@@ -204,6 +204,7 @@ runtime:
 	$(CP) runtime/gen/basis-ffi.sml \
 		basis-library/primitive/basis-ffi.sml
 	$(CP) runtime/*.h "$(INC)/"
+	$(CP) runtime/plpa/*.h "$(INC)/"
 	mv "$(INC)/c-types.h" "$(LIB)/targets/$(TARGET)/include"
 	for d in basis basis/Real basis/Word gc platform util; do	\
 		mkdir -p "$(INC)/$$d";					\
@@ -311,7 +312,7 @@ endif
 install: install-no-strip install-strip
 
 .PHONY: install-no-strip
-install-no-strip: install-docs install-no-docs move-docs 
+install-no-strip: install-docs install-no-docs move-docs
 
 MAN_PAGES :=  \
 	mllex.1 \

@@ -99,7 +99,7 @@ doit "$lib" \
         -cc-opt-quote "-I$lib/include"                           \
         -cc-opt '-O1 -fno-common'                                \
         -cc-opt '-fno-strict-aliasing -fomit-frame-pointer -w'   \
-        -link-opt '-lm -lgmp'                                    \
+        -link-opt '-lm -lgmp -lpthread -lplpa_bundled -lrt'     \
         -mlb-path-map "$lib/mlb-path-map"                        \
         -target-as-opt amd64 '-m64'                              \
         -target-as-opt x86 '-m32'                                \
