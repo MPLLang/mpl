@@ -99,7 +99,7 @@ doit "$lib" \
         -cc-opt-quote "-I$lib/include"                           \
         -cc-opt '-O1 -fno-common'                                \
         -cc-opt '-fno-strict-aliasing -fomit-frame-pointer -w'   \
-        -link-opt '-lgdtoa -lm -lgmp -lpthread -lrt'             \
+        -link-opt '-lgdtoa -lm -lgmp'                            \
         -mlb-path-map "$lib/mlb-path-map"                        \
         -target-as-opt amd64 '-m64'                              \
         -target-as-opt x86 '-m32'                                \
@@ -127,11 +127,11 @@ doit "$lib" \
         -target-link-opt amd64 '-m64'                            \
         -target-link-opt alpha                                   \
                 '-mieee -mbwx -mtune=ev6 -mfp-rounding-mode=d'   \
-        -target-link-opt darwin "$darwinLinkOpts"                \
+        -target-link-opt darwin "$darwinLinkOpts -pthread"       \
         -target-link-opt freebsd '-L/usr/local/lib/'             \
         -target-link-opt aix '-maix64'                           \
         -target-link-opt ia64 "$ia64hpux"                        \
-        -target-link-opt linux '-lplpa_bundled -Wl,-znoexecstack'\
+        -target-link-opt linux '-lplpa_bundled -pthread -lrt -Wl,-znoexecstack'\
         -target-link-opt mingw                                   \
                 '-lws2_32 -lkernel32 -lpsapi -lnetapi32 -lwinmm' \
         -target-link-opt mingw '-Wl,--enable-stdcall-fixup'      \
