@@ -15,9 +15,9 @@
  * Section numbers in parens.
  * k is key to be hashed.
  * table is of size 2^p  (it must be a power of two)
- * Open addressing (12.4), meaning that we stick the entries directly in the 
+ * Open addressing (12.4), meaning that we stick the entries directly in the
  *   table and probe until we find what we want.
- * Multiplication method (12.3.2), meaning that we compute the hash by 
+ * Multiplication method (12.3.2), meaning that we compute the hash by
  *   multiplying by a magic number, chosen by Knuth, and take the high-order p
  *   bits of the low order 32 bits.
  * Double hashing (12.4), meaning that we use two hash functions, the first to
@@ -34,22 +34,23 @@ GC_objectHashTable allocHashTable (GC_state s) {
 
   t = (GC_objectHashTable)(malloc_safe (sizeof(*t)));
   // Try to use space in the heap for the elements.
-  if (not (isHeapInit (&s->secondaryHeap))) {
+  if (not (isHeapInit (s->secondaryHeap))) {
     if (DEBUG_SHARE)
       fprintf (stderr, "using secondaryHeap\n");
-    regionStart = s->secondaryHeap.start;
-    regionEnd = s->secondaryHeap.start + s->secondaryHeap.size;
+    regionStart = s->secondaryHeap->start;
+    regionEnd = s->secondaryHeap->start + s->secondaryHeap->size;
   } else if (s->amInGC or not s->canMinor) {
     if (DEBUG_SHARE)
       fprintf (stderr, "using end of heap\n");
+    /* XX revisit this use of local frontier */
     regionStart = s->frontier;
     regionEnd = s->limitPlusSlop;
   } else {
     if (DEBUG_SHARE)
       fprintf (stderr, "using minor space\n");
     assert (s->canMinor);
-    regionStart = s->heap.start + s->heap.oldGenSize;
-    regionEnd = s->heap.nursery;
+    regionStart = s->heap->start + s->heap->oldGenSize;
+    regionEnd = s->heap->nursery;
   }
   elementsLengthMax = (uint32_t)((size_t)(regionEnd - regionStart) / sizeof (*(t->elements)));
   if (DEBUG_SHARE)
@@ -60,7 +61,7 @@ GC_objectHashTable allocHashTable (GC_state s) {
     if (DEBUG_SHARE)
       fprintf (stderr, "elementsLengthMax too small -- using calloc\n");
     t->elementsIsInHeap = FALSE;
-    t->elements = 
+    t->elements =
       (struct GC_objectHashElement *)
       (calloc_safe(t->elementsLengthMax, sizeof(*(t->elements))));
   } else {
@@ -69,8 +70,8 @@ GC_objectHashTable allocHashTable (GC_state s) {
     t->elementsIsInHeap = TRUE;
     t->elements = (struct GC_objectHashElement*)regionStart;
     // Find the largest power of two that fits.
-    for ( ; 
-         t->elementsLengthMax <= elementsLengthMax; 
+    for ( ;
+         t->elementsLengthMax <= elementsLengthMax;
          t->elementsLengthMax <<= 1, t->elementsLengthMaxLog2++)
       ; // nothing
     t->elementsLengthMax >>= 1;
@@ -82,7 +83,7 @@ GC_objectHashTable allocHashTable (GC_state s) {
   t->elementsLengthCur = 0;
   t->mayInsert = TRUE;
   if (DEBUG_SHARE) {
-    fprintf (stderr, "elementsIsInHeap = %s\n", 
+    fprintf (stderr, "elementsIsInHeap = %s\n",
              boolToString (t->elementsIsInHeap));
     fprintf (stderr, "elementsLengthMax = %"PRIu32"\n", t->elementsLengthMax);
     fprintf (stderr, FMTPTR" = allocHashTable ()\n", (uintptr_t)t);
@@ -113,8 +114,8 @@ pointer insertHashTableElem (GC_state s,
 
   if (DEBUG_SHARE)
     fprintf (stderr, "insertHashTableElem ("FMTHASH", "FMTPTR", "FMTPTR", %s)\n",
-             hash, 
-             (uintptr_t)object, 
+             hash,
+             (uintptr_t)object,
              (uintptr_t)max,
              boolToString (mightBeThere));
   if (! init) {
@@ -169,7 +170,7 @@ lookNext:
     header = getHeader (object);
     unless (header == getHeader (e->object))
       goto lookNext;
-    for (p1 = (unsigned int*)object, 
+    for (p1 = (unsigned int*)object,
          p2 = (unsigned int*)e->object;
          p1 < (unsigned int*)max;
          ++p1, ++p2)
@@ -196,8 +197,8 @@ void growHashTableMaybe (GC_state s, GC_objectHashTable t) {
   oldElementsLengthMax = t->elementsLengthMax;
   newElementsLengthMax = oldElementsLengthMax * 2;
   if (DEBUG_SHARE)
-    fprintf (stderr, 
-             "trying to grow table to cardinality %"PRIu32"\n", 
+    fprintf (stderr,
+             "trying to grow table to cardinality %"PRIu32"\n",
              newElementsLengthMax);
   // Try to alocate the new table.
   t->elements =
@@ -215,7 +216,7 @@ void growHashTableMaybe (GC_state s, GC_objectHashTable t) {
   for (unsigned int i = 0; i < oldElementsLengthMax; ++i) {
     oldElement = &oldElements[i];
     unless (NULL == oldElement->object)
-      insertHashTableElem 
+      insertHashTableElem
       (s, t, oldElement->hash, oldElement->object, NULL, FALSE);
   }
   if (t->elementsIsInHeap)
@@ -249,7 +250,7 @@ pointer hashConsPointer (GC_state s, pointer object, bool countBytesHashConsed) 
     goto done;
   }
   assert ((ARRAY_TAG == tag) or (NORMAL_TAG == tag));
-  max = 
+  max =
     object
     + (ARRAY_TAG == tag
        ? (sizeofArrayNoHeader (s, getArrayLength (object),
@@ -270,7 +271,7 @@ pointer hashConsPointer (GC_state s, pointer object, bool countBytesHashConsed) 
       amount += GC_ARRAY_HEADER_SIZE;
     else
       amount += GC_NORMAL_HEADER_SIZE;
-    s->lastMajorStatistics.bytesHashConsed += amount;
+    s->lastMajorStatistics->bytesHashConsed += amount;
   }
 done:
   if (DEBUG_SHARE)
@@ -282,12 +283,12 @@ done:
 void shareObjptr (GC_state s, objptr *opp) {
   pointer p;
 
-  p = objptrToPointer (*opp, s->heap.start);
+  p = objptrToPointer (*opp, s->heap->start);
   if (DEBUG_SHARE)
     fprintf (stderr, "shareObjptr  opp = "FMTPTR"  *opp = "FMTOBJPTR"\n",
              (uintptr_t)opp, *opp);
   p = hashConsPointer (s, p, FALSE);
-  *opp = pointerToObjptr (p, s->heap.start);
+  *opp = pointerToObjptr (p, s->heap->start);
   markIntergenerationalObjptr (s, opp);
 }
 

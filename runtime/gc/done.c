@@ -21,7 +21,7 @@ static void displayCol (FILE *out, size_t width, const char *s) {
   fprintf (out, "%s\t", s);
 }
 
-static void displayCollectionStats (FILE *out, const char *name, struct rusage *ru, 
+static void displayCollectionStats (FILE *out, const char *name, struct rusage *ru,
                                     uintmax_t num, uintmax_t bytes) {
   uintmax_t ms;
 
@@ -30,7 +30,7 @@ static void displayCollectionStats (FILE *out, const char *name, struct rusage *
   displayCol (out, 7, uintmaxToCommaString (ms));
   displayCol (out, 7, uintmaxToCommaString (num));
   displayCol (out, 15, uintmaxToCommaString (bytes));
-  displayCol (out, 15, 
+  displayCol (out, 15,
               (ms > 0)
               ? uintmaxToCommaString ((uintmax_t)(1000.0 * (float)bytes/(float)ms))
               : "-");
@@ -54,26 +54,28 @@ void GC_done (GC_state s) {
     fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
     fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
     displayCollectionStats
-      (out, "copying\t\t", 
-       &s->cumulativeStatistics.ru_gcCopying, 
-       s->cumulativeStatistics.numCopyingGCs, 
-       s->cumulativeStatistics.bytesCopied);
+      (out, "copying\t\t",
+       &s->cumulativeStatistics->ru_gcCopy,
+       s->cumulativeStatistics->numCopyingGCs,
+       s->cumulativeStatistics->bytesCopied);
     displayCollectionStats
-      (out, "mark-compact\t", 
-       &s->cumulativeStatistics.ru_gcMarkCompact, 
-       s->cumulativeStatistics.numMarkCompactGCs, 
-       s->cumulativeStatistics.bytesMarkCompacted);
+      (out, "mark-compact\t",
+       &s->cumulativeStatistics->ru_gcMarkCompact,
+       s->cumulativeStatistics->numMarkCompactGCs,
+       s->cumulativeStatistics->bytesMarkCompacted);
     displayCollectionStats
       (out, "minor\t\t",
-       &s->cumulativeStatistics.ru_gcMinor, 
-       s->cumulativeStatistics.numMinorGCs, 
-       s->cumulativeStatistics.bytesCopiedMinor);
+       &s->cumulativeStatistics->ru_gcMinor,
+       s->cumulativeStatistics->numMinorGCs,
+       s->cumulativeStatistics->bytesCopiedMinor);
+#warning Revert getCurrentTime() to rusage?
+    totalTime = getCurrentTime () - s->startTime;
     fprintf (out, "total time: %s ms\n",
              uintmaxToCommaString (totalTime));
     fprintf (out, "total GC time: %s ms (%.1f%%)\n",
-             uintmaxToCommaString (gcTime), 
-             (0 == totalTime) 
-             ? 0.0 
+             uintmaxToCommaString (gcTime),
+             (0 == totalTime)
+             ? 0.0
              : 100.0 * ((double) gcTime) / (double)totalTime);
     fprintf (out, "max pause time: %s ms\n",
              uintmaxToCommaString (s->cumulativeStatistics.maxPauseTime));
@@ -81,11 +83,11 @@ void GC_done (GC_state s) {
              uintmaxToCommaString (s->cumulativeStatistics.bytesAllocated));
     fprintf (out, "max bytes live: %s bytes\n",
              uintmaxToCommaString (s->cumulativeStatistics.maxBytesLive));
-    fprintf (out, "max heap size: %s bytes\n", 
+    fprintf (out, "max heap size: %s bytes\n",
              uintmaxToCommaString (s->cumulativeStatistics.maxHeapSize));
-    fprintf (out, "max stack size: %s bytes\n", 
+    fprintf (out, "max stack size: %s bytes\n",
              uintmaxToCommaString (s->cumulativeStatistics.maxStackSize));
-    fprintf (out, "num cards marked: %s\n", 
+    fprintf (out, "num cards marked: %s\n",
              uintmaxToCommaString (s->cumulativeStatistics.numCardsMarked));
     fprintf (out, "bytes scanned: %s bytes\n",
              uintmaxToCommaString (s->cumulativeStatistics.bytesScannedMinor));

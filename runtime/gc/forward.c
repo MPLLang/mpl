@@ -33,7 +33,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
   GC_header header;
 
   op = *opp;
-  p = objptrToPointer (op, s->heap.start);
+  p = objptrToPointer (op, s->heap->start);
   if (DEBUG_DETAILED)
     fprintf (stderr,
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
@@ -132,8 +132,8 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
   pointer p;
 
   op = *opp;
-  p = objptrToPointer (op, s->heap.start);
-  if (p < s->heap.nursery)
+  p = objptrToPointer (op, s->heap->start);
+  if (p < s->heap->nursery)
     return;
   if (DEBUG_GENERATIONAL)
     fprintf (stderr,
@@ -179,7 +179,7 @@ checkCard:
   if (cardMap[cardIndex]) {
     pointer lastObject;
 
-    s->cumulativeStatistics.numCardsMarked++;
+    s->cumulativeStatistics->numCardsMarked++;
     if (DEBUG_GENERATIONAL)
       fprintf (stderr, "card %"PRIuMAX" is marked  objectStart = "FMTPTR"\n",
                (uintmax_t)cardIndex, (uintptr_t)objectStart);
@@ -197,7 +197,7 @@ checkCard:
      */
     objectStart = foreachObjptrInRange (s, objectStart, &cardEnd,
                                         forwardObjptrIfInNursery, FALSE);
-    s->cumulativeStatistics.bytesScannedMinor += (uintmax_t)(objectStart - lastObject);
+    s->cumulativeStatistics->bytesScannedMinor += (uintmax_t)(objectStart - lastObject);
     if (objectStart == oldGenEnd)
       goto done;
     cardIndex = sizeToCardMapIndex ((size_t)(objectStart - oldGenStart));

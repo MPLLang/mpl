@@ -24,7 +24,7 @@ typedef struct GC_profileStack {
   /* ticks counts ticks while the function was on the stack. */
   uintmax_t ticks;
   /* ticksGC counts ticks in GC while the function was on the stack. */
-  uintmax_t ticksGC; 
+  uintmax_t ticksGC;
   /* lastTotal is the value of total when the oldest occurrence of f
    * on the stack was pushed, i.e., the most recent time that
    * numTimesOnStack changed from 0 to 1.  lastTotal is used to
@@ -47,7 +47,7 @@ typedef uint32_t GC_profileMasterIndex;
  * bytes allocated with allocation profiling.
  *
  * All of the arrays in GC_profileData are of length sourcesLength + sourceNamesLength.
- * The first sourceLength entries are for handling the duplicate copies of 
+ * The first sourceLength entries are for handling the duplicate copies of
  * functions, and the next sourceNamesLength entries are for the master versions.
  */
 typedef struct GC_profileData {
@@ -55,7 +55,7 @@ typedef struct GC_profileData {
    * ticks that occurred while the function was on top of the stack.
    */
   uintmax_t *countTop;
-  /* stack is an array that gives stack info for each function.  
+  /* stack is an array that gives stack info for each function.
    * It is only used if profileStack.
    */
   struct GC_profileStack *stack;
@@ -118,16 +118,18 @@ PRIVATE void GC_profileLeave (GC_state s);
 PRIVATE void GC_profileInc (GC_state s, size_t amount);
 PRIVATE void GC_profileAllocInc (GC_state s, size_t amount);
 
-PRIVATE GC_profileData GC_getProfileCurrent (GC_state s);
-PRIVATE void GC_setProfileCurrent (GC_state s, GC_profileData p);
+PRIVATE GC_profileData GC_getProfileCurrent (void);
+PRIVATE void GC_setProfileCurrent (GC_profileData p);
 
-PRIVATE GC_profileData GC_profileMalloc (GC_state s);
-PRIVATE void GC_profileWrite (GC_state s, GC_profileData p, NullString8_t fileName);
-PRIVATE void GC_profileFree (GC_state s, GC_profileData p);
+PRIVATE GC_profileData GC_profileMalloc (void);
+PRIVATE void GC_profileWrite (GC_profileData p, NullString8_t fileName);
+PRIVATE void GC_profileFree (GC_profileData p);
 
-PRIVATE void GC_profileDone (GC_state s);
+PRIVATE void GC_profileDisable (void);
+PRIVATE void GC_profileEnable (void);
+
+PRIVATE void GC_profileDone (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
 PRIVATE void GC_handleSigProf (code_pointer pc);
-

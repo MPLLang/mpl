@@ -11,7 +11,7 @@
 /*                          translateHeap                           */
 /* ---------------------------------------------------------------- */
 
-void translateObjptr (GC_state s, 
+void translateObjptr (GC_state s,
                       objptr *opp) {
   pointer p;
   pointer from, to;
@@ -32,7 +32,7 @@ void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
     return;
 
   if (DEBUG or s->controls.messages)
-    fprintf (stderr, 
+    fprintf (stderr,
              "[GC: Translating old-gen of size %s bytes of heap at "FMTPTR" from "FMTPTR".]\n",
              uintmaxToCommaString(size),
              (uintptr_t)to,

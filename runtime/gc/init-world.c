@@ -94,7 +94,7 @@ void initVectors (GC_state s) {
                            ? OBJPTR_SIZE
                            : dataBytes),
                         s->alignment);
-    assert (objectSize <= (size_t)(s->heap.start + s->heap.size - frontier));
+    assert (objectSize <= (size_t)(s->heap->start + s->heap->size - frontier));
     *((GC_arrayCounter*)(frontier)) = 0;
     frontier = frontier + GC_ARRAY_COUNTER_SIZE;
     *((GC_arrayLength*)(frontier)) = inits[i].numElements;
@@ -118,7 +118,7 @@ void initVectors (GC_state s) {
     }
     *((GC_header*)(frontier)) = buildHeaderFromTypeIndex (typeIndex);
     frontier = frontier + GC_HEADER_SIZE;
-    s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, s->heap.start);
+    s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, s->heap->start);
     if (DEBUG_DETAILED)
       fprintf (stderr, "allocated vector at "FMTPTR"\n",
                (uintptr_t)(s->globals[inits[i].globalIndex]));
@@ -129,7 +129,7 @@ void initVectors (GC_state s) {
     fprintf (stderr, "frontier after string allocation is "FMTPTR"\n",
              (uintptr_t)frontier);
   GC_profileAllocInc (s, (size_t)(frontier - s->frontier));
-  s->cumulativeStatistics.bytesAllocated += (size_t)(frontier - s->frontier);
+  s->cumulativeStatistics->bytesAllocated += (size_t)(frontier - s->frontier);
   assert (isFrontierAligned (s, frontier));
   s->frontier = frontier;
 }
@@ -138,6 +138,7 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
+  size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)
     s->globals[i] = BOGUS_OBJPTR;
@@ -152,9 +153,28 @@ void initWorld (GC_state s) {
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   initIntInfs (s);
   initVectors (s);
-  assert ((size_t)(s->frontier - start) <= s->lastMajorStatistics.bytesLive);
-  s->heap.oldGenSize = (size_t)(s->frontier - s->heap.start);
-  setGCStateCurrentHeap (s, 0, 0);
+  assert ((size_t)(s->frontier - start) <= s->lastMajorStatistics->bytesLive);
+  s->heap->oldGenSize = (size_t)(s->frontier - s->heap->start);
+  setGCStateCurrentHeap (s, 0, 0, true);
   thread = newThread (s, sizeofStackInitialReserved (s));
-  switchToThread (s, pointerToObjptr((pointer)thread - offsetofThread (s), s->heap.start));
+  switchToThread (s, pointerToObjptr((pointer)thread - offsetofThread (s), s->heap->start));
+}
+
+void duplicateWorld (GC_state d, GC_state s) {
+  GC_thread thread;
+
+  d->lastMajorStatistics->bytesLive = 0;
+
+  /* Use the original to allocate */
+  thread = newThread (s, sizeofStackInitial (s));
+
+  /* Now copy stats, heap data from original */
+  d->cumulativeStatistics->maxHeapSizeSeen = s->cumulativeStatistics->maxHeapSizeSeen;
+  d->heap = s->heap;
+  d->secondaryHeap = s->secondaryHeap;
+  d->generationalMaps = s->generationalMaps;
+
+  /* Allocation handled in setGCStateCurrentHeap when called from initWorld */
+
+  switchToThread (d, pointerToObjptr((pointer)thread - offsetofThread (d), d->heap->start));
 }

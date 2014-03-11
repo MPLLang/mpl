@@ -20,7 +20,7 @@ void updateWeaksForCheneyCopy (GC_state s) {
 
     if (DEBUG_WEAK)
       fprintf (stderr, "updateWeaksForCheneyCopy  w = "FMTPTR"  ", (uintptr_t)w);
-    p = objptrToPointer (w->objptr, s->heap.start);
+    p = objptrToPointer (w->objptr, s->heap->start);
     if (GC_FORWARDED == getHeader (p)) {
       if (DEBUG_WEAK)
         fprintf (stderr, "forwarded from "FMTOBJPTR" to "FMTOBJPTR"\n",
@@ -51,46 +51,46 @@ void majorCheneyCopyGC (GC_state s) {
   struct rusage ru_start;
   pointer toStart;
 
-  assert (s->secondaryHeap.size >= s->heap.oldGenSize);
+  assert (s->secondaryHeap->size >= s->heap->oldGenSize);
   if (detailedGCTime (s))
     startTiming (&ru_start);
-  s->cumulativeStatistics.numCopyingGCs++;
+  s->cumulativeStatistics->numCopyingGCs++;
   s->forwardState.amInMinorGC = FALSE;
-  if (DEBUG or s->controls.messages) {
-    fprintf (stderr, 
+  if (DEBUG or s->controls->messages) {
+    fprintf (stderr,
              "[GC: Starting major Cheney-copy;]\n");
     fprintf (stderr,
              "[GC:\tfrom heap at "FMTPTR" of size %s bytes,]\n",
-             (uintptr_t)(s->heap.start), 
-             uintmaxToCommaString(s->heap.size));
-    fprintf (stderr, 
+             (uintptr_t)(s->heap->start),
+             uintmaxToCommaString(s->heap->size));
+    fprintf (stderr,
              "[GC:\tto heap at "FMTPTR" of size %s bytes.]\n",
-             (uintptr_t)(s->secondaryHeap.start), 
-             uintmaxToCommaString(s->secondaryHeap.size));
+             (uintptr_t)(s->secondaryHeap->start),
+             uintmaxToCommaString(s->secondaryHeap->size));
   }
-  s->forwardState.toStart = s->secondaryHeap.start;
-  s->forwardState.toLimit = s->secondaryHeap.start + s->secondaryHeap.size;
-  assert (s->secondaryHeap.start != (pointer)NULL);
+  s->forwardState.toStart = s->secondaryHeap->start;
+  s->forwardState.toLimit = s->secondaryHeap->start + s->secondaryHeap->size;
+  assert (s->secondaryHeap->start != (pointer)NULL);
   /* The next assert ensures there is enough space for the copy to
-   * succeed.  It does not assert 
-   *   (s->secondaryHeap.size >= s->heap.size) 
+   * succeed.  It does not assert
+   *   (s->secondaryHeap->size >= s->heap->size)
    * because that is too strong.
    */
-  assert (s->secondaryHeap.size >= s->heap.oldGenSize);
-  toStart = alignFrontier (s, s->secondaryHeap.start);
+  assert (s->secondaryHeap->size >= s->heap->oldGenSize);
+  toStart = alignFrontier (s, s->secondaryHeap->start);
   s->forwardState.back = toStart;
   foreachGlobalObjptr (s, forwardObjptr);
   foreachObjptrInRange (s, toStart, &s->forwardState.back, forwardObjptr, TRUE);
   updateWeaksForCheneyCopy (s);
-  s->secondaryHeap.oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap.start);
-  bytesCopied = s->secondaryHeap.oldGenSize;
-  s->cumulativeStatistics.bytesCopied += bytesCopied;
+  s->secondaryHeap->oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap->start);
+  bytesCopied = s->secondaryHeap->oldGenSize;
+  s->cumulativeStatistics->bytesCopied += bytesCopied;
   swapHeapsForCheneyCopy (s);
-  s->lastMajorStatistics.kind = GC_COPYING;
+  s->lastMajorStatistics->kind = GC_COPYING;
   if (detailedGCTime (s))
-    stopTiming (&ru_start, &s->cumulativeStatistics.ru_gcCopying);
-  if (DEBUG or s->controls.messages)
-    fprintf (stderr, 
+    stopTiming (&ru_start, &s->cumulativeStatistics->ru_gcCopying);
+  if (DEBUG or s->controls->messages)
+    fprintf (stderr,
              "[GC: Finished major Cheney-copy; copied %s bytes.]\n",
              uintmaxToCommaString(bytesCopied));
 }
@@ -119,35 +119,37 @@ void minorCheneyCopyGC (GC_state s) {
       startTiming (&ru_start);
     s->cumulativeStatistics.numMinorGCs++;
     s->forwardState.amInMinorGC = TRUE;
-    if (DEBUG_GENERATIONAL or s->controls.messages) {
-      fprintf (stderr, 
+    if (DEBUG_GENERATIONAL or s->controls->messages) {
+      fprintf (stderr,
                "[GC: Starting minor Cheney-copy;]\n");
       fprintf (stderr,
                "[GC:\tfrom nursery at "FMTPTR" of size %s bytes.]\n",
                (uintptr_t)(s->heap.nursery),
                uintmaxToCommaString(bytesAllocated));
     }
-    s->forwardState.toStart = s->heap.start + s->heap.oldGenSize;
+    s->forwardState.toStart = s->heap->start + s->heap->oldGenSize;
     assert (isFrontierAligned (s, s->forwardState.toStart));
     s->forwardState.toLimit = s->forwardState.toStart + bytesAllocated;
     assert (invariantForGC (s));
+    s->cumulativeStatistics->numMinorGCs++;
+    s->lastMajorStatistics->numMinorGCs++;
     s->forwardState.back = s->forwardState.toStart;
     /* Forward all globals.  Would like to avoid doing this once all
      * the globals have been assigned.
      */
     foreachGlobalObjptr (s, forwardObjptrIfInNursery);
     forwardInterGenerationalObjptrs (s);
-    foreachObjptrInRange (s, s->forwardState.toStart, &s->forwardState.back, 
+    foreachObjptrInRange (s, s->forwardState.toStart, &s->forwardState.back,
                           forwardObjptrIfInNursery, TRUE);
     updateWeaksForCheneyCopy (s);
     bytesCopied = (size_t)(s->forwardState.back - s->forwardState.toStart);
-    s->cumulativeStatistics.bytesCopiedMinor += bytesCopied;
-    s->heap.oldGenSize += bytesCopied;
-    s->lastMajorStatistics.numMinorGCs++;
+    s->cumulativeStatistics->bytesCopiedMinor += bytesCopied;
+    s->heap->oldGenSize += bytesCopied;
+    s->lastMajorStatistics->numMinorGCs++;
     if (detailedGCTime (s))
-      stopTiming (&ru_start, &s->cumulativeStatistics.ru_gcMinor);
-    if (DEBUG_GENERATIONAL or s->controls.messages)
-      fprintf (stderr, 
+      stopTiming (&ru_start, &s->cumulativeStatistics->ru_gcMinor);
+    if (DEBUG_GENERATIONAL or s->controls->messages)
+      fprintf (stderr,
                "[GC: Finished minor Cheney-copy; copied %s bytes.]\n",
                uintmaxToCommaString(bytesCopied));
   }

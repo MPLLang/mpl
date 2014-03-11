@@ -11,14 +11,14 @@ void displayGCState (GC_state s, FILE *stream) {
   fprintf (stream,
            "GC state\n");
   fprintf (stream, "\tcurrentThread = "FMTOBJPTR"\n", s->currentThread);
-  displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, s->heap.start)
-                                + offsetofThread (s)), 
+  displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, s->heap->start)
+                                + offsetofThread (s)),
                  stream);
   fprintf (stream, "\tgenerational\n");
-  displayGenerationalMaps (s, &s->generationalMaps, 
+  displayGenerationalMaps (s, &s->generationalMaps,
                            stream);
   fprintf (stream, "\theap\n");
-  displayHeap (s, &s->heap, 
+  displayHeap (s, &s->heap,
                stream);
   fprintf (stream,
            "\tlimit = "FMTPTR"\n"
@@ -46,7 +46,7 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   markCard (s, (pointer)stack);
 }
 
-void setGCStateCurrentHeap (GC_state s, 
+void setGCStateCurrentHeap (GC_state s,
                             size_t oldGenBytesRequested,
                             size_t nurseryBytesRequested) {
   GC_heap h;
@@ -73,8 +73,8 @@ void setGCStateCurrentHeap (GC_state s,
       /* There is enough space in the generational nursery. */
       and (nurseryBytesRequested <= genNurserySize)
       /* The nursery is large enough to be worth it. */
-      and (((float)(h->size - s->lastMajorStatistics.bytesLive) 
-            / (float)nurserySize) 
+      and (((float)(h->size - s->lastMajorStatistics.bytesLive)
+            / (float)nurserySize)
            <= s->controls.ratios.nursery)
       and /* There is a reason to use generational GC. */
       (
@@ -105,70 +105,85 @@ void setGCStateCurrentHeap (GC_state s,
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
 }
 
-bool GC_getAmOriginal (GC_state s) {
+bool GC_getAmOriginal (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return s->amOriginal;
 }
-void GC_setAmOriginal (GC_state s, bool b) {
+void GC_setAmOriginal (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->amOriginal = b;
 }
 
-void GC_setControlsMessages (GC_state s, bool b) {
-  s->controls.messages = b;
+void GC_setControlsMessages (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  s->controls->messages = b;
 }
 
-void GC_setControlsSummary (GC_state s, bool b) {
-  s->controls.summary = b;
+void GC_setControlsSummary (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  s->controls->summary = b;
 }
 
-void GC_setControlsRusageMeasureGC (GC_state s, bool b) {
-  s->controls.rusageMeasureGC = b;
+void GC_setControlsRusageMeasureGC (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  s->controls->rusageMeasureGC = b;
 }
 
-uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s) {
-  return s->cumulativeStatistics.bytesAllocated;
+uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return s->cumulativeStatistics->bytesAllocated;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (GC_state s) {
-  return s->cumulativeStatistics.numCopyingGCs;
+uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return s->cumulativeStatistics->numCopyingGCs;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (GC_state s) {
-  return s->cumulativeStatistics.numMarkCompactGCs;
+uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return s->cumulativeStatistics->numMarkCompactGCs;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumMinorGCs (GC_state s) {
-  return s->cumulativeStatistics.numMinorGCs;
+uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return s->cumulativeStatistics->numMinorGCs;
 }
 
-size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s) {
-  return s->cumulativeStatistics.maxBytesLive;
+size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return s->cumulativeStatistics->maxBytesLive;
 }
 
-void GC_setHashConsDuringGC (GC_state s, bool b) {
+void GC_setHashConsDuringGC (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->hashConsDuringGC = b;
 }
 
-size_t GC_getLastMajorStatisticsBytesLive (GC_state s) {
+size_t GC_getLastMajorStatisticsBytesLive (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return s->lastMajorStatistics.bytesLive;
 }
 
-
-pointer GC_getCallFromCHandlerThread (GC_state s) {
+pointer GC_getCallFromCHandlerThread (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   pointer p = objptrToPointer (s->callFromCHandlerThread, s->heap.start);
   return p;
 }
 
-void GC_setCallFromCHandlerThread (GC_state s, pointer p) {
-  objptr op = pointerToObjptr (p, s->heap.start);
+void GC_setCallFromCHandlerThread (pointer p) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  objptr op = pointerToObjptr (p, s->heap->start);
   s->callFromCHandlerThread = op;
 }
 
-pointer GC_getCurrentThread (GC_state s) {
-  pointer p = objptrToPointer (s->currentThread, s->heap.start);
+pointer GC_getCurrentThread (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  pointer p = objptrToPointer (s->currentThread, s->heap->start);
   return p;
 }
 
-pointer GC_getSavedThread (GC_state s) {
+pointer GC_getSavedThread (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   pointer p;
 
   assert(s->savedThread != BOGUS_OBJPTR);
@@ -177,7 +192,8 @@ pointer GC_getSavedThread (GC_state s) {
   return p;
 }
 
-void GC_setSavedThread (GC_state s, pointer p) {
+void GC_setSavedThread (pointer p) {
+  GC_state s = pthread_getspecific (gcstate_key);
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
@@ -185,31 +201,38 @@ void GC_setSavedThread (GC_state s, pointer p) {
   s->savedThread = op;
 }
 
-void GC_setSignalHandlerThread (GC_state s, pointer p) {
-  objptr op = pointerToObjptr (p, s->heap.start);
+void GC_setSignalHandlerThread (pointer p) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  objptr op = pointerToObjptr (p, s->heap->start);
   s->signalHandlerThread = op;
 }
 
-struct rusage* GC_getRusageGCAddr (GC_state s) {
-  return &(s->cumulativeStatistics.ru_gc);
+struct rusage* GC_getRusageGCAddr (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return &(s->cumulativeStatistics->ru_gc);
 }
 
-sigset_t* GC_getSignalsHandledAddr (GC_state s) {
-  return &(s->signalsInfo.signalsHandled);
+sigset_t* GC_getSignalsHandledAddr (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return &(s->signalsInfo->signalsHandled);
 }
 
-sigset_t* GC_getSignalsPendingAddr (GC_state s) {
+sigset_t* GC_getSignalsPendingAddr (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return &(s->signalsInfo.signalsPending);
 }
 
-void GC_setGCSignalHandled (GC_state s, bool b) {
+void GC_setGCSignalHandled (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->signalsInfo.gcSignalHandled = b;
 }
 
-bool GC_getGCSignalPending (GC_state s) {
+bool GC_getGCSignalPending (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return (s->signalsInfo.gcSignalPending);
 }
 
-void GC_setGCSignalPending (GC_state s, bool b) {
+void GC_setGCSignalPending (bool b) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->signalsInfo.gcSignalPending = b;
 }

@@ -8,7 +8,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE void GC_pack (GC_state s);
-PRIVATE void GC_unpack (GC_state s);
+PRIVATE void GC_pack (void);
+PRIVATE void GC_unpack (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

@@ -11,9 +11,9 @@ void switchToThread (GC_state s, objptr op) {
     GC_thread thread;
     GC_stack stack;
 
-    thread = (GC_thread)(objptrToPointer (op, s->heap.start)
+    thread = (GC_thread)(objptrToPointer (op, s->heap->start)
                          + offsetofThread (s));
-    stack = (GC_stack)(objptrToPointer (thread->stack, s->heap.start));
+    stack = (GC_stack)(objptrToPointer (thread->stack, s->heap->start));
 
     fprintf (stderr, "switchToThread ("FMTOBJPTR")  used = %"PRIuMAX
              "  reserved = %"PRIuMAX"\n",
@@ -49,7 +49,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     beginAtomic (s);
     /* END: enter(s); */
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-    switchToThread (s, pointerToObjptr(p, s->heap.start));
+    switchToThread (s, pointerToObjptr(p, s->heap->start));
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     /* BEGIN: ensureInvariantForMutator */
@@ -62,7 +62,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     /* BEGIN: leave(s); */
     endAtomic (s);
     /* END: leave(s); */
+    assert (invariantForMutatorFrontier(s));
+    assert (invariantForMutatorStack(s));
   }
-  assert (invariantForMutatorFrontier(s));
-  assert (invariantForMutatorStack(s));
 }

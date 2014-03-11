@@ -39,10 +39,10 @@ struct GC_state {
   objptr *globals;
   uint32_t globalsLength;
   bool hashConsDuringGC;
-  struct GC_heap heap;
+  struct GC_heap *heap;
   struct GC_intInfInit *intInfInits;
   uint32_t intInfInitsLength;
-  struct GC_lastMajorStatistics lastMajorStatistics;
+  struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
   uint32_t magic; /* The magic number for this executable. */
@@ -58,7 +58,7 @@ struct GC_state {
                        */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
-  struct GC_heap secondaryHeap; /* Used for major copying collection. */
+  struct GC_heap *secondaryHeap; /* Used for major copying collection. */
   objptr signalHandlerThread; /* Handler for signals (in heap). */
   struct GC_signalsInfo signalsInfo;
   struct GC_sourceMaps sourceMaps;
@@ -78,40 +78,40 @@ static void displayGCState (GC_state s, FILE *stream);
 
 static inline size_t sizeofGCStateCurrentStackUsed (GC_state s);
 static inline void setGCStateCurrentThreadAndStack (GC_state s);
-static void setGCStateCurrentHeap (GC_state s, 
-                                   size_t oldGenBytesRequested, 
+static void setGCStateCurrentHeap (GC_state s,
+                                   size_t oldGenBytesRequested,
                                    size_t nurseryBytesRequested);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
-#if (defined (MLTON_GC_INTERNAL_BASIS)) 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE bool GC_getAmOriginal (GC_state s);
-PRIVATE void GC_setAmOriginal (GC_state s, bool b);
-PRIVATE void GC_setControlsMessages (GC_state s, bool b);
-PRIVATE void GC_setControlsSummary (GC_state s, bool b);
-PRIVATE void GC_setControlsRusageMeasureGC (GC_state s, bool b);
-PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (GC_state s);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (GC_state s);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (GC_state s);
-PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s);
-PRIVATE void GC_setHashConsDuringGC (GC_state s, bool b);
-PRIVATE size_t GC_getLastMajorStatisticsBytesLive (GC_state s);
+PRIVATE bool GC_getAmOriginal (void);
+PRIVATE void GC_setAmOriginal (bool b);
+PRIVATE void GC_setControlsMessages (bool b);
+PRIVATE void GC_setControlsSummary (bool b);
+PRIVATE void GC_setControlsRusageMeasureGC (bool b);
+PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
+PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
+PRIVATE void GC_setHashConsDuringGC (bool b);
+PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
-PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
-PRIVATE void GC_setCallFromCHandlerThread (GC_state s, pointer p);
-PRIVATE pointer GC_getCurrentThread (GC_state s);
-PRIVATE pointer GC_getSavedThread (GC_state s);
-PRIVATE void GC_setSavedThread (GC_state s, pointer p);
-PRIVATE void GC_setSignalHandlerThread (GC_state s, pointer p);
+PRIVATE pointer GC_getCallFromCHandlerThread (void);
+PRIVATE void GC_setCallFromCHandlerThread (pointer p);
+PRIVATE pointer GC_getCurrentThread (void);
+PRIVATE pointer GC_getSavedThread (void);
+PRIVATE void GC_setSavedThread (pointer p);
+PRIVATE void GC_setSignalHandlerThread (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE struct rusage* GC_getRusageGCAddr (GC_state s);
+PRIVATE struct rusage* GC_getRusageGCAddr (void);
 
-PRIVATE sigset_t* GC_getSignalsHandledAddr (GC_state s);
-PRIVATE sigset_t* GC_getSignalsPendingAddr (GC_state s);
-PRIVATE void GC_setGCSignalHandled (GC_state s, bool b);
-PRIVATE bool GC_getGCSignalPending (GC_state s);
-PRIVATE void GC_setGCSignalPending (GC_state s, bool b);
+PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
+PRIVATE sigset_t* GC_getSignalsPendingAddr (void);
+PRIVATE void GC_setGCSignalHandled (bool b);
+PRIVATE bool GC_getGCSignalPending (void);
+PRIVATE void GC_setGCSignalPending (bool b);

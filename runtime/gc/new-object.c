@@ -24,9 +24,11 @@ pointer newObject (GC_state s,
           ? hasHeapBytesFree (s, bytesRequested, 0)
           : hasHeapBytesFree (s, 0, bytesRequested));
   if (allocInOldGen) {
-    frontier = s->heap.start + s->heap.oldGenSize;
-    s->heap.oldGenSize += bytesRequested;
-    s->cumulativeStatistics.bytesAllocated += bytesRequested;
+    /* NB you must have exclusive access to the runtime state
+       if you are allocating in the older generation! */
+    frontier = s->heap->start + s->heap->oldGenSize;
+    s->heap->oldGenSize += bytesRequested;
+    s->cumulativeStatistics->bytesAllocated += bytesRequested;
   } else {
     if (DEBUG_DETAILED)
       fprintf (stderr, "frontier changed from "FMTPTR" to "FMTPTR"\n",
@@ -54,7 +56,7 @@ GC_stack newStack (GC_state s,
   GC_stack stack;
 
   assert (isStackReservedAligned (s, reserved));
-  if (reserved > s->cumulativeStatistics.maxStackSize)
+  if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics.maxStackSize = reserved;
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
                                 sizeofStackWithHeader (s, reserved),
@@ -82,7 +84,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   thread = (GC_thread)(res + offsetofThread (s));
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, s->heap.start);
+  thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -94,7 +96,9 @@ static inline void setFrontier (GC_state s, pointer p,
   p = alignFrontier (s, p);
   assert ((size_t)(p - s->frontier) <= bytes);
   GC_profileAllocInc (s, (size_t)(p - s->frontier));
-  s->cumulativeStatistics.bytesAllocated += (size_t)(p - s->frontier);
+  /* SPOONHOWER_NOTE: unsafe concurrent access */
+  s->cumulativeStatistics->bytesAllocated += (size_t)(p - s->frontier);
   s->frontier = p;
   assert (s->frontier <= s->limitPlusSlop);
+  assert (s->start <= s->frontier);
 }

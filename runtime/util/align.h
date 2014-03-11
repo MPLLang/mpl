@@ -33,7 +33,7 @@ static inline size_t align (size_t a, size_t b) {
   a += b - 1;
   a &= -b;
   assert (isAligned (a, b));
-  return a;       
+  return a;
 }
 
 static inline uintmax_t alignMax (uintmax_t a, uintmax_t b) {
@@ -41,5 +41,5 @@ static inline uintmax_t alignMax (uintmax_t a, uintmax_t b) {
   a += b - 1;
   a &= -b;
   assert (isAlignedMax (a, b));
-  return a;       
+  return a;
 }

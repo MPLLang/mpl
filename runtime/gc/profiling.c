@@ -222,7 +222,8 @@ GC_profileData profileMalloc (GC_state s) {
   return p;
 }
 
-GC_profileData GC_profileMalloc (GC_state s) {
+GC_profileData GC_profileMalloc (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return profileMalloc (s);
 }
 
@@ -235,7 +236,8 @@ void profileFree (GC_state s, GC_profileData p) {
   free (p);
 }
 
-void GC_profileFree (GC_state s, GC_profileData p) {
+void GC_profileFree (GC_profileData p) {
+  GC_state s = pthread_getspecific (gcstate_key);
   profileFree (s, p);
 }
 
@@ -303,7 +305,8 @@ void profileWrite (GC_state s, GC_profileData p, const char *fileName) {
   fclose_safe (f);
 }
 
-void GC_profileWrite (GC_state s, GC_profileData p, NullString8_t fileName) {
+void GC_profileWrite (GC_profileData p, NullString8_t fileName) {
+  GC_state s = pthread_getspecific (gcstate_key);
   profileWrite (s, p, (const char*)fileName);
 }
 
@@ -350,7 +353,7 @@ void GC_handleSigProf (code_pointer pc) {
     else {
       if (PROFILE_TIME_LABEL == s->profiling.kind) {
         uint32_t start, end, i;
-        
+
         /* Binary search labels to find which method contains PC */
         start = 0;
         end = s->sourceMaps.sourceLabelsLength;
@@ -362,12 +365,12 @@ void GC_handleSigProf (code_pointer pc) {
             end = i;
         }
         i = start;
-        
+
         /* The last label is dead code. Any address past it is thus unknown.
          * The first label is before all SML code. Before it is also unknown.
          */
         if (i-1 == s->sourceMaps.sourceLabelsLength ||
-            (i == 0 && 
+            (i == 0 &&
              (uintptr_t)pc < (uintptr_t)s->sourceMaps.sourceLabels[i].label)) {
           if (DEBUG_PROFILE)
             fprintf (stderr, "pc out of bounds\n");
@@ -461,12 +464,14 @@ void initProfiling (GC_state s) {
   }
 }
 
-void GC_profileDone (GC_state s) {
+void GC_profileDone (void) {
   GC_profileData p;
   GC_profileMasterIndex profileMasterIndex;
+  GC_state s = pthread_getspecific (gcstate_key);
 
   if (DEBUG_PROFILE)
-    fprintf (stderr, "GC_profileDone ()\n");
+    fprintf (stderr, "GC_profileDone () [%d]\n",
+             Proc_processorNumber (s));
   assert (s->profiling.isOn);
   if (PROFILE_TIME_FIELD == s->profiling.kind
       or PROFILE_TIME_LABEL == s->profiling.kind)
@@ -490,9 +495,11 @@ void GC_profileDone (GC_state s) {
 }
 
 
-GC_profileData GC_getProfileCurrent (GC_state s) {
+GC_profileData GC_getProfileCurrent (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return s->profiling.data;
 }
-void GC_setProfileCurrent (GC_state s, GC_profileData p) {
+void GC_setProfileCurrent (GC_profileData p) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->profiling.data = p;
 }
