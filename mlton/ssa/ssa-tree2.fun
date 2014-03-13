@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor SsaTree2 (S: SSA_TREE2_STRUCTS): SSA_TREE2 = 
+functor SsaTree2 (S: SSA_TREE2_STRUCTS): SSA_TREE2 =
 struct
 
 open S
@@ -44,7 +44,7 @@ structure Prod =
                             {elt = e2, isMutable = m2}) =>
                         m1 = m2 andalso equals (e1, e2))
 
-      local 
+      local
          open Layout
       in
          fun layout (p, layout) =
@@ -72,8 +72,8 @@ structure Prod =
       val keepAllMap: 'a t * ('a -> 'b option) -> 'b t =
          fn (p, f) =>
          make (Vector.keepAllMap (dest p, fn {elt, isMutable} =>
-                                  Option.map (f elt, fn elt => 
-                                              {elt = elt, 
+                                  Option.map (f elt, fn elt =>
+                                              {elt = elt,
                                                isMutable = isMutable})))
    end
 
@@ -380,8 +380,8 @@ structure Cases =
 
       fun equals (c1: t, c2: t): bool =
          let
-            fun doit (l1, l2, eq') = 
-               Vector.equals 
+            fun doit (l1, l2, eq') =
+               Vector.equals
                (l1, l2, fn ((x1, a1), (x2, a2)) =>
                 eq' (x1, x2) andalso Label.equals (a1, a2))
          in
@@ -709,7 +709,7 @@ structure Statement =
          let
             val {get = global: Var.t -> string option, set = setGlobal, ...} =
                Property.getSet (Var.plist, Property.initConst NONE)
-            val _ = 
+            val _ =
                Vector.foreach
                (v, fn s =>
                 case s of
@@ -720,7 +720,7 @@ structure Statement =
                           fun set s =
                              let
                                 val maxSize = 10
-                                val s = 
+                                val s =
                                    if String.size s > maxSize
                                       then concat [String.prefix (s, maxSize),
                                                    "..."]
@@ -943,7 +943,7 @@ structure Transfer =
             case t of
                Arith {args, overflow, success, ...} =>
                   (vars args
-                   ; label overflow 
+                   ; label overflow
                    ; label success)
              | Bug => ()
              | Call {func = f, args, return, ...} =>
@@ -986,15 +986,15 @@ structure Transfer =
                          ty = ty}
              | Bug => Bug
              | Call {func, args, return} =>
-                  Call {func = func, 
+                  Call {func = func,
                         args = fxs args,
                         return = Return.map (return, fl)}
              | Case {test, cases, default} =>
-                  Case {test = fx test, 
+                  Case {test = fx test,
                         cases = Cases.map(cases, fl),
                         default = Option.map(default, fl)}
-             | Goto {dst, args} => 
-                  Goto {dst = fl dst, 
+             | Goto {dst, args} =>
+                  Goto {dst = fl dst,
                         args = fxs args}
              | Raise xs => Raise (fxs xs)
              | Return xs => Return (fxs xs)
@@ -1052,7 +1052,7 @@ structure Transfer =
                           then Var.layout (Vector.sub (xs, 0))
                        else layoutTuple xs]
              | Runtime {prim, args, return} =>
-                  seq [Label.layout return, str " ", 
+                  seq [Label.layout return, str " ",
                        tuple [Prim.layoutApp (prim, args, Var.layout)]]
       end
 
@@ -1061,14 +1061,14 @@ structure Transfer =
       fun equals (e: t, e': t): bool =
          case (e, e') of
             (Arith {prim, args, overflow, success, ...},
-             Arith {prim = prim', args = args', 
+             Arith {prim = prim', args = args',
                     overflow = overflow', success = success', ...}) =>
                Prim.equals (prim, prim') andalso
                varsEquals (args, args') andalso
                Label.equals (overflow, overflow') andalso
                Label.equals (success, success')
           | (Bug, Bug) => true
-          | (Call {func, args, return}, 
+          | (Call {func, args, return},
              Call {func = func', args = args', return = return'}) =>
                Func.equals (func, func') andalso
                varsEquals (args, args') andalso
@@ -1109,14 +1109,14 @@ structure Transfer =
              | Call {func, args, return} =>
                   hashVars (args, hash2 (Func.hash func, Return.hash return))
              | Case {test, cases, default} =>
-                  hash2 (Var.hash test, 
+                  hash2 (Var.hash test,
                          Cases.fold
-                         (cases, 
+                         (cases,
                           Option.fold
-                          (default, 0wx55555555, 
-                           fn (l, w) => 
+                          (default, 0wx55555555,
+                           fn (l, w) =>
                            hash2 (Label.hash l, w)),
-                          fn (l, w) => 
+                          fn (l, w) =>
                           hash2 (Label.hash l, w)))
              | Goto {dst, args} =>
                   hashVars (args, Label.hash dst)
@@ -1330,7 +1330,7 @@ structure Function =
                       val _ =
                          Transfer.foreachLabel
                          (transfer, fn to =>
-                          (ignore o Graph.addEdge) 
+                          (ignore o Graph.addEdge)
                           (g, {from = from, to = labelNode to}))
                    in
                       ()
@@ -1438,7 +1438,7 @@ structure Function =
                                         Cases.Con v => doit (v, Con.toString)
                                       | Cases.Word (_, v) =>
                                            doit (v, WordX.toString)
-                                  val _ = 
+                                  val _ =
                                      case default of
                                         NONE => ()
                                       | SOME j =>
@@ -1494,7 +1494,7 @@ structure Function =
                val root = labelNode start
                val graphLayout =
                   Graph.layoutDot
-                  (graph, fn {nodeName} => 
+                  (graph, fn {nodeName} =>
                    {title = concat [Func.toString name, " control-flow graph"],
                     options = [GraphOption.Rank (Min, [{nodeName = nodeName root}])],
                     edgeOptions = edgeOptions,
@@ -1641,7 +1641,7 @@ structure Function =
             local
                fun make (new, plist) =
                   let
-                     val {get, set, destroy, ...} = 
+                     val {get, set, destroy, ...} =
                         Property.destGetSetOnce (plist, Property.initConst NONE)
                      fun bind x =
                         let
@@ -1667,14 +1667,14 @@ structure Function =
             val args = Vector.map (args, fn (x, ty) => (bindVar x, ty))
             val bindLabel = ignore o bindLabel
             val bindVar = ignore o bindVar
-            val _ = 
+            val _ =
                Vector.foreach
-               (blocks, fn Block.T {label, args, statements, ...} => 
+               (blocks, fn Block.T {label, args, statements, ...} =>
                 (bindLabel label
                  ; Vector.foreach (args, fn (x, _) => bindVar x)
                  ; Vector.foreach (statements, fn s =>
                                    Statement.foreachDef (s, bindVar o #1))))
-            val blocks = 
+            val blocks =
                Vector.map
                (blocks, fn Block.T {label, args, statements, transfer} =>
                 Block.T {label = lookupLabel label,
@@ -1706,7 +1706,7 @@ structure Function =
          if !Control.profile = Control.ProfileNone
             orelse !Control.profileIL <> Control.ProfileSource
             then f
-         else 
+         else
          let
             val _ = Control.diagnostic (fn () => layout f)
             val {args, blocks, mayInline, name, raises, returns, start} = dest f
@@ -1753,7 +1753,7 @@ structure Function =
                       : Statement.t vector * Label.t * Handler.t =
                       case raises of
                          NONE => (statements, cont, Handler.Caller)
-                       | SOME ts => 
+                       | SOME ts =>
                             let
                                val xs = Vector.map (ts, fn _ => Var.newNoname ())
                                val l = Label.newNoname ()
@@ -1814,7 +1814,7 @@ structure Function =
                 end)
             val _ = Vector.foreach (blocks, rem o Block.label)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
-            val f = 
+            val f =
                new {args = args,
                     blocks = blocks,
                     mayInline = mayInline,
@@ -1888,7 +1888,7 @@ structure Program =
                          (Node.plist,
                           Property.initFun (fn _ => {nontail = ref false,
                                                      tail = ref false}))
-                      val _ = 
+                      val _ =
                          Vector.foreach
                          (blocks, fn Block.T {transfer, ...} =>
                           case transfer of
@@ -1941,7 +1941,7 @@ structure Program =
             (* Layout includes an output function, so we need to rebind output
              * to the one above.
              *)
-            val output = output' 
+            val output = output'
          in
             output (str "\n\nDatatypes:")
             ; Vector.foreach (datatypes, output o Datatype.layout)
@@ -2121,7 +2121,7 @@ structure Program =
                         val _ = Array.update (visited, i, true)
                         val f = Vector.sub (functions, i)
                         val v' = v f
-                        val _ = Function.dfs 
+                        val _ = Function.dfs
                                 (f, fn Block.T {transfer, ...} =>
                                  (Transfer.foreachFunc (transfer, visit)
                                   ; fn () => ()))

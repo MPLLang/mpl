@@ -10,7 +10,7 @@
 
 /*
  * Weak objects have the following layout:
- * 
+ *
  * header ::
  * padding ::
  * link (native-pointer) ::
@@ -31,7 +31,7 @@
  * Note that the order of the fields is important.  The non-objptr
  * field must be first, because a weak object is sometimes treated as
  * a normal object.
- */ 
+ */
 typedef struct GC_weak {
   struct GC_weak *link;
   objptr objptr;
@@ -53,7 +53,7 @@ static inline size_t offsetofWeak (GC_state s);
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE uint32_t GC_weakCanGet (GC_state s, pointer p);
+PRIVATE uint32_t GC_weakCanGet (pointer p);
 PRIVATE pointer GC_weakGet (GC_state s, pointer p);
 PRIVATE pointer GC_weakNew (GC_state s, GC_header header, pointer p);
 

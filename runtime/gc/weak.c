@@ -31,7 +31,7 @@ size_t offsetofWeak (GC_state s) {
   return (sizeofWeak (s)) - (GC_NORMAL_HEADER_SIZE + sizeof (struct GC_weak));
 }
 
-uint32_t GC_weakCanGet (GC_state s, pointer p) {
+uint32_t GC_weakCanGet (pointer p) {
   uint32_t res;
 
   res = GC_WEAK_GONE_HEADER != getHeader (p);

@@ -35,7 +35,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
      */
     enter (s);
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-    switchToThread (s, pointerToObjptr(p, s->heap.start));
+    switchToThread (s, pointerToObjptr(p, s->heap->start));
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     ensureInvariantForMutator (s, FALSE);

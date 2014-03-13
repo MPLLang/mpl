@@ -53,15 +53,15 @@ pointer GC_arrayAllocate (GC_state s,
              uintmaxToCommaString(arraySize),
              uintmaxToCommaString(arraySizeAligned),
              uintmaxToCommaString(ensureBytesFree));
-  if (arraySizeAligned >= s->controls.oldGenArraySize) {
+  if (arraySizeAligned >= s->controls->oldGenArraySize) {
     if (not hasHeapBytesFree (s, arraySizeAligned, ensureBytesFree)) {
       enter (s);
       performGC (s, arraySizeAligned, ensureBytesFree, FALSE, TRUE);
       leave (s);
     }
-    frontier = s->heap.start + s->heap.oldGenSize;
-    s->heap.oldGenSize += arraySizeAligned;
-    s->cumulativeStatistics.bytesAllocated += arraySizeAligned;
+    frontier = s->heap->start + s->heap->oldGenSize;
+    s->heap->oldGenSize += arraySizeAligned;
+    s->cumulativeStatistics->bytesAllocated += arraySizeAligned;
   } else {
     size_t bytesRequested;
     pointer newFrontier;

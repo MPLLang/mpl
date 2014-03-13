@@ -73,7 +73,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {
-        if (DEBUG_STACKS or s->controls.messages)
+        if (DEBUG_STACKS or s->controls->messages)
           fprintf (stderr,
                    "[GC: Shrinking stack of size %s bytes to size %s bytes, using %s bytes.]\n",
                    uintmaxToCommaString(stack->reserved),
@@ -139,7 +139,7 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
     fprintf (stderr,
              "forwardObjptrIfInNursery  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
-  assert (s->heap.nursery <= p and p < s->limitPlusSlop);
+  assert (s->heap->nursery <= p and p < s->limitPlusSlop);
   forwardObjptr (s, opp);
 }
 
@@ -159,11 +159,11 @@ void forwardInterGenerationalObjptrs (GC_state s) {
   /* Constants. */
   cardMap = s->generationalMaps.cardMap;
   crossMap = s->generationalMaps.crossMap;
-  maxCardIndex = sizeToCardMapIndex (align (s->heap.oldGenSize, CARD_SIZE));
-  oldGenStart = s->heap.start;
-  oldGenEnd = oldGenStart + s->heap.oldGenSize;
+  maxCardIndex = sizeToCardMapIndex (align (s->heap->oldGenSize, CARD_SIZE));
+  oldGenStart = s->heap->start;
+  oldGenEnd = oldGenStart + s->heap->oldGenSize;
   /* Loop variables*/
-  objectStart = alignFrontier (s, s->heap.start);
+  objectStart = alignFrontier (s, s->heap->start);
   cardIndex = 0;
   cardStart = oldGenStart;
 checkAll:

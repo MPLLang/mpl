@@ -115,7 +115,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->controls->messages = TRUE;
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
-          s->controls.summary = TRUE;
+          s->controls->summary = TRUE;
         } else if (0 == strcmp (arg, "grow-ratio")) {
           i++;
           if (i == argc)
@@ -170,7 +170,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
           i++;
           if (i == argc)
             die ("@MLton may-page-heap missing argument.");
-          s->controls.mayPageHeap = stringToBool (argv[i++]);
+          s->controls->mayPageHeap = stringToBool (argv[i++]);
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
@@ -344,7 +344,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&s->signalsInfo.signalsHandled);
   sigemptyset (&s->signalsInfo.signalsPending);
-
+  s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
@@ -363,8 +363,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (s->controls->ratios.markCompact <= s->controls->ratios.copy
           and s->controls->ratios.copy <= s->controls->ratios.live)
     die ("Ratios must satisfy mark-compact-ratio <= copy-ratio <= live-ratio.");
-  unless (s->controls.ratios.stackCurrentPermitReserved
-          <= s->controls.ratios.stackCurrentMaxReserved)
+  unless (s->controls->ratios.stackCurrentPermitReserved
+          <= s->controls->ratios.stackCurrentMaxReserved)
     die ("Ratios must satisfy stack-current-permit-reserved <= stack-current-max-reserved.");
   /* We align s->sysvals.ram by s->sysvals.pageSize so that we can
    * test whether or not we we are using mark-compact by comparing
@@ -443,10 +443,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&d->signalsInfo.signalsHandled);
   sigemptyset (&d->signalsInfo.signalsPending);
-  d->startTime = s->startTime;
   d->syncReason = SYNC_NONE;
-  d->sysvals.totalRam = s->sysvals.totalRam;
   d->sysvals.pageSize = s->sysvals.pageSize;
+  d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
 

@@ -138,18 +138,17 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
-  size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)
     s->globals[i] = BOGUS_OBJPTR;
-  s->lastMajorStatistics.bytesLive = sizeofInitialBytesLive (s);
-  createHeap (s, &s->heap,
-              sizeofHeapDesired (s, s->lastMajorStatistics.bytesLive, 0),
-              s->lastMajorStatistics.bytesLive);
+  s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive (s);
+  createHeap (s, s->heap,
+              sizeofHeapDesired (s, s->lastMajorStatistics->bytesLive, 0),
+              s->lastMajorStatistics->bytesLive);
   setCardMapAndCrossMap (s);
-  start = alignFrontier (s, s->heap.start);
+  start = alignFrontier (s, s->heap->start);
   s->frontier = start;
-  s->limitPlusSlop = s->heap.start + s->heap.size;
+  s->limitPlusSlop = s->heap->start + s->heap->size;
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   initIntInfs (s);
   initVectors (s);
@@ -166,10 +165,10 @@ void duplicateWorld (GC_state d, GC_state s) {
   d->lastMajorStatistics->bytesLive = 0;
 
   /* Use the original to allocate */
-  thread = newThread (s, sizeofStackInitial (s));
+  thread = newThread (s, sizeofStackInitialReserved (s));
 
   /* Now copy stats, heap data from original */
-  d->cumulativeStatistics->maxHeapSizeSeen = s->cumulativeStatistics->maxHeapSizeSeen;
+  d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;
   d->heap = s->heap;
   d->secondaryHeap = s->secondaryHeap;
   d->generationalMaps = s->generationalMaps;

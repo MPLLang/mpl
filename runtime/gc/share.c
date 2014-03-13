@@ -23,8 +23,8 @@ void GC_share (GC_state s, pointer object) {
   // Hash cons during the second round of (un)marking.
   dfsMarkByMode (s, object, UNMARK_MODE, TRUE, FALSE);
   freeHashTable (s->objectHashTable);
-  bytesHashConsed = s->lastMajorStatistics.bytesHashConsed;
-  s->cumulativeStatistics.bytesHashConsed += bytesHashConsed;
+  bytesHashConsed = s->lastMajorStatistics->bytesHashConsed;
+  s->cumulativeStatistics->bytesHashConsed += bytesHashConsed;
   if (DEBUG_SHARE or s->controls->messages)
     printBytesHashConsedMessage (bytesHashConsed, bytesExamined);
   leave (s);

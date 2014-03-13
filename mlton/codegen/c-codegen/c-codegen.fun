@@ -231,12 +231,25 @@ fun declareGlobals (prefix: string, print) =
           in
              print (concat [prefix, s, " global", s,
                             " [", C.int (Global.numberOfType t), "];\n"])
-             ; print (concat [prefix, s, " CReturn", CType.name t, ";\n"])
           end)
       val _ =
          print (concat [prefix, "Pointer globalObjptrNonRoot [",
                         C.int (Global.numberOfNonRoot ()),
                         "];\n"])
+   in
+      ()
+   end
+
+fun declareCReturns (print) =
+   let
+      val _ =
+         List.foreach
+         (CType.all, fn t =>
+          let
+             val s = CType.toString t
+          in
+            print (concat ["\t", s, " CReturn", CType.name t, ";\n"])
+          end)
    in
       ()
    end
@@ -1173,7 +1186,10 @@ fun output {program as Machine.Program.T {chunks,
             fun outputOffsets () =
                List.foreach
                ([("ExnStackOffset", GCField.ExnStack),
+                 ("FFIOpOffset", GCField.FFIOp),
                  ("FrontierOffset", GCField.Frontier),
+                 ("GlobalObjptrNonRootOffset", GCField.GlobalObjptrNonRoot),
+                 ("ReturnToCOffset", GCField.ReturnToC),
                  ("StackBottomOffset", GCField.StackBottom),
                  ("StackTopOffset", GCField.StackTop)],
                 fn (name, f) =>
@@ -1188,6 +1204,7 @@ fun output {program as Machine.Program.T {chunks,
             ; declareProfileLabels ()
             ; C.callNoSemi ("Chunk", [chunkLabelToString chunkLabel], print)
             ; print "\n"
+            ; declareCReturns (print)
             ; declareRegisters ()
             ; C.callNoSemi ("ChunkSwitch", [chunkLabelToString chunkLabel],
                             print)
@@ -1203,7 +1220,8 @@ fun output {program as Machine.Program.T {chunks,
             ; done ()
          end
       val additionalMainArgs =
-         [chunkLabelToString chunkLabel,
+         [C.int (Global.numberOfNonRoot ()),
+          chunkLabelToString chunkLabel,
           labelToStringIndex label]
       val {print, done, ...} = outputC ()
       fun rest () =

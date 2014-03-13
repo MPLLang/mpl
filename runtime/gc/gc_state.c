@@ -18,13 +18,19 @@ void displayGCState (GC_state s, FILE *stream) {
   displayGenerationalMaps (s, &s->generationalMaps,
                            stream);
   fprintf (stream, "\theap\n");
-  displayHeap (s, &s->heap,
+  displayHeap (s, s->heap,
                stream);
   fprintf (stream,
+           "\tstart = "FMTPTR"\n"
+           "\tfrontier = "FMTPTR"\n"
            "\tlimit = "FMTPTR"\n"
+           "\tlimitPlusSlop = "FMTPTR"\n"
            "\tstackBottom = "FMTPTR"\n"
            "\tstackTop = "FMTPTR"\n",
+           (uintptr_t)s->start,
+           (uintptr_t)s->frontier,
            (uintptr_t)s->limit,
+           (uintptr_t)s->limitPlusSlop,
            (uintptr_t)s->stackBottom,
            (uintptr_t)s->stackTop);
 }
@@ -59,7 +65,7 @@ void setGCStateCurrentHeap (GC_state s,
     fprintf (stderr, "setGCStateCurrentHeap(%s, %s)\n",
              uintmaxToCommaString(oldGenBytesRequested),
              uintmaxToCommaString(nurseryBytesRequested));
-  h = &s->heap;
+  h = s->heap;
   assert (isFrontierAligned (s, h->start + h->oldGenSize + oldGenBytesRequested));
   s->limitPlusSlop = h->start + h->size;
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -73,20 +79,20 @@ void setGCStateCurrentHeap (GC_state s,
       /* There is enough space in the generational nursery. */
       and (nurseryBytesRequested <= genNurserySize)
       /* The nursery is large enough to be worth it. */
-      and (((float)(h->size - s->lastMajorStatistics.bytesLive)
+      and (((float)(h->size - s->lastMajorStatistics->bytesLive)
             / (float)nurserySize)
-           <= s->controls.ratios.nursery)
+           <= s->controls->ratios.nursery)
       and /* There is a reason to use generational GC. */
       (
        /* We must use it for debugging purposes. */
        FORCE_GENERATIONAL
        /* We just did a mark compact, so it will be advantageous to to use it. */
-       or (s->lastMajorStatistics.kind == GC_MARK_COMPACT)
+       or (s->lastMajorStatistics->kind == GC_MARK_COMPACT)
        /* The live ratio is low enough to make it worthwhile. */
-       or ((float)h->size / (float)s->lastMajorStatistics.bytesLive
+       or ((float)h->size / (float)s->lastMajorStatistics->bytesLive
            <= (h->withMapsSize < s->sysvals.ram
-               ? s->controls.ratios.copyGenerational
-               : s->controls.ratios.markCompactGenerational))
+               ? s->controls->ratios.copyGenerational
+               : s->controls->ratios.markCompactGenerational))
        )) {
     s->canMinor = TRUE;
     nursery = genNursery;
@@ -98,10 +104,10 @@ void setGCStateCurrentHeap (GC_state s,
     s->canMinor = FALSE;
   }
   assert (nurseryBytesRequested <= nurserySize);
-  s->heap.nursery = nursery;
+  s->heap->nursery = nursery;
   s->frontier = nursery;
   assert (nurseryBytesRequested <= (size_t)(s->limitPlusSlop - s->frontier));
-  assert (isFrontierAligned (s, s->heap.nursery));
+  assert (isFrontierAligned (s, s->heap->nursery));
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
 }
 
@@ -161,12 +167,12 @@ void GC_setHashConsDuringGC (bool b) {
 
 size_t GC_getLastMajorStatisticsBytesLive (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->lastMajorStatistics.bytesLive;
+  return s->lastMajorStatistics->bytesLive;
 }
 
 pointer GC_getCallFromCHandlerThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  pointer p = objptrToPointer (s->callFromCHandlerThread, s->heap.start);
+  pointer p = objptrToPointer (s->callFromCHandlerThread, s->heap->start);
   return p;
 }
 
@@ -187,7 +193,7 @@ pointer GC_getSavedThread (void) {
   pointer p;
 
   assert(s->savedThread != BOGUS_OBJPTR);
-  p = objptrToPointer (s->savedThread, s->heap.start);
+  p = objptrToPointer (s->savedThread, s->heap->start);
   s->savedThread = BOGUS_OBJPTR;
   return p;
 }
@@ -197,7 +203,7 @@ void GC_setSavedThread (pointer p) {
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
-  op = pointerToObjptr (p, s->heap.start);
+  op = pointerToObjptr (p, s->heap->start);
   s->savedThread = op;
 }
 
@@ -214,7 +220,7 @@ struct rusage* GC_getRusageGCAddr (void) {
 
 sigset_t* GC_getSignalsHandledAddr (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return &(s->signalsInfo->signalsHandled);
+  return &(s->signalsInfo.signalsHandled);
 }
 
 sigset_t* GC_getSignalsPendingAddr (void) {

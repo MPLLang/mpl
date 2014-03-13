@@ -564,7 +564,7 @@ void resizeHeapSecondary (GC_state s) {
 
   primarySize = s->heap->size;
   primaryWithMapsSize = s->heap->withMapsSize;
-  secondarySize = s->secondaryHeap.size;
+  secondarySize = s->secondaryHeap->size;
   if (DEBUG_RESIZING)
     fprintf (stderr, "secondaryHeapResize\n");
   if (0 == secondarySize)
@@ -577,6 +577,6 @@ void resizeHeapSecondary (GC_state s) {
       releaseHeap (s, s->secondaryHeap);
   } else if (secondarySize > primarySize)
     shrinkHeap (s, s->secondaryHeap, primarySize);
-  assert (0 == s->secondaryHeap.size
-          or s->heap->size == s->secondaryHeap.size);
+  assert (0 == s->secondaryHeap->size
+          or s->heap->size == s->secondaryHeap->size);
 }

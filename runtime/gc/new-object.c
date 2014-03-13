@@ -57,7 +57,7 @@ GC_stack newStack (GC_state s,
 
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
-    s->cumulativeStatistics.maxStackSize = reserved;
+    s->cumulativeStatistics->maxStackSize = reserved;
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
                                 sizeofStackWithHeader (s, reserved),
                                 allocInOldGen));

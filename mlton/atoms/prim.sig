@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature PRIM_STRUCTS = 
+signature PRIM_STRUCTS =
    sig
       structure CFunction: C_FUNCTION
       structure CType: C_TYPE
@@ -18,7 +18,7 @@ signature PRIM_STRUCTS =
       sharing WordSize = Const.WordX.WordSize
    end
 
-signature PRIM = 
+signature PRIM =
    sig
       include PRIM_STRUCTS
 
@@ -53,6 +53,7 @@ signature PRIM =
              | FFI_Symbol of {name: string, (* codegen *)
                               cty: CType.t option,
                               symbolScope: CFunction.SymbolScope.t}
+             | FFI_getArgs (* RAM_WARNING: Is this correct? *)
              | GC_collect (* ssa to rssa *)
              | IntInf_add (* ssa to rssa *)
              | IntInf_andb (* ssa to rssa *)
@@ -238,9 +239,9 @@ signature PRIM =
       val cpointerAdd: 'a t
       val cpointerDiff: 'a t
       val cpointerEqual: 'a t
-      val cpointerGet: CType.t -> 'a t 
+      val cpointerGet: CType.t -> 'a t
       val cpointerLt: 'a t
-      val cpointerSet: CType.t -> 'a t 
+      val cpointerSet: CType.t -> 'a t
       val cpointerSub: 'a t
       val cpointerToWord: 'a t
       val deref: 'a t
@@ -255,8 +256,8 @@ signature PRIM =
                                           deVector: 'b -> 'b,
                                           deWeak: 'b -> 'b}} -> 'b vector
       val ffi: 'a CFunction.t -> 'a t
-      val ffiSymbol: {name: string, 
-                      cty: CType.t option, 
+      val ffiSymbol: {name: string,
+                      cty: CType.t option,
                       symbolScope: CFunction.SymbolScope.t } -> 'a t
       val fromString: string -> 'a t option
       val hash: 'a t (* polymorphic hash *)

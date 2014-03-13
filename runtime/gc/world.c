@@ -110,7 +110,7 @@ done:
   return;
 }
 
-C_Errno_t(Bool_t) GC_getSaveWorldStatus (__attribute__ ((unused)) GC_state *gs) {
+C_Errno_t(Bool_t) GC_getSaveWorldStatus (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   return (Bool_t)(s->saveWorldStatus);
 }

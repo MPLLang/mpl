@@ -106,25 +106,25 @@ void minorCheneyCopyGC (GC_state s) {
 
   if (DEBUG_GENERATIONAL)
     fprintf (stderr, "minorGC  nursery = "FMTPTR"  frontier = "FMTPTR"\n",
-             (uintptr_t)s->heap.nursery, (uintptr_t)s->frontier);
+             (uintptr_t)s->heap->nursery, (uintptr_t)s->frontier);
   assert (invariantForGC (s));
-  bytesAllocated = (size_t)(s->frontier - s->heap.nursery);
+  bytesAllocated = (size_t)(s->frontier - s->heap->nursery);
   if (bytesAllocated == 0)
     return;
-  s->cumulativeStatistics.bytesAllocated += bytesAllocated;
+  s->cumulativeStatistics->bytesAllocated += bytesAllocated;
   if (not s->canMinor) {
-    s->heap.oldGenSize += bytesAllocated;
+    s->heap->oldGenSize += bytesAllocated;
   } else {
     if (detailedGCTime (s))
       startTiming (&ru_start);
-    s->cumulativeStatistics.numMinorGCs++;
+    s->cumulativeStatistics->numMinorGCs++;
     s->forwardState.amInMinorGC = TRUE;
     if (DEBUG_GENERATIONAL or s->controls->messages) {
       fprintf (stderr,
                "[GC: Starting minor Cheney-copy;]\n");
       fprintf (stderr,
                "[GC:\tfrom nursery at "FMTPTR" of size %s bytes.]\n",
-               (uintptr_t)(s->heap.nursery),
+               (uintptr_t)(s->heap->nursery),
                uintmaxToCommaString(bytesAllocated));
     }
     s->forwardState.toStart = s->heap->start + s->heap->oldGenSize;

@@ -34,20 +34,20 @@ void majorGC (GC_state s, size_t bytesRequested, bool mayResize) {
   else
     majorMarkCompactGC (s);
   s->hashConsDuringGC = FALSE;
-  s->lastMajorStatistics.bytesLive = s->heap.oldGenSize;
-  if (s->lastMajorStatistics.bytesLive > s->cumulativeStatistics.maxBytesLive)
-    s->cumulativeStatistics.maxBytesLive = s->lastMajorStatistics.bytesLive;
-  /* Notice that the s->lastMajorStatistics.bytesLive below is
-   * different than the s->lastMajorStatistics.bytesLive used as an
+  s->lastMajorStatistics->bytesLive = s->heap->oldGenSize;
+  if (s->lastMajorStatistics->bytesLive > s->cumulativeStatistics->maxBytesLive)
+    s->cumulativeStatistics->maxBytesLive = s->lastMajorStatistics->bytesLive;
+  /* Notice that the s->lastMajorStatistics->bytesLive below is
+   * different than the s->lastMajorStatistics->bytesLive used as an
    * argument to createHeapSecondary above.  Above, it was an
    * estimate.  Here, it is exactly how much was live after the GC.
    */
   if (mayResize) {
-    resizeHeap (s, s->lastMajorStatistics.bytesLive + bytesRequested);
+    resizeHeap (s, s->lastMajorStatistics->bytesLive + bytesRequested);
   }
   setCardMapAndCrossMap (s);
   resizeHeapSecondary (s);
-  assert (s->heap.oldGenSize + bytesRequested <= s->heap.size);
+  assert (s->heap->oldGenSize + bytesRequested <= s->heap->size);
 }
 
 void growStackCurrent (GC_state s) {
@@ -55,7 +55,7 @@ void growStackCurrent (GC_state s) {
   GC_stack stack;
 
   reserved = sizeofStackGrowReserved (s, getStackCurrent(s));
-  if (DEBUG_STACKS or s->controls.messages)
+  if (DEBUG_STACKS or s->controls->messages)
     fprintf (stderr,
              "[GC: Growing stack of size %s bytes to size %s bytes, using %s bytes.]\n",
              uintmaxToCommaString(getStackCurrent(s)->reserved),
@@ -64,8 +64,8 @@ void growStackCurrent (GC_state s) {
   assert (hasHeapBytesFree (s, sizeofStackWithHeader (s, reserved), 0));
   stack = newStack (s, reserved, TRUE);
   copyStack (s, getStackCurrent(s), stack);
-  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap.start);
-  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), s->heap.start));
+  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
+  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), s->heap->start));
 }
 
 void enterGC (GC_state s) {
@@ -102,32 +102,32 @@ void performGC (GC_state s,
   size_t totalBytesRequested;
 
   enterGC (s);
-  s->cumulativeStatistics.numGCs++;
-  if (DEBUG or s->controls.messages) {
-    size_t nurserySize = s->heap.size - ((size_t)(s->heap.nursery - s->heap.start));
-    size_t nurseryUsed = (size_t)(s->frontier - s->heap.nursery);
+  s->cumulativeStatistics->numGCs++;
+  if (DEBUG or s->controls->messages) {
+    size_t nurserySize = s->heap->size - ((size_t)(s->heap->nursery - s->heap->start));
+    size_t nurseryUsed = (size_t)(s->frontier - s->heap->nursery);
     fprintf (stderr,
              "[GC: Starting gc #%s; requesting %s nursery bytes and %s old-gen bytes,]\n",
-             uintmaxToCommaString(s->cumulativeStatistics.numGCs),
+             uintmaxToCommaString(s->cumulativeStatistics->numGCs),
              uintmaxToCommaString(nurseryBytesRequested),
              uintmaxToCommaString(oldGenBytesRequested));
     fprintf (stderr,
              "[GC:\theap at "FMTPTR" of size %s bytes (+ %s bytes card/cross map),]\n",
-             (uintptr_t)(s->heap.start),
-             uintmaxToCommaString(s->heap.size),
-             uintmaxToCommaString(s->heap.withMapsSize - s->heap.size));
+             (uintptr_t)(s->heap->start),
+             uintmaxToCommaString(s->heap->size),
+             uintmaxToCommaString(s->heap->withMapsSize - s->heap->size));
     fprintf (stderr,
              "[GC:\twith old-gen of size %s bytes (%.1f%% of heap),]\n",
-             uintmaxToCommaString(s->heap.oldGenSize),
-             100.0 * ((double)(s->heap.oldGenSize) / (double)(s->heap.size)));
+             uintmaxToCommaString(s->heap->oldGenSize),
+             100.0 * ((double)(s->heap->oldGenSize) / (double)(s->heap->size)));
     fprintf (stderr,
              "[GC:\tand nursery of size %s bytes (%.1f%% of heap),]\n",
              uintmaxToCommaString(nurserySize),
-             100.0 * ((double)(nurserySize) / (double)(s->heap.size)));
+             100.0 * ((double)(nurserySize) / (double)(s->heap->size)));
     fprintf (stderr,
              "[GC:\tand nursery using %s bytes (%.1f%% of heap, %.1f%% of nursery).]\n",
              uintmaxToCommaString(nurseryUsed),
-             100.0 * ((double)(nurseryUsed) / (double)(s->heap.size)),
+             100.0 * ((double)(nurseryUsed) / (double)(s->heap->size)),
              100.0 * ((double)(nurseryUsed) / (double)(nurserySize)));
   }
   assert (invariantForGC (s));
@@ -144,7 +144,7 @@ void performGC (GC_state s,
     + nurseryBytesRequested
     + stackBytesRequested;
   if (forceMajor
-      or totalBytesRequested > s->heap.size - s->heap.oldGenSize)
+      or totalBytesRequested > s->heap->size - s->heap->oldGenSize)
     majorGC (s, totalBytesRequested, mayResize);
   setGCStateCurrentHeap (s, oldGenBytesRequested + stackBytesRequested,
                          nurseryBytesRequested);
@@ -154,30 +154,30 @@ void performGC (GC_state s,
     growStackCurrent (s);
   setGCStateCurrentThreadAndStack (s);
   if (needGCTime (s)) {
-    gcTime = stopTiming (&ru_start, &s->cumulativeStatistics.ru_gc);
-    s->cumulativeStatistics.maxPauseTime =
-      max (s->cumulativeStatistics.maxPauseTime, gcTime);
+    gcTime = stopTiming (&ru_start, &s->cumulativeStatistics->ru_gc);
+    s->cumulativeStatistics->maxPauseTime =
+      max (s->cumulativeStatistics->maxPauseTime, gcTime);
   } else
     gcTime = 0;  /* Assign gcTime to quell gcc warning. */
-  if (DEBUG or s->controls.messages) {
-    size_t nurserySize = s->heap.size - (size_t)(s->heap.nursery - s->heap.start);
+  if (DEBUG or s->controls->messages) {
+    size_t nurserySize = s->heap->size - (size_t)(s->heap->nursery - s->heap->start);
     fprintf (stderr,
              "[GC: Finished gc #%s; time %s ms,]\n",
-             uintmaxToCommaString(s->cumulativeStatistics.numGCs),
+             uintmaxToCommaString(s->cumulativeStatistics->numGCs),
              uintmaxToCommaString(gcTime));
     fprintf (stderr,
              "[GC:\theap at "FMTPTR" of size %s bytes (+ %s bytes card/cross map),]\n",
-             (uintptr_t)(s->heap.start),
-             uintmaxToCommaString(s->heap.size),
-             uintmaxToCommaString(s->heap.withMapsSize - s->heap.size));
+             (uintptr_t)(s->heap->start),
+             uintmaxToCommaString(s->heap->size),
+             uintmaxToCommaString(s->heap->withMapsSize - s->heap->size));
     fprintf (stderr,
              "[GC:\twith old-gen of size %s bytes (%.1f%% of heap),]\n",
-             uintmaxToCommaString(s->heap.oldGenSize),
-             100.0 * ((double)(s->heap.oldGenSize) / (double)(s->heap.size)));
+             uintmaxToCommaString(s->heap->oldGenSize),
+             100.0 * ((double)(s->heap->oldGenSize) / (double)(s->heap->size)));
     fprintf (stderr,
              "[GC:\tand nursery of size %s bytes (%.1f%% of heap).]\n",
              uintmaxToCommaString(nurserySize),
-             100.0 * ((double)(nurserySize) / (double)(s->heap.size)));
+             100.0 * ((double)(nurserySize) / (double)(s->heap->size)));
   }
   /* Send a GC signal. */
   if (s->signalsInfo.gcSignalHandled
@@ -211,7 +211,7 @@ void ensureInvariantForMutator (GC_state s, bool force) {
 void ensureHasHeapBytesFree (GC_state s,
                              size_t oldGenBytesRequested,
                              size_t nurseryBytesRequested) {
-  assert (s->heap.nursery <= s->limitPlusSlop);
+  assert (s->heap->nursery <= s->limitPlusSlop);
   assert (s->frontier <= s->limitPlusSlop);
   if (not hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested))
     performGC (s, oldGenBytesRequested, nurseryBytesRequested, FALSE, TRUE);
