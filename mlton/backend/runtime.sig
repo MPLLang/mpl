@@ -83,6 +83,8 @@ signature RUNTIME =
                           numObjptrs: int}
              | Stack
              | Weak of {gone: bool}
+             | HeaderOnly
+             | Fill
          end
 
       val arrayLengthOffset: unit -> Bytes.t

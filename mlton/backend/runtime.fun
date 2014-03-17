@@ -48,8 +48,8 @@ structure GCField =
       val stackLimitOffset: Bytes.t ref = ref Bytes.zero
       val stackTopOffset: Bytes.t ref = ref Bytes.zero
 
-      fun setOffsets {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex, 
-                      exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize, 
+      fun setOffsets {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex,
+                      exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
                       returnToC, signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateOffset := atomicState
           ; cardMapAbsoluteOffset := cardMapAbsolute
@@ -103,8 +103,8 @@ structure GCField =
       val stackLimitSize: Bytes.t ref = ref Bytes.zero
       val stackTopSize: Bytes.t ref = ref Bytes.zero
 
-      fun setSizes {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex, 
-                    exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize, 
+      fun setSizes {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex,
+                    exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
                     returnToC, signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateSize := atomicState
           ; cardMapAbsoluteSize := cardMapAbsolute
@@ -173,6 +173,8 @@ structure RObjectType =
                     numObjptrs: int}
        | Stack
        | Weak of {gone: bool}
+       | HeaderOnly
+       | Fill
 
       fun layout (t: t): Layout.t =
          let
@@ -190,9 +192,12 @@ structure RObjectType =
                                ("bytesNonObjptrs", Bytes.layout bytesNonObjptrs),
                                ("numObjptrs", Int.layout numObjptrs)]]
              | Stack => str "Stack"
-             | Weak {gone} => 
+             | Weak {gone} =>
                   seq [str "Weak",
                        record [("gone", Bool.layout gone)]]
+             | HeaderOnly => str "HeaderOnly"
+             | Fill => str "Fill"
+
          end
       val _ = layout (* quell unused warning *)
    end
@@ -207,7 +212,7 @@ in
                       0 <= typeIndex
                       andalso typeIndex < maxTypeIndex)
        ; Word.orb (0w1, Word.<< (Word.fromInt typeIndex, 0w1)))
-      
+
    fun headerToTypeIndex w = Word.toInt (Word.>> (w, 0w1))
 end
 
@@ -218,7 +223,7 @@ val objptrSize : unit -> Bytes.t =
 (* see gc/object.h *)
 val headerSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.header)
-val headerOffset : unit -> Bytes.t = 
+val headerOffset : unit -> Bytes.t =
    Promise.lazy (Bytes.~ o headerSize)
 
 (* see gc/array.h *)

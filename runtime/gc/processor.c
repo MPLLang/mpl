@@ -48,8 +48,8 @@ bool Proc_isInitialized (GC_state s) {
   return Proc_initialized == s->numberOfProcs;
 }
 
-struct timeval tv_rt;
-struct timeval tv_sync;
+struct rusage rusage_rt;
+struct rusage rusage_sync;
 
 void Proc_beginCriticalSection (GC_state s) {
   if (Proc_isInitialized (s)) {
@@ -59,7 +59,7 @@ void Proc_beginCriticalSection (GC_state s) {
     if (p == 1) {
       /* We are the first thread in this round. */
       if (needGCTime (s))
-        startWallTiming (&tv_sync);
+        startTiming (&rusage_sync);
 
       switch (s->syncReason) {
       case SYNC_NONE:
@@ -96,8 +96,8 @@ void Proc_beginCriticalSection (GC_state s) {
     if (p == s->numberOfProcs) {
       /* We are the last to syncronize */
       if (needGCTime (s)) {
-        stopWallTiming (&tv_sync, &s->cumulativeStatistics->tv_sync);
-        startWallTiming (&tv_rt);
+        stopTiming (&rusage_sync, &s->cumulativeStatistics->rusage_sync);
+        startTiming (&rusage_rt);
       }
       Proc_criticalTicket = 0;
     }
@@ -116,7 +116,7 @@ void Proc_endCriticalSection (__attribute__ ((unused)) GC_state s) {
       /* We are the last to finish */
 
       if (needGCTime (s))
-        stopWallTiming (&tv_rt, &s->cumulativeStatistics->tv_rt);
+        stopTiming (&rusage_rt, &s->cumulativeStatistics->rusage_rt);
 
       Proc_criticalCount = 0;
       Proc_criticalTicket = -1;
