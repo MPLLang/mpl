@@ -13,13 +13,17 @@ void displayHeap (__attribute__ ((unused)) GC_state s,
           "\t\tnursery = "FMTPTR"\n"
           "\t\toldGenSize = %"PRIuMAX"\n"
           "\t\tsize = %"PRIuMAX"\n"
+          "\t\tavailableSize = %"PRIuMAX"\n"
           "\t\tstart = "FMTPTR"\n"
-          "\t\twithMapsSize = %"PRIuMAX"\n",
+          "\t\twithMapsSize = %"PRIuMAX"\n"
+          "\t\tfrontier = "FMTPTR"\n",
           (uintptr_t)heap->nursery,
           (uintmax_t)heap->oldGenSize,
           (uintmax_t)heap->size,
+          (uintmax_t)heap->availableSize,
           (uintptr_t)heap->start,
-          (uintmax_t)heap->withMapsSize);
+          (uintmax_t)heap->withMapsSize,
+          (uintptr_t)heap->frontier);
 }
 
 
@@ -28,8 +32,10 @@ void initHeap (__attribute__ ((unused)) GC_state s,
   h->nursery = NULL;
   h->oldGenSize = 0;
   h->size = 0;
+  h->availableSize = h->size;
   h->start = NULL;
   h->withMapsSize = 0;
+  h->frontier = NULL;
 }
 
 /* sizeofHeapDesired (s, l, cs)

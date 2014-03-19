@@ -23,12 +23,10 @@ volatile int32_t Proc_initialized = 0;
 volatile int32_t Proc_criticalCount;
 volatile int32_t Proc_criticalTicket;
 
-void Proc_waitForInitialization (__attribute__ ((unused)) GC_state s) {
-  int32_t unused;
-
+void Proc_waitForInitialization (GC_state s) {
   while (!Proc_beginInit) { }
 
-  unused = __sync_fetch_and_add (&Proc_initialized, 1);
+  __sync_fetch_and_add (&Proc_initialized, 1);
 
   while (!Proc_isInitialized (s)) { }
 }
@@ -109,7 +107,7 @@ void Proc_beginCriticalSection (GC_state s) {
   }
 }
 
-void Proc_endCriticalSection (__attribute__ ((unused)) GC_state s) {
+void Proc_endCriticalSection (GC_state s) {
   if (Proc_isInitialized (s)) {
     int32_t p = __sync_add_and_fetch (&Proc_criticalTicket, 1);
     if (p == s->numberOfProcs) {
@@ -130,6 +128,6 @@ void Proc_endCriticalSection (__attribute__ ((unused)) GC_state s) {
   }
 }
 
-bool Proc_threadInSection (__attribute__ ((unused)) GC_state s) {
+bool Proc_threadInSection (void) {
   return Proc_criticalCount > 0;
 }

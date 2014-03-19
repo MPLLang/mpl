@@ -15,6 +15,6 @@ bool Proc_isInitialized (GC_state s);
 /* Synchronize all processors */
 void Proc_beginCriticalSection (GC_state s);
 void Proc_endCriticalSection (GC_state s);
-bool Proc_threadInSection (__attribute__ ((unused)) GC_state s);
+bool Proc_threadInSection (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

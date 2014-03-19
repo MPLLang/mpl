@@ -25,7 +25,7 @@ void GC_pack (void) {
   if (keep <= s->heap->size) {
     shrinkHeap (s, s->heap, keep);
     setCardMapAndCrossMap (s);
-    setGCStateCurrentHeap (s, 0, 0);
+    setGCStateCurrentHeap (s, 0, 0, true);
     setGCStateCurrentThreadAndStack (s);
   }
   releaseHeap (s, s->secondaryHeap);

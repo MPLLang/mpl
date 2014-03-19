@@ -138,17 +138,22 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
+  size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)
     s->globals[i] = BOGUS_OBJPTR;
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive (s);
+  minSize = s->lastMajorStatistics->bytesLive
+    + ((GC_HEAP_LIMIT_SLOP + GC_BONUS_SLOP) * s->numberOfProcs);
   createHeap (s, s->heap,
-              sizeofHeapDesired (s, s->lastMajorStatistics->bytesLive, 0),
-              s->lastMajorStatistics->bytesLive);
+              sizeofHeapDesired (s, minSize, 0),
+              minSize);
   setCardMapAndCrossMap (s);
   start = alignFrontier (s, s->heap->start);
+  s->start = start;
   s->frontier = start;
   s->limitPlusSlop = s->heap->start + s->heap->size;
+  s->limitPlusSlop = s->heap->start + s->heap->size - GC_BONUS_SLOP;
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   initIntInfs (s);
   initVectors (s);

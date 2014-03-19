@@ -20,7 +20,7 @@ void enter (GC_state s) {
   Proc_beginCriticalSection(s);
   if (DEBUG)
     fprintf (stderr, "enter locked\n");
-  if (DEBUG) 
+  if (DEBUG)
     displayGCState (s, stderr);
   beginAtomic (s);
   assert (invariantForGC (s));

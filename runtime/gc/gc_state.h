@@ -32,7 +32,8 @@ struct GC_state {
   struct GC_controls *controls;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
-  uint32_t ffiOp;
+#warning Is this the right type?
+  pointer ffiArgs;
   struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */

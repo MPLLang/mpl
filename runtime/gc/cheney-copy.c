@@ -101,6 +101,7 @@ void majorCheneyCopyGC (GC_state s) {
 
 void minorCheneyCopyGC (GC_state s) {
   size_t bytesAllocated;
+  size_t bytesFilled = 0;
   size_t bytesCopied;
   struct rusage ru_start;
 
@@ -108,12 +109,28 @@ void minorCheneyCopyGC (GC_state s) {
     fprintf (stderr, "minorGC  nursery = "FMTPTR"  frontier = "FMTPTR"\n",
              (uintptr_t)s->heap->nursery, (uintptr_t)s->frontier);
   assert (invariantForGC (s));
-  bytesAllocated = (size_t)(s->frontier - s->heap->nursery);
+  bytesAllocated = (size_t)(s->heap->frontier - s->heap->nursery);
   if (bytesAllocated == 0)
     return;
   s->cumulativeStatistics->bytesAllocated += bytesAllocated;
   if (not s->canMinor) {
-    s->heap->oldGenSize += bytesAllocated;
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      /* Add in the bonus slop now since we need to fill it */
+      s->procStates[proc].limitPlusSlop += GC_BONUS_SLOP;
+      if (s->procStates[proc].limitPlusSlop != s->heap->frontier) {
+        /* Fill to avoid an uninitialized gap in the middle of the heap */
+        bytesFilled += fillGap (s, s->procStates[proc].frontier,
+                                s->procStates[proc].limitPlusSlop);
+      }
+      else {
+        /* If this is at the end of the heap there is no need to fill the gap
+         -- there will be no break in the initialized portion of the
+         heap.  Also, this is the last chunk allocated in the nursery, so it is
+         safe to use the frontier from this processor as the global frontier.  */
+        s->heap->oldGenSize = s->procStates[proc].frontier - s->heap->start;
+      }
+    }
+    bytesCopied = 0;
   } else {
     if (detailedGCTime (s))
       startTiming (&ru_start);
@@ -153,4 +170,7 @@ void minorCheneyCopyGC (GC_state s) {
                "[GC: Finished minor Cheney-copy; copied %s bytes.]\n",
                uintmaxToCommaString(bytesCopied));
   }
+  bytesAllocated -= bytesFilled;
+  s->cumulativeStatistics->bytesAllocated += bytesAllocated;
+  s->cumulativeStatistics->bytesFilled += bytesFilled;
 }
