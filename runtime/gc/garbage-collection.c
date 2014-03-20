@@ -50,7 +50,7 @@ void majorGC (GC_state s, size_t bytesRequested, bool mayResize) {
   assert (s->heap->oldGenSize + bytesRequested <= s->heap->size);
 }
 
-void growStackCurrent (GC_state s) {
+void growStackCurrent (GC_state s, bool allocInOldGen) {
   size_t reserved;
   GC_stack stack;
 
@@ -61,8 +61,10 @@ void growStackCurrent (GC_state s) {
              uintmaxToCommaString(getStackCurrent(s)->reserved),
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
-  assert (hasHeapBytesFree (s, sizeofStackWithHeader (s, reserved), 0));
-  stack = newStack (s, reserved, TRUE);
+  assert (allocInOldGen ?
+          hasHeapBytesFree (s, sizeofStackWithHeaderAligned (s, size), 0) :
+          hasHeapBytesFree (s, 0, sizeofStackWithHeaderAligned (s, size)));
+  stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
   markCard (s, objptrToPointer (getThreadCurrentObjptr(s), s->heap->start));
@@ -208,8 +210,9 @@ void performGC (GC_state s,
   leaveGC (s);
 }
 
-size_t fillGap (__attribute__ ((unused)) GC_state s, pointer start, pointer end) {
+size_t fillGap (pointer start, pointer end) {
 #warning Do I need to modify this to take into account card/cross-map-in-heap?
+#warning Unlikely since maps just moved, did not change behavior...
   size_t diff = end - start;
 
   if (diff == 0) {
@@ -316,7 +319,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
     }
     else {
       /* Fill the old gap */
-      fillGap (s, s->frontier, s->limitPlusSlop + GC_BONUS_SLOP);
+      fillGap (s->frontier, s->limitPlusSlop + GC_BONUS_SLOP);
       /* Don't update frontier or limitPlusSlop since we will either
          overwrite them (if we succeed) or just fill the same gap again
          (if we fail).  (There is no obvious other pair of values that
@@ -350,6 +353,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
   }
 }
 
+#warning Can this function be broken up? Seems to do a lot...
 // assumes that stack->used and thread->exnstack are up to date
 // assumes exclusive access to runtime if !mustEnter
 // forceGC = force major collection

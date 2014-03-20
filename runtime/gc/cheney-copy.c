@@ -119,7 +119,7 @@ void minorCheneyCopyGC (GC_state s) {
       s->procStates[proc].limitPlusSlop += GC_BONUS_SLOP;
       if (s->procStates[proc].limitPlusSlop != s->heap->frontier) {
         /* Fill to avoid an uninitialized gap in the middle of the heap */
-        bytesFilled += fillGap (s, s->procStates[proc].frontier,
+        bytesFilled += fillGap (s->procStates[proc].frontier,
                                 s->procStates[proc].limitPlusSlop);
       }
       else {

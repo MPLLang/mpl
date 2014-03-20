@@ -38,15 +38,35 @@ void GC_copyCurrentThread (GC_state s) {
   GC_thread toThread;
   LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, "GC_copyCurrentThread\n");
-  enter (s);
+  if (DEBUG_THREADS or s->controls->messages)
+    fprintf (stderr, "GC_copyCurrentThread [%d]\n", Proc_processorNumber (s));
+
+  /* SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
+     synchronize unless we don't have enough room to allocate a new thread and stack. */
+
+  /* SPOONHOWER_NOTE: copied from enter() */
+  /* SPOONHOWER_NOTE: used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
                            + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-  toThread = copyThread (s, fromThread, fromStack->used);
+#warning Should this be fromStack->used?
+  toThread = copyThread (s, fromThread, fromStack->reserved);
+
+  /* Look up these again since a GC may have occurred and moved them */
+  fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
+                           + offsetofThread (s));
+  fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
   toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap->start));
-  assert (toStack->reserved == alignStackReserved (s, toStack->used));
+  /* The following assert is no longer true, since alignment
+   * restrictions can force the reserved to be slightly larger than
+   * the used.
+   */
+  /* assert (fromStack->reserved == fromStack->used); */
+  assert (fromStack->reserved >= fromStack->used);
+#warning Will be removed in a later commit
   leave (s);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = GC_copyCurrentThread\n", (uintptr_t)toThread);
@@ -58,19 +78,45 @@ pointer GC_copyThread (GC_state s, pointer p) {
   GC_thread fromThread;
   GC_stack fromStack;
   GC_thread toThread;
-  LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
   if (DEBUG_THREADS)
-    fprintf (stderr, "GC_copyThread ("FMTPTR")\n", (uintptr_t)p);
-  enter (s);
+    fprintf (stderr, "GC_copyThread ("FMTPTR") [%d]\n", (uintptr_t)p,
+             Proc_processorNumber (s));
+
+  /* Used to be an ENTER here, but we don't really need to synchronize unless
+     we don't have enough room to allocate a new thread and stack. */
+
+  /* XXX copied from enter() */
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+
   fromThread = (GC_thread)(p + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-  toThread = copyThread (s, fromThread, fromStack->used);
-  toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap->start));
+  /* The following assert is no longer true, since alignment
+   * restrictions can force the reserved to be slightly larger than
+   * the used.
+   */
+  /* assert (fromStack->reserved == fromStack->used); */
+  assert (fromStack->reserved >= fromStack->used);
+#warning Should this be fromStack->used?
+  toThread = copyThread (s, fromThread, fromStack->reserved);
+
+#warning Remove dead code if possible
+#warning May have been dead-ified because I use fromStack->reserved above now.
+  /* The following assert is no longer true, since alignment
+   * restrictions can force the reserved to be slightly larger than
+   * the used.
+   */
+#if 0
+  toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap.start));
   assert (toStack->reserved == alignStackReserved (s, toStack->used));
-  leave (s);
+#endif
+
+  /* SPOONHOWER_NOTE: Formerly: LEAVE2 (s, "toThread", "fromThread"); */
+
   if (DEBUG_THREADS)
-    fprintf (stderr, FMTPTR" = GC_copyThread ("FMTPTR")\n",
-             (uintptr_t)toThread, (uintptr_t)fromThread);
+    fprintf (stderr, FMTPTR" = GC_copyThread ("FMTPTR") [%d]\n",
+             (uintptr_t)toThread, (uintptr_t)fromThread, Proc_processorNumber (s));
   return ((pointer)toThread - offsetofThread (s));
 }

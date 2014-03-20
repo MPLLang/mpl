@@ -19,7 +19,7 @@ static void performGC (GC_state s,
                        size_t nurseryBytesRequested,
                        bool forceMajor,
                        bool mayResize);
-static size_t fillGap (GC_state s, pointer start, pointer end);
+static size_t fillGap (pointer start, pointer end);
 static void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s,
                                                             bool forceGC,
                                                             bool ensureFrontier,
