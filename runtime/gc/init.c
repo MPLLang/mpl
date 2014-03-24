@@ -33,6 +33,16 @@ static float stringToFloat (char *s) {
   return f;
 }
 
+static int32_t stringToInt (char *s) {
+  char *endptr;
+  int i;
+
+  i = strtol (s, &endptr, 10);
+  if (s == endptr)
+    die ("Invalid @MLton int: %s.", s);
+  return i;
+}
+
 static size_t stringToBytes (char *s) {
   double d;
   char *endptr;
@@ -116,6 +126,33 @@ int processAtMLton (GC_state s, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;
+        } else if (0 == strcmp (arg, "alloc-chunk")) {
+          i++;
+          if (i == argc)
+            die ("@MLton alloc-chunk missing argument.");
+          s->controls->allocChunkSize = stringToBytes (argv[i++]);
+          unless (GC_HEAP_LIMIT_SLOP < s->controls->allocChunkSize)
+            die ("@MLton alloc-chunk argument must be greater than slop.");
+        } else if (0 == strcmp (arg, "affinity-base")) {
+          i++;
+          if (i == argc)
+            die ("@MLton affinity-base missing argument.");
+          s->controls->affinityBase = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "affinity-stride")) {
+          i++;
+          if (i == argc)
+            die ("@MLton affinity-stride missing argument.");
+          s->controls->affinityStride = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "restrict-available")) {
+          i++;
+          s->controls->restrictAvailableSize = TRUE;
+        } else if (0 == strcmp (arg, "available-ratio")) {
+          i++;
+          if (i == argc)
+            die ("@MLton available-ratio missing argument.");
+          s->controls->ratios.available = stringToFloat (argv[i++]);
+          unless (1.0 < s->controls->ratios.available)
+            die ("@MLton available-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "grow-ratio")) {
           i++;
           if (i == argc)
@@ -241,6 +278,15 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc)
             die ("@MLton use-mmap missing argument.");
           GC_setCygwinUseMmap (stringToBool (argv[i++]));
+        } else if (0 == strcmp (arg, "number-processors")) {
+          i++;
+          if (i == argc)
+            die ("@MLton number-processors missing argument.");
+          if (!s->amOriginal)
+            die ("@MLton number-processors incompatible with loaded worlds.");
+          s->numberOfProcs = stringToFloat (argv[i++]);
+          /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
+          s->controls->mayLoadWorld = FALSE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
