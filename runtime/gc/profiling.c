@@ -348,42 +348,59 @@ void GC_handleSigProf (code_pointer pc) {
     sourceSeqsIndex = SOURCE_SEQ_GC;
   else {
     frameIndex = getCachedStackTopFrameIndex (s);
-    if (C_FRAME == s->frameLayouts[frameIndex].kind)
-      sourceSeqsIndex = s->sourceMaps.frameSources[frameIndex];
-    else {
-      if (PROFILE_TIME_LABEL == s->profiling.kind) {
-        uint32_t start, end, i;
+#warning This if-condition (and the else-block!) feels like a hack to get things to work. Figure out intent and fix.
+    if (frameIndex < s->frameLayoutsLength) {
+      if (C_FRAME == s->frameLayouts[frameIndex].kind)
+        sourceSeqsIndex = s->sourceMaps.frameSources[frameIndex];
+      else {
+        if (PROFILE_TIME_LABEL == s->profiling.kind) {
+          uint32_t start, end, i;
 
-        /* Binary search labels to find which method contains PC */
-        start = 0;
-        end = s->sourceMaps.sourceLabelsLength;
-        while (end - start > 1) {
-          i = (start+end)/2;
-          if ((uintptr_t)s->sourceMaps.sourceLabels[i].label <= (uintptr_t)pc)
-            start = i;
-          else
-            end = i;
-        }
-        i = start;
+          /* Binary search labels to find which method contains PC */
+          start = 0;
+          end = s->sourceMaps.sourceLabelsLength;
+          while (end - start > 1) {
+            i = (start+end)/2;
+            if ((uintptr_t)s->sourceMaps.sourceLabels[i].label <= (uintptr_t)pc)
+              start = i;
+            else
+              end = i;
+          }
+          i = start;
 
-        /* The last label is dead code. Any address past it is thus unknown.
-         * The first label is before all SML code. Before it is also unknown.
-         */
-        if (i-1 == s->sourceMaps.sourceLabelsLength ||
-            (i == 0 &&
-             (uintptr_t)pc < (uintptr_t)s->sourceMaps.sourceLabels[i].label)) {
-          if (DEBUG_PROFILE)
-            fprintf (stderr, "pc out of bounds\n");
-          sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
+          /* The last label is dead code. Any address past it is thus unknown.
+           * The first label is before all SML code. Before it is also unknown.
+           */
+          if (i-1 == s->sourceMaps.sourceLabelsLength ||
+              (i == 0 &&
+               (uintptr_t)pc < (uintptr_t)s->sourceMaps.sourceLabels[i].label)) {
+            if (DEBUG_PROFILE)
+              fprintf (stderr, "pc out of bounds\n");
+            sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
+          } else {
+            sourceSeqsIndex = s->sourceMaps.sourceLabels[start].sourceSeqIndex;
+          }
         } else {
-          sourceSeqsIndex = s->sourceMaps.sourceLabels[start].sourceSeqIndex;
+          sourceSeqsIndex = s->sourceMaps.curSourceSeqsIndex;
         }
-      } else {
-        sourceSeqsIndex = s->sourceMaps.curSourceSeqsIndex;
       }
+    } else {
+      if (DEBUG_PROFILE) {
+        fprintf (stderr, "unknown frame index\n");
+      }
+
+      sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
     }
+
+    incForProfiling (s, 1, sourceSeqsIndex);
   }
-  incForProfiling (s, 1, sourceSeqsIndex);
+}
+
+void GC_profileDisable (void) {
+  setProfTimer (0);
+}
+void GC_profileEnable (void) {
+  setProfTimer (10000);
 }
 
 static void initProfilingTime (GC_state s) {

@@ -94,7 +94,7 @@ void Proc_beginCriticalSection (GC_state s) {
     if (p == s->numberOfProcs) {
       /* We are the last to syncronize */
       if (needGCTime (s)) {
-        stopTiming (&rusage_sync, &s->cumulativeStatistics->rusage_sync);
+        stopTiming (&rusage_sync, &s->cumulativeStatistics->ru_sync);
         startTiming (&rusage_rt);
       }
       Proc_criticalTicket = 0;
@@ -114,7 +114,7 @@ void Proc_endCriticalSection (GC_state s) {
       /* We are the last to finish */
 
       if (needGCTime (s))
-        stopTiming (&rusage_rt, &s->cumulativeStatistics->rusage_rt);
+        stopTiming (&rusage_rt, &s->cumulativeStatistics->ru_rt);
 
       Proc_criticalCount = 0;
       Proc_criticalTicket = -1;

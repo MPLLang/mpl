@@ -37,10 +37,12 @@ void majorGC (GC_state s, size_t bytesRequested, bool mayResize) {
   s->lastMajorStatistics->bytesLive = s->heap->oldGenSize;
   if (s->lastMajorStatistics->bytesLive > s->cumulativeStatistics->maxBytesLive)
     s->cumulativeStatistics->maxBytesLive = s->lastMajorStatistics->bytesLive;
-  /* Notice that the s->lastMajorStatistics->bytesLive below is
-   * different than the s->lastMajorStatistics->bytesLive used as an
-   * argument to createHeapSecondary above.  Above, it was an
-   * estimate.  Here, it is exactly how much was live after the GC.
+  if (s->lastMajorStatistics->bytesLive > s->cumulativeStatistics->maxBytesLiveSinceReset)
+    s->cumulativeStatistics->maxBytesLiveSinceReset = s->lastMajorStatistics->bytesLive;
+  /* Notice that the s->bytesLive below is different than the
+   * s->bytesLive used as an argument to createHeapSecondary above.
+   * Above, it was an estimate.  Here, it is exactly how much was live
+   * after the GC.
    */
   if (mayResize) {
     resizeHeap (s, s->lastMajorStatistics->bytesLive + bytesRequested);
@@ -166,8 +168,12 @@ void performGC (GC_state s,
   assert (hasHeapBytesFree (s, oldGenBytesRequested + stackBytesRequested,
                             nurseryBytesRequested));
   unless (stackTopOk)
-    growStackCurrent (s);
-  setGCStateCurrentThreadAndStack (s);
+    growStackCurrent (s, TRUE);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    /* DOC XXX must come first to setup maps properly */
+    s->procStates[proc].generationalMaps = s->generationalMaps;
+    setGCStateCurrentThreadAndStack (&s->procStates[proc]);
+  }
   if (needGCTime (s)) {
     gcTime = stopTiming (&ru_start, &s->cumulativeStatistics->ru_gc);
     s->cumulativeStatistics->maxPauseTime =

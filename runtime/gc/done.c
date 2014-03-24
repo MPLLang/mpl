@@ -40,17 +40,22 @@ static void displayCollectionStats (FILE *out, const char *name, struct rusage *
 void GC_done (GC_state s) {
   FILE *out;
 
-  enter (s);
+  s->syncReason = SYNC_FORCE;
+  ENTER0 (s);
   minorGC (s);
   out = stderr;
   if (s->controls->summary) {
     struct rusage ru_total;
-    uintmax_t gcTime;
     uintmax_t totalTime;
+    uintmax_t gcTime;
+    uintmax_t syncTime;
+    uintmax_t rtTime;
 
     getrusage (RUSAGE_SELF, &ru_total);
     totalTime = rusageTime (&ru_total);
     gcTime = rusageTime (&s->cumulativeStatistics->ru_gc);
+    syncTime = rusageTime (&s->cumulativeStatistics->ru_sync);
+    rtTime = rusageTime (&s->cumulativeStatistics->ru_rt);
     fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
     fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
     displayCollectionStats
@@ -72,9 +77,16 @@ void GC_done (GC_state s) {
              uintmaxToCommaString (totalTime));
     fprintf (out, "total GC time: %s ms (%.1f%%)\n",
              uintmaxToCommaString (gcTime),
-             (0 == totalTime)
-             ? 0.0
-             : 100.0 * ((double) gcTime) / (double)totalTime);
+             (0 == totalTime) ?
+             0.0 : 100.0 * ((double) gcTime) / (double)totalTime);
+    fprintf (out, "total sync time: %s ms (%.1f%%)\n",
+             uintmaxToCommaString (syncTime),
+             (0 == totalTime) ?
+             0.0 : 100.0 * ((double) syncTime) / (double)totalTime);
+    fprintf (out, "total rt time: %s ms (%.1f%%)\n",
+             uintmaxToCommaString (rtTime),
+             (0 == totalTime) ?
+             0.0 : 100.0 * ((double) rtTime) / (double)totalTime);
     fprintf (out, "max pause time: %s ms\n",
              uintmaxToCommaString (s->cumulativeStatistics->maxPauseTime));
     fprintf (out, "total bytes allocated: %s bytes\n",
@@ -91,6 +103,16 @@ void GC_done (GC_state s) {
              uintmaxToCommaString (s->cumulativeStatistics->bytesScannedMinor));
     fprintf (out, "bytes hash consed: %s bytes\n",
              uintmaxToCommaString (s->cumulativeStatistics->bytesHashConsed));
+    fprintf (out, "sync for old gen array: %s\n",
+             uintmaxToCommaString (s->cumulativeStatistics->syncForOldGenArray));
+    fprintf (out, "sync for new gen array: %s\n",
+             uintmaxToCommaString (s->cumulativeStatistics->syncForNewGenArray));
+    fprintf (out, "sync for stack: %s\n",
+             uintmaxToCommaString (s->cumulativeStatistics->syncForStack));
+    fprintf (out, "sync for heap: %s\n",
+             uintmaxToCommaString (s->cumulativeStatistics->syncForHeap));
+    fprintf (out, "sync misc: %s\n",
+             uintmaxToCommaString (s->cumulativeStatistics->syncMisc));
   }
   releaseHeap (s, s->heap);
   releaseHeap (s, s->secondaryHeap);
