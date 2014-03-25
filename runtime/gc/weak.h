@@ -53,7 +53,7 @@ static inline size_t offsetofWeak (GC_state s);
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE uint32_t GC_weakCanGet (pointer p);
+PRIVATE uint32_t GC_weakCanGet (GC_state s, pointer p);
 PRIVATE pointer GC_weakGet (GC_state s, pointer p);
 PRIVATE pointer GC_weakNew (GC_state s, GC_header header, pointer p);
 

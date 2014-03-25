@@ -463,7 +463,8 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
-  enter (s);
+  /* SPOONHOWER_NOTE: Used to be enter() here */
+
   /* When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */

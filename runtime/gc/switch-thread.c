@@ -25,9 +25,13 @@ void switchToThread (GC_state s, objptr op) {
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   if (DEBUG_THREADS)
-    fprintf (stderr, "GC_switchToThread ("FMTPTR", %"PRIuMAX")\n",
-             (uintptr_t)p, (uintmax_t)ensureBytesFree);
-  if (FALSE) {
+    fprintf (stderr,
+             "GC_switchToThread ("FMTPTR", %"PRIuMAX") [%d]\n",
+             (uintptr_t)p,
+             (uintmax_t)ensureBytesFree,
+             Proc_processorNumber (s));
+#warning Switch to other branch when I can
+  if (TRUE) {
     /* This branch is slower than the else branch, especially
      * when debugging is turned on, because it does an invariant
      * check on every thread switch.
@@ -43,7 +47,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
     s->atomicState--;
-    /* XX spoons don't bother to check the signal handler here since we
+    /* SPOONHOWER_NOTE: don't bother to check the signal handler here since we
        (probably) aren't bothering to synchronize.  we'll get it on the next
        failed allocation request. */
     //switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
@@ -56,6 +60,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     assert (invariantForMutatorStack(s));
     //LEAVE0 (s);
   } else {
+#warning Why? It looks exactly the same...
     assert (false and "unsafe in a multiprocessor context");
     /* BEGIN: enter(s); */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
