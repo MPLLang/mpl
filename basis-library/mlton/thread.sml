@@ -113,14 +113,14 @@ in
       else
          let
             val _ = switching := true
-            val r : (unit -> 'a) ref = 
+            val r : (unit -> 'a) ref =
                ref (fn () => die "Thread.atomicSwitch didn't set r.\n")
             val t: 'a thread ref =
                ref (Paused (fn x => r := x, Prim.current gcState))
             fun fail e = (t := Dead
                           ; switching := false
                           ; atomicEnd ()
-                          ; raise e)    
+                          ; raise e)
             val (T t': Runnable.t) = f (T t) handle e => fail e
             val primThread =
                case !t' before t' := Dead of
@@ -147,7 +147,7 @@ fun fromPrimitive (t: Prim.thread): Runnable.t =
 fun toPrimitive (t as T r : unit t): Prim.thread =
    case !r of
       Dead => die "Thread.toPrimitive saw Dead.\n"
-    | Interrupted t => 
+    | Interrupted t =>
          (r := Dead
           ; t)
     | New _ =>
@@ -161,7 +161,7 @@ fun toPrimitive (t as T r : unit t): Prim.thread =
            ()))
     | Paused (f, t) =>
          (r := Dead
-          ; f (fn () => ()) 
+          ; f (fn () => ())
           ; t)
 
 
@@ -224,8 +224,8 @@ local
 in
    val register: int * (MLtonPointer.t -> unit) -> unit =
       let
-         val exports = 
-            Array.array (Int32.toInt (Primitive.MLton.FFI.numExports), 
+         val exports =
+            Array.array (Int32.toInt (Primitive.MLton.FFI.numExports),
                          fn _ => raise Fail "undefined export")
          fun loop (): unit =
             let
@@ -234,14 +234,14 @@ in
                fun doit () =
                   let
                      (* Atomic 1 *)
-                     val p = Primitive.MLton.FFI.getOpArgsResPtr ()
+                     val p = Primitive.MLton.FFI.getArgs ()
                      val _ = atomicEnd ()
                      (* Atomic 0 *)
                      val i = MLtonPointer.getInt32 (MLtonPointer.getPointer (p, 0), 0)
                      val _ =
                         (Array.sub (exports, Int32.toInt i) p)
-                        handle e => 
-                           (TextIO.output 
+                        handle e =>
+                           (TextIO.output
                             (TextIO.stdErr, "Call from C to SML raised exception.\n")
                             ; MLtonExn.topLevelHandler e)
                      (* Atomic 0 *)

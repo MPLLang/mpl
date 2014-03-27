@@ -55,7 +55,7 @@ C_SUSeconds_t MLton_Rusage_gc_stime_usec (void) {
 }
 
 void MLton_Rusage_getrusage (void) {
-  MLton_Rusage_gc = *(GC_getRusageGCAddr (&gcState));
+  MLton_Rusage_gc = *(GC_getRusageGCAddr ());
   getrusage (RUSAGE_SELF, &MLton_Rusage_self);
   getrusage (RUSAGE_CHILDREN, &MLton_Rusage_children);
 }

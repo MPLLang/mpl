@@ -69,7 +69,13 @@ void forwardObjptr (GC_state s, objptr *opp) {
       assert (STACK_TAG == tag);
       headerBytes = GC_STACK_HEADER_SIZE;
       stack = (GC_stack)p;
-      current = getStackCurrent(s) == stack;
+
+      /* Check if the pointer is the current stack of any processor. */
+      current = false;
+      for (int proc = 0; proc < s->numberOfProcs; proc++) {
+        current = current || (getStackCurrent(&s->procStates[proc]) == stack);
+      }
+#warning used to be current &&= not isStackEmpty(stack) here
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {

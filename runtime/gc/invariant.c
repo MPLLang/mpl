@@ -31,6 +31,7 @@ void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
 }
 
 bool invariantForGC (GC_state s) {
+  int proc;
   if (DEBUG)
     fprintf (stderr, "invariantForGC\n");
   /* Frame layouts */
@@ -84,8 +85,24 @@ bool invariantForGC (GC_state s) {
                         assertIsObjptrInFromSpace, FALSE);
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking nursery.\n");
-  foreachObjptrInRange (s, s->heap.nursery, &s->frontier, 
-                        assertIsObjptrInFromSpace, FALSE);
+  if (s->procStates) {
+    pointer firstStart = s->heap->frontier;
+    for (proc = 0; proc < s->numberOfProcs; proc++) {
+      foreachObjptrInRange (s, s->procStates[proc].start,
+                            &s->procStates[proc].frontier, 
+                            assertIsObjptrInFromSpace, FALSE);
+      if (s->procStates[proc].start
+          and s->procStates[proc].start < firstStart)
+        firstStart = s->procStates[proc].start;
+    }
+    foreachObjptrInRange (s, s->heap->nursery,
+                          &firstStart,
+                          assertIsObjptrInFromSpace, FALSE);
+  }
+  else {
+    foreachObjptrInRange (s, s->start, &s->frontier, 
+                          assertIsObjptrInFromSpace, FALSE);
+  }
   /* Current thread. */
   GC_stack stack = getStackCurrent(s);
   assert (isStackReservedAligned (s, stack->reserved));

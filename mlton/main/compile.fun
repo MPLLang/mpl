@@ -63,8 +63,8 @@ structure CoreML = CoreML (open Atoms
                                              expandOpaque = true,
                                              var = var}
 
-                                 fun layout t = 
-                                    layoutPrettyAux 
+                                 fun layout t =
+                                    layoutPrettyAux
                                     (t, {expandOpaque = true,
                                          localTyvarNames = false})
                               end)
@@ -135,7 +135,7 @@ fun setCommandLineConstant (c as {name, value}) =
             set
          end
       val () =
-         case List.peek ([("Exn.keepHistory", 
+         case List.peek ([("Exn.keepHistory",
                            make (Bool.fromString, Control.exnHistory))],
                          fn (s, _) => s = name) of
             NONE => ()
@@ -175,7 +175,7 @@ val lookupConstant =
       fn z => f () z
    end
 
-(* ------------------------------------------------- *)   
+(* ------------------------------------------------- *)
 (*                   Primitive Env                   *)
 (* ------------------------------------------------- *)
 
@@ -229,7 +229,7 @@ local
 
    structure Env =
       struct
-         open Env 
+         open Env
 
          structure Tycon =
             struct
@@ -339,7 +339,7 @@ structure MLBString:>
 
 val lexAndParseMLB = MLBString.lexAndParseMLB
 
-val lexAndParseMLB: MLBString.t -> Ast.Basdec.t = 
+val lexAndParseMLB: MLBString.t -> Ast.Basdec.t =
    fn input =>
    let
       val ast = lexAndParseMLB input
@@ -412,7 +412,7 @@ fun elaborate {input: MLBString.t}: Xml.Program.t =
       val _ =
          case !Control.exportHeader of
             NONE => ()
-          | SOME f => 
+          | SOME f =>
                File.withOut
                (f, fn out =>
                 let
@@ -437,11 +437,11 @@ fun elaborate {input: MLBString.t}: Xml.Program.t =
                        | Control.Executable => "PART_OF"
                        | Control.LibArchive => "NO_DEFAULT_LINK"
                        | Control.Library    => "DYNAMIC_LINK"
-                   val _ = 
+                   val _ =
                       print ("#if !defined(PART_OF_"      ^ libcap ^ ") && \\\n\
                              \    !defined(STATIC_LINK_"  ^ libcap ^ ") && \\\n\
                              \    !defined(DYNAMIC_LINK_" ^ libcap ^ ")\n")
-                   val _ = 
+                   val _ =
                       print ("#define " ^ defaultLinkage ^ "_" ^ libcap ^ "\n")
                    val _ = print "#endif\n"
                    val _ = print "\n"
@@ -464,11 +464,11 @@ fun elaborate {input: MLBString.t}: Xml.Program.t =
                    val _ = print "extern \"C\" {\n"
                    val _ = print "#endif\n"
                    val _ = print "\n"
-                   val _ = 
+                   val _ =
                       if !Control.format = Control.Executable then () else
                           (print ("MLLIB_PUBLIC(void " ^ libname ^ "_open(int argc, const char** argv);)\n")
                           ;print ("MLLIB_PUBLIC(void " ^ libname ^ "_close();)\n"))
-                   val _ = Ffi.declareHeaders {print = print} 
+                   val _ = Ffi.declareHeaders {print = print}
                    val _ = print "\n"
                    val _ = print "#undef MLLIB_PRIVATE\n"
                    val _ = print "#undef MLLIB_PUBLIC\n"
@@ -527,7 +527,7 @@ fun elaborate {input: MLBString.t}: Xml.Program.t =
              currentThread = get "currentThread_Offset",
              curSourceSeqsIndex = get "sourceMaps.curSourceSeqsIndex_Offset",
              exnStack = get "exnStack_Offset",
-             ffiOp = get "ffiOp_Offset",
+             ffiArgs = get "ffiArgs_Offset",
              frontier = get "frontier_Offset",
              globalObjptrNonRoot = get "globalObjptrNonRoot_Offset",
              limit = get "limit_Offset",
@@ -546,7 +546,7 @@ fun elaborate {input: MLBString.t}: Xml.Program.t =
              currentThread = get "currentThread_Size",
              curSourceSeqsIndex = get "sourceMaps.curSourceSeqsIndex_Size",
              exnStack = get "exnStack_Size",
-             ffiOp = get "ffiOp_Size",
+             ffiArgs = get "ffiArgs_Size",
              frontier = get "frontier_Size",
              globalObjptrNonRoot = get "globalObjptrNonRoot_Size",
              limit = get "limit_Size",

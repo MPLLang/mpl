@@ -36,7 +36,7 @@ structure GCField =
       val currentThreadOffset: Bytes.t ref = ref Bytes.zero
       val curSourceSeqsIndexOffset: Bytes.t ref = ref Bytes.zero
       val exnStackOffset: Bytes.t ref = ref Bytes.zero
-      val ffiOpOffset: Bytes.t ref = ref Bytes.zero
+      val ffiArgsOffset: Bytes.t ref = ref Bytes.zero
       val frontierOffset: Bytes.t ref = ref Bytes.zero
       val globalObjptrNonRootOffset: Bytes.t ref = ref Bytes.zero
       val limitOffset: Bytes.t ref = ref Bytes.zero
@@ -49,14 +49,14 @@ structure GCField =
       val stackTopOffset: Bytes.t ref = ref Bytes.zero
 
       fun setOffsets {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex,
-                      exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
+                      exnStack, ffiArgs, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
                       returnToC, signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateOffset := atomicState
           ; cardMapAbsoluteOffset := cardMapAbsolute
           ; currentThreadOffset := currentThread
           ; curSourceSeqsIndexOffset := curSourceSeqsIndex
           ; exnStackOffset := exnStack
-          ; ffiOpOffset := ffiOp
+          ; ffiArgsOffset := ffiArgs
           ; frontierOffset := frontier
           ; globalObjptrNonRootOffset := globalObjptrNonRoot
           ; limitOffset := limit
@@ -74,7 +74,7 @@ structure GCField =
           | CurrentThread => !currentThreadOffset
           | CurSourceSeqsIndex => !curSourceSeqsIndexOffset
           | ExnStack => !exnStackOffset
-          | FFIOp => !ffiOpOffset
+          | FFIArgs => !ffiArgsOffset
           | Frontier => !frontierOffset
           | GlobalObjptrNonRoot => !globalObjptrNonRootOffset
           | Limit => !limitOffset
@@ -91,7 +91,7 @@ structure GCField =
       val currentThreadSize: Bytes.t ref = ref Bytes.zero
       val curSourceSeqsIndexSize: Bytes.t ref = ref Bytes.zero
       val exnStackSize: Bytes.t ref = ref Bytes.zero
-      val ffiOpSize: Bytes.t ref = ref Bytes.zero
+      val ffiArgsSize: Bytes.t ref = ref Bytes.zero
       val frontierSize: Bytes.t ref = ref Bytes.zero
       val globalObjptrNonRootSize: Bytes.t ref = ref Bytes.zero
       val limitSize: Bytes.t ref = ref Bytes.zero
@@ -104,14 +104,14 @@ structure GCField =
       val stackTopSize: Bytes.t ref = ref Bytes.zero
 
       fun setSizes {atomicState, cardMapAbsolute, currentThread, curSourceSeqsIndex,
-                    exnStack, ffiOp, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
+                    exnStack, ffiArgs, frontier, globalObjptrNonRoot, limit, limitPlusSlop, maxFrameSize,
                     returnToC, signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateSize := atomicState
           ; cardMapAbsoluteSize := cardMapAbsolute
           ; currentThreadSize := currentThread
           ; curSourceSeqsIndexSize := curSourceSeqsIndex
           ; exnStackSize := exnStack
-          ; ffiOpSize := ffiOp
+          ; ffiArgsSize := ffiArgs
           ; frontierSize := frontier
           ; globalObjptrNonRootSize := globalObjptrNonRoot
           ; limitSize := limit
@@ -129,7 +129,7 @@ structure GCField =
           | CurrentThread => !currentThreadSize
           | CurSourceSeqsIndex => !curSourceSeqsIndexSize
           | ExnStack => !exnStackSize
-          | FFIOp => !ffiOpSize
+          | FFIArgs => !ffiArgsSize
           | Frontier => !frontierSize
           | GlobalObjptrNonRoot => !globalObjptrNonRootSize
           | Limit => !limitSize

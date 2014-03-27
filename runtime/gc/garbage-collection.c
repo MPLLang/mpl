@@ -64,8 +64,8 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
   assert (allocInOldGen ?
-          hasHeapBytesFree (s, sizeofStackWithHeaderAligned (s, size), 0) :
-          hasHeapBytesFree (s, 0, sizeofStackWithHeaderAligned (s, size)));
+          hasHeapBytesFree (s, sizeofStackWithHeaderAligned (s, reserved), 0) :
+          hasHeapBytesFree (s, 0, sizeofStackWithHeaderAligned (s, reserved)));
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);

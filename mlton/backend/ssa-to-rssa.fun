@@ -104,7 +104,7 @@ structure CFunction =
             target = Direct "MLton_halt",
             writesStackTop = true}
 
-      val ffiGetOp = fn () =>
+      val ffiGetArgs = fn () =>
          T {args = Vector.new1 (Type.gcState ()),
             bytesNeeded = NONE,
             convention = Cdecl,
@@ -112,10 +112,12 @@ structure CFunction =
             mayGC = false,
             maySwitchThreads = false,
             modifiesFrontier = false,
-            prototype = (Vector.new1 CType.gcState, SOME CType.Int32),
+	    (* RAM_NOTE: Is this correct return type? *)
+            prototype = (Vector.new1 CType.gcState, SOME CType.cpointer),
             readsStackTop = false,
-            return = Type.word WordSize.word32,
-            target = Direct "FFI_getOp",
+            return = Type.cpointer (),
+            symbolScope = Private,
+            target = Direct "FFI_getArgs",
             writesStackTop = false}
 
       fun gcArrayAllocate {return} =
@@ -1220,11 +1222,12 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | CPointer_setReal _ => cpointerSet ()
                                | CPointer_setWord _ => cpointerSet ()
                                | FFI f => simpleCCall f
-                               (* PERF spoons this not a very efficient way of
-                                getting this value (since we know its offset *)
-                               | FFI_getOp =>
+                               (* SPOONOWER_NOTE: PERF this not a very
+                                  efficient way of getting this value
+                                  (since we know its offset *)
+                               | FFI_getArgs =>
                                     simpleCCallWithGCState
-                                    (CFunction.ffiGetOp ())
+                                    (CFunction.ffiGetArgs ())
                                | GC_collect =>
                                     ccall
                                     {args = (Vector.new3

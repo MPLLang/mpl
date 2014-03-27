@@ -246,7 +246,7 @@ fun toString (n: 'a t): string =
        | Exn_name => "Exn_name"
        | Exn_setExtendExtra => "Exn_setExtendExtra"
        | FFI f => (CFunction.Target.toString o CFunction.target) f
-       | FFI_getOp => "FFI_getOp"
+       | FFI_getArgs => "FFI_getArgs"
        | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
        | IntInf_add => "IntInf_add"
@@ -388,7 +388,7 @@ val equals: 'a t * 'a t -> bool =
     | (Exn_name, Exn_name) => true
     | (Exn_setExtendExtra, Exn_setExtendExtra) => true
     | (FFI f, FFI f') => CFunction.equals (f, f')
-    | (FFI_getOp, FFI_getOp) => true
+    | (FFI_getArgs, FFI_getArgs) => true
     | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
     | (IntInf_add, IntInf_add) => true
@@ -803,7 +803,7 @@ val kind: 'a t -> Kind.t =
        | Exn_name => Functional
        | Exn_setExtendExtra => SideEffect
        | FFI _ => Kind.SideEffect
-       | FFI_getOp => SideEffect (* PERF spoons perhaps conservative? *)
+       | FFI_getArgs => SideEffect (* SPOONOWER_NOTE: PERF perhaps conservative? *)
        | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
        | IntInf_add => Functional
@@ -1005,7 +1005,7 @@ in
        Exn_extra,
        Exn_name,
        Exn_setExtendExtra,
-       FFI_getOp,
+       FFI_getArgs,
        GC_collect,
        IntInf_add,
        IntInf_andb,
