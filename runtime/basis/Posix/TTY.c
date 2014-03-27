@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct termios Posix_TTY_Termios_termios;
 
 C_TCFlag_t Posix_TTY_Termios_getIFlag (void) {
@@ -19,7 +20,7 @@ C_TCFlag_t Posix_TTY_Termios_getLFlag (void) {
 }
 
 void Posix_TTY_Termios_getCC (Array(C_CC_t) a) {
-  for (int i = 0; i < NCCS; i++) 
+  for (int i = 0; i < NCCS; i++)
     ((cc_t*)a)[i] = Posix_TTY_Termios_termios.c_cc[i];
 }
 
@@ -48,7 +49,7 @@ void Posix_TTY_Termios_setLFlag (C_TCFlag_t f) {
 }
 
 void Posix_TTY_Termios_setCC (Array(C_CC_t) a) {
-  for (int i = 0; i < NCCS; i++) 
+  for (int i = 0; i < NCCS; i++)
     Posix_TTY_Termios_termios.c_cc[i] = ((cc_t*)a)[i];
 }
 

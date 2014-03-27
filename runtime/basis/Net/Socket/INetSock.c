@@ -1,7 +1,7 @@
 #include "platform.h"
 
-void 
-Socket_INetSock_toAddr (Vector(Word8_t) in_addr, Word16_t port, 
+void
+Socket_INetSock_toAddr (Vector(Word8_t) in_addr, Word16_t port,
                         Array(Word8_t) addr, Ref(C_Socklen_t) addrlen) {
   struct sockaddr_in *sa = (struct sockaddr_in*)addr;
 
@@ -11,6 +11,7 @@ Socket_INetSock_toAddr (Vector(Word8_t) in_addr, Word16_t port,
   *((socklen_t*)addrlen) = sizeof(struct sockaddr_in);
 }
 
+/* SPOONHOWER_NOTE: global state */
 static uint16_t Socket_INetSock_fromAddr_port;
 static struct in_addr Socket_INetSock_fromAddr_in_addr;
 

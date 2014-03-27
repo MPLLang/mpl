@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct hostent *NetHostDB_hostent;
 
 C_String_t NetHostDB_getEntryName(void) {
@@ -52,10 +53,10 @@ C_Int_t NetHostDB_getByName(NullString8_t name) {
 
 C_Errno_t(C_Int_t) NetHostDB_getHostName(Array(Char8_t) buf, C_Size_t len) {
   int out;
-  
+
   MLton_initSockets ();
   out = gethostname ((char*)buf, len);
   if (out == -1) MLton_fixSocketErrno ();
-  
+
   return out;
 }

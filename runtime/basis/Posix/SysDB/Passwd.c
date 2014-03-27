@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct passwd *Posix_SysDB_Passwd_passwd;
 
 C_String_t Posix_SysDB_Passwd_getName(void) {

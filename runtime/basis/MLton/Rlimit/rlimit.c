@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct rlimit MLton_RLimit_rlimit;
 
 C_Errno_t(C_Int_t) MLton_Rlimit_get (C_Int_t r) {

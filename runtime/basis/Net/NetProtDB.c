@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct protoent *NetProtDB_protoent;
 
 C_String_t NetProtDB_getEntryName(void) {
