@@ -40,7 +40,7 @@
 
 #define C(ty, x) (*(ty*)(x))
 #define G(ty, i) (global##ty [i])
-#define GPNR(i) G(ObjptrNonRoot, i)
+#define GPNR(i) (((Pointer*)(GCState + GlobalObjptrNonRootOffset))[i])
 #define O(ty, b, o) (*(ty*)((b) + (o)))
 #define X(ty, b, i, s, o) (*(ty*)((b) + ((i) * (s)) + (o)))
 #define S(ty, i) *(ty*)(StackTop + (i))
@@ -95,15 +95,15 @@
 #define Chunk(n)                                                \
         DeclareChunk(n) {                                       \
                 struct cont cont;                               \
+                Pointer GCState = (Pointer)(pthread_getspecific (gcstate_key)); \
                 register unsigned int frontier asm("g5");       \
-                uintptr_t l_nextFun = nextFun;                  \
                 register unsigned int stackTop asm("g6");
 #else
 #define Chunk(n)                                \
         DeclareChunk(n) {                       \
                 struct cont cont;               \
+                Pointer GCState = (Pointer)(pthread_getspecific (gcstate_key)); \
                 Pointer frontier;               \
-                uintptr_t l_nextFun = nextFun;  \
                 Pointer stackTop;
 #endif
 
@@ -120,8 +120,8 @@
 #define EndChunk                                                        \
                 default:                                                \
                         /* interchunk return */                         \
-                        nextFun = l_nextFun;                            \
-                        cont.nextChunk = (void*)nextChunks[nextFun];    \
+                        cont.nextFun = l_nextFun;                       \
+                        cont.nextChunk = (void*)nextChunks[l_nextFun];  \
                         leaveChunk:                                     \
                                 FlushFrontier();                        \
                                 FlushStackTop();                        \
@@ -139,7 +139,7 @@
                 if (DEBUG_CCODEGEN)                                     \
                         fprintf (stderr, "%s:%d: Thread_returnToC()\n", \
                                         __FILE__, __LINE__);            \
-                returnToC = TRUE;                                       \
+                (*(uint32_t*)(GCState + ReturnToCOffset)) = TRUE;       \
                 return cont;                                            \
         } while (0)
 
@@ -147,9 +147,10 @@
 /*                      farJump                      */
 /* ------------------------------------------------- */
 
+/* XXX spoons should take cont as arg? */
 #define FarJump(n, l)                           \
         do {                                    \
-                PrepFarJump(n, l);              \
+                PrepFarJump(cont, n, l);        \
                 goto leaveChunk;                \
         } while (0)
 
