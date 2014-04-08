@@ -256,8 +256,8 @@ size_t fillGap (pointer start, pointer end) {
     }
     else {
       assert(0 == diff);
-      /* XXX */
-      fprintf (stderr, "FOUND A GAP OF "FMTARRLEN" BYTES!\n", diff);
+      /* SPOONHOWER_NOTE: debug message! */
+      fprintf (stderr, "FOUND A GAP OF %zu BYTES!\n", diff);
       exit (1);
     }
 

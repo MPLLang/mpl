@@ -160,6 +160,11 @@ ifeq ($(TARGET_OS), netbsd)
 XCFLAGS += -I/usr/pkg/include
 endif
 
+ifeq ($(TARGET_OS), linux)
+FLAGS += -Iplpa
+EXTRA_LIBS += libplpa_bundled.a libplpa_bundled-gdb.a libplpa_bundled-pic.a
+endif
+
 ifeq ($(TARGET_OS), openbsd)
 XCFLAGS += -I/usr/local/include
 endif
@@ -169,14 +174,14 @@ XCFLAGS += -funroll-all-loops
 endif
 
 
-XCFLAGS += -I. -Iplatform -Iplpa
+XCFLAGS += -I. -Iplatform
 OPTCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(OPTXCFLAGS)
 DEBUGCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(DEBUGXCFLAGS)
 PICCFLAGS := $(OPTCFLAGS) $(PICXCFLAGS)
 
 ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a \
-       libplpa_bundled.a libplpa_bundled-gdb.a libplpa_bundled-pic.a \
-       libmlton.a libmlton-gdb.a libmlton-pic.a
+       libmlton.a libmlton-gdb.a libmlton-pic.a \
+	$(EXTRA_LIBS)
 ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
 
 all: $(ALL)
