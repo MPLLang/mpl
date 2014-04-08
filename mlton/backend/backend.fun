@@ -364,6 +364,7 @@ let
                   let
                      val gs =
                         Vector.map (ts, fn ty =>
+                                    (* SPOONHOWER_NOTE: spoons should use per-proc *)
                                     M.Live.Global
                                     (Global.new {isRoot = false,
                                                  ty = ty}))

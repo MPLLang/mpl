@@ -20,6 +20,7 @@ structure Data =
                          isFreed: bool ref,
                          raw: P.Data.t}
 
+      (* SPOONHOWER_NOTE: spoons profiling uses global shared state *)
       val all: t list ref = ref []
 
       local
@@ -76,6 +77,7 @@ structure Data =
                           (String.nullTerm file))
    end
 
+(* SPOONHOWER_NOTE: spoons profiling uses global shared state *)
 val r: Data.t ref = ref (Data.make P.Data.dummy)
 
 fun current () = !r
