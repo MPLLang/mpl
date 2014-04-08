@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/multimlton
+MLTON := $(BIN)/mlton
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
@@ -101,7 +101,7 @@ clean-git:
 
 .PHONY: compiler
 compiler:
-	$(MAKE) -C "$(COMP)" MLTON=$(MLTON)
+	$(MAKE) -C "$(COMP)"
 	$(CP) "$(COMP)/$(AOUT)$(EXE)" "$(LIB)/"
 
 .PHONY: constants
