@@ -153,29 +153,13 @@ fun hasCodegen (cg) =
       datatype z = datatype Control.Format.t
       datatype z = datatype Control.codegen
    in
-      case !Control.Target.arch of
-         AMD64 => (case cg of
-                      x86Codegen => false
-                    | _ => true)
-       | X86 => (case cg of
-                    amd64Codegen => false
-                  | x86Codegen =>
-                      (* Darwin PIC doesn't work *)
-                      !Control.Target.os <> Darwin orelse
-                      !Control.format = Executable orelse
-                      !Control.format = Archive
-                  | _ => true)
-       | _ => (case cg of
-                  amd64Codegen => false
-                | x86Codegen => false
-                | _ => true)
+      case cg of
+        CCodegen => true
+      | _ => false
    end
 fun hasNativeCodegen () =
-   let
-      datatype z = datatype Control.codegen
-   in
-      hasCodegen amd64Codegen
-      orelse hasCodegen x86Codegen
+   let in
+      false
    end
 
 

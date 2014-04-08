@@ -19,26 +19,26 @@ static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
 #define MLtonCallFromC                                                  \
 static void MLton_callFromC (void* ffiArgs) {                           \
   struct cont cont;                                                     \
-  GC_state = pthread_getspecific (gcstate_key);                         \
+  GC_state s = pthread_getspecific (gcstate_key);                       \
                                                                         \
   if (DEBUG_CCODEGEN)                                                   \
     fprintf (stderr, "MLton_callFromC() starting\n");                   \
-  GC_setSavedThread (s, GC_getCurrentThread (s));                       \
+  GC_setSavedThread (GC_getCurrentThread ());                           \
   s->atomicState += 3;                                                  \
   s->ffiArgs = ffiArgs;                                                 \
   if (s->signalsInfo.signalIsPending)                                   \
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;                   \
   /* Switch to the C Handler thread. */                                 \
-  GC_switchToThread (s, GC_getCallFromCHandlerThread (s), 0);           \
+  GC_switchToThread (s, GC_getCallFromCHandlerThread (), 0);            \
   cont.nextFun = *(uintptr_t*)(s->stackTop - GC_RETURNADDRESS_SIZE);    \
   cont.nextChunk = nextChunks[cont.nextFun];                            \
   s->returnToC = FALSE;                                                 \
   do {                                                                  \
-    cont=(*(struct cont(*)(void))cont.nextChunk)(cont.nextFun);         \
+    cont=(*(struct cont(*)(uintptr_t))cont.nextChunk)(cont.nextFun);    \
   } while (not s->returnToC);                                           \
   s->returnToC = FALSE;                                                 \
   s->atomicState += 1;                                                  \
-  GC_switchToThread (s, GC_getSavedThread (s), 0);                      \
+  GC_switchToThread (s, GC_getSavedThread (), 0);                       \
   s->atomicState -= 1;                                                  \
   if (0 == s->atomicState                                               \
       && s->signalsInfo.signalIsPending)                                \
@@ -93,6 +93,9 @@ void MLton_threadFunc (void* arg) {                                     \
 }
 
 #define MLtonMain(al, mg, mfs, mmc, pk, ps, gnr, mc, ml)                \
+  /* Globals */                                                         \
+  C_Pthread_Key_t gcstate_key;                                          \
+                                                                        \
   MLtonCallFromC                                                        \
                                                                         \
   MLtonThreadFunc(mc, ml)                                               \

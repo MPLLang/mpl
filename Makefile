@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/mlton
+MLTON := $(BIN)/multimlton
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
@@ -39,14 +39,14 @@ RANLIB := ranlib
 # If we're compiling with another version of MLton, then we want to do
 # another round of compilation so that we get a MLton built without
 # stubs.
-ifeq (other, $(shell if [ ! -x "$(BIN)/mlton" ]; then echo other; fi))
+ifeq (other, $(shell if [ ! -x "$(MLTON)" ]; then echo other; fi))
 	BOOTSTRAP_OTHER:=true
 else
 	BOOTSTRAP_OTHER:=false
 endif
 
 ifeq ($(origin VERSION), undefined)
-	VERSION := $(shell date +%Y%m%d)
+	VERSION := multi.$(shell date +%Y%m%d)
 endif
 ifeq ($(origin RELEASE), undefined)
 	RELEASE := 1
@@ -107,8 +107,8 @@ compiler:
 .PHONY: constants
 constants:
 	@echo 'Creating constants file.'
-	"$(BIN)/mlton" -target "$(TARGET)" -build-constants true >tmp.c
-	"$(BIN)/mlton" -target "$(TARGET)" -output tmp tmp.c
+	"$(MLTON)" -target "$(TARGET)" -build-constants true >tmp.c
+	"$(MLTON)" -target "$(TARGET)" -output tmp tmp.c
 	./tmp >"$(LIB)/targets/$(TARGET)/constants"
 	rm -f tmp tmp.exe tmp.c
 
@@ -167,7 +167,8 @@ libraries:
 mlbpathmap:
 	touch "$(MLBPATHMAP)"
 	( echo 'MLTON_ROOT $$(LIB_MLTON_DIR)/sml';	\
-	  echo 'SML_LIB $$(LIB_MLTON_DIR)/sml'; )	\
+	  echo 'SML_LIB $$(LIB_MLTON_DIR)/sml';		\
+	  echo 'WORK_QUEUE simpleworkqueue'; ) 		\
 		>>"$(MLBPATHMAP).tmp"
 	mv "$(MLBPATHMAP).tmp" "$(MLBPATHMAP)"
 
@@ -326,16 +327,16 @@ install-no-docs:
 	mkdir -p "$(TLIB)" "$(TBIN)" "$(TMAN)"
 	$(CP) "$(LIB)/." "$(TLIB)/"
 	sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"			\
-		<"$(BIN)/mlton" >"$(TBIN)/mlton"
+		<"$(MLTON)" >"$(TBIN)/mlton"
 	chmod a+x "$(TBIN)/mlton"
-	if [ -x "$(BIN)/mlton.trace" ]; then                            \
+	if [ -x "$(MLTON).trace" ]; then                            \
 		sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"		\
-			<"$(BIN)/mlton.trace" >"$(TBIN)/mlton.trace";   \
+			<"$(MLTON)trace" >"$(TBIN)/mlton.trace";   \
 		chmod a+x "$(TBIN)/mlton.trace";                        \
 	fi
-	if [ -x "$(BIN)/mlton.debug" ]; then                            \
+	if [ -x "$(MLTON).debug" ]; then                            \
 		sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"		\
-			<"$(BIN)/mlton.debug" >"$(TBIN)/mlton.debug";   \
+			<"$(MLTON).debug" >"$(TBIN)/mlton.debug";   \
 		chmod a+x "$(TBIN)/mlton.debug";                        \
 	fi
 	cd "$(BIN)" && $(CP) "$(LEX)$(EXE)" "$(NLFFIGEN)$(EXE)"		\
