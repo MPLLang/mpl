@@ -161,8 +161,8 @@ XCFLAGS += -I/usr/pkg/include
 endif
 
 ifeq ($(TARGET_OS), linux)
-FLAGS += -Iplpa
-EXTRA_LIBS += libplpa_bundled.a libplpa_bundled-gdb.a libplpa_bundled-pic.a
+XCFLAGS += -Iplpa
+XLIBS   += libplpa_bundled.a libplpa_bundled-gdb.a libplpa_bundled-pic.a
 endif
 
 ifeq ($(TARGET_OS), openbsd)
@@ -181,7 +181,7 @@ PICCFLAGS := $(OPTCFLAGS) $(PICXCFLAGS)
 
 ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a \
        libmlton.a libmlton-gdb.a libmlton-pic.a \
-	$(EXTRA_LIBS)
+	$(XLIBS)
 ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
 
 all: $(ALL)
