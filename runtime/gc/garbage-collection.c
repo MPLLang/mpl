@@ -468,12 +468,14 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */
-  if (0 == bytesRequested)
+#warning Set back to upstream when I remove extra controls
+  if (bytesRequested < s->controls->allocChunkSize) {
+    /* first make sure that I hit the minimum */
     bytesRequested = s->controls->allocChunkSize;
-  else if (bytesRequested < s->controls->allocChunkSize)
-    bytesRequested = s->controls->allocChunkSize;
-  else
-    bytesRequested += GC_HEAP_LIMIT_SLOP;
+  }
+
+  /* add extra slop */
+  bytesRequested += GC_HEAP_LIMIT_SLOP;
 
   /* XXX copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
