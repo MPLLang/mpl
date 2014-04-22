@@ -23,7 +23,7 @@ signature RUNTIME =
              | CurrentThread
              | CurSourceSeqsIndex
              | ExnStack
-             | FFIOp
+             | FFIArgs
              | Frontier (* The place where the next object is allocated. *)
              | GlobalObjptrNonRoot
              | Limit (* frontier + heapSize - LIMIT_SLOP *)

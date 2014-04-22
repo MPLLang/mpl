@@ -19,7 +19,7 @@ structure GCField =
        | CurrentThread
        | CurSourceSeqsIndex
        | ExnStack
-       | FFIOp
+       | FFIArgs
        | Frontier
        | GlobalObjptrNonRoot
        | Limit
@@ -147,7 +147,7 @@ structure GCField =
           | CurrentThread => "CurrentThread"
           | CurSourceSeqsIndex => "CurSourceSeqsIndex"
           | ExnStack => "ExnStack"
-          | FFIOp => "FFIOp"
+          | FFIArgs => "FFIArgs"
           | Frontier => "Frontier"
           | GlobalObjptrNonRoot => "GlobalObjptrNonRoot"
           | Limit => "Limit"
