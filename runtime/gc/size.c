@@ -10,7 +10,8 @@ size_t GC_size (GC_state s, pointer root) {
   size_t res;
 
 #warning This enter/leave may need to be removed...
-  enter (s); /* update stack in heap, in case it is reached */
+  s->syncReason = SYNC_STACK;
+  ENTER0 (s); /* update stack in heap, in case it is reached */
   if (DEBUG_SIZE)
     fprintf (stderr,
              "GC_size marking [%d]\n",
@@ -21,7 +22,7 @@ size_t GC_size (GC_state s, pointer root) {
              "GC_size unmarking [%d]\n",
              Proc_processorNumber (s));
   dfsMarkByMode (s, root, UNMARK_MODE, FALSE, FALSE);
-  leave(s);
+  LEAVE0 (s);
 
   return res;
 }
