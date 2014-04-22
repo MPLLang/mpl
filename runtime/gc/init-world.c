@@ -152,7 +152,6 @@ void initWorld (GC_state s) {
   start = alignFrontier (s, s->heap->start);
   s->start = start;
   s->frontier = start;
-  s->limitPlusSlop = s->heap->start + s->heap->size;
   s->limitPlusSlop = s->heap->start + s->heap->size - GC_BONUS_SLOP;
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   initIntInfs (s);

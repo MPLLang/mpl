@@ -261,6 +261,7 @@ size_t fillGap (pointer start, pointer end) {
       exit (1);
     }
 
+#warning Remove when unnecessary!
     /* XXX debug only */
     /*
     while (start < end) {

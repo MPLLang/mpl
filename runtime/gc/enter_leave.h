@@ -11,6 +11,8 @@
 static inline void enter (GC_state s);
 static inline void leave (GC_state s);
 
+#warning Might not need 1,2 versions. They are not used anywhere...
+
 #define ENTER0(s) do { enter (s); } while(0)
 #define ENTER1(s, p) do { objptr roots[1]; \
                           roots[0] = pointerToObjptr (p, s->heap->start); \
