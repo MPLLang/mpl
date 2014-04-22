@@ -12,8 +12,6 @@ structure MLtonWorld: MLTON_WORLD =
       structure Error = PosixError
       structure SysCall = Error.SysCall
 
-      val gcState = Primitive.MLton.GCState.gcState
-
       datatype status = Clone | Original
 
       (* Need to worry about:
@@ -22,15 +20,15 @@ structure MLtonWorld: MLTON_WORLD =
        *)
       fun save' (file: string): status =
          let
-            val () = 
-               SysCall.simple' 
-               ({errVal = false}, 
+            val () =
+               SysCall.simple'
+               ({errVal = false},
                 fn () => (Prim.save (NullString.nullTerm file)
-                          ; Prim.getSaveStatus (gcState)))
+                          ; Prim.getSaveStatus ()))
          in
-            if Prim.getAmOriginal gcState
+            if Prim.getAmOriginal ()
                then Original
-            else (Prim.setAmOriginal (gcState, true)
+            else (Prim.setAmOriginal true
                   ; Cleaner.clean Cleaner.atLoadWorld
                   ; Clone)
          end
@@ -49,7 +47,7 @@ structure MLtonWorld: MLTON_WORLD =
          if let open OS_FileSys
             in access (file, [A_READ])
             end
-            then 
+            then
                let val c = CommandLine.name ()
                in Posix.Process.exec (c, [c, "@MLton", "load-world", file, "--"])
                end
