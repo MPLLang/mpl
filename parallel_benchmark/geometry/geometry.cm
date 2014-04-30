@@ -1,0 +1,19 @@
+group is
+
+(* to compile with sml/nj *)
+#if (defined(SMLNJ_VERSION))
+ $/basis.cm
+#endif
+
+geometryarg.sig
+
+hull.sig
+quickhull.fun
+
+../parallelfornj.sml
+
+geometryarg.sml
+
+../randomfornj.sml
+../mainutils.sml
+main.sml

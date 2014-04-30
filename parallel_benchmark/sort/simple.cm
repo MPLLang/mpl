@@ -1,0 +1,9 @@
+group is 
+
+(* to compile with sml/nj *)
+#if (defined(SMLNJ_VERSION))
+ $/basis.cm
+#endif
+
+../parallelfornj.sml
+simple.sml

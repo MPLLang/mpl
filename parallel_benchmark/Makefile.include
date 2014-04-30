@@ -1,0 +1,85 @@
+
+# Change these (here on or command-line)
+REPEAT = 1
+AVAIL = 1.5
+PLOT = x11
+# eps
+
+# Parameters
+#MLTON_FLAGS := -const 'Exn.keepHistory true'
+
+ifneq (${KEEPG},)
+MLTON_FLAGS += -keep g
+endif
+
+ifneq (${DEBUG},)
+MLTON_FLAGS += -debug true -debug-runtime true
+endif
+
+# Commands
+TIME = time
+
+SCHEDULERS = ws3 ws4 ws5 ws6 ws7 ws8 # sim pbf pdf ws1 ws2
+BINS = ${SCHEDULERS:%=${BIN}.%}
+all: ${BINS}
+
+${BIN}.sim : %.sim : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/sim-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.pbf : %.pbf : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/pbf-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.pdf : %.pdf : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/pdf-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws1 : %.ws1 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws1-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws2 : %.ws2 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws2-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws3 : %.ws3 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws3-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws4 : %.ws4 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws4-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws5 : %.ws5 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws5-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws6 : %.ws6 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws7 : %.ws7 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws7-map ${MLTON_FLAGS} -output $@ $*.mlb
+${BIN}.ws8 : %.ws8 : *.sml $(wildcard *.fun) $(wildcard *.sig) %.mlb $(wildcard ../../build/lib/self/*.a) $(wildcard ../../build/lib/include/*.h) $(wildcard ../../build/lib/sml/basis/parallel/*)
+	${TIME} ../../build/bin/multimlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws8-map ${MLTON_FLAGS} -output $@ $*.mlb
+
+
+plots: ${PLOTS:%=plots/%.${PLOT}}
+
+${PLOTS:%=plots/%.dat}: %.dat : %.arg ${BINS}
+	@${RM} $@;
+	@echo "# `date` on `hostname`" > $@;
+	@sed -e "s#BIN#./${BIN}#g;" -e "s#REPEAT#${REPEAT}#g;" \
+	  -e "s#AVAIL#${AVAIL}#g;" < $< | \
+	  sh -x -e -s | tee --append $@;
+
+${PLOTS:%=plots/%.x11}: %.x11 : %.dat %.gp.in
+	@${RM} $*.gp;
+	@echo "set terminal x11" > $*.gp;
+	@echo "set fit logfile '/dev/null'" >> $*.gp;
+	@echo "set key left box" >> $*.gp;
+	@sed -e "s#DATA#$<#g;" -e "s#AVAIL#${AVAIL}#g;" \
+	  -e 's#set title "\([^"]*\)"#set title "\1 [`date` on `hostname`]"#g;' \
+	  < $*.gp.in >> $*.gp;
+	gnuplot -persist $*.gp;
+
+${PLOTS:%=plots/%.eps}: %.eps : %.dat %.gp.in
+	@${RM} $*.gp;
+	@${RM} $@;
+	@echo "set terminal postscript eps mono 'Times' 28" > $*.gp; #color
+	@echo "set output '$@'" >> $*.gp;
+	@echo "set fit logfile '/dev/null'" >> $*.gp;
+	@echo "unset key" >> $*.gp;
+	@sed -e "s#DATA#$<#g;" -e "s#AVAIL#${AVAIL}#g;" \
+	  -e 's#set title "\([^"]*\)"##g;' \
+	  < $*.gp.in >> $*.gp;
+	gnuplot $*.gp;
+
+${PLOTS:%=plots/%.pdf}: %.pdf : %.eps
+	epstopdf $<;
+
+${PLOTS:%=plots/%.evince}: %.evince : %.eps
+	evince $<;
