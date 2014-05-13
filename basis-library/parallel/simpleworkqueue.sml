@@ -3,37 +3,55 @@ struct
 
   type proc = int
   type work = W.work
+  type token = int ref
 
   local
-    val lock_ = _import "Parallel_lock": int -> unit;
-    val unlock_ = _import "Parallel_unlock": int -> unit;
+    val lockInit = _import "Parallel_lockInit": int ref -> int ref;
+    val thelock = lockInit (ref 0)
+    val lockTake = _import "Parallel_lockTake": int ref -> unit;
+    val lockRelease = _import "Parallel_lockRelease": int ref -> unit;
   in
-  fun lock () = lock_ 0
-  fun unlock () = unlock_ 0
+  fun lock () = lockTake thelock
+  fun unlock () = lockRelease thelock
   end
+
+  val fetchAndAdd = _import "Parallel_fetchAndAdd": Int32.int ref * Int32.int -> Int32.int;
     
   (* initialize state *)
-  val queue = ref nil : work list ref
+  val queue = ref nil : (token * work) list ref
 
-  fun addWork _ ws = 
+  fun newWork _ = ref 0
+
+  fun addWork (_, tws) = 
     let in
       lock ();
-      queue := ws @ (!queue);
+      queue := tws @ (!queue);
       unlock ()
     end
 
   fun getWork _ = 
-    let in
+    let 
+      fun loop () = 
+          case !queue
+           of nil => NONE
+            | (t, w)::ws => 
+              let in
+                queue := ws;
+                if fetchAndAdd (t, 2) = 0 then
+                  SOME w
+                else
+                  loop ()
+              end
+    in
       lock ();
-      case !queue
-        of nil => (unlock ();
-                   NONE)
-         | w::ws => (queue := ws;
-                     unlock ();
-                     SOME w)
+      loop ()
+      before unlock ()
     end
 
   fun finishWork _ = ()
+
+  fun removeWork (_, t) = 
+      if fetchAndAdd (t, 1) = 0 then true else false
 
   fun shouldYield _ = true
 

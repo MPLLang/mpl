@@ -2,38 +2,42 @@ structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN =
 struct
 
   structure B = MLtonParallelBasic
-
-  val fetchAndAdd = _import "Parallel_fetchAndAdd": Int32.int ref * Int32.int -> Int32.int;
+  structure V = MLtonParallelSyncVarCapture
 
   datatype 'a result = 
-      NotYet
-    | Finished of 'a
-    | Raised of exn
+     Finished of 'a
+   | Raised of exn
 
   fun fork (f, g) =
       let
-        val c = ref 0
-        val l = ref NotYet
-        val r = ref NotYet
-                
-        fun wrap k h res () = 
-            let
-              val v = Finished (h ())
-                      handle e => Raised e
-              val () = res := v
-              val t = fetchAndAdd (c, 1)
-            in
-              if t = 1 then 
-                B.resume (k, (!l, !r))
-              else 
-                B.return ()
-            end
+        (* Used to hold the result of the right-hand side in the case where
+          that code is executed in parallel. *) 
+        val var = V.empty ()
+        (* Closure used to run the right-hand side... but only in the case
+          where that code is run in parallel. *)
+        fun rightside () = (V.write (var, Finished (g ())
+                                          handle e => Raised e);
+                            B.return ())
+
+        (* Offer the right side to any processor that wants it *)
+        val t = B.addRight rightside (* might suspend *)
+        (* Run the left side *)
+        val a = f ()
+            (* XXX Do we need to execute g in the case where f raises? *)
+            handle e => (ignore (B.remove t); B.yield (); raise e)
+        (* Try to retract our offer -- if successful, run the right side
+          ourselves. *)
+        val b = if B.remove t then
+                 (* no need to yield since we expect this work to be the next thing
+                    in the queue *)
+                  g ()
+                  handle e => (B.yield (); raise e)
+                else
+                  case V.read var of (_, Finished b) => b
+                                   | (_, Raised e) => (B.yield (); raise e)
       in
-        case B.suspend (fn k => [wrap k f l, wrap k g r])
-         of (Finished a, Finished b) => (a, b)
-          | (Raised e, _) => raise e
-          | (_, Raised e) => raise e
-          | _ => raise B.Parallel "impossible"
+        B.yield ();
+        (a, b)
       end
 
   fun reduce maxSeq f g u n =
@@ -55,6 +59,30 @@ struct
           in
             f (fork (wrap i l',
                      wrap (i + l') (l - l')))
+          end
+    in
+      wrap 0 n ()
+    end
+
+  fun reduce' maxSeq (g : int -> unit) n =
+    let
+      val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
+
+      fun wrap i l () =
+        if l <= maxSeq then
+           let
+             val stop = i + l
+             fun loop j = if j = stop then ()
+                            else (g j; loop (j + 1))
+           in
+             loop i
+           end
+        else
+          let
+            val l' = l div 2
+          in
+            ignore (fork (wrap i l',
+                          wrap (i + l') (l - l')))
           end
     in
       wrap 0 n ()

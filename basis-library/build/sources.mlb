@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-ann  
+ann
    "deadCode true"
    "sequenceNonUnit warn"
    "nonexhaustiveMatch warn" "redundantMatch warn"
@@ -21,11 +21,11 @@ in
 
    ../integer/iwconv0.sml
    ../integer/num0.sml
-   local 
-      ../config/bind/int-prim.sml 
+   local
+      ../config/bind/int-prim.sml
       ../config/bind/pointer-prim.sml
-      ../config/bind/real-prim.sml 
-      ../config/bind/word-prim.sml 
+      ../config/bind/real-prim.sml
+      ../config/bind/word-prim.sml
    in ann "forceUsed" in
       ../config/objptr/objptr-$(OBJPTR_REP).sml
       ../config/header/header-$(HEADER_WORD).sml
@@ -34,10 +34,10 @@ in
    end end
    ../integer/int-inf0.sml
    local
-      local 
-         ../config/bind/int-prim.sml 
-         ../config/bind/int-inf-prim.sml 
-         ../config/bind/word-prim.sml 
+      local
+         ../config/bind/int-prim.sml
+         ../config/bind/int-inf-prim.sml
+         ../config/bind/word-prim.sml
       in ann "forceUsed" in
          ../config/default/default-$(DEFAULT_INT).sml
          ../config/default/default-$(DEFAULT_WORD).sml
@@ -51,13 +51,13 @@ in
       ../integer/num1.sml
    end
 
-   local 
-      ../config/bind/char-prim.sml 
-      ../config/bind/int-prim.sml 
-      ../config/bind/int-inf-prim.sml 
-      ../config/bind/real-prim.sml 
-      ../config/bind/string-prim.sml 
-      ../config/bind/word-prim.sml 
+   local
+      ../config/bind/char-prim.sml
+      ../config/bind/int-prim.sml
+      ../config/bind/int-inf-prim.sml
+      ../config/bind/real-prim.sml
+      ../config/bind/string-prim.sml
+      ../config/bind/word-prim.sml
    in ann "forceUsed" in
       ../config/default/default-$(DEFAULT_CHAR).sml
       ../config/default/default-$(DEFAULT_WIDECHAR).sml
@@ -78,8 +78,8 @@ in
    ../list/list.sml
    ../list/list-pair.sig
    ../list/list-pair.sml
-   local 
-      ../config/bind/int-prim.sml 
+   local
+      ../config/bind/int-prim.sml
    in ann "forceUsed" in
       ../config/seqindex/seqindex-$(SEQINDEX_INT).sml
    end end
@@ -116,11 +116,11 @@ in
    ../integer/int.sml
    ../integer/word.sig
    ../integer/word.sml
-   local 
-      ../config/bind/int-top.sml 
+   local
+      ../config/bind/int-top.sml
       ../config/bind/pointer-prim.sml
-      ../config/bind/real-prim.sml 
-      ../config/bind/word-top.sml 
+      ../config/bind/real-prim.sml
+      ../config/bind/word-top.sml
    in ann "forceUsed" in
       ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
@@ -130,10 +130,10 @@ in
    end end
    ../integer/int-inf.sig
    ../integer/int-inf.sml
-   local 
-      ../config/bind/int-top.sml 
-      ../config/bind/int-inf-top.sml 
-      ../config/bind/word-top.sml 
+   local
+      ../config/bind/int-top.sml
+      ../config/bind/int-inf-top.sml
+      ../config/bind/word-top.sml
    in ann "forceUsed" in
       ../config/default/default-$(DEFAULT_INT).sml
       ../config/default/default-$(DEFAULT_WORD).sml
@@ -149,11 +149,11 @@ in
    ../integer/embed-word.sml
    ../integer/pack-word.sig
    ../integer/pack-word.sml
-   local 
-      ../config/bind/int-top.sml 
+   local
+      ../config/bind/int-top.sml
       ../config/bind/pointer-prim.sml
-      ../config/bind/real-prim.sml 
-      ../config/bind/word-top.sml 
+      ../config/bind/real-prim.sml
+      ../config/bind/word-top.sml
    in ann "forceUsed" in
       ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
@@ -201,8 +201,8 @@ in
    ../real/math.sig
    ../real/real.sig
    ../real/real.sml
-   local 
-      ../config/bind/real-top.sml 
+   local
+      ../config/bind/real-top.sml
    in ann "forceUsed" in
       ../config/default/default-$(DEFAULT_REAL).sml
       ../config/default/large-real.sml
@@ -210,11 +210,11 @@ in
    ../real/real-global.sml
    ../real/pack-real.sig
    ../real/pack-real.sml
-   local 
-      ../config/bind/int-top.sml 
+   local
+      ../config/bind/int-top.sml
       ../config/bind/pointer-prim.sml
-      ../config/bind/real-top.sml 
-      ../config/bind/word-top.sml 
+      ../config/bind/real-top.sml
+      ../config/bind/word-top.sml
    in ann "forceUsed" in
       ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
@@ -342,8 +342,8 @@ in
    ../mlton/itimer.sig
    ../mlton/itimer.sml
    ../mlton/ffi.sig
-   ann 
-      "ffiStr MLtonFFI" 
+   ann
+      "ffiStr MLtonFFI"
    in
       ../mlton/ffi.sml
    end
@@ -357,7 +357,7 @@ in
    ../mlton/rlimit.sig
    ../mlton/rlimit.sml
    ../mlton/syslog.sig
-   ../mlton/syslog.sml 
+   ../mlton/syslog.sml
    ../mlton/vector.sig
    ../mlton/weak.sig
    ../mlton/weak.sml
@@ -372,13 +372,16 @@ in
 
    ../parallel/workqueue.sig
    ../parallel/basic.sig
+   ../parallel/syncvar.sig
    ../parallel/future.sig
    ../parallel/forkjoin.sig
    ../parallel/array.sig
    ../parallel/parallel.sig
    ann "allowFFI true" in
+      ../parallel/wsworkqueue.sml
       ../parallel/$(WORK_QUEUE).sml
       ../parallel/basic.sml
+      ../parallel/syncvar.sml
       ../parallel/future.sml
       ../parallel/forkjoin.sml
    end

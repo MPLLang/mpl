@@ -10,6 +10,9 @@ sig
   val future : (unit -> 'a) -> 'a t
 
   (* force the execution of a future if that has not yet occured. *)
-  val force : 'a t -> 'a
+  val touch : 'a t -> 'a
+
+  val reportSuspends : unit -> int
+  val resetSuspends : unit -> unit
 
 end

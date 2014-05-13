@@ -22,4 +22,6 @@ sig
            (* maxSeq       "*"            "inj"        unit  length *)
   val reduce : int -> ('b * 'b -> 'b) -> (int -> 'b) -> 'b -> int -> 'b
 
+  val reduce' : int -> (int -> unit) -> int -> unit
+
 end

@@ -1,69 +1,94 @@
-structure MLtonParallelFuture :> MLTON_PARALLEL_FUTURE =
+functor MLtonParallelFuture (structure V : MLTON_PARALLEL_SYNCVAR
+                             structure B : sig 
+                               type void
+                               val add : (unit -> void) -> unit
+                               val start : unit -> unit
+                               val stop : unit -> unit
+                               val return : unit -> void
+                             end)
+        :> MLTON_PARALLEL_FUTURE =
 struct
 
-  structure B = MLtonParallelBasic
-
-  val fetchAndAdd = _import "Parallel_fetchAndAdd": Int32.int ref * Int32.int -> Int32.int;
+  val suspends = ref 0
+  fun incr r = r := !r + 1
 
   datatype 'a result =
-      NotYet 
-    | Finished of 'a
+      Finished of 'a
     | Raised of exn
 
-  type 'a t = 'a result ref * 'a result B.t option ref * int ref
+  type 'a t = 'a result V.t
 
   fun future f =
     let 
-      val r = ref NotYet
-      val n = ref NONE
-      val c = ref 0
-      val () = B.addWork 
-        [fn () => 
-         let
-           val res = Finished (f ())
-                       handle e => Raised e
-           val () = r := res
-           val t = fetchAndAdd (c, 1)
-         in
-           if t = 0 then B.return ()
-           else B.resume (valOf (!n), res)
-         end]
+      val v = V.empty ()
+      val _ = B.add (fn () => (B.start ();
+                               V.write (v, Finished (f ())
+                                           handle e => Raised e);
+                               B.stop ();
+                               B.return ()))
     in
-      (r, n, c)
+      v
     end
 
-  fun force (r, n, c) =
-    let 
-      val res = if !c = 1 then
-                  B.continue (fn () => !r)
-                else
-(*
-                  B.suspend (fn k =>
-                                let 
-                                  val () = n := SOME k
-                                  val t = fetchAndAdd (c, 1)
-                                in
-                                  if t = 0 then []
-                                  else [fn () => B.resume (k, !r)]
-                                end)
-*)
-                  B.suspend (fn k =>
-                                let 
-                                  val () = n := SOME k
-                                in
-                                  [fn () => 
-                                      let 
-                                        val t = fetchAndAdd (c, 1)
-                                      in
-                                        if t = 0 then B.return () else B.resume (k, !r)
-                                      end]
-                                end)
+  fun touch v =
+      let
+        val (susp, a) = V.read v
+        val () = if susp then incr suspends else ()
+      in
+        case a of 
+          Finished v => v
+        | Raised e => raise e
+      end
 
-    in
-      case res of 
-        Finished v => v
-      | Raised e => raise e
-      | NotYet => raise B.Parallel "got NotYet in force!"
-    end
+  fun reportSuspends () = !suspends
+  fun resetSuspends () = suspends := 0
 
+end
+
+local
+structure NoDelay =
+struct
+  open MLtonParallelBasic
+  val add = ignore o addLeft
+  fun start () = ()
+  fun stop () = ()
+end
+structure Delay =
+struct
+  open MLtonParallelBasic
+  val add = delayedAdd
+  fun start () = ()
+  fun stop () = ()
+end
+structure MaybeDelay =
+struct
+  open MLtonParallelBasic
+  open MLtonParallelInternal
+  val inFuture = Array.array (numberOfProcessors, false)
+  fun add f = if Array.sub (inFuture, processorNumber()) then
+                (delayedAdd f)
+              else
+                (ignore (addLeft f))
+  fun start () = Array.update (inFuture, processorNumber (), true)
+  fun stop () = Array.update (inFuture, processorNumber (), false)
+end
+in
+structure MLtonParallelFutureSuspend = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarSuspend
+                       structure B = NoDelay)
+structure MLtonParallelFutureSuspendDelay = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarSuspend
+                       structure B = Delay)
+structure MLtonParallelFutureSuspendMaybeDelay = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarSuspend
+                       structure B = MaybeDelay)
+structure MLtonParallelFutureCapture = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarCapture
+                       structure B = NoDelay)
+structure MLtonParallelFutureCaptureDelay = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarCapture
+                       structure B = Delay)
+structure MLtonParallelFutureCaptureMaybeDelay = 
+  MLtonParallelFuture (structure V = MLtonParallelSyncVarCapture
+                       structure B = MaybeDelay)
 end

@@ -3,14 +3,19 @@ struct
 
   type proc = int
   type work = W.work
+  type token = int ref
 
   local
-    val lock_ = _import "Parallel_lock": int -> unit;
-    val unlock_ = _import "Parallel_unlock": int -> unit;
+    val lockInit = _import "Parallel_lockInit": int ref -> int ref;
+    val thelock = lockInit (ref 0)
+    val lockTake = _import "Parallel_lockTake": int ref -> unit;
+    val lockRelease = _import "Parallel_lockRelease": int ref -> unit;
   in
-  fun lock () = lock_ 0
-  fun unlock () = unlock_ 0
+  fun lock () = lockTake thelock
+  fun unlock () = lockRelease thelock
   end
+
+  val fetchAndAdd = _import "Parallel_fetchAndAdd": Int32.int ref * Int32.int -> Int32.int;
 
   datatype 'a mlist = 
      Cons of 'a * 'a mlist ref 
@@ -19,44 +24,60 @@ struct
   (* initialize state *)
   val (head, tail) = (ref Nil, ref Nil)
 
-  fun addWork _ ws = 
+  fun newWork _ = ref 0
+
+  fun addWork (_, tws) = 
     let
-      fun add w = 
+      fun add (c, w) =
           tail := (case !tail of
                      Cons (_, r) => 
                      let 
-                       val n = Cons (w, ref (!r))
+                       val n = Cons ((w, c), ref (!r))
                        val () = r := n
                      in
                        n
                      end
                    | Nil => 
                      let 
-                       val n = Cons (w, ref Nil)
+                       val n = Cons ((w, c), ref Nil)
                        val () = head := n
                      in
                        n
                      end)
     in
       lock ();
-      app add ws;
-      unlock ()
+      app add tws
+      before unlock ()
     end
 
   fun getWork _ = 
-    let in
+    let 
+      fun loop () =       
+          case !head
+           of Nil => NONE
+            | Cons ((w, c), t) => 
+              let in
+                (* first remove from the queue *)
+                head := !t;
+                case !t of Nil => tail := Nil
+                         | _ => ();
+                if fetchAndAdd (c, 2) = 0 then
+                  SOME w
+                else (* cancelled *)
+                  loop ()
+              end
+    in
       lock ();
-      case !head
-       of Nil => (unlock ();
-                   NONE)
-        | Cons (w, t) => (head := !t;
-                           case !t of Nil => tail := !t
-                                    | _ => ();
-                           unlock ();
-                           SOME w)
+      loop ()
+      before unlock ()
     end
 
+  fun startWork _ = ()
+
   fun finishWork _ = ()
+
+  fun removeWork (_, c) = 
+      if fetchAndAdd (c, 1) = 0 then true else false
 
   fun shouldYield _ = true
 
