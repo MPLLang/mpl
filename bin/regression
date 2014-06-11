@@ -88,6 +88,7 @@ if $cross; then
 	flags[${#flags[@]}]="-stop"
 	flags[${#flags[@]}]="g"
 fi
+# RAM_NOTE: Some are disabled with a '.disabled' suffix, so they will not be found
 cont='callcc.sml callcc2.sml callcc3.sml once.sml'
 flatArray='finalize.sml flat-array.sml flat-array.2.sml'
 intInf='conv.sml conv2.sml fixed-integer.sml harmonic.sml int-inf.*.sml slow.sml slower.sml smith-normal-form.sml'
@@ -127,6 +128,10 @@ case $crossTarget in
 	forMinGW='true'
 ;;
 esac
+
+for f in *.sml.disabled; do
+    echo TEST ${f%.sml.disabled} IS DISABLED
+done
 
 for f in *.sml; do
         f=`basename "$f" .sml`
