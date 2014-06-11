@@ -7,7 +7,7 @@ struct
   val maxVal = ref 1000
   val tests = ref ["mmm"]
 
-  local 
+  local
     fun processDenseArgs nil = ()
       | processDenseArgs (args as (arg::rest)) =
 
@@ -32,8 +32,8 @@ struct
   val foldr = AS.foldr
   val app = AS.app
 
-  fun vvm_check (a, b) = 
-    let 
+  fun vvm_check (a, b) =
+    let
       val l = length a
       fun loop (i, acc) = if i = l then acc
                           else
@@ -85,7 +85,7 @@ struct
                                structure D = NonblockedSeq)
 
   fun run name size parCutoff =
-    let 
+    let
       val mmm = if name = "mmm" then NonblockedPar.mmm parCutoff
                 else if name = "mmm_naive" then NaivePar.mmm parCutoff
                 else if name = "mmm_seq" then NonblockedSeq.mmm parCutoff
@@ -103,18 +103,18 @@ struct
                 else if name = "mmm_str256_seq" then StridedSeq256.mmm parCutoff
                 else if name = "mmm_str512_seq" then StridedSeq512.mmm parCutoff
                 else if name = "mmm_str1024_seq" then StridedSeq1024.mmm parCutoff
-                else if name = "mmm_blk_seq" then BlockedSeq.mmm parCutoff 
-                else if name = "mmm_blk" then BlockedPar.mmm parCutoff 
+                else if name = "mmm_blk_seq" then BlockedSeq.mmm parCutoff
+                else if name = "mmm_blk" then BlockedPar.mmm parCutoff
                 else raise Argument ("unknown dense option: " ^ name)
-      
+
       fun checkResult mn a =
           let val a' = mmm_check mn
               val epsilon = 1e~6
-              fun loop (i, j) = 
+              fun loop (i, j) =
                   if i = length a then true
-                  else if j = length (sub (a, i)) 
+                  else if j = length (sub (a, i))
                   then loop (i + 1, 0)
-                  else ( (Real.abs (sub (sub (a, i), j) - sub (sub (a', i), j)) < epsilon) 
+                  else ( (Real.abs (sub (sub (a, i), j) - sub (sub (a', i), j)) < epsilon)
                          orelse
                          (print (Real.toString (sub (sub (a, i), j) - sub (sub (a', i), j)) ^ " ");
                           false) )
@@ -127,9 +127,9 @@ struct
       fun build () =
           let
             fun buildMatrix size : real AS.slice AS.slice =
-                tabulate (size, fn _ => 
+                tabulate (size, fn _ =>
                    tabulate (size, fn _ => randomReal (Real.fromInt (!maxVal))))
-            val m = buildMatrix size    
+            val m = buildMatrix size
             val n = buildMatrix size
 
             val () = if !printResult then
@@ -146,28 +146,28 @@ struct
 
       val test = mmm
 
-      fun post (m, n) a = 
+      fun post (m, n) a =
           let in
-            if !check then checkResult (m, n) a 
+            if !check then checkResult (m, n) a
             else print "done\n";
             if !printResult then printMatrix a
             else ()
           end
 
-      val (space, time) = repeatTest name build test post
+      val {space = space, time = time, ...} = repeatTest name build test post
 
     in
       print (String.concat [name, " ",
                             MLton.Parallel.Basic.policyName, " ",
                             Int.toString MLton.Parallel.Basic.numberOfProcessors, " ",
-                            Int.toString size, " ", 
-                            Int.toString parCutoff, " ", 
+                            Int.toString size, " ",
+                            Int.toString parCutoff, " ",
                             Word64.fmt StringCvt.DEC space, " ",
                             LargeInt.toString time, "\n"])
     end
 
-  fun doit () = 
-      let in 
+  fun doit () =
+      let in
         print "#format: name policy procs size parCutoff average-space(B) average-time(ms)\n";
         table3 run (!tests) (!sizes) (!parCutoffs)
       end

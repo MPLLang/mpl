@@ -11,5 +11,7 @@ barneshut.fun
 simarg.sml
 
 ../randomformlton.sml
+../Listsort.sig
+../Listsort.sml
 ../mainutils.sml
 main.sml

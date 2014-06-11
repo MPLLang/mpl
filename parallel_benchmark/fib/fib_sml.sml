@@ -2,14 +2,14 @@
 val fork = MLton.Parallel.ForkJoin.fork
 val policyName = MLton.Parallel.Basic.policyName
 (*
-fun fork (f, g) = (f (), g ()) 
+fun fork (f, g) = (f (), g ())
 val policyName = "serial"
 *)
 
 fun fib n =
     if n <= 1 then 1
     else
-      let 
+      let
         val (a, b) = fork (fn () => fib (n - 1),
                            fn () => fib (n - 2))
       in
@@ -18,18 +18,18 @@ fun fib n =
 
 fun iterFib n =
     let
-      fun loop i x y = 
+      fun loop i x y =
           if i > n-2 then x
           else loop (i+1) (x+y) x
     in
       loop 0 1 1
     end
 
-val () = 
+val () =
     if null (CommandLine.arguments ()) then
       let
-        fun run n = 
-            let 
+        fun run n =
+            let
               val start = Time.now ()
               val r = fib n
               val diff = Time.- (Time.now (), start)
@@ -39,7 +39,7 @@ val () =
                        else ()
             in
               print (concat [policyName, " Fib(",
-                             Int.toString n, ")\t", 
+                             Int.toString n, ")\t",
                              LargeInt.toString (Time.toMilliseconds diff),
                              " ms\n"])
             end
@@ -57,5 +57,3 @@ val () =
       in
         print ("finished with " ^ (Int.toString r) ^ "\n")
       end
-
-

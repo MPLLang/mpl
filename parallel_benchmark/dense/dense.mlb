@@ -10,6 +10,8 @@ strided.fun
 blocked.fun
 
 ../randomformlton.sml
+../Listsort.sig
+../Listsort.sml
 ../mainutils.sml
 densearg.sml
 main.sml

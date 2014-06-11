@@ -119,7 +119,7 @@ struct
 
         fun averageDropMinMax l =
             let
-              val l = ListMergeSort.sort op> l
+              val l = Listsort.sort (fn (x, y) => if x = y then EQUAL else if x > y then GREATER else LESS) l
             in
               if length l < 8 then (foldl op+ 0 l) div (length l)
               else
