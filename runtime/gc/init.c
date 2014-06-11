@@ -322,6 +322,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
   s->controls->oldGenArraySize = 0x100000;
+  s->controls->allocChunkSize = 4096;
+  s->controls->affinityBase = 0;
+  s->controls->affinityStride = 1;
+  s->controls->restrictAvailableSize = FALSE;
   s->controls->ratios.copy = 4.0f;
   s->controls->ratios.copyGenerational = 4.0f;
   s->controls->ratios.grow = 8.0f;
@@ -342,15 +346,22 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->cumulativeStatistics = (struct GC_cumulativeStatistics *)
     malloc (sizeof (struct GC_cumulativeStatistics));
   s->cumulativeStatistics->bytesAllocated = 0;
+  s->cumulativeStatistics->bytesFilled = 0;
   s->cumulativeStatistics->bytesCopied = 0;
   s->cumulativeStatistics->bytesCopiedMinor = 0;
   s->cumulativeStatistics->bytesHashConsed = 0;
   s->cumulativeStatistics->bytesMarkCompacted = 0;
   s->cumulativeStatistics->bytesScannedMinor = 0;
   s->cumulativeStatistics->maxBytesLive = 0;
+  s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
   s->cumulativeStatistics->maxHeapSize = 0;
   s->cumulativeStatistics->maxPauseTime = 0;
   s->cumulativeStatistics->maxStackSize = 0;
+  s->cumulativeStatistics->syncForOldGenArray = 0;
+  s->cumulativeStatistics->syncForNewGenArray = 0;
+  s->cumulativeStatistics->syncForStack = 0;
+  s->cumulativeStatistics->syncForHeap = 0;
+  s->cumulativeStatistics->syncMisc = 0;
   s->cumulativeStatistics->numCardsMarked = 0;
   s->cumulativeStatistics->numCopyingGCs = 0;
   s->cumulativeStatistics->numHashConsGCs = 0;
@@ -360,8 +371,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   rusageZero (&s->cumulativeStatistics->ru_gcCopying);
   rusageZero (&s->cumulativeStatistics->ru_gcMarkCompact);
   rusageZero (&s->cumulativeStatistics->ru_gcMinor);
+  rusageZero (&s->cumulativeStatistics->ru_rt);
+  rusageZero (&s->cumulativeStatistics->ru_sync);
 
   s->currentThread = BOGUS_OBJPTR;
+  s->ffiArgs = NULL;
   s->hashConsDuringGC = FALSE;
 
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
@@ -371,6 +385,7 @@ int GC_init (GC_state s, int argc, char **argv) {
     malloc (sizeof (struct GC_lastMajorStatistics));
   s->lastMajorStatistics->bytesHashConsed = 0;
   s->lastMajorStatistics->bytesLive = 0;
+#warning Does this need to be under an option?
   s->lastMajorStatistics->kind = GC_COPYING;
   s->lastMajorStatistics->numMinorGCs = 0;
 
@@ -396,6 +411,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->weaks = NULL;
   s->saveWorldStatus = true;
 
+#warning Why is this not found in the Spoonhower copy?
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;
