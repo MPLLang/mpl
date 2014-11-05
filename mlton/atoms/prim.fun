@@ -11,7 +11,7 @@
  * If you add new polymorphic primitives, you must modify extractTargs.
  *)
 
-functor Prim (S: PRIM_STRUCTS): PRIM = 
+functor Prim (S: PRIM_STRUCTS): PRIM =
 struct
 
 open S
@@ -59,8 +59,9 @@ datatype 'a t =
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
  | FFI of 'a CFunction.t (* ssa to rssa *)
- | FFI_Symbol of {name: string, 
-                  cty: CType.t option, 
+ | FFI_getArgs  (* RAM_WARNING: Is this right? *)
+ | FFI_Symbol of {name: string,
+                  cty: CType.t option,
                   symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* ssa to rssa *)
  | IntInf_add (* ssa to rssa *)
@@ -245,6 +246,7 @@ fun toString (n: 'a t): string =
        | Exn_name => "Exn_name"
        | Exn_setExtendExtra => "Exn_setExtendExtra"
        | FFI f => (CFunction.Target.toString o CFunction.target) f
+       | FFI_getArgs => "FFI_getArgs"
        | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
        | IntInf_add => "IntInf_add"
@@ -386,6 +388,7 @@ val equals: 'a t * 'a t -> bool =
     | (Exn_name, Exn_name) => true
     | (Exn_setExtendExtra, Exn_setExtendExtra) => true
     | (FFI f, FFI f') => CFunction.equals (f, f')
+    | (FFI_getArgs, FFI_getArgs) => true
     | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
     | (IntInf_add, IntInf_add) => true
@@ -549,7 +552,8 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Exn_name => Exn_name
     | Exn_setExtendExtra => Exn_setExtendExtra
     | FFI func => FFI (CFunction.map (func, f))
-    | FFI_Symbol {name, cty, symbolScope} => 
+    | FFI_getArgs => FFI_getArgs
+    | FFI_Symbol {name, cty, symbolScope} =>
         FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
     | IntInf_add => IntInf_add
@@ -672,7 +676,7 @@ val bug = MLton_bug
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
-fun cpointerGet ctype = 
+fun cpointerGet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -690,7 +694,7 @@ fun cpointerGet ctype =
        | Word64 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 64))
    end
 val cpointerLt = CPointer_lt
-fun cpointerSet ctype = 
+fun cpointerSet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -798,10 +802,12 @@ val kind: 'a t -> Kind.t =
        | Exn_extra => Functional
        | Exn_name => Functional
        | Exn_setExtendExtra => SideEffect
-       | FFI (CFunction.T {kind, ...}) => (case kind of
-                                              CFunction.Kind.Impure => SideEffect
-                                            | CFunction.Kind.Pure => Functional
-                                            | CFunction.Kind.Runtime _ => SideEffect)
+       | FFI ( CFunction.T { kind, ... } ) => ( case kind of
+						   CFunction.Kind.Functional => Functional
+						 | CFunction.Kind.Impure => SideEffect
+						 |
+						   CFunction.Kind.Runtime _ => SideEffect )
+       | FFI_getArgs => SideEffect (* SPOONOWER_NOTE: PERF perhaps conservative? *)
        | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
        | IntInf_add => Functional
@@ -1003,6 +1009,7 @@ in
        Exn_extra,
        Exn_name,
        Exn_setExtendExtra,
+       FFI_getArgs,
        GC_collect,
        IntInf_add,
        IntInf_andb,
@@ -1067,7 +1074,7 @@ in
            fun coerces (name, sizes, sizes', ac) =
               List.fold
               (sizes, ac, fn (s, ac) =>
-               List.fold 
+               List.fold
                (sizes', ac, fn (s', ac) =>
                 name (s, s') :: ac))
            fun coercesS (name, sizes, sizes', ac) =
@@ -1078,7 +1085,7 @@ in
            fun casts (name, sizes, ac) =
               List.fold (sizes, ac, fn (s, ac) => name s :: ac)
         in
-           casts (fn rs => Real_castToWord (rs, WordSize.fromBits (RealSize.bits rs)), real, 
+           casts (fn rs => Real_castToWord (rs, WordSize.fromBits (RealSize.bits rs)), real,
            coerces (Real_rndToReal, real, real,
            coercesS (Real_rndToWord, real, word,
            casts (fn rs => Word_castToReal (WordSize.fromBits (RealSize.bits rs), rs), real,
@@ -1258,7 +1265,8 @@ fun 'a checkApp (prim: 'a t,
        | Exn_name => noTargs (fn () => (oneArg exn, string))
        | Exn_setExtendExtra => oneTarg (fn t => (oneArg (arrow (t, t)), unit))
        | FFI f =>
-            noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
+             noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
+       | FFI_getArgs => noTargs (fn () => (noArgs, cpointer))
        | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
        | IntInf_add => intInfBinary ()
@@ -1534,7 +1542,7 @@ fun ('a, 'b) apply (p: 'a t,
             orelse IntInf.> (ii, maxIntInf)
       end
       val intInfTooBig =
-         Trace.trace 
+         Trace.trace
          ("Prim.intInfTooBig", IntInf.layout, Bool.layout)
          intInfTooBig
       fun intInf (ii:  IntInf.t): ('a, 'b) ApplyResult.t =
@@ -1590,7 +1598,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfBinary (i1, i2) =
          if intInfTooBig i1 orelse intInfTooBig i2
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_add => iio (IntInf.+, i1, i2)
              | IntInf_andb => iio (IntInf.andb, i1, i2)
@@ -1605,7 +1613,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfUnary (i1) =
          if intInfTooBig i1
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_neg => intInf (IntInf.~ i1)
              | IntInf_notb => intInf (IntInf.notb i1)
@@ -1613,7 +1621,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfShiftOrToString (i1, w2) =
          if intInfTooBig i1
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_arshift =>
                   intInf (IntInf.~>> (i1, Word.fromIntInf (WordX.toIntInf w2)))
@@ -1631,7 +1639,7 @@ fun ('a, 'b) apply (p: 'a t,
                      val base =
                         case WordX.toInt w2 of
                            2 => StringCvt.BIN
-                         | 8 => StringCvt.OCT 
+                         | 8 => StringCvt.OCT
                          | 10 => StringCvt.DEC
                          | 16 => StringCvt.HEX
                          | _ => Error.bug "Prim.apply: strange base for IntInf_toString"
@@ -1911,7 +1919,7 @@ fun ('a, 'b) apply (p: 'a t,
                           else Unknown
                in
                   case p of
-                     CPointer_add => 
+                     CPointer_add =>
                         if WordX.isZero w
                            then Var x
                         else Unknown
@@ -1996,9 +2004,9 @@ fun ('a, 'b) apply (p: 'a t,
              | (_, [Const (Real r), Var x]) => varReal (x, r, false)
              | (_, [Var x, Const (Word i)]) => varWord (x, i, true)
              | (_, [Const (Word i), Var x]) => varWord (x, i, false)
-             | (_, [Const (IntInf i1), Const (IntInf i2), _]) => 
+             | (_, [Const (IntInf i1), Const (IntInf i2), _]) =>
                   intInfBinary (i1, i2)
-             | (_, [Const (IntInf i1), Const (Word w2), _]) => 
+             | (_, [Const (IntInf i1), Const (Word w2), _]) =>
                   intInfShiftOrToString (i1, w2)
              | (_, [Const (IntInf i1), _]) => intInfUnary (i1)
              | (_, [Var x, Const (IntInf i), Var space]) =>

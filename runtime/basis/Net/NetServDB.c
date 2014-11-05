@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct servent *NetHostDB_servent;
 
 C_String_t NetServDB_getEntryName(void) {

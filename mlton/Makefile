@@ -13,6 +13,9 @@ BIN := $(BUILD)/bin
 HOST_ARCH := $(shell "$(SRC)/bin/host-arch")
 HOST_OS := $(shell "$(SRC)/bin/host-os")
 LIB := $(BUILD)/lib
+ifeq (other, $(shell if [ ! -x "$(MLTON)" ]; then echo other; fi))
+MLTON := mlton
+endif
 TARGET := self
 AOUT := mlton-compile
 PATH := $(BIN):$(shell echo $$PATH)
@@ -26,7 +29,7 @@ ifeq (self, $(shell if [ -x "$(BIN)/mlton" ]; then echo self; fi))
   FLAGS += -default-ann 'warnUnused true'
   # FLAGS += -type-check true
 else
-# We're compiling MLton with an older version of itself. 
+# We're compiling MLton with an older version of itself.
 # Use "-align 8" for amd64 to avoid GMP/mul_2exp segfault with a
 # mis-aligned limb when compiling with <= 20070826.
 ifeq (amd64,$(findstring $(HOST_ARCH), amd64))
@@ -106,7 +109,7 @@ $(AOUT): $(SOURCES)
 	rm -f control/version.sml
 	$(MAKE) control/version.sml
 	@echo 'Compiling mlton (takes a while)'
-	mlton $(FLAGS) $(FILE)
+	$(MLTON) $(FLAGS) $(FILE)
 
 .PHONY: def-use
 def-use: mlton.def-use

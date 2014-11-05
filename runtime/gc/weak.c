@@ -31,13 +31,14 @@ size_t offsetofWeak (GC_state s) {
   return (sizeofWeak (s)) - (GC_NORMAL_HEADER_SIZE + sizeof (struct GC_weak));
 }
 
-uint32_t GC_weakCanGet (__attribute__ ((unused)) GC_state s, pointer p) {
+uint32_t GC_weakCanGet (GC_state s, pointer p) {
   uint32_t res;
 
   res = GC_WEAK_GONE_HEADER != getHeader (p);
   if (DEBUG_WEAK)
-    fprintf (stderr, "%s = GC_weakCanGet ("FMTPTR")\n",
-             boolToString (res), (uintptr_t)p);
+    fprintf (stderr, "%s = GC_weakCanGet ("FMTPTR") [%d]\n",
+             boolToString (res), (uintptr_t)p,
+             Proc_processorNumber (s));
   return res;
 }
 
@@ -46,10 +47,11 @@ pointer GC_weakGet (GC_state s, pointer p) {
   pointer res;
 
   weak = (GC_weak)(p + offsetofWeak (s));
-  res = objptrToPointer(weak->objptr, s->heap.start);
+  res = objptrToPointer(weak->objptr, s->heap->start);
   if (DEBUG_WEAK)
-    fprintf (stderr, FMTPTR" = GC_weakGet ("FMTPTR")\n",
-             (uintptr_t)res, (uintptr_t)p);
+    fprintf (stderr, FMTPTR" = GC_weakGet ("FMTPTR") [%d]\n",
+             (uintptr_t)res, (uintptr_t)p,
+             Proc_processorNumber (s));
   return res;
 }
 
@@ -61,9 +63,10 @@ pointer GC_weakNew (GC_state s, GC_header header, pointer p) {
                    sizeofWeak (s),
                    FALSE);
   weak = (GC_weak)(res + offsetofWeak (s));
-  weak->objptr = pointerToObjptr(p, s->heap.start);
+  weak->objptr = pointerToObjptr(p, s->heap->start);
   if (DEBUG_WEAK)
-    fprintf (stderr, FMTPTR" = GC_weakNew ("FMTHDR", "FMTPTR")\n",
-             (uintptr_t)res, header, (uintptr_t)p);
+    fprintf (stderr, FMTPTR" = GC_weakNew ("FMTHDR", "FMTPTR") [%d]\n",
+             (uintptr_t)res, header, (uintptr_t)p,
+             Proc_processorNumber (s));
   return (pointer)res;
 }

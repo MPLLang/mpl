@@ -1,7 +1,9 @@
 #include "platform.h"
 
-extern struct GC_state gcState;
+/* SPOONHOWER_NOTE: reference to global gcState */
+/* extern struct GC_state gcState; */
 
+/* SPOONHOWER_NOTE: global state */
 static struct rusage MLton_Rusage_self;
 static struct rusage MLton_Rusage_children;
 static struct rusage MLton_Rusage_gc;
@@ -55,7 +57,10 @@ C_SUSeconds_t MLton_Rusage_gc_stime_usec (void) {
 }
 
 void MLton_Rusage_getrusage (void) {
-  MLton_Rusage_gc = *(GC_getRusageGCAddr (&gcState));
+#warning Reenable when I can
+#if 0
+  MLton_Rusage_gc = *(GC_getRusageGCAddr ());
+#endif
   getrusage (RUSAGE_SELF, &MLton_Rusage_self);
   getrusage (RUSAGE_CHILDREN, &MLton_Rusage_children);
 }

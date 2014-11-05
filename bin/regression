@@ -88,6 +88,7 @@ if $cross; then
 	flags[${#flags[@]}]="-stop"
 	flags[${#flags[@]}]="g"
 fi
+# RAM_NOTE: Some are disabled with a '.disabled' suffix, so they will not be found
 cont='callcc.sml callcc2.sml callcc3.sml once.sml'
 flatArray='finalize.sml flat-array.sml flat-array.2.sml'
 intInf='conv.sml conv2.sml fixed-integer.sml harmonic.sml int-inf.*.sml slow.sml slower.sml smith-normal-form.sml'
@@ -127,6 +128,10 @@ case $crossTarget in
 	forMinGW='true'
 ;;
 esac
+
+for f in *.sml.disabled; do
+    echo TEST ${f%.sml.disabled} IS DISABLED
+done
 
 for f in *.sml; do
         f=`basename "$f" .sml`
@@ -190,12 +195,12 @@ for f in *.sml; do
                 echo "\$(SML_LIB)/basis/basis.mlb
                         \$(SML_LIB)/basis/mlton.mlb
                         \$(SML_LIB)/basis/sml-nj.mlb
-                        ann 
+                        ann
                                 \"allowFFI true\"
                                 \"allowOverload true\"
                                 \"nonexhaustiveMatch ignore\"
                                 \"redundantMatch ignore\"
-                        in $f.sml 
+                        in $f.sml
                         end" >"$mlb"
                 "$mlton" "${flags[@]}" "${extraFlags[@]}" -output "$f" "$mlb"
                 if [ "$?" -ne '0' ] || ((! $cross) && [ ! -x "$f" ]); then
@@ -217,7 +222,7 @@ for f in *.sml; do
                 libs="-lmlton -lgmp $libs -lgdtoa -lm"
                 # Must use $f.[0-9].[csS], not $f.*.[csS], because the
                 # latter will include other files, e.g. for finalize,
-                # it will also include finalize.2. This happens only 
+                # it will also include finalize.2. This happens only
 		# when running cross regressions, which builds all the
 		# C files and saves them in this directory.
 		files="$f.[0-9].[csS]"
@@ -238,7 +243,7 @@ for f in *.sml; do
 		if $forMinGW; then
                        nonZeroMsg="$nonZeroMsg"'\r'
 		fi
-                ( "./$f" || echo -e "$nonZeroMsg" ) >$tmp 2>&1 
+                ( "./$f" || echo -e "$nonZeroMsg" ) >$tmp 2>&1
                 if [ -r "$f.ok" ]; then
                         compare="$f.$HOST_ARCH-$HOST_OS.ok"
                         if [ ! -r $compare ]; then
@@ -280,7 +285,7 @@ for f in *.sml; do
                 rm -f "$tmpf" "$tmpf.sml"
         ;;
         esac
-done 
+done
 mmake clean >/dev/null
 cd "$src"
 for f in mllex mlyacc mlprof; do

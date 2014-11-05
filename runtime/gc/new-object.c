@@ -12,6 +12,7 @@
  * Allocate a new object in the heap.
  * bytesRequested includes the size of the header.
  */
+/* XXX DOC spoons must hold the runtime lock if allocInOldGen is true! */
 pointer newObject (GC_state s,
                    GC_header header,
                    size_t bytesRequested,
@@ -24,9 +25,11 @@ pointer newObject (GC_state s,
           ? hasHeapBytesFree (s, bytesRequested, 0)
           : hasHeapBytesFree (s, 0, bytesRequested));
   if (allocInOldGen) {
-    frontier = s->heap.start + s->heap.oldGenSize;
-    s->heap.oldGenSize += bytesRequested;
-    s->cumulativeStatistics.bytesAllocated += bytesRequested;
+    /* NB you must have exclusive access to the runtime state
+       if you are allocating in the older generation! */
+    frontier = s->heap->start + s->heap->oldGenSize;
+    s->heap->oldGenSize += bytesRequested;
+    s->cumulativeStatistics->bytesAllocated += bytesRequested;
   } else {
     if (DEBUG_DETAILED)
       fprintf (stderr, "frontier changed from "FMTPTR" to "FMTPTR"\n",
@@ -35,6 +38,7 @@ pointer newObject (GC_state s,
     frontier = s->frontier;
     s->frontier += bytesRequested;
   }
+  /* XXX unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
   *((GC_header*)frontier) = header;
   result = frontier + GC_NORMAL_HEADER_SIZE;
@@ -54,8 +58,8 @@ GC_stack newStack (GC_state s,
   GC_stack stack;
 
   assert (isStackReservedAligned (s, reserved));
-  if (reserved > s->cumulativeStatistics.maxStackSize)
-    s->cumulativeStatistics.maxStackSize = reserved;
+  if (reserved > s->cumulativeStatistics->maxStackSize)
+    s->cumulativeStatistics->maxStackSize = reserved;
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
                                 sizeofStackWithHeader (s, reserved),
                                 allocInOldGen));
@@ -74,7 +78,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   pointer res;
 
   assert (isStackReservedAligned (s, reserved));
-  ensureHasHeapBytesFree (s, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+  ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
   stack = newStack (s, reserved, FALSE);
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
@@ -82,7 +86,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   thread = (GC_thread)(res + offsetofThread (s));
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, s->heap.start);
+  thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -94,7 +98,9 @@ static inline void setFrontier (GC_state s, pointer p,
   p = alignFrontier (s, p);
   assert ((size_t)(p - s->frontier) <= bytes);
   GC_profileAllocInc (s, (size_t)(p - s->frontier));
-  s->cumulativeStatistics.bytesAllocated += (size_t)(p - s->frontier);
+  /* SPOONHOWER_NOTE: unsafe concurrent access */
+  s->cumulativeStatistics->bytesAllocated += (size_t)(p - s->frontier);
   s->frontier = p;
   assert (s->frontier <= s->limitPlusSlop);
+  assert (s->start <= s->frontier);
 }

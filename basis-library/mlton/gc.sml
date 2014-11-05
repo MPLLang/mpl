@@ -10,27 +10,25 @@ structure MLtonGC =
    struct
       open Primitive.MLton.GC
 
-      val gcState = Primitive.MLton.GCState.gcState
-
       val pack : unit -> unit =
-         fn () => pack gcState
+         fn () => pack ()
       val unpack : unit -> unit =
-         fn () => unpack gcState
+         fn () => unpack ()
 
       val setHashConsDuringGC : bool -> unit =
-         fn b => setHashConsDuringGC (gcState, b)
+         fn b => setHashConsDuringGC b
       val setMessages : bool -> unit =
-         fn b => setMessages (gcState, b)
+         fn b => setMessages b
       val setRusageMeasureGC : bool -> unit =
-         fn b => setRusageMeasureGC (gcState, b)
+         fn b => setRusageMeasureGC b
       val setSummary : bool -> unit =
-         fn b => setSummary (gcState, b)
+         fn b => setSummary b
 
       structure Statistics =
          struct
             local
                fun mk conv prim =
-                  fn () => conv (prim gcState)
+                  fn () => conv (prim ())
                val mkSize = mk C_Size.toLargeInt
                val mkUIntmax = mk C_UIntmax.toLargeInt
             in

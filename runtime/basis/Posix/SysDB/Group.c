@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct group *Posix_SysDB_Group_group;
 
 C_String_t Posix_SysDB_Group_getName(void) {

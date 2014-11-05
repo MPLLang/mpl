@@ -9,10 +9,11 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+#warning Here is the layout of a heap entry
 /*
  * All ML objects (including ML execution stacks) are allocated in a
  * contiguous heap.  The heap has the following general layout:
- * 
+ *
  *  -------------------------------------------------------------------------
  *  |    old generation    |               |  nursery  | cardMap | crossMap |
  *  -------------------------------------------------------------------------
@@ -24,6 +25,10 @@
 */
 
 typedef struct GC_heap {
+#warning Remove if I do not want that profiling metric
+  size_t availableSize; /* may be smaller than size if we are limiting
+                           allocation for profiling purposes */
+  pointer frontier; /* next (globally) unallocated space */
   pointer nursery; /* start of nursery */
   size_t oldGenSize; /* size of old generation */
   size_t size; /* size of heap */

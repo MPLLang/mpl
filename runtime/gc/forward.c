@@ -33,7 +33,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
   GC_header header;
 
   op = *opp;
-  p = objptrToPointer (op, s->heap.start);
+  p = objptrToPointer (op, s->heap->start);
   if (DEBUG_DETAILED)
     fprintf (stderr,
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
@@ -69,11 +69,17 @@ void forwardObjptr (GC_state s, objptr *opp) {
       assert (STACK_TAG == tag);
       headerBytes = GC_STACK_HEADER_SIZE;
       stack = (GC_stack)p;
-      current = getStackCurrent(s) == stack;
+
+      /* Check if the pointer is the current stack of any processor. */
+      current = false;
+      for (int proc = 0; proc < s->numberOfProcs; proc++) {
+        current = current || (getStackCurrent(&s->procStates[proc]) == stack);
+      }
+#warning used to be current &&= not isStackEmpty(stack) here
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {
-        if (DEBUG_STACKS or s->controls.messages)
+        if (DEBUG_STACKS or s->controls->messages)
           fprintf (stderr,
                    "[GC: Shrinking stack of size %s bytes to size %s bytes, using %s bytes.]\n",
                    uintmaxToCommaString(stack->reserved),
@@ -132,14 +138,15 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
   pointer p;
 
   op = *opp;
-  p = objptrToPointer (op, s->heap.start);
-  if (p < s->heap.nursery)
+  p = objptrToPointer (op, s->heap->start);
+  if (p < s->heap->nursery)
     return;
   if (DEBUG_GENERATIONAL)
     fprintf (stderr,
              "forwardObjptrIfInNursery  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
-  assert (s->heap.nursery <= p and p < s->limitPlusSlop);
+#warning Should this just be limitPlusSlop like in upstream?
+  assert (s->heap->nursery <= p and p < s->heap->frontier);
   forwardObjptr (s, opp);
 }
 
@@ -159,11 +166,11 @@ void forwardInterGenerationalObjptrs (GC_state s) {
   /* Constants. */
   cardMap = s->generationalMaps.cardMap;
   crossMap = s->generationalMaps.crossMap;
-  maxCardIndex = sizeToCardMapIndex (align (s->heap.oldGenSize, CARD_SIZE));
-  oldGenStart = s->heap.start;
-  oldGenEnd = oldGenStart + s->heap.oldGenSize;
+  maxCardIndex = sizeToCardMapIndex (align (s->heap->oldGenSize, CARD_SIZE));
+  oldGenStart = s->heap->start;
+  oldGenEnd = oldGenStart + s->heap->oldGenSize;
   /* Loop variables*/
-  objectStart = alignFrontier (s, s->heap.start);
+  objectStart = alignFrontier (s, s->heap->start);
   cardIndex = 0;
   cardStart = oldGenStart;
 checkAll:
@@ -179,7 +186,7 @@ checkCard:
   if (cardMap[cardIndex]) {
     pointer lastObject;
 
-    s->cumulativeStatistics.numCardsMarked++;
+    s->cumulativeStatistics->numCardsMarked++;
     if (DEBUG_GENERATIONAL)
       fprintf (stderr, "card %"PRIuMAX" is marked  objectStart = "FMTPTR"\n",
                (uintmax_t)cardIndex, (uintptr_t)objectStart);
@@ -197,7 +204,7 @@ checkCard:
      */
     objectStart = foreachObjptrInRange (s, objectStart, &cardEnd,
                                         forwardObjptrIfInNursery, FALSE);
-    s->cumulativeStatistics.bytesScannedMinor += (uintmax_t)(objectStart - lastObject);
+    s->cumulativeStatistics->bytesScannedMinor += (uintmax_t)(objectStart - lastObject);
     if (objectStart == oldGenEnd)
       goto done;
     cardIndex = sizeToCardMapIndex ((size_t)(objectStart - oldGenStart));

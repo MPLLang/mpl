@@ -114,6 +114,7 @@ structure Handler =
 datatype handler = datatype Handler.t
 
 local
+  (* SPOONHOWER_NOTE: spoons signals use global shared state *)
    val r = ref C_Int.zero
 in
    fun initHandler (s: signal): Handler.t =
@@ -139,6 +140,7 @@ val (getHandler, setHandler, handlers) =
        handlers)
    end
 
+(* SPOONHOWER_NOTE: spoons signal use global shared state *)
 val gcHandler = ref Ignore
 
 fun handled () =

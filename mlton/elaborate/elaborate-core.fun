@@ -929,8 +929,8 @@ fun parseIEAttributesConvention (attributes: ImportExportAttribute.t list)
     | _ => NONE
 
 val isIEAttributeKind =
-   fn ImportExportAttribute.Impure => true
-    | ImportExportAttribute.Pure => true
+   fn ImportExportAttribute.Functional => true
+    | ImportExportAttribute.Impure => true
     | ImportExportAttribute.Runtime => true
     | _ => false
 
@@ -940,8 +940,8 @@ fun parseIEAttributesKind (attributes: ImportExportAttribute.t list)
       [] => SOME CKind.Impure
     | [a] =>
          (case a of
-             ImportExportAttribute.Impure => SOME CKind.Impure
-           | ImportExportAttribute.Pure => SOME CKind.Pure
+             ImportExportAttribute.Functional => SOME CKind.Functional
+           | ImportExportAttribute.Impure => SOME CKind.Impure
            | ImportExportAttribute.Runtime => SOME CKind.runtimeDefault
            | _ => NONE)
     | _ => NONE
@@ -1053,7 +1053,7 @@ fun import {attributes: ImportExportAttribute.t list,
                                                  [Vector.new1 addrTy, args]
                                       end,
                                convention = convention,
-                               kind = kind,
+			       kind = kind,
                                prototype = (Vector.map (args, #ctype),
                                             Option.map (result, #ctype)),
                                return = (case result of

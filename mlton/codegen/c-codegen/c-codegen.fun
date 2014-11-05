@@ -70,7 +70,7 @@ structure C =
       val bytes = int o Bytes.toInt
 
       fun string s =
-         let val quote = "\""
+         let val quote = "\"" (* " *)
          in concat [quote, String.escapeC s, quote]
          end
 
@@ -249,7 +249,7 @@ fun declareGlobals (prefix: string, print) =
       (* gcState can't be static because stuff in mlton-lib.c refers to
        * it.
        *)
-      val _ = print (concat [prefix, "struct GC_state gcState;\n"])
+      val _ = print (concat [prefix, "struct GC_state * gcState;\n"])
       val _ =
          List.foreach
          (CType.all, fn t =>
@@ -258,12 +258,25 @@ fun declareGlobals (prefix: string, print) =
           in
              print (concat [prefix, s, " global", s,
                             " [", C.int (Global.numberOfType t), "];\n"])
-             ; print (concat [prefix, s, " CReturn", CType.name t, ";\n"])
           end)
       val _ =
          print (concat [prefix, "Pointer globalObjptrNonRoot [",
                         C.int (Global.numberOfNonRoot ()),
                         "];\n"])
+   in
+      ()
+   end
+
+fun declareCReturns (print) =
+   let
+      val _ =
+         List.foreach
+         (CType.all, fn t =>
+          let
+             val s = CType.toString t
+          in
+            print (concat ["\t", s, " CReturn", CType.name t, ";\n"])
+          end)
    in
       ()
    end
@@ -397,6 +410,8 @@ fun outputDeclarations
                       in
                          ("WEAK_TAG", false, bytesNonObjptrs, numObjptrs)
                       end
+                 | HeaderOnly => ("HEADER_ONLY_TAG", false, 0, 0)
+                 | Fill => ("FILL_TAG", false, 0, 0)
           in
              concat ["{ ", tag, ", ",
                      C.bool hasIdentity, ", ",
@@ -1185,7 +1200,10 @@ fun output {program as Machine.Program.T {chunks,
             fun outputOffsets () =
                List.foreach
                ([("ExnStackOffset", GCField.ExnStack),
+                 ("FFIArgsOffset", GCField.FFIArgs),
                  ("FrontierOffset", GCField.Frontier),
+                 ("GlobalObjptrNonRootOffset", GCField.GlobalObjptrNonRoot),
+                 ("ReturnToCOffset", GCField.ReturnToC),
                  ("StackBottomOffset", GCField.StackBottom),
                  ("StackTopOffset", GCField.StackTop)],
                 fn (name, f) =>
@@ -1200,6 +1218,7 @@ fun output {program as Machine.Program.T {chunks,
             ; declareProfileLabels ()
             ; C.callNoSemi ("Chunk", [chunkLabelToString chunkLabel], print)
             ; print "\n"
+            ; declareCReturns (print)
             ; declareRegisters ()
             ; C.callNoSemi ("ChunkSwitch", [chunkLabelToString chunkLabel],
                             print)
@@ -1215,7 +1234,8 @@ fun output {program as Machine.Program.T {chunks,
             ; done ()
          end
       val additionalMainArgs =
-         [chunkLabelToString chunkLabel,
+         [C.int (Global.numberOfNonRoot ()),
+          chunkLabelToString chunkLabel,
           labelToStringIndex label]
       val {print, done, ...} = outputC ()
       fun rest () =

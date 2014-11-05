@@ -17,7 +17,10 @@ void enter (GC_state s) {
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  if (DEBUG) 
+  Proc_beginCriticalSection(s);
+  if (DEBUG)
+    fprintf (stderr, "enter locked\n");
+  if (DEBUG)
     displayGCState (s, stderr);
   beginAtomic (s);
   assert (invariantForGC (s));
@@ -33,6 +36,10 @@ void leave (GC_state s) {
    */
   assert (invariantForMutator (s, FALSE, TRUE));
   endAtomic (s);
+  s->syncReason = SYNC_NONE;
   if (DEBUG)
     fprintf (stderr, "leave ok\n");
+  Proc_endCriticalSection(s);
+  if (DEBUG)
+    fprintf (stderr, "leave unlocked\n");
 }

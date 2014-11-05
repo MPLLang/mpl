@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global gcState */
 extern struct GC_state gcState;
 
 static void handler (int signum) {
@@ -9,7 +10,7 @@ static void handler (int signum) {
 C_Errno_t(C_Int_t) Posix_Signal_default (C_Signal_t signum) {
   struct sigaction sa;
 
-  sigdelset (GC_getSignalsHandledAddr (&gcState), signum);
+  sigdelset (GC_getSignalsHandledAddr (), signum);
   memset (&sa, 0, sizeof(sa));
   sa.sa_handler = SIG_DFL;
   return sigaction (signum, &sa, NULL);
@@ -28,7 +29,7 @@ C_Errno_t(C_Int_t) Posix_Signal_isDefault (C_Int_t signum, Ref(C_Int_t) isDef) {
 C_Errno_t(C_Int_t) Posix_Signal_ignore (C_Signal_t signum) {
   struct sigaction sa;
 
-  sigdelset (GC_getSignalsHandledAddr (&gcState), signum);
+  sigdelset (GC_getSignalsHandledAddr (), signum);
   memset (&sa, 0, sizeof(sa));
   sa.sa_handler = SIG_IGN;
   return sigaction (signum, &sa, NULL);
@@ -45,11 +46,12 @@ C_Errno_t(C_Int_t) Posix_Signal_isIgnore (C_Int_t signum, Ref(C_Int_t) isIgn) {
 }
 
 C_Errno_t(C_Int_t) Posix_Signal_handlee (C_Int_t signum) {
+  /* XXX global state */
   static struct sigaction sa;
 
-  sigaddset (GC_getSignalsHandledAddr (&gcState), signum);
+  sigaddset (GC_getSignalsHandledAddr (), signum);
   memset (&sa, 0, sizeof(sa));
-  /* The mask must be full because GC_handler reads and writes 
+  /* The mask must be full because GC_handler reads and writes
    * s->signalsPending (else there is a race condition).
    */
   sigfillset (&sa.sa_mask);
@@ -61,22 +63,23 @@ C_Errno_t(C_Int_t) Posix_Signal_handlee (C_Int_t signum) {
 }
 
 void Posix_Signal_handleGC (void) {
-  GC_setGCSignalHandled (&gcState, TRUE);
+  GC_setGCSignalHandled (TRUE);
 }
 
 C_Int_t Posix_Signal_isPending (C_Int_t signum) {
-  return sigismember (GC_getSignalsPendingAddr (&gcState), signum);
+  return sigismember (GC_getSignalsPendingAddr (), signum);
 }
 
 C_Int_t Posix_Signal_isPendingGC (void) {
-  return GC_getGCSignalPending (&gcState);
+  return GC_getGCSignalPending ();
 }
 
 void Posix_Signal_resetPending (void) {
-  sigemptyset (GC_getSignalsPendingAddr (&gcState));
-  GC_setGCSignalPending (&gcState, FALSE);
+  sigemptyset (GC_getSignalsPendingAddr ());
+  GC_setGCSignalPending (FALSE);
 }
 
+/* SPOONHOWER_NOTE: global state */
 static sigset_t Posix_Signal_sigset;
 
 C_Errno_t(C_Int_t) Posix_Signal_sigaddset (C_Signal_t signum) {

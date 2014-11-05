@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct utsname Posix_ProcEnv_Uname_utsname;
 
 C_String_t Posix_ProcEnv_Uname_getSysName (void) {

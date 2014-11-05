@@ -24,8 +24,8 @@
 #include "gc/align.c"
 #include "gc/read_write.c"
 
-/* Import the global gcState (but try not to use it too much). */
-extern struct GC_state gcState;
+/* used to look up per-processor state */
+extern C_Pthread_Key_t gcstate_key;
 
 #include "gc/array-allocate.c"
 #include "gc/array.c"
@@ -41,6 +41,7 @@ extern struct GC_state gcState;
 #include "gc/foreach.c"
 #include "gc/forward.c"
 #include "gc/frame.c"
+#include "gc/processor.c"
 #include "gc/garbage-collection.c"
 #include "gc/gc_state.c"
 #include "gc/generational.c"
@@ -59,6 +60,7 @@ extern struct GC_state gcState;
 #include "gc/object.c"
 #include "gc/objptr.c"
 #include "gc/pack.c"
+#include "gc/parallel.c"
 #include "gc/pointer.c"
 #include "gc/profiling.c"
 #include "gc/rusage.c"

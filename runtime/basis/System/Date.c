@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct tm Date_tmIn;
 static struct tm *Date_tmOut;
 

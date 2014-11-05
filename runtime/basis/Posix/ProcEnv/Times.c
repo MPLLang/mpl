@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct tms Posix_ProcEnv_Times_tms;
 
 C_Clock_t Posix_ProcEnv_Times_getUTime(void) {

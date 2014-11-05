@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor Ffi (S: FFI_STRUCTS): FFI = 
+functor Ffi (S: FFI_STRUCTS): FFI =
 struct
 
 open S
@@ -14,7 +14,7 @@ structure Convention = CFunction.Convention
 structure SymbolScope = CFunction.SymbolScope
 
 local
-   val scopes: (Word.t * String.t * SymbolScope.t) HashSet.t = 
+   val scopes: (Word.t * String.t * SymbolScope.t) HashSet.t =
       HashSet.new {hash = #1}
 in
    fun checkScope {name, symbolScope} =
@@ -57,9 +57,9 @@ in
       in
          id
       end
-   fun addSymbol {name, ty, symbolScope} = 
-      ignore (List.push (symbols, {name = name, 
-                                   ty = ty, 
+   fun addSymbol {name, ty, symbolScope} =
+      ignore (List.push (symbols, {name = name,
+                                   ty = ty,
                                    symbolScope = symbolScope}))
 end
 
@@ -67,7 +67,8 @@ val headers: string list ref = ref []
 
 fun declareExports {print} =
    let
-      val _ = print "PRIVATE Pointer MLton_FFI_opArgsResPtr;\n"
+      (* SPOONHOWER_NOTE: remove global state *)
+      (* val _ = print "PRIVATE Pointer MLton_FFI_opArgsResPtr;\n" *)
    in
       List.foreach
       (!symbols, fn {name, ty, symbolScope} =>
@@ -130,7 +131,8 @@ fun declareExports {print} =
           List.push (headers, concat [headerSymbolScope, "(", prototype, ";)"])
           ; print (concat [symbolScope, " ", prototype, " {\n"])
           ; print (concat ["\tPointer localOpArgsRes[", Int.toString n,"];\n"])
-          ; print (concat ["\tMLton_FFI_opArgsResPtr = (Pointer)(localOpArgsRes);\n"])
+          (* SPOONHOWER_NOTE: remove global state *)
+          (* ; print (concat ["\tMLton_FFI_opArgsResPtr = (Pointer)(localOpArgsRes);\n"]) *)
           ; print (concat ["\tInt32 localOp = ", Int.toString id, ";\n",
                            "\tlocalOpArgsRes[0] = (Pointer)(&localOp);\n"])
           ; Vector.foreach (args, fn (_, set) => print set)
@@ -140,7 +142,7 @@ fun declareExports {print} =
                    print (concat ["\t", CType.toString t, " localRes;\n",
                                   "\tlocalOpArgsRes[", Int.toString (Vector.length args + 1), "] = ",
                                   "(Pointer)(&localRes);\n"]))
-          ; print ("\tMLton_callFromC ();\n")
+          ; print ("\tMLton_callFromC (localOpArgsRes);\n")
           ; (case res of
                 NONE => ()
               | SOME _ => print "\treturn localRes;\n")

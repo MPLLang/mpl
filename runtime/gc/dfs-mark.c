@@ -92,11 +92,11 @@ markNext:
   assert (nextHeaderp == getHeaderp (next));
   assert (nextHeader == getHeader (next));
   // assert (*(pointer*) todo == next);
-  assert (fetchObjptrToPointer (todo, s->heap.start) == next);
+  assert (fetchObjptrToPointer (todo, s->heap->start) == next);
   headerp = nextHeaderp;
   header = nextHeader;
   // *(pointer*)todo = prev;
-  storeObjptrFromPointer (todo, prev, s->heap.start);
+  storeObjptrFromPointer (todo, prev, s->heap->start);
   prev = cur;
   cur = next;
 mark:
@@ -139,7 +139,7 @@ markInNormal:
       fprintf (stderr, "markInNormal  objptrIndex = %"PRIu32"\n", objptrIndex);
     assert (objptrIndex < numObjptrs);
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap.start);
+    next = fetchObjptrToPointer (todo, s->heap->start);
     if (not isPointer (next)) {
 markNextInNormal:
       assert (objptrIndex < numObjptrs);
@@ -215,7 +215,7 @@ markInArray:
     assert (objptrIndex < numObjptrs);
     assert (todo == indexArrayAtObjptrIndex (s, cur, arrayIndex, objptrIndex));
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap.start);
+    next = fetchObjptrToPointer (todo, s->heap->start);
     if (not (isPointer(next))) {
 markNextInArray:
       assert (arrayIndex < getArrayLength (cur));
@@ -273,7 +273,7 @@ markInFrame:
     }
     todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap.start);
+    next = fetchObjptrToPointer (todo, s->heap->start);
     if (DEBUG_DFS_MARK)
       fprintf (stderr,
                "    offset %u  todo "FMTPTR"  next = "FMTPTR"\n",
@@ -320,9 +320,9 @@ ret:
     objptrIndex = (header & COUNTER_MASK) >> COUNTER_SHIFT;
     todo += objptrIndex * OBJPTR_SIZE;
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap.start);
+    prev = fetchObjptrToPointer (todo, s->heap->start);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap.start);
+    storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     goto markNextInNormal;
@@ -332,9 +332,9 @@ ret:
     objptrIndex = (header & COUNTER_MASK) >> COUNTER_SHIFT;
     todo += bytesNonObjptrs + objptrIndex * OBJPTR_SIZE;
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap.start);
+    prev = fetchObjptrToPointer (todo, s->heap->start);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap.start);
+    storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     goto markNextInArray;
@@ -348,9 +348,9 @@ ret:
     frameOffsets = frameLayout->offsets;
     todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap.start);
+    prev = fetchObjptrToPointer (todo, s->heap->start);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap.start);
+    storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     objptrIndex++;
@@ -362,13 +362,13 @@ ret:
 void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp) {
   pointer p;
 
-  p = objptrToPointer (*opp, s->heap.start);
+  p = objptrToPointer (*opp, s->heap->start);
   dfsMarkByMode (s, p, MARK_MODE, TRUE, TRUE);
 }
 
 void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s, objptr *opp) {
   pointer p;
 
-  p = objptrToPointer (*opp, s->heap.start);
+  p = objptrToPointer (*opp, s->heap->start);
   dfsMarkByMode (s, p, MARK_MODE, FALSE, TRUE);
 }

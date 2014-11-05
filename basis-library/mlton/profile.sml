@@ -20,6 +20,7 @@ structure Data =
                          isFreed: bool ref,
                          raw: P.Data.t}
 
+      (* SPOONHOWER_NOTE: spoons profiling uses global shared state *)
       val all: t list ref = ref []
 
       local
@@ -76,6 +77,7 @@ structure Data =
                           (String.nullTerm file))
    end
 
+(* SPOONHOWER_NOTE: spoons profiling uses global shared state *)
 val r: Data.t ref = ref (Data.make P.Data.dummy)
 
 fun current () = !r
@@ -92,7 +94,7 @@ fun setCurrent (d as Data.T {isCurrent, isFreed, raw, ...}) =
             val _ = ic := false
             val _ = isCurrent := true
             val _ = r := d
-            val _ = P.setCurrent (gcState, raw)
+            val _ = P.setCurrent raw
          in
             ()
          end
@@ -105,7 +107,7 @@ fun withData (d: Data.t, f: unit -> 'a): 'a =
       DynamicWind.wind (f, fn () => setCurrent old)
    end
 
-fun init () = setCurrent (Data.make (P.getCurrent gcState))
+fun init () = setCurrent (Data.make (P.getCurrent ()))
 
 val _ =
    if not isOn
@@ -115,9 +117,9 @@ val _ =
          val _ =
             Cleaner.addNew
             (Cleaner.atExit, fn () =>
-             (P.done gcState
+             (P.done ()
               ; Data.write (current (), "mlmon.out")
-              ; List.app (fn d => P.Data.free (gcState, Data.raw d)) 
+              ; List.app (fn d => P.Data.free (gcState, Data.raw d))
                          (!Data.all)))
          val _ =
             Cleaner.addNew

@@ -23,11 +23,28 @@ void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f) {
   }
   if (DEBUG_DETAILED)
     fprintf (stderr, "foreachGlobal threads\n");
-  callIfIsObjptr (s, f, &s->callFromCHandlerThread);
-  callIfIsObjptr (s, f, &s->currentThread);
-  callIfIsObjptr (s, f, &s->savedThread);
-  callIfIsObjptr (s, f, &s->signalHandlerThread);
+  if (s->procStates) {
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread);
+      callIfIsObjptr (s, f, &s->procStates[proc].currentThread);
+      callIfIsObjptr (s, f, &s->procStates[proc].savedThread);
+      callIfIsObjptr (s, f, &s->procStates[proc].signalHandlerThread);
+
+      if (s->procStates[proc].roots) {
+        for (uint32_t i = 0; i < s->procStates[proc].rootsLength; i++) {
+          callIfIsObjptr (s, f, &s->procStates[proc].roots[i]);
+        }
+      }
+    }
+  }
+  else {
+    callIfIsObjptr (s, f, &s->callFromCHandlerThread);
+    callIfIsObjptr (s, f, &s->currentThread);
+    callIfIsObjptr (s, f, &s->savedThread);
+    callIfIsObjptr (s, f, &s->signalHandlerThread);
+  }
 }
+
 
 
 /* foreachObjptrInObject (s, p, f, skipWeaks) 
@@ -118,7 +135,7 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
       p -= dataBytes;
     }
     p += alignWithExtra (s, dataBytes, GC_ARRAY_HEADER_SIZE);
-  } else { /* stack */
+  } else if (STACK_TAG == tag) {
     GC_stack stack; 
     pointer top, bottom; 
     unsigned int i;
@@ -126,7 +143,6 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
     GC_frameLayout frameLayout;
     GC_frameOffsets frameOffsets;
 
-    assert (STACK_TAG == tag);
     stack = (GC_stack)p;
     bottom = getStackBottom (s, stack); 
     top = getStackTop (s, stack);
@@ -155,6 +171,18 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
     assert(top == bottom);
     p += sizeof (struct GC_stack) + stack->reserved;
   }
+  else if (HEADER_ONLY_TAG == tag) {
+  }
+  else if (FILL_TAG == tag) {
+    GC_smallGapSize bytes;
+    bytes = *((GC_smallGapSize *)p);
+    p += GC_SMALL_GAP_SIZE_SIZE;
+    p += bytes;
+  }
+  else {
+    assert (0 and "unknown object tag type");
+  }
+
   return p;
 }
 

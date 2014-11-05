@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor LookupConstant (S: LOOKUP_CONSTANT_STRUCTS): LOOKUP_CONSTANT = 
+functor LookupConstant (S: LOOKUP_CONSTANT_STRUCTS): LOOKUP_CONSTANT =
 struct
 
 open S
@@ -55,11 +55,14 @@ val gcFields =
     "currentThread",
     "sourceMaps.curSourceSeqsIndex",
     "exnStack",
+    "ffiArgs",
     "frontier",
     "generationalMaps.cardMapAbsolute",
+    "globalObjptrNonRoot",
     "limit",
     "limitPlusSlop",
     "maxFrameSize",
+    "returnToC",
     "signalsInfo.signalIsPending",
     "stackBottom",
     "stackLimit",
@@ -103,7 +106,7 @@ fun build (constants, out) =
                   Bool => ("%s", concat [value, "? \"true\" : \"false\""])
                 | Real _ => ("%.20f", value)
                 | String => ("%s", value)
-                | Word ws => 
+                | Word ws =>
                      (case WordSize.prim (WordSize.roundUpToPrim ws) of
                          WordSize.W8 => "%\"PRIu8\""
                        | WordSize.W16 => "%\"PRIu16\""
@@ -126,7 +129,7 @@ fun load (ins: In.t, commandLineConstants)
       fun add {name, value} =
          let
             val hash = String.hash name
-            val _ = 
+            val _ =
                HashSet.lookupOrInsert
                (table, hash,
                 fn {name = name', ...} => name = name',
@@ -144,12 +147,12 @@ fun load (ins: In.t, commandLineConstants)
           in
              add {name = name, value = value}
           end)
-      val _ = 
+      val _ =
          In.foreachLine
          (ins, fn l =>
           case String.tokens (l, Char.isSpace) of
              [name, "=", value] => add {name = name, value = value}
-           | _ => Error.bug 
+           | _ => Error.bug
                   (concat ["LookupConstants.load: strange constants line: ", l]))
       fun lookupConstant ({default, name}, ty: ConstType.t): Const.t =
          let
@@ -162,9 +165,9 @@ fun load (ins: In.t, commandLineConstants)
                    fn {name = name', ...} => name = name',
                    fn () =>
                    case default of
-                      NONE => Error.bug 
+                      NONE => Error.bug
                               (concat ["LookupConstants.load.lookupConstant: ",
-                                       "constant not found: ", 
+                                       "constant not found: ",
                                        name])
                     | SOME value =>
                          {hash = hash,

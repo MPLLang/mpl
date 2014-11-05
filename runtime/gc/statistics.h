@@ -8,8 +8,20 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+enum {
+  SYNC_NONE = 0,
+  SYNC_OLD_GEN_ARRAY,
+  SYNC_NEW_GEN_ARRAY,
+  SYNC_STACK,
+  SYNC_HEAP,
+  SYNC_FORCE,
+  SYNC_PACK,
+  SYNC_SAVE_WORLD,
+};
+
 struct GC_cumulativeStatistics {
   uintmax_t bytesAllocated;
+  uintmax_t bytesFilled; /* i.e. unused gaps */
   uintmax_t bytesCopied;
   uintmax_t bytesCopiedMinor;
   uintmax_t bytesHashConsed;
@@ -17,9 +29,16 @@ struct GC_cumulativeStatistics {
   uintmax_t bytesScannedMinor;
 
   size_t maxBytesLive;
+  size_t maxBytesLiveSinceReset;
   size_t maxHeapSize;
   uintmax_t maxPauseTime;
   size_t maxStackSize;
+
+  uintmax_t syncForOldGenArray;
+  uintmax_t syncForNewGenArray;
+  uintmax_t syncForStack;
+  uintmax_t syncForHeap;
+  uintmax_t syncMisc;
 
   uintmax_t numCardsMarked; /* Number of marked cards seen during minor GCs. */
 
@@ -33,6 +52,9 @@ struct GC_cumulativeStatistics {
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */
   struct rusage ru_gcMarkCompact; /* resource usage in major mark-compact gcs. */
   struct rusage ru_gcMinor; /* resource usage in minor copying gcs. */
+
+  struct rusage ru_rt; /* total time "inside" runtime (not incl. synch.) */
+  struct rusage ru_sync; /* time waiting to synchronize in runtime */
 };
 
 struct GC_lastMajorStatistics {

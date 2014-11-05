@@ -10,7 +10,7 @@
 
 /*
  * Weak objects have the following layout:
- * 
+ *
  * header ::
  * padding ::
  * link (native-pointer) ::
@@ -31,7 +31,7 @@
  * Note that the order of the fields is important.  The non-objptr
  * field must be first, because a weak object is sometimes treated as
  * a normal object.
- */ 
+ */
 typedef struct GC_weak {
   struct GC_weak *link;
   objptr objptr;

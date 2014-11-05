@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct timeval Socket_timeout;
 static struct timeval *Socket_timeoutPtr;
 
@@ -28,10 +29,10 @@ C_Errno_t(C_Int_t) Socket_select (Vector(C_Fd_t) read_vec,
   fd_set read_fd_set, write_fd_set, except_fd_set;
   fd_set *read_fds, *write_fds, *except_fds;
   int res;
-  
+
   read_len = GC_getArrayLength((pointer)read_vec);
   if (read_len > 0) {
-    read_fds = &read_fd_set; 
+    read_fds = &read_fd_set;
     FD_ZERO(read_fds);
     for (unsigned int i = 0; i < read_len; i++) {
       int fd = ((int *)read_vec)[i];
@@ -42,7 +43,7 @@ C_Errno_t(C_Int_t) Socket_select (Vector(C_Fd_t) read_vec,
   }
   write_len = GC_getArrayLength((pointer)write_vec);
   if (write_len > 0) {
-    write_fds = &write_fd_set; 
+    write_fds = &write_fd_set;
     FD_ZERO(write_fds);
     for (unsigned int i = 0; i < write_len; i++) {
       int fd = ((int *)write_vec)[i];
@@ -53,7 +54,7 @@ C_Errno_t(C_Int_t) Socket_select (Vector(C_Fd_t) read_vec,
   }
   except_len = GC_getArrayLength((pointer)except_vec);
   if (except_len > 0) {
-    except_fds = &except_fd_set; 
+    except_fds = &except_fd_set;
     FD_ZERO(except_fds);
     for (unsigned int i = 0; i < except_len; i++) {
       int fd = ((int *)except_vec)[i];

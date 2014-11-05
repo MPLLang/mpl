@@ -25,8 +25,8 @@ static inline void callStackAux (GC_state s, GC_frameIndex i);
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE uint32_t GC_numStackFrames (GC_state s);
-PRIVATE void GC_callStack (GC_state s, pointer p);
-PRIVATE uint32_t* GC_frameIndexSourceSeq (GC_state s, GC_frameIndex frameIndex);
+PRIVATE uint32_t GC_numStackFrames (GC_state* states);
+PRIVATE void GC_callStack (GC_state* states, pointer p);
+PRIVATE uint32_t* GC_frameIndexSourceSeq (GC_state* states, GC_frameIndex frameIndex);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

@@ -41,6 +41,7 @@
 #include <limits.h>
 // #include <locale.h>
 #include <math.h>
+#include <pthread.h>
 // #include <setjmp.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -70,6 +71,9 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #define __Darwin__
 #endif
 
+// No-op on most platforms for now
+#define set_cpu_affinity(num) do {} while (0)
+
 #if (defined (_AIX))
 #include "platform/aix.h"
 #elif (defined (__CYGWIN__))
@@ -83,6 +87,7 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #elif (defined (__GNU__))
 #include "platform/hurd.h"
 #elif (defined (__linux__))
+#undef set_cpu_affinity
 #include "platform/linux.h"
 #elif (defined (__MINGW32__))
 #include "platform/mingw.h"

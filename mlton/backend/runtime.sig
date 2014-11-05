@@ -23,10 +23,13 @@ signature RUNTIME =
              | CurrentThread
              | CurSourceSeqsIndex
              | ExnStack
+             | FFIArgs
              | Frontier (* The place where the next object is allocated. *)
+             | GlobalObjptrNonRoot
              | Limit (* frontier + heapSize - LIMIT_SLOP *)
              | LimitPlusSlop (* frontier + heapSize *)
              | MaxFrameSize
+             | ReturnToC
              | SignalIsPending
              | StackBottom
              | StackLimit (* Must have StackTop <= StackLimit *)
@@ -39,10 +42,13 @@ signature RUNTIME =
                              currentThread: Bytes.t,
                              curSourceSeqsIndex: Bytes.t,
                              exnStack: Bytes.t,
+                             ffiArgs: Bytes.t,
                              frontier: Bytes.t,
+                             globalObjptrNonRoot: Bytes.t,
                              limit: Bytes.t,
                              limitPlusSlop: Bytes.t,
                              maxFrameSize: Bytes.t,
+                             returnToC: Bytes.t,
                              signalIsPending: Bytes.t,
                              stackBottom: Bytes.t,
                              stackLimit: Bytes.t,
@@ -52,10 +58,13 @@ signature RUNTIME =
                            currentThread: Bytes.t,
                            curSourceSeqsIndex: Bytes.t,
                            exnStack: Bytes.t,
+                           ffiArgs: Bytes.t,
                            frontier: Bytes.t,
+                           globalObjptrNonRoot: Bytes.t,
                            limit: Bytes.t,
                            limitPlusSlop: Bytes.t,
                            maxFrameSize: Bytes.t,
+                           returnToC: Bytes.t,
                            signalIsPending: Bytes.t,
                            stackBottom: Bytes.t,
                            stackLimit: Bytes.t,
@@ -74,6 +83,8 @@ signature RUNTIME =
                           numObjptrs: int}
              | Stack
              | Weak of {gone: bool}
+             | HeaderOnly
+             | Fill
          end
 
       val arrayLengthOffset: unit -> Bytes.t

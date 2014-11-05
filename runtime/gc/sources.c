@@ -19,7 +19,8 @@ char* getSourceName (GC_state s, GC_sourceIndex i) {
   return s->sourceMaps.sourceNames[s->sourceMaps.sources[i].sourceNameIndex];
 }
 
-char* GC_sourceName (GC_state s, GC_sourceIndex i) {
+char* GC_sourceName (GC_sourceIndex i) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return getSourceName (s, i);
 }
 
@@ -43,8 +44,8 @@ void sortSourceLabels (GC_state s) {
   GC_sourceLabelIndex i;
 
   /* Sort sourceLabels by address. */
-  qsort (s->sourceMaps.sourceLabels, 
-         s->sourceMaps.sourceLabelsLength, 
+  qsort (s->sourceMaps.sourceLabels,
+         s->sourceMaps.sourceLabelsLength,
          sizeof (*s->sourceMaps.sourceLabels),
          compareSourceLabels);
   if (0 == s->sourceMaps.sourceLabels[s->sourceMaps.sourceLabelsLength - 1].label)
@@ -58,7 +59,7 @@ void sortSourceLabels (GC_state s) {
 void compressSourceLabels (GC_state s) {
   GC_sourceLabelIndex in, out, i;
   GC_sourceSeqIndex sourceSeqIndex;
-  
+
   /* Eliminate duplicate sourceLabels */
   out = 0;
   sourceSeqIndex = SOURCE_SEQ_UNKNOWN;
@@ -68,7 +69,7 @@ void compressSourceLabels (GC_state s) {
       sourceSeqIndex = s->sourceMaps.sourceLabels[in].sourceSeqIndex;
     }
   }
-  
+
   s->sourceMaps.sourceLabelsLength = out;
 
   if (DEBUG_SOURCES)

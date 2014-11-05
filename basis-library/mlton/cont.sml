@@ -12,7 +12,7 @@ struct
 structure Thread =
    struct
       open Primitive.MLton.Thread
-      val savedPre = fn () => savedPre Primitive.MLton.GCState.gcState
+      val savedPre = fn () => savedPre ()
    end
 
 fun die (s: string): 'a =
@@ -27,7 +27,7 @@ type 'a t = (unit -> 'a) -> unit
 fun callcc (f: 'a t -> 'a): 'a =
    if MLtonThread.amInSignalHandler ()
        then die "MLton.Cont.callcc can not be used in a signal handler\n"
-    else 
+    else
        let
           datatype 'a state =
              Original of 'a t -> 'a

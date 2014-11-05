@@ -1,0 +1,20 @@
+group is
+
+(* to compile with sml/nj *)
+#if (defined(SMLNJ_VERSION))
+ $/basis.cm
+#endif
+
+dense.sig
+densearg.sig
+
+naive.fun
+nonblocked.fun
+strided.fun
+blocked.fun
+
+../parallelfornj.sml
+../randomfornj.sml
+../mainutils.sml
+densearg.sml
+main.sml

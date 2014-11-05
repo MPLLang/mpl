@@ -189,7 +189,10 @@ void incForProfiling (GC_state s, size_t amount, GC_sourceSeqIndex sourceSeqInde
 
 void GC_profileInc (GC_state s, size_t amount) {
   if (DEBUG_PROFILE)
-    fprintf (stderr, "GC_profileInc (%"PRIuMAX")\n", (uintmax_t)amount);
+    fprintf (stderr,
+             "GC_profileInc (%"PRIuMAX") [%d]\n",
+             (uintmax_t)amount,
+             Proc_processorNumber (s));
   incForProfiling (s, amount,
                    s->amInGC
                    ? SOURCE_SEQ_GC
@@ -199,7 +202,10 @@ void GC_profileInc (GC_state s, size_t amount) {
 void GC_profileAllocInc (GC_state s, size_t amount) {
   if (s->profiling.isOn and (PROFILE_ALLOC == s->profiling.kind)) {
     if (DEBUG_PROFILE)
-      fprintf (stderr, "GC_profileAllocInc (%"PRIuMAX")\n", (uintmax_t)amount);
+      fprintf (stderr,
+               "GC_profileAllocInc (%"PRIuMAX") [%d]\n",
+               (uintmax_t)amount,
+               Proc_processorNumber (s));
     GC_profileInc (s, amount);
   }
 }
@@ -222,7 +228,8 @@ GC_profileData profileMalloc (GC_state s) {
   return p;
 }
 
-GC_profileData GC_profileMalloc (GC_state s) {
+GC_profileData GC_profileMalloc (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return profileMalloc (s);
 }
 
@@ -235,7 +242,8 @@ void profileFree (GC_state s, GC_profileData p) {
   free (p);
 }
 
-void GC_profileFree (GC_state s, GC_profileData p) {
+void GC_profileFree (GC_profileData p) {
+  GC_state s = pthread_getspecific (gcstate_key);
   profileFree (s, p);
 }
 
@@ -303,7 +311,8 @@ void profileWrite (GC_state s, GC_profileData p, const char *fileName) {
   fclose_safe (f);
 }
 
-void GC_profileWrite (GC_state s, GC_profileData p, NullString8_t fileName) {
+void GC_profileWrite (GC_profileData p, NullString8_t fileName) {
+  GC_state s = pthread_getspecific (gcstate_key);
   profileWrite (s, p, (const char*)fileName);
 }
 
@@ -339,48 +348,67 @@ void GC_handleSigProf (code_pointer pc) {
   GC_sourceSeqIndex sourceSeqsIndex;
 
   s = handleSigProfState;
+
   if (DEBUG_PROFILE)
-    fprintf (stderr, "GC_handleSigProf ("FMTPTR")\n", (uintptr_t)pc);
+    fprintf (stderr, "GC_handleSigProf ("FMTPTR") [%d]\n", (uintptr_t)pc,
+             Proc_processorNumber (s));
   if (s->amInGC)
     sourceSeqsIndex = SOURCE_SEQ_GC;
   else {
     frameIndex = getCachedStackTopFrameIndex (s);
-    if (C_FRAME == s->frameLayouts[frameIndex].kind)
-      sourceSeqsIndex = s->sourceMaps.frameSources[frameIndex];
-    else {
-      if (PROFILE_TIME_LABEL == s->profiling.kind) {
-        uint32_t start, end, i;
-        
-        /* Binary search labels to find which method contains PC */
-        start = 0;
-        end = s->sourceMaps.sourceLabelsLength;
-        while (end - start > 1) {
-          i = (start+end)/2;
-          if ((uintptr_t)s->sourceMaps.sourceLabels[i].label <= (uintptr_t)pc)
-            start = i;
-          else
-            end = i;
-        }
-        i = start;
-        
-        /* The last label is dead code. Any address past it is thus unknown.
-         * The first label is before all SML code. Before it is also unknown.
-         */
-        if (i-1 == s->sourceMaps.sourceLabelsLength ||
-            (i == 0 && 
-             (uintptr_t)pc < (uintptr_t)s->sourceMaps.sourceLabels[i].label)) {
-          if (DEBUG_PROFILE)
-            fprintf (stderr, "pc out of bounds\n");
-          sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
+#warning This if-condition (and the else-block!) feels like a hack to get things to work. Figure out intent and fix.
+    if (frameIndex < s->frameLayoutsLength) {
+      if (C_FRAME == s->frameLayouts[frameIndex].kind)
+        sourceSeqsIndex = s->sourceMaps.frameSources[frameIndex];
+      else {
+        if (PROFILE_TIME_LABEL == s->profiling.kind) {
+          uint32_t start, end, i;
+
+          /* Binary search labels to find which method contains PC */
+          start = 0;
+          end = s->sourceMaps.sourceLabelsLength;
+          while (end - start > 1) {
+            i = (start+end)/2;
+            if ((uintptr_t)s->sourceMaps.sourceLabels[i].label <= (uintptr_t)pc)
+              start = i;
+            else
+              end = i;
+          }
+          i = start;
+
+          /* The last label is dead code. Any address past it is thus unknown.
+           * The first label is before all SML code. Before it is also unknown.
+           */
+          if (i-1 == s->sourceMaps.sourceLabelsLength ||
+              (i == 0 &&
+               (uintptr_t)pc < (uintptr_t)s->sourceMaps.sourceLabels[i].label)) {
+            if (DEBUG_PROFILE)
+              fprintf (stderr, "pc out of bounds\n");
+            sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
+          } else {
+            sourceSeqsIndex = s->sourceMaps.sourceLabels[start].sourceSeqIndex;
+          }
         } else {
-          sourceSeqsIndex = s->sourceMaps.sourceLabels[start].sourceSeqIndex;
+          sourceSeqsIndex = s->sourceMaps.curSourceSeqsIndex;
         }
-      } else {
-        sourceSeqsIndex = s->sourceMaps.curSourceSeqsIndex;
       }
+    } else {
+      if (DEBUG_PROFILE) {
+        fprintf (stderr, "unknown frame index\n");
+      }
+
+      sourceSeqsIndex = SOURCE_SEQ_UNKNOWN;
     }
+
+    incForProfiling (s, 1, sourceSeqsIndex);
   }
-  incForProfiling (s, 1, sourceSeqsIndex);
+}
+
+void GC_profileDisable (void) {
+  setProfTimer (0);
+}
+void GC_profileEnable (void) {
+  setProfTimer (10000);
 }
 
 static void initProfilingTime (GC_state s) {
@@ -461,12 +489,14 @@ void initProfiling (GC_state s) {
   }
 }
 
-void GC_profileDone (GC_state s) {
+void GC_profileDone (void) {
   GC_profileData p;
   GC_profileMasterIndex profileMasterIndex;
+  GC_state s = pthread_getspecific (gcstate_key);
 
   if (DEBUG_PROFILE)
-    fprintf (stderr, "GC_profileDone ()\n");
+    fprintf (stderr, "GC_profileDone () [%d]\n",
+             Proc_processorNumber (s));
   assert (s->profiling.isOn);
   if (PROFILE_TIME_FIELD == s->profiling.kind
       or PROFILE_TIME_LABEL == s->profiling.kind)
@@ -490,9 +520,11 @@ void GC_profileDone (GC_state s) {
 }
 
 
-GC_profileData GC_getProfileCurrent (GC_state s) {
+GC_profileData GC_getProfileCurrent (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
   return s->profiling.data;
 }
-void GC_setProfileCurrent (GC_state s, GC_profileData p) {
+void GC_setProfileCurrent (GC_profileData p) {
+  GC_state s = pthread_getspecific (gcstate_key);
   s->profiling.data = p;
 }

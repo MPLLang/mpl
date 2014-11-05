@@ -1,5 +1,6 @@
 #include "platform.h"
 
+/* SPOONHOWER_NOTE: global state */
 static struct stat Posix_FileSys_Stat_statbuf;
 
 C_Dev_t Posix_FileSys_Stat_getDev (void) {

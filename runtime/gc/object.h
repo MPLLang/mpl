@@ -8,22 +8,27 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* 
- * There are four kinds of ML objects: 
+/*
+ * There are four kinds of ML objects:
  *   array, normal (fixed size), stack, and weak.
+ * Plus three additional tags that are used to fill gaps:
+ *   zero, one, and two word objects
+ *   (that is, {0,1,2} words in addition to the header)
  */
-typedef enum { 
+typedef enum {
   /* The tag indices here must agree with those in declareObjectTypes()
    * in codegen/c-codegen/c-codegen.fun. */
   ARRAY_TAG = 0,
   NORMAL_TAG = 1,
   STACK_TAG = 2,
   WEAK_TAG = 3,
+  HEADER_ONLY_TAG = 4,
+  FILL_TAG = 5
 } GC_objectTypeTag;
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS)) 
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static const char* objectTypeTagToString (GC_objectTypeTag tag);
 
@@ -35,7 +40,7 @@ static const char* objectTypeTagToString (GC_objectTypeTag tag);
 /*
  * Each object has a header, which immediately precedes the object data.
  * A header has the following bit layout:
- * 
+ *
  * 00        : 1
  * 01 - 19   : type index bits, index into GC_state->objectTypes.
  * 20 - 30   : counter bits, used by mark compact GC (initially 0)
@@ -83,8 +88,8 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
 /*
  * Normal objects have the following layout:
  *
- * header :: 
- * (non heap-pointers)* :: 
+ * header ::
+ * (non heap-pointers)* ::
  * (heap pointers)*
  *
  * Note that the non heap-pointers denote a sequence of primitive data
@@ -95,6 +100,10 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Word64.word on an x86).
 */
 #define GC_NORMAL_HEADER_SIZE GC_HEADER_SIZE
+
+typedef uint32_t GC_smallGapSize;
+#define GC_SMALL_GAP_SIZE_SIZE sizeof (GC_smallGapSize)
+#define GC_BONUS_SLOP (GC_HEADER_SIZE + GC_SMALL_GAP_SIZE_SIZE)
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
@@ -108,7 +117,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* 
+/*
  * The type index of a header is an index into an array of object
  * types, where each element describes the layout of an object.  The
  * object types array is declared as:
@@ -145,6 +154,8 @@ enum {
   WORD32_VECTOR_TYPE_INDEX = 4,
   WORD16_VECTOR_TYPE_INDEX = 5,
   WORD64_VECTOR_TYPE_INDEX = 6,
+  HEADER_ONLY_TYPE_INDEX =   7,
+  FILL_TYPE_INDEX =          8
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -158,6 +169,9 @@ enum {
 #define GC_WORD16_VECTOR_HEADER buildHeaderFromTypeIndex (WORD16_VECTOR_TYPE_INDEX)
 #define GC_WORD32_VECTOR_HEADER buildHeaderFromTypeIndex (WORD32_VECTOR_TYPE_INDEX)
 #define GC_WORD64_VECTOR_HEADER buildHeaderFromTypeIndex (WORD64_VECTOR_TYPE_INDEX)
+
+#define GC_HEADER_ONLY_HEADER buildHeaderFromTypeIndex (HEADER_ONLY_TYPE_INDEX)
+#define GC_FILL_HEADER buildHeaderFromTypeIndex (FILL_TYPE_INDEX)
 
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,

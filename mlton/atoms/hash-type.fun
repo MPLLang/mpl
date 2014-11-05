@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor HashType (S: HASH_TYPE_STRUCTS): HASH_TYPE = 
+functor HashType (S: HASH_TYPE_STRUCTS): HASH_TYPE =
 struct
 
 open S
@@ -158,7 +158,7 @@ fun substitute (ty, v) =
       then ty (* This optimization is important so that monotypes
                * are not substituted inside of.
                *)
-   else 
+   else
       hom {ty = ty,
            var = fn a => (case Vector.peek (v, fn (a', _) =>
                                             Tyvar.equals (a, a')) of
@@ -167,11 +167,11 @@ fun substitute (ty, v) =
            con = con}
 
 val substitute =
-   Trace.trace2 
-   ("HashType.substitute", 
-    layout, 
-    Vector.layout (Layout.tuple2 (Tyvar.layout, Type.layout)), 
-    layout) 
+   Trace.trace2
+   ("HashType.substitute",
+    layout,
+    Vector.layout (Layout.tuple2 (Tyvar.layout, Type.layout)),
+    layout)
    substitute
 
 (* fun equalss (ts: t list): t option =

@@ -8,13 +8,14 @@
 
 void beginAtomic (GC_state s) {
   s->atomicState++;
+  /* SPOONHOWER_NOTE: this seems ok but strange */
   if (0 == s->limit)
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 }
 
 void endAtomic (GC_state s) {
   s->atomicState--;
-  if (0 == s->atomicState 
+  if (0 == s->atomicState
       and s->signalsInfo.signalIsPending)
     s->limit = 0;
 }

@@ -16,6 +16,7 @@ structure Exit =
             val success = fromInt 0
          end
 
+      (* SPOONHOWER_NOTE: spoons global state seems bad *)
       val exiting = ref false
 
       fun atExit f =
