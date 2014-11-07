@@ -76,5 +76,6 @@ typedef GC_state GCState_t;
 #include "gc/share.h"
 #include "gc/parallel.h"
 #include "gc/processor.h"
+#include "gc/chunk-pool.h"
 
 #endif /* _MLTON_GC_H_ */
