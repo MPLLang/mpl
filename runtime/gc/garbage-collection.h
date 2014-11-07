@@ -9,6 +9,18 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+/*********************/
+/* Runtime Interface */
+/*********************/
+PRIVATE void GC_collect (GC_state s, size_t bytesRequested, bool force);
+
+/* SPOONHOWER_NOTE: spoons should probably go somewhere else... or just get removed */
+#warning Is the return type correct?
+PRIVATE pointer FFI_getArgs (GC_state s);
+
+/**********************/
+/* Internal Interface */
+/**********************/
 static void minorGC (GC_state s);
 static void majorGC (GC_state s, size_t bytesRequested, bool mayResize);
 static inline void growStackCurrent (GC_state s, bool allocInOldGen);
@@ -26,14 +38,5 @@ static void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s,
                                                             bool ensureStack,
                                                             size_t oldGenBytesRequested,
                                                             size_t nurseryBytesRequested);
-
-#endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
-
-#if (defined (MLTON_GC_INTERNAL_BASIS))
-
-PRIVATE void GC_collect (GC_state s, size_t bytesRequested, bool force);
-/* SPOONHOWER_NOTE: spoons should probably go somewhere else... or just get removed */
-#warning Is the return type correct?
-PRIVATE pointer FFI_getArgs (GC_state s);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
