@@ -21,6 +21,16 @@
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 /**
+ * @brief Initializes the ChunkPool with the given <tt>poolSize</tt>
+ *
+ * <tt>poolSize</tt> is the maximum size of the pool. This function
+ * <em>must</em> be called before any other functions can be called.
+ *
+ * @param poolSize Maximum size of the pool, in bytes
+ */
+PRIVATE void ChunkPool_initialize (size_t poolSize);
+
+/**
  * @brief Allocates a new chunk from the pool
  *
  * This function allocates a new chunk from the pool with <em>at least</em>
@@ -58,12 +68,12 @@ PRIVATE bool ChunkPool_free (void* chunk);
  * chunk. It returns NULL if it cannot find the containing chunk or the
  * containing chunk has not been allocated.
  *
- * @param pointer Pointer to find containing chunk for.
+ * @param object Pointer to find containing chunk for.
  *
  * @return The beginning of the chunk as returned by
  * <tt>ChunkPool_allocate()</tt> on success, NULL otherwise.
  */
-PRIVATE void* ChunkPool_find (void* pointer);
+PRIVATE void* ChunkPool_find (void* object);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
