@@ -59,13 +59,11 @@ datatype 'a t =
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
  | FFI of 'a CFunction.t (* ssa to rssa *)
- | FFI_getArgs
+ | FFI_getArgs  (* RAM_WARNING: Is this right? *)
  | FFI_Symbol of {name: string,
                   cty: CType.t option,
                   symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* ssa to rssa *)
- | GC_enterGlobalHeap (* ssa to rssa *)
- | GC_exitGlobalHeap (* ssa to rssa *)
  | IntInf_add (* ssa to rssa *)
  | IntInf_andb (* ssa to rssa *)
  | IntInf_arshift (* ssa to rssa *)
@@ -250,8 +248,6 @@ fun toString (n: 'a t): string =
        | FFI_getArgs => "FFI_getArgs"
        | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
-       | GC_enterGlobalHeap => "GC_enterGlobalHeap"
-       | GC_exitGlobalHeap => "GC_exitGlobalHeap"
        | IntInf_add => "IntInf_add"
        | IntInf_andb => "IntInf_andb"
        | IntInf_arshift => "IntInf_arshift"
@@ -393,8 +389,6 @@ val equals: 'a t * 'a t -> bool =
     | (FFI_getArgs, FFI_getArgs) => true
     | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
-    | (GC_enterGlobalHeap, GC_enterGlobalHeap) => true
-    | (GC_exitGlobalHeap, GC_exitGlobalHeap) => true
     | (IntInf_add, IntInf_add) => true
     | (IntInf_andb, IntInf_andb) => true
     | (IntInf_arshift, IntInf_arshift) => true
@@ -559,8 +553,6 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | FFI_Symbol {name, cty, symbolScope} =>
         FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
-    | GC_enterGlobalHeap => GC_enterGlobalHeap
-    | GC_exitGlobalHeap => GC_exitGlobalHeap
     | IntInf_add => IntInf_add
     | IntInf_andb => IntInf_andb
     | IntInf_arshift => IntInf_arshift
@@ -812,8 +804,6 @@ val kind: 'a t -> Kind.t =
        | FFI_getArgs => SideEffect (* SPOONOWER_NOTE: PERF perhaps conservative? *)
        | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
-       | GC_enterGlobalHeap => SideEffect
-       | GC_exitGlobalHeap => SideEffect
        | IntInf_add => Functional
        | IntInf_andb => Functional
        | IntInf_arshift => Functional
@@ -1014,8 +1004,6 @@ in
        Exn_setExtendExtra,
        FFI_getArgs,
        GC_collect,
-       GC_enterGlobalHeap,
-       GC_exitGlobalHeap,
        IntInf_add,
        IntInf_andb,
        IntInf_arshift,
@@ -1273,8 +1261,6 @@ fun 'a checkApp (prim: 'a t,
        | FFI_getArgs => noTargs (fn () => (noArgs, cpointer))
        | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
-       | GC_enterGlobalHeap => noTargs (fn () => (noArgs, unit))
-       | GC_exitGlobalHeap => noTargs (fn () => (noArgs, unit))
        | IntInf_add => intInfBinary ()
        | IntInf_andb => intInfBinary ()
        | IntInf_arshift => intInfShift ()
