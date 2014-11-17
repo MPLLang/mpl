@@ -21,9 +21,8 @@
  * locality optimizations. It is backed by a <tt>mmap()</tt>'d memory region.
  *
  * Finding a chunk is done by checking candidate chunk beginnings and verifying
- * them against a guarantor.
- The method used requires chunk sizes to be powers
- * of 2 and integral multiples of the minimum chunk size.
+ * them against a guarantor. The method used requires chunk sizes to be integral
+ * multiples of the minimum chunk size.
  */
 
 /***********/
