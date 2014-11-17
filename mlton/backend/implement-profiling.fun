@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor ImplementProfiling (S: IMPLEMENT_PROFILING_STRUCTS): IMPLEMENT_PROFILING = 
+functor ImplementProfiling (S: IMPLEMENT_PROFILING_STRUCTS): IMPLEMENT_PROFILING =
 struct
 
 open S
@@ -166,7 +166,7 @@ fun doit program =
                           (fn si =>
                            (List.push (names, SourceInfo.toString' (si, sep))
                             ; Counter.next nameCounter)))
-      in         
+      in
          fun sourceInfoNode (si: SourceInfo.t) =
             let
                val infoNode =
@@ -196,7 +196,7 @@ fun doit program =
                      NONE => true
                    | SOME file =>
                         List.foldr
-                        (!Control.profileInclExcl, true, 
+                        (!Control.profileInclExcl, true,
                          fn ((re, keep), b) =>
                          if Regexp.Compiled.matchesAll (re, file)
                             then keep
@@ -211,7 +211,7 @@ fun doit program =
             then false
             else (case SourceInfo.file si of
                      NONE => false
-                   | SOME file => 
+                   | SOME file =>
                         List.foldr
                         (!Control.profileC, false,
                          fn (re, b) =>
@@ -311,12 +311,12 @@ fun doit program =
          end
       fun setCurSourceSeqsIndexFromIndex (sourceSeqsIndex: int): Statement.t =
          let
-            val curSourceSeqsIndex = 
+            val curSourceSeqsIndex =
                Operand.Runtime Runtime.GCField.CurSourceSeqsIndex
          in
             Statement.Move
             {dst = curSourceSeqsIndex,
-             src = Operand.word (WordX.fromIntInf 
+             src = Operand.word (WordX.fromIntInf
                                  (IntInf.fromInt sourceSeqsIndex,
                                   WordSize.word32))}
          end
@@ -351,7 +351,7 @@ fun doit program =
                       let
                          val _ = seen := true
                          val _ = List.push (allSeen, seen)
-                         val _ = 
+                         val _ =
                             List.foreach
                             (!callers, fn from =>
                              List.foreach
@@ -390,7 +390,7 @@ fun doit program =
                                     ; yes ())
                            else no ()
                       | SOME (node' as InfoNode.T {info = si', ...}) =>
-                           (* 
+                           (*
                             * si  : callee
                             * si' : caller
                             *)
@@ -409,7 +409,7 @@ fun doit program =
                                    orelse
                                    (wantedCSource si'
                                     andalso not (equals (si', main)))))
-                              end 
+                              end
                               then (InfoNode.call {from = node', to = node ()}
                                     ; yes ())
                            else no ()
@@ -480,16 +480,16 @@ fun doit program =
                                                  codeCoverageStatement sourceSeq :: ss)
                                         else (true, ss)
                                   else (false, ss)
-                               val (leaves, sourceSeq) = 
+                               val (leaves, sourceSeq) =
                                   case ps of
                                      Enter _ =>
                                         (case sourceSeq of
-                                            [] => Error.bug 
+                                            [] => Error.bug
                                                   "Profile.backward: unmatched Enter"
                                           | _ :: sis => (leaves, sis))
                                    | Leave _ =>
                                         (case leaves of
-                                            [] => Error.bug 
+                                            [] => Error.bug
                                                   "Profile.backward: missing Leave"
                                           | infoNode :: leaves =>
                                                (leaves,
@@ -529,7 +529,7 @@ fun doit program =
                                    kind = kind,
                                    label = label,
                                    statements = statements,
-                                   transfer = 
+                                   transfer =
                                    Transfer.CCall
                                    {args = Vector.new1 Operand.GCState,
                                     func = func,
@@ -543,7 +543,7 @@ fun doit program =
                         {args = args,
                          kind = kind,
                          label = label}
-               in                      
+               in
                   List.push (blocks,
                              Block.T {args = args,
                                       kind = kind,
@@ -646,6 +646,8 @@ fun doit program =
                                        fun doit si =
                                           add (#1 (enter (pushes, si)))
                                     in
+                                       (* RAM_NOTE: Add cases for *)
+                                       (* GC_{enter,exit}MangagementHeap *)
                                        case target of
                                           Direct "GC_collect" => doit SourceInfo.gc
                                         | Direct "GC_arrayAllocate" =>
@@ -776,7 +778,7 @@ fun doit program =
                                               end
                                          | Leave si =>
                                               (case pushes of
-                                                  [] => Error.bug 
+                                                  [] => Error.bug
                                                         "Profile.goto: unmatched Leave"
                                                 | p :: pushes =>
                                                      let
@@ -796,7 +798,7 @@ fun doit program =
                                                            then (pushes,
                                                                  keep,
                                                                  leaves)
-                                                        else Error.bug 
+                                                        else Error.bug
                                                              "Profile.goto: mismatched Leave"
                                                      end)
                                      val shouldSplit =
@@ -866,7 +868,7 @@ fun doit program =
                                                 case firstEnter pushes of
                                                    NONE =>
                                                       List.push (tailCalls, fi)
-                                                 | SOME n => 
+                                                 | SOME n =>
                                                       List.push (callers, n)
                                           in
                                              if profileStack
@@ -909,7 +911,7 @@ fun doit program =
          Vector.map
          (Vector.fromListRev (!infoNodes),
           fn InfoNode.T {nameIndex, successors, ...} =>
-          {nameIndex = nameIndex, 
+          {nameIndex = nameIndex,
            successorsIndex = (sourceSeqIndex
                               (List.revMap (!successors,
                                             InfoNode.sourcesIndex)))})
@@ -935,7 +937,7 @@ fun doit program =
                    sourceSeqs = sourceSeqs,
                    sources = sources})
          end
-   in 
+   in
       (program, makeProfileInfo)
    end
 

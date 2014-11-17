@@ -56,6 +56,8 @@ signature PRIM =
                               symbolScope: CFunction.SymbolScope.t}
              | FFI_getArgs (* RAM_WARNING: Is this correct? *)
              | GC_collect (* ssa to rssa *)
+             | GC_enterGlobalHeap (* ssa to rssa *)
+             | GC_exitGlobalHeap (* ssa to rssa *)
              | IntInf_add (* ssa to rssa *)
              | IntInf_andb (* ssa to rssa *)
              | IntInf_arshift (* ssa to rssa *)

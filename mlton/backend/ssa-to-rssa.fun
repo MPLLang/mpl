@@ -144,6 +144,36 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_arrayAllocate"}
 
+      val gcEnterGlobalHeap = fn () =>
+         T {args = Vector.new0 (),
+            convention = Cdecl,
+            kind = Kind.Runtime {bytesNeeded = NONE,
+                                 ensuresBytesFree = false,
+                                 mayGC = false,
+                                 maySwitchThreads = false,
+                                 modifiesFrontier = true,
+                                 readsStackTop = false,
+                                 writesStackTop = false},
+            prototype = (Vector.new0 (), NONE),
+            return = Type.unit,
+            symbolScope = Private,
+            target = Direct "GC_enterGlobalHeap"}
+
+      val gcExitGlobalHeap = fn () =>
+         T {args = Vector.new0 (),
+            convention = Cdecl,
+            kind = Kind.Runtime {bytesNeeded = NONE,
+                                 ensuresBytesFree = false,
+                                 mayGC = false,
+                                 maySwitchThreads = false,
+                                 modifiesFrontier = true,
+                                 readsStackTop = false,
+                                 writesStackTop = false},
+            prototype = (Vector.new0 (), NONE),
+            return = Type.unit,
+            symbolScope = Private,
+            target = Direct "GC_exitGlobalHeap"}
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1242,6 +1272,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                               Operand.bool true)),
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
+                               | GC_enterGlobalHeap => simpleCCall (CFunction.gcEnterGlobalHeap ())
+                               | GC_exitGlobalHeap => simpleCCall (CFunction.gcExitGlobalHeap ())
                                | IntInf_add =>
                                     simpleCCallWithGCState
                                     (CFunction.intInfBinary IntInf_add)
