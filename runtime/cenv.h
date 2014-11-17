@@ -10,9 +10,16 @@
 #ifndef _MLTON_CENV_H_
 #define _MLTON_CENV_H_
 
+#warning Clean this file up!
+
 /* GNU C Library Feature Macros */
 #define _ISOC99_SOURCE
+/* Specify _BSD, _SVID and _DEFAULT_SOURCE for glibc >= 2.20
+ * compatibility
+ */
 #define _BSD_SOURCE
+#define _SVID_SOURCE
+#define _DEFAULT_SOURCE
 // #define _XOPEN_SOURCE 600
 /* Only enable _POSIX_C_SOURCE on platforms that don't have broken
  * system headers.
