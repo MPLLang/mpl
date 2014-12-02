@@ -123,6 +123,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
+        } else if (0 == strcmp (arg, "hm-messages")) {
+          i++;
+          s->controls->heapManagementMessages = TRUE;
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;

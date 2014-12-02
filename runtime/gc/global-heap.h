@@ -10,7 +10,8 @@
  * @author Ram Raghunathan
  *
  * @brief
- * The Interface for interacting specifically with the global heap.
+ * The Interface for interacting specifically with the global heap. These
+ * functions are under the 'HeapManagement' namespace
  */
 
 #ifndef GLOBAL_HEAP_H_
@@ -21,12 +22,12 @@
 /**
  * This function changes the runtime to use the global heap.
  */
-PRIVATE void GC_enterGlobalHeap (void);
+PRIVATE void HeapManagement_enterGlobalHeap (void);
 
 /**
  * This function changes the runtime to exit the global heap.
  */
-PRIVATE void GC_exitGlobalHeap (void);
+PRIVATE void HeapManagement_exitGlobalHeap (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
