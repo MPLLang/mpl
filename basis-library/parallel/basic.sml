@@ -10,6 +10,9 @@ struct
                | Thread of unit T.t
 
   val numberOfProcessors = MLtonParallelInternal.numberOfProcessors
+  val enterGlobalHeap = MLtonParallelInternal.enterGlobalHeap
+  val exitGlobalHeap = MLtonParallelInternal.exitGlobalHeap
+  val evaluateInGlobalHeap = MLtonParallelInternal.evaluateInGlobalHeap
 
   structure Q = WorkQueue (struct
                              type work = job
@@ -110,176 +113,218 @@ struct
 
   fun suspend f =
       let
-        val p = processorNumber ()
-        fun tail (p, k) =
-            let
-              val () = incSuspends p
-              val q = Q.suspendWork p
-            in
-              f (Suspend (k, q))
-            end
+          val _ = enterGlobalHeap ()
+
+          val p = processorNumber ()
+          fun tail (p, k) =
+              let
+                  val () = incSuspends p
+                  val q = Q.suspendWork p
+              in
+                  f (Suspend (k, q))
+              end
+          val result = capture' (p, tail)
+
+          val _ = exitGlobalHeap()
       in
-        capture' (p, tail)
+          result
       end
 
   fun capture f =
       let
-        val p = processorNumber ()
-        fun tail (p, k) =
-            let
-              val () = incSuspends p
-              val () = Q.finishWork p
-            in
-              f (Capture k)
-            end
+          val _ = enterGlobalHeap ()
+
+          val p = processorNumber ()
+          fun tail (p, k) =
+              let
+                  val () = incSuspends p
+                  val () = Q.finishWork p
+              in
+                  f (Capture k)
+              end
+          val result = capture' (p, tail)
+
+          val _  = exitGlobalHeap ()
       in
-        capture' (p, tail)
+          result
       end
 
-  fun resume (Suspend (k, q), v) =
+  fun resume suspension =
       let
-        val p = processorNumber ()
+          val _ = enterGlobalHeap ()
+
+          val result =
+              case suspension of
+                  (Suspend (k, q), v) =>
+                  let
+                      val p = processorNumber ()
+                  in
+                      Q.resumeWork (p, q, (Q.newWork p,
+                                           Thread (T.prepend (k, fn () => v))))
+                  end
+                | (Capture k, v) =>
+                  let
+                      val p = processorNumber ()
+                  in
+                      Q.addWork (p, [(Q.newWork p,
+                                      Thread (T.prepend (k, fn () => v)))])
+                  end
+
+          val _ = exitGlobalHeap ()
       in
-        Q.resumeWork (p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
-      end
-    | resume (Capture k, v) =
-      let
-        val p = processorNumber ()
-      in
-        Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => v)))])
+          result
       end
 
-  fun yield () =
-      let
-        val p = processorNumber ()
-      in
-        if Q.shouldYield p then
-          capture' (p, fn (p, k) =>
-                          let in
-                            Q.addWork (p, [(Q.newWork p, Thread k)]);
-                            incSuspends p;
-                            Q.finishWork p
-                          end)
-        else
-          ()
-      end
+  val yield =
+      evaluateInGlobalHeap
+          (fn () =>
+              let
+                  val p = processorNumber ()
+              in
+                  if Q.shouldYield p then
+                      capture' (p, fn (p, k) =>
+                                      let in
+                                          Q.addWork (p, [(Q.newWork p, Thread k)]);
+                                          incSuspends p;
+                                          Q.finishWork p
+                                      end)
+                  else
+                      ()
+              end)
 
-  fun addRight w =
-      let
-        val p = processorNumber ()
-        val t = Q.newWork p
-      in
-        if Q.shouldYield p then
-          (* Switch to a new thread *)
-          capture' (p, fn (p, k) =>
-                         let in
-                           (* Add the continuation first -- it is higher priority *)
-                           Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => t))),
-                                          (t, Work w)]);
-                           incSuspends p;
-                           Q.finishWork p
-                         end)
-        else
+  local
+      fun doAddRight w =
           let
-            fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+              val p = processorNumber ()
+              val t = Q.newWork p
           in
-            (* add any delayed work *)
-            (* XXX maybe should run delayed work and queue the currrent thread too? *)
-            app add (rev (Array.sub (delayed, p)));
-            Array.update (delayed, p, nil);
-            Q.addWork (p, [(t, Work w)]);
-            t
-          end
-      end
-
-  fun addLeft w =
-      let
-        val p = processorNumber ()
-        val t = Q.newWork p
-      in
-        if Q.shouldYield p then
-          capture' (p, fn (p, k) =>
-                         let in
-                           Q.addWork (p, [(Q.newWork p, Work w),
-                                          (t, Thread (T.prepend (k, fn () => t)))]);
-                           incSuspends p;
-                           Q.finishWork p
-                         end)
-        else
-          T.switch (fn k =>
-                       T.prepare
-                       (T.new (fn () =>
-                                  let
-                                    fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
-                                  in
-                                    (* add any delayed work *)
-                                    (* XXX maybe should run delayed work and queue the currrent thread too? *)
-                                    app add (rev (Array.sub (delayed, p)));
-                                    Array.update (delayed, p, nil);
-                                    Q.addWork (p, [(t, Thread (T.prepend (k, fn () => t)))]);
-                                    w ()
-                                  end), ()))
-      end
-
-  fun remove t = Q.removeWork (processorNumber (), t)
-
-(* XXX left? what about the right? *)
-  fun delayedAdd w =
-      let
-        (* PERF use a array-based buffer to avoid allocation *)
-        val p = processorNumber ()
-        val ws = Array.sub (delayed, p)
-      in
-        Array.update (delayed, p, w::ws)
-      end
-
-  fun return () =
-      let
-        val p = processorNumber ()
-      in
-        (* Look for delayed work *)
-        case Array.sub (delayed, p)
-         of nil => ((* this is counted in schedule: incSuspends p;  *)
-                    Q.finishWork p;
-                    schedule true ())
-          | ws =>
-            let
-              val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match
-              val () = Array.update (delayed, p, nil)
-              fun add nil = ()
-                | add (w::ws) =
-                  Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))])
-              (* add any lower priority work *)
-              val () = add ws
-            in
-              (* now what do to with w? *)
               if Q.shouldYield p then
-                (Q.addWork (p, [(Q.newWork p, Work w)]);
-                 (* this is counted in schedule: incSuspends p; *)
-                 Q.finishWork p;
-                 schedule true ())
+                  (* Switch to a new thread *)
+                  capture' (p, fn (p, k) =>
+                                  let in
+                                      (* Add the continuation first -- it is higher priority *)
+                                      Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => t))),
+                                                     (t, Work w)]);
+                                      incSuspends p;
+                                      Q.finishWork p
+                                  end)
               else
-                w ()
-            end
-      end
+                  let
+                      fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                  in
+                      (* add any delayed work *)
+                      (* XXX maybe should run delayed work and queue the currrent thread too? *)
+                      app add (rev (Array.sub (delayed, p)));
+                      Array.update (delayed, p, nil);
+                      Q.addWork (p, [(t, Work w)]);
+                      t
+                  end
+          end
+  in
+      val addRight = evaluateInGlobalHeap doAddRight
+  end
+
+  local
+      fun doAddLeft w =
+          let
+              val p = processorNumber ()
+              val t = Q.newWork p
+          in
+              if Q.shouldYield p then
+                  capture' (p, fn (p, k) =>
+                                  let in
+                                      Q.addWork (p, [(Q.newWork p, Work w),
+                                                     (t, Thread (T.prepend (k, fn () => t)))]);
+                                      incSuspends p;
+                                      Q.finishWork p
+                                  end)
+              else
+                  T.switch (fn k =>
+                               T.prepare
+                                   (T.new (fn () =>
+                                              let
+                                                  fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                                              in
+                                                  (* add any delayed work *)
+                                                  (* XXX maybe should run delayed work and queue the currrent thread too? *)
+                                                  app add (rev (Array.sub (delayed, p)));
+                                                  Array.update (delayed, p, nil);
+                                                  Q.addWork (p, [(t, Thread (T.prepend (k, fn () => t)))]);
+                                                  w ()
+                                              end), ()))
+          end
+  in
+      val addLeft = evaluateInGlobalHeap doAddLeft
+  end
+
+  val remove =
+      evaluateInGlobalHeap (fn t => Q.removeWork (processorNumber (), t))
+
+  (* XXX left? what about the right? *)
+  val delayedAdd =
+      evaluateInGlobalHeap
+          (fn w =>
+              let
+                  (* PERF use a array-based buffer to avoid allocation *)
+                  val p = processorNumber ()
+                  val ws = Array.sub (delayed, p)
+              in
+                  Array.update (delayed, p, w::ws)
+              end)
+
+  val return =
+      evaluateInGlobalHeap
+          (fn () =>
+              let
+                  val p = processorNumber ()
+              in
+                  (* Look for delayed work *)
+                  case Array.sub (delayed, p)
+                   of nil => ((* this is counted in schedule: incSuspends p;  *)
+                       Q.finishWork p;
+                       schedule true ())
+                    | ws =>
+                      let
+                          val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match
+                          val () = Array.update (delayed, p, nil)
+                          fun add nil = ()
+                            | add (w::ws) =
+                              Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))])
+                          (* add any lower priority work *)
+                          val () = add ws
+                      in
+                          (* now what do to with w? *)
+                          if Q.shouldYield p then
+                              (Q.addWork (p, [(Q.newWork p, Work w)]);
+                               (* this is counted in schedule: incSuspends p; *)
+                               Q.finishWork p;
+                               schedule true ())
+                          else
+                              w ()
+                      end
+              end)
 
   val () = (_export "Parallel_run": (unit -> void) -> unit;) (schedule false)
   (* init MUST come after schedulerLoop has been exported *)
   val () = (_import "Parallel_init" runtime private: unit -> unit;) ()
 
   val policyName = Q.policyName
-  val maxBytesLive = _import "Parallel_maxBytesLive" runtime private: unit -> Word64.word;
-  val gcTime = _import "Parallel_getTimeInGC" runtime private: unit -> Word64.word;
-  val successfulSteals = Q.reportSuccessfulSteals
-  val failedSteals = Q.reportFailedSteals
-  fun resetStatistics () =
-      let
-        val resetBytesLive = _import "Parallel_resetBytesLive" runtime private: unit -> unit;
-      in
-        Q.resetSteals ();
-        Array.modify (fn _ => 0) suspends;
-        resetBytesLive ()
-      end
-  val suspends = fn () => Array.foldl op+ 0 suspends
+  val maxBytesLive =
+      evaluateInGlobalHeap (_import "Parallel_maxBytesLive" runtime private: unit -> Word64.word;)
+  val gcTime =
+      evaluateInGlobalHeap (_import "Parallel_getTimeInGC" runtime private: unit -> Word64.word;)
+  val successfulSteals = evaluateInGlobalHeap Q.reportSuccessfulSteals
+  val failedSteals = evaluateInGlobalHeap Q.reportFailedSteals
+  val resetStatistics =
+      evaluateInGlobalHeap
+          (fn () =>
+              let
+                  val resetBytesLive = _import "Parallel_resetBytesLive" runtime private: unit -> unit;
+              in
+                  Q.resetSteals ();
+                  Array.modify (fn _ => 0) suspends;
+                  resetBytesLive ()
+              end)
+  val suspends = evaluateInGlobalHeap (fn () => Array.foldl op+ 0 suspends)
 
 end
