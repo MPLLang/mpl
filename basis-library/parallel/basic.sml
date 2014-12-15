@@ -7,7 +7,9 @@ struct
   structure T = MLtonThread
 
   datatype job = Work of unit -> void
-               | Thread of unit T.t
+               | Thread of {thread = unit T.t,
+                            heapHead = MLtonPointer.t,
+                            lastAllocatedChunk = MLtonPointer.t}
 
   val numberOfProcessors = MLtonParallelInternal.numberOfProcessors
   val enterGlobalHeap = MLtonParallelInternal.enterGlobalHeap
@@ -55,7 +57,7 @@ struct
                   val () = Q.startWork p
                   val () = (case j
                              of Work w => w ()
-                              | Thread k => T.switch (fn _ => T.prepare (k, ())))
+                              | Thread {thread = k, ...} => T.switch (fn _ => T.prepare (k, ())))
                       (* PERF? this handle only makes sense for the Work case *)
                       (* PERF? move this handler out to the native entry point? *)
                       handle e => (TextIO.output (TextIO.stdErr,
@@ -96,7 +98,7 @@ struct
                 val t =
                     case Q.getWork p
                      of SOME (_, Work w) => T.new (fn () => (Q.startWork p; w ()))
-                      | SOME (_, Thread k') => T.prepend (k', fn () => (Q.startWork p))
+                      | SOME (_, Thread {thread = k', ...}) => T.prepend (k', fn () => (Q.startWork p))
                       | NONE => T.new (schedule false)
                 (* to disable hijacking, use this instead
                 val t = T.new schedule

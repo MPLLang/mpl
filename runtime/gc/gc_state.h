@@ -38,6 +38,8 @@ struct GC_state {
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
   struct GC_generationalMaps generationalMaps;
+  pointer globalFrontier;
+  pointer globalLimit;
 #warning Not sure if this is used anymore...
   /* Currently only used to hold raise operands. XXX at least i think so */
   Pointer *globalObjptrNonRoot;
