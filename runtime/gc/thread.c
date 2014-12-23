@@ -12,9 +12,17 @@ void displayThread (GC_state s,
   fprintf(stream,
           "\t\texnStack = %"PRIuMAX"\n"
           "\t\tbytesNeeded = %"PRIuMAX"\n"
+          "\t\tinGlobalHeapCounter = %"PRIuMAX"\n"
+          "\t\theapHead = %p\n"
+          "\t\tlastAllocatedChunk = %p\n"
+          "\t\tfrontier = %p\n"
           "\t\tstack = "FMTOBJPTR"\n",
           (uintmax_t)thread->exnStack,
           (uintmax_t)thread->bytesNeeded,
+          ((uintmax_t)(thread->inGlobalHeapCounter)),
+          thread->heapHead,
+          thread->lastAllocatedChunk,
+          thread->frontier,
           thread->stack);
   displayStack (s, (GC_stack)(objptrToPointer (thread->stack, s->heap->start)),
                 stream);

@@ -422,25 +422,37 @@ structure ObjectType =
       val thread = fn () =>
          let
             val padding =
-               let
-                  val align =
-                     case !Control.align of
-                        Control.Align4 => Bytes.fromInt 4
-                      | Control.Align8 => Bytes.fromInt 8
-                  val bytesHeader =
-                     Bits.toBytes (Control.Target.Size.header ())
-                  val bytesCSize =
-                     Bits.toBytes (Control.Target.Size.csize ())
-                  val bytesExnStack =
-                     Bits.toBytes (Type.width (Type.exnStack ()))
-                  val bytesStack =
-                     Bits.toBytes (Type.width (Type.stack ()))
+                let
+                    val align =
+                        case !Control.align of
+                            Control.Align4 => Bytes.fromInt 4
+                          | Control.Align8 => Bytes.fromInt 8
+                    val bytesHeader =
+                        Bits.toBytes (Control.Target.Size.header ())
+                    val bytesCSize =
+                        Bits.toBytes (Control.Target.Size.csize ())
+                    val bytesExnStack =
+                        Bits.toBytes (Type.width (Type.exnStack ()))
+                    val bytesInGlobalHeapCounter =
+                        Bits.toBytes (Control.Target.Size.csize ())
+                    val bytesHeapHead =
+                        Bits.toBytes (Control.Target.Size.cpointer ())
+                    val bytesLastAllocatedChunk =
+                        Bits.toBytes (Control.Target.Size.cpointer ())
+                    val bytesFrontier =
+                        Bits.toBytes (Control.Target.Size.cpointer ())
+                    val bytesStack =
+                        Bits.toBytes (Type.width (Type.stack ()))
 
                   val bytesObject =
                      Bytes.+ (bytesHeader,
                      Bytes.+ (bytesCSize,
                      Bytes.+ (bytesExnStack,
-                              bytesStack)))
+                     Bytes.+ (bytesInGlobalHeapCounter,
+                     Bytes.+ (bytesHeapHead,
+                     Bytes.+ (bytesLastAllocatedChunk,
+                     Bytes.+ (bytesFrontier,
+                              bytesStack)))))))
                   val bytesTotal =
                      Bytes.align (bytesObject, {alignment = align})
                   val bytesPad = Bytes.- (bytesTotal, bytesObject)
@@ -449,10 +461,14 @@ structure ObjectType =
                end
          in
             Normal {hasIdentity = true,
-                    ty = Type.seq (Vector.new4 (padding,
-                                                Type.csize (),
-                                                Type.exnStack (),
-                                                Type.stack ()))}
+                    ty = Type.seq (Vector.fromList [padding,
+                                                    Type.csize (),
+                                                    Type.exnStack (),
+                                                    Type.csize (),
+                                                    Type.cpointer (),
+                                                    Type.cpointer (),
+                                                    Type.cpointer (),
+                                                    Type.stack ()])}
          end
 
       (* Order in the following vector matters.  The basic pointer tycons must
