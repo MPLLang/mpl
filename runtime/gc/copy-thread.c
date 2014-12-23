@@ -52,7 +52,7 @@ void GC_copyCurrentThread (GC_state s) {
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
                            + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-#warning Should this be fromStack->used?
+#pragma message "Should this be fromStack->used?"
   toThread = copyThread (s, fromThread, fromStack->reserved);
 
   /* Look up these again since a GC may have occurred and moved them */
@@ -101,11 +101,11 @@ pointer GC_copyThread (GC_state s, pointer p) {
    */
   /* assert (fromStack->reserved == fromStack->used); */
   assert (fromStack->reserved >= fromStack->used);
-#warning Should this be fromStack->used?
+#pragma message "Should this be fromStack->used?"
   toThread = copyThread (s, fromThread, fromStack->reserved);
 
-#warning Remove dead code if possible
-#warning May have been dead-ified because I use fromStack->reserved above now.
+#pragma message "Remove dead code if possible"
+#pragma message "May have been dead-ified because I use fromStack->reserved above now."
   /* The following assert is no longer true, since alignment
    * restrictions can force the reserved to be slightly larger than
    * the used.

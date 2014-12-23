@@ -381,7 +381,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->weaks = NULL;
   s->saveWorldStatus = true;
 
-#warning Why is this not found in the Spoonhower copy?
+#pragma message "Why is this not found in the Spoonhower copy?"
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;

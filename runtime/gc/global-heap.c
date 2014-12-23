@@ -24,7 +24,7 @@ void HeapManagement_enterGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread currentThread = getThreadCurrent (s);
 
-#warning Insert overflow check?
+#pragma message "Insert overflow check?"
   currentThread->inGlobalHeapCounter++;
   if (1 == currentThread->inGlobalHeapCounter) {
     assert (NULL != s->globalFrontier);
@@ -33,7 +33,7 @@ void HeapManagement_enterGlobalHeap (void) {
     HeapManagement_debugMessage(s, "Entering Global Heap\n");
 
     HeapManagement_exitLocalHeap (s);
-#warning Activate when ready
+#pragma message "Activate when ready"
 #if 0
     s->frontier = s->globalFrontier;
     s->limit = s->globalLimit;

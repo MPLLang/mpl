@@ -213,7 +213,7 @@ static void maybeWaitForGC (GC_state s) {
   }
 }
 
-#warning Remove when sure I am done
+#pragma message "Remove when sure I am done"
 #if 0
 //struct rusage ru_lock;
 

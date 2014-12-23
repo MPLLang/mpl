@@ -32,7 +32,7 @@ struct GC_state {
   struct GC_controls *controls;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
-#warning Is this the right type?
+#pragma message "Is this the right type?"
   pointer ffiArgs;
   struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
@@ -40,7 +40,7 @@ struct GC_state {
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
   pointer globalLimit;
-#warning Not sure if this is used anymore...
+#pragma message "Not sure if this is used anymore..."
   /* Currently only used to hold raise operands. XXX at least i think so */
   Pointer *globalObjptrNonRoot;
   /* Ordinary globals */

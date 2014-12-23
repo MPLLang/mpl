@@ -15,7 +15,7 @@
 PRIVATE void GC_collect (GC_state s, size_t bytesRequested, bool force);
 
 /* SPOONHOWER_NOTE: spoons should probably go somewhere else... or just get removed */
-#warning Is the return type correct?
+#pragma message "Is the return type correct?"
 PRIVATE pointer FFI_getArgs (GC_state s);
 
 /**********************/

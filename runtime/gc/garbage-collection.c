@@ -217,8 +217,8 @@ void performGC (GC_state s,
 }
 
 size_t fillGap (pointer start, pointer end) {
-#warning Do I need to modify this to take into account card/cross-map-in-heap?
-#warning Unlikely since maps just moved, did not change behavior...
+#pragma message "Do I need to modify this to take into account card/cross-map-in-heap?"
+#pragma message "Unlikely since maps just moved, did not change behavior..."
   size_t diff = end - start;
 
   if (diff == 0) {
@@ -261,7 +261,7 @@ size_t fillGap (pointer start, pointer end) {
       exit (1);
     }
 
-#warning Remove when unnecessary!
+#pragma message "Remove when unnecessary!"
     /* XXX debug only */
     /*
     while (start < end) {
@@ -360,7 +360,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
   }
 }
 
-#warning Can this function be broken up? Seems to do a lot...
+#pragma message "Can this function be broken up? Seems to do a lot..."
 // assumes that stack->used and thread->exnstack are up to date
 // assumes exclusive access to runtime if !mustEnter
 // forceGC = force major collection
@@ -469,7 +469,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */
-#warning Set back to upstream when I remove extra controls
+#pragma message "Set back to upstream when I remove extra controls"
   if (bytesRequested < s->controls->allocChunkSize) {
     /* first make sure that I hit the minimum */
     bytesRequested = s->controls->allocChunkSize;

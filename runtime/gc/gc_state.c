@@ -80,7 +80,7 @@ void setGCStateCurrentHeap (GC_state s,
              uintmaxToCommaString(nurseryBytesRequested));
   h = s->heap;
   assert (isFrontierAligned (s, h->start + h->oldGenSize + oldGenBytesRequested));
-#warning What happens to s->limit{,PlusSlop}?
+#pragma message "What happens to s->limit{,PlusSlop}?"
   limit = h->start + h->size - bonus;
   nurserySize = h->size - (h->oldGenSize + oldGenBytesRequested) - bonus;
   assert (isFrontierAligned (s, limit - nurserySize));
@@ -118,7 +118,7 @@ void setGCStateCurrentHeap (GC_state s,
     s->canMinor = FALSE;
   }
 
-#warning What does this do?
+#pragma message "What does this do?"
   if (s->controls->restrictAvailableSize
       and
       (s->cumulativeStatistics->maxBytesLiveSinceReset > 0)) {
@@ -194,10 +194,10 @@ void setGCStateCurrentHeap (GC_state s,
         getThreadCurrent(&s->procStates[proc])->bytesNeeded;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#warning Probably not necessary, remove after confirmation
+#pragma message "Probably not necessary, remove after confirmation"
       /* XXX clearCardMap (?) */
 
-#warning Might want to remove this after cleanup
+#pragma message "Might want to remove this after cleanup"
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -216,10 +216,10 @@ void setGCStateCurrentHeap (GC_state s,
         GC_HEAP_LIMIT_SLOP;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#warning Probably not necessary, remove after confirmation
+#pragma message "Probably not necessary, remove after confirmation"
       /* XXX clearCardMap (?) */
 
-#warning Might want to remove this after cleanup
+#pragma message "Might want to remove this after cleanup"
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -230,7 +230,7 @@ void setGCStateCurrentHeap (GC_state s,
     s->start = s->frontier = frontier;
     s->limitPlusSlop = limit;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-#warning Probably not necessary, remove after confirmation
+#pragma message "Probably not necessary, remove after confirmation"
     /* XXX clearCardMap (?) */
 
     if (DEBUG)

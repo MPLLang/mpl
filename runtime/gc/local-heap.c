@@ -21,9 +21,9 @@
 /* Function Definitions */
 /************************/
 void HeapManagement_enterLocalHeap (GC_state s) {
-  #warning Unimplemented
+  #pragma message "Unimplemented"
 }
 
 void HeapManagement_exitLocalHeap (GC_state s) {
-  #warning Unimplemented
+  #pragma message "Unimplemented"
 }

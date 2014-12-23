@@ -9,7 +9,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-#warning Here is the layout of a heap entry
+#pragma message "Here is the layout of a heap entry"
 /*
  * All ML objects (including ML execution stacks) are allocated in a
  * contiguous heap.  The heap has the following general layout:
@@ -25,7 +25,7 @@
 */
 
 typedef struct GC_heap {
-#warning Remove if I do not want that profiling metric
+#pragma message "Remove if I do not want that profiling metric"
   size_t availableSize; /* may be smaller than size if we are limiting
                            allocation for profiling purposes */
   pointer frontier; /* next (globally) unallocated space */
