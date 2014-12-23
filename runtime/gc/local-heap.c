@@ -13,8 +13,17 @@
  * local-heap.h.
  */
 
-#include local-heap.h
+#include "local-heap.h"
+
+#include "heap-utils.h"
 
 /************************/
 /* Function Definitions */
 /************************/
+void HeapManagement_enterLocalHeap (GC_state s) {
+  #warning Unimplemented
+}
+
+void HeapManagement_exitLocalHeap (GC_state s) {
+  #warning Unimplemented
+}

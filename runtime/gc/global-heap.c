@@ -13,77 +13,46 @@
  * global-heap.h.
  */
 
-#include global-heap.h
+#include "global-heap.h"
 
-/******************************/
-/* Static Function Prototypes */
-/******************************/
-static void HeapManagement_debugMessage (GC_state s, const char* format, ...)
-    __attribute__((format (printf, 2, 3)));
+#include "heap-utils.h"
 
 /************************/
 /* Function Definitions */
 /************************/
-void GC_enterGlobalHeap (void) {
+void HeapManagement_enterGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
+  GC_thread currentThread = getThreadCurrent (s);
 
-  if (NULL != s->globalFrontier) {
+#warning Insert overflow check?
+  currentThread->inGlobalHeapCounter++;
+  if (1 == currentThread->inGlobalHeapCounter) {
+    assert (NULL != s->globalFrontier);
     assert (NULL != s->globalLimit);
 
-    HeapManagement_debugMessage(
-        s,
-        "Entering Global Heap: frontier = %p --> %p, limit = %p --> %p\n",
-        s->frontier,
-        s->globalFrontier,
-        s->limit,
-        s->globalLimit);
+    HeapManagement_debugMessage(s, "Entering Global Heap\n");
 
+    HeapManagement_exitLocalHeap (s);
+#warning Activate when ready
+#if 0
     s->frontier = s->globalFrontier;
     s->limit = s->globalLimit;
-  }
-  /*
-   * else this is the first call, which means we are already in the global heap
-   * as we start the process in it
-   */
-#if ASSERT
-  else {
-    assert(NULL == s->globalLimit);
-    HeapManagement_debugMessage(
-        s,
-        "Entering Global Heap for first time: frontier = %p, limit = %p\n",
-        s->frontier,
-        s->limit);
-  }
 #endif
+  }
 }
 
-void GC_exitGlobalHeap (pointer headArgument,
-                        pointer lastAllocatedChunkArgument) {
+void HeapManagement_exitGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  struct HeapManagement_TaskHeap taskHeap = {
-    .head = ((void**)(headArgument)),
-    .lastAllocatedChunk = ((void**)(lastAllocatedChunkArgument))
-  };
+  GC_thread currentThread = getThreadCurrent (s);
 
-  HeapManagement_debugMessage(
-      s,
-      "Exiting Global Heap: frontier = %p --> %p, limit = %p --> %p\n",
-      s->frontier,
-      s->globalFrontier,
-      s->limit,
-      s->globalLimit);
+  assert (currentThread->inGlobalHeapCounter > 0);
+  currentThread->inGlobalHeapCounter--;
+  if (0 == currentThread->inGlobalHeapCounter) {
+    HeapManagement_debugMessage(s, "Exiting Global Heap\n");
 
-  s->globalFrontier = s->frontier;
-  s->globalLimit = s->limit;
+    s->globalFrontier = s->frontier;
+    s->globalLimit = s->limit;
 
-  HeapManagement_setLocalHeapFrontierAndLimit(s, &taskHeap);
-}
-
-void HeapManagement_debugMessage (GC_state s, const char* format, ...) {
-  if (DEBUG_HEAP_MANAGEMENT or s->controls->heapManagementMessages) {
-    va_list substitutions;
-    va_start(substitutions, format);
-    vfprintf (stderr, format, substitutions);
-    va_end(substitutions);
+    HeapManagement_enterLocalHeap (s);
   }
 }

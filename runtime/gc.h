@@ -77,6 +77,8 @@ typedef GC_state GCState_t;
 #include "gc/parallel.h"
 #include "gc/processor.h"
 #include "gc/chunk-pool.h"
+#include "gc/heap-utils.h"
 #include "gc/global-heap.h"
+#include "gc/local-heap.h"
 
 #endif /* _MLTON_GC_H_ */
