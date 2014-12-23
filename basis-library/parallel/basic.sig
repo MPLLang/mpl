@@ -12,23 +12,24 @@ sig
 
   (* Suspends the current thread of execution and runs the given function,
     passing in a reified form of the original thread.  The given function must
-    not call any other function in this signature. *) 
+    not call any other function in this signature. *)
   val suspend : ('a t -> unit) -> 'a
   (* Re-enable a suspended computation and continue with the current job *)
-  val resume : 'a t * 'a -> unit
+  val resume : ('a t * 'a) -> unit
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
   val capture : ('a t -> unit) -> 'a
 
   (* Add the given work to the queue; the work is consider to have lower
     priority than the current task.  Returns a token that may be used to
     remove this task from the scheduling queue.  This operation may suspend
-    under some scheduling policies. *) 
-  (* "Right" adds to the right of the current task -- lower priority than the 
+    under some scheduling policies. *)
+  (* "Right" adds to the right of the current task -- lower priority than the
     current task *)
   val addRight : work -> token
-  (* "Left" adds to the left of the current task -- higher priority than the
-    current task *)
-  val addLeft : work -> token
+  (* RAM_NOTE: Disabled until reintegrated *)
+  (* (* "Left" adds to the left of the current task -- higher priority than the *)
+  (*   current task *) *)
+  (* val addLeft : work -> token *)
   (* Remove a task from the work queue if no processor has yet started work on
     it.  Returns true if the task was successfully removed and, we are
     guaranteed that no other processor will execute that task.  At most call
