@@ -39,7 +39,7 @@ in
       local
          ../config/bind/int-prim.sml
          ../config/bind/int-inf-prim.sml
-      in ann "forceUsed" in 
+      in ann "forceUsed" in
          ../config/default/default-$(DEFAULT_INT).sml
       end end
    in
@@ -387,7 +387,8 @@ in
    ../parallel/workqueue.sig
    ../parallel/basic.sig
    ../parallel/syncvar.sig
-   ../parallel/future.sig
+   (* RAM_NOTE: Disabled until reintegrated *)
+   (* ../parallel/future.sig *)
    ../parallel/forkjoin.sig
    ../parallel/array.sig
    ../parallel/parallel.sig
@@ -396,7 +397,8 @@ in
       ../parallel/$(WORK_QUEUE).sml
       ../parallel/basic.sml
       ../parallel/syncvar.sml
-      ../parallel/future.sml
+      (* RAM_NOTE: Disabled until reintegrated *)
+      (* ../parallel/future.sml *)
       ../parallel/forkjoin.sml
    end
    ../parallel/array.sml
