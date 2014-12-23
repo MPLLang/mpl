@@ -100,8 +100,8 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Word64.word on an x86).
 */
 #define GC_NORMAL_HEADER_SIZE GC_HEADER_SIZE
-
-typedef uint32_t GC_smallGapSize;
+#warning Might want this to be defined in model.h
+typedef uint64_t GC_smallGapSize;
 #define GC_SMALL_GAP_SIZE_SIZE sizeof (GC_smallGapSize)
 #define GC_BONUS_SLOP (GC_HEADER_SIZE + GC_SMALL_GAP_SIZE_SIZE)
 
