@@ -43,6 +43,14 @@ struct
        TextIO.flushOut TextIO.stdErr;
        MLtonProcess.exit MLtonProcess.Status.failure)
 
+  (* RAM_NOTE: Remove once futures are reintegrated *)
+  fun checkDelayedEmpty p =
+      if length (Array.sub (delayed, p)) > 0 then
+          print "basic.sml: capture': ERROR: Delayed work exists?\n"
+      else
+          ()
+
+
   fun schedule countSuspends () =
     let
       fun loop (countSuspends, p) =
@@ -115,12 +123,14 @@ struct
                  *)
                 fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
               in
-                (* XX maybe this should move out (before suspend/finishWork) *)
-                (* add any delayed work *)
-                app add (rev (Array.sub (delayed, p)));
-                Array.update (delayed, p, nil);
-                (* return the new thread to switch to *)
-                T.prepare (T.prepend (t, tail), (p, k))
+                  checkDelayedEmpty p;
+                  (* RAM_NOTE: Disabled until reintegrated *)
+                  (* (* XX maybe this should move out (before suspend/finishWork) *) *)
+                  (* (* add any delayed work *) *)
+                  (* app add (rev (Array.sub (delayed, p))); *)
+                  (* Array.update (delayed, p, nil); *)
+                  (* return the new thread to switch to *)
+                  T.prepare (T.prepend (t, tail), (p, k))
               end)
 
   fun suspend (f: 'a t -> unit) =
@@ -236,10 +246,12 @@ struct
                   let
                       fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
                   in
-                      (* add any delayed work *)
-                      (* XXX maybe should run delayed work and queue the currrent thread too? *)
-                      app add (rev (Array.sub (delayed, p)));
-                      Array.update (delayed, p, nil);
+                      checkDelayedEmpty p;
+                      (* RAM_NOTE: Disabled until reintegrated *)
+                      (* (* add any delayed work *) *)
+                      (* (* XXX maybe should run delayed work and queue the currrent thread too? *) *)
+                      (* app add (rev (Array.sub (delayed, p))); *)
+                      (* Array.update (delayed, p, nil); *)
                       Q.addWork (p, [(t, Work w)]);
                       t
                   end
@@ -290,6 +302,7 @@ struct
       evaluateInGlobalHeap
           (fn w =>
               let
+                  val _ = die "basic.sml: delayedAdd: FATAL: function called!\n"
                   (* PERF use a array-based buffer to avoid allocation *)
                   val p = processorNumber ()
                   val ws = Array.sub (delayed, p)
@@ -304,30 +317,34 @@ struct
                   val p = processorNumber ()
               in
                   (* Look for delayed work *)
-                  case Array.sub (delayed, p)
-                   of nil => ((* this is counted in schedule: incSuspends p;  *)
-                       Q.finishWork p;
-                       schedule true ())
+                  case Array.sub (delayed, p) of
+                      nil =>
+                      (* this is counted in schedule: incSuspends p;  *)
+                      (Q.finishWork p;
+                       T.switch (fn _ => T.prepare (T.new (schedule true), ())))
                     | ws =>
-                      let
-                          val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match
-                          val () = Array.update (delayed, p, nil)
-                          fun add nil = ()
-                            | add (w::ws) =
-                              Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))])
-                          (* add any lower priority work *)
-                          val () = add ws
-                      in
-                          (* now what do to with w? *)
-                          if Q.shouldYield p then
-                              (Q.addWork (p, [(Q.newWork p, Work w)]);
-                               (* this is counted in schedule: incSuspends p; *)
-                               Q.finishWork p;
-                               schedule true ())
-                          else
-                              (exitGlobalHeap ();
-                               w ())
-                      end
+                      (checkDelayedEmpty p;
+                       die "basic.sml: return: FATAL: Delayed work exists!\n")
+                       (* RAM_NOTE: Disabled until reintegrated *)
+                       (* let *)
+                       (*     val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match *)
+                       (*     val () = Array.update (delayed, p, nil) *)
+                       (*     fun add nil = () *)
+                       (*       | add (w::ws) = *)
+                       (*         Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))]) *)
+                       (*     (* add any lower priority work *) *)
+                       (*     val () = add ws *)
+                       (* in *)
+                       (*     (* now what do to with w? *) *)
+                       (*     if Q.shouldYield p then *)
+                       (*         (Q.addWork (p, [(Q.newWork p, Work w)]); *)
+                       (*          (* this is counted in schedule: incSuspends p; *) *)
+                       (*          Q.finishWork p; *)
+                       (*          schedule true ()) *)
+                       (*     else *)
+                       (*         (exitGlobalHeap (); *)
+                       (*          w ()) *)
+                       (* end *)
               end)
 
 
