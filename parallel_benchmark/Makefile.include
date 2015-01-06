@@ -6,7 +6,7 @@ PLOT = x11
 # eps
 
 # Parameters
-#MLTON_FLAGS := -const 'Exn.keepHistory true'
+MLTON_FLAGS := -const 'Exn.keepHistory true' -expert true
 
 ifneq (${KEEPG},)
 MLTON_FLAGS += -keep g

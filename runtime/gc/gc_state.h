@@ -32,6 +32,10 @@ struct GC_state {
   struct GC_controls *controls;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
+  objptr currentHierarchicalHeap; /*
+                                   * hierarchical heap to use for executing
+                                   * thread
+                                   */
 #pragma message "Is this the right type?"
   pointer ffiArgs;
   struct GC_forwardState forwardState;

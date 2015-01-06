@@ -471,6 +471,44 @@ structure ObjectType =
                                                     Type.stack ()])}
          end
 
+      val hierarchicalHeap =
+       fn () =>
+          let
+              val padding =
+                  let
+                      val align =
+                          case !Control.align of
+                              Control.Align4 => Bytes.fromInt 4
+                            | Control.Align8 => Bytes.fromInt 8
+
+                      val bytesHeader =
+                          Bits.toBytes (Control.Target.Size.header ())
+                      val bytesHeapHead =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLastAllocatedChunk =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesFrontier =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesObject =
+                          Bytes.+ (bytesHeader,
+                          Bytes.+ (bytesHeapHead,
+                          Bytes.+ (bytesLastAllocatedChunk,
+                                   bytesFrontier)))
+
+                      val bytesTotal =
+                          Bytes.align (bytesObject, {alignment = align})
+                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
+                  in
+                      Type.bits (Bytes.toBits bytesPad)
+                  end
+          in
+              Normal {hasIdentity = true,
+                      ty = Type.seq (Vector.fromList [padding,
+                                                      Type.cpointer (),
+                                                      Type.cpointer (),
+                                                      Type.cpointer ()])}
+          end
+
       (* Order in the following vector matters.  The basic pointer tycons must
        * correspond to the constants in gc/object.h.
        * STACK_TYPE_INDEX,
@@ -480,9 +518,9 @@ structure ObjectType =
        * WORD16_VECTOR_TYPE_INDEX,
        * WORD32_VECTOR_TYPE_INDEX.
        * WORD64_VECTOR_TYPE_INDEX.
-       * ZERO_WORD_TYPE_INDEX,
-       * ONE_WORD_TYPE_INDEX,
-       * TWO_WORD_TYPE_INDEX.
+       * HEADER_ONLY_TYPE_INDEX,
+       * FILL_TYPE_INDEX,
+       * HIERARCHICAL_HEAP_INDEX
        *)
       val basic = fn () =>
          let
@@ -504,7 +542,8 @@ structure ObjectType =
              wordVec 16,
              wordVec 64,
              (ObjptrTycon.headerOnly, HeaderOnly),
-             (ObjptrTycon.fill, Fill)]
+             (ObjptrTycon.fill, Fill),
+             (ObjptrTycon.hierarchicalHeap, hierarchicalHeap ())]
          end
 
       local

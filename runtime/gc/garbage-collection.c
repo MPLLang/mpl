@@ -431,6 +431,30 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
     if ((ensureStack and not invariantForMutatorStack (s))
         or not hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested)
         or forceGC) {
+#pragma message "Remove when done"
+#pragma message "Remove when done"
+#pragma message "Remove when done"
+#pragma message "Remove when done"
+#pragma message "Remove when done"
+#if 0
+      fprintf(stderr,
+              "performGC(%p, %d, %d, %d, TRUE) called from %s:%d\n",
+              s,
+              oldGenBytesRequested,
+              nurseryBytesRequested,
+              forceGC,
+              __FILE__,
+              __LINE__);
+      fprintf(stderr,
+              "  ensureStack = %d\n"
+              "  not invariantForMutatorStack = %d\n"
+              "  not hasHeapBytesFree() = %d\n"
+              "  forceGC = %d\n",
+              ensureStack,
+              not invariantForMutatorStack (s),
+              not hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested),
+              forceGC);
+#endif
       performGC (s, oldGenBytesRequested, nurseryBytesRequested, forceGC, TRUE);
     }
     else

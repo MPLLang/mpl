@@ -17,13 +17,31 @@
 
 #include "heap-utils.h"
 
+/******************************/
+/* Static Function Prototypes */
+/******************************/
+pointer HeapManagement_calculateLimitFromChunk (void* chunk);
+
 /************************/
 /* Function Definitions */
 /************************/
 void HeapManagement_enterLocalHeap (GC_state s) {
-  #pragma message "Unimplemented"
+  #if 0
+  GC_thread currentThread = getThreadCurrent (s);
+
+  if (NULL != currentThread->lastAllocatedChunk) {
+    assert (NULL != currentThread->heapHead);
+    assert (NULL != currentThread->frontier);
+
+    s->frontier = currentThread->frontier;
+    s->limit = HeapManagement_calculateLimitFromChunk (
+        currentThread->lastAllocatedChunk);
+  }
+#endif
 }
 
 void HeapManagement_exitLocalHeap (GC_state s) {
-  #pragma message "Unimplemented"
+  GC_thread currentThread = getThreadCurrent (s);
+
+  currentThread->frontier = s->frontier;
 }

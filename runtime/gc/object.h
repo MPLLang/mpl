@@ -155,7 +155,8 @@ enum {
   WORD16_VECTOR_TYPE_INDEX = 5,
   WORD64_VECTOR_TYPE_INDEX = 6,
   HEADER_ONLY_TYPE_INDEX =   7,
-  FILL_TYPE_INDEX =          8
+  FILL_TYPE_INDEX =          8,
+  HIERARCHICAL_HEAP_INDEX =  9
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -169,9 +170,9 @@ enum {
 #define GC_WORD16_VECTOR_HEADER buildHeaderFromTypeIndex (WORD16_VECTOR_TYPE_INDEX)
 #define GC_WORD32_VECTOR_HEADER buildHeaderFromTypeIndex (WORD32_VECTOR_TYPE_INDEX)
 #define GC_WORD64_VECTOR_HEADER buildHeaderFromTypeIndex (WORD64_VECTOR_TYPE_INDEX)
-
 #define GC_HEADER_ONLY_HEADER buildHeaderFromTypeIndex (HEADER_ONLY_TYPE_INDEX)
 #define GC_FILL_HEADER buildHeaderFromTypeIndex (FILL_TYPE_INDEX)
+#define GC_HIERARCHICAL_HEAP_HEADER buildHeaderFromTypeIndex (HIERARCHICAL_HEAP_INDEX)
 
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,
