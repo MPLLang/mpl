@@ -16,12 +16,6 @@
 #ifndef LOCAL_HEAP_H_
 #define LOCAL_HEAP_H_
 
-struct HeapManagement_RuntimeInfo {
-  size_t globalHeapCounter;
-  void** heapHead;
-  void** lastAllocatedChunk;
-};
-
 struct HeapManagement_ChunkMetadata {
   void* next;
   size_t size;

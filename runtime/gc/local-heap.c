@@ -20,7 +20,7 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-pointer HeapManagement_calculateLimitFromChunk (void* chunk);
+static pointer HeapManagement_calculateLimitFromChunk (void* chunk);
 
 /************************/
 /* Function Definitions */
