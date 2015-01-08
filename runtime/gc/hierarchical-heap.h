@@ -66,6 +66,9 @@ COMPILE_TIME_ASSERT(HeapManagement_HierarchicalHeap__packed,
                     sizeof (objptr));
 
 /* RAM_NOTE: should take GC_state argument once I get that back in */
+size_t HeapManagement_displayHierarchicalHeap (
+    const struct HeapManagement_HierarchicalHeap* hierarchicalHeap,
+    FILE* stream);
 size_t HeapManagement_sizeofHierarchicalHeap (void);
 size_t HeapManagement_offsetofHierarchicalHeap (void);
 
