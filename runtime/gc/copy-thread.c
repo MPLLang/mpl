@@ -52,7 +52,7 @@ void GC_copyCurrentThread (GC_state s) {
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
                            + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-#pragma message "Should this be fromStack->used?"
+  /* RAM_NOTE: Should this be fromStack->used? */
   toThread = copyThread (s, fromThread, fromStack->reserved);
 
   /* Look up these again since a GC may have occurred and moved them */
@@ -101,7 +101,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
    */
   /* assert (fromStack->reserved == fromStack->used); */
   assert (fromStack->reserved >= fromStack->used);
-#pragma message "Should this be fromStack->used?"
+  /* RAM_NOTE: Should this be fromStack->used? */
   toThread = copyThread (s, fromThread, fromStack->reserved);
 
 #pragma message "Remove dead code if possible"

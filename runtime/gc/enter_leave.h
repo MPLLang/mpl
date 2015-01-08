@@ -11,7 +11,7 @@
 static inline void enter (GC_state s);
 static inline void leave (GC_state s);
 
-#pragma message "Condense out of macros? Also, some versions not used"
+/* RAM_NOTE: Condense out of macros? Also, some versions not used */
 
 #define ENTER0(s) do { enter (s); } while(0)
 #define ENTER1(s, p) do { objptr roots[1]; \

@@ -44,7 +44,7 @@ struct GC_state {
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
   pointer globalLimit;
-#pragma message "Not sure if this is used anymore..."
+  /* RAM_NOTE: Not sure if this is used anymore... */
   /* Currently only used to hold raise operands. XXX at least i think so */
   Pointer *globalObjptrNonRoot;
   /* Ordinary globals */

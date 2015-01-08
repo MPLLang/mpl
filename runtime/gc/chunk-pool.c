@@ -342,7 +342,6 @@ void* ChunkPool_find (void* object) {
       ChunkPool_chunkToChunkMetadata (containingChunk);
   void* chunk = NULL;
 
-#pragma message "Consider this note"
   /*
    * RAM_NOTE: May not need to lock if I can guarantee that these chunks will
    * not enter free list or be re-initialized

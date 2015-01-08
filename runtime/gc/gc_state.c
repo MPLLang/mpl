@@ -118,7 +118,7 @@ void setGCStateCurrentHeap (GC_state s,
     s->canMinor = FALSE;
   }
 
-#pragma message "What does this do?"
+  /* RAM_NOTE: What does this do? */
   if (s->controls->restrictAvailableSize
       and
       (s->cumulativeStatistics->maxBytesLiveSinceReset > 0)) {
@@ -194,10 +194,10 @@ void setGCStateCurrentHeap (GC_state s,
         getThreadCurrent(&s->procStates[proc])->bytesNeeded;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#pragma message "Probably not necessary, remove after confirmation"
+      /* RAM_NOTE: Probably not necessary, remove after confirmation */
       /* XXX clearCardMap (?) */
 
-#pragma message "Might want to remove this after cleanup"
+      /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -216,10 +216,10 @@ void setGCStateCurrentHeap (GC_state s,
         GC_HEAP_LIMIT_SLOP;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#pragma message "Probably not necessary, remove after confirmation"
+      /* RAM_NOTE: Probably not necessary, remove after confirmation */
       /* XXX clearCardMap (?) */
 
-#pragma message "Might want to remove this after cleanup"
+      /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -230,7 +230,7 @@ void setGCStateCurrentHeap (GC_state s,
     s->start = s->frontier = frontier;
     s->limitPlusSlop = limit;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-#pragma message "Probably not necessary, remove after confirmation"
+    /* RAM_NOTE: Probably not necessary, remove after confirmation */
     /* XXX clearCardMap (?) */
 
     if (DEBUG)

@@ -217,8 +217,6 @@ void performGC (GC_state s,
 }
 
 size_t fillGap (pointer start, pointer end) {
-#pragma message "Do I need to modify this to take into account card/cross-map-in-heap?"
-#pragma message "Unlikely since maps just moved, did not change behavior..."
   size_t diff = end - start;
 
   if (diff == 0) {
@@ -260,14 +258,6 @@ size_t fillGap (pointer start, pointer end) {
       fprintf (stderr, "FOUND A GAP OF %zu BYTES!\n", diff);
       exit (1);
     }
-
-#pragma message "Remove when unnecessary!"
-    /* XXX debug only */
-    /*
-    while (start < end) {
-      *(start++) = 0xDF;
-    }
-    */
 
     return diff;
   }
@@ -360,7 +350,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
   }
 }
 
-#pragma message "Can this function be broken up? Seems to do a lot..."
+/* RAM_NOTE: Can this function be broken up? Seems to do a lot... */
 // assumes that stack->used and thread->exnstack are up to date
 // assumes exclusive access to runtime if !mustEnter
 // forceGC = force major collection

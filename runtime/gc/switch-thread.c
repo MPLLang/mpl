@@ -30,7 +30,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
              (uintptr_t)p,
              (uintmax_t)ensureBytesFree,
              Proc_processorNumber (s));
-#pragma message "Switch to other branch when I can"
+  /* RAM_NOTE: Switch to other branch when I can */
   if (TRUE) {
     /* This branch is slower than the else branch, especially
      * when debugging is turned on, because it does an invariant
@@ -60,7 +60,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     assert (invariantForMutatorStack(s));
     //LEAVE0 (s);
   } else {
-#pragma message "Why? It looks exactly the same..."
+    /* RAM_NOTE: Why? It looks exactly the same... */
     assert (false and "unsafe in a multiprocessor context");
     /* BEGIN: enter(s); */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
