@@ -29,13 +29,13 @@
  * lastAllocatedChunk (void*) ::
  * savedFrontier (void*) ::
  * chunkList (void*) ::
- * sourceHeap (objptr) ::
- * nextDerivativeHeap (objptr) ::
- * derivativeHeapList (objptr)
+ * sourceHH (objptr) ::
+ * nextDerivedHH (objptr) ::
+ * derivedHHList (objptr)
  *
  * There may be zero or more bytes of padding for alignment purposes.
  */
-struct HeapManagement_HierarchicalHeap {
+struct HM_HierarchicalHeap {
   void* lastAllocatedChunk; /**< The last allocated chunk, so that 'chunkList'
                              * does not have to be traversed to find it. */
 
@@ -44,20 +44,20 @@ struct HeapManagement_HierarchicalHeap {
 
   void* chunkList; /**< The list of chunks making up this heap. */
 
-  objptr sourceHeap; /**< The heap this object branched off of or BOGUS_OBJPTR
+  objptr sourceHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                       * if it is the first heap. */
 
-  objptr nextDerivativeHeap; /**< The next heap in the 'derivativeHeapList' of
-                              * the 'sourceHeap'. This variable is the 'next'
-                              * pointer for the intrusive linked list. */
+  objptr nextDerivedHH; /**< The next heap in the 'derivedHHList' of
+                         * the 'sourceHH'. This variable is the 'next'
+                         * pointer for the intrusive linked list. */
 
-  objptr derivativeHeapList; /**< The list of heaps that are derived from this
-                              * heap. All heaps in this list should have their
-                              * 'sourceHeap' set to this object. */
+  objptr derivedHHList; /**< The list of heaps that are derived from this
+                         * heap. All heaps in this list should have their
+                         * 'sourceHH' set to this object. */
 } __attribute__((packed));
 
-COMPILE_TIME_ASSERT(HeapManagement_HierarchicalHeap__packed,
-                    sizeof (struct HeapManagement_HierarchicalHeap) ==
+COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
+                    sizeof (struct HM_HierarchicalHeap) ==
                     sizeof (void*) +
                     sizeof (void*) +
                     sizeof (void*) +
@@ -66,14 +66,34 @@ COMPILE_TIME_ASSERT(HeapManagement_HierarchicalHeap__packed,
                     sizeof (objptr));
 
 /* RAM_NOTE: should take GC_state argument once I get that back in */
-size_t HeapManagement_displayHierarchicalHeap (
-    const struct HeapManagement_HierarchicalHeap* hierarchicalHeap,
+static inline void HM_displayHierarchicalHeap (
+    const struct HM_HierarchicalHeap* hh,
     FILE* stream);
-size_t HeapManagement_sizeofHierarchicalHeap (void);
-size_t HeapManagement_offsetofHierarchicalHeap (void);
+static inline size_t HM_sizeofHierarchicalHeap (void);
+static inline size_t HM_offsetofHierarchicalHeap (void);
+
+/**
+ * Appends the derived hierarchical heap to the derivedHHList of the source
+ * hierarchical heap and sets relationships appropriately.
+ *
+ * @param sourceHH The source struct HM_HierarchicalHeap
+ * @param derviedHH The struct HM_HierarchicalHeap set to be derived off of
+ * 'sourceHH'
+ */
+PRIVATE void HM_appendDerivedHeap (struct HM_HierarchicalHeap* sourceHH,
+                                   struct HM_HierarchicalHeap* derivedHH);
+
+/**
+ * Merges the specified hierarchical heap back into its source hierarchical
+ * heap. Note that the specified heap must already be fully merged (i.e. its
+ * derivedHHList should be empty)
+ *
+ * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
+ */
+PRIVATE void HM_mergeIntoSourceHeap (struct HM_HierarchicalHeap* hh);
 
 #else
-struct HeapManagement_HierarchicalHeap;
+struct HM_HierarchicalHeap;
 #endif
 
 #endif /* HIERARCHICAL_HEAP_H_ */

@@ -95,6 +95,7 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
+  struct HM_HierarchicalHeap* hh;
   size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)
@@ -115,6 +116,12 @@ void initWorld (GC_state s) {
   assert ((size_t)(s->frontier - start) <= s->lastMajorStatistics->bytesLive);
   s->heap->oldGenSize = (size_t)(s->frontier - s->heap->start);
   setGCStateCurrentHeap (s, 0, 0, true);
+
+  hh = newHierarchicalHeap (s);
+  s->currentHierarchicalHeap =
+      pointerToObjptr (((pointer)(hh)) - HM_offsetofHierarchicalHeap (),
+                       s->heap->start);
+
   thread = newThread (s, sizeofStackInitialReserved (s));
   switchToThread (s, pointerToObjptr((pointer)thread - offsetofThread (s), s->heap->start));
 }

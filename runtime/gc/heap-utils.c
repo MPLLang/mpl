@@ -9,12 +9,12 @@
  *
  * @author Ram Raghunathan
  *
- * This file implements the HeapManagement utility functions described in
+ * This file implements the HM (Heap Management) utility functions described in
  * heap-utils.h
  */
 
-void HeapManagement_debugMessage (GC_state s, const char* format, ...) {
-  if (DEBUG_HEAP_MANAGEMENT or s->controls->heapManagementMessages) {
+void HM_debugMessage (GC_state s, const char* format, ...) {
+  if (DEBUG_HEAP_MANAGEMENT or s->controls->HMMessages) {
     va_list substitutions;
     va_start(substitutions, format);
     vfprintf (stderr, format, substitutions);

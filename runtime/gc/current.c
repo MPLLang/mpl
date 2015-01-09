@@ -24,3 +24,19 @@ GC_stack getStackCurrent (GC_state s) {
   pointer p = objptrToPointer(getStackCurrentObjptr(s), s->heap->start);
   return (GC_stack)p;
 }
+
+objptr getHierarchicalHeapCurrentObjptr (GC_state s) {
+  return s->currentHierarchicalHeap;
+}
+
+struct HM_HierarchicalHeap* getHierarchicalHeapCurrent (GC_state s) {
+  objptr hhObjptr = getHierarchicalHeapCurrentObjptr (s);
+
+  if (!isObjptr (hhObjptr)) {
+    return NULL;
+  }
+
+  pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
+  return ((struct HM_HierarchicalHeap*)(hhPointer +
+                                        HM_offsetofHierarchicalHeap ()));
+}

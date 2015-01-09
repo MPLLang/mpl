@@ -20,13 +20,13 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-static pointer HeapManagement_calculateLimitFromChunk (void* chunk);
+static pointer HM_calculateLimitFromChunk (void* chunk);
 
 /************************/
 /* Function Definitions */
 /************************/
-void HeapManagement_enterLocalHeap (GC_state s) {
-  #if 0
+void HM_enterLocalHeap (GC_state s) {
+#if 0
   GC_thread currentThread = getThreadCurrent (s);
 
   if (NULL != currentThread->lastAllocatedChunk) {
@@ -34,13 +34,15 @@ void HeapManagement_enterLocalHeap (GC_state s) {
     assert (NULL != currentThread->frontier);
 
     s->frontier = currentThread->frontier;
-    s->limit = HeapManagement_calculateLimitFromChunk (
+    s->limit = HM_calculateLimitFromChunk (
         currentThread->lastAllocatedChunk);
   }
+#else
+  s = s;
 #endif
 }
 
-void HeapManagement_exitLocalHeap (GC_state s) {
+void HM_exitLocalHeap (GC_state s) {
   GC_thread currentThread = getThreadCurrent (s);
 
   currentThread->frontier = s->frontier;

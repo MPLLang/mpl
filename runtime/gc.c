@@ -52,6 +52,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/heap.c"
 #include "gc/heap_predicates.c"
 #include "gc/heap-utils.c"
+#include "gc/hierarchical-heap.c"
 #include "gc/init-world.c"
 #include "gc/init.c"
 #include "gc/int-inf.c"
@@ -80,3 +81,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/translate.c"
 #include "gc/weak.c"
 #include "gc/world.c"
+
+#pragma message                                                         \
+  "With LTO a reality, we should benchmark whether this unity build is worth " \
+  "the maintenance overhead"

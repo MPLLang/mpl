@@ -97,6 +97,32 @@ GC_thread newThread (GC_state s, size_t reserved) {
   return thread;
 }
 
+struct HM_HierarchicalHeap* newHierarchicalHeap (GC_state s) {
+  /* allocate the object */
+  ensureHasHeapBytesFreeAndOrInvariantForMutator (
+      s, FALSE, FALSE, FALSE, 0, HM_sizeofHierarchicalHeap ());
+  pointer hhObject = newObject (s,
+                                GC_HIERARCHICAL_HEAP_HEADER,
+                                HM_sizeofHierarchicalHeap (),
+                                FALSE);
+  struct HM_HierarchicalHeap* hh =
+      ((struct HM_HierarchicalHeap*)(hhObject +
+                                     HM_offsetofHierarchicalHeap ()));
+
+  /* initialize the object */
+  hh->lastAllocatedChunk = NULL;
+  hh->savedFrontier = NULL;
+  hh->chunkList = NULL;
+  hh->sourceHH = BOGUS_OBJPTR;
+  hh->nextDerivedHH = BOGUS_OBJPTR;
+  hh->derivedHHList = BOGUS_OBJPTR;
+  if (DEBUG_HEAP_MANAGEMENT) {
+    fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));
+  }
+
+  return hh;
+}
+
 static inline void setFrontier (GC_state s, pointer p,
                                 ARG_USED_FOR_ASSERT size_t bytes) {
   p = alignFrontier (s, p);

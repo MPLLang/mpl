@@ -10,16 +10,29 @@
 void displayGCState (GC_state s, FILE *stream) {
   fprintf (stream,
            "GC state\n");
+
   fprintf (stream, "\tcurrentThread = "FMTOBJPTR"\n", s->currentThread);
   displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, s->heap->start)
                                 + offsetofThread (s)),
                  stream);
+
+  fprintf (stream,
+           "\tcurrentHierarchicalHeap = "FMTOBJPTR"\n",
+           s->currentHierarchicalHeap);
+  HM_displayHierarchicalHeap (
+      ((struct HM_HierarchicalHeap*)(objptrToPointer (s->currentHierarchicalHeap,
+                                                      s->heap->start)
+                                     + offsetofThread (s))),
+      stream);
+
   fprintf (stream, "\tgenerational\n");
   displayGenerationalMaps (s, &s->generationalMaps,
                            stream);
+
   fprintf (stream, "\theap\n");
   displayHeap (s, s->heap,
                stream);
+
   fprintf (stream,
            "\tstart = "FMTPTR"\n"
            "\tfrontier = "FMTPTR"\n"

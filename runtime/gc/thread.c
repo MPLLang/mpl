@@ -20,9 +20,9 @@ void displayThread (GC_state s,
           (uintmax_t)thread->exnStack,
           (uintmax_t)thread->bytesNeeded,
           ((uintmax_t)(thread->inGlobalHeapCounter)),
-          thread->heapHead,
-          thread->lastAllocatedChunk,
-          thread->frontier,
+          ((void*)(thread->heapHead)),
+          ((void*)(thread->lastAllocatedChunk)),
+          ((void*)(thread->frontier)),
           thread->stack);
   displayStack (s, (GC_stack)(objptrToPointer (thread->stack, s->heap->start)),
                 stream);

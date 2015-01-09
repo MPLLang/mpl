@@ -125,7 +125,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->controls->messages = TRUE;
         } else if (0 == strcmp (arg, "hm-messages")) {
           i++;
-          s->controls->heapManagementMessages = TRUE;
+          s->controls->HMMessages = TRUE;
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;
@@ -349,6 +349,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->cumulativeStatistics = newCumulativeStatistics();
 
   s->currentThread = BOGUS_OBJPTR;
+  s->currentHierarchicalHeap = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
   s->globalFrontier = NULL;
   s->globalLimit = NULL;
@@ -462,6 +463,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->controls = s->controls;
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
+  d->currentHierarchicalHeap = BOGUS_OBJPTR;
   d->globalFrontier = NULL;
   d->globalLimit = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;

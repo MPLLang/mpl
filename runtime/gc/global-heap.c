@@ -20,7 +20,7 @@
 /************************/
 /* Function Definitions */
 /************************/
-void HeapManagement_enterGlobalHeap (void) {
+void HM_enterGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread currentThread = getThreadCurrent (s);
 
@@ -30,9 +30,9 @@ void HeapManagement_enterGlobalHeap (void) {
     assert (NULL != s->globalFrontier);
     assert (NULL != s->globalLimit);
 
-    HeapManagement_debugMessage(s, "Entering Global Heap\n");
+    HM_debugMessage(s, "Entering Global Heap\n");
 
-    HeapManagement_exitLocalHeap (s);
+    HM_exitLocalHeap (s);
 #pragma message "Activate when ready"
 #if 0
     s->frontier = s->globalFrontier;
@@ -41,18 +41,18 @@ void HeapManagement_enterGlobalHeap (void) {
   }
 }
 
-void HeapManagement_exitGlobalHeap (void) {
+void HM_exitGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread currentThread = getThreadCurrent (s);
 
   assert (currentThread->inGlobalHeapCounter > 0);
   currentThread->inGlobalHeapCounter--;
   if (0 == currentThread->inGlobalHeapCounter) {
-    HeapManagement_debugMessage(s, "Exiting Global Heap\n");
+    HM_debugMessage(s, "Exiting Global Heap\n");
 
     s->globalFrontier = s->frontier;
     s->globalLimit = s->limit;
 
-    HeapManagement_enterLocalHeap (s);
+    HM_enterLocalHeap (s);
   }
 }

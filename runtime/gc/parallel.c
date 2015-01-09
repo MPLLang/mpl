@@ -202,7 +202,8 @@ void Parallel_resetBytesLive (void) {
   s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
 }
 
-
+#pragma message "Remove when sure I am done"
+#if 0
 static void maybeWaitForGC (GC_state s) {
   if (Proc_threadInSection ()) {
     //fprintf (stderr, "waiting for gc [%d]\n", Proc_processorNumber (s));
@@ -213,8 +214,6 @@ static void maybeWaitForGC (GC_state s) {
   }
 }
 
-#pragma message "Remove when sure I am done"
-#if 0
 //struct rusage ru_lock;
 
 void Parallel_lock (Int32 p) {

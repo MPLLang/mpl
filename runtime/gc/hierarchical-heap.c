@@ -18,33 +18,29 @@
 /************************/
 /* Function Definitions */
 /************************/
-size_t HeapManagement_displayHierarchicalHeap (
-    const struct HeapManagement_HierarchicalHeap* hierarchicalHeap,
+void HM_displayHierarchicalHeap (
+    const struct HM_HierarchicalHeap* hh,
     FILE* stream) {
   fprintf (stream,
-           "HierarchicalHeap (%p) = {\n"
-           "\t.lastAllocatedChunk = %p,\n"
-           "\t.savedFrontier = %p,\n"
-           "\t.chunkList = %p,\n"
-           "\t.sourceHeap = %"FMTOBJPTR",\n"
-           "\t.nextDerivativeHeap = %"FMTOBJPTR",\n"
-           "\t.derivativeHeapList= %"FMTOBJPTR",\n"
-           "}\n",
-           hierarchicalHeap,
-           hierarchicalHeap->lastAllocatedChunk,
-           hierarchicalHeap->savedFrontier,
-           hierarchicalHeap->chunkList,
-           hierarchicalHeap->sourceHeap,
-           hierarchicalHeap->nextDerivativeHeap,
-           hierarchicalHeap->derivativeHeapList);
+           "\t\tlastAllocatedChunk = %p\n"
+           "\t\tsavedFrontier = %p\n"
+           "\t\tchunkList = %p\n"
+           "\t\tsourceHH = "FMTOBJPTR"\n"
+           "\t\tnextDerivedHH = "FMTOBJPTR"\n"
+           "\t\tderivedHHList= "FMTOBJPTR"\n",
+           hh->lastAllocatedChunk,
+           hh->savedFrontier,
+           hh->chunkList,
+           hh->sourceHH,
+           hh->nextDerivedHH,
+           hh->derivedHHList);
 }
 
-#pragma message "Should be able to compute once and save result"
-size_t HeapManagement_sizeofHierarchicalHeap (void) {
+/* RAM_NOTE: Should be able to compute once and save result */
+size_t HM_sizeofHierarchicalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  size_t result = GC_NORMAL_HEADER_SIZE +
-                  sizeof (struct HeapManagement_HierarchicalHeap);
+  size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
   result = align (result, s->alignment);
 
   if (DEBUG) {
@@ -75,9 +71,9 @@ size_t HeapManagement_sizeofHierarchicalHeap (void) {
   return result;
 }
 
-#pragma message "Should be able to compute once and save result"
-size_t HeapManagement_offsetofHierarchicalHeap (void) {
-  return ((sizeofHierarchicalHeap ()) -
+/* RAM_NOTE: Should be able to compute once and save result */
+size_t HM_offsetofHierarchicalHeap (void) {
+  return ((HM_sizeofHierarchicalHeap ()) -
           GC_NORMAL_HEADER_SIZE +
-          sizeof (struct HeapManagement_HierarchicalHeap));
+          sizeof (struct HM_HierarchicalHeap));
 }
