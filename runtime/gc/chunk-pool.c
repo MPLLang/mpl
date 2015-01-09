@@ -46,7 +46,7 @@ struct ChunkPool_chunkMetadata {
   union {
     size_t numChunksInSpan;
     struct ChunkPool_chunkMetadata* spanStart;
-  };
+  } spanInfo;
   struct ChunkPool_chunkMetadata* previous;
   struct ChunkPool_chunkMetadata* next;
 };
@@ -140,7 +140,7 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
  /* 12 bits */
 #define ChunkPool_CHUNKADDRESSMASK (0xfffULL)
 /* 2^12 bytes == 4KiB */
-#define ChunkPool_MINIMUMCHUNKSIZE (1ULL << ChunkPool_CHUNKADDRESSMASK)
+#define ChunkPool_MINIMUMCHUNKSIZE (~ChunkPool_CHUNKADDRESSMASK)
 #define ChunkPool_NUMFREELISTS (256)
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
@@ -186,13 +186,13 @@ void ChunkPool_initialize (size_t poolSize) {
 
   /* setup pool variables */
   ChunkPool_poolStart = region;
-  ChunkPool_poolEnd = region + adjustedPoolSize;
+  ChunkPool_poolEnd = ((uint8_t*)(region)) + adjustedPoolSize;
 
   /* setup metadatas variable */
   unsigned int numChunks = adjustedPoolSize / ChunkPool_MINIMUMCHUNKSIZE;
   ChunkPool_chunkMetadatas = malloc_safe (numChunks *
                                           sizeof(*ChunkPool_chunkMetadatas));
-  ChunkPool_chunkMetadatas->numChunksInSpan = numChunks;
+  ChunkPool_chunkMetadatas->spanInfo.numChunksInSpan = numChunks;
 
   /* Add the giant chunk into the free list */
   ChunkPool_insertIntoFreeList (ChunkPool_chunkMetadatas);
@@ -230,7 +230,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
              ChunkPool_freeLists[freeListIndex];
          NULL != cursor;
          cursor = cursor->next) {
-      if (chunksRequested <= cursor->numChunksInSpan) {
+      if (chunksRequested <= cursor->spanInfo.numChunksInSpan) {
         /*
          * split the span if possible and return the chunk
          */
@@ -284,21 +284,21 @@ bool ChunkPool_free (void* chunk) {
   if (ChunkPool_NONFIRSTCHUNK == previousSpanStart->previous) {
     assert (ChunkPool_NONFIRSTCHUNK == previousSpanStart->next);
 
-    previousSpanStart = previousSpanStart->spanStart;
+    previousSpanStart = previousSpanStart->spanInfo.spanStart;
 
     assert (ChunkPool_NONFIRSTCHUNK != previousSpanStart->previous);
     assert (ChunkPool_NONFIRSTCHUNK != previousSpanStart->next);
   }
 
   struct ChunkPool_chunkMetadata* nextSpanStart =
-      spanStart + (spanStart->numChunksInSpan);
+      spanStart + (spanStart->spanInfo.numChunksInSpan);
   assert (ChunkPool_NONFIRSTCHUNK != previousSpanStart->previous);
   assert (ChunkPool_NONFIRSTCHUNK != previousSpanStart->next);
 
   if (ChunkPool_ALLOCATED != previousSpanStart->previous) {
     /* coalesceable! remove from list and join */
     ChunkPool_removeFromFreeList (previousSpanStart);
-    previousSpanStart->numChunksInSpan += spanStart->numChunksInSpan;
+    previousSpanStart->spanInfo.numChunksInSpan += spanStart->spanInfo.numChunksInSpan;
 
     /*
      * set spanStart to previousSpanStart so that I don't have to branch on
@@ -310,7 +310,7 @@ bool ChunkPool_free (void* chunk) {
   if (ChunkPool_ALLOCATED != nextSpanStart->previous) {
     /* coalesceable! remove from list and join */
     ChunkPool_removeFromFreeList (nextSpanStart);
-    spanStart->numChunksInSpan += nextSpanStart->numChunksInSpan;
+    spanStart->spanInfo.numChunksInSpan += nextSpanStart->spanInfo.numChunksInSpan;
   }
 
   /*
@@ -320,6 +320,8 @@ bool ChunkPool_free (void* chunk) {
   ChunkPool_insertIntoFreeList (spanStart);
 
   pthread_rwlock_unlock_safe(&ChunkPool_lock);
+
+  return true;
 }
 
 /**
@@ -349,7 +351,7 @@ void* ChunkPool_find (void* object) {
   pthread_rwlock_rdlock_safe(&ChunkPool_lock);
   if (ChunkPool_NONFIRSTCHUNK == chunkMetadata->previous) {
     assert (ChunkPool_NONFIRSTCHUNK == chunkMetadata->next);
-    chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata->spanStart);
+    chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata->spanInfo.spanStart);
   } else {
     assert  (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata);
@@ -380,7 +382,7 @@ void ChunkPool_insertIntoFreeList (
 
   struct ChunkPool_chunkMetadata** list =
       &(ChunkPool_freeLists[ChunkPool_findFreeListIndexForNumChunks (
-          chunkMetadata->numChunksInSpan)]);
+          chunkMetadata->spanInfo.numChunksInSpan)]);
 
   chunkMetadata->previous = NULL;
   chunkMetadata->next = *list;
@@ -397,7 +399,7 @@ void ChunkPool_removeFromFreeList (
 
   struct ChunkPool_chunkMetadata** list =
       &(ChunkPool_freeLists[ChunkPool_findFreeListIndexForNumChunks (
-          chunkMetadata->numChunksInSpan)]);
+          chunkMetadata->spanInfo.numChunksInSpan)]);
 
   if (NULL != chunkMetadata->previous) {
     chunkMetadata->previous->next = chunkMetadata->next;
@@ -418,11 +420,11 @@ void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
 
   /* setup the forwarding pointers */
   for (unsigned int chunkOffset = 1;
-       chunkOffset < spanStart->numChunksInSpan;
+       chunkOffset < spanStart->spanInfo.numChunksInSpan;
        chunkOffset++) {
     struct ChunkPool_chunkMetadata* chunkMetadata =
         spanStart + chunkOffset;
-    chunkMetadata->spanStart = spanStart;
+    chunkMetadata->spanInfo.spanStart = spanStart;
     chunkMetadata->previous = ChunkPool_NONFIRSTCHUNK;
     chunkMetadata->next = ChunkPool_NONFIRSTCHUNK;
   }
@@ -436,17 +438,17 @@ void ChunkPool_maybeSplitSpan (
 
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->previous);
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
-  assert (chunkMetadata->numChunksInSpan >= splitChunks);
+  assert (chunkMetadata->spanInfo.numChunksInSpan >= splitChunks);
 
-  if (chunkMetadata->numChunksInSpan == splitChunks) {
+  if (chunkMetadata->spanInfo.numChunksInSpan == splitChunks) {
     /* nothing to do! */
     *newSpanStart = NULL;
   } else {
     /* can split, so should split */
     *newSpanStart = chunkMetadata + splitChunks;
-    (*newSpanStart)->numChunksInSpan =
-        chunkMetadata->numChunksInSpan - splitChunks;
-    chunkMetadata->numChunksInSpan = splitChunks;
+    (*newSpanStart)->spanInfo.numChunksInSpan =
+        chunkMetadata->spanInfo.numChunksInSpan - splitChunks;
+    chunkMetadata->spanInfo.numChunksInSpan = splitChunks;
   }
 }
 
@@ -457,9 +459,11 @@ void* ChunkPool_chunkMetadataToChunk (
   unsigned int chunkIndex =
       (chunkMetadata - ChunkPool_chunkMetadatas) / sizeof(*chunkMetadata);
 
-  assert (ChunkPool_poolStart + (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE) <
+  assert (((uint8_t*)(ChunkPool_poolStart)) +
+          (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE) <
           ChunkPool_poolEnd);
-  return (ChunkPool_poolStart + (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE));
+  return (((uint8_t*)(ChunkPool_poolStart)) +
+          (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE));
 }
 
 struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
@@ -471,6 +475,6 @@ struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
   assert (chunk < ChunkPool_poolEnd);
 
   unsigned int chunkIndex =
-      (chunk - ChunkPool_poolStart) / ChunkPool_MINIMUMCHUNKSIZE;
+      (((uint8_t*)(chunk)) - ((uint8_t*)(ChunkPool_poolStart))) / ChunkPool_MINIMUMCHUNKSIZE;
   return (ChunkPool_chunkMetadatas + chunkIndex);
 }
