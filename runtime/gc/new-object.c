@@ -97,7 +97,9 @@ GC_thread newThread (GC_state s, size_t reserved) {
   return thread;
 }
 
-struct HM_HierarchicalHeap* newHierarchicalHeap (GC_state s) {
+pointer HM_newHierarchicalHeap (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
   /* allocate the object */
   ensureHasHeapBytesFreeAndOrInvariantForMutator (
       s, FALSE, FALSE, FALSE, 0, HM_sizeofHierarchicalHeap ());
@@ -113,14 +115,14 @@ struct HM_HierarchicalHeap* newHierarchicalHeap (GC_state s) {
   hh->lastAllocatedChunk = NULL;
   hh->savedFrontier = NULL;
   hh->chunkList = NULL;
-  hh->sourceHH = BOGUS_OBJPTR;
-  hh->nextDerivedHH = BOGUS_OBJPTR;
-  hh->derivedHHList = BOGUS_OBJPTR;
+  hh->parentHH = BOGUS_OBJPTR;
+  hh->nextChildHH = BOGUS_OBJPTR;
+  hh->childHHList = BOGUS_OBJPTR;
   if (DEBUG_HEAP_MANAGEMENT) {
     fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));
   }
 
-  return hh;
+  return hhObject;
 }
 
 static inline void setFrontier (GC_state s, pointer p,

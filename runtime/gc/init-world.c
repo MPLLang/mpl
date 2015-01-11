@@ -117,7 +117,7 @@ void initWorld (GC_state s) {
   s->heap->oldGenSize = (size_t)(s->frontier - s->heap->start);
   setGCStateCurrentHeap (s, 0, 0, true);
 
-  hh = newHierarchicalHeap (s);
+  hh = HM_newHierarchicalHeap ();
   s->currentHierarchicalHeap =
       pointerToObjptr (((pointer)(hh)) - HM_offsetofHierarchicalHeap (),
                        s->heap->start);
