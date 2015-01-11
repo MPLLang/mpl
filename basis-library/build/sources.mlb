@@ -311,6 +311,8 @@ in
    ../mlton/process.sml
    ../mlton/gc.sig
    ../mlton/gc.sml
+   ../mlton/HM.sig
+   ../mlton/HM.sml
    ../mlton/rusage.sig
    ../mlton/rusage.sml
 
