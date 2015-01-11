@@ -141,6 +141,22 @@ structure GC =
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
    end
 
+structure HM =
+    struct
+        structure HierarchicalHeap =
+            struct
+                type t = HM.HierarchicalHeap.t
+
+                val newHierarchicalHeap =
+                    _prim "HierarchicalHeap_new": unit -> t;
+                val appendChildHeap =
+                    _import "HM_appendChildHeap" runtime private:
+                    (t * t) -> unit;
+                val mergeIntoParentHeap =
+                    _import "HM_mergeIntoParentHeap" runtime private: t -> unit;
+            end
+    end
+
 structure Platform =
    struct
       structure Arch =
