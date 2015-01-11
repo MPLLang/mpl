@@ -43,6 +43,7 @@ signature TYPE_OPS =
       val deVector: t -> t
       val deWeak: t -> t
       val exn: t
+      val hierarchicalHeap: t
       val intInf: t
       val isTuple: t -> bool
       val list: t -> t

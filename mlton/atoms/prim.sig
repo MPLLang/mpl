@@ -56,6 +56,7 @@ signature PRIM =
                               symbolScope: CFunction.SymbolScope.t}
              | FFI_getArgs (* RAM_WARNING: Is this correct? *)
              | GC_collect (* ssa to rssa *)
+             | HierarchicalHeap_new (* ssa to rssa *)
              | IntInf_add (* ssa to rssa *)
              | IntInf_andb (* ssa to rssa *)
              | IntInf_arshift (* ssa to rssa *)
@@ -228,6 +229,7 @@ signature PRIM =
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,
                                       exn: 'a,
+                                      hierarchicalHeap: 'a,
                                       intInf: 'a,
                                       real: RealSize.t -> 'a,
                                       reff: 'a -> 'a,

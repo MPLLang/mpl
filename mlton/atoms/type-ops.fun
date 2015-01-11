@@ -27,6 +27,7 @@ in
    val bool = nullary Tycon.bool
    val cpointer = nullary Tycon.cpointer
    val exn = nullary Tycon.exn
+   val hierarchicalHeap = nullary Tycon.hierarchicalHeap
    val intInf = nullary Tycon.intInf
    val real = RealSize.memoize (fn s => nullary (Tycon.real s))
    val thread = nullary Tycon.thread

@@ -228,6 +228,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                    | CPointer => ()
                    | Datatype tycon' =>
                         List.push (#dependents (tyconInfo tycon'), tycon)
+                   | HierarchicalHeap => ()
                    | IntInf => ()
                    | Real _ => ()
                    | Ref t => setTypeDependents t

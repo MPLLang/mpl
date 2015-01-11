@@ -22,6 +22,7 @@ structure Type =
           Array of t
         | CPointer
         | Datatype of Tycon.t
+        | HierarchicalHeap
         | IntInf
         | Real of RealSize.t
         | Ref of t
@@ -68,6 +69,7 @@ structure Type =
             fn (Array t1, Array t2) => equals (t1, t2)
              | (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
+             | (HierarchicalHeap, HierarchicalHeap) => true
              | (IntInf, IntInf) => true
              | (Real s1, Real s2) => RealSize.equals (s1, s2)
              | (Ref t1, Ref t2) => equals (t1, t2)
@@ -119,6 +121,7 @@ structure Type =
          fun make (tycon, tree) = lookup (Tycon.hash tycon, tree)
       in
          val cpointer = make (Tycon.cpointer, CPointer)
+         val hierarchicalHeap = make (Tycon.hierarchicalHeap, HierarchicalHeap)
          val intInf = make (Tycon.intInf, IntInf)
          val thread = make (Tycon.thread, Thread)
       end
@@ -174,6 +177,7 @@ structure Type =
                  Array t => seq [layout t, str " array"]
                | CPointer => str "pointer"
                | Datatype t => Tycon.layout t
+               | HierarchicalHeap => str "hierarchicalHeap"
                | IntInf => str "intInf"
                | Real s => str (concat ["real", RealSize.toString s])
                | Ref t => seq [layout t, str " ref"]
@@ -203,6 +207,7 @@ structure Type =
                             cpointer = cpointer,
                             equals = equals,
                             exn = unit,
+                            hierarchicalHeap = hierarchicalHeap,
                             intInf = intInf,
                             real = real,
                             reff = reff,
@@ -1757,6 +1762,7 @@ structure Program =
                           Array t => countType t
                         | CPointer => ()
                         | Datatype _ => ()
+                        | HierarchicalHeap => ()
                         | IntInf => ()
                         | Real _ => ()
                         | Ref t => countType t

@@ -117,6 +117,7 @@ structure Type =
       and tree =
           CPointer
         | Datatype of Tycon.t
+        | HierarchicalHeap
         | IntInf
         | Object of {args: t Prod.t,
                      con: ObjectCon.t}
@@ -159,6 +160,7 @@ structure Type =
          val same: tree * tree -> bool =
             fn (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
+             | (HierarchicalHeap, HierarchicalHeap) => true
              | (IntInf, IntInf) => true
              | (Object {args = a1, con = c1}, Object {args = a2, con = c2}) =>
                   ObjectCon.equals (c1, c2)
@@ -207,6 +209,7 @@ structure Type =
          fun make (tycon, tree) = lookup (Tycon.hash tycon, tree)
       in
          val cpointer = make (Tycon.cpointer, CPointer)
+         val hierarchicalHeap = make (Tycon.hierarchicalHeap, HierarchicalHeap)
          val intInf = make (Tycon.intInf, IntInf)
          val thread = make (Tycon.thread, Thread)
       end
@@ -287,6 +290,7 @@ structure Type =
               case dest t of
                  CPointer => str "cpointer"
                | Datatype t => Tycon.layout t
+               | HierarchicalHeap => str "hierarchicalHeap"
                | IntInf => str "intInf"
                | Object {args, con} =>
                     if isUnit t
@@ -333,6 +337,7 @@ structure Type =
                                cpointer = cpointer,
                                equals = equals,
                                exn = unit,
+                               hierarchicalHeap = hierarchicalHeap,
                                intInf = intInf,
                                real = real,
                                reff = fn _ => raise BadPrimApp,
@@ -1991,6 +1996,7 @@ structure Program =
                        case Type.dest t of
                           CPointer => ()
                         | Datatype _ => ()
+                        | HierarchicalHeap => ()
                         | IntInf => ()
                         | Object {args, ...} => Prod.foreach (args, countType)
                         | Real _ => ()

@@ -33,6 +33,7 @@ val all = [CPointer,
 
 val cpointer = CPointer
 val objptr = Objptr
+val hierarchicalHeap = objptr
 val thread = objptr
 
 val equals: t * t -> bool = op =

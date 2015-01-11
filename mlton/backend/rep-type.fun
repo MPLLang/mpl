@@ -109,6 +109,9 @@ structure Type =
 
       val compareRes = word WordSize.compareRes
 
+      val hierarchicalHeap: unit -> t =
+       fn () => objptr ObjptrTycon.hierarchicalHeap
+
       val objptrHeader: unit -> t = word o WordSize.objptrHeader
 
       val seqIndex: unit -> t = word o WordSize.seqIndex
@@ -489,11 +492,20 @@ structure ObjectType =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesFrontier =
                           Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesParentHH =
+                          Bits.toBytes (Control.Target.Size.objptr ())
+                      val bytesNextChildHH =
+                          Bits.toBytes (Control.Target.Size.objptr ())
+                      val bytesChildHHList =
+                          Bits.toBytes (Control.Target.Size.objptr ())
                       val bytesObject =
                           Bytes.+ (bytesHeader,
                           Bytes.+ (bytesHeapHead,
                           Bytes.+ (bytesLastAllocatedChunk,
-                                   bytesFrontier)))
+                          Bytes.+ (bytesFrontier,
+			  Bytes.+ (bytesParentHH,
+			  Bytes.+ (bytesNextChildHH,
+			           bytesChildHHList))))))
 
                       val bytesTotal =
                           Bytes.align (bytesObject, {alignment = align})
@@ -506,7 +518,10 @@ structure ObjectType =
                       ty = Type.seq (Vector.fromList [padding,
                                                       Type.cpointer (),
                                                       Type.cpointer (),
-                                                      Type.cpointer ()])}
+                                                      Type.cpointer (),
+                                                      Type.hierarchicalHeap (),
+                                                      Type.hierarchicalHeap (),
+                                                      Type.hierarchicalHeap ()])}
           end
 
       (* Order in the following vector matters.  The basic pointer tycons must

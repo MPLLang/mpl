@@ -33,4 +33,5 @@ signature OBJPTR_TYCON =
       val wordVector: Bits.t -> t
       val headerOnly: t
       val fill: t
+      val hierarchicalHeap: t
    end

@@ -793,6 +793,7 @@ structure Type =
          in
             [("Bool", CType.bool, Tycon.bool),
              ("CPointer", CType.cpointer, Tycon.cpointer),
+             ("HierarchicalHeap", CType.hierarchicalHeap, Tycon.hierarchicalHeap),
              ("Real32", CType.real RealSize.R32, Tycon.real RealSize.R32),
              ("Real64", CType.real RealSize.R64, Tycon.real RealSize.R64),
              ("Thread", CType.thread, Tycon.thread)]

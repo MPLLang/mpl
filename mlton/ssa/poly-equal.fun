@@ -407,7 +407,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   else Dexp.call {func = equalTyconFunc tycon,
                                   args = Vector.new2 (dx1, dx2),
                                   ty = Type.bool}
-             | Type.IntInf => 
+             | Type.HierarchicalHeap => eq ()
+             | Type.IntInf =>
                   if hasConstArg ()
                      then eq ()
                   else Dexp.call {func = intInfEqualFunc (),

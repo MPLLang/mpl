@@ -77,6 +77,7 @@ fun checkScopes (program as
                  case Type.dest ty of
                     CPointer => ()
                   | Datatype tycon => getTycon tycon
+                  | HierarchicalHeap =>  ()
                   | IntInf => ()
                   | Object {args, con, ...} => 
                        let

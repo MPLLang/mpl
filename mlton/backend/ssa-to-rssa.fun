@@ -144,6 +144,22 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_arrayAllocate"}
 
+      (* CHECK; hierarchicalHeap as objptr *)
+      val newHierarchicalHeap = fn () =>
+         T {args = Vector.new0 (),
+            convention = Cdecl,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
+				 ensuresBytesFree = false,
+				 mayGC = true,
+				 maySwitchThreads = false,
+				 modifiesFrontier = true,
+				 readsStackTop = false,
+				 writesStackTop = false},
+            prototype = (Vector.new0 (), SOME CType.CPointer),
+            return = Type.hierarchicalHeap (),
+            symbolScope = Private,
+            target = Direct "HM_newHierarchicalHeap"}
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1242,6 +1258,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                               Operand.bool true)),
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
+                               | HierarchicalHeap_new =>
+                                 simpleCCall (CFunction.newHierarchicalHeap ())
                                | IntInf_add =>
                                     simpleCCallWithGCState
                                     (CFunction.intInfBinary IntInf_add)
