@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor CType (S: C_TYPE_STRUCTS): C_TYPE = 
+functor CType (S: C_TYPE_STRUCTS): C_TYPE =
 struct
 
 open S

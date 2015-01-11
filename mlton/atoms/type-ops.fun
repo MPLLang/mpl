@@ -54,7 +54,7 @@ in
    val arrow = binary Tycon.arrow
 end
 
-val arrow = 
+val arrow =
    Trace.trace ("TypeOps.arrow", Layout.tuple2 (layout, layout), layout) arrow
 
 fun deUnaryOpt tycon t =
@@ -108,8 +108,8 @@ fun deArrow t =
     | NONE => Error.bug "TypeOps.deArrow"
 
 val deArrow =
-   Trace.trace 
-   ("TypeOps.deArrow", layout, Layout.tuple2 (layout, layout)) 
+   Trace.trace
+   ("TypeOps.deArrow", layout, Layout.tuple2 (layout, layout))
    deArrow
 
 end

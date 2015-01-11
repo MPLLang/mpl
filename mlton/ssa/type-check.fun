@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor TypeCheck (S: TYPE_CHECK_STRUCTS): TYPE_CHECK = 
+functor TypeCheck (S: TYPE_CHECK_STRUCTS): TYPE_CHECK =
 struct
 
 open S
@@ -56,8 +56,8 @@ fun checkScopes (program as
 
       val {destroy = destroyLoopType, get = loopType, ...} =
          Property.destGet
-         (Type.plist, 
-          Property.initRec 
+         (Type.plist,
+          Property.initRec
           (fn (ty, loopType) =>
            let
               datatype z = datatype Type.dest
@@ -81,7 +81,7 @@ fun checkScopes (program as
       fun loopTypes tys = Vector.foreach (tys, loopType)
       (* Redefine bindVar to check well-formedness of types. *)
       val bindVar = fn (x, ty) => (loopType ty; bindVar (x, ty))
-      fun loopExp exp = 
+      fun loopExp exp =
          let
             val _ =
                case exp of
@@ -150,7 +150,7 @@ fun checkScopes (program as
                   val _ = getVar test
                   val _ =
                      case cases of
-                        Cases.Con cs => doitCon cs 
+                        Cases.Con cs => doitCon cs
                       | Cases.Word (ws, cs) => doitWord (ws, cs)
                in
                   ()
@@ -172,7 +172,7 @@ fun checkScopes (program as
                   val _ = Vector.foreach (statements, loopStatement)
                   val _ = loopTransfer transfer
                   val _ = Vector.foreach (children, loop)
-                  val _ = Vector.foreach 
+                  val _ = Vector.foreach
                           (statements, fn s =>
                            Option.app (Statement.var s, unbindVar))
                   val _ = Vector.foreach (args, unbindVar o #1)
@@ -240,7 +240,7 @@ structure Function =
                let
                   fun bug (msg: string): 'a =
                      let
-                        val _ = 
+                        val _ =
                            Vector.foreach
                            (blocks, fn Block.T {label, ...} =>
                             let
@@ -309,7 +309,7 @@ structure Function =
                                  outputl (List.layout SourceInfo.layout sources,
                                           Out.error)
                               end
-                           val _ = 
+                           val _ =
                               if (case transfer of
                                      Call {return, ...} =>
                                         let

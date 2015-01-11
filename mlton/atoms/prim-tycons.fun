@@ -30,7 +30,7 @@ local
 in
    val array = make "array"
    val arrow = make "->"
-   val bool = make "bool" 
+   val bool = make "bool"
    val cpointer = make "cpointer"
    val exn = make "exn"
    val hierarchicalHeap = make "hierarchicalHeap"
@@ -70,7 +70,7 @@ local
                 NONE => Error.bug "PrimTycons.make.fromSize"
               | SOME {tycon, ...} => tycon)
          fun is t = Vector.exists (all, fn {tycon = t', ...} => equals (t, t'))
-         fun de t = 
+         fun de t =
             case Vector.peek (all, fn {tycon = t', ...} => equals (t, t')) of
                NONE => Error.bug "PrimTycons.make.de"
              | SOME {size, ...} => size
@@ -146,11 +146,11 @@ val tuple = #2 tuple
 val vector = #2 vector
 val weak = #2 weak
 
-val defaultChar = fn () => 
+val defaultChar = fn () =>
    case !Control.defaultChar of
       "char8" => char CharSize.C8
     | _ => Error.bug "PrimTycons.defaultChar"
-val defaultInt = fn () => 
+val defaultInt = fn () =>
    case !Control.defaultInt of
       "int8" => int (IntSize.fromBits (Bits.fromInt 8))
     | "int16" => int (IntSize.fromBits (Bits.fromInt 16))
@@ -158,12 +158,12 @@ val defaultInt = fn () =>
     | "int64" => int (IntSize.fromBits (Bits.fromInt 64))
     | "intinf" => intInf
     | _ => Error.bug "PrimTycons.defaultInt"
-val defaultReal = fn () => 
+val defaultReal = fn () =>
    case !Control.defaultReal of
       "real32" => real RealSize.R32
     | "real64" => real RealSize.R64
     | _ => Error.bug "PrimTycons.defaultReal"
-val defaultWord = fn () => 
+val defaultWord = fn () =>
    case !Control.defaultWord of
       "word8" => word (WordSize.fromBits (Bits.fromInt 8))
     | "word16" => word (WordSize.fromBits (Bits.fromInt 16))

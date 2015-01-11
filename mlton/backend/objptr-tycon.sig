@@ -26,7 +26,7 @@ signature OBJPTR_TYCON =
       val setIndex: t * int -> unit
       val toString: t -> string
 
-      (* See gc/object.h. *) 
+      (* See gc/object.h. *)
       val stack: t
       val thread: t
       val weakGone: t

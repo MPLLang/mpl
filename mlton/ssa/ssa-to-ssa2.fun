@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor SsaToSsa2 (S: SSA_TO_SSA2_STRUCTS): SSA_TO_SSA2 = 
+functor SsaToSsa2 (S: SSA_TO_SSA2_STRUCTS): SSA_TO_SSA2 =
 struct
 
 open S
@@ -296,7 +296,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                               start = start}
           end)
       val globals = convertStatements globals
-      val program = 
+      val program =
          S2.Program.T {datatypes = datatypes,
                        functions = functions,
                        globals = globals,

@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature SSA_TREE_STRUCTS = 
+signature SSA_TREE_STRUCTS =
    sig
       include ATOMS
    end
@@ -49,7 +49,7 @@ signature RETURN =
       val map: t * (Label.t -> Label.t) -> t
    end
 
-signature SSA_TREE = 
+signature SSA_TREE =
    sig
       include SSA_TREE_STRUCTS
 
@@ -181,7 +181,7 @@ signature SSA_TREE =
                         test: Var.t}
              | Goto of {args: Var.t vector,
                         dst: Label.t}
-             (* Raise implicitly raises to the caller.  
+             (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)
              | Raise of Var.t vector
@@ -195,7 +195,7 @@ signature SSA_TREE =
             val foreachLabel: t * (Label.t -> unit) -> unit
             val foreachLabelVar: t * (Label.t -> unit) * (Var.t -> unit) -> unit
             val foreachVar: t * (Var.t -> unit) -> unit
-            val hash: t -> Word.t 
+            val hash: t -> Word.t
             val layout: t -> Layout.t
             val replaceLabelVar: t * (Label.t -> Label.t) * (Var.t -> Var.t) -> t
             val replaceLabel: t * (Label.t -> Label.t) -> t

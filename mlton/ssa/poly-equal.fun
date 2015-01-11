@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor PolyEqual (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM = 
+functor PolyEqual (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM =
 struct
 
 open S
@@ -169,14 +169,14 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                SOME
                                {con = con,
                                 args = xs,
-                                body = 
+                                body =
                                 Dexp.casee
                                 {test = darg2,
                                  ty = Type.bool,
                                  default = if 1 = Vector.length cons
                                               then NONE
                                            else SOME Dexp.falsee,
-                                 cases = 
+                                 cases =
                                  Dexp.Con
                                  (Vector.new1
                                   {con = con,
@@ -384,7 +384,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   intInfEqual
                end
       and equalExp (e1: Dexp.t, e2: Dexp.t, ty: Type.t): Dexp.t =
-         Dexp.name (e1, fn x1 => 
+         Dexp.name (e1, fn x1 =>
          Dexp.name (e2, fn x2 => equal (x1, x2, ty)))
       and equal (x1: Var.t, x2: Var.t, ty: Type.t): Dexp.t =
          let
@@ -392,7 +392,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
             val dx2 = Dexp.var (x2, ty)
             fun prim (p, targs) =
                Dexp.primApp {prim = p,
-                             targs = targs, 
+                             targs = targs,
                              args = Vector.new2 (dx1, dx2),
                              ty = Type.bool}
             fun eq () = prim (Prim.eq, Vector.new1 ty)
@@ -512,9 +512,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           end)
       fun doit blocks =
          let
-            val blocks = 
+            val blocks =
                Vector.fold
-               (blocks, [], 
+               (blocks, [],
                 fn (block as Block.T {label, args, statements, transfer}, blocks) =>
                 if not (#hasEqual (labelInfo label))
                    then block::blocks
@@ -527,9 +527,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                transfer = transfer}
                    val (blocks, las) =
                       Vector.fold
-                      (statements, 
+                      (statements,
                        (blocks, {label = label, args = args, statements = []}),
-                       fn (stmt as Statement.T {exp, var, ...}, 
+                       fn (stmt as Statement.T {exp, var, ...},
                            (blocks, las as {label, args, statements})) =>
                        let
                          fun normal () = (blocks,
@@ -546,7 +546,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                (case (Prim.name prim, Vector.length targs) of
                                    (Prim.Name.MLton_eq, 1) =>
                                       (case Type.dest (Vector.sub (targs, 0)) of
-                                          Type.CPointer => 
+                                          Type.CPointer =>
                                              let
                                                 val cp0 = Vector.sub (args, 0)
                                                 val cp1 = Vector.sub (args, 1)
@@ -586,7 +586,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                                            targs = Vector.new0 (),
                                                            args = Vector.new2 (w0,w1)}}
                                              in
-                                                adds [wordEqStmt, 
+                                                adds [wordEqStmt,
                                                       realCastToWordStmt (r1, w1),
                                                       realCastToWordStmt (r0, w0)]
                                              end
@@ -617,7 +617,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                              Handler.Dead,
                                              l)
                                       in
-                                        (finish (las, 
+                                        (finish (las,
                                                  Goto {dst = start',
                                                        args = Vector.new0 ()})
                                          :: (bs' @ blocks),
