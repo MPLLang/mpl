@@ -25,15 +25,15 @@ void HM_displayHierarchicalHeap (
            "\t\tlastAllocatedChunk = %p\n"
            "\t\tsavedFrontier = %p\n"
            "\t\tchunkList = %p\n"
-           "\t\tsourceHH = "FMTOBJPTR"\n"
-           "\t\tnextDerivedHH = "FMTOBJPTR"\n"
-           "\t\tderivedHHList= "FMTOBJPTR"\n",
+           "\t\tparentHH = "FMTOBJPTR"\n"
+           "\t\tnextChildHH = "FMTOBJPTR"\n"
+           "\t\tchildHHList= "FMTOBJPTR"\n",
            hh->lastAllocatedChunk,
            hh->savedFrontier,
            hh->chunkList,
-           hh->sourceHH,
-           hh->nextDerivedHH,
-           hh->derivedHHList);
+           hh->parentHH,
+           hh->nextChildHH,
+           hh->childHHList);
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */

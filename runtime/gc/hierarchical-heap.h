@@ -29,9 +29,9 @@
  * lastAllocatedChunk (void*) ::
  * savedFrontier (void*) ::
  * chunkList (void*) ::
- * sourceHH (objptr) ::
- * nextDerivedHH (objptr) ::
- * derivedHHList (objptr)
+ * parentHH (objptr) ::
+ * nextChildHH (objptr) ::
+ * childHHList (objptr)
  *
  * There may be zero or more bytes of padding for alignment purposes.
  */
@@ -44,16 +44,16 @@ struct HM_HierarchicalHeap {
 
   void* chunkList; /**< The list of chunks making up this heap. */
 
-  objptr sourceHH; /**< The heap this object branched off of or BOGUS_OBJPTR
-                      * if it is the first heap. */
+  objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
+                    * if it is the first heap. */
 
-  objptr nextDerivedHH; /**< The next heap in the 'derivedHHList' of
-                         * the 'sourceHH'. This variable is the 'next'
-                         * pointer for the intrusive linked list. */
+  objptr nextChildHH; /**< The next heap in the 'derivedHHList' of
+                       * the 'parentHH'. This variable is the 'next'
+                       * pointer for the intrusive linked list. */
 
-  objptr derivedHHList; /**< The list of heaps that are derived from this
-                         * heap. All heaps in this list should have their
-                         * 'sourceHH' set to this object. */
+  objptr childHHList; /**< The list of heaps that are derived from this
+                       * heap. All heaps in this list should have their
+                       * 'parentHH' set to this object. */
 } __attribute__((packed));
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
@@ -73,24 +73,25 @@ static inline size_t HM_sizeofHierarchicalHeap (void);
 static inline size_t HM_offsetofHierarchicalHeap (void);
 
 /**
- * Appends the derived hierarchical heap to the derivedHHList of the source
+ * Appends the derived hierarchical heap to the childHHList of the source
  * hierarchical heap and sets relationships appropriately.
  *
- * @param sourceHH The source struct HM_HierarchicalHeap
- * @param derviedHH The struct HM_HierarchicalHeap set to be derived off of
- * 'sourceHH'
+ * @param parentHH The source struct HM_HierarchicalHeap
+ * @param childHH The struct HM_HierarchicalHeap set to be derived off of
+ * 'parentHH'
  */
-PRIVATE void HM_appendDerivedHeap (struct HM_HierarchicalHeap* sourceHH,
-                                   struct HM_HierarchicalHeap* derivedHH);
+PRIVATE void HM_appendChildHierarchicalHeap (
+    struct HM_HierarchicalHeap* parentHH, struct HM_HierarchicalHeap* childHH);
 
 /**
  * Merges the specified hierarchical heap back into its source hierarchical
  * heap. Note that the specified heap must already be fully merged (i.e. its
- * derivedHHList should be empty)
+ * childHHList should be empty)
  *
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
-PRIVATE void HM_mergeIntoSourceHeap (struct HM_HierarchicalHeap* hh);
+PRIVATE void HM_mergeIntoParentHierarchicalHeap (
+    struct HM_HierarchicalHeap* hh);
 
 #else
 struct HM_HierarchicalHeap;
