@@ -438,12 +438,6 @@ structure ObjectType =
                         Bits.toBytes (Type.width (Type.exnStack ()))
                     val bytesInGlobalHeapCounter =
                         Bits.toBytes (Control.Target.Size.csize ())
-                    val bytesHeapHead =
-                        Bits.toBytes (Control.Target.Size.cpointer ())
-                    val bytesLastAllocatedChunk =
-                        Bits.toBytes (Control.Target.Size.cpointer ())
-                    val bytesFrontier =
-                        Bits.toBytes (Control.Target.Size.cpointer ())
                     val bytesStack =
                         Bits.toBytes (Type.width (Type.stack ()))
 
@@ -452,10 +446,7 @@ structure ObjectType =
                      Bytes.+ (bytesCSize,
                      Bytes.+ (bytesExnStack,
                      Bytes.+ (bytesInGlobalHeapCounter,
-                     Bytes.+ (bytesHeapHead,
-                     Bytes.+ (bytesLastAllocatedChunk,
-                     Bytes.+ (bytesFrontier,
-                              bytesStack)))))))
+                              bytesStack))))
                   val bytesTotal =
                      Bytes.align (bytesObject, {alignment = align})
                   val bytesPad = Bytes.- (bytesTotal, bytesObject)
@@ -468,9 +459,6 @@ structure ObjectType =
                                                     Type.csize (),
                                                     Type.exnStack (),
                                                     Type.csize (),
-                                                    Type.cpointer (),
-                                                    Type.cpointer (),
-                                                    Type.cpointer (),
                                                     Type.stack ()])}
          end
 

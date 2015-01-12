@@ -87,9 +87,6 @@ GC_thread newThread (GC_state s, size_t reserved) {
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->inGlobalHeapCounter = 1;
-  thread->heapHead = NULL;
-  thread->lastAllocatedChunk = NULL;
-  thread->frontier = NULL;
   thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",

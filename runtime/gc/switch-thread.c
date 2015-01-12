@@ -19,6 +19,7 @@ void switchToThread (GC_state s, objptr op) {
              "  reserved = %"PRIuMAX"\n",
              op, (uintmax_t)stack->used, (uintmax_t)stack->reserved);
   }
+  assert (0 == getThreadCurrent (s)->inGlobalHeapCounter);
   s->currentThread = op;
   setGCStateCurrentThreadAndStack (s);
 }

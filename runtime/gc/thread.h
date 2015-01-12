@@ -35,9 +35,6 @@ typedef struct GC_thread {
   size_t bytesNeeded;
   size_t exnStack;
   size_t inGlobalHeapCounter;
-  void* heapHead;
-  void* lastAllocatedChunk;
-  pointer frontier;
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
 
@@ -46,9 +43,6 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t)
                     + sizeof(size_t)
                     + sizeof(size_t)
-                    + sizeof(void*)
-                    + sizeof(void*)
-                    + sizeof(pointer)
                     + sizeof(objptr));
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
