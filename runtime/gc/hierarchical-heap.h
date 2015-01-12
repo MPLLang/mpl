@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Ram Raghunathan.
+/* Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -10,7 +10,7 @@
  * @author Ram Raghunathan
  *
  * @brief
- * Utility functions for managing the HierarchicalHeap object
+ * Definition of the HierarchicalHeap object and management interface
  */
 
 #ifndef HIERARCHICAL_HEAP_H_
@@ -64,7 +64,11 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof (objptr) +
                     sizeof (objptr) +
                     sizeof (objptr));
+#else
+struct HM_HierarchicalHeap;
+#endif
 
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 /* RAM_NOTE: should take GC_state argument once I get that back in */
 static inline void HM_displayHierarchicalHeap (
     const struct HM_HierarchicalHeap* hh,
@@ -76,25 +80,31 @@ static inline size_t HM_offsetofHierarchicalHeap (void);
  * Appends the derived hierarchical heap to the childHHList of the source
  * hierarchical heap and sets relationships appropriately.
  *
+ * @attention
+ * 'childHH' should be a newly created "orphan" HierarchicalHeap.
+ *
  * @param parentHH The source struct HM_HierarchicalHeap
  * @param childHH The struct HM_HierarchicalHeap set to be derived off of
- * 'parentHH'
+ * 'parentHH'.
  */
-PRIVATE void HM_appendChildHierarchicalHeap (
-    struct HM_HierarchicalHeap* parentHH, struct HM_HierarchicalHeap* childHH);
+PRIVATE void HM_appendChildHierarchicalHeap (pointer parentHHObject,
+                                             pointer childHHObject);
 
 /**
  * Merges the specified hierarchical heap back into its source hierarchical
- * heap. Note that the specified heap must already be fully merged (i.e. its
- * childHHList should be empty)
+ * heap.
+ *
+ * @attention
+ * The specified heap must already be fully merged (i.e. its childHHList should
+ * be empty).
+ *
+ * @attention
+ * Once this function completes, the passed-in heap should be considered used
+ * and all references to it dropped.
  *
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
-PRIVATE void HM_mergeIntoParentHierarchicalHeap (
-    struct HM_HierarchicalHeap* hh);
-
-#else
-struct HM_HierarchicalHeap;
+PRIVATE void HM_mergeIntoParentHierarchicalHeap (pointer hhObject);
 #endif
 
 #endif /* HIERARCHICAL_HEAP_H_ */

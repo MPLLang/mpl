@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Ram Raghunathan.
+/* Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -76,4 +76,58 @@ size_t HM_offsetofHierarchicalHeap (void) {
   return ((HM_sizeofHierarchicalHeap ()) -
           GC_NORMAL_HEADER_SIZE +
           sizeof (struct HM_HierarchicalHeap));
+}
+
+void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
+                                     pointer childHHPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
+  struct HM_HierarchicalHeap* parentHH =
+      ((struct HM_HierarchicalHeap*)(parentHHPointer +
+                                     HM_offsetofHierarchicalHeap ()));
+
+  objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
+  struct HM_HierarchicalHeap* childHH =
+      ((struct HM_HierarchicalHeap*)(childHHPointer +
+                                     HM_offsetofHierarchicalHeap ()));
+
+  /* childHH should be a orphan! */
+  assert (BOGUS_OBJPTR == childHH->parentHH);
+  assert (BOGUS_OBJPTR == childHH->nextChildHH);
+
+  /*
+   * If childHH's will be merged back in LIFO order, this sets up
+   * parentHH->childHHList in that order
+   */
+  childHH->parentHH = parentHHObjptr;
+  childHH->nextChildHH = parentHH->childHHList;
+  parentHH->childHHList = childHHObjptr;
+}
+
+void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  LOCAL_USED_FOR_ASSERT objptr hhObjptr =
+      pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh =
+      ((struct HM_HierarchicalHeap*)(hhPointer +
+                                     HM_offsetofHierarchicalHeap ()));
+
+  assert (BOGUS_OBJPTR != hh->parentHH);
+  pointer parentHHPointer = objptrToPointer (hh->parentHH, s->heap->start);
+  struct HM_HierarchicalHeap* parentHH =
+      ((struct HM_HierarchicalHeap*)(parentHHPointer +
+                                     HM_offsetofHierarchicalHeap ()));
+
+  /* remove hh from parentHH->childHHList */
+  /*
+   * This assert assumes that all merges happen in LIFO order, as per the
+   * comment in HM_appendChildHH ()
+   */
+  assert (parentHH->childHHList == hhObjptr);
+  parentHH->childHHList = hh->nextChildHH;
+
+  /* append hh->chunkList to parentHH->chunkList */
+  HM_appendChunkList (&(parentHH->chunkList), hh->chunkList);
 }
