@@ -17,11 +17,6 @@
 
 #include "heap-utils.h"
 
-/******************************/
-/* Static Function Prototypes */
-/******************************/
-static pointer HM_calculateLimitFromChunk (void* chunk);
-
 /************************/
 /* Function Definitions */
 /************************/

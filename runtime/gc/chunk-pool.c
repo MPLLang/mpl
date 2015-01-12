@@ -459,8 +459,8 @@ void* ChunkPool_chunkMetadataToChunk (
   unsigned int chunkIndex =
       (chunkMetadata - ChunkPool_chunkMetadatas) / sizeof(*chunkMetadata);
 
-  assert (((uint8_t*)(ChunkPool_poolStart)) +
-          (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE) <
+  assert (((void*)(((uint8_t*)(ChunkPool_poolStart)) +
+                   (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE))) <
           ChunkPool_poolEnd);
   return (((uint8_t*)(ChunkPool_poolStart)) +
           (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE));
