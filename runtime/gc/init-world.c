@@ -95,7 +95,7 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
-  struct HM_HierarchicalHeap* hh;
+  pointer hh;
   size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)
@@ -119,8 +119,7 @@ void initWorld (GC_state s) {
 
   hh = HM_newHierarchicalHeap ();
   s->currentHierarchicalHeap =
-      pointerToObjptr (((pointer)(hh)) - HM_offsetofHierarchicalHeap (),
-                       s->heap->start);
+      pointerToObjptr (hh - HM_offsetofHierarchicalHeap (), s->heap->start);
 
   thread = newThread (s, sizeofStackInitialReserved (s));
   switchToThread (s, pointerToObjptr((pointer)thread - offsetofThread (s), s->heap->start));
