@@ -33,12 +33,8 @@ void HM_enterGlobalHeap (void) {
     HM_debugMessage(s, "Entering Global Heap\n");
 
     HM_exitLocalHeap (s);
-#pragma message "Activate when ready"
-#if 0
-    s->frontier = s->globalFrontier;
-    s->limit = s->globalLimit;
-#endif
   }
+#pragma message "Unimplemented!"
 }
 
 void HM_exitGlobalHeap (void) {
@@ -55,4 +51,5 @@ void HM_exitGlobalHeap (void) {
 
     HM_enterLocalHeap (s);
   }
+#pragma message "Unimplemented!"
 }

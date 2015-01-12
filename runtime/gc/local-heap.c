@@ -26,24 +26,9 @@ static pointer HM_calculateLimitFromChunk (void* chunk);
 /* Function Definitions */
 /************************/
 void HM_enterLocalHeap (GC_state s) {
-#if 0
-  GC_thread currentThread = getThreadCurrent (s);
-
-  if (NULL != currentThread->lastAllocatedChunk) {
-    assert (NULL != currentThread->heapHead);
-    assert (NULL != currentThread->frontier);
-
-    s->frontier = currentThread->frontier;
-    s->limit = HM_calculateLimitFromChunk (
-        currentThread->lastAllocatedChunk);
-  }
-#else
-  s = s;
-#endif
+#pragma message "Unimplemented!"
 }
 
 void HM_exitLocalHeap (GC_state s) {
-  GC_thread currentThread = getThreadCurrent (s);
-
-  currentThread->frontier = s->frontier;
+#pragma message "Unimplemented!"
 }
