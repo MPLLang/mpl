@@ -91,6 +91,9 @@
 /*                       Chunk                       */
 /* ------------------------------------------------- */
 
+#pragma message                                                        \
+  "The 'Pointer GCState...' is how he passes in the correct GC_state " \
+  "regardless of which thread is running the code"
 #if (defined (__sun__) && defined (REGISTER_FRONTIER_STACKTOP))
 #define Chunk(n)                                                \
         DeclareChunk(n) {                                       \

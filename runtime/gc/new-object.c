@@ -94,19 +94,17 @@ GC_thread newThread (GC_state s, size_t reserved) {
   return thread;
 }
 
-pointer HM_newHierarchicalHeap (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+pointer HM_newHierarchicalHeap (GC_state s) {
   /* allocate the object */
   ensureHasHeapBytesFreeAndOrInvariantForMutator (
-      s, FALSE, FALSE, FALSE, 0, HM_sizeofHierarchicalHeap ());
+      s, FALSE, FALSE, FALSE, 0, HM_sizeofHierarchicalHeap (s));
   pointer hhObject = newObject (s,
                                 GC_HIERARCHICAL_HEAP_HEADER,
-                                HM_sizeofHierarchicalHeap (),
+                                HM_sizeofHierarchicalHeap (s),
                                 FALSE);
   struct HM_HierarchicalHeap* hh =
       ((struct HM_HierarchicalHeap*)(hhObject +
-                                     HM_offsetofHierarchicalHeap ()));
+                                     HM_offsetofHierarchicalHeap (s)));
 
   /* initialize the object */
   hh->lastAllocatedChunk = NULL;

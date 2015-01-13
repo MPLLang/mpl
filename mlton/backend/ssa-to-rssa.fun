@@ -146,7 +146,7 @@ structure CFunction =
 
       (* CHECK; hierarchicalHeap as objptr *)
       val newHierarchicalHeap = fn () =>
-         T {args = Vector.new0 (),
+         T {args = Vector.new1 (Type.gcState ()),
             convention = Cdecl,
 	    kind = Kind.Runtime {bytesNeeded = NONE,
 				 ensuresBytesFree = false,
@@ -1259,7 +1259,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
                                | HierarchicalHeap_new =>
-                                 simpleCCall (CFunction.newHierarchicalHeap ())
+                                 simpleCCallWithGCState
+                                     (CFunction.newHierarchicalHeap ())
                                | IntInf_add =>
                                     simpleCCallWithGCState
                                     (CFunction.intInfBinary IntInf_add)

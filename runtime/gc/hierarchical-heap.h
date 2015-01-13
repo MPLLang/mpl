@@ -73,8 +73,8 @@ struct HM_HierarchicalHeap;
 static inline void HM_displayHierarchicalHeap (
     const struct HM_HierarchicalHeap* hh,
     FILE* stream);
-static inline size_t HM_sizeofHierarchicalHeap (void);
-static inline size_t HM_offsetofHierarchicalHeap (void);
+static inline size_t HM_sizeofHierarchicalHeap (GC_state s);
+static inline size_t HM_offsetofHierarchicalHeap (GC_state s);
 
 /**
  * Appends the derived hierarchical heap to the childHHList of the source

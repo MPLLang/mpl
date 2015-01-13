@@ -38,5 +38,5 @@ struct HM_HierarchicalHeap* getHierarchicalHeapCurrent (GC_state s) {
 
   pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
   return ((struct HM_HierarchicalHeap*)(hhPointer +
-                                        HM_offsetofHierarchicalHeap ()));
+                                        HM_offsetofHierarchicalHeap (s)));
 }

@@ -37,9 +37,7 @@ void HM_displayHierarchicalHeap (
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_sizeofHierarchicalHeap (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+size_t HM_sizeofHierarchicalHeap (GC_state s) {
   size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
   result = align (result, s->alignment);
 
@@ -85,12 +83,12 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
   struct HM_HierarchicalHeap* parentHH =
       ((struct HM_HierarchicalHeap*)(parentHHPointer +
-                                     HM_offsetofHierarchicalHeap ()));
+                                     HM_offsetofHierarchicalHeap (s)));
 
   objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
   struct HM_HierarchicalHeap* childHH =
       ((struct HM_HierarchicalHeap*)(childHHPointer +
-                                     HM_offsetofHierarchicalHeap ()));
+                                     HM_offsetofHierarchicalHeap (s)));
 
   /* childHH should be a orphan! */
   assert (BOGUS_OBJPTR == childHH->parentHH);
@@ -112,13 +110,13 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
       pointerToObjptr (hhPointer, s->heap->start);
   struct HM_HierarchicalHeap* hh =
       ((struct HM_HierarchicalHeap*)(hhPointer +
-                                     HM_offsetofHierarchicalHeap ()));
+                                     HM_offsetofHierarchicalHeap (s)));
 
   assert (BOGUS_OBJPTR != hh->parentHH);
   pointer parentHHPointer = objptrToPointer (hh->parentHH, s->heap->start);
   struct HM_HierarchicalHeap* parentHH =
       ((struct HM_HierarchicalHeap*)(parentHHPointer +
-                                     HM_offsetofHierarchicalHeap ()));
+                                     HM_offsetofHierarchicalHeap (s)));
 
   /* remove hh from parentHH->childHHList */
   /*
