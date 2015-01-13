@@ -5,10 +5,10 @@ struct
         _import "Parallel_processorNumber" runtime private: unit -> Int32.int;
 
     val enterGlobalHeap: unit -> unit =
-        _import "HeapManagement_enterGlobalHeap" runtime private: unit -> unit;
+        _import "HM_enterGlobalHeap" runtime private: unit -> unit;
 
     val exitGlobalHeap: unit -> unit =
-        _import "HeapManagement_exitGlobalHeap" runtime private: unit -> unit;
+        _import "HM_exitGlobalHeap" runtime private: unit -> unit;
 
     fun evaluateInGlobalHeap (f: 'a -> 'b): 'a -> 'b =
         fn argument =>
