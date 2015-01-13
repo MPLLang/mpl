@@ -70,10 +70,10 @@ size_t HM_sizeofHierarchicalHeap (GC_state s) {
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_offsetofHierarchicalHeap (void) {
-  return ((HM_sizeofHierarchicalHeap ()) -
-          GC_NORMAL_HEADER_SIZE +
-          sizeof (struct HM_HierarchicalHeap));
+size_t HM_offsetofHierarchicalHeap (GC_state s) {
+  return ((HM_sizeofHierarchicalHeap (s)) -
+          (GC_NORMAL_HEADER_SIZE +
+           sizeof (struct HM_HierarchicalHeap)));
 }
 
 void HM_appendChildHierarchicalHeap (pointer parentHHPointer,

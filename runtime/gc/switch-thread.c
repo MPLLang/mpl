@@ -19,7 +19,14 @@ void switchToThread (GC_state s, objptr op) {
              "  reserved = %"PRIuMAX"\n",
              op, (uintmax_t)stack->used, (uintmax_t)stack->reserved);
   }
-  assert (0 == getThreadCurrent (s)->inGlobalHeapCounter);
+
+#if ASSERT
+  if (BOGUS_OBJPTR != s->currentThread) {
+    /* switching threads should only happen in the global heap! */
+    assert (0 != getThreadCurrent (s)->inGlobalHeapCounter);
+  }
+#endif
+
   s->currentThread = op;
   setGCStateCurrentThreadAndStack (s);
 }
