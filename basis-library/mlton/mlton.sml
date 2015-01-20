@@ -83,20 +83,20 @@ structure Process = MLtonProcess
 (* structure Ptrace = MLtonPtrace *)
 structure Profile = MLtonProfile
 structure Random = MLtonRandom
-structure Real = 
+structure Real =
    struct
       open Real
       type t = real
    end
-structure Real32 = 
+structure Real32 =
    struct
       open Real32
       type t = real
       open Primitive.PackReal32
    end
-structure Real64 = 
+structure Real64 =
    struct
-      open Real64 
+      open Real64
       type t = real
       open Primitive.PackReal64
    end
@@ -143,7 +143,7 @@ structure Word8Vector = struct
    type t = vector
 end
 
-val _ = 
+val _ =
    (Primitive.TopLevel.setHandler MLtonExn.defaultTopLevelHandler
     ; Primitive.TopLevel.setSuffix Exit.defaultTopLevelSuffix)
 end
