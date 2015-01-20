@@ -40,6 +40,7 @@ signature MLTON =
       structure Exn: MLTON_EXN
       structure Finalizable: MLTON_FINALIZABLE
       structure GC: MLTON_GC
+      structure HM: MLTON_HM
       structure IntInf: MLTON_INT_INF
       structure Itimer: MLTON_ITIMER
       structure LargeReal: MLTON_REAL

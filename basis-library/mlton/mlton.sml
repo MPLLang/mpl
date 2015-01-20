@@ -58,6 +58,7 @@ end
 structure Cont = MLtonCont
 structure Exn = MLtonExn
 structure Finalizable = MLtonFinalizable
+structure HM = MLtonHM
 structure IntInf =
    struct
       open IntInf
