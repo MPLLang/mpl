@@ -6,14 +6,23 @@
 
 structure MLtonHM:> MLTON_HM =
     struct
+        structure PrimHM = Primitive.MLton.HM
+
         structure HierarchicalHeap =
             struct
-                structure PrimHH = Primitive.MLton.HM.HierarchicalHeap
+                structure PrimHH = PrimHM.HierarchicalHeap
 
                 type t = PrimHH.t
 
                 val new: unit -> t = PrimHH.newHierarchicalHeap
+
                 val appendChild: (t * t) -> unit = PrimHH.appendChildHeap
                 val mergeIntoParent: t -> unit = PrimHH.mergeIntoParentHeap
+
+                val set: t -> unit = PrimHH.setHierarchicalHeap
+                val get: unit -> t = PrimHH.getHierarchicalHeap
             end
+
+        val enterGlobalHeap: unit -> unit = PrimHM.enterGlobalHeap
+        val exitGlobalHeap: unit -> unit = PrimHM.exitGlobalHeap
     end

@@ -11,7 +11,14 @@ signature MLTON_HM =
                       type t
 
                       val new: unit -> t
+
                       val appendChild: (t * t) -> unit
                       val mergeIntoParent: t -> unit
+
+                      val set: t -> unit
+                      val get: unit -> t
                   end
+
+        val enterGlobalHeap: unit -> unit
+        val exitGlobalHeap: unit -> unit
     end
