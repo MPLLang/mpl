@@ -16,7 +16,7 @@
  * with "getNewVar".  "newScope" also handles resetting the variable to its
  * old value once the processing of the lambda is done.
  *)
-functor ClosureConvert (S: CLOSURE_CONVERT_STRUCTS): CLOSURE_CONVERT = 
+functor ClosureConvert (S: CLOSURE_CONVERT_STRUCTS): CLOSURE_CONVERT =
 struct
 
 open S
@@ -84,9 +84,9 @@ structure Accum =
              (* Must shrink because coercions may be inserted at constructor
               * applications.  I'm pretty sure the shrinking will eliminate
               * any case expressions/local functions.
-              * We must rebind eliminated variables because the shrinker is 
-              * just processing globals and hence cannot safely delete a 
-              * variable that has no occurrences, since there may still be 
+              * We must rebind eliminated variables because the shrinker is
+              * just processing globals and hence cannot safely delete a
+              * variable that has no occurrences, since there may still be
               * occurrences in functions.
               *)
              val globals = AL.toList globals
@@ -120,7 +120,7 @@ structure Accum =
              else
                 let
                    val ss = Block.statements (Vector.sub (blocks, 0))
-                   val vs = 
+                   val vs =
                       case Ssa.Statement.exp (Vector.last ss) of
                          Ssa.Exp.Tuple vs =>
                             if Vector.length vars = Vector.length vs
@@ -135,7 +135,7 @@ structure Accum =
                       (vs, fn (i, v) =>
                        if Var.equals (v, Vector.sub (vars, i))
                           then NONE
-                          else SOME (Ssa.Statement.T 
+                          else SOME (Ssa.Statement.T
                                      {exp = Ssa.Exp.Var v,
                                       ty = Vector.sub (tys, i),
                                       var = SOME (Vector.sub (vars, i))}))
@@ -147,8 +147,8 @@ structure Accum =
 
 (*
 val traceConvertExp =
-   Trace.trace2 
-   ("ClosureConvert.convertExp", 
+   Trace.trace2
+   ("ClosureConvert.convertExp",
     Sexp.layout, Instance.layout, Dexp.layout)
 *)
 
@@ -216,13 +216,13 @@ fun closureConvert
          Property.getSetOnce
          (Var.plist, Property.initRaise ("closure convert info", Var.layout))
       val varInfo =
-         Trace.trace 
+         Trace.trace
          ("ClosureConvert.varInfo", Var.layout, Layout.ignore)
          varInfo
       val varExpInfo = varInfo o SvarExp.var
       val isGlobal = ! o #isGlobal o varInfo
       val isGlobal =
-         Trace.trace 
+         Trace.trace
          ("ClosureConvert.isGlobal", Var.layout, Bool.layout)
          isGlobal
       val value = #value o varInfo
@@ -261,7 +261,7 @@ fun closureConvert
                                value = v})
             fun newVar (x, v) = newVar' (x, v, NONE)
             val newVar =
-               Trace.trace2 
+               Trace.trace2
                ("ClosureConvert.newVar",
                 Var.layout, Layout.ignore, Unit.layout)
                newVar
@@ -480,7 +480,7 @@ fun closureConvert
                SOME t => t
              | NONE =>
                   let
-                     val t = 
+                     val t =
                         case Value.dest v of
                            Value.Array v => Type.array (valueType v)
                          | Value.Lambdas ls => #ty (lambdasInfo ls)
@@ -501,7 +501,7 @@ fun closureConvert
          in
             case !r of
                SOME info => info
-             | NONE => 
+             | NONE =>
                   let
                      val tycon = Tycon.newString "lambdas"
                      val cons =
@@ -576,8 +576,8 @@ fun closureConvert
       (*               coerce               *)
       (*------------------------------------*)
       val traceCoerce =
-         Trace.trace3 
-         ("ClosureConvert.coerce", 
+         Trace.trace3
+         ("ClosureConvert.coerce",
           Dexp.layout, Value.layout, Value.layout, Dexp.layout)
       (*       val traceCoerceTuple =
        *         let val layoutValues = List.layout (", ", Value.layout)
@@ -590,7 +590,7 @@ fun closureConvert
          (fn (e: Dexp.t, from: Value.t, to: Value.t) =>
           if Value.equals (from, to)
              then e
-          else 
+          else
              case (Value.dest from, Value.dest to) of
                 (Value.Tuple vs, Value.Tuple vs') =>
                    coerceTuple (e, valueType from, vs, valueType to, vs')
@@ -641,12 +641,12 @@ fun closureConvert
               ty': Type.t, vs': Value.t vector) =>
           if Type.equals (ty, ty')
              then e
-          else 
+          else
              Dexp.detuple
              {tuple = e,
               length = Vector.length vs,
               body =
-              fn components => 
+              fn components =>
               Dexp.tuple
               {exps = Vector.map3 (components, vs, vs',
                                    fn (x, v, v') =>
@@ -661,7 +661,7 @@ fun closureConvert
                        case Prim.name p of
                           Prim.Name.MLton_installSignalHandler => true
                         | _ => false)
-      (*------------------------------------*)                 
+      (*------------------------------------*)
       (*               apply                *)
       (*------------------------------------*)
       fun apply {func, arg, resultVal}: Dexp.t =
@@ -797,7 +797,7 @@ fun closureConvert
                       if Vector.isEmpty decs
                          then (binds, ac)
                       else
-                         let 
+                         let
                             val {lambda, var, ...} = Vector.sub (decs, 0)
                             val info = lambdaInfo lambda
                             val tupleVar = Var.newString "tuple"
@@ -985,7 +985,7 @@ fun closureConvert
                                            Value.dest (VarInfo.value a1)) of
                                         (Value.Lambdas l, Value.Lambdas l') =>
                                            if Lambdas.equals (l, l')
-                                              then doit () 
+                                              then doit ()
                                            else Dexp.falsee
                                       | _ => doit ()
                                   end
@@ -1002,7 +1002,7 @@ fun closureConvert
                                            Value.dest (VarInfo.value a1)) of
                                         (Value.Lambdas l, Value.Lambdas l') =>
                                            if Lambdas.equals (l, l')
-                                              then doit () 
+                                              then doit ()
                                            else Dexp.falsee
                                       | _ => doit ()
                                   end

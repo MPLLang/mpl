@@ -5,20 +5,20 @@ signature BASIS_EXTRA =
       datatype bool = datatype bool
       eqtype char
       type exn
-      eqtype int 
-      datatype 'a option = NONE | SOME of 'a 
-      datatype order = LESS | EQUAL | GREATER 
+      eqtype int
+      datatype 'a option = NONE | SOME of 'a
+      datatype order = LESS | EQUAL | GREATER
       datatype list = datatype list
       datatype ref = datatype ref
       type real
       eqtype string
-      type substring 
+      type substring
       eqtype unit
       eqtype 'a vector
-      eqtype word 
+      eqtype word
 
       (* Top-level exceptions *)
-      exception Bind 
+      exception Bind
       exception Chr
       exception Div
       exception Domain
@@ -41,15 +41,15 @@ signature BASIS_EXTRA =
       val ^ : string * string -> string
       val app : ('a -> unit) -> 'a list -> unit
       val before : 'a * unit -> 'a
-      val ceil : real -> int 
+      val ceil : real -> int
       val chr : int -> char
       val concat : string list -> string
       val exnMessage : exn -> string
       val exnName : exn -> string
       val explode : string -> char list
-      val floor : real -> int 
+      val floor : real -> int
       val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
-      val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b 
+      val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
       val getOpt : ('a option * 'a) -> 'a
       val hd : 'a list -> 'a
       val ignore : 'a -> unit
@@ -72,58 +72,58 @@ signature BASIS_EXTRA =
       val str : char -> string
       val substring : string * int * int -> string
       val tl : 'a list -> 'a list
-      val trunc : real -> int 
+      val trunc : real -> int
 (*
       val use : string -> unit
 *)
-      val valOf : 'a option -> 'a 
+      val valOf : 'a option -> 'a
       val vector : 'a list -> 'a vector
 
       (* Required structures *)
-      structure Array : ARRAY   
-      structure ArraySlice : ARRAY_SLICE        
-      structure BinIO : BIN_IO  
-      structure BinPrimIO : PRIM_IO     
-      structure Bool : BOOL     
-      structure Byte : BYTE     
-      structure Char : CHAR     
-      structure CharArray : MONO_ARRAY  
-      structure CharArraySlice : MONO_ARRAY_SLICE       
-      structure CharVector : MONO_VECTOR        
-      structure CharVectorSlice : MONO_VECTOR_SLICE     
-      structure CommandLine : COMMAND_LINE      
-      structure Date : DATE     
-      structure General : GENERAL       
-      structure IEEEReal : IEEE_REAL    
-      structure Int : INTEGER   
-      structure IO : IO 
-      structure LargeInt : INTEGER      
-      structure LargeReal : REAL        
-      structure LargeWord : WORD        
-      structure List : LIST     
-      structure ListPair : LIST_PAIR    
-      structure Math : MATH     
-      structure Option : OPTION 
-      structure OS : OS 
-      structure Position : INTEGER      
-      structure Real : REAL     
-      structure StringCvt : STRING_CVT  
-      structure String : STRING 
-      structure Substring : SUBSTRING   
-      structure TextIO : TEXT_IO        
-      structure TextPrimIO : PRIM_IO    
-      structure Text : TEXT     
-      structure Time : TIME     
-      structure Timer : TIMER   
-      structure VectorSlice : VECTOR_SLICE      
-      structure Vector : VECTOR 
-      structure Word : WORD     
+      structure Array : ARRAY
+      structure ArraySlice : ARRAY_SLICE
+      structure BinIO : BIN_IO
+      structure BinPrimIO : PRIM_IO
+      structure Bool : BOOL
+      structure Byte : BYTE
+      structure Char : CHAR
+      structure CharArray : MONO_ARRAY
+      structure CharArraySlice : MONO_ARRAY_SLICE
+      structure CharVector : MONO_VECTOR
+      structure CharVectorSlice : MONO_VECTOR_SLICE
+      structure CommandLine : COMMAND_LINE
+      structure Date : DATE
+      structure General : GENERAL
+      structure IEEEReal : IEEE_REAL
+      structure Int : INTEGER
+      structure IO : IO
+      structure LargeInt : INTEGER
+      structure LargeReal : REAL
+      structure LargeWord : WORD
+      structure List : LIST
+      structure ListPair : LIST_PAIR
+      structure Math : MATH
+      structure Option : OPTION
+      structure OS : OS
+      structure Position : INTEGER
+      structure Real : REAL
+      structure StringCvt : STRING_CVT
+      structure String : STRING
+      structure Substring : SUBSTRING
+      structure TextIO : TEXT_IO
+      structure TextPrimIO : PRIM_IO
+      structure Text : TEXT
+      structure Time : TIME
+      structure Timer : TIMER
+      structure VectorSlice : VECTOR_SLICE
+      structure Vector : VECTOR
+      structure Word : WORD
       structure Word8: WORD
-      structure Word8Array : MONO_ARRAY 
-      structure Word8Array2 : MONO_ARRAY2       
-      structure Word8ArraySlice : MONO_ARRAY_SLICE      
-      structure Word8Vector : MONO_VECTOR       
-      structure Word8VectorSlice : MONO_VECTOR_SLICE    
+      structure Word8Array : MONO_ARRAY
+      structure Word8Array2 : MONO_ARRAY2
+      structure Word8ArraySlice : MONO_ARRAY_SLICE
+      structure Word8Vector : MONO_VECTOR
+      structure Word8VectorSlice : MONO_VECTOR_SLICE
 
       (* Optional structures *)
       structure Array2 : ARRAY2
@@ -412,7 +412,7 @@ signature BASIS_EXTRA =
  *)
 (*
       sharing type array = Array.array
-      sharing type vector = Vector.vector 
+      sharing type vector = Vector.vector
 *)
 (*
       sharing type ref = General.ref
@@ -428,12 +428,12 @@ signature BASIS_EXTRA =
 
       (* Required structures *)
 (*
-      sharing type BinIO.StreamIO.elem = Word8.word 
+      sharing type BinIO.StreamIO.elem = Word8.word
 *)
       sharing type BinIO.StreamIO.reader = BinPrimIO.reader
       sharing type BinIO.StreamIO.pos = BinPrimIO.pos
 (*
-      sharing type BinIO.StreamIO.vector = Word8Vector.vector 
+      sharing type BinIO.StreamIO.vector = Word8Vector.vector
 *)
       sharing type BinIO.StreamIO.writer = BinPrimIO.writer
       sharing type BinPrimIO.array = Word8Array.array
@@ -474,7 +474,7 @@ signature BASIS_EXTRA =
       (* redundant *)
 (*
       sharing type TextIO.elem = char
-      sharing type TextIO.vector = string 
+      sharing type TextIO.vector = string
 *)
       sharing type TextPrimIO.array = CharArray.array
       sharing type TextPrimIO.array_slice = CharArraySlice.slice
@@ -808,7 +808,7 @@ signature BASIS_EXTRA =
    where type Word8ArraySlice.slice = Word8ArraySlice.slice
    where type Word8ArraySlice.vector_slice = Word8ArraySlice.vector_slice
    where type Word8Vector.vector = Word8Vector.vector
-   
+
    where type MLton.Pointer.t = MLton.Pointer.t
    where type 'a MLton.Thread.t = 'a MLton.Thread.t
    where type MLton.Thread.Runnable.t = MLton.Thread.Runnable.t
