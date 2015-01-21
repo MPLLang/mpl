@@ -443,6 +443,7 @@ fun closureConvert
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
                 (Tycon.array, unary Type.array),
                 (Tycon.cpointer, nullary Type.cpointer),
+                (Tycon.hierarchicalHeap, nullary Type.hierarchicalHeap),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
                 (Tycon.thread, nullary Type.thread),
