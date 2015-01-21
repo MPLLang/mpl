@@ -5,14 +5,12 @@ struct
   type work = unit -> void
 
   structure T = MLtonThread
+  structure HH = MLtonHM.HierarchicalHeap
 
-  datatype job = Work of unit -> void
-               | Thread of unit T.t
+  datatype job = Work of (unit -> void) * HH.t
+               | Thread of unit T.t * HH.t
 
   val numberOfProcessors = MLtonParallelInternal.numberOfProcessors
-  val enterGlobalHeap = MLtonParallelInternal.enterGlobalHeap
-  val exitGlobalHeap = MLtonParallelInternal.exitGlobalHeap
-  val evaluateInGlobalHeap = MLtonParallelInternal.evaluateInGlobalHeap
 
   structure Q = WorkQueue (struct
                              type work = job
@@ -20,8 +18,8 @@ struct
                            end)
     :> PARALLEL_WORKQUEUE where type work = job
 
-  datatype 'a t = Suspend of 'a T.t * Q.susp
-                | Capture of 'a T.t
+  datatype 'a t = Suspend of 'a T.t * HH.t * Q.susp
+                | Capture of 'a T.t * HH.t
 
   type token = Q.token
 
@@ -38,6 +36,16 @@ struct
 
   val enabled = ref true
 
+  fun evaluateInGlobalHeap (f: 'a -> 'b): 'a -> 'b =
+      fn argument =>
+         let
+             val _ = MLtonHM.enterGlobalHeap ()
+             val result = f argument
+             val _ = MLtonHM.exitGlobalHeap ()
+         in
+             result
+         end
+
   fun die message =
       (TextIO.output (TextIO.stdErr, message);
        TextIO.flushOut TextIO.stdErr;
@@ -50,6 +58,7 @@ struct
       else
           ()
 
+  fun makeHHSetter hh = fn _ => HH.set hh
 
   fun schedule countSuspends () =
     let
@@ -66,17 +75,35 @@ struct
                   val () = if countSuspends andalso nonlocal then incSuspends p else ()
                   (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
                   val () = Q.startWork p
-                  val () = (case j of
-                                Work w => (exitGlobalHeap(); w ())
-                              | Thread k =>
-                                T.switch (fn _ => T.prepare (k, ())))
+                  val () = (case j
+                             of Work (w, parentHH) =>
+                                if nonlocal
+                                then
+                                    let
+                                        val childHH = HH.new ()
+                                        val () =
+                                            HH.appendChild (parentHH, childHH)
+                                    in
+                                        HH.set childHH;
+                                        MLtonHM.exitGlobalHeap ();
+                                        w ()
+                                    end
+                                else
+                                    (MLtonHM.exitGlobalHeap ();
+                                     w ())
+                              | Thread (k, hh) =>
+                                T.switch (fn _ =>
+                                             T.prepare
+                                                 (T.prepend
+                                                      (k, makeHHSetter hh),
+                                                  ()))
 
-                           (* PERF? this handle only makes sense for the Work case *)
-                           (* PERF? move this handler out to the native entry point? *)
-                           handle e => (enterGlobalHeap ();
-                                        die ("MLton.Parallel.Basic.schedule: WARNING: Caught exception \""
-                                             ^ (General.exnMessage e)
-                                             ^ "\" in parallel scheduler!\n"))
+                                (* PERF? this handle only makes sense for the Work case *)
+                                (* PERF? move this handler out to the native entry point? *)
+                                handle e => (MLtonHM.enterGlobalHeap ();
+                                             die ("MLton.Parallel.Basic.schedule: WARNING: Caught exception \""
+                                                  ^ (General.exnMessage e)
+                                                  ^ "\" in parallel scheduler!\n")))
                   (* A job should never return -- we will only get here in exceptional
                     conditions. *)
                   (* NB we call processorNumber again here in case that this
@@ -108,20 +135,36 @@ struct
                   Otherwise, create a new thread. *)
                 val t =
                     case Q.getWork p of
-                        SOME (_, Work w) =>
-                        T.new (fn () =>
-                                       (Q.startWork p;
-                                        exitGlobalHeap ();
-                                        w ()
-                                       (* RAM_NOTE: Do I need to switch heaps on exception here? *)
-                                       ))
-                      | SOME (_, Thread k) =>
-                        T.prepend (k, fn () => Q.startWork p)
+                        SOME (nonlocal, Work (w, parentHH)) =>
+                        if nonlocal
+                        then
+                            let
+                                val childHH = HH.new ()
+                                val () = HH.appendChild (parentHH, childHH)
+                            in
+                                T.new (fn () =>
+                                          (Q.startWork p;
+                                           HH.set childHH;
+                                           MLtonHM.exitGlobalHeap ();
+                                           w ()
+                                          (* RAM_NOTE: Do I need to switch heaps on exception here? *)
+                                          ))
+                            end
+                        else
+                            T.new (fn () =>
+                                      (Q.startWork p;
+                                       MLtonHM.exitGlobalHeap ();
+                                       w ()
+                                      (* RAM_NOTE: Do I need to switch heaps on exception here? *)
+                                      ))
+                      | SOME (_, Thread (k, hh)) =>
+                        T.prepend (k, fn _ => (HH.set hh; Q.startWork p))
                       | NONE => T.new (fn () => schedule false ())
                 (* to disable hijacking, use this instead
                 val t = T.new schedule
                  *)
-                fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                val currentHH = HH.get ()
+                fun add w = Q.addWork (p, [(Q.newWork p, Work (w, currentHH))])
               in
                   checkDelayedEmpty p;
                   (* RAM_NOTE: Disabled until reintegrated *)
@@ -135,65 +178,69 @@ struct
 
   fun suspend (f: 'a t -> unit) =
       let
-          val _ = enterGlobalHeap ()
+          val _ = MLtonHM.enterGlobalHeap ()
 
           val p = processorNumber ()
+          val hh = HH.get ()
           fun tail (p, k) =
               let
                   val () = incSuspends p
                   val q = Q.suspendWork p
               in
-                f (Suspend (k, q))
+                f (Suspend (k, hh, q))
               end
 
           val result = capture' (p, tail)
 
-          val _ = exitGlobalHeap ()
+          val _ = MLtonHM.exitGlobalHeap ()
       in
           result
       end
 
   fun capture (f: 'a t -> unit) =
       let
-          val _ = enterGlobalHeap ()
+          val _ = MLtonHM.enterGlobalHeap ()
 
           val p = processorNumber ()
+          val hh = HH.get ()
           fun tail (p, k) =
               let
                   val () = incSuspends p
                   val () = Q.finishWork p
               in
-                f (Capture k)
+                f (Capture (k, hh))
               end
           val result = capture' (p, tail)
 
-          val _  = exitGlobalHeap ()
+          val _  = MLtonHM.exitGlobalHeap ()
       in
           result
       end
 
   fun resume suspension =
       let
-          val _ = enterGlobalHeap ()
+          val _ = MLtonHM.enterGlobalHeap ()
 
           val result =
               case suspension of
-                  (Suspend (k, q), v) =>
+                  (Suspend (k, hh, q), v) =>
                   let
                       val p = processorNumber ()
                   in
-                      Q.resumeWork (p, q, (Q.newWork p,
-                                           Thread (T.prepend (k, fn () => v))))
+                      Q.resumeWork (p,
+                                    q,
+                                    (Q.newWork p,
+                                     Thread (T.prepend (k, fn () => v), hh)))
                   end
-                | (Capture k, v) =>
+                | (Capture (k, hh), v) =>
                   let
                       val p = processorNumber ()
                   in
                       Q.addWork (p, [(Q.newWork p,
-                                      Thread (T.prepend (k, fn () => v)))])
+                                      Thread (T.prepend (k, fn () => v), hh))])
                   end
 
-          val _ = exitGlobalHeap ()
+          val _ = MLtonHM.exitGlobalHeap ()
       in
           result
       end
@@ -206,10 +253,12 @@ struct
               in
                   if Q.shouldYield p then
                       let
+                          val hh = HH.get ()
                           val () =
                               capture' (p, fn (p, k) =>
-                                              (Q.addWork (p, [(Q.newWork p,
-                                                               Thread k)]);
+                                              (Q.addWork (p,
+                                                          [(Q.newWork p,
+                                                            Thread (k, hh))]);
                                                incSuspends p;
                                                Q.finishWork p))
                       in
@@ -224,27 +273,31 @@ struct
           let
               val p = processorNumber ()
               val t = Q.newWork p
+              val currentHH = HH.get ()
           in
-              if Q.shouldYield p then
+              if Q.shouldYield p
+              then
                   (* Switch to a new thread *)
-                let
-                  val t =
-                      capture' (p, fn (p, k) =>
-                                      let in
-                                        (* Add the continuation first -- it is higher priority *)
-                                        Q.addWork (p,
-                                                   [(Q.newWork p,
-                                                     Thread (T.prepend (k, fn () => t))),
-                                                    (t, Work w)]);
-                                        incSuspends p;
-                                        Q.finishWork p
-                                      end)
-                in
-                  t
-                end
+                  let
+                      val t =
+                          capture' (p, fn (p, k) =>
+                                          let in
+                                              (* Add the continuation first -- it is higher priority *)
+                                              Q.addWork (p,
+                                                         [(Q.newWork p,
+                                                           Thread (T.prepend (k, fn () => t),
+                                                                   currentHH)),
+                                                          (t,
+                                                           Work (w, currentHH))]);
+                                              incSuspends p;
+                                              Q.finishWork p
+                                          end)
+                  in
+                      t
+                  end
               else
                   let
-                      fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                      fun add w = Q.addWork (p, [(Q.newWork p, Work (w, currentHH))])
                   in
                       checkDelayedEmpty p;
                       (* RAM_NOTE: Disabled until reintegrated *)
@@ -252,7 +305,7 @@ struct
                       (* (* XXX maybe should run delayed work and queue the currrent thread too? *) *)
                       (* app add (rev (Array.sub (delayed, p))); *)
                       (* Array.update (delayed, p, nil); *)
-                      Q.addWork (p, [(t, Work w)]);
+                      Q.addWork (p, [(t, Work (w, currentHH))]);
                       t
                   end
           end
@@ -342,7 +395,7 @@ struct
                        (*          Q.finishWork p; *)
                        (*          schedule true ()) *)
                        (*     else *)
-                       (*         (exitGlobalHeap (); *)
+                       (*         (MLtonHM.exitGlobalHeap (); *)
                        (*          w ()) *)
                        (* end *)
               end)

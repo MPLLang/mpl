@@ -2,16 +2,14 @@ structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN =
 struct
 
   structure B = MLtonParallelBasic
+  structure HH = MLtonHM.HierarchicalHeap
   structure V = MLtonParallelSyncVarCapture
 
   datatype 'a result =
-     Finished of 'a
-   | Raised of exn
+     Finished of 'a * HH.t
+   | Raised of exn * HH.t
 
-  val enterGlobalHeap = MLtonParallelInternal.enterGlobalHeap
-  val exitGlobalHeap = MLtonParallelInternal.exitGlobalHeap
-
-  local
+   local
       fun doFork (f, g) =
           let
               (* Used to hold the result of the right-hand side in the case where
@@ -19,9 +17,15 @@ struct
               val var = V.empty ()
               (* Closure used to run the right-hand side... but only in the case
           where that code is run in parallel. *)
-              fun rightside () = (V.write (var, Finished (g ())
-                                                handle e => Raised e);
-                                  B.return ())
+              fun rightside () =
+                  let
+                      val hh = HH.get ()
+                  in
+                      V.write (var,
+                               Finished (g (), hh)
+                               handle e => Raised (e, hh));
+                      B.return ()
+                  end
 
               (* Offer the right side to any processor that wants it *)
               val t = B.addRight rightside (* might suspend *)
@@ -31,14 +35,25 @@ struct
                       handle e => (ignore (B.remove t); B.yield (); raise e)
               (* Try to retract our offer -- if successful, run the right side
           ourselves. *)
-              val b = if B.remove t then
-                          (* no need to yield since we expect this work to be the next thing
-                    in the queue *)
-                          g ()
-                          handle e => (B.yield (); raise e)
-                      else
-                          case V.read var of (_, Finished b) => b
-                                           | (_, Raised e) => (B.yield (); raise e)
+              val b =
+                  if B.remove t
+                  then
+                      (*
+                       * no need to yield since we expect this work to be the
+                       * next thing in the queue
+                       *)
+                      g ()
+                      handle e => (B.yield (); raise e)
+                  else
+                      (* must have been stolen, so I have a heap to merge *)
+                      case V.read var
+                       of (_, Finished (b, childHH)) =>
+                          (HH.mergeIntoParent childHH;
+                           b)
+                        | (_, Raised (e, childHH)) =>
+                          (HH.mergeIntoParent childHH;
+                           B.yield ();
+                           raise e)
           in
               B.yield ();
               (a, b)
@@ -46,9 +61,9 @@ struct
   in
       fun fork functions =
           let
-              val _ = enterGlobalHeap ()
+              val _ = MLtonHM.enterGlobalHeap ()
               val result = doFork functions
-              val _ = exitGlobalHeap ()
+              val _ = MLtonHM.exitGlobalHeap ()
           in
               result
           end
@@ -81,9 +96,9 @@ struct
   in
       fun reduce maxSeq f g u n =
           let
-              val _ = enterGlobalHeap ()
+              val _ = MLtonHM.enterGlobalHeap ()
               val result = doReduce maxSeq f g u n
-              val _ = exitGlobalHeap ()
+              val _ = MLtonHM.exitGlobalHeap ()
           in
               result
           end
@@ -116,9 +131,9 @@ struct
   in
       fun reduce' maxSeq g n =
           let
-              val _ = enterGlobalHeap ()
+              val _ = MLtonHM.enterGlobalHeap ()
               val result = doReduce' maxSeq g n
-              val _ = exitGlobalHeap ()
+              val _ = MLtonHM.exitGlobalHeap ()
           in
               result
           end

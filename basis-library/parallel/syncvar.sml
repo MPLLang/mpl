@@ -8,8 +8,6 @@ struct
 
   type 'a t = int ref * 'a state ref
 
-  val enterGlobalHeap = MLtonParallelInternal.enterGlobalHeap
-  val exitGlobalHeap = MLtonParallelInternal.exitGlobalHeap
   val lock = _import "Parallel_lockTake" runtime private: int ref -> unit;
   val unlock = _import "Parallel_lockRelease" runtime private: int ref -> unit;
 
@@ -30,17 +28,16 @@ struct
                   val () = v := Done a
                   val () = unlock r
               in
-                  (* Add readers to the queue *)
                   app (fn k => B.resume (k, (true, a))) readers
               end
   in
       fun write argument =
           let
-              val () = enterGlobalHeap ()
+              val () = MLtonHM.enterGlobalHeap ()
               val result = doWrite argument
-                           handle e => (exitGlobalHeap ();
+                           handle e => (MLtonHM.exitGlobalHeap ();
                                         raise e)
-              val () = exitGlobalHeap ()
+              val () = MLtonHM.exitGlobalHeap ()
           in
               result
           end
@@ -66,9 +63,9 @@ struct
   in
       fun read argument =
           let
-              val () = enterGlobalHeap ()
+              val () = MLtonHM.enterGlobalHeap ()
               val result = doRead argument
-              val () = exitGlobalHeap ()
+              val () = MLtonHM.exitGlobalHeap ()
           in
               result
           end
