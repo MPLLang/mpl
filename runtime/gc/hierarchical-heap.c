@@ -27,18 +27,8 @@
  * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
  * objptr, NULL otherwise
  */
-static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr);
-
-/**
- * This function converts a hierarchical heap objptr to the struct
- * HM_HierarchicalHeap
- *
- * @param hhObjptr the objptr to convert
- *
- * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
- * objptr, NULL otherwise
- */
-static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr);
+static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
+                                                    objptr hhObjptr);
 
 /************************/
 /* Function Definitions */
@@ -106,18 +96,14 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   GC_state s = pthread_getspecific (gcstate_key);
 
   objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
-  struct HM_HierarchicalHeap* parentHH =
-      ((struct HM_HierarchicalHeap*)(parentHHPointer +
-                                     HM_offsetofHierarchicalHeap (s)));
+  struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, parentHHObjptr);
 
   objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
-  struct HM_HierarchicalHeap* childHH =
-      ((struct HM_HierarchicalHeap*)(childHHPointer +
-                                     HM_offsetofHierarchicalHeap (s)));
+  struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(s, childHHObjptr);
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(parentHH);
-  HM_assertHierarchicalHeapInvariants(childHH);
+  HM_assertHierarchicalHeapInvariants(s, parentHH);
+  HM_assertHierarchicalHeapInvariants(s, childHH);
 #endif /* ASSERT */
 
   /* childHH should be a orphan! */
@@ -133,29 +119,23 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   parentHH->childHHList = childHHObjptr;
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(parentHH);
-  HM_assertHierarchicalHeapInvariants(childHH);
+  HM_assertHierarchicalHeapInvariants(s, parentHH);
+  HM_assertHierarchicalHeapInvariants(s, childHH);
 #endif /* ASSERT */
 }
 
 void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  LOCAL_USED_FOR_ASSERT objptr hhObjptr =
-      pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh =
-      ((struct HM_HierarchicalHeap*)(hhPointer +
-                                     HM_offsetofHierarchicalHeap (s)));
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
 
   assert (BOGUS_OBJPTR != hh->parentHH);
-  pointer parentHHPointer = objptrToPointer (hh->parentHH, s->heap->start);
-  struct HM_HierarchicalHeap* parentHH =
-      ((struct HM_HierarchicalHeap*)(parentHHPointer +
-                                     HM_offsetofHierarchicalHeap (s)));
+  struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(parentHH);
-  HM_assertHierarchicalHeapInvariants(hh);
+  HM_assertHierarchicalHeapInvariants(s, parentHH);
+  HM_assertHierarchicalHeapInvariants(s, hh);
 #endif /* ASSERT */
 
   /* remove hh from parentHH->childHHList */
@@ -167,42 +147,53 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   parentHH->childHHList = hh->nextChildHH;
 
   /* append hh->chunkList to parentHH->chunkList */
-  HM_appendChunkList (&(parentHH->chunkList), hh->chunkList);
+  assert(HM_getLastChunk(hh->chunkList) == hh->lastAllocatedChunk);
+  HM_appendChunkList (&(parentHH->chunkList),
+                      hh->chunkList,
+                      hh->lastAllocatedChunk);
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(parentHH);
+  HM_assertHierarchicalHeapInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
 #endif /* ASSERT */
 }
 
 #if ASSERT
-void HM_assertHierarchicalHeapInvariants(struct HM_HierarchicalHeap* hh) {
+void HM_assertHierarchicalHeapInvariants(GC_state s,
+                                         const struct HM_HierarchicalHeap* hh) {
   HM_assertChunkListInvariants(hh->chunkList);
-  assert(ChunkPool_getLastChunk(chunkList) == hh->lastAllocatedChunk);
-  assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
-
-  bool foundInParentList = FALSE;
-  struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(hh->parentHH);
-  for (struct HM_HierarchicalHeap* childHH =
-           HHObjptrToStruct(parentHH->childHHList);
-       NULL != childHH;
-       childHH = HHObjptrToStruct(childHH->nextChildHH)) {
-    if (hh == childHH) {
-      foundInParentList = TRUE;
-      break;
-    }
+  assert(HM_getLastChunk(hh->chunkList) == hh->lastAllocatedChunk);
+  if (NULL != hh->savedFrontier) {
+    assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
   }
-  assert(foundInParentList);
 
-  for (struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(hh->childHHList);
+  struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
+  if (NULL != parentHH) {
+    /* Make sure I am in parentHH->childHHList */
+    bool foundInParentList = FALSE;
+    for (struct HM_HierarchicalHeap* childHH =
+             HHObjptrToStruct(s, parentHH->childHHList);
+         NULL != childHH;
+         childHH = HHObjptrToStruct(s, childHH->nextChildHH)) {
+      if (hh == childHH) {
+        foundInParentList = TRUE;
+        break;
+      }
+    }
+    assert(foundInParentList);
+  }
+
+  for (struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(s,
+                                                              hh->childHHList);
        NULL != childHH;
-       childHH = HHObjptrToStruct(hh->nextChildHH)) {
-    assert(HHObjptrToStruct(childHH->parentHH) == hh);
+       childHH = HHObjptrToStruct(s, childHH->nextChildHH)) {
+    assert(HHObjptrToStruct(s, childHH->parentHH) == hh);
   }
 }
 #endif /* ASSERT */
 
-static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr) {
+static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
+                                                    objptr hhObjptr) {
   if (BOGUS_OBJPTR == hhObjptr) {
     return NULL;
   }

@@ -145,7 +145,8 @@ PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
  *
  * @param hh The struct HM_HierarchicalHeap to assert invariants for
  */
-void HM_assertHierarchicalHeapInvariants(const struct HM_HierarchicalHeap* hh);
+void HM_assertHierarchicalHeapInvariants(GC_state s,
+                                         const struct HM_HierarchicalHeap* hh);
 #endif /* ASSERT */
 
 #endif /* HIERARCHICAL_HEAP_H_ */
