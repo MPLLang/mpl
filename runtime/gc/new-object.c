@@ -57,6 +57,9 @@ GC_stack newStack (GC_state s,
                    bool allocInOldGen) {
   GC_stack stack;
 
+#pragma message "Figure out a way to put this in the hierarchical heaps"
+  HM_enterGlobalHeap();
+
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
@@ -69,6 +72,9 @@ GC_stack newStack (GC_state s,
     fprintf (stderr, FMTPTR " = newStack (%"PRIuMAX")\n",
              (uintptr_t)stack,
              (uintmax_t)reserved);
+
+  HM_exitGlobalHeap();
+
   return stack;
 }
 
@@ -76,6 +82,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
   GC_stack stack;
   GC_thread thread;
   pointer res;
+
+  HM_enterGlobalHeap();
 
   assert (isStackReservedAligned (s, reserved));
   ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
@@ -91,6 +99,9 @@ GC_thread newThread (GC_state s, size_t reserved) {
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
+
+  HM_exitGlobalHeap();
+
   return thread;
 }
 

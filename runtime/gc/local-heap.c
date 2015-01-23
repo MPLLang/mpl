@@ -21,9 +21,14 @@
 /* Function Definitions */
 /************************/
 void HM_enterLocalHeap (GC_state s) {
-#pragma message "Unimplemented!"
+  const struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+
+  s->frontier = HM_getHierarchicalHeapSavedFrontier(hh);
+  s->limit = HM_getChunkEnd(HM_getHierarchicalHeapLastAllocatedChunk(hh));
 }
 
 void HM_exitLocalHeap (GC_state s) {
-#pragma message "Unimplemented!"
+  struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+
+  HM_setHierarchicalHeapSavedFrontier(hh, s->frontier);
 }

@@ -16,17 +16,22 @@
 #ifndef CHUNK_H_
 #define CHUNK_H_
 
+#if (defined (MLTON_GC_INTERNAL_TYPES))
 /**
  * @brief
  * Represents the information about the chunk
  *
  * This packed object is placed at the beginning of a chunk for easy access
  */
-struct ChunkInfo {
+struct HM_ChunkInfo {
   void* chunkEnd; /**< The end of this chunk */
   void* nextChunk; /**< The next chunk in the heap's chunk list */
 } __attribute__((packed));
+#else
+struct HM_ChunkInfo;
+#endif /* MLTON_GC_INTERNAL_TYPES */
 
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 /**
  * This function appends 'chunkList' to 'destinationChunkList'
  *
@@ -39,13 +44,23 @@ void HM_appendChunkList(void** destinationChunkList,
                         void* lastChunk);
 
 /**
+ * This function returns the end of the chunk, usually used as the heap limit
+ *
+ * @param chunk The chunk to use
+ *
+ * @return The end of the chunk
+ */
+void* HM_getChunkEnd(void* chunk);
+
+/**
  * This function gets the last chunk in a list
  *
  * @param chunkList The list to get the last chunk of
  *
  * @return the last chunk, or NULL if the list is empty
  */
-void* HM_getLastChunk(void* chunkList);
+void* HM_getChunkListLastChunk(void* chunkList);
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
 /**

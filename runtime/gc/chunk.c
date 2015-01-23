@@ -24,11 +24,12 @@
  *
  * @return the ChunkInfo struct pointer
  */
-static struct ChunkInfo* getChunkInfo(void* chunk);
+static struct HM_ChunkInfo* getChunkInfo(void* chunk);
 
 /************************/
 /* Function Definitions */
 /************************/
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 void HM_appendChunkList(void** destinationChunkList,
                         void* chunkList,
                         void* lastChunk) {
@@ -56,6 +57,10 @@ void HM_appendChunkList(void** destinationChunkList,
   *destinationChunkList = chunkList;
 }
 
+void* HM_getChunkEnd(void* chunk) {
+  return getChunkInfo(chunk)->chunkEnd;
+}
+
 void* HM_getLastChunk(void* chunkList) {
   if (NULL == chunkList) {
     return NULL;
@@ -69,10 +74,11 @@ void* HM_getLastChunk(void* chunkList) {
 
   return chunk;
 }
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
 void HM_assertChunkInvariants(const void* chunk) {
-  struct ChunkInfo* chunkInfo = getChunkInfo(chunk);
+  struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
   assert(ChunkPool_find(((char*)(chunkInfo->chunkEnd)) - 1) == chunk);
 }
 
@@ -83,8 +89,8 @@ void HM_assertChunkListInvariants(const void* chunkList) {
     HM_assertChunkInvariants(chunk);
   }
 }
-#endif
+#endif /* ASSERT */
 
-struct ChunkInfo* getChunkInfo(void* chunk) {
-  return ((struct ChunkInfo*)(chunk));
+struct HM_ChunkInfo* getChunkInfo(void* chunk) {
+  return ((struct HM_ChunkInfo*)(chunk));
 }

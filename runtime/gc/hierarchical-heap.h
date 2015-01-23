@@ -68,43 +68,6 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
 struct HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
-/* RAM_NOTE: should take GC_state argument once I get that back in */
-
-/**
- * Pretty-prints the hierarchical heap structure
- *
- * @param hh The struct HM_HierarchicalHeap to print
- * @param stream The stream to print to
- */
-static inline void HM_displayHierarchicalHeap(
-    const struct HM_HierarchicalHeap* hh,
-    FILE* stream);
-
-/**
- * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
- * header and padding
- *
- * @param s The GC_state to take alignment off of
- *
- * @return total size of the struct HM_HierarchicalHeap object
- */
-static inline size_t HM_sizeofHierarchicalHeap(GC_state s);
-
-/**
- * Returns offset into object to get at the struct HM_HierarchicalHeap
- *
- * @note
- * Objects are passed to runtime functions immediately <em>after</em> the
- * header, so we only need to pass the padding to get to the struct.
- *
- * @param s The GC_state to get alignment off of for HM_sizeofHierarchicalHeap()
- *
- * @return The offset into the object to get to the struct HM_HierarchicalHeap
- */
-static inline size_t HM_offsetofHierarchicalHeap(GC_state s);
-#endif /* MLTON_GC_INTERNAL_FUNCS */
-
 /**
  * Appends the derived hierarchical heap to the childHHList of the source
  * hierarchical heap and sets relationships appropriately.
@@ -117,7 +80,7 @@ static inline size_t HM_offsetofHierarchicalHeap(GC_state s);
  * 'parentHH'.
  */
 PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
-                                             pointer childHHObject);
+                                            pointer childHHObject);
 
 /**
  * Merges the specified hierarchical heap back into its source hierarchical
@@ -134,6 +97,80 @@ PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
 PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+/* RAM_NOTE: should take GC_state argument once I get that back in */
+
+/**
+ * Pretty-prints the hierarchical heap structure
+ *
+ * @param hh The struct HM_HierarchicalHeap to print
+ * @param stream The stream to print to
+ */
+void HM_displayHierarchicalHeap(const struct HM_HierarchicalHeap* hh,
+                                FILE* stream);
+
+/**
+ * Returns the current hierarchical heap in use
+ *
+ * @param s The GC_state to use
+ *
+ * @return hh The struct HM_HierarchicalHeap in use
+ */
+struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s);
+
+/**
+ * Gets the saved frontier from a struct HM_HierarchicalHeap
+ *
+ * @param hh The struct HM_HierarchicalHeap to use
+ *
+ * @return the savedFrontier field
+ */
+void* HM_getHierarchicalHeapSavedFrontier(
+    const struct HM_HierarchicalHeap* hh);
+
+/**
+ * Gets the last allocated chunk from a struct HM_HierarchicalHeap
+ *
+ * @param hh The struct HM_HierarchicalHeap to use
+ *
+ * @return the lastAllocatedChunk field
+ */
+void* HM_getHierarchicalHeapLastAllocatedChunk(
+    const struct HM_HierarchicalHeap* hh);
+
+/**
+ * Returns offset into object to get at the struct HM_HierarchicalHeap
+ *
+ * @note
+ * Objects are passed to runtime functions immediately <em>after</em> the
+ * header, so we only need to pass the padding to get to the struct.
+ *
+ * @param s The GC_state to get alignment off of for HM_sizeofHierarchicalHeap()
+ *
+ * @return The offset into the object to get to the struct HM_HierarchicalHeap
+ */
+size_t HM_offsetofHierarchicalHeap(GC_state s);
+
+/**
+ * Sets the saved frontier in a struct HM_HierarchicalHeap
+ *
+ * @param hh The struct HM_HierarchicalHeap to use
+ * @param savedFrontier The new saved frontier to set
+ */
+void HM_setHierarchicalHeapSavedFrontier(struct HM_HierarchicalHeap* hh,
+                                         void* savedFrontier);
+
+/**
+ * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
+ * header and padding
+ *
+ * @param s The GC_state to take alignment off of
+ *
+ * @return total size of the struct HM_HierarchicalHeap object
+ */
+size_t HM_sizeofHierarchicalHeap(GC_state s);
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
 /**

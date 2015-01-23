@@ -33,64 +33,6 @@ static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
 /************************/
 /* Function Definitions */
 /************************/
-void HM_displayHierarchicalHeap (
-    const struct HM_HierarchicalHeap* hh,
-    FILE* stream) {
-  fprintf (stream,
-           "\t\tlastAllocatedChunk = %p\n"
-           "\t\tsavedFrontier = %p\n"
-           "\t\tchunkList = %p\n"
-           "\t\tparentHH = "FMTOBJPTR"\n"
-           "\t\tnextChildHH = "FMTOBJPTR"\n"
-           "\t\tchildHHList= "FMTOBJPTR"\n",
-           hh->lastAllocatedChunk,
-           hh->savedFrontier,
-           hh->chunkList,
-           hh->parentHH,
-           hh->nextChildHH,
-           hh->childHHList);
-}
-
-/* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_sizeofHierarchicalHeap (GC_state s) {
-  size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
-  result = align (result, s->alignment);
-
-  if (DEBUG) {
-    uint16_t bytesNonObjptrs;
-    uint16_t numObjptrs;
-    splitHeader (s,
-                 GC_HIERARCHICAL_HEAP_HEADER,
-                 NULL,
-                 NULL,
-                 &bytesNonObjptrs,
-                 &numObjptrs);
-
-    size_t check = GC_NORMAL_HEADER_SIZE +
-                   (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
-
-    if (DEBUG_DETAILED) {
-      fprintf (
-          stderr,
-          "sizeofHierarchicalHeap: result = %"PRIuMAX"  check = %"PRIuMAX"\n",
-          (uintmax_t)result,
-          (uintmax_t)check);
-    }
-
-    assert (check == result);
-  }
-  assert (isAligned (result, s->alignment));
-
-  return result;
-}
-
-/* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_offsetofHierarchicalHeap (GC_state s) {
-  return ((HM_sizeofHierarchicalHeap (s)) -
-          (GC_NORMAL_HEADER_SIZE +
-           sizeof (struct HM_HierarchicalHeap)));
-}
-
 void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
                                      pointer childHHPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
@@ -157,6 +99,86 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   /* don't assert hh here as it should be thrown away! */
 #endif /* ASSERT */
 }
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+void HM_displayHierarchicalHeap (
+    const struct HM_HierarchicalHeap* hh,
+    FILE* stream) {
+  fprintf (stream,
+           "\t\tlastAllocatedChunk = %p\n"
+           "\t\tsavedFrontier = %p\n"
+           "\t\tchunkList = %p\n"
+           "\t\tparentHH = "FMTOBJPTR"\n"
+           "\t\tnextChildHH = "FMTOBJPTR"\n"
+           "\t\tchildHHList= "FMTOBJPTR"\n",
+           hh->lastAllocatedChunk,
+           hh->savedFrontier,
+           hh->chunkList,
+           hh->parentHH,
+           hh->nextChildHH,
+           hh->childHHList);
+}
+
+struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s) {
+  return HHObjptrToStruct(s, pointerToObjptr (s->currentHierarchicalHeap,
+                                              s->heap->start));
+}
+
+void* HM_getHierarchicalHeapSavedFrontier(
+    const struct HM_HierarchicalHeap* hh) {
+  return hh->savedFrontier;
+}
+
+void* HM_getHierarchicalHeapLastAllocatedChunk(
+    const struct HM_HierarchicalHeap* hh) {
+  return hh->lastAllocatedChunk;
+}
+
+/* RAM_NOTE: Should be able to compute once and save result */
+size_t HM_offsetofHierarchicalHeap (GC_state s) {
+  return ((HM_sizeofHierarchicalHeap (s)) -
+          (GC_NORMAL_HEADER_SIZE +
+           sizeof (struct HM_HierarchicalHeap)));
+}
+
+void HM_setHierarchicalHeapSavedFrontier(struct HM_HierarchicalHeap* hh,
+                                         void* savedFrontier) {
+  hh->savedFrontier = savedFrontier;
+}
+
+/* RAM_NOTE: Should be able to compute once and save result */
+size_t HM_sizeofHierarchicalHeap (GC_state s) {
+  size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
+  result = align (result, s->alignment);
+
+  if (DEBUG) {
+    uint16_t bytesNonObjptrs;
+    uint16_t numObjptrs;
+    splitHeader (s,
+                 GC_HIERARCHICAL_HEAP_HEADER,
+                 NULL,
+                 NULL,
+                 &bytesNonObjptrs,
+                 &numObjptrs);
+
+    size_t check = GC_NORMAL_HEADER_SIZE +
+                   (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+
+    if (DEBUG_DETAILED) {
+      fprintf (
+          stderr,
+          "sizeofHierarchicalHeap: result = %"PRIuMAX"  check = %"PRIuMAX"\n",
+          (uintmax_t)result,
+          (uintmax_t)check);
+    }
+
+    assert (check == result);
+  }
+  assert (isAligned (result, s->alignment));
+
+  return result;
+}
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
 void HM_assertHierarchicalHeapInvariants(GC_state s,

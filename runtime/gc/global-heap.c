@@ -24,8 +24,12 @@ void HM_enterGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread currentThread = getThreadCurrent (s);
 
-#pragma message "Insert overflow check?"
+  if ((~((size_t)(0))) == currentThread->inGlobalHeapCounter) {
+    die(__FILE__ ":%d: currentThread->inGlobalHeapCounter about to overflow!",
+        __LINE__);
+  }
   currentThread->inGlobalHeapCounter++;
+
   if (1 == currentThread->inGlobalHeapCounter) {
     assert (NULL != s->globalFrontier);
     assert (NULL != s->globalLimit);
@@ -33,8 +37,10 @@ void HM_enterGlobalHeap (void) {
     HM_debugMessage(s, "Entering Global Heap\n");
 
     HM_exitLocalHeap (s);
+
+    s->frontier = s->globalFrontier;
+    s->limit = s->globalLimit;
   }
-#pragma message "Unimplemented!"
 }
 
 void HM_exitGlobalHeap (void) {
@@ -51,5 +57,12 @@ void HM_exitGlobalHeap (void) {
 
     HM_enterLocalHeap (s);
   }
-#pragma message "Unimplemented!"
 }
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+bool HM_inGlobalHeap (GC_state s) {
+  GC_thread currentThread = getThreadCurrent (s);
+
+  return (0 != currentThread->inGlobalHeapCounter);
+}
+#endif /* MLTON_GC_INTERNAL_FUNCS */

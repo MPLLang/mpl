@@ -19,6 +19,12 @@ pointer GC_arrayAllocate (GC_state s,
   pointer result;
   bool holdLock;
 
+#pragma message "Fix once I have refs in hierachical heaps"
+  if (!HM_inGlobalHeap(s)) {
+    die(__FILE__ ":%d: Tried to allocate array in hierarchical heap!",
+        __LINE__);
+  }
+
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
   if (DEBUG or s->controls->messages)
     fprintf (stderr, "GC_arrayAllocate (%"PRIuMAX", "FMTARRLEN", "FMTHDR") [%d]\n",
