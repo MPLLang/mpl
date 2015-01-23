@@ -30,12 +30,28 @@ static struct ChunkInfo* getChunkInfo (void* chunk);
 /* Function Definitions */
 /************************/
 void HM_appendChunkList (void** destinationChunkList, void* chunkList) {
+  if (NULL == chunkList) {
+    /* nothing to append */
+    return;
+  } else if (NULL == *destinationChunkList) {
+    /*
+     * nothing to append to, so just rename. While the code in else branch will
+     * still work, this is a shortcut to prevent having to find lastChunk
+     */
+    *destinationChunkList = chunkList;
+    return;
+  }
+
+  /* else, I have two lists to append */
+
   /* find the last chunk in 'chunkList' */
   void* lastChunk;
   for (lastChunk = chunkList;
        NULL != getChunkInfo (lastChunk)->nextChunk;
        lastChunk = getChunkInfo (lastChunk)->nextChunk) {
   }
+
+  assert (NULL == getChunkInfo (lastChunk)->nextChunk);
 
   /* link last chunk to the first chunk in the destination list */
   getChunkInfo (lastChunk)->nextChunk = *destinationChunkList;
