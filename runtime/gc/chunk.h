@@ -32,8 +32,20 @@ struct ChunkInfo {
  *
  * @param destinationChunkList The head of the chunk list to append to
  * @param chunkList the chunk list to append
+ * @param lastChunk the last chunk in the chunkList
  */
-void HM_appendChunkList(void** destinationChunkList, void* chunkList);
+void HM_appendChunkList(void** destinationChunkList,
+                        void* chunkList,
+                        void* lastChunk);
+
+/**
+ * This function gets the last chunk in a list
+ *
+ * @param chunkList The list to get the last chunk of
+ *
+ * @return the last chunk, or NULL if the list is empty
+ */
+void* HM_getLastChunk(void* chunkList);
 
 #if ASSERT
 /**

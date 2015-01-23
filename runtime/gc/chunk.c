@@ -24,12 +24,14 @@
  *
  * @return the ChunkInfo struct pointer
  */
-static struct ChunkInfo* getChunkInfo (void* chunk);
+static struct ChunkInfo* getChunkInfo(void* chunk);
 
 /************************/
 /* Function Definitions */
 /************************/
-void HM_appendChunkList (void** destinationChunkList, void* chunkList) {
+void HM_appendChunkList(void** destinationChunkList,
+                        void* chunkList,
+                        void* lastChunk) {
   if (NULL == chunkList) {
     /* nothing to append */
     return;
@@ -44,20 +46,28 @@ void HM_appendChunkList (void** destinationChunkList, void* chunkList) {
 
   /* else, I have two lists to append */
 
-  /* find the last chunk in 'chunkList' */
-  void* lastChunk;
-  for (lastChunk = chunkList;
-       NULL != getChunkInfo (lastChunk)->nextChunk;
-       lastChunk = getChunkInfo (lastChunk)->nextChunk) {
-  }
-
-  assert (NULL == getChunkInfo (lastChunk)->nextChunk);
+  assert(NULL != lastChunk);
+  assert(NULL == getChunkInfo(lastChunk)->nextChunk);
 
   /* link last chunk to the first chunk in the destination list */
-  getChunkInfo (lastChunk)->nextChunk = *destinationChunkList;
+  getChunkInfo(lastChunk)->nextChunk = *destinationChunkList;
 
   /* set 'chunkList' as the new start of the destination chunk list */
   *destinationChunkList = chunkList;
+}
+
+void* HM_getLastChunk(void* chunkList) {
+  if (NULL == chunkList) {
+    return NULL;
+  }
+
+  void* chunk;
+  for (chunk = chunkList;
+       NULL != getChunkInfo(chunk)->nextChunk;
+       chunk = getChunkInfo(chunk)->nextChunk) {
+  }
+
+  return chunk;
 }
 
 #if ASSERT
@@ -75,6 +85,6 @@ void HM_assertChunkListInvariants(const void* chunkList) {
 }
 #endif
 
-struct ChunkInfo* getChunkInfo (void* chunk) {
+struct ChunkInfo* getChunkInfo(void* chunk) {
   return ((struct ChunkInfo*)(chunk));
 }
