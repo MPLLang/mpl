@@ -137,10 +137,9 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
  * This specifies the compiled-in minimum chunk size. All allocation requests
  * will be satisfied with chunks that are at least this size
  */
- /* 12 bits */
-#define ChunkPool_CHUNKADDRESSMASK (0xfffULL)
+#define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
 /* 2^12 bytes == 4KiB */
-#define ChunkPool_MINIMUMCHUNKSIZE (~ChunkPool_CHUNKADDRESSMASK)
+#define ChunkPool_MINIMUMCHUNKSIZE (1ULL << 12)
 #define ChunkPool_NUMFREELISTS (256)
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
@@ -170,6 +169,9 @@ ChunkPool_freeLists[ChunkPool_NUMFREELISTS] = {0};
  * <tt>poolSize</tt>.
  */
 void ChunkPool_initialize (size_t poolSize) {
+  /* I die if I hit an error anyways, so just set this early */
+  ChunkPool_initialized = true;
+
   /* get adjusted pool size */
   size_t adjustedPoolSize = poolSize & ~ChunkPool_CHUNKADDRESSMASK;
 
@@ -203,8 +205,6 @@ void ChunkPool_initialize (size_t poolSize) {
     errno = initRetVal;
     diee(__FILE__ ":%d: pthread_rwlock_init() failed with errno %d", __LINE__, errno);
   }
-
-  ChunkPool_initialized = true;
 }
 
 /**
@@ -386,7 +386,9 @@ void ChunkPool_insertIntoFreeList (
 
   chunkMetadata->previous = NULL;
   chunkMetadata->next = *list;
-  (*list)->previous = chunkMetadata;
+  if (NULL != *list) {
+    (*list)->previous = chunkMetadata;
+  }
   *list = chunkMetadata;
 }
 
