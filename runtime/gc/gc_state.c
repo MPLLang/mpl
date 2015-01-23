@@ -343,6 +343,18 @@ pointer GC_getCurrentThread (void) {
   return p;
 }
 
+pointer GC_getCurrentHierarchicalHeap (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  return objptrToPointer (s->currentHierarchicalHeap, s->heap->start);
+}
+
+void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  objptr op;
+
+  s->currentHierarchicalHeap = pointerToObjptr (hhPointer, s->heap->start);
+}
+
 pointer GC_getSavedThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   pointer p;

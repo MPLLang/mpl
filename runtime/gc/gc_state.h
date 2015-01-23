@@ -124,6 +124,8 @@ PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
 PRIVATE void GC_setCallFromCHandlerThread (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);
+PRIVATE pointer GC_getCurrentHierarchicalHeap (void);
+PRIVATE void GC_setCurrentHierarchicalHeap (pointer hhPointer);
 PRIVATE pointer GC_getSavedThread (void);
 PRIVATE void GC_setSavedThread (pointer p);
 PRIVATE void GC_setSignalHandlerThread (pointer p);

@@ -148,20 +148,22 @@ structure HM =
                 type t = HM.HierarchicalHeap.t
 
                 val appendChildHeap =
-                    _import "HM_appendChildHeap" runtime private:
+                    _import "HM_appendChildHierarchicalHeap" runtime private:
                     (t * t) -> unit;
 
                 val getHierarchicalHeap =
-                    _import "HM_getHierarchicalHeap" runtime private: unit -> t;
+                    _import "GC_getCurrentHierarchicalHeap" runtime private: unit -> t;
 
                 val mergeIntoParentHeap =
-                    _import "HM_mergeIntoParentHeap" runtime private: t -> unit;
+                    _import "HM_mergeIntoParentHierarchicalHeap"
+                            runtime private:
+                    t -> unit;
 
                 val newHierarchicalHeap =
                     _prim "HierarchicalHeap_new": unit -> t;
 
                 val setHierarchicalHeap =
-                    _import "HM_setHierarchicalHeap" runtime private: t -> unit;
+                    _import "GC_setCurrentHierarchicalHeap" runtime private: t -> unit;
             end
 
         val enterGlobalHeap =
