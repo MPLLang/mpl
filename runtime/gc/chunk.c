@@ -60,6 +60,21 @@ void HM_appendChunkList (void** destinationChunkList, void* chunkList) {
   *destinationChunkList = chunkList;
 }
 
+#if ASSERT
+void HM_assertChunkInvariants(const void* chunk) {
+  struct ChunkInfo* chunkInfo = getChunkInfo(chunk);
+  assert(ChunkPool_find(((char*)(chunkInfo->chunkEnd)) - 1) == chunk);
+}
+
+void HM_assertChunkListInvariants(const void* chunkList) {
+  for (void* chunk = chunkList;
+       NULL != chunk;
+       chunk = getChunkInfo(chunk)->nextChunk) {
+    HM_assertChunkInvariants(chunk);
+  }
+}
+#endif
+
 struct ChunkInfo* getChunkInfo (void* chunk) {
   return ((struct ChunkInfo*)(chunk));
 }

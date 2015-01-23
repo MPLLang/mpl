@@ -66,15 +66,44 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof (objptr));
 #else
 struct HM_HierarchicalHeap;
-#endif
+#endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /* RAM_NOTE: should take GC_state argument once I get that back in */
-static inline void HM_displayHierarchicalHeap (
+
+/**
+ * Pretty-prints the hierarchical heap structure
+ *
+ * @param hh The struct HM_HierarchicalHeap to print
+ * @param stream The stream to print to
+ */
+static inline void HM_displayHierarchicalHeap(
     const struct HM_HierarchicalHeap* hh,
     FILE* stream);
-static inline size_t HM_sizeofHierarchicalHeap (GC_state s);
-static inline size_t HM_offsetofHierarchicalHeap (GC_state s);
+
+/**
+ * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
+ * header and padding
+ *
+ * @param s The GC_state to take alignment off of
+ *
+ * @return total size of the struct HM_HierarchicalHeap object
+ */
+static inline size_t HM_sizeofHierarchicalHeap(GC_state s);
+
+/**
+ * Returns offset into object to get at the struct HM_HierarchicalHeap
+ *
+ * @note
+ * Objects are passed to runtime functions immediately <em>after</em> the
+ * header, so we only need to pass the padding to get to the struct.
+ *
+ * @param s The GC_state to get alignment off of for HM_sizeofHierarchicalHeap()
+ *
+ * @return The offset into the object to get to the struct HM_HierarchicalHeap
+ */
+static inline size_t HM_offsetofHierarchicalHeap(GC_state s);
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 /**
  * Appends the derived hierarchical heap to the childHHList of the source
@@ -87,7 +116,7 @@ static inline size_t HM_offsetofHierarchicalHeap (GC_state s);
  * @param childHH The struct HM_HierarchicalHeap set to be derived off of
  * 'parentHH'.
  */
-PRIVATE void HM_appendChildHierarchicalHeap (pointer parentHHObject,
+PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
                                              pointer childHHObject);
 
 /**
@@ -104,7 +133,19 @@ PRIVATE void HM_appendChildHierarchicalHeap (pointer parentHHObject,
  *
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
-PRIVATE void HM_mergeIntoParentHierarchicalHeap (pointer hhObject);
-#endif
+PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
+
+#if ASSERT
+/**
+ * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
+ *
+ * @attention
+ * If an assertion fails, this function aborts the program, as per the assert()
+ * macro.
+ *
+ * @param hh The struct HM_HierarchicalHeap to assert invariants for
+ */
+void HM_assertHierarchicalHeapInvariants(const struct HM_HierarchicalHeap* hh);
+#endif /* ASSERT */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

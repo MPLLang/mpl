@@ -15,6 +15,31 @@
 
 #include "hierarchical-heap.h"
 
+/******************************/
+/* Static Function Prototypes */
+/******************************/
+/**
+ * This function converts a hierarchical heap objptr to the struct
+ * HM_HierarchicalHeap
+ *
+ * @param hhObjptr the objptr to convert
+ *
+ * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
+ * objptr, NULL otherwise
+ */
+static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr);
+
+/**
+ * This function converts a hierarchical heap objptr to the struct
+ * HM_HierarchicalHeap
+ *
+ * @param hhObjptr the objptr to convert
+ *
+ * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
+ * objptr, NULL otherwise
+ */
+static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr);
+
 /************************/
 /* Function Definitions */
 /************************/
@@ -90,6 +115,11 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
       ((struct HM_HierarchicalHeap*)(childHHPointer +
                                      HM_offsetofHierarchicalHeap (s)));
 
+#if ASSERT
+  HM_assertHierarchicalHeapInvariants(parentHH);
+  HM_assertHierarchicalHeapInvariants(childHH);
+#endif /* ASSERT */
+
   /* childHH should be a orphan! */
   assert (BOGUS_OBJPTR == childHH->parentHH);
   assert (BOGUS_OBJPTR == childHH->nextChildHH);
@@ -101,6 +131,11 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   childHH->parentHH = parentHHObjptr;
   childHH->nextChildHH = parentHH->childHHList;
   parentHH->childHHList = childHHObjptr;
+
+#if ASSERT
+  HM_assertHierarchicalHeapInvariants(parentHH);
+  HM_assertHierarchicalHeapInvariants(childHH);
+#endif /* ASSERT */
 }
 
 void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
@@ -118,6 +153,11 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
       ((struct HM_HierarchicalHeap*)(parentHHPointer +
                                      HM_offsetofHierarchicalHeap (s)));
 
+#if ASSERT
+  HM_assertHierarchicalHeapInvariants(parentHH);
+  HM_assertHierarchicalHeapInvariants(hh);
+#endif /* ASSERT */
+
   /* remove hh from parentHH->childHHList */
   /*
    * This assert assumes that all merges happen in LIFO order, as per the
@@ -128,4 +168,46 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
 
   /* append hh->chunkList to parentHH->chunkList */
   HM_appendChunkList (&(parentHH->chunkList), hh->chunkList);
+
+#if ASSERT
+  HM_assertHierarchicalHeapInvariants(parentHH);
+  /* don't assert hh here as it should be thrown away! */
+#endif /* ASSERT */
+}
+
+#if ASSERT
+void HM_assertHierarchicalHeapInvariants(struct HM_HierarchicalHeap* hh) {
+  HM_assertChunkListInvariants(hh->chunkList);
+  assert(ChunkPool_getLastChunk(chunkList) == hh->lastAllocatedChunk);
+  assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
+
+  bool foundInParentList = FALSE;
+  struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(hh->parentHH);
+  for (struct HM_HierarchicalHeap* childHH =
+           HHObjptrToStruct(parentHH->childHHList);
+       NULL != childHH;
+       childHH = HHObjptrToStruct(childHH->nextChildHH)) {
+    if (hh == childHH) {
+      foundInParentList = TRUE;
+      break;
+    }
+  }
+  assert(foundInParentList);
+
+  for (struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(hh->childHHList);
+       NULL != childHH;
+       childHH = HHObjptrToStruct(hh->nextChildHH)) {
+    assert(HHObjptrToStruct(childHH->parentHH) == hh);
+  }
+}
+#endif /* ASSERT */
+
+static struct HM_HierarchicalHeap* HHObjptrToStruct(objptr hhObjptr) {
+  if (BOGUS_OBJPTR == hhObjptr) {
+    return NULL;
+  }
+
+  pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
+  return ((struct HM_HierarchicalHeap*)(hhPointer +
+                                        HM_offsetofHierarchicalHeap (s)));
 }

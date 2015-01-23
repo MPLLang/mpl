@@ -16,11 +16,6 @@
 #ifndef LOCAL_HEAP_H_
 #define LOCAL_HEAP_H_
 
-struct HM_ChunkMetadata {
-  void* next;
-  size_t size;
-} __attribute__((packed));
-
 /**
  * This function enters the local heap of the currently running thread
  *
