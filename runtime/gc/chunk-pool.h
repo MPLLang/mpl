@@ -28,7 +28,7 @@
  *
  * @param poolSize Maximum size of the pool, in bytes
  */
-PRIVATE void ChunkPool_initialize (size_t poolSize);
+void ChunkPool_initialize (size_t poolSize);
 
 /**
  * @brief Allocates a new chunk from the pool
@@ -46,7 +46,7 @@ PRIVATE void ChunkPool_initialize (size_t poolSize);
  * @return NULL if a chunk could not be allocated, pointer to an allocated chunk
  * otherwise. Guaranteed to be 8-byte aligned.
  */
-PRIVATE void* ChunkPool_allocate (size_t* bytesRequested);
+void* ChunkPool_allocate (size_t* bytesRequested);
 
 /**
  * @brief Frees a chunk back to the pool
@@ -57,7 +57,7 @@ PRIVATE void* ChunkPool_allocate (size_t* bytesRequested);
  *
  * @return true on success and false otherwise.
  */
-PRIVATE bool ChunkPool_free (void* chunk);
+bool ChunkPool_free (void* chunk);
 
 /**
  * @brief Finds the containing chunk for the given pointer.
@@ -73,7 +73,16 @@ PRIVATE bool ChunkPool_free (void* chunk);
  * @return The beginning of the chunk as returned by
  * <tt>ChunkPool_allocate()</tt> on success, NULL otherwise.
  */
-PRIVATE void* ChunkPool_find (void* object);
+void* ChunkPool_find (void* object);
+
+/**
+ * This functions checks if 'pointer' is within the ChunkPool space
+ *
+ * @param pointer The pointer to check
+ *
+ * @return TRUE if 'pointer' is in the ChunkPool space, FALSE otherwise.
+ */
+bool ChunkPool_pointerInChunkPool (void* pointer);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

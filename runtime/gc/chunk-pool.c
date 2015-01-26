@@ -25,6 +25,10 @@
  * multiples of the minimum chunk size.
  */
 
+#include "chunk-pool.h"
+
+#include <pthread.h>
+
 /***********/
 /* Structs */
 /***********/
@@ -149,7 +153,7 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
 /*************/
 static bool ChunkPool_initialized = false;
 
-static pthread_rwlock_t ChunkPool_lock;
+static pthread_rwlock_t ChunkPool_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
@@ -186,6 +190,15 @@ void ChunkPool_initialize (size_t poolSize) {
     diee(__FILE__ ":%d: mmap() failed with errno %d", __LINE__, errno);
   }
 
+#pragma message "Remove once unnecessary"
+#if ASSERT
+  for (uint64_t* cursor = region;
+       cursor < ((uint8_t*)(region)) + adjustedPoolSize;
+       cursor++) {
+    *cursor = ((uint64_t)(0xdeadbeefcafebabe));
+  }
+#endif /* ASSERT */
+
   /* setup pool variables */
   ChunkPool_poolStart = region;
   ChunkPool_poolEnd = ((uint8_t*)(region)) + adjustedPoolSize;
@@ -198,13 +211,6 @@ void ChunkPool_initialize (size_t poolSize) {
 
   /* Add the giant chunk into the free list */
   ChunkPool_insertIntoFreeList (ChunkPool_chunkMetadatas);
-
-  /* Initialize the lock */
-  int initRetVal;
-  if (0 != (initRetVal = pthread_rwlock_init(&ChunkPool_lock, NULL))) {
-    errno = initRetVal;
-    diee(__FILE__ ":%d: pthread_rwlock_init() failed with errno %d", __LINE__, errno);
-  }
 }
 
 /**
@@ -361,6 +367,12 @@ void* ChunkPool_find (void* object) {
   return chunk;
 }
 
+bool ChunkPool_pointerInChunkPool (void* pointer) {
+  assert (ChunkPool_initialized);
+
+  return ((pointer >= ChunkPool_poolStart) && (pointer < ChunkPool_poolEnd));
+}
+
 unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
   assert (ChunkPool_initialized);
 
@@ -458,8 +470,7 @@ void* ChunkPool_chunkMetadataToChunk (
     const struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
-  unsigned int chunkIndex =
-      (chunkMetadata - ChunkPool_chunkMetadatas) / sizeof(*chunkMetadata);
+  unsigned int chunkIndex = chunkMetadata - ChunkPool_chunkMetadatas;
 
   assert (((void*)(((uint8_t*)(ChunkPool_poolStart)) +
                    (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE))) <
