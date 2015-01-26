@@ -193,7 +193,7 @@ void ChunkPool_initialize (size_t poolSize) {
 #pragma message "Remove once unnecessary"
 #if ASSERT
   for (uint64_t* cursor = region;
-       cursor < ((uint8_t*)(region)) + adjustedPoolSize;
+       cursor < ((uint64_t*)(((uint8_t*)(region)) + adjustedPoolSize));
        cursor++) {
     *cursor = ((uint64_t)(0xdeadbeefcafebabe));
   }
@@ -367,10 +367,11 @@ void* ChunkPool_find (void* object) {
   return chunk;
 }
 
-bool ChunkPool_pointerInChunkPool (void* pointer) {
+bool ChunkPool_pointerInChunkPool (void* candidate) {
   assert (ChunkPool_initialized);
 
-  return ((pointer >= ChunkPool_poolStart) && (pointer < ChunkPool_poolEnd));
+  return ((candidate >= ChunkPool_poolStart) &&
+          (candidate < ChunkPool_poolEnd));
 }
 
 unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
