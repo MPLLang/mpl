@@ -100,6 +100,9 @@ void Proc_beginCriticalSection (GC_state s) {
       Proc_criticalTicket = 0;
     }
 
+#pragma message                                                 \
+  "Threads unlock one at a time as checking per-thread GC "     \
+  "invariants needs to be done one-by-one?"
     while (Proc_criticalTicket != myNumber) {}
   }
   else {

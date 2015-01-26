@@ -350,7 +350,6 @@ pointer GC_getCurrentHierarchicalHeap (void) {
 
 void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr op;
 
   s->currentHierarchicalHeap = pointerToObjptr (hhPointer, s->heap->start);
 }
