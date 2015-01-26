@@ -22,6 +22,11 @@
 /************************/
 void HM_enterGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
+  if (NULL == s) {
+    /* initialization not finished, so nothing to do yet */
+    return;
+  }
+
   GC_thread currentThread = getThreadCurrent (s);
 
   if ((~((size_t)(0))) == currentThread->inGlobalHeapCounter) {
@@ -45,6 +50,11 @@ void HM_enterGlobalHeap (void) {
 
 void HM_exitGlobalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
+  if (NULL == s) {
+    /* initialization not finished, so nothing to do yet */
+    return;
+  }
+
   GC_thread currentThread = getThreadCurrent (s);
 
   assert (currentThread->inGlobalHeapCounter > 0);

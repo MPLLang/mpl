@@ -73,7 +73,10 @@ GC_stack newStack (GC_state s,
              (uintptr_t)stack,
              (uintmax_t)reserved);
 
-  HM_exitGlobalHeap();
+  if (BOGUS_OBJPTR != s->currentThread) {
+    /* after runtime init */
+    HM_exitGlobalHeap();
+  }
 
   return stack;
 }
@@ -100,7 +103,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
 
-  HM_exitGlobalHeap();
+  if (BOGUS_OBJPTR != s->currentThread) {
+    /* after runtime init */
+    HM_exitGlobalHeap();
+  }
 
   return thread;
 }
@@ -117,13 +123,17 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_offsetofHierarchicalHeap (s)));
 
-  /* initialize the object */
+  /* initialize the object with a small chunk */
   hh->lastAllocatedChunk = NULL;
   hh->savedFrontier = NULL;
   hh->chunkList = NULL;
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;
+  if (!HM_extendHierarchicalHeap(hh, GC_HEAP_LIMIT_SLOP)) {
+    die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+  }
+
   if (DEBUG_HEAP_MANAGEMENT) {
     fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));
   }
