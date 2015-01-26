@@ -16,6 +16,21 @@
 #ifndef CHUNK_H_
 #define CHUNK_H_
 
+#pragma message "Remove when know unnecessary"
+#if 0
+/**
+ * @brief
+ * This pointer is used as an "invalid" chunk for when no chunk is set along
+ * with its start and end.
+ *
+ * While NULL can be set, this leads to limit being set to NULL, A.K.A. 0, which
+ * may interfere with the signal handler limit checks. Instead, we use
+ * CHUNK_INVALID_POINTER for chunk, start, and end which allows for correct
+ * limit checks.
+ */
+#define CHUNK_INVALID_POINTER ((void*)(0x1))
+#endif
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 /**
  * @brief
@@ -33,6 +48,16 @@ struct HM_ChunkInfo;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /**
+ * This function allocates and initializes a chunk of at least allocableSize
+ * allocable bytes.
+ *
+ * @param allocableSize The minimum number of allocable bytes in the chunk
+ *
+ * @return NULL if no chunk could be allocated, or chunk pointer otherwise.
+ */
+void* HM_allocateChunk(size_t allocableSize);
+
+/**
  * This function appends 'chunkList' to 'destinationChunkList'
  *
  * @param destinationChunkList The head of the chunk list to append to
@@ -44,13 +69,25 @@ void HM_appendChunkList(void** destinationChunkList,
                         void* lastChunk);
 
 /**
- * This function returns the end of the chunk, usually used as the heap limit
+ * This function returns the end of the chunk (pointer to byte after last
+ * allocable byte), usually used as the heap limit
  *
  * @param chunk The chunk to use
  *
- * @return The end of the chunk
+ * @return end of the chunk
  */
 void* HM_getChunkEnd(void* chunk);
+
+/**
+ * This function returns the start of allocable area of the chunk (pointer to
+ * the first byte that can be allocated), usually used as the initial heap
+ * frontier.
+ *
+ * @param chunk The chunk to use
+ *
+ * @return start of the chunk
+ */
+void* HM_getChunkStart(void* chunk);
 
 /**
  * This function gets the last chunk in a list

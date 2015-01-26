@@ -26,10 +26,33 @@
  */
 static struct HM_ChunkInfo* getChunkInfo(void* chunk);
 
+#if ASSERT
+/**
+ * Same as getChunkInfo() except for const-correctness. See getChunkInfo() for
+ * more details
+ */
+static const struct HM_ChunkInfo* getConstChunkInfo(const void* chunk);
+#endif /* ASSERT */
+
 /************************/
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
+void* HM_allocateChunk(size_t allocableSize) {
+  size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
+  void* chunk = ChunkPool_allocate(&totalSize);
+
+  if (NULL == chunk) {
+    return NULL;
+  }
+
+  struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
+  chunkInfo->chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
+  chunkInfo->nextChunk = NULL;
+
+  return chunk;
+}
+
 void HM_appendChunkList(void** destinationChunkList,
                         void* chunkList,
                         void* lastChunk) {
@@ -61,7 +84,11 @@ void* HM_getChunkEnd(void* chunk) {
   return getChunkInfo(chunk)->chunkEnd;
 }
 
-void* HM_getLastChunk(void* chunkList) {
+void* HM_getChunkStart(void* chunk) {
+  return ((void*)(((char*)(chunk)) + sizeof(struct HM_ChunkInfo)));
+}
+
+void* HM_getChunkListLastChunk(void* chunkList) {
   if (NULL == chunkList) {
     return NULL;
   }
@@ -78,14 +105,14 @@ void* HM_getLastChunk(void* chunkList) {
 
 #if ASSERT
 void HM_assertChunkInvariants(const void* chunk) {
-  struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
+  const struct HM_ChunkInfo* chunkInfo = getConstChunkInfo(chunk);
   assert(ChunkPool_find(((char*)(chunkInfo->chunkEnd)) - 1) == chunk);
 }
 
 void HM_assertChunkListInvariants(const void* chunkList) {
-  for (void* chunk = chunkList;
+  for (const void* chunk = chunkList;
        NULL != chunk;
-       chunk = getChunkInfo(chunk)->nextChunk) {
+       chunk = getConstChunkInfo(chunk)->nextChunk) {
     HM_assertChunkInvariants(chunk);
   }
 }
@@ -94,3 +121,9 @@ void HM_assertChunkListInvariants(const void* chunkList) {
 struct HM_ChunkInfo* getChunkInfo(void* chunk) {
   return ((struct HM_ChunkInfo*)(chunk));
 }
+
+#if ASSERT
+const struct HM_ChunkInfo* getConstChunkInfo(const void* chunk) {
+  return ((const struct HM_ChunkInfo*)(chunk));
+}
+#endif /* ASSERT */
