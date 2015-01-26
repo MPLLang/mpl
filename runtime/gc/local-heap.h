@@ -30,6 +30,17 @@ void HM_enterLocalHeap (GC_state s);
  * @param s The GC_state of the processor calling this function
  */
 void HM_exitLocalHeap (GC_state s);
+
+/**
+ * This function ensures that the hierarchical heap has enough space
+ *
+ * @param s The GC_state to operate on
+ * @param forceGC Whether or not to force a GC
+ * @param bytesRequested The minimum number of bytes to leave free on return
+ */
+void HM_ensureHierarchicalHeapAssurances(GC_state s,
+                                         bool forceGC,
+                                         size_t bytesRequested);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* LOCAL_HEAP_H_ */

@@ -36,13 +36,14 @@
  * There may be zero or more bytes of padding for alignment purposes.
  */
 struct HM_HierarchicalHeap {
-  void* lastAllocatedChunk; /**< The last allocated chunk, so that 'chunkList'
-                             * does not have to be traversed to find it. */
+#pragma message "Maybe this should just be 'void* limit'?"
+  void* lastAllocatedChunk; /**< The last allocated chunk, for quick access to
+                             * the current limit */
 
   void* savedFrontier; /**< The saved frontier when returning to this
                         * hierarchical heap. */
 
-  void* chunkList; /**< The list of chunks making up this heap. */
+  void* chunkList; /**< The unordered list of chunks making up this heap. */
 
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
@@ -111,6 +112,23 @@ void HM_displayHierarchicalHeap(const struct HM_HierarchicalHeap* hh,
                                 FILE* stream);
 
 /**
+ * This function extends the hierarchical heap with at least bytesRequested free
+ * space.
+ *
+ * @attention
+ * On successful completion, hh->savedFrontier is updated to the frontier of the
+ * extension and HM_getHierarchicalHeapLimit(hh) will return the limit of the
+ * extension.
+ *
+ * @param hh The hierarchical heap to extend
+ * @param bytesRequested The minimum size of the extension
+ *
+ * @return TRUE if extension succeeded, FALSE otherwise
+ */
+bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
+                               size_t bytesRequested);
+
+/**
  * Returns the current hierarchical heap in use
  *
  * @param s The GC_state to use
@@ -130,14 +148,24 @@ void* HM_getHierarchicalHeapSavedFrontier(
     const struct HM_HierarchicalHeap* hh);
 
 /**
- * Gets the last allocated chunk from a struct HM_HierarchicalHeap
+ * Gets the heap limit from a struct HM_HierarchicalHeap
  *
  * @param hh The struct HM_HierarchicalHeap to use
  *
- * @return the lastAllocatedChunk field
+ * @return the heap limit
  */
-void* HM_getHierarchicalHeapLastAllocatedChunk(
-    const struct HM_HierarchicalHeap* hh);
+void* HM_getHierarchicalHeapLimit(const struct HM_HierarchicalHeap* hh);
+
+/**
+ * Checks if 'candidateObjptr' belongs to the hierarchical heap space.
+ *
+ * @param s The GC_state to use
+ * @param candidateObjptr The objptr to test
+ *
+ * @return TRUE if 'candidateObjptr' belongs to the hierarchical heap space,
+ * FALSE otherwise
+ */
+bool HM_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 
 /**
  * Returns offset into object to get at the struct HM_HierarchicalHeap

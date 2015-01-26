@@ -89,10 +89,9 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   parentHH->childHHList = hh->nextChildHH;
 
   /* append hh->chunkList to parentHH->chunkList */
-  assert(HM_getLastChunk(hh->chunkList) == hh->lastAllocatedChunk);
   HM_appendChunkList (&(parentHH->chunkList),
                       hh->chunkList,
-                      hh->lastAllocatedChunk);
+                      HM_getChunkListLastChunk(hh->chunkList));
 
 #if ASSERT
   HM_assertHierarchicalHeapInvariants(s, parentHH);
@@ -119,9 +118,22 @@ void HM_displayHierarchicalHeap (
            hh->childHHList);
 }
 
+bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
+                               size_t bytesRequested) {
+  void* chunk = HM_allocateChunk(bytesRequested);
+
+  if (NULL == chunk) {
+    return FALSE;
+  }
+
+  HM_appendChunkList(&(hh->chunkList), chunk, chunk);
+  hh->savedFrontier = HM_getChunkStart(chunk);
+  hh->lastAllocatedChunk = chunk;
+  return TRUE;
+}
+
 struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s) {
-  return HHObjptrToStruct(s, pointerToObjptr (s->currentHierarchicalHeap,
-                                              s->heap->start));
+  return HHObjptrToStruct(s, s->currentHierarchicalHeap);
 }
 
 void* HM_getHierarchicalHeapSavedFrontier(
@@ -129,9 +141,13 @@ void* HM_getHierarchicalHeapSavedFrontier(
   return hh->savedFrontier;
 }
 
-void* HM_getHierarchicalHeapLastAllocatedChunk(
-    const struct HM_HierarchicalHeap* hh) {
-  return hh->lastAllocatedChunk;
+void* HM_getHierarchicalHeapLimit(const struct HM_HierarchicalHeap* hh) {
+  return HM_getChunkEnd(hh->lastAllocatedChunk);
+}
+
+bool HM_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
+  pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
+  return ChunkPool_pointerInChunkPool(candidatePointer);
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
@@ -184,10 +200,7 @@ size_t HM_sizeofHierarchicalHeap (GC_state s) {
 void HM_assertHierarchicalHeapInvariants(GC_state s,
                                          const struct HM_HierarchicalHeap* hh) {
   HM_assertChunkListInvariants(hh->chunkList);
-  assert(HM_getLastChunk(hh->chunkList) == hh->lastAllocatedChunk);
-  if (NULL != hh->savedFrontier) {
-    assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
-  }
+  assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
 
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
   if (NULL != parentHH) {
