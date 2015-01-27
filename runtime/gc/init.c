@@ -359,7 +359,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->currentHierarchicalHeap = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
   s->globalFrontier = NULL;
-  s->globalLimit = NULL;
+  s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;
 
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
@@ -472,7 +472,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->currentThread = BOGUS_OBJPTR;
   d->currentHierarchicalHeap = BOGUS_OBJPTR;
   d->globalFrontier = NULL;
-  d->globalLimit = NULL;
+  d->globalLimitPlusSlop = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

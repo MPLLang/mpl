@@ -37,14 +37,13 @@ void HM_enterGlobalHeap (void) {
 
   if (1 == currentThread->inGlobalHeapCounter) {
     assert (NULL != s->globalFrontier);
-    assert (NULL != s->globalLimit);
-
-    HM_debugMessage(s, "Entering Global Heap\n");
+    assert (NULL != s->globalLimitPlusSlop);
 
     HM_exitLocalHeap (s);
 
     s->frontier = s->globalFrontier;
-    s->limit = s->globalLimit;
+    s->limitPlusSlop = s->globalLimitPlusSlop;
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 }
 
@@ -60,10 +59,8 @@ void HM_exitGlobalHeap (void) {
   assert (currentThread->inGlobalHeapCounter > 0);
   currentThread->inGlobalHeapCounter--;
   if (0 == currentThread->inGlobalHeapCounter) {
-    HM_debugMessage(s, "Exiting Global Heap\n");
-
     s->globalFrontier = s->frontier;
-    s->globalLimit = s->limit;
+    s->globalLimitPlusSlop = s->limitPlusSlop;
 
     HM_enterLocalHeap (s);
   }

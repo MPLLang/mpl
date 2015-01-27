@@ -24,7 +24,8 @@ void HM_enterLocalHeap (GC_state s) {
   const struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
 
   s->frontier = HM_getHierarchicalHeapSavedFrontier(hh);
-  s->limit = HM_getHierarchicalHeapLimit(hh);
+  s->limitPlusSlop = HM_getHierarchicalHeapLimit(hh);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 }
 
 void HM_exitLocalHeap (GC_state s) {
@@ -36,9 +37,11 @@ void HM_exitLocalHeap (GC_state s) {
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
                                          size_t bytesRequested) {
+  assert (bytesRequested >= GC_HEAP_LIMIT_SLOP);
+
   int processor = s->procStates ? Proc_processorNumber (s) : -1;
   struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
-  size_t heapBytesFree = s->limit - s->frontier;
+  size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
   HM_debugMessage(s,
                   "[%d] HM_ensureHierarchicalHeapAssurances(): bytesRequested: "
@@ -66,21 +69,22 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                     processor);
   }
 
-  if (s->limit < s->frontier) {
+  if (s->limitPlusSlop < s->frontier) {
     die(__FILE__ ":%d: s->limit (%p) < s->frontier (%p)",
         __LINE__,
         ((void*)(s->limit)),
         ((void*)(s->frontier)));
   }
 
-  if (((size_t)(s->limit - s->frontier)) < bytesRequested) {
+  if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
     if (!HM_extendHierarchicalHeap(hh, bytesRequested)) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
 
     s->frontier = HM_getHierarchicalHeapSavedFrontier(hh);
-    s->limit = HM_getHierarchicalHeapLimit(hh);
+    s->limitPlusSlop = HM_getHierarchicalHeapLimit(hh);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
   assert(((size_t)(s->limit - s->frontier)) >= bytesRequested);

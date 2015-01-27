@@ -43,7 +43,7 @@ struct GC_state {
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
-  pointer globalLimit;
+  pointer globalLimitPlusSlop;
   /* RAM_NOTE: Not sure if this is used anymore... */
   /* Currently only used to hold raise operands. XXX at least i think so */
   Pointer *globalObjptrNonRoot;
