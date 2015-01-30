@@ -20,10 +20,14 @@ pointer GC_arrayAllocate (GC_state s,
   bool holdLock;
 
 #pragma message "Fix once I have refs in hierachical heaps"
+#if 0
   if (!HM_inGlobalHeap(s)) {
     die(__FILE__ ":%d: Tried to allocate array in hierarchical heap!",
         __LINE__);
   }
+#else
+  HM_enterGlobalHeap(FALSE);
+#endif
 
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
   if (DEBUG or s->controls->messages)
@@ -148,6 +152,8 @@ pointer GC_arrayAllocate (GC_state s,
   if (holdLock) {
     LEAVE1 (s, result);
   }
+
+  HM_exitGlobalHeap(FALSE);
 
   return result;
 
