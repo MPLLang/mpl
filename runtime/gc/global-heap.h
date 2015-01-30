@@ -20,12 +20,12 @@
 /**
  * This function changes the runtime to use the global heap.
  */
-PRIVATE void HM_enterGlobalHeap (void);
+PRIVATE void HM_enterGlobalHeap (bool fromMLtonParallel);
 
 /**
  * This function changes the runtime to exit the global heap.
  */
-PRIVATE void HM_exitGlobalHeap (void);
+PRIVATE void HM_exitGlobalHeap (bool fromMLtonParallel);
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /**

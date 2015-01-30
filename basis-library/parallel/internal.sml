@@ -1,6 +1,5 @@
 structure MLtonParallelInternal =
 struct
-
     val processorNumber: unit -> Int32.int =
         _import "Parallel_processorNumber" runtime private: unit -> Int32.int;
 
@@ -9,4 +8,6 @@ struct
                           "Parallel_numberOfProcessors"
                           runtime private: unit -> Int32.int;) ())
 
+    val enterGlobalHeap = fn () => MLtonHM.enterGlobalHeap true
+    val exitGlobalHeap = fn () => MLtonHM.exitGlobalHeap true
 end

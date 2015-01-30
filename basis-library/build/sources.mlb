@@ -300,6 +300,9 @@ in
    ../mlton/exn.sig
    ../mlton/exn.sml
 
+   ../mlton/HM.sig
+   ../mlton/HM.sml
+
    ann "allowFFI true" in
       ../parallel/internal.sml
    end
@@ -311,8 +314,7 @@ in
    ../mlton/process.sml
    ../mlton/gc.sig
    ../mlton/gc.sml
-   ../mlton/HM.sig
-   ../mlton/HM.sml
+
    ../mlton/rusage.sig
    ../mlton/rusage.sml
 

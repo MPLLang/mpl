@@ -55,14 +55,14 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Entering "
                     "Management Heap GC\n",
                     processor);
-    HM_enterGlobalHeap();
+    HM_enterGlobalHeap(FALSE);
     ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
                                                    forceGC,
                                                    TRUE,
                                                    TRUE,
                                                    0,
                                                    0);
-    HM_exitGlobalHeap();
+    HM_exitGlobalHeap(FALSE);
     HM_debugMessage(s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Exiting "
                     "Management Heap GC\n",

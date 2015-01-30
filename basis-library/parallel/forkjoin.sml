@@ -3,6 +3,7 @@ struct
 
   structure B = MLtonParallelBasic
   structure HH = MLtonHM.HierarchicalHeap
+  structure I = MLtonParallelInternal
   structure V = MLtonParallelSyncVarCapture
 
   datatype 'a result =
@@ -61,9 +62,9 @@ struct
   in
       fun fork functions =
           let
-              val _ = MLtonHM.enterGlobalHeap ()
+              val _ = I.enterGlobalHeap ()
               val result = doFork functions
-              val _ = MLtonHM.exitGlobalHeap ()
+              val _ = I.exitGlobalHeap ()
           in
               result
           end
@@ -96,9 +97,9 @@ struct
   in
       fun reduce maxSeq f g u n =
           let
-              val _ = MLtonHM.enterGlobalHeap ()
+              val _ = I.enterGlobalHeap ()
               val result = doReduce maxSeq f g u n
-              val _ = MLtonHM.exitGlobalHeap ()
+              val _ = I.exitGlobalHeap ()
           in
               result
           end
@@ -131,9 +132,9 @@ struct
   in
       fun reduce' maxSeq g n =
           let
-              val _ = MLtonHM.enterGlobalHeap ()
+              val _ = I.enterGlobalHeap ()
               val result = doReduce' maxSeq g n
-              val _ = MLtonHM.exitGlobalHeap ()
+              val _ = I.exitGlobalHeap ()
           in
               result
           end

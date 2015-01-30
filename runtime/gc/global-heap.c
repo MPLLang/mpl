@@ -17,10 +17,15 @@
 
 #include "heap-utils.h"
 
+/********************/
+/* Static Variables */
+/********************/
+static bool HM_mltonParallelCalled = FALSE;
+
 /************************/
 /* Function Definitions */
 /************************/
-void HM_enterGlobalHeap (void) {
+void HM_enterGlobalHeap (bool fromMLtonParallel) {
   GC_state s = pthread_getspecific (gcstate_key);
   if (NULL == s) {
     /* initialization not finished, so nothing to do yet */
@@ -28,6 +33,25 @@ void HM_enterGlobalHeap (void) {
   }
 
   GC_thread currentThread = getThreadCurrent (s);
+
+  if (!HM_mltonParallelCalled) {
+    if (fromMLtonParallel) {
+      /*
+       * This is the first call from MLton.Parallel, so we let it slide (nothing
+       * to do). The next calls will perform the actions
+       */
+      HM_mltonParallelCalled = TRUE;
+    }
+
+    /**
+     * On calls before MLton.Parallel called, the thread is already set
+     * inGlobalHeap = 1 so nothing to do. Subsequent threads are created in
+     * MLton.Parallel so those will only call exitGlobalHeap() instead of
+     * enterGlobalHeap()
+     */
+    assert(1 == currentThread->inGlobalHeapCounter);
+    return;
+  }
 
   if ((~((size_t)(0))) == currentThread->inGlobalHeapCounter) {
     die(__FILE__ ":%d: currentThread->inGlobalHeapCounter about to overflow!",
@@ -47,7 +71,7 @@ void HM_enterGlobalHeap (void) {
   }
 }
 
-void HM_exitGlobalHeap (void) {
+void HM_exitGlobalHeap (bool fromMLtonParallel) {
   GC_state s = pthread_getspecific (gcstate_key);
   if (NULL == s) {
     /* initialization not finished, so nothing to do yet */
@@ -55,6 +79,13 @@ void HM_exitGlobalHeap (void) {
   }
 
   GC_thread currentThread = getThreadCurrent (s);
+
+  if (!HM_mltonParallelCalled) {
+    /* HM_enterGlobalHeap() should have been called first! */
+    assert(!fromMLtonParallel);
+    assert(1 == currentThread->inGlobalHeapCounter);
+    return;
+  }
 
   assert (currentThread->inGlobalHeapCounter > 0);
   currentThread->inGlobalHeapCounter--;

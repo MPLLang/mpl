@@ -19,6 +19,6 @@ signature MLTON_HM =
                       val get: unit -> t
                   end
 
-        val enterGlobalHeap: unit -> unit
-        val exitGlobalHeap: unit -> unit
+        val enterGlobalHeap: bool -> unit
+        val exitGlobalHeap: bool -> unit
     end

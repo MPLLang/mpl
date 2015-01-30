@@ -23,6 +23,6 @@ structure MLtonHM:> MLTON_HM =
                 val get: unit -> t = PrimHH.getHierarchicalHeap
             end
 
-        val enterGlobalHeap: unit -> unit = PrimHM.enterGlobalHeap
-        val exitGlobalHeap: unit -> unit = PrimHM.exitGlobalHeap
+        val enterGlobalHeap: bool -> unit = PrimHM.enterGlobalHeap
+        val exitGlobalHeap: bool -> unit = PrimHM.exitGlobalHeap
     end
