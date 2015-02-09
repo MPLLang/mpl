@@ -38,6 +38,17 @@ void forwardObjptr (GC_state s, objptr *opp) {
     fprintf (stderr,
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
+
+  if (HM_objptrInHierarchicalHeap(s, *opp)) {
+    /*
+     * We do not support collecting the global heap while the hierarchical
+     * heaps are in play
+     */
+    die(__FILE__ ":%d: forwardObjptr(): Tried to collect global heap while "
+        "hierarchical heaps are used!",
+        __LINE__);
+  }
+
   assert (isObjptrInFromSpace (s, *opp));
   header = getHeader (p);
   if (DEBUG_DETAILED and header == GC_FORWARDED)
