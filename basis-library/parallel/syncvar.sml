@@ -15,6 +15,22 @@ struct
 
   fun empty () = (ref ~1, ref (Waiting nil))
 
+  fun die message =
+      (TextIO.output (TextIO.stdErr, message);
+       TextIO.flushOut TextIO.stdErr;
+       MLtonProcess.exit MLtonProcess.Status.failure)
+
+  fun checkZeroReader list =
+      case list
+       of [] => ()
+        | _ => die "syncvar.sml: reader already waiting!\n"
+
+  fun checkMaxOneReader list =
+      case list
+       of [] => ()
+        | [_] => ()
+        | _ => die "syncvar.sml: more than one reader waiting?!\n"
+
   local
       fun doWrite ((r, v), a) =
           case !v of
@@ -29,6 +45,7 @@ struct
                                   | Done _ => raise B.Parallel "async write to sync var!"
                   val () = v := Done a
                   val () = unlock r
+                  val () = checkMaxOneReader readers
               in
                   app (fn k => B.resume (k, (true, a))) readers
               end
@@ -60,7 +77,8 @@ struct
                    of Done a =>
                       (unlock r; (false, a))
                     | Waiting readers =>
-                      B.suspend (fn k => (v := Waiting (k::readers); unlock r))
+                      (checkZeroReader readers;
+                       B.suspend (fn k => (v := Waiting (k::readers); unlock r)))
               end
   in
       fun read argument =
