@@ -69,6 +69,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
 struct HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 /**
  * Appends the derived hierarchical heap to the childHHList of the source
  * hierarchical heap and sets relationships appropriately.
@@ -98,6 +99,7 @@ PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
 PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
+#endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /* RAM_NOTE: should take GC_state argument once I get that back in */

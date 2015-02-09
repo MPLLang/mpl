@@ -33,6 +33,7 @@ static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
 /************************/
 /* Function Definitions */
 /************************/
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
                                      pointer childHHPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
@@ -85,8 +86,19 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
    * This assert assumes that all merges happen in LIFO order, as per the
    * comment in HM_appendChildHH ()
    */
-  assert (parentHH->childHHList == hhObjptr);
-  parentHH->childHHList = hh->nextChildHH;
+  objptr* cursor;
+  for (cursor = &(parentHH->childHHList);
+#if ASSERT
+       (BOGUS_OBJPTR != *cursor) &&
+#endif
+                        (hhObjptr != *cursor);
+       cursor = &(HHObjptrToStruct(s, *cursor)->nextChildHH)) {
+  }
+  /* hh should be found! */
+  assert(BOGUS_OBJPTR != *cursor);
+  /* remove hh from the list */
+  *cursor = hh->nextChildHH;
+
 
   /* append hh->chunkList to parentHH->chunkList */
   HM_appendChunkList (&(parentHH->chunkList),
@@ -98,6 +110,7 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   /* don't assert hh here as it should be thrown away! */
 #endif /* ASSERT */
 }
+#endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 void HM_displayHierarchicalHeap (
