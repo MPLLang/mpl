@@ -22,8 +22,10 @@ void switchToThread (GC_state s, objptr op) {
 
 #if ASSERT
   if (BOGUS_OBJPTR != s->currentThread) {
-    /* switching threads should only happen in the global heap! */
-    assert (0 != getThreadCurrent (s)->inGlobalHeapCounter);
+    if (getThreadCurrent(s)->useHierarchicalHeap) {
+      /* switching threads should only happen in the global heap! */
+      assert (HM_inGlobalHeap(s));
+    }
   }
 #endif
 

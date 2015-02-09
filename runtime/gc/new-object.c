@@ -58,7 +58,7 @@ GC_stack newStack (GC_state s,
   GC_stack stack;
 
 #pragma message "Figure out a way to put this in the hierarchical heaps"
-  HM_enterGlobalHeap(FALSE);
+  HM_enterGlobalHeap();
 
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
@@ -73,7 +73,7 @@ GC_stack newStack (GC_state s,
              (uintptr_t)stack,
              (uintmax_t)reserved);
 
-  HM_exitGlobalHeap(FALSE);
+  HM_exitGlobalHeap();
 
   return stack;
 }
@@ -83,7 +83,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   GC_thread thread;
   pointer res;
 
-  HM_enterGlobalHeap(FALSE);
+  HM_enterGlobalHeap();
 
   assert (isStackReservedAligned (s, reserved));
   ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
@@ -92,15 +92,16 @@ GC_thread newThread (GC_state s, size_t reserved) {
                    sizeofThread (s),
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
+  thread->inGlobalHeapCounter = 0;
+  thread->useHierarchicalHeap = FALSE;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->inGlobalHeapCounter = 1;
   thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
 
-  HM_exitGlobalHeap(FALSE);
+  HM_exitGlobalHeap();
 
   return thread;
 }

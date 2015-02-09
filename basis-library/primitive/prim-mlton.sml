@@ -163,7 +163,12 @@ structure HM =
                     _prim "HierarchicalHeap_new": unit -> t;
 
                 val setHierarchicalHeap: t -> unit =
-                    _import "GC_setCurrentHierarchicalHeap" runtime private: t -> unit;
+                    _import "GC_setCurrentHierarchicalHeap" runtime private:
+                    t -> unit;
+
+                val setCurrentThreadUseHierarchicalHeap: unit -> unit =
+                    _import "T_setCurrentThreadUseHierarchicalHeap"
+                            runtime private: unit -> unit;
             end
 
         val enterGlobalHeap: bool -> unit =

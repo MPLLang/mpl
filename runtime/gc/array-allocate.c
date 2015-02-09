@@ -26,7 +26,7 @@ pointer GC_arrayAllocate (GC_state s,
         __LINE__);
   }
 #else
-  HM_enterGlobalHeap(FALSE);
+  HM_enterGlobalHeap();
 #endif
 
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
@@ -153,7 +153,7 @@ pointer GC_arrayAllocate (GC_state s,
     LEAVE1 (s, result);
   }
 
-  HM_exitGlobalHeap(FALSE);
+  HM_exitGlobalHeap();
 
   return result;
 

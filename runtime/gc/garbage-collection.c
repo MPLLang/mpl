@@ -474,7 +474,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
 
-  if (HM_inGlobalHeap(s)) {
+  if (!getThreadCurrent(s)->useHierarchicalHeap || HM_inGlobalHeap(s)) {
     ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
                                                     TRUE, TRUE,
                                                     0, 0);

@@ -422,45 +422,56 @@ structure ObjectType =
 
       val stack = Stack
 
-      val thread = fn () =>
-         let
-            val padding =
-                let
-                    val align =
-                        case !Control.align of
-                            Control.Align4 => Bytes.fromInt 4
-                          | Control.Align8 => Bytes.fromInt 8
-                    val bytesHeader =
-                        Bits.toBytes (Control.Target.Size.header ())
-                    val bytesCSize =
-                        Bits.toBytes (Control.Target.Size.csize ())
-                    val bytesExnStack =
-                        Bits.toBytes (Type.width (Type.exnStack ()))
-                    val bytesInGlobalHeapCounter =
-                        Bits.toBytes (Control.Target.Size.csize ())
-                    val bytesStack =
-                        Bits.toBytes (Type.width (Type.stack ()))
+      val thread =
+       fn () =>
+          let
+              val padding =
+                  let
+                      val align =
+                          case !Control.align
+                           of Control.Align4 => Bytes.fromInt 4
+                            | Control.Align8 => Bytes.fromInt 8
+                      val bytesHeader =
+                          Bits.toBytes (Control.Target.Size.header ())
+                      val bytesInGlobalHeapCounter =
+                          Bits.toBytes (Type.width (Type.word32))
+                      val bytesUseHierarchicalHeap =
+                          Bits.toBytes (Type.width (Type.bool))
+                      val bytesBytesNeeded =
+                          Bits.toBytes (Control.Target.Size.csize ())
+                      val bytesExnStack =
+                          Bits.toBytes (Type.width (Type.exnStack ()))
+                      val bytesStack =
+                          Bits.toBytes (Type.width (Type.stack ()))
 
-                  val bytesObject =
-                     Bytes.+ (bytesHeader,
-                     Bytes.+ (bytesCSize,
-                     Bytes.+ (bytesExnStack,
-                     Bytes.+ (bytesInGlobalHeapCounter,
-                              bytesStack))))
-                  val bytesTotal =
-                     Bytes.align (bytesObject, {alignment = align})
-                  val bytesPad = Bytes.- (bytesTotal, bytesObject)
-               in
-                  Type.bits (Bytes.toBits bytesPad)
-               end
-         in
-            Normal {hasIdentity = true,
-                    ty = Type.seq (Vector.fromList [padding,
-                                                    Type.csize (),
-                                                    Type.exnStack (),
-                                                    Type.csize (),
-                                                    Type.stack ()])}
-         end
+                      val bytesObject =
+                          let
+                              infix 6 +
+                              fun x + y = Bytes.+ (x, y)
+                          in
+                              bytesHeader +
+                              bytesInGlobalHeapCounter +
+                              bytesUseHierarchicalHeap +
+                              bytesBytesNeeded +
+                              bytesExnStack +
+                              bytesStack
+                          end
+
+                      val bytesTotal = Bytes.align (bytesObject,
+                                                    {alignment = align})
+                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
+                  in
+                      Type.bits (Bytes.toBits bytesPad)
+                  end
+          in
+              Normal {hasIdentity = true,
+                      ty = Type.seq (Vector.fromList [padding,
+                                                      Type.word32,
+                                                      Type.bool,
+                                                      Type.csize (),
+                                                      Type.exnStack (),
+                                                      Type.stack ()])}
+          end
 
       val hierarchicalHeap =
        fn () =>

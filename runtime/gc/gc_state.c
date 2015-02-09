@@ -343,9 +343,26 @@ pointer GC_getCurrentThread (void) {
   return p;
 }
 
+void GC_setCurrentThreadUseHierarchicalHeap (void) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread currentThread = getThreadCurrent(s);
+
+  currentThread->useHierarchicalHeap = TRUE;
+}
+
 pointer GC_getCurrentHierarchicalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return objptrToPointer (s->currentHierarchicalHeap, s->heap->start);
+
+  pointer retVal;
+  if (BOGUS_OBJPTR != s->currentHierarchicalHeap) {
+    retVal = objptrToPointer (s->currentHierarchicalHeap, s->heap->start);
+  } else {
+    /* create a new hierarchical heap to return */
+    retVal = HM_newHierarchicalHeap(s);
+    s->currentHierarchicalHeap = pointerToObjptr(retVal, s->heap->start);
+  }
+
+  return retVal;
 }
 
 void GC_setCurrentHierarchicalHeap (pointer hhPointer) {

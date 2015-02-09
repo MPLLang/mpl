@@ -12,6 +12,8 @@
  * invariant.
  */
 void enter (GC_state s) {
+#pragma message "This should be more nuanced with HH collection"
+  HM_enterGlobalHeap ();
   if (DEBUG)
     fprintf (stderr, "enter\n");
   /* used needs to be set because the mutator has changed s->stackTop. */
@@ -42,4 +44,6 @@ void leave (GC_state s) {
   Proc_endCriticalSection(s);
   if (DEBUG)
     fprintf (stderr, "leave unlocked\n");
+#pragma message "This should be more nuanced with HH collection"
+  HM_exitGlobalHeap();
 }

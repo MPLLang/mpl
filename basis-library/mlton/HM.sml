@@ -21,6 +21,9 @@ structure MLtonHM:> MLTON_HM =
 
                 val set: t -> unit = PrimHH.setHierarchicalHeap
                 val get: unit -> t = PrimHH.getHierarchicalHeap
+
+                val useHierarchicalHeap: unit -> unit =
+                    PrimHH.setCurrentThreadUseHierarchicalHeap
             end
 
         val enterGlobalHeap: bool -> unit = PrimHM.enterGlobalHeap

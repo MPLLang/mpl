@@ -17,6 +17,8 @@ signature MLTON_HM =
 
                       val set: t -> unit
                       val get: unit -> t
+
+                      val useHierarchicalHeap: unit -> unit
                   end
 
         val enterGlobalHeap: bool -> unit

@@ -124,6 +124,16 @@ PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
 PRIVATE void GC_setCallFromCHandlerThread (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);
+PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (void);
+/**
+ * This function returns the current hierarchical heap
+ *
+ * @note
+ * If no hierarchical heap was set, a new one is created, set as current, and
+ * returned.
+ *
+ * @return pointer to the current hierarchical heap
+ */
 PRIVATE pointer GC_getCurrentHierarchicalHeap (void);
 PRIVATE void GC_setCurrentHierarchicalHeap (pointer hhPointer);
 PRIVATE pointer GC_getSavedThread (void);

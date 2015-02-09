@@ -55,11 +55,18 @@ struct
   (* RAM_NOTE: Remove once futures are reintegrated *)
   fun checkDelayedEmpty p =
       if length (Array.sub (delayed, p)) > 0 then
-          print "basic.sml: capture': ERROR: Delayed work exists?\n"
+          die "basic.sml: capture': ERROR: Delayed work exists?\n"
       else
           ()
 
-  fun makeHHSetter hh = fn _ => HH.set hh
+  fun makeHHSetter hhOption = fn () => case hhOption
+                                        of SOME(hh) => (I.enterGlobalHeap ();
+                                                        HH.set hh;
+                                                        HH.useHierarchicalHeap ();
+                                                        I.exitGlobalHeap ())
+                                         | NONE => (I.enterGlobalHeap ();
+                                                    HH.useHierarchicalHeap ();
+                                                    I.exitGlobalHeap ())
 
   fun schedule countSuspends () =
     let
@@ -85,18 +92,19 @@ struct
                                         val () =
                                             HH.appendChild (parentHH, childHH)
                                     in
-                                        HH.set childHH;
-                                        I.exitGlobalHeap ();
+                                        makeHHSetter (SOME childHH) ();
                                         w ()
                                     end
                                 else
-                                    (I.exitGlobalHeap ();
+                                    (I.enterGlobalHeap();
+                                     HH.useHierarchicalHeap ();
+                                     I.exitGlobalHeap ();
                                      w ())
                               | Thread (k, hh) =>
                                 T.switch (fn _ =>
                                              T.prepare
                                                  (T.prepend
-                                                      (k, makeHHSetter hh),
+                                                      (k, makeHHSetter (SOME hh)),
                                                   ()))
 
                                 (* PERF? this handle only makes sense for the Work case *)
@@ -145,8 +153,7 @@ struct
                             in
                                 T.new (fn () =>
                                           (Q.startWork p;
-                                           HH.set childHH;
-                                           I.exitGlobalHeap ();
+                                           makeHHSetter (SOME childHH) ();
                                            w ()
                                           (* RAM_NOTE: Do I need to switch heaps on exception here? *)
                                           ))
@@ -154,12 +161,14 @@ struct
                         else
                             T.new (fn () =>
                                       (Q.startWork p;
+                                       I.enterGlobalHeap ();
+                                       HH.useHierarchicalHeap ();
                                        I.exitGlobalHeap ();
                                        w ()
                                       (* RAM_NOTE: Do I need to switch heaps on exception here? *)
                                       ))
                       | SOME (_, Thread (k, hh)) =>
-                        T.prepend (k, fn _ => (HH.set hh; Q.startWork p))
+                        T.prepend (k, fn _ => (makeHHSetter (SOME hh) (); Q.startWork p))
                       | NONE => T.new (fn () => schedule false ())
                 (* to disable hijacking, use this instead
                 val t = T.new schedule

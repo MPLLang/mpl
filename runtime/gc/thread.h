@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2014-2015 Ram Raghunathan
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -32,18 +33,20 @@
  * normal object.
  */
 typedef struct GC_thread {
+  Word32 inGlobalHeapCounter;
+  Bool useHierarchicalHeap;
   size_t bytesNeeded;
   size_t exnStack;
-  size_t inGlobalHeapCounter;
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
-                    sizeof(size_t)
-                    + sizeof(size_t)
-                    + sizeof(size_t)
-                    + sizeof(objptr));
+                    sizeof(Word32) +
+                    sizeof(Bool) +
+                    sizeof(size_t) +
+                    sizeof(size_t) +
+                    sizeof(objptr));
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
 
@@ -53,6 +56,16 @@ struct GC_thread;
 typedef struct GC_thread *GC_thread;
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
+
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+/**
+ * This function sets the current thread to use the hierarchical heap.
+ *
+ * @attention
+ * Once set, this cannot be unset
+ */
+PRIVATE void T_setCurrentThreadUseHierarchicalHeap(void);
+#endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 

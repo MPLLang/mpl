@@ -17,15 +17,17 @@
 #ifndef GLOBAL_HEAP_H_
 #define GLOBAL_HEAP_H_
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 /**
  * This function changes the runtime to use the global heap.
  */
-PRIVATE void HM_enterGlobalHeap (bool fromMLtonParallel);
+PRIVATE void HM_enterGlobalHeap (void);
 
 /**
  * This function changes the runtime to exit the global heap.
  */
-PRIVATE void HM_exitGlobalHeap (bool fromMLtonParallel);
+PRIVATE void HM_exitGlobalHeap (void);
+#endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /**

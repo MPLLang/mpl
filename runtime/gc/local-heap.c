@@ -40,7 +40,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   assert (bytesRequested >= GC_HEAP_LIMIT_SLOP);
 
   int processor = s->procStates ? Proc_processorNumber (s) : -1;
-  struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
   HM_debugMessage(s,
@@ -55,22 +54,30 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Entering "
                     "Management Heap GC\n",
                     processor);
-    HM_enterGlobalHeap(FALSE);
-    ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
-                                                   forceGC,
-                                                   TRUE,
-                                                   TRUE,
-                                                   0,
-                                                   0);
-    HM_exitGlobalHeap(FALSE);
+    HM_enterGlobalHeap();
+    ENTER0(s);
+    LEAVE0(s);
+    HM_exitGlobalHeap();
     HM_debugMessage(s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Exiting "
                     "Management Heap GC\n",
                     processor);
   }
 
+  if (!invariantForMutatorStack(s)) {
+    /* go to global GC to get the stack invariant satisfied */
+    HM_enterGlobalHeap();
+    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, forceGC,
+                                                    FALSE, TRUE,
+                                                    0, 0);
+    HM_exitGlobalHeap();
+  }
+
+  /* fetch after management heap GC to make sure that I get the updated value */
+  struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+
   if (s->limitPlusSlop < s->frontier) {
-    die(__FILE__ ":%d: s->limit (%p) < s->frontier (%p)",
+    die(__FILE__ ":%d: s->limitPlusSlop (%p) < s->frontier (%p)",
         __LINE__,
         ((void*)(s->limit)),
         ((void*)(s->frontier)));
@@ -87,5 +94,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
-  assert(((size_t)(s->limit - s->frontier)) >= bytesRequested);
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
 }
