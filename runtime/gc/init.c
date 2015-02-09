@@ -290,11 +290,10 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp (arg, "chunk-pool-size")) {
-#pragma message "There should be a cleaner way of doing this"
+        } else if (0 == strcmp (arg, "fixed-chunk-pool")) {
           i++;
           if (i == argc) {
-            die ("@MLton chunk-pool-size missing argument.");
+            die ("@MLton fixed-chunk-pool missing argument.");
           }
           ChunkPool_initialize(stringToBytes (argv[i++]));
         } else if (0 == strcmp (arg, "--")) {
