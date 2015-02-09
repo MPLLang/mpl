@@ -30,6 +30,19 @@ void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
   }
 }
 
+static inline void assertIsObjptrReachable (GC_state s, objptr *opp) {
+  assert (isObjptrInFromSpace (s, *opp) ||
+          HM_objptrInHierarchicalHeap(s, *opp));
+
+  if (!isObjptrInFromSpace (s, *opp) &&
+      !HM_objptrInHierarchicalHeap(s, *opp)) {
+    die ("gc.c: assertIsObjptrReachable "
+         "opp = "FMTPTR"  "
+         "*opp = "FMTOBJPTR"\n",
+         (uintptr_t)opp, *opp);
+  }
+}
+
 bool invariantForGC (GC_state s) {
   int proc;
   if (DEBUG)
@@ -81,27 +94,27 @@ bool invariantForGC (GC_state s) {
   pointer back = s->heap->start + s->heap->oldGenSize;
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking old generation.\n");
-  foreachObjptrInRange (s, alignFrontier (s, s->heap->start), &back, 
-                        assertIsObjptrInFromSpace, FALSE);
+  foreachObjptrInRange (s, alignFrontier (s, s->heap->start), &back,
+                        assertIsObjptrReachable, FALSE);
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking nursery.\n");
   if (s->procStates) {
     pointer firstStart = s->heap->frontier;
     for (proc = 0; proc < s->numberOfProcs; proc++) {
       foreachObjptrInRange (s, s->procStates[proc].start,
-                            &s->procStates[proc].frontier, 
-                            assertIsObjptrInFromSpace, FALSE);
+                            &s->procStates[proc].frontier,
+                            assertIsObjptrReachable, FALSE);
       if (s->procStates[proc].start
           and s->procStates[proc].start < firstStart)
         firstStart = s->procStates[proc].start;
     }
     foreachObjptrInRange (s, s->heap->nursery,
                           &firstStart,
-                          assertIsObjptrInFromSpace, FALSE);
+                          assertIsObjptrReachable, FALSE);
   }
   else {
-    foreachObjptrInRange (s, s->start, &s->frontier, 
-                          assertIsObjptrInFromSpace, FALSE);
+    foreachObjptrInRange (s, s->start, &s->frontier,
+                          assertIsObjptrReachable, FALSE);
   }
   /* Current thread. */
   GC_stack stack = getStackCurrent(s);

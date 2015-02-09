@@ -11,6 +11,7 @@
 
 #if ASSERT
 static inline void assertIsObjptrInFromSpace (GC_state s, objptr *opp);
+static inline void assertIsObjptrReachable (GC_state s, objptr *opp);
 static bool invariantForGC (GC_state s);
 #endif
 static inline bool invariantForMutatorFrontier (GC_state s);
