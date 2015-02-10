@@ -1,17 +1,9 @@
-
-val fork = MLton.Parallel.ForkJoin.fork
-val policyName = MLton.Parallel.Basic.policyName
-(*
-fun fork (f, g) = (f (), g ())
-val policyName = "serial"
-*)
-
-fun fib n =
+fun fib fork n=
     if n <= 1 then 1
     else
       let
-        val (a, b) = fork (fn () => fib (n - 1),
-                           fn () => fib (n - 2))
+        val (a, b) = fork (fn () => fib fork (n - 1),
+                           fn () => fib fork (n - 2))
       in
         a + b
       end
@@ -25,20 +17,20 @@ fun iterFib n =
       loop 0 1 1
     end
 
-val () =
-    if null (CommandLine.arguments ()) then
+fun main fork args =
+    if null args then
       let
         fun run n =
             let
               val start = Time.now ()
-              val r = fib n
+              val r = fib fork n
               val diff = Time.- (Time.now (), start)
               val r' = iterFib n
               val () = if r <> r' then print ("expected " ^ Int.toString r' ^
                                               " but got " ^ Int.toString r ^ " instead!\n")
                        else ()
             in
-              print (concat [policyName, " Fib(",
+              print (concat [" Fib(",
                              Int.toString n, ")\t",
                              LargeInt.toString (Time.toMilliseconds diff),
                              " ms\n"])
@@ -48,8 +40,8 @@ val () =
       end
     else
       let
-        val n = valOf (Int.fromString (hd (CommandLine.arguments ())))
-        val r = fib n
+        val n = valOf (Int.fromString (hd (args)))
+        val r = fib fork n
         val r' = iterFib n
         val () = if r <> r' then print ("expected " ^ Int.toString r' ^
                                         " but got " ^ Int.toString r ^ " instead!\n")
@@ -57,3 +49,16 @@ val () =
       in
         print ("finished with " ^ (Int.toString r) ^ "\n")
       end
+
+val () =
+    case CommandLine.arguments ()
+     of "serial"::args => (print "Running in serial mode\n";
+                           main (fn (f, g) => (f (), g ())) args)
+      | "parallel"::args => (print "Running in parallel mode\n";
+                             main MLton.Parallel.ForkJoin.fork args)
+      | argument::_ => (TextIO.output (TextIO.stdErr, "Invalid fork-mode \"" ^
+                                                      argument ^
+                                                      "\"\n");
+                        OS.Process.exit OS.Process.failure)
+      | [] => (TextIO.output (TextIO.stdErr, "Fork mode unspecified!\n");
+               OS.Process.exit OS.Process.failure)

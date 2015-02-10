@@ -1,25 +1,23 @@
-val fork = MLton.Parallel.ForkJoin.fork
-
-fun quicksort xs =
+fun sort fork =
     let
-        fun qs [] = []
-          | qs [x] = [x]
-          | qs (p::xs) =
+        fun quicksort xs =
             let
-                val (less, more) = List.partition (fn x => x < p) xs
-                val (left, right) = if length less > 10000
-                                    then fork (fn () => qs less,
-                                               fn () => qs more)
-                                    else (qs less, qs more)
+                fun qs [] = []
+                  | qs [x] = [x]
+                  | qs (p::xs) =
+                    let
+                        val (less, more) = List.partition (fn x => x < p) xs
+                        val (left, right) = if length less > 10000
+                                            then fork (fn () => qs less,
+                                                       fn () => qs more)
+                                            else (qs less, qs more)
+                    in
+                        left @ (p :: right)
+                    end
             in
-                left @ (p :: right)
+                qs xs
             end
-    in
-        qs xs
-    end
 
-fun main () =
-    let
         fun listToString list =
             "[" ^
             (foldl (fn (x, acc) => acc ^ ", " ^ (Int.toString x)) "" list) ^
@@ -45,4 +43,15 @@ fun main () =
         print ("Correct Sort?: " ^ Bool.toString (sorted result) ^ "\n")
     end
 
-val () = main ()
+val () =
+    case CommandLine.arguments ()
+     of "serial"::_ => (print "Running in serial mode\n";
+                        sort (fn (f, g) => (f (), g ())))
+      | "parallel"::_ => (print "Running in parallel mode\n";
+                          sort MLton.Parallel.ForkJoin.fork)
+      | argument::_ => (TextIO.output (TextIO.stdErr, "Invalid fork-mode \"" ^
+                                                      argument ^
+                                                      "\"\n");
+                        OS.Process.exit OS.Process.failure)
+      | [] => (TextIO.output (TextIO.stdErr, "Fork mode unspecified!\n");
+               OS.Process.exit OS.Process.failure)
