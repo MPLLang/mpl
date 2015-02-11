@@ -7,7 +7,7 @@ fun sort fork =
                   | qs (p::xs) =
                     let
                         val (less, more) = List.partition (fn x => x < p) xs
-                        val (left, right) = if length less > 10000
+                        val (left, right) = if length less > 10
                                             then fork (fn () => qs less,
                                                        fn () => qs more)
                                             else (qs less, qs more)
