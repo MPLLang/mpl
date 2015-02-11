@@ -34,8 +34,7 @@ static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
-                                     pointer childHHPointer) {
+void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
@@ -45,8 +44,8 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(s, childHHObjptr);
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(s, parentHH);
-  HM_assertHierarchicalHeapInvariants(s, childHH);
+  HM_HH_assertInvariants(s, parentHH);
+  HM_HH_assertInvariants(s, childHH);
 #endif /* ASSERT */
 
   /* childHH should be a orphan! */
@@ -62,12 +61,12 @@ void HM_appendChildHierarchicalHeap (pointer parentHHPointer,
   parentHH->childHHList = childHHObjptr;
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(s, parentHH);
-  HM_assertHierarchicalHeapInvariants(s, childHH);
+  HM_HH_assertInvariants(s, parentHH);
+  HM_HH_assertInvariants(s, childHH);
 #endif /* ASSERT */
 }
 
-void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
+void HM_HH_mergeIntoParent(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
@@ -77,8 +76,8 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(s, parentHH);
-  HM_assertHierarchicalHeapInvariants(s, hh);
+  HM_HH_assertInvariants(s, parentHH);
+  HM_HH_assertInvariants(s, hh);
 #endif /* ASSERT */
 
   /* remove hh from parentHH->childHHList */
@@ -106,14 +105,14 @@ void HM_mergeIntoParentHierarchicalHeap (pointer hhPointer) {
                       HM_getChunkListLastChunk(hh->chunkList));
 
 #if ASSERT
-  HM_assertHierarchicalHeapInvariants(s, parentHH);
+  HM_HH_assertInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
 #endif /* ASSERT */
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-void HM_displayHierarchicalHeap (
+void HM_HH_display (
     const struct HM_HierarchicalHeap* hh,
     FILE* stream) {
   fprintf (stream,
@@ -131,8 +130,7 @@ void HM_displayHierarchicalHeap (
            hh->childHHList);
 }
 
-bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
-                               size_t bytesRequested) {
+bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   void* chunk = HM_allocateChunk(bytesRequested);
 
   if (NULL == chunk) {
@@ -145,38 +143,38 @@ bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
   return TRUE;
 }
 
-struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s) {
+struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
   return HHObjptrToStruct(s, s->currentHierarchicalHeap);
 }
 
-void* HM_getHierarchicalHeapSavedFrontier(
+void* HM_HH_getSavedFrontier(
     const struct HM_HierarchicalHeap* hh) {
   return hh->savedFrontier;
 }
 
-void* HM_getHierarchicalHeapLimit(const struct HM_HierarchicalHeap* hh) {
+void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkEnd(hh->lastAllocatedChunk);
 }
 
-bool HM_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
+/* RAM_NOTE: should this be moved to local-heap.h? */
+bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
   return ChunkPool_pointerInChunkPool(candidatePointer);
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_offsetofHierarchicalHeap (GC_state s) {
-  return ((HM_sizeofHierarchicalHeap (s)) -
-          (GC_NORMAL_HEADER_SIZE +
-           sizeof (struct HM_HierarchicalHeap)));
+size_t HM_HH_offsetof(GC_state s) {
+  return (HM_HH_sizeof(s) - (GC_NORMAL_HEADER_SIZE +
+                             sizeof (struct HM_HierarchicalHeap)));
 }
 
-void HM_setHierarchicalHeapSavedFrontier(struct HM_HierarchicalHeap* hh,
-                                         void* savedFrontier) {
+void HM_HH_setSavedFrontier(struct HM_HierarchicalHeap* hh,
+                            void* savedFrontier) {
   hh->savedFrontier = savedFrontier;
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_sizeofHierarchicalHeap (GC_state s) {
+size_t HM_HH_sizeof(GC_state s) {
   size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
   result = align (result, s->alignment);
 
@@ -210,7 +208,7 @@ size_t HM_sizeofHierarchicalHeap (GC_state s) {
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
-void HM_assertHierarchicalHeapInvariants(GC_state s,
+void HM_HH_assertInvariants(GC_state s,
                                          const struct HM_HierarchicalHeap* hh) {
   HM_assertChunkListInvariants(hh->chunkList);
   assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
@@ -248,5 +246,5 @@ static struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s,
 
   pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
   return ((struct HM_HierarchicalHeap*)(hhPointer +
-                                        HM_offsetofHierarchicalHeap (s)));
+                                        HM_HH_offsetof(s)));
 }

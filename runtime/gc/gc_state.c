@@ -19,10 +19,10 @@ void displayGCState (GC_state s, FILE *stream) {
   fprintf (stream,
            "\tcurrentHierarchicalHeap = "FMTOBJPTR"\n",
            s->currentHierarchicalHeap);
-  HM_displayHierarchicalHeap (
-      ((struct HM_HierarchicalHeap*)(objptrToPointer (s->currentHierarchicalHeap,
-                                                      s->heap->start)
-                                     + offsetofThread (s))),
+  HM_HH_display(
+      ((struct HM_HierarchicalHeap*)(
+          objptrToPointer(s->currentHierarchicalHeap, s->heap->start) +
+          HM_HH_offsetof(s))),
       stream);
 
   fprintf (stream, "\tgenerational\n");

@@ -95,7 +95,6 @@ void initWorld (GC_state s) {
   uint32_t i;
   pointer start;
   GC_thread thread;
-  pointer hh;
   size_t minSize;
 
   for (i = 0; i < s->globalsLength; ++i)

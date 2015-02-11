@@ -81,8 +81,7 @@ struct HM_HierarchicalHeap;
  * @param childHH The struct HM_HierarchicalHeap set to be derived off of
  * 'parentHH'.
  */
-PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
-                                            pointer childHHObject);
+PRIVATE void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer);
 
 /**
  * Merges the specified hierarchical heap back into its source hierarchical
@@ -98,7 +97,7 @@ PRIVATE void HM_appendChildHierarchicalHeap(pointer parentHHObject,
  *
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
-PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
+PRIVATE void HM_HH_mergeIntoParent(pointer hhPointer);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -110,8 +109,7 @@ PRIVATE void HM_mergeIntoParentHierarchicalHeap(pointer hhObject);
  * @param hh The struct HM_HierarchicalHeap to print
  * @param stream The stream to print to
  */
-void HM_displayHierarchicalHeap(const struct HM_HierarchicalHeap* hh,
-                                FILE* stream);
+void HM_HH_display(const struct HM_HierarchicalHeap* hh, FILE* stream);
 
 /**
  * This function extends the hierarchical heap with at least bytesRequested free
@@ -127,8 +125,7 @@ void HM_displayHierarchicalHeap(const struct HM_HierarchicalHeap* hh,
  *
  * @return TRUE if extension succeeded, FALSE otherwise
  */
-bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
-                               size_t bytesRequested);
+bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 
 /**
  * Returns the current hierarchical heap in use
@@ -137,7 +134,7 @@ bool HM_extendHierarchicalHeap(struct HM_HierarchicalHeap* hh,
  *
  * @return hh The struct HM_HierarchicalHeap in use
  */
-struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s);
+struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
 
 /**
  * Gets the saved frontier from a struct HM_HierarchicalHeap
@@ -146,8 +143,7 @@ struct HM_HierarchicalHeap* HM_getCurrentHierarchicalHeap (GC_state s);
  *
  * @return the savedFrontier field
  */
-void* HM_getHierarchicalHeapSavedFrontier(
-    const struct HM_HierarchicalHeap* hh);
+void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Gets the heap limit from a struct HM_HierarchicalHeap
@@ -156,7 +152,7 @@ void* HM_getHierarchicalHeapSavedFrontier(
  *
  * @return the heap limit
  */
-void* HM_getHierarchicalHeapLimit(const struct HM_HierarchicalHeap* hh);
+void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Checks if 'candidateObjptr' belongs to the hierarchical heap space.
@@ -167,7 +163,7 @@ void* HM_getHierarchicalHeapLimit(const struct HM_HierarchicalHeap* hh);
  * @return TRUE if 'candidateObjptr' belongs to the hierarchical heap space,
  * FALSE otherwise
  */
-bool HM_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
+bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 
 /**
  * Returns offset into object to get at the struct HM_HierarchicalHeap
@@ -180,7 +176,7 @@ bool HM_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
  *
  * @return The offset into the object to get to the struct HM_HierarchicalHeap
  */
-size_t HM_offsetofHierarchicalHeap(GC_state s);
+size_t HM_HH_offsetof(GC_state s);
 
 /**
  * Sets the saved frontier in a struct HM_HierarchicalHeap
@@ -188,8 +184,8 @@ size_t HM_offsetofHierarchicalHeap(GC_state s);
  * @param hh The struct HM_HierarchicalHeap to use
  * @param savedFrontier The new saved frontier to set
  */
-void HM_setHierarchicalHeapSavedFrontier(struct HM_HierarchicalHeap* hh,
-                                         void* savedFrontier);
+void HM_HH_setSavedFrontier(struct HM_HierarchicalHeap* hh,
+                            void* savedFrontier);
 
 /**
  * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
@@ -199,7 +195,7 @@ void HM_setHierarchicalHeapSavedFrontier(struct HM_HierarchicalHeap* hh,
  *
  * @return total size of the struct HM_HierarchicalHeap object
  */
-size_t HM_sizeofHierarchicalHeap(GC_state s);
+size_t HM_HH_sizeof(GC_state s);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
@@ -212,8 +208,7 @@ size_t HM_sizeofHierarchicalHeap(GC_state s);
  *
  * @param hh The struct HM_HierarchicalHeap to assert invariants for
  */
-void HM_assertHierarchicalHeapInvariants(GC_state s,
-                                         const struct HM_HierarchicalHeap* hh);
+void HM_HH_assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh);
 #endif /* ASSERT */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

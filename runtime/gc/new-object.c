@@ -108,26 +108,28 @@ GC_thread newThread (GC_state s, size_t reserved) {
 
 pointer HM_newHierarchicalHeap (GC_state s) {
   /* allocate the object */
-  ensureHasHeapBytesFreeAndOrInvariantForMutator (
-      s, FALSE, FALSE, FALSE, 0, HM_sizeofHierarchicalHeap (s));
+  ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
+                                                 FALSE,
+                                                 FALSE,
+                                                 FALSE,
+                                                 0,
+                                                 HM_HH_sizeof(s));
   pointer hhObject = newObject (s,
                                 GC_HIERARCHICAL_HEAP_HEADER,
-                                HM_sizeofHierarchicalHeap (s),
+                                HM_HH_sizeof(s),
                                 FALSE);
   struct HM_HierarchicalHeap* hh =
       ((struct HM_HierarchicalHeap*)(hhObject +
-                                     HM_offsetofHierarchicalHeap (s)));
+                                     HM_HH_offsetof(s)));
 
   /* initialize the object with a small chunk */
   hh->lastAllocatedChunk = NULL;
   hh->savedFrontier = NULL;
+  hh->currentLevel = HH_INVALID_LEVEL;
   hh->chunkList = NULL;
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;
-  if (!HM_extendHierarchicalHeap(hh, GC_HEAP_LIMIT_SLOP)) {
-    die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-  }
 
   if (DEBUG_HEAP_MANAGEMENT) {
     fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));

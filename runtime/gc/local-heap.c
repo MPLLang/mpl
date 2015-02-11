@@ -21,17 +21,17 @@
 /* Function Definitions */
 /************************/
 void HM_enterLocalHeap (GC_state s) {
-  const struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+  const struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  s->frontier = HM_getHierarchicalHeapSavedFrontier(hh);
-  s->limitPlusSlop = HM_getHierarchicalHeapLimit(hh);
+  s->frontier = HM_HH_getSavedFrontier(hh);
+  s->limitPlusSlop = HM_HH_getLimit(hh);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 }
 
 void HM_exitLocalHeap (GC_state s) {
-  struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  HM_setHierarchicalHeapSavedFrontier(hh, s->frontier);
+  HM_HH_setSavedFrontier(hh, s->frontier);
 }
 
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
@@ -74,7 +74,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   }
 
   /* fetch after management heap GC to make sure that I get the updated value */
-  struct HM_HierarchicalHeap* hh = HM_getCurrentHierarchicalHeap(s);
+  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
   if (s->limitPlusSlop < s->frontier) {
     die(__FILE__ ":%d: s->limitPlusSlop (%p) < s->frontier (%p)",
@@ -85,12 +85,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
-    if (!HM_extendHierarchicalHeap(hh, bytesRequested)) {
+    if (!HM_HH_extend(hh, bytesRequested)) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
 
-    s->frontier = HM_getHierarchicalHeapSavedFrontier(hh);
-    s->limitPlusSlop = HM_getHierarchicalHeapLimit(hh);
+    s->frontier = HM_HH_getSavedFrontier(hh);
+    s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 

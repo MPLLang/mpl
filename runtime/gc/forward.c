@@ -39,7 +39,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
 
-  if (HM_objptrInHierarchicalHeap(s, *opp)) {
+  if (HM_HH_objptrInHierarchicalHeap(s, *opp)) {
     /*
      * We do not support collecting the global heap while the hierarchical
      * heaps are in play
