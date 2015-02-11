@@ -26,9 +26,10 @@ COMPILE_TIME_ASSERT(sizeof_voidStar__gte__sizeof_objptr,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-#pragma message                                                         \
-  "With the simplified models, objptrs are just pointers. Convert 'to' " \
-  "functions to simple casts"
+/*
+ * RAM_NOTE: With the simplified models, objptrs are just pointers. Convert
+ * 'to' functions to simple casts
+ */
 
 static inline bool isObjptr (objptr p);
 static inline pointer objptrToPointer (objptr O, pointer B);

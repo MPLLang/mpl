@@ -13,8 +13,10 @@ void Parallel_init (void) {
     Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
 
     /* Set up call-back state in each worker thread */
-    /* XXX hack copy the call-from-c-handler into the worker threads
-       assumes this is called by the primary thread */
+    /*
+     * SPOONHOWER_NOTE: hack copy the call-from-c-handler into the worker
+     * threads assumes this is called by the primary thread
+     */
     for (int proc = 0; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].callFromCHandlerThread = pointerToObjptr(
         GC_copyThread (s, objptrToPointer(s->callFromCHandlerThread,
@@ -202,13 +204,13 @@ void Parallel_resetBytesLive (void) {
   s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
 }
 
-#pragma message "Remove when sure I am done"
+/* RAM_NOTE: Remove when sure I am done */
 #if 0
 static void maybeWaitForGC (GC_state s) {
   if (Proc_threadInSection ()) {
     //fprintf (stderr, "waiting for gc [%d]\n", Proc_processorNumber (s));
 
-    /* XXX hack? */
+    /* SPOONHOWER_NOTE: hack? */
     ENTER0 (s);
     LEAVE0 (s);
   }

@@ -88,7 +88,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
   /* Used to be an ENTER here, but we don't really need to synchronize unless
      we don't have enough room to allocate a new thread and stack. */
 
-  /* XXX copied from enter() */
+  /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
@@ -105,7 +105,10 @@ pointer GC_copyThread (GC_state s, pointer p) {
   toThread = copyThread (s, fromThread, fromStack->reserved);
 
 #pragma message "Remove dead code if possible"
-#pragma message "May have been dead-ified because I use fromStack->reserved above now."
+  /*
+   * RAM_NOTE: May have been dead-ified because I use fromStack->reserved above
+   * now.
+   */
   /* The following assert is no longer true, since alignment
    * restrictions can force the reserved to be slightly larger than
    * the used.

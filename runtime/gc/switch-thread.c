@@ -48,7 +48,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
      * So, we'll stick with the else branch for now.
      */
     //ENTER1 (s, p);
-    /* XXX copied from enter() */
+    /* SPOONHOWER_NOTE: copied from enter() */
     /* used needs to be set because the mutator has changed s->stackTop. */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
     getThreadCurrent(s)->exnStack = s->exnStack;

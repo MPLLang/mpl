@@ -170,7 +170,7 @@ void performGC (GC_state s,
   unless (stackTopOk)
     growStackCurrent (s, TRUE);
   for (int proc = 0; proc < s->numberOfProcs; proc++) {
-    /* DOC XXX must come first to setup maps properly */
+    /* SPOONHOWER_NOTE: must come first to setup maps properly */
     s->procStates[proc].generationalMaps = s->generationalMaps;
     setGCStateCurrentThreadAndStack (&s->procStates[proc]);
   }
@@ -414,7 +414,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
 
     ENTER0 (s);
-    /* XXX should this go here? */
+    /* SPOONHOWER_NOTE: should this go here? */
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
     /* Recheck invariants now that we hold the lock */
@@ -459,7 +459,6 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */
-#pragma message "Set back to upstream when I remove extra controls"
   if (bytesRequested < s->controls->allocChunkSize) {
     /* first make sure that I hit the minimum */
     bytesRequested = s->controls->allocChunkSize;
@@ -468,7 +467,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* add extra slop */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  /* XXX copied from enter() */
+  /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;

@@ -86,7 +86,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
       for (int proc = 0; proc < s->numberOfProcs; proc++) {
         current = current || (getStackCurrent(&s->procStates[proc]) == stack);
       }
-#pragma message "used to have 'current &&= not isStackEmpty(stack)' here"
+      /* RAM_NOTE: used to have 'current &&= not isStackEmpty(stack)' here */
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {
@@ -156,7 +156,7 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
     fprintf (stderr,
              "forwardObjptrIfInNursery  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
-#pragma message "Should this just be limitPlusSlop like in upstream?"
+  /* RAM_NOTE: Should this just be limitPlusSlop like in upstream? */
   assert (s->heap->nursery <= p and p < s->heap->frontier);
   forwardObjptr (s, opp);
 }

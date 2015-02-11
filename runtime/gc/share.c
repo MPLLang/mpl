@@ -10,7 +10,6 @@ void GC_share (GC_state s, pointer object) {
   size_t bytesExamined;
   size_t bytesHashConsed;
 
-  /* RAM_NOTE: Should there be enter/leave here? */
   s->syncReason = SYNC_STACK;
   ENTER0(s); /* update stack in heap, in case it is reached */
   if (DEBUG_SHARE)

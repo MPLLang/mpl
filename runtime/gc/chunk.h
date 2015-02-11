@@ -16,7 +16,7 @@
 #ifndef CHUNK_H_
 #define CHUNK_H_
 
-#pragma message "Remove when know unnecessary"
+/* RAM_NOTE: Remove when know unnecessary */
 #if 0
 /**
  * @brief

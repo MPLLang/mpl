@@ -45,7 +45,10 @@ struct GC_state {
   pointer globalFrontier;
   pointer globalLimitPlusSlop;
   /* RAM_NOTE: Not sure if this is used anymore... */
-  /* Currently only used to hold raise operands. XXX at least i think so */
+  /*
+   * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
+   * think so
+   */
   Pointer *globalObjptrNonRoot;
   /* Ordinary globals */
   objptr *globals;

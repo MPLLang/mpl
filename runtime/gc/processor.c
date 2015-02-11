@@ -8,7 +8,7 @@ int32_t Proc_processorNumber (GC_state s) {
     }
   }
 
-  /* XXX shouldn't get here */
+  /* SPOONHOWER_NOTE: shouldn't get here */
   fprintf (stderr, "don't know my own processor number (signals?)\n");
   exit (1);
   return 0;
@@ -100,9 +100,10 @@ void Proc_beginCriticalSection (GC_state s) {
       Proc_criticalTicket = 0;
     }
 
-#pragma message                                                 \
-  "Threads unlock one at a time as checking per-thread GC "     \
-  "invariants needs to be done one-by-one?"
+    /*
+     * RAM_NOTE: Threads unlock one at a time as checking per-thread GC
+     * invariants needs to be done one-by-one?
+     */
     while (Proc_criticalTicket != myNumber) {}
   }
   else {

@@ -36,7 +36,7 @@
  * There may be zero or more bytes of padding for alignment purposes.
  */
 struct HM_HierarchicalHeap {
-#pragma message "Maybe this should just be 'void* limit'?"
+  /* RAM_NOTE: Maybe this should just be 'void* limit'? */
   void* lastAllocatedChunk; /**< The last allocated chunk, for quick access to
                              * the current limit */
 

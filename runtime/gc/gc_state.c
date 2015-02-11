@@ -93,7 +93,7 @@ void setGCStateCurrentHeap (GC_state s,
              uintmaxToCommaString(nurseryBytesRequested));
   h = s->heap;
   assert (isFrontierAligned (s, h->start + h->oldGenSize + oldGenBytesRequested));
-#pragma message "What happens to s->limit{,PlusSlop}?"
+  /* RAM_NOTE: What happens to s->limit{,PlusSlop}? */
   limit = h->start + h->size - bonus;
   nurserySize = h->size - (h->oldGenSize + oldGenBytesRequested) - bonus;
   assert (isFrontierAligned (s, limit - nurserySize));
@@ -124,7 +124,7 @@ void setGCStateCurrentHeap (GC_state s,
     nursery = genNursery;
     nurserySize = genNurserySize;
     clearCardMap (s);
-    /* XXX copy card map to other processors? */
+    /* SPOONHOWER_NOTE: copy card map to other processors? */
   } else {
     unless (nurseryBytesRequested <= nurserySize)
       die ("Out of memory.  Insufficient space in nursery.");
@@ -208,7 +208,7 @@ void setGCStateCurrentHeap (GC_state s,
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
       /* RAM_NOTE: Probably not necessary, remove after confirmation */
-      /* XXX clearCardMap (?) */
+      /* SPOONHOWER_NOTE: clearCardMap (?) */
 
       /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
@@ -230,7 +230,7 @@ void setGCStateCurrentHeap (GC_state s,
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
       /* RAM_NOTE: Probably not necessary, remove after confirmation */
-      /* XXX clearCardMap (?) */
+      /* SPOONHOWER_NOTE: clearCardMap (?) */
 
       /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
@@ -244,7 +244,7 @@ void setGCStateCurrentHeap (GC_state s,
     s->limitPlusSlop = limit;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     /* RAM_NOTE: Probably not necessary, remove after confirmation */
-    /* XXX clearCardMap (?) */
+    /* SPOONHOWER_NOTE: clearCardMap (?) */
 
     if (DEBUG)
       for (size_t i = 0; i < GC_BONUS_SLOP; i++)

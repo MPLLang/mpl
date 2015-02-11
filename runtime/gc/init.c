@@ -491,12 +491,12 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
 
-  // XXX spoons better duplicate?
+  // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
 
   d->sysvals.ram = s->sysvals.ram;
 
-  // XXX spoons better duplicate
+  // SPOONHOWER_NOTE: better duplicate
   //initProfiling (d);
 
   // Multi-processor support is incompatible with saved-worlds

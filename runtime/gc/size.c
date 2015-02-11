@@ -9,7 +9,6 @@
 size_t GC_size (GC_state s, pointer root) {
   size_t res;
 
-  /* RAM_NOTE: This enter/leave may be removable */
   s->syncReason = SYNC_STACK;
   ENTER0 (s); /* update stack in heap, in case it is reached */
   if (DEBUG_SIZE)

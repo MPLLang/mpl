@@ -90,7 +90,7 @@ int saveWorldToFILE (GC_state s, FILE *f) {
 void GC_saveWorld (GC_state s, NullString8_t fileName) {
   FILE *f;
   s->syncReason = SYNC_SAVE_WORLD;
-  /* XXX is fileName heap allocated? */
+  /* SPOONHOWER_NOTE: is fileName heap allocated? */
   ENTER0 (s);
   f = fopen ((const char*)fileName, "wb");
   if (f == 0) {

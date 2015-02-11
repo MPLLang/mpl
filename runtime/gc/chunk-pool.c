@@ -190,15 +190,6 @@ void ChunkPool_initialize (size_t poolSize) {
     diee(__FILE__ ":%d: mmap() failed with errno %d", __LINE__, errno);
   }
 
-#pragma message "Remove once unnecessary"
-#if ASSERT
-  for (uint64_t* cursor = region;
-       cursor < ((uint64_t*)(((uint8_t*)(region)) + adjustedPoolSize));
-       cursor++) {
-    *cursor = ((uint64_t)(0xdeadbeefcafebabe));
-  }
-#endif /* ASSERT */
-
   /* setup pool variables */
   ChunkPool_poolStart = region;
   ChunkPool_poolEnd = ((uint8_t*)(region)) + adjustedPoolSize;
