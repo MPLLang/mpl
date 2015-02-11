@@ -30,7 +30,7 @@ void HM_enterGlobalHeap (void) {
 
   GC_thread currentThread = getThreadCurrent (s);
 
-  if ((~((size_t)(0))) == currentThread->inGlobalHeapCounter) {
+  if ((~((Word32)(0))) == currentThread->inGlobalHeapCounter) {
     die(__FILE__ ":%d: currentThread->inGlobalHeapCounter about to overflow!",
         __LINE__);
   }
