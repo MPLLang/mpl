@@ -147,12 +147,16 @@ structure HM =
             struct
                 type t = HM.HierarchicalHeap.t
 
-                val appendChildHeap: (t * t) -> unit =
-                    _import "HM_HH_appendChild" runtime private:
-                    (t * t) -> unit;
+                val appendChildHeap: t * t -> unit =
+                    _import "HM_HH_appendChild" runtime private: t * t -> unit;
 
                 val getHierarchicalHeap: unit -> t =
-                    _import "GC_getCurrentHierarchicalHeap" runtime private: unit -> t;
+                    _import "GC_getCurrentHierarchicalHeap" runtime private:
+                    unit -> t;
+
+                val getLevel: t -> C_Size.t =
+                    _import "HM_HH_getLevel" runtime private:
+                    t -> C_Size.t;
 
                 val mergeIntoParentHeap: t -> unit =
                     _import "HM_HH_mergeIntoParent" runtime private: t -> unit;
@@ -160,9 +164,16 @@ structure HM =
                 val newHierarchicalHeap: unit -> t =
                     _prim "HierarchicalHeap_new": unit -> t;
 
+                val promoteChunks: t -> unit =
+                    _import "HM_HH_promoteChunks" runtime private: t -> unit;
+
                 val setHierarchicalHeap: t -> unit =
                     _import "GC_setCurrentHierarchicalHeap" runtime private:
                     t -> unit;
+
+                val setLevel: t * C_Size.t -> unit =
+                    _import "HM_HH_setLevel" runtime private:
+                    t * C_Size.t -> unit;
 
                 val setCurrentThreadUseHierarchicalHeap: unit -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"

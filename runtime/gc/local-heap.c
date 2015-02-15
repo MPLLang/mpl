@@ -21,8 +21,9 @@
 /* Function Definitions */
 /************************/
 void HM_enterLocalHeap (GC_state s) {
-  const struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
+  HM_HH_ensureNotEmpty(hh);
   s->frontier = HM_HH_getSavedFrontier(hh);
   s->limitPlusSlop = HM_HH_getLimit(hh);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;

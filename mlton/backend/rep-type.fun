@@ -447,7 +447,7 @@ structure ObjectType =
                       val bytesObject =
                           let
                               infix 6 +
-                              fun x + y = Bytes.+ (x, y)
+                              val op+ = Bytes.+
                           in
                               bytesHeader +
                               bytesInGlobalHeapCounter +
@@ -485,26 +485,35 @@ structure ObjectType =
 
                       val bytesHeader =
                           Bits.toBytes (Control.Target.Size.header ())
-                      val bytesHeapHead =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
+
                       val bytesLastAllocatedChunk =
                           Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesFrontier =
+                      val bytesSavedFrontier =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLevel =
+                          Bits.toBytes (Control.Target.Size.csize ())
+                      val bytesChunkList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
-                          Bits.toBytes (Control.Target.Size.objptr ())
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesNextChildHH =
-                          Bits.toBytes (Control.Target.Size.objptr ())
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesChildHHList =
-                          Bits.toBytes (Control.Target.Size.objptr ())
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesObject =
-                          Bytes.+ (bytesHeader,
-                          Bytes.+ (bytesHeapHead,
-                          Bytes.+ (bytesLastAllocatedChunk,
-                          Bytes.+ (bytesFrontier,
-			  Bytes.+ (bytesParentHH,
-			  Bytes.+ (bytesNextChildHH,
-			           bytesChildHHList))))))
+                          let
+                              infix 6 +
+                              val op+ = Bytes.+
+                          in
+                              bytesHeader +
+                              bytesLastAllocatedChunk +
+                              bytesSavedFrontier +
+                              bytesLevel +
+                              bytesChunkList +
+			      bytesParentHH +
+			      bytesNextChildHH +
+			      bytesChildHHList
+                          end
 
                       val bytesTotal =
                           Bytes.align (bytesObject, {alignment = align})
@@ -517,6 +526,7 @@ structure ObjectType =
                       ty = Type.seq (Vector.fromList [padding,
                                                       Type.cpointer (),
                                                       Type.cpointer (),
+                                                      Type.csize (),
                                                       Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),

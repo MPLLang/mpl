@@ -12,11 +12,15 @@ signature MLTON_HM =
 
                       val new: unit -> t
 
-                      val appendChild: (t * t) -> unit
-                      val mergeIntoParent: t -> unit
-
                       val set: t -> unit
                       val get: unit -> t
+
+                      val setLevel: t * int -> unit
+                      val getLevel: t -> int
+                      val promoteChunks: t -> unit
+
+                      val appendChild: (t * t) -> unit
+                      val mergeIntoParent: t -> unit
 
                       val useHierarchicalHeap: unit -> unit
                   end

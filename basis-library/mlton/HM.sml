@@ -16,11 +16,17 @@ structure MLtonHM:> MLTON_HM =
 
                 val new: unit -> t = PrimHH.newHierarchicalHeap
 
-                val appendChild: (t * t) -> unit = PrimHH.appendChildHeap
-                val mergeIntoParent: t -> unit = PrimHH.mergeIntoParentHeap
-
                 val set: t -> unit = PrimHH.setHierarchicalHeap
                 val get: unit -> t = PrimHH.getHierarchicalHeap
+
+                val setLevel: t * int -> unit =
+                 fn (hh, level) => PrimHH.setLevel (hh, C_Size.fromInt level)
+                val getLevel: t -> int =
+                 fn hh => C_Size.toInt (PrimHH.getLevel hh)
+                val promoteChunks: t -> unit = PrimHH.promoteChunks
+
+                val appendChild: (t * t) -> unit = PrimHH.appendChildHeap
+                val mergeIntoParent: t -> unit = PrimHH.mergeIntoParentHeap
 
                 val useHierarchicalHeap: unit -> unit =
                     PrimHH.setCurrentThreadUseHierarchicalHeap

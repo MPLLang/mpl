@@ -125,8 +125,8 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   /* initialize the object with a small chunk */
   hh->lastAllocatedChunk = NULL;
   hh->savedFrontier = NULL;
-  hh->currentLevel = HH_INVALID_LEVEL;
-  hh->chunkList = NULL;
+  hh->level = 0;
+  hh->levelList = NULL;
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;

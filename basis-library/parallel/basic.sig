@@ -25,7 +25,7 @@ sig
     under some scheduling policies. *)
   (* "Right" adds to the right of the current task -- lower priority than the
     current task *)
-  val addRight : work -> token
+  val addRight : work * int -> token
   (* RAM_NOTE: Disabled until reintegrated *)
   (* (* "Left" adds to the left of the current task -- higher priority than the *)
   (*   current task *) *)

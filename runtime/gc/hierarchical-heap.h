@@ -28,6 +28,7 @@
  * padding ::
  * lastAllocatedChunk (void*) ::
  * savedFrontier (void*) ::
+ * level (size_t) ::
  * chunkList (void*) ::
  * parentHH (objptr) ::
  * nextChildHH (objptr) ::
@@ -43,7 +44,12 @@ struct HM_HierarchicalHeap {
   void* savedFrontier; /**< The saved frontier when returning to this
                         * hierarchical heap. */
 
-  void* chunkList; /**< The unordered list of chunks making up this heap. */
+  /* RAM_NOTE: can be lesser width if I add another field */
+  size_t level; /**< The current level of the hierarchy which new chunks should
+                 * belong to. */
+
+  void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
+                    * information */
 
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
@@ -58,13 +64,23 @@ struct HM_HierarchicalHeap {
 } __attribute__((packed));
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
-                    sizeof (struct HM_HierarchicalHeap) ==
-                    sizeof (void*) +
-                    sizeof (void*) +
-                    sizeof (void*) +
-                    sizeof (objptr) +
-                    sizeof (objptr) +
-                    sizeof (objptr));
+                    sizeof(struct HM_HierarchicalHeap) ==
+                    sizeof(void*) +
+                    sizeof(void*) +
+                    sizeof(size_t) +
+                    sizeof(void*) +
+                    sizeof(objptr) +
+                    sizeof(objptr) +
+                    sizeof(objptr));
+
+#pragma message "Remove when known unnecessary"
+#if 0
+/**
+ * This value is an "invalid" level and used for HM_HierarchicalHeap
+ * initialization
+ */
+#define HH_INVALID_LEVEL (~((size_t)(0)))
+#endif
 #else
 struct HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -84,6 +100,15 @@ struct HM_HierarchicalHeap;
 PRIVATE void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer);
 
 /**
+ * Gets the current level from a struct HM_HierarchicalHeap
+ *
+ * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
+ *
+ * @return The level of the HM_HierarchicalHeap
+ */
+PRIVATE size_t HM_HH_getLevel(pointer hhPointer);
+
+/**
  * Merges the specified hierarchical heap back into its source hierarchical
  * heap.
  *
@@ -98,6 +123,21 @@ PRIVATE void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer);
  * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
  */
 PRIVATE void HM_HH_mergeIntoParent(pointer hhPointer);
+
+/**
+ * Promotes the chunks at the last level to the parent's level
+ *
+ * @param hhPointer The HM_HierarchicalHeap to modify
+ */
+PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
+
+/**
+ * Sets the current level in a struct HM_HierarchicalHeap
+ *
+ * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
+ * @param level The level to set
+ */
+PRIVATE void HM_HH_setLevel(pointer hhPointer, size_t level);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -110,6 +150,14 @@ PRIVATE void HM_HH_mergeIntoParent(pointer hhPointer);
  * @param stream The stream to print to
  */
 void HM_HH_display(const struct HM_HierarchicalHeap* hh, FILE* stream);
+
+/**
+ * This function ensures that the heap is not empty and has enough space to
+ * satisfy allocation requests
+ *
+ * @param hh The struct HM_HierarchicalHeap to modify
+ */
+void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 
 /**
  * This function extends the hierarchical heap with at least bytesRequested free
@@ -197,18 +245,5 @@ void HM_HH_setSavedFrontier(struct HM_HierarchicalHeap* hh,
  */
 size_t HM_HH_sizeof(GC_state s);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
-
-#if ASSERT
-/**
- * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
- *
- * @attention
- * If an assertion fails, this function aborts the program, as per the assert()
- * macro.
- *
- * @param hh The struct HM_HierarchicalHeap to assert invariants for
- */
-void HM_HH_assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh);
-#endif /* ASSERT */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

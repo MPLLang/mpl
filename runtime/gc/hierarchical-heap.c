@@ -19,6 +19,18 @@
 /* Static Function Prototypes */
 /******************************/
 /**
+ * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
+ *
+ * @attention
+ * If an assertion fails, this function aborts the program, as per the assert()
+ * macro.
+ *
+ * @param s The GC_state to use
+ * @param hh The struct HM_HierarchicalHeap to assert invariants for
+ */
+void HM_HH_assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh);
+
+/**
  * This function converts a hierarchical heap objptr to the struct
  * HM_HierarchicalHeap
  *
@@ -43,10 +55,8 @@ void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer) {
   objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
   struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(s, childHHObjptr);
 
-#if ASSERT
   HM_HH_assertInvariants(s, parentHH);
   HM_HH_assertInvariants(s, childHH);
-#endif /* ASSERT */
 
   /* childHH should be a orphan! */
   assert (BOGUS_OBJPTR == childHH->parentHH);
@@ -60,10 +70,17 @@ void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer) {
   childHH->nextChildHH = parentHH->childHHList;
   parentHH->childHHList = childHHObjptr;
 
-#if ASSERT
   HM_HH_assertInvariants(s, parentHH);
   HM_HH_assertInvariants(s, childHH);
-#endif /* ASSERT */
+}
+
+size_t HM_HH_getLevel(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+  return hh->level;
 }
 
 void HM_HH_mergeIntoParent(pointer hhPointer) {
@@ -75,10 +92,10 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert (BOGUS_OBJPTR != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
 
-#if ASSERT
   HM_HH_assertInvariants(s, parentHH);
   HM_HH_assertInvariants(s, hh);
-#endif /* ASSERT */
+  /* can only merge at join point! */
+  assert(hh->level == parentHH->level);
 
   /* remove hh from parentHH->childHHList */
   /*
@@ -90,24 +107,36 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
 #if ASSERT
        (BOGUS_OBJPTR != *cursor) &&
 #endif
-                        (hhObjptr != *cursor);
+                (hhObjptr != *cursor);
        cursor = &(HHObjptrToStruct(s, *cursor)->nextChildHH)) {
   }
-  /* hh should be found! */
   assert(BOGUS_OBJPTR != *cursor);
-  /* remove hh from the list */
   *cursor = hh->nextChildHH;
 
+  /* merge level lists */
+  HM_mergeLevelList(&(parentHH->levelList), hh->levelList);
 
-  /* append hh->chunkList to parentHH->chunkList */
-  HM_appendChunkList (&(parentHH->chunkList),
-                      hh->chunkList,
-                      HM_getChunkListLastChunk(hh->chunkList));
-
-#if ASSERT
   HM_HH_assertInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
-#endif /* ASSERT */
+}
+
+void HM_HH_promoteChunks(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+  assert(HM_getHighestLevel(hh->levelList) <= hh->level);
+  HM_promoteChunks(&(hh->levelList), hh->level);
+}
+
+void HM_HH_setLevel(pointer hhPointer, size_t level) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+  hh->level = level;
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
@@ -118,26 +147,48 @@ void HM_HH_display (
   fprintf (stream,
            "\t\tlastAllocatedChunk = %p\n"
            "\t\tsavedFrontier = %p\n"
-           "\t\tchunkList = %p\n"
+           "\t\tlevelList = %p\n"
            "\t\tparentHH = "FMTOBJPTR"\n"
            "\t\tnextChildHH = "FMTOBJPTR"\n"
            "\t\tchildHHList= "FMTOBJPTR"\n",
            hh->lastAllocatedChunk,
            hh->savedFrontier,
-           hh->chunkList,
+           hh->levelList,
            hh->parentHH,
            hh->nextChildHH,
            hh->childHHList);
 }
 
+void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
+  if (NULL == hh->levelList) {
+    assert(NULL == hh->lastAllocatedChunk);
+    assert(NULL == hh->savedFrontier);
+
+    /* add in one chunk */
+    if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
+      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+    }
+  }
+
+  HM_HH_assertInvariants(pthread_getspecific(gcstate_key), hh);
+}
+
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  void* chunk = HM_allocateChunk(bytesRequested);
+  size_t level = HM_getHighestLevel(hh->levelList);
+  void* chunk;
+  assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
+  if ((CHUNK_INVALID_LEVEL == level) || (hh->level > level)) {
+    chunk = HM_allocateLevelHeadChunk(bytesRequested,
+                                      hh->level,
+                                      &(hh->levelList));
+  } else {
+    chunk = HM_allocateChunk(bytesRequested, hh->levelList);
+  }
 
   if (NULL == chunk) {
     return FALSE;
   }
 
-  HM_appendChunkList(&(hh->chunkList), chunk, chunk);
   hh->savedFrontier = HM_getChunkStart(chunk);
   hh->lastAllocatedChunk = chunk;
   return TRUE;
@@ -209,9 +260,14 @@ size_t HM_HH_sizeof(GC_state s) {
 
 #if ASSERT
 void HM_HH_assertInvariants(GC_state s,
-                                         const struct HM_HierarchicalHeap* hh) {
-  HM_assertChunkListInvariants(hh->chunkList);
-  assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
+                            const struct HM_HierarchicalHeap* hh) {
+  HM_assertLevelListInvariants(hh->levelList);
+  if (NULL != hh->lastAllocatedChunk) {
+    assert(hh->lastAllocatedChunk == ChunkPool_find(hh->savedFrontier));
+  } else {
+    assert(NULL == hh->savedFrontier);
+    assert(NULL == hh->levelList);
+  }
 
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
   if (NULL != parentHH) {
@@ -235,6 +291,12 @@ void HM_HH_assertInvariants(GC_state s,
        childHH = HHObjptrToStruct(s, childHH->nextChildHH)) {
     assert(HHObjptrToStruct(s, childHH->parentHH) == hh);
   }
+}
+#else
+void HM_HH_assertInvariants(GC_state s,
+                            const struct HM_HierarchicalHeap* hh) {
+  ((void)(s));
+  ((void)(hh));
 }
 #endif /* ASSERT */
 
