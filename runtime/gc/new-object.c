@@ -123,8 +123,9 @@ pointer HM_newHierarchicalHeap (GC_state s) {
                                      HM_HH_offsetof(s)));
 
   /* initialize the object with a small chunk */
-  hh->lastAllocatedChunk = NULL;
   hh->savedFrontier = NULL;
+  hh->limit = NULL;
+  hh->lock = HM_HH_LOCK_INITIALIZER;
   hh->level = 0;
   hh->levelList = NULL;
   hh->parentHH = BOGUS_OBJPTR;

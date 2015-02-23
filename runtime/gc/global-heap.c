@@ -72,9 +72,44 @@ void HM_exitGlobalHeap (void) {
   if (0 == currentThread->inGlobalHeapCounter) {
     s->globalFrontier = s->frontier;
     s->globalLimitPlusSlop = s->limitPlusSlop;
-
     HM_enterLocalHeap (s);
   }
+}
+
+void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(NULL != s);
+  assert(NULL != s->globalFrontier);
+  assert(NULL != s->globalLimitPlusSlop);
+
+  /* update frontier and limit */
+  HM_exitLocalHeap (s);
+  s->frontier = s->globalFrontier;
+  s->limitPlusSlop = s->globalLimitPlusSlop;
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  /* restore inGlobalHeapCounter */
+  getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
+}
+
+Word32 HM_explicitExitGlobalHeap(void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  assert(NULL != s);
+  assert(HM_inGlobalHeap(s));
+
+  /* update frontier and limit */
+  s->globalFrontier = s->frontier;
+  s->globalLimitPlusSlop = s->limitPlusSlop;
+  HM_enterLocalHeap (s);
+
+  /* set inGlobalHeapCounter to zero */
+  GC_thread thread = getThreadCurrent(s);
+  Word32 retVal = thread->inGlobalHeapCounter;
+  thread->inGlobalHeapCounter = 0;
+
+  /* return the old inGlobalHeapCounter */
+  return retVal;
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

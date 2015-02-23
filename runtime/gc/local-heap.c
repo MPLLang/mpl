@@ -32,7 +32,7 @@ void HM_enterLocalHeap (GC_state s) {
 void HM_exitLocalHeap (GC_state s) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  HM_HH_setSavedFrontier(hh, s->frontier);
+  HM_HH_updateValues(hh, s->frontier);
 }
 
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
@@ -55,10 +55,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Entering "
                     "Management Heap GC\n",
                     processor);
-    HM_enterGlobalHeap();
     ENTER0(s);
     LEAVE0(s);
-    HM_exitGlobalHeap();
     HM_debugMessage(s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Exiting "
                     "Management Heap GC\n",
@@ -77,6 +75,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   /* fetch after management heap GC to make sure that I get the updated value */
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
+  /* update hh before modification */
+  HM_HH_updateValues(hh, s->frontier);
+
   if (s->limitPlusSlop < s->frontier) {
     die(__FILE__ ":%d: s->limitPlusSlop (%p) < s->frontier (%p)",
         __LINE__,
@@ -87,7 +88,10 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
     if (!HM_HH_extend(hh, bytesRequested)) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+      HM_HHC_collectLocal();
+      if (!HM_HH_extend(hh, bytesRequested)) {
+        die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+      }
     }
 
     s->frontier = HM_HH_getSavedFrontier(hh);

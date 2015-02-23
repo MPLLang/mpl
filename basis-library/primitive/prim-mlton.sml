@@ -154,9 +154,9 @@ structure HM =
                     _import "GC_getCurrentHierarchicalHeap" runtime private:
                     unit -> t;
 
-                val getLevel: t -> C_Size.t =
+                val getLevel: t -> Word32.word =
                     _import "HM_HH_getLevel" runtime private:
-                    t -> C_Size.t;
+                    t -> Word32.word;
 
                 val mergeIntoParentHeap: t -> unit =
                     _import "HM_HH_mergeIntoParent" runtime private: t -> unit;
@@ -171,20 +171,28 @@ structure HM =
                     _import "GC_setCurrentHierarchicalHeap" runtime private:
                     t -> unit;
 
-                val setLevel: t * C_Size.t -> unit =
+                val setLevel: t * Word32.word -> unit =
                     _import "HM_HH_setLevel" runtime private:
-                    t * C_Size.t -> unit;
+                    t * Word32.word -> unit;
 
                 val setCurrentThreadUseHierarchicalHeap: unit -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"
                             runtime private: unit -> unit;
             end
 
-        val enterGlobalHeap: bool -> unit =
-            _import "HM_enterGlobalHeap" runtime private: bool -> unit;
+        val enterGlobalHeap: unit -> unit =
+            _import "HM_enterGlobalHeap" runtime private: unit -> unit;
 
-        val exitGlobalHeap: bool -> unit =
-            _import "HM_exitGlobalHeap" runtime private: bool -> unit;
+        val exitGlobalHeap: unit -> unit =
+            _import "HM_exitGlobalHeap" runtime private: unit -> unit;
+
+        val explicitEnterGlobalHeap: Word32.word -> unit =
+            _import "HM_explicitEnterGlobalHeap" runtime private:
+            Word32.word -> unit;
+
+        val explicitExitGlobalHeap: unit -> Word32.word =
+            _import "HM_explicitExitGlobalHeap" runtime private:
+            unit -> Word32.word;
     end
 
 structure Platform =

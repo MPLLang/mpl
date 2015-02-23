@@ -434,9 +434,9 @@ structure ObjectType =
                       val bytesHeader =
                           Bits.toBytes (Control.Target.Size.header ())
                       val bytesInGlobalHeapCounter =
-                          Bits.toBytes (Type.width (Type.word32))
+                          Bits.toBytes (Type.width Type.word32)
                       val bytesUseHierarchicalHeap =
-                          Bits.toBytes (Type.width (Type.bool))
+                          Bits.toBytes (Type.width Type.bool)
                       val bytesBytesNeeded =
                           Bits.toBytes (Control.Target.Size.csize ())
                       val bytesExnStack =
@@ -485,14 +485,17 @@ structure ObjectType =
 
                       val bytesHeader =
                           Bits.toBytes (Control.Target.Size.header ())
-
-                      val bytesLastAllocatedChunk =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesSavedFrontier =
                           Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLimit =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLastAllocatedChunk =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLock =
+                          Bits.toBytes (Type.width Type.word32)
                       val bytesLevel =
-                          Bits.toBytes (Control.Target.Size.csize ())
-                      val bytesChunkList =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
@@ -506,10 +509,12 @@ structure ObjectType =
                               val op+ = Bytes.+
                           in
                               bytesHeader +
-                              bytesLastAllocatedChunk +
                               bytesSavedFrontier +
+                              bytesLimit +
+                              bytesLastAllocatedChunk +
+                              bytesLock +
                               bytesLevel +
-                              bytesChunkList +
+                              bytesLevelList +
 			      bytesParentHH +
 			      bytesNextChildHH +
 			      bytesChildHHList
@@ -526,7 +531,9 @@ structure ObjectType =
                       ty = Type.seq (Vector.fromList [padding,
                                                       Type.cpointer (),
                                                       Type.cpointer (),
-                                                      Type.csize (),
+                                                      Type.cpointer (),
+                                                      Type.word32,
+                                                      Type.word32,
                                                       Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),

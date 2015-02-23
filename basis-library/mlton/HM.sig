@@ -25,6 +25,8 @@ signature MLTON_HM =
                       val useHierarchicalHeap: unit -> unit
                   end
 
-        val enterGlobalHeap: bool -> unit
-        val exitGlobalHeap: bool -> unit
+        val enterGlobalHeap: unit -> unit
+        val exitGlobalHeap: unit -> unit
+        val explicitEnterGlobalHeap: Word32.word -> unit
+        val explicitExitGlobalHeap: unit -> Word32.word
     end

@@ -127,6 +127,7 @@ void forwardObjptr (GC_state s, objptr *opp) {
           fprintf (stderr, "not linking\n");
       }
     }
+
     /* Store the forwarding pointer in the old object. */
     *((GC_header*)(p - GC_HEADER_SIZE)) = GC_FORWARDED;
     *((objptr*)p) = pointerToObjptr (s->forwardState.back + headerBytes,
@@ -135,6 +136,11 @@ void forwardObjptr (GC_state s, objptr *opp) {
     s->forwardState.back += size + skip;
     assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_HEADER_SIZE,
                        s->alignment));
+
+    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
+      /* update level chunk head containingHH pointers */
+      HM_HH_updateLevelListPointers(*((objptr*)(p)));
+    }
   }
   *opp = *((objptr*)p);
   if (DEBUG_DETAILED)

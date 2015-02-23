@@ -76,6 +76,14 @@ bool ChunkPool_free (void* chunk);
 void* ChunkPool_find (void* object);
 
 /**
+ * This function returns if half of the chunk pool has been allocated
+ *
+ * @return TRUE if more than half of the chunk pool's space has been allocated,
+ * FALSE otherwise
+ */
+bool ChunkPool_overHalfAllocated(void);
+
+/**
  * This functions checks if 'pointer' is within the ChunkPool space
  *
  * @param pointer The pointer to check
@@ -83,6 +91,15 @@ void* ChunkPool_find (void* object);
  * @return TRUE if 'pointer' is in the ChunkPool space, FALSE otherwise.
  */
 bool ChunkPool_pointerInChunkPool (void* pointer);
+
+/**
+ * This function returns the size of the chunk.
+ *
+ * @param chunk The chunk to return size of
+ *
+ * @return size of 'chunk' or 0 on error
+ */
+size_t ChunkPool_size(void* chunk);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

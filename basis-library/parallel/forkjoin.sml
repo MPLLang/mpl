@@ -2,7 +2,8 @@ structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN =
 struct
 
   structure B = MLtonParallelBasic
-  structure HH = MLtonHM.HierarchicalHeap
+  structure HM = MLtonHM
+  structure HH = HM.HierarchicalHeap
   structure I = MLtonParallelInternal
   structure V = MLtonParallelSyncVarCapture
 
@@ -17,12 +18,12 @@ struct
       fun evaluateFunction f (exceptionHandler: unit -> unit) =
           let
               (* RAM_NOTE: I need an uncounted enter/exit heap *)
-              val () = I.exitGlobalHeap ()
+              val () = HM.exitGlobalHeap ()
               val result = (SOME(f ()), NONE)
                            (* SPOONHOWER_NOTE Do we need to execute g in the case where f raises? *)
                            handle e => (exceptionHandler ();
                                         (NONE, SOME(e)))
-              val () = I.enterGlobalHeap ()
+              val () = HM.enterGlobalHeap ()
           in
               case result
                of (SOME(r), NONE) => r
@@ -32,13 +33,19 @@ struct
   in
       fun fork (f, g) =
           let
-              val () = I.enterGlobalHeap ()
+              val () = HM.enterGlobalHeap ()
+              (* make sure a hh is set *)
+              val hh = HH.get ()
+              val level = HH.getLevel hh
               (* Make sure calling thread is set to use hierarchical heaps *)
               val () = HH.useHierarchicalHeap ()
 
               (* Used to hold the result of the right-hand side in the case where
-          that code is executed in parallel. *)
+          that code is executed in parallel. Should be on hierarchical heap as
+          it points to HH data *)
+              val inGlobalHeapCounter = HM.explicitExitGlobalHeap ()
               val var = V.empty ()
+              val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
               (* Closure used to run the right-hand side... but only in the case
           where that code is run in parallel. *)
               fun rightside () =
@@ -50,9 +57,6 @@ struct
                                handle e => Raised (e, hh));
                       B.return ()
                   end
-
-              val hh = HH.get ()
-              val level = HH.getLevel hh
 
               (* Increment level for chunks allocated by 'f' and 'g' *)
               val () = HH.setLevel (hh, level + 1)
@@ -91,6 +95,7 @@ struct
                *)
               val () = HH.promoteChunks hh
 
+
               (* Reset level *)
               val () = HH.setLevel (hh, level)
           in
@@ -126,9 +131,9 @@ struct
   in
       fun reduce maxSeq f g u n =
           let
-              val _ = I.enterGlobalHeap ()
+              val _ = HM.enterGlobalHeap ()
               val result = doReduce maxSeq f g u n
-              val _ = I.exitGlobalHeap ()
+              val _ = HM.exitGlobalHeap ()
           in
               result
           end
@@ -161,9 +166,9 @@ struct
   in
       fun reduce' maxSeq g n =
           let
-              val _ = I.enterGlobalHeap ()
+              val _ = HM.enterGlobalHeap ()
               val result = doReduce' maxSeq g n
-              val _ = I.exitGlobalHeap ()
+              val _ = HM.exitGlobalHeap ()
           in
               result
           end

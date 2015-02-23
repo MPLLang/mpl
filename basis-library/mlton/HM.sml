@@ -20,9 +20,9 @@ structure MLtonHM:> MLTON_HM =
                 val get: unit -> t = PrimHH.getHierarchicalHeap
 
                 val setLevel: t * int -> unit =
-                 fn (hh, level) => PrimHH.setLevel (hh, C_Size.fromInt level)
+                 fn (hh, level) => PrimHH.setLevel (hh, Word32.fromInt level)
                 val getLevel: t -> int =
-                 fn hh => C_Size.toInt (PrimHH.getLevel hh)
+                 fn hh => Word32.toInt (PrimHH.getLevel hh)
                 val promoteChunks: t -> unit = PrimHH.promoteChunks
 
                 val appendChild: (t * t) -> unit = PrimHH.appendChildHeap
@@ -32,6 +32,10 @@ structure MLtonHM:> MLTON_HM =
                     PrimHH.setCurrentThreadUseHierarchicalHeap
             end
 
-        val enterGlobalHeap: bool -> unit = PrimHM.enterGlobalHeap
-        val exitGlobalHeap: bool -> unit = PrimHM.exitGlobalHeap
+        val enterGlobalHeap: unit -> unit = PrimHM.enterGlobalHeap
+        val exitGlobalHeap: unit -> unit = PrimHM.exitGlobalHeap
+        val explicitEnterGlobalHeap: Word32.word -> unit =
+            PrimHM.explicitEnterGlobalHeap
+        val explicitExitGlobalHeap: unit -> Word32.word =
+            PrimHM.explicitExitGlobalHeap
     end

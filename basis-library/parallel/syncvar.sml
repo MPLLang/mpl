@@ -2,7 +2,7 @@ functor MLtonParallelSyncVar (structure B : MLTON_PARALLEL_BASIC)
         :> MLTON_PARALLEL_SYNCVAR =
 struct
 
-  structure I = MLtonParallelInternal
+  structure HM = MLtonHM
 
   datatype 'a state =
       Waiting of (bool * 'a) B.t list
@@ -52,11 +52,11 @@ struct
   in
       fun write argument =
           let
-              val () = I.enterGlobalHeap ()
+              val () = HM.enterGlobalHeap ()
               val result = doWrite argument
-                           handle e => (I.exitGlobalHeap ();
+                           handle e => (HM.exitGlobalHeap ();
                                         raise e)
-              val () = I.exitGlobalHeap ()
+              val () = HM.exitGlobalHeap ()
           in
               result
           end
@@ -83,9 +83,9 @@ struct
   in
       fun read argument =
           let
-              val () = I.enterGlobalHeap ()
+              val () = HM.enterGlobalHeap ()
               val result = doRead argument
-              val () = I.exitGlobalHeap ()
+              val () = HM.exitGlobalHeap ()
           in
               result
           end

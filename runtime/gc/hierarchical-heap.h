@@ -26,8 +26,8 @@
  *
  * header ::
  * padding ::
- * lastAllocatedChunk (void*) ::
  * savedFrontier (void*) ::
+ * limit (void*) ::
  * level (size_t) ::
  * chunkList (void*) ::
  * parentHH (objptr) ::
@@ -37,15 +37,17 @@
  * There may be zero or more bytes of padding for alignment purposes.
  */
 struct HM_HierarchicalHeap {
-  /* RAM_NOTE: Maybe this should just be 'void* limit'? */
-  void* lastAllocatedChunk; /**< The last allocated chunk, for quick access to
-                             * the current limit */
-
   void* savedFrontier; /**< The saved frontier when returning to this
                         * hierarchical heap. */
 
+  void* limit; /**< The limit of the last allocated chunk */
+
+  void* lastAllocatedChunk; /**< The last allocated chunk */
+
+  Int32 lock; /**< The spinlock for exclusive access to the childHHList */
+
   /* RAM_NOTE: can be lesser width if I add another field */
-  size_t level; /**< The current level of the hierarchy which new chunks should
+  Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
   void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
@@ -67,7 +69,9 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(struct HM_HierarchicalHeap) ==
                     sizeof(void*) +
                     sizeof(void*) +
-                    sizeof(size_t) +
+                    sizeof(void*) +
+                    sizeof(Int32) +
+                    sizeof(Word32) +
                     sizeof(void*) +
                     sizeof(objptr) +
                     sizeof(objptr) +
@@ -81,6 +85,20 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
  */
 #define HH_INVALID_LEVEL (~((size_t)(0)))
 #endif
+/**
+ * This is the value of HM_HierarchicalHeap::lock when locked
+ */
+#define HM_HH_LOCK_LOCKED ((Int32)(1))
+
+/**
+ * This is the value of HM_HierarchicalHeap::lock when unlocked
+ */
+#define HM_HH_LOCK_UNLOCKED ((Int32)(-1))
+
+/**
+ * This is the initial value of HM_HierarchicalHeap::lock
+ */
+#define HM_HH_LOCK_INITIALIZER HM_HH_LOCK_UNLOCKED
 #else
 struct HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -176,6 +194,19 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 
 /**
+ * Gets the containing hierarchical heap for the given objptr
+ *
+ * @attention
+ * object <em>must</em> be within the hierarchical heap!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr to get the Hierarchical Heap for
+ *
+ * @return The struct HM_HierarchicalHeap that 'object' belongs to
+ */
+struct HM_HierarchicalHeap* HM_HH_getContaining(GC_state s, objptr object);
+
+/**
  * Returns the current hierarchical heap in use
  *
  * @param s The GC_state to use
@@ -183,6 +214,19 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
  * @return hh The struct HM_HierarchicalHeap in use
  */
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
+
+/**
+ * Gets the level of an objptr in the hierarchical heap
+ *
+ * @attention
+ * objptr must be a valid, allocated HierarchicalHeap objptr!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr
+ *
+ * @return the level of the objptr
+ */
+Word32 HM_HH_getObjptrLevel(GC_state s, objptr object);
 
 /**
  * Gets the saved frontier from a struct HM_HierarchicalHeap
@@ -227,13 +271,13 @@ bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 size_t HM_HH_offsetof(GC_state s);
 
 /**
- * Sets the saved frontier in a struct HM_HierarchicalHeap
+ * Updates the values in 'hh' to reflect mutator
  *
- * @param hh The struct HM_HierarchicalHeap to use
- * @param savedFrontier The new saved frontier to set
+ * @param hh The struct HM_HierarchicalHeap to update
+ * @param frontier The new frontier
  */
-void HM_HH_setSavedFrontier(struct HM_HierarchicalHeap* hh,
-                            void* savedFrontier);
+void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
+                        void* frontier);
 
 /**
  * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
@@ -244,6 +288,15 @@ void HM_HH_setSavedFrontier(struct HM_HierarchicalHeap* hh,
  * @return total size of the struct HM_HierarchicalHeap object
  */
 size_t HM_HH_sizeof(GC_state s);
+
+/**
+ * Update pointers in the level list of the hierarchical heap passed in. This
+ * should be called upon moving a hierarchical heap to ensure that all pointers
+ * are forwarded.
+ *
+ * @param hhObjptr The objptr of the hierarchical heap to update
+ */
+void HM_HH_updateLevelListPointers(objptr hhObjptr);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

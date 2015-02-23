@@ -24,6 +24,7 @@
  * them against a guarantor. The method used requires chunk sizes to be integral
  * multiples of the minimum chunk size.
  */
+#pragma message "Couple more tightly to reduce locking"
 
 #include "chunk-pool.h"
 
@@ -157,6 +158,7 @@ static pthread_rwlock_t ChunkPool_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
+static size_t ChunkPool_bytesAllocated = 0;
 
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatas = NULL;
 static struct ChunkPool_chunkMetadata*
@@ -216,6 +218,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   *bytesRequested = (*bytesRequested + ChunkPool_MINIMUMCHUNKSIZE - 1) &
                     ~ChunkPool_CHUNKADDRESSMASK;
   size_t chunksRequested = *bytesRequested / ChunkPool_MINIMUMCHUNKSIZE;
+  ChunkPool_bytesAllocated += *bytesRequested;
 
   pthread_rwlock_wrlock_safe(&ChunkPool_lock);
   /* Search for chunk to satisfy */
@@ -237,6 +240,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         /* now split */
         struct ChunkPool_chunkMetadata* newSpanStart;
         ChunkPool_maybeSplitSpan (&newSpanStart, cursor, chunksRequested);
+        assert(cursor->spanInfo.numChunksInSpan >= chunksRequested);
 
         if (NULL != newSpanStart) {
           /* insert residual back into freelist */
@@ -258,6 +262,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   /*
    * If execution reaches here, then I do not have a span to satisfy the request
    */
+  ChunkPool_bytesAllocated -= *bytesRequested;
   pthread_rwlock_unlock_safe(&ChunkPool_lock);
   return NULL;
 }
@@ -271,11 +276,16 @@ bool ChunkPool_free (void* chunk) {
   struct ChunkPool_chunkMetadata* spanStart =
       ChunkPool_chunkToChunkMetadata (chunk);
 
+  /* should be the first chunk in a span! */
   assert (ChunkPool_ALLOCATED == spanStart->previous);
   assert (ChunkPool_ALLOCATED == spanStart->next);
 
+  ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
+                              ChunkPool_MINIMUMCHUNKSIZE;
+
   pthread_rwlock_wrlock_safe(&ChunkPool_lock);
 
+#if 0
   /* Get the previous and next spans for coalescing */
   struct ChunkPool_chunkMetadata* previousSpanStart = spanStart - 1;
   if (ChunkPool_NONFIRSTCHUNK == previousSpanStart->previous) {
@@ -293,9 +303,12 @@ bool ChunkPool_free (void* chunk) {
   assert (ChunkPool_NONFIRSTCHUNK != previousSpanStart->next);
 
   if (ChunkPool_ALLOCATED != previousSpanStart->previous) {
+    assert(ChunkPool_ALLOCATED != previousSpanStart->next);
+
     /* coalesceable! remove from list and join */
     ChunkPool_removeFromFreeList (previousSpanStart);
-    previousSpanStart->spanInfo.numChunksInSpan += spanStart->spanInfo.numChunksInSpan;
+    previousSpanStart->spanInfo.numChunksInSpan +=
+        spanStart->spanInfo.numChunksInSpan;
 
     /*
      * set spanStart to previousSpanStart so that I don't have to branch on
@@ -305,10 +318,13 @@ bool ChunkPool_free (void* chunk) {
   }
 
   if (ChunkPool_ALLOCATED != nextSpanStart->previous) {
+    assert(ChunkPool_ALLOCATED != nextSpanStart->next);
+
     /* coalesceable! remove from list and join */
     ChunkPool_removeFromFreeList (nextSpanStart);
     spanStart->spanInfo.numChunksInSpan += nextSpanStart->spanInfo.numChunksInSpan;
   }
+#endif
 
   /*
    * At this point, spanStart points to the possible coalesced span. Reinsert it
@@ -350,12 +366,48 @@ void* ChunkPool_find (void* object) {
     assert (ChunkPool_NONFIRSTCHUNK == chunkMetadata->next);
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata->spanInfo.spanStart);
   } else {
-    assert  (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
+    assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata);
   }
   pthread_rwlock_unlock_safe(&ChunkPool_lock);
 
+  assert(ChunkPool_ALLOCATED ==
+         ChunkPool_chunkToChunkMetadata(chunk)->previous);
+  assert(ChunkPool_ALLOCATED ==
+         ChunkPool_chunkToChunkMetadata(chunk)->next);
+
   return chunk;
+}
+
+bool ChunkPool_overHalfAllocated(void) {
+  return (((((size_t)(ChunkPool_poolEnd)) -
+            ((size_t)(ChunkPool_poolStart))) / 2) < ChunkPool_bytesAllocated);
+}
+
+/**
+ * This function serializes against <tt>ChunkPool_allocate()</tt> and
+ * <tt>ChunkPool_free()</tt> but is reentrant against itself.
+ */
+size_t ChunkPool_size(void* chunk) {
+  assert (chunk >= ChunkPool_poolStart);
+  assert (chunk < ChunkPool_poolEnd);
+  assert(((void*)(((size_t)(chunk)) & ~ChunkPool_CHUNKADDRESSMASK)) == chunk);
+
+  struct ChunkPool_chunkMetadata* chunkMetadata =
+      ChunkPool_chunkToChunkMetadata(chunk);
+
+  pthread_rwlock_rdlock_safe(&ChunkPool_lock);
+  if (ChunkPool_NONFIRSTCHUNK == chunkMetadata->previous) {
+    assert(ChunkPool_NONFIRSTCHUNK == chunkMetadata->next);
+    return 0;
+  }
+
+  assert(ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
+  size_t retVal =
+      chunkMetadata->spanInfo.numChunksInSpan * ChunkPool_MINIMUMCHUNKSIZE;
+  pthread_rwlock_unlock_safe(&ChunkPool_lock);
+
+  return retVal;
 }
 
 bool ChunkPool_pointerInChunkPool (void* candidate) {

@@ -7,7 +7,4 @@ struct
         Int32.toInt ((_import
                           "Parallel_numberOfProcessors"
                           runtime private: unit -> Int32.int;) ())
-
-    val enterGlobalHeap = fn () => MLtonHM.enterGlobalHeap true
-    val exitGlobalHeap = fn () => MLtonHM.exitGlobalHeap true
 end

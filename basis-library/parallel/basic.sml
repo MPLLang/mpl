@@ -4,7 +4,8 @@ struct
   type void = unit
   type work = unit -> void
 
-  structure HH = MLtonHM.HierarchicalHeap
+  structure HM = MLtonHM
+  structure HH = HM.HierarchicalHeap
   structure I = MLtonParallelInternal
   structure T = MLtonThread
 
@@ -40,9 +41,9 @@ struct
   fun evaluateInGlobalHeap (f: 'a -> 'b): 'a -> 'b =
       fn argument =>
          let
-             val _ = I.enterGlobalHeap ()
+             val _ = HM.enterGlobalHeap ()
              val result = f argument
-             val _ = I.exitGlobalHeap ()
+             val _ = HM.exitGlobalHeap ()
          in
              result
          end
@@ -60,13 +61,13 @@ struct
           ()
 
   fun makeHHSetter hhOption = fn () => case hhOption
-                                        of SOME(hh) => (I.enterGlobalHeap ();
+                                        of SOME(hh) => (HM.enterGlobalHeap ();
                                                         HH.set hh;
                                                         HH.useHierarchicalHeap ();
-                                                        I.exitGlobalHeap ())
-                                         | NONE => (I.enterGlobalHeap ();
+                                                        HM.exitGlobalHeap ())
+                                         | NONE => (HM.enterGlobalHeap ();
                                                     HH.useHierarchicalHeap ();
-                                                    I.exitGlobalHeap ())
+                                                    HM.exitGlobalHeap ())
 
   fun schedule countSuspends () =
       let
@@ -116,7 +117,7 @@ struct
 
                                         (* PERF? this handle only makes sense for the Work case *)
                                         (* PERF? move this handler out to the native entry point? *)
-                                        handle e => (I.enterGlobalHeap ();
+                                        handle e => (HM.enterGlobalHeap ();
                                                      die ("MLton.Parallel.Basic.schedule: WARNING: Caught exception \""
                                                           ^ (General.exnMessage e)
                                                           ^ "\" in parallel scheduler!\n")))
@@ -176,7 +177,7 @@ struct
 
   (*                               (* PERF? this handle only makes sense for the Work case *) *)
   (*                               (* PERF? move this handler out to the native entry point? *) *)
-  (*                               handle e => (I.enterGlobalHeap (); *)
+  (*                               handle e => (HM.enterGlobalHeap (); *)
   (*                                            die ("MLton.Parallel.Basic.schedule: WARNING: Caught exception \"" *)
   (*                                                 ^ (General.exnMessage e) *)
   (*                                                 ^ "\" in parallel scheduler!\n"))) *)
@@ -312,7 +313,7 @@ struct
 
   fun suspend (f: 'a t -> unit) =
       let
-          val _ = I.enterGlobalHeap ()
+          val _ = HM.enterGlobalHeap ()
 
           val p = processorNumber ()
           val hh = HH.get ()
@@ -326,14 +327,14 @@ struct
 
           val result = capture' (p, tail)
 
-          val _ = I.exitGlobalHeap ()
+          val _ = HM.exitGlobalHeap ()
       in
           result
       end
 
   fun capture (f: 'a t -> unit) =
       let
-          val _ = I.enterGlobalHeap ()
+          val _ = HM.enterGlobalHeap ()
 
           val p = processorNumber ()
           val hh = HH.get ()
@@ -346,14 +347,14 @@ struct
               end
           val result = capture' (p, tail)
 
-          val _  = I.exitGlobalHeap ()
+          val _  = HM.exitGlobalHeap ()
       in
           result
       end
 
   fun resume suspension =
       let
-          val _ = I.enterGlobalHeap ()
+          val _ = HM.enterGlobalHeap ()
 
           val result =
               case suspension of
@@ -374,7 +375,7 @@ struct
                                       Thread (T.prepend (k, fn () => v), hh))])
                   end
 
-          val _ = I.exitGlobalHeap ()
+          val _ = HM.exitGlobalHeap ()
       in
           result
       end
@@ -530,7 +531,7 @@ struct
                        (*          Q.finishWork p; *)
                        (*          schedule true ()) *)
                        (*     else *)
-                       (*         (I.exitGlobalHeap (); *)
+                       (*         (HM.exitGlobalHeap (); *)
                        (*          w ()) *)
                        (* end *)
               end)
