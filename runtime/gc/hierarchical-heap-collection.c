@@ -107,7 +107,11 @@ void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  HM_HH_assertInvariants(s, hh);
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+
+  assertInvariants(s, hh);
 
   int processor = s->procStates ? Proc_processorNumber (s) : -1;
 
