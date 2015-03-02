@@ -130,7 +130,7 @@ void HM_HHC_collectLocal(void) {
 
   forwardHHObjptrsInLevelList(s, &newLevelList, hh, hh->level);
 
-  HM_HH_assertInvariants(s, hh);
+  assertInvariants(s, hh);
 
   /* free old chunks */
   HM_freeChunks(&(hh->levelList), hh->level);
@@ -153,7 +153,7 @@ void HM_HHC_collectLocal(void) {
     hh->lastAllocatedChunk = lastChunk;
   }
 
-  HM_HH_assertInvariants(s, hh);
+  assertInvariants(s, hh);
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "
@@ -174,7 +174,7 @@ void* HM_HHC_foreachHHObjptrInObject(GC_state s,
   uint16_t numObjptrs;
   GC_objectTypeTag tag;
 
-  HM_HH_assertInvariants(s, hh);
+  assertInvariants(s, hh);
 
   header = getHeader (p);
   splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);

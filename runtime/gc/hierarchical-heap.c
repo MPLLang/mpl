@@ -28,8 +28,7 @@
  * @param s The GC_state to use
  * @param hh The struct HM_HierarchicalHeap to assert invariants for
  */
-static void HM_HH_assertInvariants(GC_state s,
-                                   const struct HM_HierarchicalHeap* hh);
+static void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh);
 
 /**
  * This function converts a hierarchical heap objptr to the struct
@@ -75,7 +74,7 @@ void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer) {
   lockHH(childHH);
 
   /* cannot assert parentHH as it is still running! */
-  HM_HH_assertInvariants(s, childHH);
+  assertInvariants(s, childHH);
 
   /* childHH should be a orphan! */
   assert (BOGUS_OBJPTR == childHH->parentHH);
@@ -90,7 +89,7 @@ void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer) {
   parentHH->childHHList = childHHObjptr;
 
   /* cannot assert parentHH as it is still running! */
-  HM_HH_assertInvariants(s, childHH);
+  assertInvariants(s, childHH);
 
   unlockHH(childHH);
   unlockHH(parentHH);
@@ -117,8 +116,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   lockHH(hh);
   lockHH(parentHH);
 
-  HM_HH_assertInvariants(s, parentHH);
-  HM_HH_assertInvariants(s, hh);
+  assertInvariants(s, parentHH);
+  assertInvariants(s, hh);
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
@@ -141,7 +140,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList);
 
-  HM_HH_assertInvariants(s, parentHH);
+  assertInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
 
   unlockHH(parentHH);
@@ -201,7 +200,7 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
     }
   }
 
-  HM_HH_assertInvariants(pthread_getspecific(gcstate_key), hh);
+  assertInvariants(pthread_getspecific(gcstate_key), hh);
 }
 
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
@@ -319,8 +318,7 @@ void HM_HH_updateLevelListPointers(objptr hhObjptr) {
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
-void HM_HH_assertInvariants(GC_state s,
-                            const struct HM_HierarchicalHeap* hh) {
+void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   HM_assertLevelListInvariants(hh->levelList);
   if (NULL != hh->limit) {
     assert(ChunkPool_find(((char*)(hh->limit)) - 1) == hh->lastAllocatedChunk);
@@ -356,8 +354,7 @@ void HM_HH_assertInvariants(GC_state s,
   }
 }
 #else
-void HM_HH_assertInvariants(GC_state s,
-                            const struct HM_HierarchicalHeap* hh) {
+void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   ((void)(s));
   ((void)(hh));
 }
