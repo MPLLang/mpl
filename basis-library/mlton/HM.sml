@@ -38,4 +38,6 @@ structure MLtonHM:> MLTON_HM =
             PrimHM.explicitEnterGlobalHeap
         val explicitExitGlobalHeap: unit -> Word32.word =
             PrimHM.explicitExitGlobalHeap
+
+        val registerQueue: 'a array -> unit = PrimHM.registerQueue
     end

@@ -29,4 +29,6 @@ signature MLTON_HM =
         val exitGlobalHeap: unit -> unit
         val explicitEnterGlobalHeap: Word32.word -> unit
         val explicitExitGlobalHeap: unit -> Word32.word
+
+        val registerQueue: 'a array -> unit
     end

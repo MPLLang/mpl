@@ -103,6 +103,10 @@ static void forwardHHObjptrsInLevelList(GC_state s,
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
+void HM_HHC_registerQueue(pointer queuePointer) { }
+#endif /* MLTON_GC_INTERNAL_BASIS */
+
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);

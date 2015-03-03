@@ -25,6 +25,10 @@ typedef void (*HHObjptrFunction) (GC_state s,
                                   objptr* opp);
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+PRIVATE void HM_HHC_registerQueue(pointer queuePointer);
+#endif /* MLTON_GC_INTERNAL_BASIS */
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 /**
  * This function performs a local collection on the current hierarchical heap

@@ -128,6 +128,12 @@ struct
                            fn i => if i < numberOfProcessors then
                                      SOME (newQueue i)
                                    else NONE)
+  val () = Array.app (fn q =>
+                         case q
+                          of SOME (Queue {work = ref q, ...}) =>
+                             MLtonHM.registerQueue q
+                           | _ => ())
+                     queues
 
 (*
   local
@@ -331,7 +337,8 @@ struct
           in
             work := w;
             top := i - j;
-            bottom := 0
+            bottom := 0;
+            MLtonHM.registerQueue w
           end
       end
 

@@ -193,6 +193,9 @@ structure HM =
         val explicitExitGlobalHeap: unit -> Word32.word =
             _import "HM_explicitExitGlobalHeap" runtime private:
             unit -> Word32.word;
+
+        val registerQueue: 'a array -> unit =
+            _import "HM_HHC_registerQueue" runtime private: 'a array -> unit;
     end
 
 structure Platform =
