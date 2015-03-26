@@ -69,6 +69,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/size.c"
 #include "gc/sources.c"
 #include "gc/stack.c"
+#include "gc/statistics.c"
 #include "gc/switch-thread.c"
 #include "gc/thread.c"
 #include "gc/translate.c"

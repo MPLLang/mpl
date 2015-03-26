@@ -343,36 +343,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackShrink = 0.5f;
   s->controls->summary = FALSE;
 
-  s->cumulativeStatistics = (struct GC_cumulativeStatistics *)
-    malloc (sizeof (struct GC_cumulativeStatistics));
-  s->cumulativeStatistics->bytesAllocated = 0;
-  s->cumulativeStatistics->bytesFilled = 0;
-  s->cumulativeStatistics->bytesCopied = 0;
-  s->cumulativeStatistics->bytesCopiedMinor = 0;
-  s->cumulativeStatistics->bytesHashConsed = 0;
-  s->cumulativeStatistics->bytesMarkCompacted = 0;
-  s->cumulativeStatistics->bytesScannedMinor = 0;
-  s->cumulativeStatistics->maxBytesLive = 0;
-  s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
-  s->cumulativeStatistics->maxHeapSize = 0;
-  s->cumulativeStatistics->maxPauseTime = 0;
-  s->cumulativeStatistics->maxStackSize = 0;
-  s->cumulativeStatistics->syncForOldGenArray = 0;
-  s->cumulativeStatistics->syncForNewGenArray = 0;
-  s->cumulativeStatistics->syncForStack = 0;
-  s->cumulativeStatistics->syncForHeap = 0;
-  s->cumulativeStatistics->syncMisc = 0;
-  s->cumulativeStatistics->numCardsMarked = 0;
-  s->cumulativeStatistics->numCopyingGCs = 0;
-  s->cumulativeStatistics->numHashConsGCs = 0;
-  s->cumulativeStatistics->numMarkCompactGCs = 0;
-  s->cumulativeStatistics->numMinorGCs = 0;
-  rusageZero (&s->cumulativeStatistics->ru_gc);
-  rusageZero (&s->cumulativeStatistics->ru_gcCopying);
-  rusageZero (&s->cumulativeStatistics->ru_gcMarkCompact);
-  rusageZero (&s->cumulativeStatistics->ru_gcMinor);
-  rusageZero (&s->cumulativeStatistics->ru_rt);
-  rusageZero (&s->cumulativeStatistics->ru_sync);
+  s->cumulativeStatistics = newCumulativeStatistics();
 
   s->currentThread = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
@@ -381,13 +352,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
   initHeap (s, s->heap);
 
-  s->lastMajorStatistics = (struct GC_lastMajorStatistics *)
-    malloc (sizeof (struct GC_lastMajorStatistics));
-  s->lastMajorStatistics->bytesHashConsed = 0;
-  s->lastMajorStatistics->bytesLive = 0;
-#warning Does this need to be under an option?
-  s->lastMajorStatistics->kind = GC_COPYING;
-  s->lastMajorStatistics->numMinorGCs = 0;
+  s->lastMajorStatistics = newLastMajorStatistics();
 
   s->numberOfProcs = 1;
   s->procStates = NULL;
@@ -490,10 +455,10 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->atomicState = 0;
   d->callFromCHandlerThread = BOGUS_OBJPTR;
   d->controls = s->controls;
-  d->cumulativeStatistics = s->cumulativeStatistics;
+  d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
   d->hashConsDuringGC = s->hashConsDuringGC;
-  d->lastMajorStatistics = s->lastMajorStatistics;
+  d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
   d->roots = NULL;
   d->rootsLength = 0;
