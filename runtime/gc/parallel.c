@@ -225,7 +225,7 @@ void Parallel_lock (Int32 p) {
 
   /*
   if (needGCTime (s))
-    startTiming (&ru_lock);
+    startTiming (RUSAGE_THREAD, &ru_lock);
   */
 
   do {
@@ -238,7 +238,7 @@ void Parallel_lock (Int32 p) {
                                              myNumber));
   /*
   if (needGCTime (s))
-    stopTiming (&ru_lock, &s->cumulativeStatistics->ru_lock);
+    stopTiming (RUSAGE_THREAD, &ru_lock, &s->cumulativeStatistics->ru_lock);
   */
 }
 

@@ -16,7 +16,7 @@ static inline void rusageMinusMax (struct rusage *ru1,
                                    struct rusage *ru2,
                                    struct rusage *ru);
 static inline uintmax_t rusageTime (struct rusage *ru);
-static inline void startTiming (struct rusage *ru_start);
-static uintmax_t stopTiming (struct rusage *ru_start, struct rusage *ru_gc);
+static inline void startTiming (int who, struct rusage *ru_start);
+static uintmax_t stopTiming (int who, struct rusage *ru_start, struct rusage *ru_gc);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

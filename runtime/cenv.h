@@ -19,6 +19,7 @@
  */
 #if (defined (__linux__) || defined(__GNU__))
 #define _POSIX_C_SOURCE 200112L
+#define _GNU_SOURCE
 #endif
 #define _FILE_OFFSET_BITS 64
 

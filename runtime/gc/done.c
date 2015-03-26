@@ -44,7 +44,7 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   uintmax_t syncTime;
   uintmax_t rtTime;
 
-  getrusage (RUSAGE_SELF, &ru_total);
+  getrusage (RUSAGE_THREAD, &ru_total);
   totalTime = rusageTime (&ru_total);
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
   syncTime = rusageTime (&cumulativeStatistics->ru_sync);
