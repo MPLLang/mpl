@@ -116,7 +116,14 @@ void GC_done (GC_state s) {
   minorGC (s);
   out = stderr;
   if (s->controls->summary) {
-    displayCumulativeStatistics (out, s->cumulativeStatistics);
+    if (s->procStates) {
+      for (int proc = 0; proc < s->numberOfProcs; proc++) {
+        fprintf (out, "Thread [%d]::\n", proc);
+        displayCumulativeStatistics (out, s->procStates[proc].cumulativeStatistics);
+      }
+    } else {
+      displayCumulativeStatistics (out, s->cumulativeStatistics);
+    }
   }
   releaseHeap (s, s->heap);
   releaseHeap (s, s->secondaryHeap);
