@@ -72,6 +72,7 @@ PRIVATE Pointer gcStateAddress;
 
 static void MLton_callFromC ();
 
+/* RAM_NOTE: Should this be merged into gc/init.c:GC_duplicate? */
 void Duplicate (GC_state d, GC_state s) {
   // Initialize
   d->alignment = s->alignment;

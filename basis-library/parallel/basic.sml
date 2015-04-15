@@ -94,6 +94,9 @@ struct
                                                               "ERROR: work exists on queue?!")
 
                                             val childHH = HH.new ()
+                                            (*
+                                             * RAM_NOTE: consolidate functions?
+                                             *)
                                             val () = HH.setLevel (childHH, level)
                                             val () = HH.appendChild (parentHH,
                                                                      childHH)
@@ -365,14 +368,16 @@ struct
                       Q.resumeWork (p,
                                     q,
                                     (Q.newWork p,
-                                     Thread (T.prepend (k, fn () => v), hh)))
+                                     Thread (T.prepend (k, fn () => v), hh),
+                                     NONE))
                   end
                 | (Capture (k, hh), v) =>
                   let
                       val p = processorNumber ()
                   in
                       Q.addWork (p, [(Q.newWork p,
-                                      Thread (T.prepend (k, fn () => v), hh))])
+                                      Thread (T.prepend (k, fn () => v), hh),
+                                      NONE)])
                   end
 
           val _ = HM.exitGlobalHeap ()
@@ -393,7 +398,8 @@ struct
                               capture' (p, fn (p, k) =>
                                               (Q.addWork (p,
                                                           [(Q.newWork p,
-                                                            Thread (k, hh))]);
+                                                            Thread (k, hh),
+                                                            NONE)]);
                                                incSuspends p;
                                                Q.finishWork p))
                       in
@@ -421,9 +427,14 @@ struct
                                               Q.addWork (p,
                                                          [(Q.newWork p,
                                                            Thread (T.prepend (k, fn () => t),
-                                                                   currentHH)),
+                                                                   currentHH),
+                                                           NONE),
                                                           (t,
-                                                           Work (w, currentHH, level))]);
+                                                           Work (w,
+                                                                 currentHH,
+                                                                 level),
+                                                           SOME (currentHH,
+                                                                 level- 1))]);
                                               incSuspends p;
                                               Q.finishWork p
                                           end)
@@ -441,7 +452,9 @@ struct
                       (* (* XXX maybe should run delayed work and queue the currrent thread too? *) *)
                       (* app add (rev (Array.sub (delayed, p))); *)
                       (* Array.update (delayed, p, nil); *)
-                      Q.addWork (p, [(t, Work (w, currentHH, level))]);
+                      Q.addWork (p, [(t,
+                                      Work (w, currentHH, level),
+                                      SOME (currentHH, level - 1))]);
                       t
                   end
           end

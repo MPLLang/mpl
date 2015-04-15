@@ -164,6 +164,25 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
 
   hh->level = level;
+  if ((HM_HH_INVALID_LEVEL != hh->lastSharedLevel) &&
+      (hh->lastSharedLevel >= level)) {
+    assert(hh->lastSharedLevel == level);
+    hh->lastSharedLevel = level - 1;
+  }
+}
+
+void HM_HH_setSharedLevel(pointer hhPointer, size_t level) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+  lockHH(hh);
+  if ((HM_HH_INVALID_LEVEL == hh->lastSharedLevel) ||
+      (hh->lastSharedLevel < level)) {
+    hh->lastSharedLevel = level;
+  }
+  unlockHH(hh);
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
@@ -172,16 +191,24 @@ void HM_HH_display (
     const struct HM_HierarchicalHeap* hh,
     FILE* stream) {
   fprintf (stream,
-           "\t\tsavedFrontier = %p\n"
-           "\t\tlimit = %p\n"
-           "\t\tlastAllocatedChunk = %p\n"
-           "\t\tlevelList = %p\n"
-           "\t\tparentHH = "FMTOBJPTR"\n"
-           "\t\tnextChildHH = "FMTOBJPTR"\n"
-           "\t\tchildHHList= "FMTOBJPTR"\n",
+           "\tsavedFrontier = %p\n"
+           "\tlimit = %p\n"
+           "\tlastAllocatedChunk = %p\n"
+           "\tlock = %s\n"
+           "\tlevel = %u\n"
+           "\tlastSharedLevel = %u\n"
+           "\tid = %u\n"
+           "\tlevelList = %p\n"
+           "\tparentHH = "FMTOBJPTR"\n"
+           "\tnextChildHH = "FMTOBJPTR"\n"
+           "\tchildHHList= "FMTOBJPTR"\n",
            hh->savedFrontier,
            hh->limit,
            hh->lastAllocatedChunk,
+           (HM_HH_LOCK_LOCKED == hh->lock) ? "locked" : "unlocked",
+           hh->level,
+           hh->lastSharedLevel,
+           hh->id,
            hh->levelList,
            hh->parentHH,
            hh->nextChildHH,
@@ -235,7 +262,8 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   return TRUE;
 }
 
-struct HM_HierarchicalHeap* HM_HH_getContaining(GC_state s, objptr object) {
+struct HM_HierarchicalHeap* HM_HH_getContaining(ARG_USED_FOR_ASSERT GC_state s,
+                                                objptr object) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
   return HM_getContainingHierarchicalHeap(object);

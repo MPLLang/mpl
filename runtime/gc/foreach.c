@@ -28,6 +28,8 @@ void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f) {
       callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread);
       callIfIsObjptr (s, f, &s->procStates[proc].currentThread);
       callIfIsObjptr (s, f, &s->procStates[proc].currentHierarchicalHeap);
+      callIfIsObjptr (s, f, &s->procStates[proc].wsQueue);
+      callIfIsObjptr (s, f, &s->procStates[proc].wsQueueLock);
       callIfIsObjptr (s, f, &s->procStates[proc].savedThread);
       callIfIsObjptr (s, f, &s->procStates[proc].signalHandlerThread);
 
@@ -42,6 +44,8 @@ void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f) {
     callIfIsObjptr (s, f, &s->callFromCHandlerThread);
     callIfIsObjptr (s, f, &s->currentThread);
     callIfIsObjptr (s, f, &s->currentHierarchicalHeap);
+    callIfIsObjptr (s, f, &s->wsQueue);
+    callIfIsObjptr (s, f, &s->wsQueueLock);
     callIfIsObjptr (s, f, &s->savedThread);
     callIfIsObjptr (s, f, &s->signalHandlerThread);
   }

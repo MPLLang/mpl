@@ -11,6 +11,9 @@
 /*                       Depth-first Marking                        */
 /* ---------------------------------------------------------------- */
 
+static bool noopDescendHook(GC_state s, void* rawArgs, objptr object);
+static void noopAscendHook(GC_state s, void* rawArgs, objptr* objectObjptr);
+
 bool isPointerMarked (pointer p) {
   return MARK_MASK & getHeader (p);
 }
@@ -26,7 +29,7 @@ bool isPointerMarkedByMode (pointer p, GC_markMode m) {
   }
 }
 
-/* dfsMarkByMode (s, r, m, shc, slw)
+/* dfsMarkByModeCustom (s, r, m, shc, slw, dh, ah)
  *
  * Sets all the mark bits in the object graph pointed to by r.
  *
@@ -37,12 +40,22 @@ bool isPointerMarkedByMode (pointer p, GC_markMode m) {
  *
  * If slw, it links the weak objects marked.
  *
+ * dh is called before descending into an object and returns if it should be
+ * descended into
+ *
+ * ah is called before ascending to an object's parent in the dfs tree.
+ *
  * It returns the total size in bytes of the objects marked.
  */
-size_t dfsMarkByMode (GC_state s, pointer root,
-                      GC_markMode mode,
-                      bool shouldHashCons,
-                      bool shouldLinkWeaks) {
+size_t dfsMarkByModeCustom (GC_state s, pointer root,
+                            GC_markMode mode,
+                            bool shouldHashCons,
+                            bool shouldLinkWeaks,
+                            dfsDescendHookFun descendHook,
+                            void* descendHookArgs,
+                            dfsAscendHookFun ascendHook,
+                            void* ascendHookArgs
+                            ) {
   GC_header mark; /* Used to set or clear the mark bit. */
   size_t size; /* Total number of bytes marked. */
   pointer cur; /* The current object being marked. */
@@ -62,10 +75,29 @@ size_t dfsMarkByMode (GC_state s, pointer root,
   GC_returnAddress returnAddress;
   GC_frameLayout frameLayout;
   GC_frameOffsets frameOffsets;
+  int processor = s->procStates ? Proc_processorNumber (s) : -1;
 
-  if (isPointerMarkedByMode (root, mode))
-    /* Object has already been marked. */
+  if (DEBUG_DFS_MARK) {
+    fprintf(stderr,
+            "[%d] dfsMarkByMode: START %s\n",
+            processor,
+            (mode == MARK_MODE) ? "mark" : "unmark");
+    fflush(stderr);
+  }
+
+  if (isPointerMarkedByMode (root, mode) ||
+      !descendHook(s, descendHookArgs, pointerToObjptr(root, s->heap->start))) {
+    /* Object has already been marked or should not be descended into. */
+    if (DEBUG_DFS_MARK) {
+      fprintf(stderr,
+              "[%d] dfsMarkByMode: END %s\n",
+              processor,
+              (mode == MARK_MODE) ? "mark" : "unmark");
+      fflush(stderr);
+    }
+
     return 0;
+  }
   mark = (MARK_MODE == mode) ? MARK_MASK : 0;
   size = 0;
   cur = root;
@@ -81,13 +113,16 @@ markNext:
    * nextHeader is the header of next.
    * todo is a pointer to the pointer inside cur that points to next.
    */
-  if (DEBUG_DFS_MARK)
+  if (DEBUG_DFS_MARK) {
     fprintf (stderr,
-             "markNext"
+             "[%d] markNext"
              "  cur = "FMTPTR"  next = "FMTPTR
              "  prev = "FMTPTR"  todo = "FMTPTR"\n",
+             processor,
              (uintptr_t)cur, (uintptr_t)next,
              (uintptr_t)prev, (uintptr_t)todo);
+    fflush(stderr);
+  }
   assert (not isPointerMarkedByMode (next, mode));
   assert (nextHeaderp == getHeaderp (next));
   assert (nextHeader == getHeader (next));
@@ -99,11 +134,26 @@ markNext:
   storeObjptrFromPointer (todo, prev, s->heap->start);
   prev = cur;
   cur = next;
+  if (!descendHook(s, descendHookArgs, pointerToObjptr(cur, s->heap->start))) {
+    // should not descend into this object, so pop back
+    if (DEBUG_DFS_MARK) {
+      fprintf (stderr,
+               "[%d] dfsMarkByModeCustom: markNext: descendHook(cur = %p) = FALSE\n",
+               processor,
+               ((void*)(cur)));
+      fflush(stderr);
+    }
+
+    goto ret;
+  }
 mark:
-  if (DEBUG_DFS_MARK)
-    fprintf (stderr, "mark  cur = "FMTPTR"  prev = "FMTPTR"  mode = %s\n",
+  if (DEBUG_DFS_MARK) {
+    fprintf (stderr, "[%d] mark  cur = "FMTPTR"  prev = "FMTPTR"  mode = %s\n",
+             processor,
              (uintptr_t)cur, (uintptr_t)prev,
              (mode == MARK_MODE) ? "mark" : "unmark");
+    fflush(stderr);
+  }
   /* cur is the object to mark.
    * prev is the mark stack.
    * headerp points to the header of cur.
@@ -135,8 +185,13 @@ normalDone:
     todo = cur + bytesNonObjptrs;
     objptrIndex = 0;
 markInNormal:
-    if (DEBUG_DFS_MARK)
-      fprintf (stderr, "markInNormal  objptrIndex = %"PRIu32"\n", objptrIndex);
+    if (DEBUG_DFS_MARK) {
+      fprintf (stderr,
+               "[%d] markInNormal  objptrIndex = %"PRIu32"\n",
+               processor,
+               objptrIndex);
+      fflush(stderr);
+    }
     assert (objptrIndex < numObjptrs);
     // next = *(pointer*)todo;
     next = fetchObjptrToPointer (todo, s->heap->start);
@@ -167,17 +222,24 @@ markNextInNormal:
       GC_weak w;
 
       w = (GC_weak)(cur + offsetofWeak (s));
-      if (DEBUG_WEAK)
-        fprintf (stderr, "marking weak "FMTPTR" ",
+      if (DEBUG_WEAK) {
+        fprintf (stderr, "[%d] marking weak "FMTPTR" ",
+                 processor,
                  (uintptr_t)w);
+        fflush(stderr);
+      }
       if (isObjptr (w->objptr)) {
-        if (DEBUG_WEAK)
-          fprintf (stderr, "linking\n");
+        if (DEBUG_WEAK) {
+          fprintf (stderr, "[%d] linking\n", processor);
+          fflush(stderr);
+        }
         w->link = s->weaks;
         s->weaks = w;
       } else {
-        if (DEBUG_WEAK)
-          fprintf (stderr, "not linking\n");
+        if (DEBUG_WEAK) {
+          fprintf (stderr, "[%d] not linking\n", processor);
+          fflush(stderr);
+        }
       }
     }
     goto ret;
@@ -208,9 +270,12 @@ markArrayElt:
     /* Skip to the first pointer. */
     todo += bytesNonObjptrs;
 markInArray:
-    if (DEBUG_DFS_MARK)
-      fprintf (stderr, "markInArray arrayIndex = %"PRIxARRCTR" objptrIndex = %"PRIu32"\n",
+    if (DEBUG_DFS_MARK) {
+      fprintf (stderr, "[%d] markInArray arrayIndex = %"PRIxARRCTR" objptrIndex = %"PRIu32"\n",
+               processor,
                arrayIndex, objptrIndex);
+      fflush(stderr);
+    }
     assert (arrayIndex < getArrayLength (cur));
     assert (objptrIndex < numObjptrs);
     assert (todo == indexArrayAtObjptrIndex (s, cur, arrayIndex, objptrIndex));
@@ -256,9 +321,12 @@ markInStack:
      * to be marked.
      */
     assert (getStackBottom (s, (GC_stack)cur) <= top);
-    if (DEBUG_DFS_MARK)
-      fprintf (stderr, "markInStack  top = %"PRIuMAX"\n",
+    if (DEBUG_DFS_MARK) {
+      fprintf (stderr, "[%d] markInStack  top = %"PRIuMAX"\n",
+               processor,
                (uintmax_t)(top - getStackBottom (s, (GC_stack)cur)));
+      fflush(stderr);
+    }
     if (top == getStackBottom (s, (GC_stack)(cur)))
       goto ret;
     objptrIndex = 0;
@@ -274,11 +342,14 @@ markInFrame:
     todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
     // next = *(pointer*)todo;
     next = fetchObjptrToPointer (todo, s->heap->start);
-    if (DEBUG_DFS_MARK)
+    if (DEBUG_DFS_MARK) {
       fprintf (stderr,
-               "    offset %u  todo "FMTPTR"  next = "FMTPTR"\n",
+               "[%d]     offset %u  todo "FMTPTR"  next = "FMTPTR"\n",
+               processor,
                frameOffsets [objptrIndex + 1],
                (uintptr_t)todo, (uintptr_t)next);
+      fflush(stderr);
+    }
     if (not isPointer (next)) {
       objptrIndex++;
       goto markInFrame;
@@ -300,12 +371,28 @@ ret:
    * Need to set the pointer in the prev object that pointed to cur
    * to point back to prev, and restore prev.
    */
-  if (DEBUG_DFS_MARK)
-    fprintf (stderr, "return  cur = "FMTPTR"  prev = "FMTPTR"\n",
+  if (DEBUG_DFS_MARK) {
+    fprintf (stderr, "[%d] return  cur = "FMTPTR"  prev = "FMTPTR"\n",
+             processor,
              (uintptr_t)cur, (uintptr_t)prev);
-  assert (isPointerMarkedByMode (cur, mode));
-  if (NULL == prev)
+    fflush(stderr);
+  }
+  /* RAM_NOTE: was 'assert (isPointerMarkedByMode (cur, mode));' */
+  /*
+   * RAM_NOTE: would be nice to have an equivalent assertion, perhaps by
+   * restricting 'descendHook()'
+   */
+  if (NULL == prev) {
+    if (DEBUG_DFS_MARK) {
+      fprintf(stderr,
+              "[%d] dfsMarkByMode: END %s\n",
+              processor,
+              (mode == MARK_MODE) ? "mark" : "unmark");
+      fflush(stderr);
+    }
+
     return size;
+  }
   next = cur;
   cur = prev;
   headerp = getHeaderp (cur);
@@ -325,6 +412,17 @@ ret:
     storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
+    /* Call the ascendHook now that we are done with 'cur' */
+    ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
+    if (DEBUG_DFS_MARK) {
+      fprintf(stderr,
+              "[%d] dfsMarkByMode: ret/NORMAL_TAG: ascendHook(todo = %p), "
+              "*todo = %p\n",
+              processor,
+              ((void*)(todo)),
+              *((void**)(todo)));
+      fflush(stderr);
+    }
     goto markNextInNormal;
   } else if (ARRAY_TAG == tag) {
     arrayIndex = getArrayCounter (cur);
@@ -337,6 +435,17 @@ ret:
     storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
+    /* Call the ascendHook now that we are done with 'cur' */
+    ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
+    if (DEBUG_DFS_MARK) {
+      fprintf(stderr,
+              "[%d] dfsMarkByMode: ret/ARRAY_TAG: ascendHook(todo = %p), "
+              "*todo = %p\n",
+              processor,
+              ((void*)(todo)),
+              *((void**)(todo)));
+      fflush(stderr);
+    }
     goto markNextInArray;
   } else {
     assert (STACK_TAG == tag);
@@ -353,10 +462,36 @@ ret:
     storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
+    /* Call the ascendHook now that we are done with 'cur' */
+    ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
+    if (DEBUG_DFS_MARK) {
+      fprintf(stderr,
+              "[%d] dfsMarkByMode: ret/STACK_TAG: ascendHook(todo = %p), "
+              "*todo = %p\n",
+              processor,
+              ((void*)(todo)),
+              *((void**)(todo)));
+      fflush(stderr);
+    }
     objptrIndex++;
     goto markInFrame;
   }
   assert (FALSE);
+}
+
+static size_t dfsMarkByMode (GC_state s, pointer root,
+                             GC_markMode mode,
+                             bool shouldHashCons,
+                             bool shouldLinkWeaks) {
+  return dfsMarkByModeCustom(s,
+                             root,
+                             mode,
+                             shouldHashCons,
+                             shouldLinkWeaks,
+                             noopDescendHook,
+                             NULL,
+                             noopAscendHook,
+                             NULL);
 }
 
 void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp) {
@@ -371,4 +506,21 @@ void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s, objptr *opp) {
 
   p = objptrToPointer (*opp, s->heap->start);
   dfsMarkByMode (s, p, MARK_MODE, FALSE, TRUE);
+}
+
+bool noopDescendHook(GC_state s, void* rawArgs, objptr object) {
+  // silence compiler about unused variables
+  ((void)(s));
+  ((void)(rawArgs));
+  ((void)(object));
+
+  return TRUE;
+}
+void noopAscendHook(GC_state s, void* rawArgs, objptr* objectObjptr) {
+  // silence compiler about unused variables
+  ((void)(s));
+  ((void)(rawArgs));
+  ((void)(objectObjptr));
+
+  return;
 }

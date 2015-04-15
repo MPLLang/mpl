@@ -40,15 +40,19 @@ struct
               (* Make sure calling thread is set to use hierarchical heaps *)
               val () = HH.useHierarchicalHeap ()
 
-              (* Used to hold the result of the right-hand side in the case where
-          that code is executed in parallel. Should be on hierarchical heap as
-          it points to HH data *)
+              (*
+               * Used to hold the result of the right-hand side in the case
+               * where that code is executed in parallel. Should be on
+               * hierarchical heap as it points to HH data
+               *)
               val inGlobalHeapCounter = HM.explicitExitGlobalHeap ()
               val var = V.empty ()
-              val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
-              (* Closure used to run the right-hand side... but only in the case
-          where that code is run in parallel. *)
-              fun rightside () =
+
+              (*
+               * Closure used to run the right-hand side... but only in the case
+               * where that code is run in parallel.
+               *)
+              val rightside = fn () =>
                   let
                       val hh = HH.get ()
                   in
@@ -57,6 +61,10 @@ struct
                                handle e => Raised (e, hh));
                       B.return ()
                   end
+                  handle B.Parallel msg =>
+                         (print (msg ^ "\n");
+                          raise B.Parallel msg)
+              val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
 
               (* Increment level for chunks allocated by 'f' and 'g' *)
               val () = HH.setLevel (hh, level + 1)

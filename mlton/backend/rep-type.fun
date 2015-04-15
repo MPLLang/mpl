@@ -495,6 +495,10 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesLevel =
                           Bits.toBytes (Type.width Type.word32)
+                      val bytesLastSharedLevel =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesID =
+                          Bits.toBytes (Type.width Type.word32)
                       val bytesLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
@@ -514,6 +518,8 @@ structure ObjectType =
                               bytesLastAllocatedChunk +
                               bytesLock +
                               bytesLevel +
+                              bytesLastSharedLevel +
+                              bytesID +
                               bytesLevelList +
 			      bytesParentHH +
 			      bytesNextChildHH +
@@ -532,6 +538,8 @@ structure ObjectType =
                                                       Type.cpointer (),
                                                       Type.cpointer (),
                                                       Type.cpointer (),
+                                                      Type.word32,
+                                                      Type.word32,
                                                       Type.word32,
                                                       Type.word32,
                                                       Type.cpointer (),

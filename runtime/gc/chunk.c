@@ -142,12 +142,12 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   chunkInfo->frontier = HM_getChunkStart(chunk);
   chunkInfo->nextChunk = NULL;
   chunkInfo->level = level;
+  chunkInfo->split.levelHead.nextHead = NULL;
   chunkInfo->split.levelHead.lastChunk = chunk;
   chunkInfo->split.levelHead.containingHH = hh;
 
   /* insert into level list */
-  chunkInfo->split.levelHead.nextHead = *levelList;
-  *levelList = chunk;
+  HM_mergeLevelList(levelList, chunk);
 
   /* populate chunkEnd */
   *chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
@@ -160,6 +160,13 @@ void HM_foreachHHObjptrInLevelList(GC_state s,
                                    HHObjptrFunction f,
                                    struct HM_HierarchicalHeap* hh,
                                    size_t minLevel) {
+  struct HHObjptrFunctionArgs fArgs = {
+    .destinationLevelList = destinationLevelList,
+    .hh = hh,
+    .minLevel = minLevel,
+    .maxLevel = 0
+  };
+
   for (void* levelList = *destinationLevelList;
        NULL != levelList;
        levelList = getChunkInfo(levelList)->split.levelHead.nextHead) {
@@ -169,15 +176,16 @@ void HM_foreachHHObjptrInLevelList(GC_state s,
 #pragma message "Optimize by saving frontier?"
       for (pointer p = HM_getChunkStart(chunk);
            p != getChunkInfo(chunk)->frontier;) {
-        p = advanceToObjectData(s, p);
         LOCAL_USED_FOR_ASSERT void* savedLevelList = *destinationLevelList;
+
+        p = advanceToObjectData(s, p);
+        fArgs.maxLevel = getChunkInfo(levelList)->level;
         p = HM_HHC_foreachHHObjptrInObject(s,
                                            p,
+                                           FALSE,
                                            f,
-                                           destinationLevelList,
-                                           hh,
-                                           minLevel,
-                                           getChunkInfo(levelList)->level);
+                                           &fArgs);
+
         assert(savedLevelList == *destinationLevelList);
       }
     }

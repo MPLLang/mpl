@@ -22,6 +22,7 @@ functor WorkStealing (structure W : sig type work val numberOfProcessors : unit 
 struct
 
   type proc = int
+  type share = (MLtonHM.HierarchicalHeap.t * int) option
   type work = W.work
 
   val successfulSteals = ref 0
@@ -66,28 +67,30 @@ struct
 *)
   end
 
-(*
+
   local
     exception Impossible
     open TextIO
   in
-  fun die n = (output (stdErr,
-                       "WSWorkQueue: die at " ^ (Int.toString n) ^ "\n");
+  fun die m = (output (stdErr,
+                       "WSWorkQueue: died reason:  " ^ m ^ "\n");
                flushOut stdErr;
                (* XX releaseLock (); *)
                raise Impossible)
   end
-*)
+
   exception WorkQueue
   exception QueueSize
 
   structure A = Array
+  structure HH = MLtonHM.HierarchicalHeap
   structure V = Vector
+
   val numberOfProcessors = W.numberOfProcessors ()
 
   val WORK_ARRAY_SIZE = 1024
   (* private state *)
-  datatype entry = Empty | Work of (token * W.work (* * int *)) | Marker
+  datatype entry = Empty | Work of (token * W.work * share) | Marker
   and queue = Queue of {
                               top : int ref,
                               bottom : int ref,
@@ -121,6 +124,10 @@ struct
   val locks = A.tabulate (numberOfProcessors,
                           (* fn _ => singleLock) *)
                           fn _ => Lock { thiefLock = ref ~1, ownerLock = dekkerInit () })
+  val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
+                      MLtonHM.registerQueueLock (p, thiefLock))
+                  locks
+
   val suspending = A.array (numberOfProcessors,
                             false)
   val QUEUE_ARRAY_SIZE = 8192
@@ -128,12 +135,11 @@ struct
                            fn i => if i < numberOfProcessors then
                                      SOME (newQueue i)
                                    else NONE)
-  val () = Array.app (fn q =>
-                         case q
-                          of SOME (Queue {work = ref q, ...}) =>
-                             MLtonHM.registerQueue q
-                           | _ => ())
-                     queues
+  val () = A.appi (fn (p, q) => case q
+                                 of SOME (Queue {work = ref q, ...}) =>
+                                    MLtonHM.registerQueue (p, q)
+                                  | _ => ())
+                  queues
 
 (*
   local
@@ -338,7 +344,7 @@ struct
             work := w;
             top := i - j;
             bottom := 0;
-            MLtonHM.registerQueue w
+            MLtonHM.registerQueue (p, w)
           end
       end
 
@@ -348,17 +354,16 @@ struct
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
       val () = takeLock thiefLock; (* XTRA *)
       (* val () = dekkerLock (true, lock); *)
-
       val q as Queue { top, work, ... } = case A.sub (queues, p)
                                       of SOME q => q | NONE => (print "add\n"; raise WorkQueue)
-      fun add (tw as (t as Token r, w)) =
+      fun add (tw as (t as Token r, w, share)) =
           let
             val i = !top
             val () = if i = A.length (!work) then resize p q else ()
             val i = !top (* in case of resize *)
           in
             r := SOME q;
-            A.update (!work, i, Work (* tw *) (t, w (*, next () *)));
+            A.update (!work, i, Work (t, w, share));
             top := i + 1
           end
     in
@@ -370,24 +375,25 @@ struct
     end
 
 (* move queue at a into p', assumes the master lock is held *)
-  fun moveQueue (a, p') =
-      if a = p' then ()
-      else
-        let
-          val q as Queue { index, ... } =
-              case A.sub (queues, a) of SOME q => q
-                                      | NONE => (print "move\n"; raise WorkQueue)
-        in
-          index := p';
-          A.update (queues, p', SOME q)
-        end
+  fun moveQueue (a, p') = die "Tried to Move Queue"
+      (* if a = p' then () *)
+      (* else *)
+      (*   let *)
+      (*     val q as Queue { index, work = ref qArray } = *)
+      (*         case A.sub (queues, a) of SOME q => q *)
+      (*                                 | NONE => (print "move\n"; raise WorkQueue) *)
+      (*   in *)
+      (*     index := p'; *)
+      (*     A.update (queues, p', SOME q); *)
+      (*     MLtonHM.registerQueue (p', qArray) *)
+      (*   end *)
 
   local
     fun victim p =
         let
-          (* XXX this is not greedy *)
+          (* SPOONHOWER_NOTE: this is not greedy *)
 
-          (* NB this is unprotected access to totalQueues and activeQueues.
+          (* SPOONHOWER_NOTE: this is unprotected access to totalQueues and activeQueues.
             However, if one is being concurrently updated we will still given
             sequentializable behavior. *)
           val n = if P.stealFromSuspendedQueues then
@@ -424,32 +430,35 @@ struct
                               releaseLock thiefLock)
                   end
                 else
-                  let
-                    (* Here we hold on to our own lock, since we might modify
-                      our own queue. *)
-                    val () = takeLock masterLock
-                  in
-                    fn () => (releaseLock masterLock;
-                              (* dekkerUnlock (true, lock); *)
-                              releaseLock thiefLock (* XTRA *))
-                  end
+                    die "Victim is not a processor"
+                  (* let *)
+                  (*   (* Here we hold on to our own lock, since we might modify *)
+                  (*     our own queue. *) *)
+                  (*   val () = takeLock masterLock *)
+                  (* in *)
+                  (*   fn () => (releaseLock masterLock; *)
+                  (*             (* dekkerUnlock (true, lock); *) *)
+                  (*             releaseLock thiefLock (* XTRA *)) *)
+                  (* end *)
+
             fun maybeCleanup () =
                 if p' < numberOfProcessors then false (* can't remove owned queues *)
-                else if p' >= !activeQueues then false (* can't remove inactive queues *)
-                else
-                  let
-                    (* assumes we hold masterLock and there is nothing in p' *)
-                    val a = !activeQueues - 1
-                    val b = !totalQueues - 1
-                  in
-                    (* If this is the last queue then we need to clear it explicitly *)
-                    A.update (queues, p', NONE);
-                    moveQueue (a, p');
-                    activeQueues := a;
-                    moveQueue (b, a);
-                    totalQueues := b;
-                    true
-                  end
+                else die "Tried to cleanup"
+                    (* if p' >= !activeQueues then false (* can't remove inactive queues *) *)
+                    (* else *)
+                    (*     let *)
+                    (*         (* assumes we hold masterLock and there is nothing in p' *) *)
+                    (*         val a = !activeQueues - 1 *)
+                    (*         val b = !totalQueues - 1 *)
+                    (*     in *)
+                    (*         (* If this is the last queue then we need to clear it explicitly *) *)
+                    (*         A.update (queues, p', NONE); *)
+                    (*         moveQueue (a, p'); *)
+                    (*         activeQueues := a; *)
+                    (*         moveQueue (b, a); *)
+                    (*         totalQueues := b; *)
+                    (*         true *)
+                    (*     end *)
           in
             case A.sub (queues, p')
              of NONE => (incr failedSteals; unsync (); yield (); NONE)
@@ -461,35 +470,36 @@ struct
                   if i <> j then (* not empty *)
                     if P.stealEntireQueues andalso p' >= numberOfProcessors
                        andalso (not P.stealFromSuspendedQueues orelse p' < !activeQueues) then
-                      let (* Steal the whole queue *)
-                        val a = !activeQueues - 1
-                        val b = !totalQueues - 1
-                      in
-                        index := p;
-                        A.update (queues, p, SOME q);
-                        (* Shuffle the other queues around *)
-                        moveQueue (a, p');
-                        activeQueues := a;
-                        moveQueue (b, a);
-                        totalQueues := b;
-                        A.update (queues, b, NONE);
-                        (* Update our new state *)
-                        top := i - 1;
-                        case A.sub (!work, i - 1)
-                         of Empty => raise WorkQueue
-                          | Marker => (pr p "queue-steal(marker):";
-                                       (* count the steal here since we won't
-                                           count it next time *)
-                                       incr successfulSteals;
-                                       NONE)
-                          | Work tw =>
-                            (pr p "queue-steal:";
-                             incr successfulSteals;
-                             SOME (true, #2 tw))
-                      end
-                        before (A.update (!work, i - 1, Empty);
-                                count p "queue-steal" ~1;
-                                unsync ())
+                        die "Invalid steal"
+                      (* let (* Steal the whole queue *) *)
+                      (*   val a = !activeQueues - 1 *)
+                      (*   val b = !totalQueues - 1 *)
+                      (* in *)
+                      (*   index := p; *)
+                      (*   A.update (queues, p, SOME q); *)
+                      (*   (* Shuffle the other queues around *) *)
+                      (*   moveQueue (a, p'); *)
+                      (*   activeQueues := a; *)
+                      (*   moveQueue (b, a); *)
+                      (*   totalQueues := b; *)
+                      (*   A.update (queues, b, NONE); *)
+                      (*   (* Update our new state *) *)
+                      (*   top := i - 1; *)
+                      (*   case A.sub (!work, i - 1) *)
+                      (*    of Empty => raise WorkQueue *)
+                      (*     | Marker => (pr p "queue-steal(marker):"; *)
+                      (*                  (* count the steal here since we won't *)
+                      (*                      count it next time *) *)
+                      (*                  incr successfulSteals; *)
+                      (*                  NONE) *)
+                      (*     | Work tw => *)
+                      (*       (pr p "queue-steal:"; *)
+                      (*        incr successfulSteals; *)
+                      (*        SOME (true, #2 tw)) *)
+                      (* end *)
+                      (*   before (A.update (!work, i - 1, Empty); *)
+                      (*           count p "queue-steal" ~1; *)
+                      (*           unsync ()) *)
                     else
                       let (* Just steal the oldest task *)
                         val w = A.sub (!work, j)
@@ -504,6 +514,15 @@ struct
                           | Work tw =>
                             (pr p "work-steal:";
                              incr successfulSteals;
+                             (case #3 tw
+                               of NONE => ()
+                                | SOME (hh, sharedLevel) =>
+                                  (print ("Setting Shared Level " ^
+                                          (Int.toString sharedLevel) ^
+                                          " on processor " ^
+                                          (Int.toString p') ^
+                                          "\n");
+                                   HH.setSharedLevel (hh, sharedLevel)));
                              SOME (true, #2 tw))
                       end
                         before (count p "work-steal" ~1;
@@ -568,7 +587,13 @@ struct
         (* Initialize a queue for this processor if none exists *)
         case A.sub (queues, p)
          of SOME _ => ()
-          | NONE => A.update (queues, p, SOME (newQueue p));
+          | NONE =>
+            let
+                val q as Queue {work = ref qArray, ...}= newQueue p
+            in
+                A.update (queues, p, SOME q);
+                MLtonHM.registerQueue (p, qArray)
+            end;
         count p "start" 0;
         releaseLock thiefLock (* XTRA *)
         (* dekkerLock *)
@@ -584,24 +609,25 @@ struct
         val () = takeLock thiefLock (* XTRA *)
       in
         (if P.suspendEntireQueues then
-           let
-             val () = takeLock masterLock
-             val q as Queue { index, ... } = case A.sub (queues, p)
-                                              of SOME q => q | NONE => (print "suspend\n"; raise WorkQueue)
-             val a = !totalQueues
-             val () = if a >= QUEUE_ARRAY_SIZE then (print "queues1\n"; raise QueueSize) else ()
-           in
-             index := a;
-             A.update (queues, a, SOME q);
-             totalQueues := a + 1;
-             pr p "suspend:";
-             (* XX this is because we currently add delayed tasks (in
-              schedule) after a suspend *)
-             A.update (queues, p, (* XXX PERF? NONE *) SOME (newQueue p));
-             count p "suspend" 0;
-             releaseLock masterLock;
-             SOME q
-           end
+           die "Tried to suspend entire queue"
+           (* let *)
+           (*   val () = takeLock masterLock *)
+           (*   val q as Queue { index, ... } = case A.sub (queues, p) *)
+           (*                                    of SOME q => q | NONE => (print "suspend\n"; raise WorkQueue) *)
+           (*   val a = !totalQueues *)
+           (*   val () = if a >= QUEUE_ARRAY_SIZE then (print "queues1\n"; raise QueueSize) else () *)
+           (* in *)
+           (*   index := a; *)
+           (*   A.update (queues, a, SOME q); *)
+           (*   totalQueues := a + 1; *)
+           (*   pr p "suspend:"; *)
+           (*   (* XX this is because we currently add delayed tasks (in *)
+           (*    schedule) after a suspend *) *)
+           (*   A.update (queues, p, (* XXX PERF? NONE *) SOME (newQueue p)); *)
+           (*   count p "suspend" 0; *)
+           (*   releaseLock masterLock; *)
+           (*   SOME q *)
+           (* end *)
          else
            let in
              A.update (suspending, p, true);
@@ -611,7 +637,7 @@ struct
                 releaseLock thiefLock) (* XTRA *)
       end
 
-  fun resumeWork (p, NONE, tw as (t as Token r, w)) =
+  fun resumeWork (p, NONE, tw as (t as Token r, w, share)) =
       if P.resumeWorkLocally then
         let
           (* val () = pr p "before-resume-local" *)
@@ -640,46 +666,48 @@ struct
         end
 
       else (* make a new queue *)
-        let
-          (* val () = pr p "before-resume-non-local" *)
-          val () = takeLock masterLock
-          val a = !activeQueues
-          val b = !totalQueues
-          val () = if b >= QUEUE_ARRAY_SIZE then (print "queues2\n"; raise QueueSize) else ()
-          val q as Queue { work, top, ... } = newQueue a
-          val i = !top (* top should be 0 *)
-        in
-          A.update (!work, i, Work (t, w (*, next () *)));
-          top := i + 1;
-          totalQueues := b + 1;
-          moveQueue (a, b);
-          activeQueues := a + 1;
-          A.update (queues, a, SOME q);
-          pr p "non-local-resume:";
-          count p "non-local-resume" 1;
-          releaseLock masterLock
-        end
-    | resumeWork (p, q as SOME (Queue { work, top, index, ... }), tw as (t, w)) =
-      let
-        (* val () = pr p "before-resume-original" *)
-        val () = takeLock masterLock
-        val i = !top
-        val a = !activeQueues
-        val p' = !index
-        val () = if i = WORK_ARRAY_SIZE then resize p (valOf q) else ()
-        val i = !top (* in case of resize *)
-      in
-        A.update (!work, i, Work (t, w (*, next () *)));
-        top := i + 1;
-        (* Swap this queue in as the last active one *)
-        moveQueue (a, p');
-        index := a;
-        A.update (queues, a, q);
-        activeQueues := a + 1;
-        pr p "resume:";
-        count p "resume" 1;
-        releaseLock masterLock
-      end
+          die "Tried to resume work non-locally"
+        (* let *)
+        (*   (* val () = pr p "before-resume-non-local" *) *)
+        (*   val () = takeLock masterLock *)
+        (*   val a = !activeQueues *)
+        (*   val b = !totalQueues *)
+        (*   val () = if b >= QUEUE_ARRAY_SIZE then (print "queues2\n"; raise QueueSize) else () *)
+        (*   val q as Queue { work, top, ... } = newQueue a *)
+        (*   val i = !top (* top should be 0 *) *)
+        (* in *)
+        (*   A.update (!work, i, Work (t, w (*, next () *))); *)
+        (*   top := i + 1; *)
+        (*   totalQueues := b + 1; *)
+        (*   moveQueue (a, b); *)
+        (*   activeQueues := a + 1; *)
+        (*   A.update (queues, a, SOME q); *)
+        (*   pr p "non-local-resume:"; *)
+        (*   count p "non-local-resume" 1; *)
+        (*   releaseLock masterLock *)
+        (* end *)
+    | resumeWork (p, q as SOME (Queue { work, top, index, ... }), tw as (t, w, share)) =
+      die "Tried to resume entire queue"
+      (* let *)
+      (*   (* val () = pr p "before-resume-original" *) *)
+      (*   val () = takeLock masterLock *)
+      (*   val i = !top *)
+      (*   val a = !activeQueues *)
+      (*   val p' = !index *)
+      (*   val () = if i = WORK_ARRAY_SIZE then resize p (valOf q) else () *)
+      (*   val i = !top (* in case of resize *) *)
+      (* in *)
+      (*   A.update (!work, i, Work (t, w (*, next () *))); *)
+      (*   top := i + 1; *)
+      (*   (* Swap this queue in as the last active one *) *)
+      (*   moveQueue (a, p'); *)
+      (*   index := a; *)
+      (*   A.update (queues, a, q); *)
+      (*   activeQueues := a + 1; *)
+      (*   pr p "resume:"; *)
+      (*   count p "resume" 1; *)
+      (*   releaseLock masterLock *)
+      (* end *)
 
 (* what if a job J is added, then that queue is suspended, then resumed by a
   different processor.  then the token (the proc number at the time J was
@@ -688,7 +716,7 @@ struct
       let
         (* val () = pr p' "before-remove" *)
         val Queue { index, ... } = case !r of SOME q => q | NONE => (print "remove\n"; raise WorkQueue)
-(* this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
+(* SPOONHOWER_NOTE: this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
         val p = !index
         val unsync =
             if p < numberOfProcessors then
@@ -709,11 +737,12 @@ struct
                            releaseLock thiefLock)
               end
             else
-              let
-                val () = takeLock masterLock
-              in
-                fn _ => releaseLock masterLock
-              end
+                die "Tried to resume work from unowned queue"
+              (* let *)
+              (*   val () = takeLock masterLock *)
+              (* in *)
+              (*   fn _ => releaseLock masterLock *)
+              (* end *)
 
         val Queue { top, bottom, work, ... } = case !r of SOME q => q | NONE => (print "remove2\n"; raise WorkQueue)
         val last = !top - 1

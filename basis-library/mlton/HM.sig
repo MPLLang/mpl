@@ -17,6 +17,7 @@ signature MLTON_HM =
 
                       val setLevel: t * int -> unit
                       val getLevel: t -> int
+                      val setSharedLevel: t * int -> unit
                       val promoteChunks: t -> unit
 
                       val appendChild: (t * t) -> unit
@@ -30,5 +31,6 @@ signature MLTON_HM =
         val explicitEnterGlobalHeap: Word32.word -> unit
         val explicitExitGlobalHeap: unit -> Word32.word
 
-        val registerQueue: 'a array -> unit
+        val registerQueue: int * 'a array -> unit
+        val registerQueueLock: int * int ref -> unit
     end

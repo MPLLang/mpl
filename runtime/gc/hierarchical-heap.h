@@ -17,6 +17,7 @@
 #define HIERARCHICAL_HEAP_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+/* RAM_NOTE: May need to be rearranged for cache efficiency */
 /**
  * @brief
  * Represents a "node" of the hierarchical heap and contains various data
@@ -28,7 +29,10 @@
  * padding ::
  * savedFrontier (void*) ::
  * limit (void*) ::
- * level (size_t) ::
+ * lock (Int32) ::
+ * level (Word32) ::
+ * lastSharedLevel (Word32) ::
+ * id (Word32) ::
  * chunkList (void*) ::
  * parentHH (objptr) ::
  * nextChildHH (objptr) ::
@@ -49,6 +53,12 @@ struct HM_HierarchicalHeap {
   /* RAM_NOTE: can be lesser width if I add another field */
   Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
+
+  Word32 lastSharedLevel; /**< The last shared level for this heap, beyond which
+                           * I cannot locally collect */
+
+  Word32 id; /**< the ID of this HierarchicalHeap object, for visualization
+              * purposes */
 
   void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
                     * information */
@@ -72,19 +82,19 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(void*) +
                     sizeof(Int32) +
                     sizeof(Word32) +
+                    sizeof(Word32) +
+                    sizeof(Word32) +
                     sizeof(void*) +
                     sizeof(objptr) +
                     sizeof(objptr) +
                     sizeof(objptr));
 
-#pragma message "Remove when known unnecessary"
-#if 0
 /**
  * This value is an "invalid" level and used for HM_HierarchicalHeap
  * initialization
  */
-#define HH_INVALID_LEVEL (~((size_t)(0)))
-#endif
+#define HM_HH_INVALID_LEVEL (~((Word32)(0)))
+
 /**
  * This is the value of HM_HierarchicalHeap::lock when locked
  */
@@ -156,6 +166,14 @@ PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
  * @param level The level to set
  */
 PRIVATE void HM_HH_setLevel(pointer hhPointer, size_t level);
+
+/**
+ * Sets the shared level of the struct HM_HierarchicalHeap to include 'level'
+ *
+ * @param hhPointer The pointer to the struct HM_HierarchicalHeap to modify
+ * @param level The level to include in the shared set.
+ */
+PRIVATE void HM_HH_setSharedLevel(pointer hhPointer, size_t level);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

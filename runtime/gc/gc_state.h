@@ -36,6 +36,8 @@ struct GC_state {
                                    * hierarchical heap to use for executing
                                    * thread
                                    */
+  objptr wsQueue; /* The work-stealing queue for this processor */
+  objptr wsQueueLock; /* The work-stealing queue lock for this processor */
 #pragma message "Is this the right type?"
   pointer ffiArgs;
   struct GC_forwardState forwardState;

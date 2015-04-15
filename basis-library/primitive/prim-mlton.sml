@@ -178,6 +178,10 @@ structure HM =
                 val setCurrentThreadUseHierarchicalHeap: unit -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"
                             runtime private: unit -> unit;
+
+                val setSharedLevel: t * Word32.word -> unit =
+                    _import "HM_HH_setSharedLevel" runtime private:
+                    t * Word32.word -> unit;
             end
 
         val enterGlobalHeap: unit -> unit =
@@ -194,8 +198,13 @@ structure HM =
             _import "HM_explicitExitGlobalHeap" runtime private:
             unit -> Word32.word;
 
-        val registerQueue: 'a array -> unit =
-            _import "HM_HHC_registerQueue" runtime private: 'a array -> unit;
+        val registerQueue: Int32.int * 'a array -> unit =
+            _import "HM_HHC_registerQueue" runtime private:
+            Int32.int * 'a array -> unit;
+
+        val registerQueueLock: Int32.int * Int32.int ref -> unit =
+            _import "HM_HHC_registerQueueLock" runtime private:
+            Int32.int * Int32.int ref -> unit;
     end
 
 structure Platform =

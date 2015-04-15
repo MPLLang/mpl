@@ -17,16 +17,50 @@
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+struct HHObjptrFunctionArgs {
+  void** destinationLevelList;
+  struct HM_HierarchicalHeap* hh;
+  size_t minLevel;
+  size_t maxLevel;
+};
+
 typedef void (*HHObjptrFunction) (GC_state s,
-                                  void** destinationLevelList,
-                                  struct HM_HierarchicalHeap* hh,
-                                  size_t minLevel,
-                                  size_t maxLevel,
+                                  struct HHObjptrFunctionArgs* args,
                                   objptr* opp);
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-PRIVATE void HM_HHC_registerQueue(pointer queuePointer);
+/**
+ * This function registers 'queuePointer' as the work stealing queue associated
+ * with processor 'processor'
+ *
+ * @note
+ * A second call will overwrite the previously saved registration
+ *
+ * @attention
+ * 'queuePointer' <em>must</em> point to an object on the global heap.
+ *
+ * @param processor The processor to register for
+ * @param queuePointer pointer to an object in the global heap that is the queue
+ * to register
+ */
+PRIVATE void HM_HHC_registerQueue(int processor, pointer queuePointer);
+
+/**
+ * This function registers 'queueLockPointer' as the work stealing queue lock
+ * associated with processor 'processor'
+ *
+ * @note
+ * A second call will overwrite the previously saved registration
+ *
+ * @attention
+ * 'queueLockPointer' <em>must</em> point to an object on the global heap.
+ *
+ * @param processor The processor to register for
+ * @param queueLockPointer pointer to an int ref in the global heap that is the
+ * queue lock to register
+ */
+PRIVATE void HM_HHC_registerQueueLock(int processor, pointer queueLockPointer);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -48,13 +82,11 @@ void HM_HHC_collectLocal(void);
  *
  * @return The pointer after the object
  */
-static void* HM_HHC_foreachHHObjptrInObject(GC_state s,
-                                            pointer p,
-                                            HHObjptrFunction f,
-                                            void** destinationLevelList,
-                                            struct HM_HierarchicalHeap* hh,
-                                            size_t minLevel,
-                                            size_t maxLevel);
+static pointer HM_HHC_foreachHHObjptrInObject(GC_state s,
+                                              pointer p,
+                                              bool traceObject,
+                                              HHObjptrFunction f,
+                                              struct HHObjptrFunctionArgs* fArgs);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */
