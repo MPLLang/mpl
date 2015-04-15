@@ -22,6 +22,12 @@ runtime () {
     make -j1 runtime
 }
 
+basis () {
+    echo "******* BASIS *******"
+    cd "$SCRIPT_DIR"
+    make -j1 basis-no-check script mlbpathmap constants libraries tools
+}
+
 # Main
 
 if [[ $# = "0" ]] ; then
@@ -29,25 +35,33 @@ if [[ $# = "0" ]] ; then
     def_use
     exit 0
 else
-    case $1 in
-	all-no-docs)
-	    all_no_docs
-	    exit 0
-	    ;;
+    for command in "$@"; do
+	echo $command
+	case $command in
+	    all-no-docs)
+		all_no_docs
+		;;
 
-	def-use)
-	    def_use
-	    exit 0
-	    ;;
+	    def-use)
+		def_use
+		;;
 
-	runtime)
-	    runtime
-	    exit 0
-	    ;;
+	    runtime)
+		runtime
+		;;
 
-	*)
-	    echo "$1 is not a valid compilation target" 1>&2
-	    exit 1
-	    ;;
-    esac
+	    compiler)
+		compiler
+		;;
+
+	    basis)
+		basis
+		;;
+
+	    *)
+		echo "$1 is not a valid compilation target" 1>&2
+		exit 1
+		;;
+	esac
+    done
 fi
