@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2014 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -24,6 +24,7 @@
 #include "gc/align.c"
 #include "gc/read_write.c"
 
+/* RAM_NOTE: Remove if I move to a different TLS model */
 /* used to look up per-processor state */
 extern C_Pthread_Key_t gcstate_key;
 
