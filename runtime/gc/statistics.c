@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  */
 
-struct GC_cumulativeStatistics *newCumulativeStatistics() {
+struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   struct GC_cumulativeStatistics *cumulativeStatistics;
 
   cumulativeStatistics = (struct GC_cumulativeStatistics *)
@@ -43,14 +43,14 @@ struct GC_cumulativeStatistics *newCumulativeStatistics() {
   return cumulativeStatistics;
 }
 
-struct GC_lastMajorStatistics *newLastMajorStatistics() {
+struct GC_lastMajorStatistics *newLastMajorStatistics(void) {
   struct GC_lastMajorStatistics *lastMajorStatistics;
 
   lastMajorStatistics = (struct GC_lastMajorStatistics *)
     malloc (sizeof (struct GC_lastMajorStatistics));
   lastMajorStatistics->bytesHashConsed = 0;
   lastMajorStatistics->bytesLive = 0;
-#warning Does this need to be under an option?
+  /* RAM_NOTE: Does this need to be under an option? */
   lastMajorStatistics->kind = GC_COPYING;
   lastMajorStatistics->numMinorGCs = 0;
 

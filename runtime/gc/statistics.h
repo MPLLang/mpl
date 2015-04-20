@@ -68,7 +68,7 @@ struct GC_lastMajorStatistics {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-struct GC_cumulativeStatistics* newCumulativeStatistics();
-struct GC_lastMajorStatistics* newLastMajorStatistics();
+struct GC_cumulativeStatistics* newCumulativeStatistics(void);
+struct GC_lastMajorStatistics* newLastMajorStatistics(void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
