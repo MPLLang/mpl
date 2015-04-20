@@ -65,3 +65,10 @@ struct GC_lastMajorStatistics {
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+struct GC_cumulativeStatistics* newCumulativeStatistics();
+struct GC_lastMajorStatistics* newLastMajorStatistics();
+
+#endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

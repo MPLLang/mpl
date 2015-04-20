@@ -368,7 +368,7 @@ void majorMarkCompactGC (GC_state s) {
   struct rusage ru_start;
 
   if (detailedGCTime (s))
-    startTiming (&ru_start);
+    startTiming (RUSAGE_THREAD, &ru_start);
   s->cumulativeStatistics->numMarkCompactGCs++;
   if (DEBUG or s->controls->messages) {
     fprintf (stderr,
@@ -398,7 +398,7 @@ void majorMarkCompactGC (GC_state s) {
   s->cumulativeStatistics->bytesMarkCompacted += bytesMarkCompacted;
   s->lastMajorStatistics->kind = GC_MARK_COMPACT;
   if (detailedGCTime (s))
-    stopTiming (&ru_start, &s->cumulativeStatistics->ru_gcMarkCompact);
+    stopTiming (RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcMarkCompact);
   if (DEBUG or s->controls->messages) {
     fprintf (stderr,
              "[GC: Finished major mark-compact; mark compacted %s bytes.]\n",

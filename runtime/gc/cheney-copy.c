@@ -55,7 +55,7 @@ void majorCheneyCopyGC (GC_state s) {
 
   assert (s->secondaryHeap->size >= s->heap->oldGenSize);
   if (detailedGCTime (s))
-    startTiming (&ru_start);
+    startTiming (RUSAGE_THREAD, &ru_start);
   s->cumulativeStatistics->numCopyingGCs++;
   s->forwardState.amInMinorGC = FALSE;
   if (DEBUG or s->controls->messages) {
@@ -90,7 +90,7 @@ void majorCheneyCopyGC (GC_state s) {
   swapHeapsForCheneyCopy (s);
   s->lastMajorStatistics->kind = GC_COPYING;
   if (detailedGCTime (s))
-    stopTiming (&ru_start, &s->cumulativeStatistics->ru_gcCopying);
+    stopTiming (RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcCopying);
   if (DEBUG or s->controls->messages)
     fprintf (stderr,
              "[GC: Finished major Cheney-copy; copied %s bytes.]\n",
@@ -135,7 +135,7 @@ void minorCheneyCopyGC (GC_state s) {
     bytesCopied = 0;
   } else {
     if (detailedGCTime (s))
-      startTiming (&ru_start);
+      startTiming (RUSAGE_THREAD, &ru_start);
     s->cumulativeStatistics->numMinorGCs++;
     s->forwardState.amInMinorGC = TRUE;
     if (DEBUG_GENERATIONAL or s->controls->messages) {
@@ -166,7 +166,7 @@ void minorCheneyCopyGC (GC_state s) {
     s->heap->oldGenSize += bytesCopied;
     s->lastMajorStatistics->numMinorGCs++;
     if (detailedGCTime (s))
-      stopTiming (&ru_start, &s->cumulativeStatistics->ru_gcMinor);
+      stopTiming (RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcMinor);
     if (DEBUG_GENERATIONAL or s->controls->messages)
       fprintf (stderr,
                "[GC: Finished minor Cheney-copy; copied %s bytes.]\n",

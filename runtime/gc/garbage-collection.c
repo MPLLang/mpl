@@ -136,7 +136,7 @@ void performGC (GC_state s,
   }
   assert (invariantForGC (s));
   if (needGCTime (s))
-    startTiming (&ru_start);
+    startTiming (RUSAGE_THREAD, &ru_start);
   minorGC (s);
   stackTopOk = invariantForMutatorStack (s);
   stackBytesRequested =
@@ -175,7 +175,7 @@ void performGC (GC_state s,
     setGCStateCurrentThreadAndStack (&s->procStates[proc]);
   }
   if (needGCTime (s)) {
-    gcTime = stopTiming (&ru_start, &s->cumulativeStatistics->ru_gc);
+    gcTime = stopTiming (RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
     s->cumulativeStatistics->maxPauseTime =
       max (s->cumulativeStatistics->maxPauseTime, gcTime);
   } else
