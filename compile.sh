@@ -10,6 +10,14 @@ all_no_docs () {
     make -j1 clean all-no-docs
 }
 
+compiler () {
+    echo "***** compiler *****"
+    cd "$SCRIPT_DIR"
+    # Remove to force recompilation with stable mlton
+    rm ./build/bin/mlton || true
+    make -j1 compiler basis-no-check script
+}
+
 def_use () {
     echo "******* DEF-USE *******"
     cd "$SCRIPT_DIR/mlton"
@@ -40,6 +48,10 @@ else
 	case $command in
 	    all-no-docs)
 		all_no_docs
+		;;
+
+	    compiler)
+		compiler
 		;;
 
 	    def-use)
