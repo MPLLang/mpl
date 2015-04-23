@@ -18,6 +18,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->bytesHashConsed = 0;
   cumulativeStatistics->bytesMarkCompacted = 0;
   cumulativeStatistics->bytesScannedMinor = 0;
+  cumulativeStatistics->bytesHHLocaled = 0;
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
   cumulativeStatistics->maxHeapSize = 0;
@@ -33,10 +34,12 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numHashConsGCs = 0;
   cumulativeStatistics->numMarkCompactGCs = 0;
   cumulativeStatistics->numMinorGCs = 0;
+  cumulativeStatistics->numHHLocalGCs = 0;
   rusageZero (&cumulativeStatistics->ru_gc);
   rusageZero (&cumulativeStatistics->ru_gcCopying);
   rusageZero (&cumulativeStatistics->ru_gcMarkCompact);
   rusageZero (&cumulativeStatistics->ru_gcMinor);
+  rusageZero (&cumulativeStatistics->ru_gcHHLocal);
   rusageZero (&cumulativeStatistics->ru_rt);
   rusageZero (&cumulativeStatistics->ru_sync);
 

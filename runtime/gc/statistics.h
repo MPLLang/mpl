@@ -27,6 +27,7 @@ struct GC_cumulativeStatistics {
   uintmax_t bytesHashConsed;
   uintmax_t bytesMarkCompacted;
   uintmax_t bytesScannedMinor;
+  uintmax_t bytesHHLocaled;
 
   size_t maxBytesLive;
   size_t maxBytesLiveSinceReset;
@@ -47,11 +48,14 @@ struct GC_cumulativeStatistics {
   uintmax_t numHashConsGCs;
   uintmax_t numMarkCompactGCs;
   uintmax_t numMinorGCs;
+  uintmax_t numHHLocalGCs;
 
   struct rusage ru_gc; /* total resource usage in gc. */
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */
   struct rusage ru_gcMarkCompact; /* resource usage in major mark-compact gcs. */
   struct rusage ru_gcMinor; /* resource usage in minor copying gcs. */
+  struct rusage ru_gcHHLocal; /**< Resource usage during Hierachical Heap local
+                               * collections */
 
   struct rusage ru_rt; /* total time "inside" runtime (not incl. synch.) */
   struct rusage ru_sync; /* time waiting to synchronize in runtime */

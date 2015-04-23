@@ -66,6 +66,11 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
      &cumulativeStatistics->ru_gcMinor,
      cumulativeStatistics->numMinorGCs,
      cumulativeStatistics->bytesCopiedMinor);
+  displayCollectionStats
+      (out, "HHLocal\t\t",
+       &cumulativeStatistics->ru_gcHHLocal,
+       cumulativeStatistics->numHHLocalGCs,
+       cumulativeStatistics->bytesHHLocaled);
   fprintf (out, "total time: %s ms\n",
            uintmaxToCommaString (totalTime));
   fprintf (out, "total GC time: %s ms (%.1f%%)\n",

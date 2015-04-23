@@ -120,6 +120,12 @@ void HM_HHC_registerQueueLock(int processor, pointer queueLockPointer) {
 void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+  struct rusage ru_start;
+
+  if (detailedGCTime (s)) {
+    startTiming (RUSAGE_THREAD, &ru_start);
+  }
+  s->cumulativeStatistics->numHHLocalGCs++;
 
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -202,6 +208,10 @@ void HM_HHC_collectLocal(void) {
                   "HierarchicalHeap = %p\n",
                   processor,
                   ((void*)(hh)));
+
+  if (detailedGCTime(s)) {
+    stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
+  }
 }
 
 pointer HM_HHC_foreachHHObjptrInObject(GC_state s,
