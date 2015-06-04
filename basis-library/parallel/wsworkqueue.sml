@@ -517,12 +517,7 @@ struct
                              (case #3 tw
                                of NONE => ()
                                 | SOME (hh, sharedLevel) =>
-                                  (print ("Setting Shared Level " ^
-                                          (Int.toString sharedLevel) ^
-                                          " on processor " ^
-                                          (Int.toString p') ^
-                                          "\n");
-                                   HH.setSharedLevel (hh, sharedLevel)));
+                                  HH.setSharedLevel (hh, sharedLevel));
                              SOME (true, #2 tw))
                       end
                         before (count p "work-steal" ~1;
