@@ -399,9 +399,11 @@ struct HM_HierarchicalHeap* HHObjptrToStruct(GC_state s, objptr hhObjptr) {
 }
 
 void lockHH(struct HM_HierarchicalHeap* hh) {
+  volatile Int32* lock = &(hh->lock);
+
   do {
-  } while ((hh->lock == HM_HH_LOCK_LOCKED) ||
-           (!__sync_bool_compare_and_swap (&(hh->lock),
+  } while ((HM_HH_LOCK_LOCKED == *lock) ||
+           (!__sync_bool_compare_and_swap (lock,
                                            HM_HH_LOCK_UNLOCKED,
                                            HM_HH_LOCK_LOCKED)));
 }
