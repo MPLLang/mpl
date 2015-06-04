@@ -122,7 +122,7 @@ void HM_HHC_collectLocal(void) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
 
-  if (detailedGCTime (s)) {
+  if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
   }
   s->cumulativeStatistics->numHHLocalGCs++;
@@ -209,8 +209,17 @@ void HM_HHC_collectLocal(void) {
                   processor,
                   ((void*)(hh)));
 
-  if (detailedGCTime(s)) {
-    stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
+  /* enter timing info if necessary */
+  if (needGCTime(s)) {
+    if (detailedGCTime(s)) {
+      stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
+    }
+
+    /*
+     * RAM_NOTE: small extra here since I recompute delta, but probably not a
+     * big deal...
+     */
+    stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
 }
 
