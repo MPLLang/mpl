@@ -260,6 +260,7 @@ void Parallel_unlock (Int32 p) {
 uint64_t Parallel_getTimeInGC (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   uint64_t gcTime = rusageTime (&s->cumulativeStatistics->ru_gc);
+#pragma message "Remove dead code"
   /*
     fprintf (stderr, "total GC time: %s ms\n",
              uintmaxToCommaString (gcTime));

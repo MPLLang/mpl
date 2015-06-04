@@ -79,6 +79,18 @@ static void ChunkPool_insertIntoFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata);
 
 /**
+ * Performs the actual chunk free operation.
+ *
+ * @attention
+ * Does not lock! The lock <em>must</em> be held before calling this function.
+ *
+ * @param chunk The chunk to free
+ *
+ * @return TRUE on success, FALSE otherwise.
+ */
+bool ChunkPool_performFree(void* chunk);
+
+/**
  * Removes the chunkMetadata object from its list
  *
  * @param chunkMetadata the object to remove
@@ -246,7 +258,6 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 
         if (NULL != newSpanStart) {
           /* insert residual back into freelist */
-          ChunkPool_initializeSpan(newSpanStart);
           ChunkPool_insertIntoFreeList(newSpanStart);
         }
 
@@ -271,88 +282,37 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 }
 
 /**
+ * This function is implemented and serializes against all other functions in a
+ * batch.
+ */
+bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
+  assert (ChunkPool_initialized);
+
+  pthread_mutex_lock_safe(&ChunkPool_lock);
+  for (void* chunk = f(fArgs);
+       NULL != chunk;
+       chunk = f(fArgs)) {
+    if (!ChunkPool_performFree(chunk)) {
+      pthread_mutex_unlock_safe(&ChunkPool_lock);
+      return FALSE;
+    }
+  }
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
+
+  return TRUE;
+}
+
+/**
  * This function is implemented and serializes against all other functions.
  */
 bool ChunkPool_free (void* chunk) {
   assert (ChunkPool_initialized);
 
-  struct ChunkPool_chunkMetadata* spanStart =
-      ChunkPool_chunkToChunkMetadata (chunk);
+  pthread_mutex_lock_safe(&ChunkPool_lock);
+  bool result = ChunkPool_performFree(chunk);
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
-  /* should be the first chunk in a span! */
-  assert (ChunkPool_ALLOCATED == spanStart->previous);
-  assert (ChunkPool_ALLOCATED == spanStart->next);
-
-  ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
-                              ChunkPool_MINIMUMCHUNKSIZE;
-
-  pthread_rwlock_wrlock_safe(&ChunkPool_lock);
-
-  /* Get the previous and next spans for coalescing */
-  bool coalesced = FALSE;
-  struct ChunkPool_chunkMetadata* previousSpanStart = spanStart - 1;
-  previousSpanStart = (previousSpanStart >= ChunkPool_chunkMetadatas) ?
-                      (previousSpanStart) : (NULL);
-
-  struct ChunkPool_chunkMetadata* nextSpanStart =
-      spanStart + (spanStart->spanInfo.numChunksInSpan);
-  nextSpanStart = (nextSpanStart < ChunkPool_chunkMetadatasEnd) ?
-                  (nextSpanStart) : (NULL);
-
-  if ((NULL != previousSpanStart) &&
-      (ChunkPool_NONFIRSTCHUNK == previousSpanStart->previous)) {
-    /* go to first chunk in previous span if necessary */
-    assert (ChunkPool_NONFIRSTCHUNK == previousSpanStart->next);
-
-    previousSpanStart = previousSpanStart->spanInfo.spanStart;
-  }
-
-  if ((NULL != previousSpanStart) &&
-      (ChunkPool_ALLOCATED != previousSpanStart->previous)) {
-    assert(ChunkPool_ALLOCATED != previousSpanStart->next);
-    assert(ChunkPool_NONFIRSTCHUNK != previousSpanStart->previous);
-    assert(ChunkPool_NONFIRSTCHUNK != previousSpanStart->next);
-
-    /* coalesceable! remove from list and join */
-    ChunkPool_removeFromFreeList (previousSpanStart);
-    previousSpanStart->spanInfo.numChunksInSpan +=
-        spanStart->spanInfo.numChunksInSpan;
-
-    /*
-     * set spanStart to previousSpanStart so that I don't have to branch on
-     * for coalescing nextSpanStart
-     */
-    spanStart = previousSpanStart;
-
-    coalesced = TRUE;
-  }
-
-  if ((NULL != nextSpanStart) &&
-      (ChunkPool_ALLOCATED != nextSpanStart->previous)) {
-    assert(ChunkPool_ALLOCATED != nextSpanStart->next);
-    assert(ChunkPool_NONFIRSTCHUNK != nextSpanStart->previous);
-    assert(ChunkPool_NONFIRSTCHUNK != nextSpanStart->next);
-
-    /* coalesceable! remove from list and join */
-    ChunkPool_removeFromFreeList (nextSpanStart);
-    spanStart->spanInfo.numChunksInSpan += nextSpanStart->spanInfo.numChunksInSpan;
-
-    coalesced = TRUE;
-  }
-
-  /*
-   * At this point, spanStart points to the possible coalesced span. Reinsert it
-   * into the free list!
-   */
-  if (coalesced) {
-    /* I coalesced, so I need to reinitialize the span */
-    ChunkPool_initializeSpan(spanStart);
-  }
-  ChunkPool_insertIntoFreeList(spanStart);
-
-  pthread_rwlock_unlock_safe(&ChunkPool_lock);
-
-  return TRUE;
+  return result;
 }
 
 /**
@@ -407,18 +367,11 @@ size_t ChunkPool_size(void* chunk) {
   const struct ChunkPool_chunkMetadata* chunkMetadata =
       ChunkPool_chunkToChunkMetadata(chunk);
 
-  pthread_rwlock_rdlock_safe(&ChunkPool_lock);
-  if (ChunkPool_NONFIRSTCHUNK == chunkMetadata->previous) {
-    assert(ChunkPool_NONFIRSTCHUNK == chunkMetadata->next);
-    return 0;
-  }
 
-  assert(ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
-  size_t retVal =
-      chunkMetadata->spanInfo.numChunksInSpan * ChunkPool_MINIMUMCHUNKSIZE;
-  pthread_rwlock_unlock_safe(&ChunkPool_lock);
+  assert(ChunkPool_ALLOCATED == chunkMetadata->previous);
+  assert(ChunkPool_ALLOCATED == chunkMetadata->next);
 
-  return retVal;
+  return (chunkMetadata->spanInfo.numChunksInSpan * ChunkPool_MINIMUMCHUNKSIZE);
 }
 
 bool ChunkPool_pointerInChunkPool (void* candidate) {
@@ -457,6 +410,91 @@ void ChunkPool_insertIntoFreeList (
     (*list)->previous = chunkMetadata;
   }
   *list = chunkMetadata;
+}
+
+bool ChunkPool_performFree(void* chunk) {
+  struct ChunkPool_chunkMetadata* spanStart =
+      ChunkPool_chunkToChunkMetadata (chunk);
+
+  /* should be the first chunk in a span! */
+  assert (ChunkPool_ALLOCATED == spanStart->previous);
+  assert (ChunkPool_ALLOCATED == spanStart->next);
+
+  ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
+                              ChunkPool_MINIMUMCHUNKSIZE;
+
+  /* Get the previous and next spans for coalescing */
+  bool coalesced = FALSE;
+#pragma message "Resolve"
+#if 0
+  struct ChunkPool_chunkMetadata* previousSpanStart = spanStart - 1;
+  previousSpanStart = (previousSpanStart >= ChunkPool_chunkMetadatas) ?
+                      (previousSpanStart) : (NULL);
+#endif
+
+  struct ChunkPool_chunkMetadata* nextSpanStart =
+      spanStart + (spanStart->spanInfo.numChunksInSpan);
+  nextSpanStart = (nextSpanStart < ChunkPool_chunkMetadatasEnd) ?
+                  (nextSpanStart) : (NULL);
+
+#pragma message "Resolve"
+#if 0
+  if ((NULL != previousSpanStart) &&
+      (ChunkPool_NONFIRSTCHUNK == previousSpanStart->previous)) {
+    /* go to first chunk in previous span if necessary */
+    assert (ChunkPool_NONFIRSTCHUNK == previousSpanStart->next);
+
+    previousSpanStart = previousSpanStart->spanInfo.spanStart;
+  }
+
+  if ((NULL != previousSpanStart) &&
+      (ChunkPool_ALLOCATED != previousSpanStart->previous)) {
+    assert(ChunkPool_ALLOCATED != previousSpanStart->next);
+    assert(ChunkPool_NONFIRSTCHUNK != previousSpanStart->previous);
+    assert(ChunkPool_NONFIRSTCHUNK != previousSpanStart->next);
+
+    /* coalesceable! remove from list and join */
+    ChunkPool_removeFromFreeList (previousSpanStart);
+    previousSpanStart->spanInfo.numChunksInSpan +=
+        spanStart->spanInfo.numChunksInSpan;
+
+    /*
+     * set spanStart to previousSpanStart so that I don't have to branch on
+     * for coalescing nextSpanStart
+     */
+    spanStart = previousSpanStart;
+
+    coalesced = TRUE;
+  }
+#endif
+
+  if ((NULL != nextSpanStart) &&
+      (ChunkPool_ALLOCATED != nextSpanStart->previous)) {
+    assert(ChunkPool_ALLOCATED != nextSpanStart->next);
+    assert(ChunkPool_NONFIRSTCHUNK != nextSpanStart->previous);
+    assert(ChunkPool_NONFIRSTCHUNK != nextSpanStart->next);
+
+    /* coalesceable! remove from list and join */
+    ChunkPool_removeFromFreeList (nextSpanStart);
+    spanStart->spanInfo.numChunksInSpan += nextSpanStart->spanInfo.numChunksInSpan;
+
+    coalesced = TRUE;
+  }
+
+#pragma message "Resolve"
+#if 0
+  /*
+   * At this point, spanStart points to the possible coalesced span. Reinsert it
+   * into the free list!
+   */
+  if (coalesced) {
+    /* I coalesced, so I need to reinitialize the span */
+    ChunkPool_initializeSpan(spanStart);
+  }
+#endif
+  ChunkPool_insertIntoFreeList(spanStart);
+
+  return TRUE;
 }
 
 void ChunkPool_removeFromFreeList (

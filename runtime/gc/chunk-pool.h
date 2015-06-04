@@ -18,6 +18,10 @@
 #ifndef CHUNK_POOL_H_
 #define CHUNK_POOL_H_
 
+#if (defined (MLTON_GC_INTERNAL_TYPES))
+typedef void* (*ChunkPool_BatchFreeFunction) (void* args);
+#endif /* MLTON_GC_INTERNAL_TYPES */
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 /**
@@ -47,6 +51,19 @@ void ChunkPool_initialize (size_t poolSize);
  * otherwise. Guaranteed to be 8-byte aligned.
  */
 void* ChunkPool_allocate (size_t* bytesRequested);
+
+/**
+ * @brief Frees a batch of chunks via an iterator function
+ *
+ * @attention
+ * If a free fails, this function terminates and returns false
+ *
+ * @param f The iterator function
+ * @param fArgs The arguments to f
+ *
+ * @return TRUE if all frees succeeded, FALSE otherwise
+ */
+bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs);
 
 /**
  * @brief Frees a chunk back to the pool

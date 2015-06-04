@@ -14,6 +14,15 @@
 
 #include "chunk.h"
 
+/***********/
+/* Structs */
+/***********/
+struct FreeLevelListIteratorArgs {
+  void** levelList;
+  void* chunkList;
+  Word32 minLevel;
+};
+
 /******************************/
 /* Static Function Prototypes */
 /******************************/
@@ -58,6 +67,16 @@ static void HM_assertChunkListInvariants(const void* chunkList);
 #endif /* ASSERT */
 
 /**
+ * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
+ * from a level list
+ *
+ * @param arg a struct FreeLevelListIteratorArgs* cast to void*
+ *
+ * @return pointer to chunk if it exists, NULL otherwise.
+ */
+void* HM_freeLevelListIterator(void* arg);
+
+/**
  * This function retrieves the ChunkInfo object from a chunk
  *
  * @param chunk The chunk to retrieve the object from
@@ -73,7 +92,8 @@ static struct HM_ChunkInfo* getChunkInfo(void* chunk);
 static const struct HM_ChunkInfo* getChunkInfoConst(const void* chunk);
 
 /**
- * Gets the level's head chunk for a given chunk.
+ * Gets the level's head chunk for a given chunk. Compresses the path to the
+ * level head if possible.
  *
  * @param chunk The chunk to get the level head chunk for
  *
@@ -84,6 +104,9 @@ static void* getLevelHeadChunk(void* chunk);
 /**
  * Same as getLevelHeadChunk() except for const-correctness. See
  * getLevelHeadChunk() for more details.
+ *
+ * @attention
+ * Unlike getLvelHeadChunk(), this version does not compress paths.
  */
 static const void* getLevelHeadChunkConst(const void* chunk);
 
@@ -193,6 +216,7 @@ void HM_foreachHHObjptrInLevelList(GC_state s,
 }
 
 void HM_freeChunks(void** levelList, Word32 minLevel) {
+#if 0
   for (void* chunkList = *levelList;
        (NULL != chunkList) && (getChunkInfo(chunkList)->level >= minLevel);
        chunkList = *levelList) {
@@ -212,6 +236,15 @@ void HM_freeChunks(void** levelList, Word32 minLevel) {
       ChunkPool_free(chunk);
     }
   }
+#endif
+  struct FreeLevelListIteratorArgs iteratorArgs = {
+    .levelList = levelList,
+    .chunkList = NULL,
+    .minLevel = minLevel
+  };
+  LOCAL_USED_FOR_ASSERT bool result =
+      ChunkPool_iteratedFree(HM_freeLevelListIterator, &iteratorArgs);
+  assert(result);
 }
 
 void* HM_getChunkFrontier(void* chunk) {
@@ -463,6 +496,33 @@ void HM_assertChunkListInvariants(const void* chunkList) {
 }
 #endif /* ASSERT */
 
+void* HM_freeLevelListIterator(void* arg) {
+  struct FreeLevelListIteratorArgs* state =
+      ((struct FreeLevelListIteratorArgs*)(arg));
+
+  if (NULL == state->chunkList) {
+    /* get chunk list from level list */
+    state->chunkList = *(state->levelList);
+
+    if ((NULL == state->chunkList) ||
+        (getChunkInfo(state->chunkList)->level < state->minLevel)) {
+      /* all done */
+      return NULL;
+    }
+
+    /* this chunk list will be freed, so unlink and advance level list */
+    *(state->levelList) =
+        getChunkInfo(state->chunkList)->split.levelHead.nextHead;
+  }
+
+  void* chunk = state->chunkList;
+
+  /* advance chunkList */
+  state->chunkList = getChunkInfo(state->chunkList)->nextChunk;
+
+  return chunk;
+}
+
 struct HM_ChunkInfo* getChunkInfo(void* chunk) {
   return ((struct HM_ChunkInfo*)(chunk));
 }
@@ -481,6 +541,9 @@ void* getLevelHeadChunk(void* chunk) {
        cursor = getChunkInfo(cursor)->split.normal.levelHead) {
   }
   assert(NULL != cursor);
+
+  /* compress path! */
+  getChunkInfo(cursor)->split.normal.levelHead = cursor;
 
   return cursor;
 }
