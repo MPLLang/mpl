@@ -296,6 +296,23 @@ int processAtMLton (GC_state s, int argc, char **argv,
             die ("@MLton fixed-chunk-pool missing argument.");
           }
           ChunkPool_initialize(stringToBytes (argv[i++]));
+        } else if (0 == strcmp (arg, "hh-collection-level")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-collection-level missing argument.");
+          }
+          const char* level = argv[i++];
+          if (0 == strcmp (level, "none")) {
+            s->controls->hhCollectionLevel = NONE;
+          } else if (0 == strcmp (level, "superlocal")) {
+            s->controls->hhCollectionLevel = SUPERLOCAL;
+          } else if (0 == strcmp (level, "local")) {
+            s->controls->hhCollectionLevel = LOCAL;
+          } else {
+            die ("@MLton hh-collection-level \"%s\" invalid. Must be one of "
+                 "none, superlocal, or local.",
+                 level);
+          }
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -351,6 +368,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
   s->controls->summary = FALSE;
+  s->controls->hhCollectionLevel = ALL;
 
   s->cumulativeStatistics = newCumulativeStatistics();
 

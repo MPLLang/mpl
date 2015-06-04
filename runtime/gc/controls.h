@@ -41,6 +41,13 @@ struct GC_ratios {
   float available;
 };
 
+enum HHCollectionLevel {
+  ALL,
+  LOCAL,
+  SUPERLOCAL,
+  NONE
+};
+
 struct GC_controls {
   size_t fixedHeap; /* If 0, then no fixed heap. */
   size_t maxHeap; /* if zero, then unlimited, else limit total heap */
@@ -57,6 +64,7 @@ struct GC_controls {
   struct GC_ratios ratios;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
+  enum HHCollectionLevel hhCollectionLevel;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */

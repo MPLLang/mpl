@@ -122,6 +122,11 @@ void HM_HHC_collectLocal(void) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
 
+  if (NONE == s->controls->hhCollectionLevel) {
+    /* collection disabled */
+    return;
+  }
+
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
   }
@@ -155,6 +160,11 @@ void HM_HHC_collectLocal(void) {
     .minLevel = hh->lastSharedLevel + 1,
     .maxLevel = hh->level
   };
+
+  if (SUPERLOCAL == s->controls->hhCollectionLevel) {
+    hhObjptrFunctionArgs.minLevel = hh->level;
+  }
+
   HM_HHC_foreachHHObjptrInObject(s,
                                  objptrToPointer(getStackCurrentObjptr(s),
                                                  s->heap->start),
