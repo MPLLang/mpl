@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Ram Raghunathan.
+/* Copyright (C) 2015,2014 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -16,15 +16,15 @@
  *
  * This implementation of the Chunk Pool interface found in chunk-pool.h is a
  * simple version that has serialized access to <tt>ChunkPool_allocate()</tt>
- * and <tt>ChunkPool_free</tt> along with a RW-lock on
- * <tt>ChunkPool_find()</tt>. It does not do any other multithreaded access or
- * locality optimizations. It is backed by a <tt>mmap()</tt>'d memory region.
+ * and <tt>ChunkPool_free</tt> along with a unlocked access to metadata
+ * functions like <tt>ChunkPool_find()</tt>. It does not do any other
+ * multithreaded access or locality optimizations. It is backed by a
+ * <tt>mmap()</tt>'d memory region.
  *
  * Finding a chunk is done by checking candidate chunk beginnings and verifying
  * them against a guarantor. The method used requires chunk sizes to be integral
  * multiples of the minimum chunk size.
  */
-#pragma message "Couple more tightly to reduce locking"
 
 #include "chunk-pool.h"
 
@@ -133,7 +133,7 @@ static void* ChunkPool_chunkMetadataToChunk (
  * @return The corresponding chunkMetadata
  */
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
-    void* const chunk);
+    const void* chunk);
 
 /*************/
 /* Constants */
@@ -154,7 +154,7 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
 /*************/
 static bool ChunkPool_initialized = FALSE;
 
-static pthread_rwlock_t ChunkPool_lock = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
@@ -222,7 +222,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   size_t chunksRequested = *bytesRequested / ChunkPool_MINIMUMCHUNKSIZE;
   ChunkPool_bytesAllocated += *bytesRequested;
 
-  pthread_rwlock_wrlock_safe(&ChunkPool_lock);
+  pthread_mutex_lock_safe(&ChunkPool_lock);
   /* Search for chunk to satisfy */
   for (int freeListIndex =
            ChunkPool_findFreeListIndexForNumChunks (chunksRequested);
@@ -256,7 +256,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         cursor->next = ChunkPool_ALLOCATED;
 
         /* done with free list modifications at this point, so unlock */
-        pthread_rwlock_unlock_safe(&ChunkPool_lock);
+        pthread_mutex_unlock_safe(&ChunkPool_lock);
         return ChunkPool_chunkMetadataToChunk (cursor);
       }
     }
@@ -266,7 +266,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
    * If execution reaches here, then I do not have a span to satisfy the request
    */
   ChunkPool_bytesAllocated -= *bytesRequested;
-  pthread_rwlock_unlock_safe(&ChunkPool_lock);
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
   return NULL;
 }
 
@@ -375,11 +375,6 @@ void* ChunkPool_find (void* object) {
       ChunkPool_chunkToChunkMetadata (containingChunk);
   void* chunk = NULL;
 
-  /*
-   * RAM_NOTE: May not need to lock if I can guarantee that these chunks will
-   * not enter free list or be re-initialized
-   */
-  pthread_rwlock_rdlock_safe(&ChunkPool_lock);
   if (ChunkPool_NONFIRSTCHUNK == chunkMetadata->previous) {
     assert (ChunkPool_NONFIRSTCHUNK == chunkMetadata->next);
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata->spanInfo.spanStart);
@@ -387,7 +382,6 @@ void* ChunkPool_find (void* object) {
     assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata);
   }
-  pthread_rwlock_unlock_safe(&ChunkPool_lock);
 
   assert(ChunkPool_ALLOCATED ==
          ChunkPool_chunkToChunkMetadata(chunk)->previous);
@@ -403,8 +397,7 @@ bool ChunkPool_overHalfAllocated(void) {
 }
 
 /**
- * This function serializes against <tt>ChunkPool_allocate()</tt> and
- * <tt>ChunkPool_free()</tt> but is reentrant against itself.
+ * This function serializes against nothing
  */
 size_t ChunkPool_size(void* chunk) {
   assert (chunk >= ChunkPool_poolStart);
@@ -557,14 +550,15 @@ void* ChunkPool_chunkMetadataToChunk (
 }
 
 struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
-    void* const chunk) {
+    const void* chunk) {
   assert (ChunkPool_initialized);
 
   assert (0 == (((size_t)(chunk)) & ChunkPool_CHUNKADDRESSMASK));
   assert (chunk >= ChunkPool_poolStart);
   assert (chunk < ChunkPool_poolEnd);
 
-  unsigned int chunkIndex =
-      (((uint8_t*)(chunk)) - ((uint8_t*)(ChunkPool_poolStart))) / ChunkPool_MINIMUMCHUNKSIZE;
+  unsigned int chunkIndex = (((const uint8_t*)(chunk)) -
+                             ((const uint8_t*)(ChunkPool_poolStart))) /
+                            ChunkPool_MINIMUMCHUNKSIZE;
   return (ChunkPool_chunkMetadatas + chunkIndex);
 }

@@ -94,25 +94,17 @@ static inline int mkstemp_safe (char *template) {
   return fd;
 }
 
-static inline void pthread_rwlock_wrlock_safe (pthread_rwlock_t* rwlock) {
+static inline void pthread_mutex_lock_safe (pthread_mutex_t* rwlock) {
   int retVal;
-  if (0 != (retVal = pthread_rwlock_wrlock(rwlock))) {
+  if (0 != (retVal = pthread_mutex_lock(rwlock))) {
     errno = retVal;
     diee("pthread_rwlock_wrlock() failed with errno %d", errno);
   }
 }
 
-static inline void pthread_rwlock_rdlock_safe (pthread_rwlock_t* rwlock) {
+static inline void pthread_mutex_unlock_safe (pthread_mutex_t* rwlock) {
   int retVal;
-  if (0 != (retVal = pthread_rwlock_rdlock(rwlock))) {
-    errno = retVal;
-    diee("pthread_rwlock_rdlock() failed with errno %d", errno);
-  }
-}
-
-static inline void pthread_rwlock_unlock_safe (pthread_rwlock_t* rwlock) {
-  int retVal;
-  if (0 != (retVal = pthread_rwlock_unlock(rwlock))) {
+  if (0 != (retVal = pthread_mutex_unlock(rwlock))) {
     errno = retVal;
     diee("pthread_rwlock_unlock() failed with errno %d", errno);
   }

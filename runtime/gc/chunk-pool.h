@@ -65,8 +65,11 @@ bool ChunkPool_free (void* chunk);
  * This function finds the containing chunk for the given <tt>pointer</tt>. If
  * found, it returns a pointer to the beginning of the chunk which is the same
  * value returned by <tt>ChunkPool_allocate()</tt> upon allocation of the
- * chunk. It returns NULL if it cannot find the containing chunk or the
- * containing chunk has not been allocated.
+ * chunk.
+ *
+ * @attention
+ * This function does no error checking or locking so 'object' <em>must</em>
+ * reside in an allocated chunk for the duration of this call.
  *
  * @param object Pointer to find containing chunk for.
  *
@@ -94,6 +97,11 @@ bool ChunkPool_pointerInChunkPool (void* pointer);
 
 /**
  * This function returns the size of the chunk.
+ *
+ * @attention
+ * For performance, this function does <em>no</em> error checking or
+ * locking. 'chunk' <em>must</em> be pointer to the first byte of an allocated
+ * chunk for the duration of this call.
  *
  * @param chunk The chunk to return size of
  *
