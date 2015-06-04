@@ -6,7 +6,7 @@ PLOT = x11
 # eps
 
 # Parameters
-MLTON_FLAGS := -const 'Exn.keepHistory true' -expert true
+MLTON_FLAGS := -const 'Exn.keepHistory true' -expert true -link-opt '-Wl,--no-as-needed -lprofiler -Wl,--as-needed' -mlb-path-var "T7_SML_LIB $(T7_SML_LIB)" -mark-cards false
 
 ifneq (${KEEPG},)
 MLTON_FLAGS += -keep g
