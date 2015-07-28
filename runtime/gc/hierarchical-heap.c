@@ -231,16 +231,15 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
 }
 
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  size_t level = HM_getHighestLevel(hh->levelList);
-  void* chunk;
-  void* chunkEnd;
-  assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
-
   if (ChunkPool_overHalfAllocated()) {
     /* collect first to free up some space */
     HM_HHC_collectLocal();
   }
 
+  size_t level = HM_getHighestLevel(hh->levelList);
+  void* chunk;
+  void* chunkEnd;
+  assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
   if ((CHUNK_INVALID_LEVEL == level) || (hh->level > level)) {
     chunk = HM_allocateLevelHeadChunk(&(hh->levelList),
                                       &chunkEnd,
