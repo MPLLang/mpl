@@ -58,8 +58,7 @@ void enter (GC_state s) {
       s->cumulativeStatistics->syncMisc++;
       break;
     default:
-      LOG(s, true, true, L_ERROR, "Unknown sync reason!");
-      exit(1);
+      DIE(s, "Unknown sync reason!");
   }
 }
 

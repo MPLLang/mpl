@@ -33,4 +33,17 @@
         __func__,                                        \
         __VA_ARGS__)
 
+/**
+ * Improved die() using the logger
+ *
+ * @param s The GC_state to use to fetch the processor number. See 'LOG()'.
+ * @param ... Both the format and the arguments for the message.
+ */
+#define DIE(s, ...)                               \
+  do {                                            \
+    fflush(NULL);                                 \
+    LOG(s, true, true, L_ERROR, __VA_ARGS__);     \
+    exit(1);                                      \
+  } while(false)
+
 #endif /* UTIL_H_ */
