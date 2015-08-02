@@ -57,8 +57,8 @@ struct GC_cumulativeStatistics {
   struct rusage ru_gcHHLocal; /**< Resource usage during Hierachical Heap local
                                * collections */
 
-  struct rusage ru_rt; /* total time "inside" runtime (not incl. synch.) */
-  struct rusage ru_sync; /* time waiting to synchronize in runtime */
+  struct rusage ru_crit; /* total time in critical sections */
+  struct rusage ru_sync; /* time waiting to synchronize for critical sections */
 };
 
 struct GC_lastMajorStatistics {

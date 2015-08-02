@@ -1,4 +1,7 @@
+#include "gc_state.h"
 
+#ifndef PROCESSOR_H_
+#define PROCESSOR_H_
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
@@ -18,3 +21,5 @@ void Proc_endCriticalSection (GC_state s);
 bool Proc_threadInSection (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
+
+#endif /* PROCESSOR_H_ */

@@ -42,13 +42,13 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   uintmax_t totalTime;
   uintmax_t gcTime;
   uintmax_t syncTime;
-  uintmax_t rtTime;
+  uintmax_t critTime;
 
   getrusage (RUSAGE_THREAD, &ru_total);
   totalTime = rusageTime (&ru_total);
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
   syncTime = rusageTime (&cumulativeStatistics->ru_sync);
-  rtTime = rusageTime (&cumulativeStatistics->ru_rt);
+  critTime = rusageTime (&cumulativeStatistics->ru_crit);
   fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
   fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
   displayCollectionStats
@@ -81,10 +81,10 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (syncTime),
            (0 == totalTime) ?
            0.0 : 100.0 * ((double) syncTime) / (double)totalTime);
-  fprintf (out, "total rt time: %s ms (%.1f%%)\n",
-           uintmaxToCommaString (rtTime),
+  fprintf (out, "total crit time: %s ms (%.1f%%)\n",
+           uintmaxToCommaString (critTime),
            (0 == totalTime) ?
-           0.0 : 100.0 * ((double) rtTime) / (double)totalTime);
+           0.0 : 100.0 * ((double) critTime) / (double)totalTime);
   fprintf (out, "max pause time: %s ms\n",
            uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",

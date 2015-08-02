@@ -12,19 +12,55 @@
  * invariant.
  */
 void enter (GC_state s) {
-#pragma message "This should be more nuanced with HH collection"
-  HM_enterGlobalHeap ();
   LOG(s, DEBUG, true, L_DEBUG, "starting...");
+
+  #pragma message "This should be more nuanced with HH collection"
+  HM_enterGlobalHeap ();
+
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+
   Proc_beginCriticalSection(s);
+  beginAtomic (s);
+
   LOG(s, DEBUG, true, L_DEBUG, "locked");
   if (DEBUG)
     displayGCState (s, stderr);
-  beginAtomic (s);
+
   assert (invariantForGC (s));
+
   LOG(s, DEBUG, true, L_DEBUG, "okay");
+
+  switch (s->syncReason) {
+    case SYNC_NONE:
+      /* I am just a passenger on this critical section */
+      break;
+    case SYNC_OLD_GEN_ARRAY:
+      s->cumulativeStatistics->syncForOldGenArray++;
+      break;
+    case SYNC_NEW_GEN_ARRAY:
+      s->cumulativeStatistics->syncForNewGenArray++;
+      break;
+    case SYNC_STACK:
+      s->cumulativeStatistics->syncForStack++;
+      break;
+    case SYNC_HEAP:
+      s->cumulativeStatistics->syncForHeap++;
+      break;
+    case SYNC_FORCE:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    case SYNC_PACK:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    case SYNC_SAVE_WORLD:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    default:
+      LOG(s, true, true, L_ERROR, "Unknown sync reason!");
+      exit(1);
+  }
 }
 
 void leave (GC_state s) {
