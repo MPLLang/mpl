@@ -7,6 +7,9 @@
  * See the file MLton-LICENSE for details.
  */
 
+#ifndef GC_STATE_H_
+#define GC_STATE_H_
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 struct GC_state {
@@ -154,3 +157,5 @@ PRIVATE sigset_t* GC_getSignalsPendingAddr (void);
 PRIVATE void GC_setGCSignalHandled (bool b);
 PRIVATE bool GC_getGCSignalPending (void);
 PRIVATE void GC_setGCSignalPending (bool b);
+
+#endif /* GC_STATE_H_ */

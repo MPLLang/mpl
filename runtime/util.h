@@ -6,8 +6,8 @@
  * See the file MLton-LICENSE for details.
  */
 
-#ifndef _MLTON_UTIL_H_
-#define _MLTON_UTIL_H_
+#ifndef MLTON_UTIL_H_
+#define MLTON_UTIL_H_
 
 #include "cenv.h"
 #include "util/pointer.h"
@@ -39,5 +39,6 @@
 #include "util/to-string.h"
 #include "util/align.h"
 #include "util/endian.h"
+#include "util/logger.h"
 
-#endif /* _MLTON_UTIL_H_ */
+#endif /* MLTON_UTIL_H_ */

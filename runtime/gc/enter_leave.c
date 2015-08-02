@@ -14,36 +14,30 @@
 void enter (GC_state s) {
 #pragma message "This should be more nuanced with HH collection"
   HM_enterGlobalHeap ();
-  if (DEBUG)
-    fprintf (stderr, "enter\n");
+  LOG(s, DEBUG, true, L_DEBUG, "starting...");
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   Proc_beginCriticalSection(s);
-  if (DEBUG)
-    fprintf (stderr, "enter locked\n");
+  LOG(s, DEBUG, true, L_DEBUG, "locked");
   if (DEBUG)
     displayGCState (s, stderr);
   beginAtomic (s);
   assert (invariantForGC (s));
-  if (DEBUG)
-    fprintf (stderr, "enter ok\n");
+  LOG(s, DEBUG, true, L_DEBUG, "okay");
 }
 
 void leave (GC_state s) {
-  if (DEBUG)
-    fprintf (stderr, "leave\n");
+  LOG(s, DEBUG, true, L_DEBUG, "starting...");
   /* The mutator frontier invariant may not hold
    * for functions that don't ensureBytesFree.
    */
   assert (invariantForMutator (s, FALSE, TRUE));
   endAtomic (s);
   s->syncReason = SYNC_NONE;
-  if (DEBUG)
-    fprintf (stderr, "leave ok\n");
+  LOG(s, DEBUG, true, L_DEBUG, "okay");
   Proc_endCriticalSection(s);
-  if (DEBUG)
-    fprintf (stderr, "leave unlocked\n");
+  LOG(s, DEBUG, true, L_DEBUG, "unlocked");
 #pragma message "This should be more nuanced with HH collection"
   HM_exitGlobalHeap();
 }

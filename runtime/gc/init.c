@@ -11,6 +11,8 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
+#include "strings.h"
+
 static bool stringToBool (char *s) {
   if (0 == strcmp (s, "false"))
     return FALSE;
@@ -186,6 +188,42 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc)
             die ("@MLton load-world missing argument.");
           *worldFile = argv[i++];
+        } else if (0 == strcmp(arg, "log-file")) {
+          i++;
+          if (i == argc) {
+            die("@MLton log-file missing argument.");
+          }
+
+          const char* filePath = argv[i++];
+          if (0 == strcmp(filePath, "-")) {
+            L_setFile(stdout);
+          } else {
+            FILE* file = fopen(argv[i++], "w");
+            if (NULL == file) {
+              diee("@MLton Could not open specified log file.");
+            } else {
+              L_setFile(file);
+            }
+          }
+        } else if (0 == strcmp(arg, "log-level")) {
+          i++;
+          if (i == argc) {
+            die("@MLton log-level missing argument.");
+          }
+          char* levelString = argv[i++];
+          if (0 == strcasecmp(levelString, "none")) {
+            L_setLevel(L_NONE);
+          } else if (0 == strcasecmp(levelString, "error")) {
+            L_setLevel(L_ERROR);
+          } else if (0 == strcasecmp(levelString, "warning")) {
+            L_setLevel(L_WARNING);
+          } else if (0 == strcasecmp(levelString, "info")) {
+            L_setLevel(L_INFO);
+          }  else if (0 == strcasecmp(levelString, "debug")) {
+            L_setLevel(L_DEBUG);
+          } else {
+            die ("@MLton log-level invalid argument");
+          }
         } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {
           i++;
           if (i == argc)
@@ -415,6 +453,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   unless (isAligned (s->sysvals.pageSize, CARD_SIZE))
     die ("Page size must be a multiple of card size.");
+  L_setFile(stderr);
   processAtMLton (s, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, argc, argv, &s->worldFile);
   if (s->controls->fixedHeap > 0 and s->controls->maxHeap > 0)

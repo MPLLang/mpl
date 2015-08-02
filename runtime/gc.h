@@ -24,6 +24,7 @@ typedef GC_state GCState_t;
 #endif
 
 #include "gc/debug.h"
+#include "gc/util.h"
 
 #include "gc/align.h"
 #include "gc/model.h"
