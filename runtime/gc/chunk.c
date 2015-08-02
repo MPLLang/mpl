@@ -179,37 +179,37 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 }
 
 void HM_foreachHHObjptrInLevelList(GC_state s,
-                                   void** destinationLevelList,
+                                   void** levelList,
                                    HHObjptrFunction f,
                                    struct HM_HierarchicalHeap* hh,
                                    size_t minLevel) {
   struct HHObjptrFunctionArgs fArgs = {
-    .destinationLevelList = destinationLevelList,
     .hh = hh,
     .minLevel = minLevel,
     .maxLevel = 0
   };
 
-  for (void* levelList = *destinationLevelList;
-       NULL != levelList;
-       levelList = getChunkInfo(levelList)->split.levelHead.nextHead) {
-    for (void* chunk = levelList;
+  for (void* levelHead = *levelList;
+       NULL != levelHead;
+       levelHead = getChunkInfo(levelHead)->split.levelHead.nextHead) {
+    for (void* chunk = levelHead;
          NULL != chunk;
          chunk = getChunkInfo(chunk)->nextChunk) {
 #pragma message "Optimize by saving frontier?"
       for (pointer p = HM_getChunkStart(chunk);
            p != getChunkInfo(chunk)->frontier;) {
-        LOCAL_USED_FOR_ASSERT void* savedLevelList = *destinationLevelList;
+        LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;
 
         p = advanceToObjectData(s, p);
-        fArgs.maxLevel = getChunkInfo(levelList)->level;
+        fArgs.maxLevel = getChunkInfo(levelHead)->level;
         p = HM_HHC_foreachHHObjptrInObject(s,
                                            p,
                                            FALSE,
                                            f,
                                            &fArgs);
 
-        assert(savedLevelList == *destinationLevelList);
+        /* asserts that no new lower level has been created */
+        assert(savedLevelList == *levelList);
       }
     }
   }

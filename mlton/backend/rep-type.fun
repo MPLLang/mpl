@@ -501,6 +501,8 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesNewLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesNextChildHH =
@@ -521,6 +523,7 @@ structure ObjectType =
                               bytesLastSharedLevel +
                               bytesID +
                               bytesLevelList +
+                              bytesNewLevelList +
 			      bytesParentHH +
 			      bytesNextChildHH +
 			      bytesChildHHList
@@ -542,6 +545,7 @@ structure ObjectType =
                                                       Type.word32,
                                                       Type.word32,
                                                       Type.word32,
+                                                      Type.cpointer (),
                                                       Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),

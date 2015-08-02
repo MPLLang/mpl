@@ -63,6 +63,10 @@ struct HM_HierarchicalHeap {
   void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
                     * information */
 
+  void* newLevelList; /**< The new list of level lists generated during a local
+                       * garbage collection. See HM_ChunkInfo for more
+                       information */
+
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
 
@@ -84,6 +88,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(Word32) +
                     sizeof(Word32) +
                     sizeof(Word32) +
+                    sizeof(void*) +
                     sizeof(void*) +
                     sizeof(objptr) +
                     sizeof(objptr) +

@@ -18,7 +18,6 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct HHObjptrFunctionArgs {
-  void** destinationLevelList;
   struct HM_HierarchicalHeap* hh;
   size_t minLevel;
   size_t maxLevel;

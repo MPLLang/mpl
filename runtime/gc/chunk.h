@@ -118,13 +118,13 @@ void* HM_allocateLevelHeadChunk(void** levelList,
  * higher levels than those already there.
  *
  * @param s The GC_state to use
- * @param destinationLevelList The level list to iterate over
+ * @param levelList The level list to iterate over
  * @param f The function to call on each objptr.
  * @param hh The struct HM_HierarchicalHeap to pass to 'f'
  * @param minLevel The minLevel to pass to 'f'
  */
 void HM_foreachHHObjptrInLevelList(GC_state s,
-                                   void** destinationLevelList,
+                                   void** levelList,
                                    HHObjptrFunction f,
                                    struct HM_HierarchicalHeap* hh,
                                    size_t minLevel);

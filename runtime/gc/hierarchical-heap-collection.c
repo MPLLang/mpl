@@ -147,15 +147,14 @@ void HM_HHC_collectLocal(void) {
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
 
-  /* copy to newLevelList */
-  void* newLevelList = NULL;
+  /* initialize hh->newLevelList for the collection */
+  hh->newLevelList = NULL;
 
   /* lock queue to prevent steals */
   Parallel_lockTake(objptrToPointer(s->wsQueueLock, s->heap->start));
 
   /* copy roots */
   struct HHObjptrFunctionArgs hhObjptrFunctionArgs = {
-    .destinationLevelList = &newLevelList,
     .hh = hh,
     .minLevel = hh->lastSharedLevel + 1,
     .maxLevel = hh->level
@@ -179,7 +178,7 @@ void HM_HHC_collectLocal(void) {
 
   /* do copy-collection */
   HM_foreachHHObjptrInLevelList(s,
-                                &newLevelList,
+                                &(hh->newLevelList),
                                 forwardHHObjptr,
                                 hh,
                                 hh->lastSharedLevel + 1);
@@ -190,8 +189,8 @@ void HM_HHC_collectLocal(void) {
   HM_freeChunks(&(hh->levelList), hh->lastSharedLevel + 1);
 
   /* merge newLevelList back in */
-  HM_updateLevelListPointers(newLevelList, hh);
-  HM_mergeLevelList(&(hh->levelList), newLevelList);
+  HM_updateLevelListPointers(hh->newLevelList, hh);
+  HM_mergeLevelList(&(hh->levelList), hh->newLevelList);
 
   /* update lastAllocatedChunk and associated */
   void* lastChunk = HM_getChunkListLastChunk(hh->levelList);
@@ -615,7 +614,7 @@ void forwardHHObjptr (GC_state s,
 
     size_t size = headerBytes + objectBytes;
     /* Copy the object. */
-    pointer copyPointer = copyObject(args->destinationLevelList,
+    pointer copyPointer = copyObject(&(args->hh->newLevelList),
                                      p - headerBytes,
                                      size,
                                      (level > args->maxLevel) ? (args->maxLevel) : (level));
@@ -673,7 +672,7 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)*opp);
   }
 
-  /* args->destinationLevelList has containingHH set to NULL */
+  /* args->hh->newLevelList has containingHH set to NULL */
   assert (NULL == HM_HH_getContaining(s, *opp));
 }
 
