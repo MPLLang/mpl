@@ -42,6 +42,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   rusageZero (&cumulativeStatistics->ru_gcHHLocal);
   rusageZero (&cumulativeStatistics->ru_crit);
   rusageZero (&cumulativeStatistics->ru_sync);
+  rusageZero (&cumulativeStatistics->ru_bsp);
 
   return cumulativeStatistics;
 }

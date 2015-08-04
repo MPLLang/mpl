@@ -58,7 +58,8 @@ struct GC_cumulativeStatistics {
                                * collections */
 
   struct rusage ru_crit; /* total time in critical sections */
-  struct rusage ru_sync; /* time waiting to synchronize for critical sections */
+  struct rusage ru_sync; /* total time synchronizing for critical sections */
+  struct rusage ru_bsp; /* total time in BSP rounds */
 };
 
 struct GC_lastMajorStatistics {
