@@ -385,6 +385,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->mayPageHeap = FALSE;
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
+  s->controls->HMMessages = FALSE;
   s->controls->oldGenArraySize = 0x100000;
   s->controls->allocChunkSize = 4096;
   s->controls->affinityBase = 0;

@@ -29,6 +29,10 @@ bool isPointerMarkedByMode (pointer p, GC_markMode m) {
   }
 }
 
+/*
+ * RAM_NOTE: DFS marking, hash-cons'ing, and weak-link'ing should be folded into
+ * descendHook() and ascendHook()
+ */
 /* dfsMarkByModeCustom (s, r, m, shc, slw, dh, ah)
  *
  * Sets all the mark bits in the object graph pointed to by r.
@@ -210,8 +214,11 @@ markNextInNormal:
     nextHeaderp = getHeaderp (next);
     nextHeader = *nextHeaderp;
     if (mark == (nextHeader & MARK_MASK)) {
-      if (shouldHashCons)
+      if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
+      }
+      /* Call the ascendHook since we will not be descending into 'next' */
+      ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markNextInNormal;
     }
     *headerp = (header & ~COUNTER_MASK) | (objptrIndex << COUNTER_SHIFT);
@@ -301,8 +308,11 @@ markNextInArray:
     nextHeaderp = getHeaderp (next);
     nextHeader = *nextHeaderp;
     if (mark == (nextHeader & MARK_MASK)) {
-      if (shouldHashCons)
+      if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
+      }
+      /* Call the ascendHook since we will not be descending into 'next' */
+      ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markNextInArray;
     }
     /* Recur and mark next. */
@@ -358,8 +368,11 @@ markInFrame:
     nextHeader = *nextHeaderp;
     if (mark == (nextHeader & MARK_MASK)) {
       objptrIndex++;
-      if (shouldHashCons)
+      if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
+      }
+      /* Call the ascendHook since we will not be descending into 'next' */
+      ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markInFrame;
     }
     ((GC_stack)cur)->markIndex = objptrIndex;
