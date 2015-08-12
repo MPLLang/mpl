@@ -191,8 +191,6 @@ void HM_HH_display (
     const struct HM_HierarchicalHeap* hh,
     FILE* stream) {
   fprintf (stream,
-           "\tsavedFrontier = %p\n"
-           "\tlimit = %p\n"
            "\tlastAllocatedChunk = %p\n"
            "\tlock = %s\n"
            "\tlevel = %u\n"
@@ -202,8 +200,6 @@ void HM_HH_display (
            "\tparentHH = "FMTOBJPTR"\n"
            "\tnextChildHH = "FMTOBJPTR"\n"
            "\tchildHHList= "FMTOBJPTR"\n",
-           hh->savedFrontier,
-           hh->limit,
            hh->lastAllocatedChunk,
            (HM_HH_LOCK_LOCKED == hh->lock) ? "locked" : "unlocked",
            hh->level,
@@ -217,8 +213,6 @@ void HM_HH_display (
 
 void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
   if (NULL == hh->levelList) {
-    assert(NULL == hh->savedFrontier);
-    assert(NULL == hh->limit);
     assert(NULL == hh->lastAllocatedChunk);
 
     /* add in one chunk */
@@ -254,8 +248,6 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
     return FALSE;
   }
 
-  hh->limit = chunkEnd;
-  hh->savedFrontier = HM_getChunkFrontier(chunk);
   hh->lastAllocatedChunk = chunk;
 
   return TRUE;
@@ -276,13 +268,12 @@ Word32 HM_HH_getObjptrLevel(GC_state s, objptr object) {
   return HM_getObjptrLevel(s, object);
 }
 
-void* HM_HH_getSavedFrontier(
-    const struct HM_HierarchicalHeap* hh) {
-  return hh->savedFrontier;
+void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh) {
+  return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 
 void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
-  return hh->limit;
+  return HM_getChunkLimit(hh->lastAllocatedChunk);
 }
 
 /* RAM_NOTE: should this be moved to local-heap.h? */
@@ -299,7 +290,6 @@ size_t HM_HH_offsetof(GC_state s) {
 
 void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
                         void* frontier) {
-  hh->savedFrontier = frontier;
   HM_updateChunkValues(hh->lastAllocatedChunk, frontier);
 }
 
@@ -347,15 +337,8 @@ void HM_HH_updateLevelListPointers(objptr hhObjptr) {
 #if ASSERT
 void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   HM_assertLevelListInvariants(hh->levelList);
-  if (NULL != hh->limit) {
-    assert(ChunkPool_find(((char*)(hh->limit)) - 1) == hh->lastAllocatedChunk);
-    assert(ChunkPool_find(hh->savedFrontier) == hh->lastAllocatedChunk);
-    assert(NULL != hh->levelList);
-  } else {
-    assert(NULL == hh->savedFrontier);
-    assert(NULL == hh->lastAllocatedChunk);
-    assert(NULL == hh->levelList);
-  }
+  assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
+         ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
 
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
   if (NULL != parentHH) {

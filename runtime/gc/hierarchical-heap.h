@@ -27,8 +27,6 @@
  *
  * header ::
  * padding ::
- * savedFrontier (void*) ::
- * limit (void*) ::
  * lock (Int32) ::
  * level (Word32) ::
  * lastSharedLevel (Word32) ::
@@ -41,11 +39,6 @@
  * There may be zero or more bytes of padding for alignment purposes.
  */
 struct HM_HierarchicalHeap {
-  void* savedFrontier; /**< The saved frontier when returning to this
-                        * hierarchical heap. */
-
-  void* limit; /**< The limit of the last allocated chunk */
-
   void* lastAllocatedChunk; /**< The last allocated chunk */
 
   Int32 lock; /**< The spinlock for exclusive access to the childHHList */
@@ -81,8 +74,6 @@ struct HM_HierarchicalHeap {
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(struct HM_HierarchicalHeap) ==
-                    sizeof(void*) +
-                    sizeof(void*) +
                     sizeof(void*) +
                     sizeof(Int32) +
                     sizeof(Word32) +
@@ -205,9 +196,9 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
  * space.
  *
  * @attention
- * On successful completion, hh->savedFrontier is updated to the frontier of the
- * extension and HM_getHierarchicalHeapLimit(hh) will return the limit of the
- * extension.
+ * On successful completion, the frontier in hh->lastAllocatedChunk is updated
+ * to the frontier of the extension and HM_getHierarchicalHeapLimit(hh) will
+ * return the limit of the extension.
  *
  * @param hh The hierarchical heap to extend
  * @param bytesRequested The minimum size of the extension
@@ -251,12 +242,14 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
  */
 Word32 HM_HH_getObjptrLevel(GC_state s, objptr object);
 
+/* RAM_NOTE: This should be renamed to getFrontier */
 /**
  * Gets the saved frontier from a struct HM_HierarchicalHeap
  *
  * @param hh The struct HM_HierarchicalHeap to use
  *
- * @return the savedFrontier field
+ * @return the frontier of the last allocated chunk, which is saved on every
+ * exitLocalHeap().
  */
 void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh);
 

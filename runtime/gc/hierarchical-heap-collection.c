@@ -196,13 +196,9 @@ void HM_HHC_collectLocal(void) {
   void* lastChunk = HM_getChunkListLastChunk(hh->levelList);
   if (NULL == lastChunk) {
     /* empty lists, so reset hh */
-    hh->savedFrontier = NULL;
-    hh->limit = NULL;
     hh->lastAllocatedChunk = NULL;
   } else {
     /* we have a last chunk */
-    hh->savedFrontier = HM_getChunkFrontier(lastChunk);
-    hh->limit = HM_getChunkLimit(lastChunk);
     hh->lastAllocatedChunk = lastChunk;
   }
 

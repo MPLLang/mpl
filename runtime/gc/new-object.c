@@ -122,9 +122,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_HH_offsetof(s)));
 
-  /* initialize the object with a small chunk */
-  hh->savedFrontier = NULL;
-  hh->limit = NULL;
+  hh->lastAllocatedChunk = NULL;
   hh->lock = HM_HH_LOCK_INITIALIZER;
   hh->level = 0;
   hh->lastSharedLevel = HM_HH_INVALID_LEVEL;
