@@ -181,12 +181,12 @@ void HM_HHC_collectLocal(void) {
                                 &(hh->newLevelList),
                                 forwardHHObjptr,
                                 hh,
-                                hh->lastSharedLevel + 1);
+                                hhObjptrFunctionArgs.minLevel);
 
   assertInvariants(s, hh);
 
   /* free old chunks */
-  HM_freeChunks(&(hh->levelList), hh->lastSharedLevel + 1);
+  HM_freeChunks(&(hh->levelList), hhObjptrFunctionArgs.minLevel);
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);
