@@ -27,10 +27,13 @@ bool isObjptrInToSpace (GC_state s, objptr op) {
  * Forwards the object pointed to by *opp and updates *opp to point to
  * the new object.
  */
-void forwardObjptr (GC_state s, objptr *opp) {
+void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
   objptr op;
   pointer p;
   GC_header header;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   op = *opp;
   p = objptrToPointer (op, s->heap->start);
@@ -150,9 +153,12 @@ void forwardObjptr (GC_state s, objptr *opp) {
   assert (isObjptrInToSpace (s, *opp));
 }
 
-void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
+void forwardObjptrIfInNursery (GC_state s, objptr *opp, void* ignored) {
   objptr op;
   pointer p;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   op = *opp;
   p = objptrToPointer (op, s->heap->start);
@@ -164,7 +170,7 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp) {
              (uintptr_t)opp, op, (uintptr_t)p);
   /* RAM_NOTE: Should this just be limitPlusSlop like in upstream? */
   assert (s->heap->nursery <= p and p < s->heap->frontier);
-  forwardObjptr (s, opp);
+  forwardObjptr (s, opp, NULL);
 }
 
 /* Walk through all the cards and forward all intergenerational pointers. */
@@ -219,8 +225,12 @@ checkCard:
      * Weak.set, the foreachObjptrInRange will do the right thing on
      * weaks, since the weak pointer will never be into the nursery.
      */
-    objectStart = foreachObjptrInRange (s, objectStart, &cardEnd,
-                                        forwardObjptrIfInNursery, FALSE);
+    objectStart = foreachObjptrInRange (s,
+                                        objectStart,
+                                        &cardEnd,
+                                        FALSE,
+                                        forwardObjptrIfInNursery,
+                                        NULL);
     s->cumulativeStatistics->bytesScannedMinor += (uintmax_t)(objectStart - lastObject);
     if (objectStart == oldGenEnd)
       goto done;

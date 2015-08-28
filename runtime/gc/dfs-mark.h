@@ -37,7 +37,11 @@ static size_t dfsMarkByMode (GC_state s, pointer root,
                              GC_markMode mode,
                              bool shouldHashCons,
                              bool shouldLinkWeaks);
-static inline void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp);
-static inline void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s, objptr *opp);
+static inline void dfsMarkWithHashConsWithLinkWeaks (GC_state s,
+                                                     objptr *opp,
+                                                     void* ignored);
+static inline void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s,
+                                                        objptr *opp,
+                                                        void* ignored);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

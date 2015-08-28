@@ -27,8 +27,10 @@ static inline bool isPointerInToSpace (GC_state s, pointer p);
 static inline bool isObjptrInToSpace (GC_state s, objptr op);
 #endif
 
-static inline void forwardObjptr (GC_state s, objptr *opp);
-static inline void forwardObjptrIfInNursery (GC_state s, objptr *opp);
+static inline void forwardObjptr (GC_state s, objptr *opp, void* ignored);
+static inline void forwardObjptrIfInNursery (GC_state s,
+                                             objptr *opp,
+                                             void* ignored);
 static inline void forwardInterGenerationalObjptrs (GC_state s);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

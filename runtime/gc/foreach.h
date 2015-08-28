@@ -8,23 +8,33 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-typedef void (*GC_foreachObjptrFun) (GC_state s, objptr *opp);
+typedef void (*ForeachObjptrFunction) (GC_state s, objptr *opp, void* args);
 
-static inline void callIfIsObjptr (GC_state s, GC_foreachObjptrFun f, objptr *opp);
+static inline void callIfIsObjptr (GC_state s,
+                                   ForeachObjptrFunction f,
+                                   objptr *opp,
+                                   void* fArgs);
 /* foreachGlobalObjptr (s, f)
- * 
- * Apply f to each global object pointer into the heap. 
+ *
+ * Apply f to each global object pointer into the heap.
  */
-static inline void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f);
-/* foreachObjptrInObject (s, p, skipWeaks, f) 
- * 
+static inline void foreachGlobalObjptr (GC_state s,
+                                        ForeachObjptrFunction f,
+                                        void* fArgs);
+
+/* foreachObjptrInObject (s, p, skipWeaks, f)
+ *
  * Applies f to each object pointer in the object pointed to by p.
  * Returns pointer to the end of object, i.e. just past object.
  *
  * If skipWeaks, then the object pointer in weak objects is skipped.
  */
-static inline pointer foreachObjptrInObject (GC_state s, pointer p,
-                                             GC_foreachObjptrFun f, bool skipWeaks);
+static inline pointer foreachObjptrInObject (GC_state s,
+                                             pointer p,
+                                             bool skipWeaks,
+                                             ForeachObjptrFunction f,
+                                             void* fArgs);
+
 /* foreachObjptrInRange (s, front, back, f, skipWeaks)
  *
  * Apply f to each pointer between front and *back, which should be a
@@ -36,9 +46,12 @@ static inline pointer foreachObjptrInObject (GC_state s, pointer p,
  *
  * If skipWeaks, then the object pointer in weak objects is skipped.
  */
-static inline pointer foreachObjptrInRange (GC_state s, pointer front, pointer *back,
-                                            GC_foreachObjptrFun f, bool skipWeaks);
-
+static inline pointer foreachObjptrInRange (GC_state s,
+                                            pointer front,
+                                            pointer *back,
+                                            bool skipWeaks,
+                                            ForeachObjptrFunction f,
+                                            void* fArgs);
 
 typedef void (*GC_foreachStackFrameFun) (GC_state s, GC_frameIndex i);
 

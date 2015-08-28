@@ -507,15 +507,23 @@ static size_t dfsMarkByMode (GC_state s, pointer root,
                              NULL);
 }
 
-void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp) {
+void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp, void* ignored) {
   pointer p;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   p = objptrToPointer (*opp, s->heap->start);
   dfsMarkByMode (s, p, MARK_MODE, TRUE, TRUE);
 }
 
-void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s, objptr *opp) {
+void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s,
+                                          objptr *opp,
+                                          void* ignored) {
   pointer p;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   p = objptrToPointer (*opp, s->heap->start);
   dfsMarkByMode (s, p, MARK_MODE, FALSE, TRUE);

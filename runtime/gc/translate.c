@@ -11,10 +11,13 @@
 /*                          translateHeap                           */
 /* ---------------------------------------------------------------- */
 
-void translateObjptr (GC_state s,
-                      objptr *opp) {
+void translateObjptr (GC_state s, objptr *opp, void* ignored) {
   pointer p;
-  pointer from, to;
+  pointer from;
+  pointer to;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   from = s->translateState.from;
   to = s->translateState.to;
@@ -40,7 +43,12 @@ void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
   s->translateState.from = from;
   s->translateState.to = to;
   /* Translate globals and heap. */
-  foreachGlobalObjptr (s, translateObjptr);
+  foreachGlobalObjptr (s, translateObjptr, NULL);
   limit = to + size;
-  foreachObjptrInRange (s, alignFrontier (s, to), &limit, translateObjptr, FALSE);
+  foreachObjptrInRange (s,
+                        alignFrontier (s, to),
+                        &limit,
+                        FALSE,
+                        translateObjptr,
+                        NULL);
 }

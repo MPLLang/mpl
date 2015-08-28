@@ -6,48 +6,51 @@
  * See the file MLton-LICENSE for details.
  */
 
-void callIfIsObjptr (GC_state s, GC_foreachObjptrFun f, objptr *opp) {
-  if (isObjptr (*opp))
-    f (s, opp);
+void callIfIsObjptr (GC_state s,
+                     ForeachObjptrFunction f,
+                     objptr *opp,
+                     void* fArgs) {
+  if (isObjptr (*opp)) {
+    f(s, opp, fArgs);
+  }
 }
 
 /* foreachGlobalObjptr (s, f)
  *
  * Apply f to each global object pointer into the heap.
  */
-void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f) {
+void foreachGlobalObjptr (GC_state s, ForeachObjptrFunction f, void* fArgs) {
   for (unsigned int i = 0; i < s->globalsLength; ++i) {
     if (DEBUG_DETAILED)
       fprintf (stderr, "foreachGlobal %u\n", i);
-    callIfIsObjptr (s, f, &s->globals [i]);
+    callIfIsObjptr (s, f, &s->globals [i], fArgs);
   }
   if (DEBUG_DETAILED)
     fprintf (stderr, "foreachGlobal threads\n");
   if (s->procStates) {
     for (int proc = 0; proc < s->numberOfProcs; proc++) {
-      callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread);
-      callIfIsObjptr (s, f, &s->procStates[proc].currentThread);
-      callIfIsObjptr (s, f, &s->procStates[proc].currentHierarchicalHeap);
-      callIfIsObjptr (s, f, &s->procStates[proc].wsQueue);
-      callIfIsObjptr (s, f, &s->procStates[proc].wsQueueLock);
-      callIfIsObjptr (s, f, &s->procStates[proc].savedThread);
-      callIfIsObjptr (s, f, &s->procStates[proc].signalHandlerThread);
+      callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].currentThread, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].currentHierarchicalHeap, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].wsQueue, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].wsQueueLock, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].savedThread, fArgs);
+      callIfIsObjptr (s, f, &s->procStates[proc].signalHandlerThread, fArgs);
 
       if (s->procStates[proc].roots) {
         for (uint32_t i = 0; i < s->procStates[proc].rootsLength; i++) {
-          callIfIsObjptr (s, f, &s->procStates[proc].roots[i]);
+          callIfIsObjptr (s, f, &s->procStates[proc].roots[i], fArgs);
         }
       }
     }
-  }
-  else {
-    callIfIsObjptr (s, f, &s->callFromCHandlerThread);
-    callIfIsObjptr (s, f, &s->currentThread);
-    callIfIsObjptr (s, f, &s->currentHierarchicalHeap);
-    callIfIsObjptr (s, f, &s->wsQueue);
-    callIfIsObjptr (s, f, &s->wsQueueLock);
-    callIfIsObjptr (s, f, &s->savedThread);
-    callIfIsObjptr (s, f, &s->signalHandlerThread);
+  } else {
+    callIfIsObjptr (s, f, &s->callFromCHandlerThread, fArgs);
+    callIfIsObjptr (s, f, &s->currentThread, fArgs);
+    callIfIsObjptr (s, f, &s->currentHierarchicalHeap, fArgs);
+    callIfIsObjptr (s, f, &s->wsQueue, fArgs);
+    callIfIsObjptr (s, f, &s->wsQueueLock, fArgs);
+    callIfIsObjptr (s, f, &s->savedThread, fArgs);
+    callIfIsObjptr (s, f, &s->signalHandlerThread, fArgs);
   }
 }
 
@@ -60,8 +63,11 @@ void foreachGlobalObjptr (GC_state s, GC_foreachObjptrFun f) {
  *
  * If skipWeaks, then the object pointer in weak objects is skipped.
  */
-pointer foreachObjptrInObject (GC_state s, pointer p,
-                               GC_foreachObjptrFun f, bool skipWeaks) {
+pointer foreachObjptrInObject (GC_state s,
+                               pointer p,
+                               bool skipWeaks,
+                               ForeachObjptrFunction f,
+                               void* fArgs) {
   GC_header header;
   uint16_t bytesNonObjptrs;
   uint16_t numObjptrs;
@@ -87,13 +93,14 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
         fprintf (stderr,
                  "  p = "FMTPTR"  *p = "FMTOBJPTR"\n",
                  (uintptr_t)p, *(objptr*)p);
-      callIfIsObjptr (s, f, (objptr*)p);
+      callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
     }
   } else if (WEAK_TAG == tag) {
     p += bytesNonObjptrs;
     if (1 == numObjptrs) {
-      if (not skipWeaks)
-        callIfIsObjptr (s, f, (objptr*)p);
+      if (not skipWeaks) {
+        callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
+      }
       p += OBJPTR_SIZE;
     }
   } else if (ARRAY_TAG == tag) {
@@ -115,11 +122,12 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
       ;
     } else {
       last = p + dataBytes;
-      if (0 == bytesNonObjptrs)
+      if (0 == bytesNonObjptrs) {
         /* Array with only pointers. */
-        for ( ; p < last; p += OBJPTR_SIZE)
-          callIfIsObjptr (s, f, (objptr*)p);
-      else {
+        for ( ; p < last; p += OBJPTR_SIZE) {
+          callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
+        }
+      } else {
         /* Array with a mix of pointers and non-pointers. */
         size_t bytesObjptrs;
 
@@ -133,8 +141,9 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
           p += bytesNonObjptrs;
           next = p + bytesObjptrs;
           /* For each internal pointer. */
-          for ( ; p < next; p += OBJPTR_SIZE)
-            callIfIsObjptr (s, f, (objptr*)p);
+          for ( ; p < next; p += OBJPTR_SIZE) {
+            callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
+          }
         }
       }
       assert (p == last);
@@ -168,24 +177,24 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
       frameOffsets = frameLayout->offsets;
       top -= frameLayout->size;
       for (i = 0 ; i < frameOffsets[0] ; ++i) {
-        if (DEBUG)
+        if (DEBUG) {
           fprintf(stderr, "  offset %"PRIx16"  address "FMTOBJPTR"\n",
                   frameOffsets[i + 1], *(objptr*)(top + frameOffsets[i + 1]));
-        callIfIsObjptr (s, f, (objptr*)(top + frameOffsets[i + 1]));
+        }
+
+        callIfIsObjptr (s, f, ((objptr*)(top + frameOffsets[i + 1])), fArgs);
       }
     }
     assert(top == bottom);
     p += sizeof (struct GC_stack) + stack->reserved;
-  }
-  else if (HEADER_ONLY_TAG == tag) {
-  }
-  else if (FILL_TAG == tag) {
+  } else if (HEADER_ONLY_TAG == tag) {
+    /* do nothing for header-only objects */
+  } else if (FILL_TAG == tag) {
     GC_smallGapSize bytes;
     bytes = *((GC_smallGapSize *)p);
     p += GC_SMALL_GAP_SIZE_SIZE;
     p += bytes;
-  }
-  else {
+  } else {
     assert (0 and "unknown object tag type");
   }
 
@@ -204,8 +213,12 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
  * If skipWeaks, then the object pointer in weak objects is skipped.
  */
 
-pointer foreachObjptrInRange (GC_state s, pointer front, pointer *back,
-                              GC_foreachObjptrFun f, bool skipWeaks) {
+pointer foreachObjptrInRange (GC_state s,
+                              pointer front,
+                              pointer *back,
+                              bool skipWeaks,
+                              ForeachObjptrFunction f,
+                              void* fArgs) {
   pointer b;
 
   assert (isFrontierAligned (s, front));
@@ -224,7 +237,7 @@ pointer foreachObjptrInRange (GC_state s, pointer front, pointer *back,
                  (uintptr_t)front, (uintptr_t)(*back));
       pointer p = advanceToObjectData (s, front);
       assert (isAligned ((size_t)p, s->alignment));
-      front = foreachObjptrInObject (s, p, f, skipWeaks);
+      front = foreachObjptrInObject (s, p, skipWeaks, f, fArgs);
     }
     b = *back;
   }

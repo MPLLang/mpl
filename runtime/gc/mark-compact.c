@@ -45,10 +45,13 @@ void copyForThreadInternal (pointer dst, pointer src) {
   }
 }
 
-void threadInternalObjptr (GC_state s, objptr *opp) {
+void threadInternalObjptr (GC_state s, objptr *opp, void* ignored) {
   objptr opop;
   pointer p;
   GC_header *headerp;
+
+  /* silence compiler warning */
+  ((void)(ignored));
 
   opop = pointerToObjptr ((pointer)opp, s->heap->start);
   p = objptrToPointer (*opp, s->heap->start);
@@ -187,7 +190,7 @@ thread:
       gap += skipGap;
       front += size + skipFront;
       endOfLastMarked = front;
-      foreachObjptrInObject (s, p, threadInternalObjptr, FALSE);
+      foreachObjptrInObject (s, p, FALSE, threadInternalObjptr, NULL);
       goto updateObject;
     } else {
       /* It's not marked. */
@@ -383,13 +386,13 @@ void majorMarkCompactGC (GC_state s) {
     s->lastMajorStatistics->bytesHashConsed = 0;
     s->cumulativeStatistics->numHashConsGCs++;
     s->objectHashTable = allocHashTable (s);
-    foreachGlobalObjptr (s, dfsMarkWithHashConsWithLinkWeaks);
+    foreachGlobalObjptr (s, dfsMarkWithHashConsWithLinkWeaks, NULL);
     freeHashTable (s->objectHashTable);
   } else {
-    foreachGlobalObjptr (s, dfsMarkWithoutHashConsWithLinkWeaks);
+    foreachGlobalObjptr (s, dfsMarkWithoutHashConsWithLinkWeaks, NULL);
   }
   updateWeaksForMarkCompact (s);
-  foreachGlobalObjptr (s, threadInternalObjptr);
+  foreachGlobalObjptr (s, threadInternalObjptr, NULL);
   updateForwardPointersForMarkCompact (s, currentStack);
   updateBackwardPointersAndSlideForMarkCompact (s, currentStack);
   bytesHashConsed = s->lastMajorStatistics->bytesHashConsed;

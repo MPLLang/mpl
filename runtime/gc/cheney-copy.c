@@ -81,8 +81,13 @@ void majorCheneyCopyGC (GC_state s) {
   assert (s->secondaryHeap->size >= s->heap->oldGenSize);
   toStart = alignFrontier (s, s->secondaryHeap->start);
   s->forwardState.back = toStart;
-  foreachGlobalObjptr (s, forwardObjptr);
-  foreachObjptrInRange (s, toStart, &s->forwardState.back, forwardObjptr, TRUE);
+  foreachGlobalObjptr (s, forwardObjptr, NULL);
+  foreachObjptrInRange (s,
+                        toStart,
+                        &s->forwardState.back,
+                        TRUE,
+                        forwardObjptr,
+                        NULL);
   updateWeaksForCheneyCopy (s);
   s->secondaryHeap->oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap->start);
   bytesCopied = s->secondaryHeap->oldGenSize;
@@ -156,10 +161,14 @@ void minorCheneyCopyGC (GC_state s) {
     /* Forward all globals.  Would like to avoid doing this once all
      * the globals have been assigned.
      */
-    foreachGlobalObjptr (s, forwardObjptrIfInNursery);
+    foreachGlobalObjptr (s, forwardObjptrIfInNursery, NULL);
     forwardInterGenerationalObjptrs (s);
-    foreachObjptrInRange (s, s->forwardState.toStart, &s->forwardState.back,
-                          forwardObjptrIfInNursery, TRUE);
+    foreachObjptrInRange (s,
+                          s->forwardState.toStart,
+                          &s->forwardState.back,
+                          TRUE,
+                          forwardObjptrIfInNursery,
+                          NULL);
     updateWeaksForCheneyCopy (s);
     bytesCopied = (size_t)(s->forwardState.back - s->forwardState.toStart);
     s->cumulativeStatistics->bytesCopiedMinor += bytesCopied;

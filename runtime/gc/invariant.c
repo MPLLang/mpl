@@ -8,7 +8,10 @@
  */
 
 #if ASSERT
-void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
+void assertIsObjptrInFromSpace (GC_state s, objptr *opp, void* ignored) {
+  /* silence compiler warning */
+  ((void)(ignored));
+
   assert (isObjptrInFromSpace (s, *opp));
   unless (isObjptrInFromSpace (s, *opp))
     die ("gc.c: assertIsObjptrInFromSpace "
@@ -30,7 +33,12 @@ void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
   }
 }
 
-static inline void assertIsObjptrReachable (GC_state s, objptr *opp) {
+static inline void assertIsObjptrReachable (GC_state s,
+                                            objptr *opp,
+                                            void* ignored) {
+  /* silence compiler warning */
+  ((void)(ignored));
+
   assert (isObjptrInFromSpace (s, *opp) ||
           HM_HH_objptrInHierarchicalHeap(s, *opp));
 
@@ -90,31 +98,45 @@ bool invariantForGC (GC_state s) {
   assert (s->secondaryHeap->start == NULL
           or s->heap->size == s->secondaryHeap->size);
   /* Check that all pointers are into from space. */
-  foreachGlobalObjptr (s, assertIsObjptrInFromSpace);
+  foreachGlobalObjptr (s, assertIsObjptrInFromSpace, NULL);
   pointer back = s->heap->start + s->heap->oldGenSize;
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking old generation.\n");
-  foreachObjptrInRange (s, alignFrontier (s, s->heap->start), &back,
-                        assertIsObjptrReachable, FALSE);
+  foreachObjptrInRange (s,
+                        alignFrontier (s, s->heap->start),
+                        &back,
+                        FALSE,
+                        assertIsObjptrReachable,
+                        NULL);
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking nursery.\n");
   if (s->procStates) {
     pointer firstStart = s->heap->frontier;
     for (proc = 0; proc < s->numberOfProcs; proc++) {
-      foreachObjptrInRange (s, s->procStates[proc].start,
+      foreachObjptrInRange (s,
+                            s->procStates[proc].start,
                             &s->procStates[proc].frontier,
-                            assertIsObjptrReachable, FALSE);
+                            FALSE,
+                            assertIsObjptrReachable,
+                            NULL);
       if (s->procStates[proc].start
           and s->procStates[proc].start < firstStart)
         firstStart = s->procStates[proc].start;
     }
-    foreachObjptrInRange (s, s->heap->nursery,
+    foreachObjptrInRange (s,
+                          s->heap->nursery,
                           &firstStart,
-                          assertIsObjptrReachable, FALSE);
+                          FALSE,
+                          assertIsObjptrReachable,
+                          NULL);
   }
   else {
-    foreachObjptrInRange (s, s->start, &s->frontier,
-                          assertIsObjptrReachable, FALSE);
+    foreachObjptrInRange (s,
+                          s->start,
+                          &s->frontier,
+                          FALSE,
+                          assertIsObjptrReachable,
+                          NULL);
   }
   /* Current thread. */
   GC_stack stack = getStackCurrent(s);
