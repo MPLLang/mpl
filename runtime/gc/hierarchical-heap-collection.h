@@ -17,15 +17,11 @@
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
-struct HHObjptrFunctionArgs {
+struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   size_t minLevel;
   size_t maxLevel;
 };
-
-typedef void (*HHObjptrFunction) (GC_state s,
-                                  struct HHObjptrFunctionArgs* args,
-                                  objptr* opp);
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -69,23 +65,13 @@ PRIVATE void HM_HHC_registerQueueLock(int processor, pointer queueLockPointer);
 void HM_HHC_collectLocal(void);
 
 /**
- * Call 'f' for each hierarchical heap objptr in the object 'p'
+ * Forwards the object pointed to by 'opp' into 'destinationLevelList'
  *
  * @param s The GC_state to use
- * @param p The object to iterate over
- * @param f The function to call
- * @param destinationLevelList The destination level list passed to 'f'
- * @param hh The struct HM_HierarchicalHeap passed to 'f'
- * @param minLevel The minLevel passed to 'f'
- * @param maxLevel The maxLevel passed to 'f'
- *
- * @return The pointer after the object
+ * @param opp The objptr to forward
+ * @param args The struct ForwardHHObjptrArgs* for this call, cast as a void*
  */
-static pointer HM_HHC_foreachHHObjptrInObject(GC_state s,
-                                              pointer p,
-                                              bool traceObject,
-                                              HHObjptrFunction f,
-                                              struct HHObjptrFunctionArgs* fArgs);
+void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

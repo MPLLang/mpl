@@ -178,12 +178,11 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   return chunk;
 }
 
-void HM_foreachHHObjptrInLevelList(GC_state s,
-                                   void** levelList,
-                                   HHObjptrFunction f,
-                                   struct HM_HierarchicalHeap* hh,
-                                   size_t minLevel) {
-  struct HHObjptrFunctionArgs fArgs = {
+void HM_forwardHHObjptrsInLevelList(GC_state s,
+                                    void** levelList,
+                                    struct HM_HierarchicalHeap* hh,
+                                    size_t minLevel) {
+  struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = minLevel,
     .maxLevel = 0
@@ -195,18 +194,20 @@ void HM_foreachHHObjptrInLevelList(GC_state s,
     for (void* chunk = levelHead;
          NULL != chunk;
          chunk = getChunkInfo(chunk)->nextChunk) {
-#pragma message "Optimize by saving frontier?"
+#pragma message "Use foreachObjptrInRange?"
       for (pointer p = HM_getChunkStart(chunk);
            p != getChunkInfo(chunk)->frontier;) {
         LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;
 
         p = advanceToObjectData(s, p);
-        fArgs.maxLevel = getChunkInfo(levelHead)->level;
-        p = HM_HHC_foreachHHObjptrInObject(s,
-                                           p,
-                                           FALSE,
-                                           f,
-                                           &fArgs);
+        forwardHHObjptrArgs.maxLevel = getChunkInfo(levelHead)->level;
+        p = foreachObjptrInObject(s,
+                                  p,
+                                  FALSE,
+                                  trueObjptrPredicate,
+                                  NULL,
+                                  forwardHHObjptr,
+                                  &forwardHHObjptrArgs);
 
         /* asserts that no new lower level has been created */
         assert(savedLevelList == *levelList);
@@ -216,27 +217,6 @@ void HM_foreachHHObjptrInLevelList(GC_state s,
 }
 
 void HM_freeChunks(void** levelList, Word32 minLevel) {
-#if 0
-  for (void* chunkList = *levelList;
-       (NULL != chunkList) && (getChunkInfo(chunkList)->level >= minLevel);
-       chunkList = *levelList) {
-    assert(CHUNK_INVALID_LEVEL != getChunkInfo(chunkList)->level);
-
-    /* unlink chunkList */
-    *levelList = getChunkInfo(chunkList)->split.levelHead.nextHead;
-
-    /* free everything in chunkList */
-    for(void* chunk = chunkList;
-        NULL != chunk;
-        chunk = chunkList) {
-      /* unlink chunk */
-      chunkList = getChunkInfo(chunkList)->nextChunk;
-
-      /* free the chunk */
-      ChunkPool_free(chunk);
-    }
-  }
-#endif
   struct FreeLevelListIteratorArgs iteratorArgs = {
     .levelList = levelList,
     .chunkList = NULL,

@@ -86,6 +86,9 @@ void majorCheneyCopyGC (GC_state s) {
                         toStart,
                         &s->forwardState.back,
                         TRUE,
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
                         forwardObjptr,
                         NULL);
   updateWeaksForCheneyCopy (s);
@@ -167,6 +170,9 @@ void minorCheneyCopyGC (GC_state s) {
                           s->forwardState.toStart,
                           &s->forwardState.back,
                           TRUE,
+                          FALSE,
+                          trueObjptrPredicate,
+                          NULL,
                           forwardObjptrIfInNursery,
                           NULL);
     updateWeaksForCheneyCopy (s);

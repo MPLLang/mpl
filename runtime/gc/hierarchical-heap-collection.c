@@ -15,31 +15,9 @@
 
 #include "hierarchical-heap-collection.h"
 
-/**********************/
-/* Struct Definitions */
-/**********************/
-
-struct TraceHHObjptrAscendHookArgs {
-  HHObjptrFunction f;
-  struct HHObjptrFunctionArgs* fArgs;
-};
-
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-/**
- * Calls 'f' on 'p' if it is a objptr to a object in the Hierarchical Heap
- *
- * @param s The GC_state to use
- * @param f The function to call
- * @param fArgs The args to pass to to 'f'
- * @param opp The objptr* to pass to 'f'
- */
-static void callIfIsHHObjptr (GC_state s,
-                              HHObjptrFunction f,
-                              struct HHObjptrFunctionArgs* fArgs,
-                              objptr* opp);
-
 /**
  * Copies the object into the destination level list
  *
@@ -56,38 +34,16 @@ pointer copyObject(void** destinationLevelList,
                    Word32 level);
 
 /**
- * Forwards the object pointed to by 'opp' into 'destinationLevelList'
+ * ObjptrPredicateFunction for skipping global heap objects we don't care about
+ */
+bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored);
+
+/**
+ * Returns the maximum global heap frontier across all processors
  *
- * @param s The GC_state to use
- * @param args The additional args for this call
- * @param opp The objptr to forward
+ * @param s The GC_state to used
  */
-void forwardHHObjptr (GC_state s,
-                      struct HHObjptrFunctionArgs* args,
-                      objptr* opp);
-
-/**
- * Calls 'f' on every object in the Hierarchcical Heap reachable from 'p'.
- *
- * @param s The GC_state to use
- * @param f The function to call
- * @param fArgs The args to pass to to 'f'
- * @param objectObjptr The objptr* to trace
- */
-void traceForHHObjptr(GC_state s,
-                      HHObjptrFunction f,
-                      struct HHObjptrFunctionArgs* fArgs,
-                      objptr* objectObjptr);
-
-/**
- * The descend hook used by traceForHHObjptr()
- */
-bool traceHHObjptrDescendHook(GC_state s, void* rawArgs, objptr object);
-
-/**
- * The ascend hook used by traceForHHObjptr()
- */
-void traceHHObjptrAscendHook(GC_state s, void* rawArgs, objptr* objectObjptr);
+pointer maxGlobalHeapFrontier(GC_state s);
 
 /************************/
 /* Function Definitions */
@@ -154,39 +110,53 @@ void HM_HHC_collectLocal(void) {
   Parallel_lockTake(objptrToPointer(s->wsQueueLock, s->heap->start));
 
   /* copy roots */
-  struct HHObjptrFunctionArgs hhObjptrFunctionArgs = {
+  struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = hh->lastSharedLevel + 1,
     .maxLevel = hh->level
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
-    hhObjptrFunctionArgs.minLevel = hh->level;
+    forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  HM_HHC_foreachHHObjptrInObject(s,
-                                 objptrToPointer(getStackCurrentObjptr(s),
-                                                 s->heap->start),
-                                 FALSE,
-                                 forwardHHObjptr,
-                                 &hhObjptrFunctionArgs);
-  HM_HHC_foreachHHObjptrInObject(s,
-                                 objptrToPointer(s->wsQueue, s->heap->start),
-                                 TRUE,
-                                 forwardHHObjptr,
-                                 &hhObjptrFunctionArgs);
+  foreachObjptrInObject(s,
+                        objptrToPointer(getStackCurrentObjptr(s),
+                                        s->heap->start),
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
+                        forwardHHObjptr,
+                        &forwardHHObjptrArgs);
+
+  LOG(s,
+      TRUE,
+      TRUE,
+      L_INFO,
+      "START foreach %ld MB",
+      (s->heap->frontier - s->heap->start) / (1024 * 1024));
+  pointer frontier = maxGlobalHeapFrontier(s);
+  foreachObjptrInRange(s,
+                       s->heap->start,
+                       &frontier,
+                       TRUE,
+                       TRUE,
+                       globalHeapObjptrPredicate,
+                       NULL,
+                       forwardHHObjptr,
+                       &forwardHHObjptrArgs);
+  LOG(s, TRUE, TRUE, L_INFO, "END foreach");
 
   /* do copy-collection */
-  HM_foreachHHObjptrInLevelList(s,
-                                &(hh->newLevelList),
-                                forwardHHObjptr,
-                                hh,
-                                hhObjptrFunctionArgs.minLevel);
+  HM_forwardHHObjptrsInLevelList(s,
+                                 &(hh->newLevelList),
+                                 hh,
+                                 forwardHHObjptrArgs.minLevel);
 
   assertInvariants(s, hh);
 
   /* free old chunks */
-  HM_freeChunks(&(hh->levelList), hhObjptrFunctionArgs.minLevel);
+  HM_freeChunks(&(hh->levelList), forwardHHObjptrArgs.minLevel);
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);
@@ -228,281 +198,10 @@ void HM_HHC_collectLocal(void) {
   }
 }
 
-pointer HM_HHC_foreachHHObjptrInObject(GC_state s,
-                                       pointer p,
-                                       bool traceObject,
-                                       HHObjptrFunction f,
-                                       struct HHObjptrFunctionArgs* fArgs) {
-  GC_header header;
-  uint16_t bytesNonObjptrs;
-  uint16_t numObjptrs;
-  GC_objectTypeTag tag;
-
-  assertInvariants(s, fArgs->hh);
-
-  header = getHeader (p);
-  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
-  if (DEBUG_DETAILED)
-    fprintf (stderr,
-             "foreachHHObjptrInObject ("FMTPTR")"
-             "  header = "FMTHDR
-             "  tag = %s"
-             "  bytesNonObjptrs = %d"
-             "  numObjptrs = %d\n",
-             (uintptr_t)p, header, objectTypeTagToString (tag),
-             bytesNonObjptrs, numObjptrs);
-  if (NORMAL_TAG == tag) {
-    p += bytesNonObjptrs;
-    pointer max = p + (numObjptrs * OBJPTR_SIZE);
-    /* Apply f to all internal pointers. */
-    for ( ; p < max; p += OBJPTR_SIZE) {
-      if (DEBUG_DETAILED) {
-        fprintf (stderr,
-                 "  p = "FMTPTR"  *p = "FMTOBJPTR"\n",
-                 (uintptr_t)p, *(objptr*)p);
-      }
-
-      if (traceObject) {
-        traceForHHObjptr(s,
-                         f,
-                         fArgs,
-                         ((objptr*)(p)));
-      } else {
-        callIfIsHHObjptr (s,
-                          f,
-                          fArgs,
-                          (objptr*)p);
-      }
-    }
-  } else if (WEAK_TAG == tag) {
-#pragma message "Implement when I can"
-#if 0
-    p += bytesNonObjptrs;
-    if (1 == numObjptrs) {
-      if (not skipWeaks) {
-        if (traceObject) {
-          traceForHHObjptr(s,
-                           f,
-                           fArgs,
-                           ((objptr*)(p)));
-        } else {
-          callIfIsHHObjptr (s,
-                            f,
-                            fArgs,
-                            (objptr*)p);
-        }
-      }
-      p += OBJPTR_SIZE;
-    }
-#else
-    die(__FILE__ ":%d: "
-        "foreachHHObjptrInObject() does not support Weak objects!",
-        __LINE__);
-#endif
-  } else if (ARRAY_TAG == tag) {
-    size_t bytesPerElement;
-    size_t dataBytes;
-    pointer last;
-    GC_arrayLength numElements;
-
-    numElements = getArrayLength (p);
-    bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-    dataBytes = numElements * bytesPerElement;
-    if (dataBytes < OBJPTR_SIZE) {
-      /* Very small (including empty) arrays have OBJPTR_SIZE bytes
-       * space for the forwarding pointer.
-       */
-      dataBytes = OBJPTR_SIZE;
-    } else if (0 == numObjptrs) {
-      /* No objptrs to process. */
-      ;
-    } else {
-      last = p + dataBytes;
-      if (0 == bytesNonObjptrs)
-        /* Array with only pointers. */
-        for ( ; p < last; p += OBJPTR_SIZE) {
-          if (traceObject) {
-            traceForHHObjptr(s,
-                             f,
-                             fArgs,
-                             ((objptr*)(p)));
-          } else {
-            callIfIsHHObjptr (s,
-                              f,
-                              fArgs,
-                              (objptr*)p);
-          }
-        }
-      else {
-        /* Array with a mix of pointers and non-pointers. */
-        size_t bytesObjptrs;
-
-        bytesObjptrs = numObjptrs * OBJPTR_SIZE;
-
-        /* For each array element. */
-        for ( ; p < last; ) {
-          pointer next;
-
-          /* Skip the non-pointers. */
-          p += bytesNonObjptrs;
-          next = p + bytesObjptrs;
-          /* For each internal pointer. */
-          for ( ; p < next; p += OBJPTR_SIZE) {
-            if (traceObject) {
-              traceForHHObjptr(s,
-                               f,
-                               fArgs,
-                               ((objptr*)(p)));
-            } else {
-              callIfIsHHObjptr (s,
-                                f,
-                                fArgs,
-                                (objptr*)p);
-            }
-          }
-        }
-      }
-      assert (p == last);
-      p -= dataBytes;
-    }
-    p += alignWithExtra (s, dataBytes, GC_ARRAY_HEADER_SIZE);
-  } else if (STACK_TAG == tag) {
-    GC_stack stack;
-    pointer top, bottom;
-    unsigned int i;
-    GC_returnAddress returnAddress;
-    GC_frameLayout frameLayout;
-    GC_frameOffsets frameOffsets;
-
-    stack = (GC_stack)p;
-    bottom = getStackBottom (s, stack);
-    top = getStackTop (s, stack);
-    if (DEBUG) {
-      fprintf (stderr, "  bottom = "FMTPTR"  top = "FMTPTR"\n",
-               (uintptr_t)bottom, (uintptr_t)top);
-    }
-    assert (stack->used <= stack->reserved);
-    while (top > bottom) {
-      /* Invariant: top points just past a "return address". */
-      returnAddress = *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
-      if (DEBUG) {
-        fprintf (stderr, "  top = "FMTPTR"  return address = "FMTRA"\n",
-                 (uintptr_t)top, returnAddress);
-      }
-      frameLayout = getFrameLayoutFromReturnAddress (s, returnAddress);
-      frameOffsets = frameLayout->offsets;
-      top -= frameLayout->size;
-      for (i = 0 ; i < frameOffsets[0] ; ++i) {
-        if (DEBUG) {
-          fprintf(stderr, "  offset %"PRIx16"  address "FMTOBJPTR"\n",
-                  frameOffsets[i + 1], *(objptr*)(top + frameOffsets[i + 1]));
-        }
-
-        if (traceObject) {
-          traceForHHObjptr(s,
-                           f,
-                           fArgs,
-                           ((objptr*)(top + frameOffsets[i + 1])));
-        } else {
-          callIfIsHHObjptr (s,
-                            f,
-                            fArgs,
-                            (objptr*)(top + frameOffsets[i + 1]));
-        }
-      }
-    }
-    assert(top == bottom);
-    p += sizeof (struct GC_stack) + stack->reserved;
-  }
-  else if (HEADER_ONLY_TAG == tag) {
-#pragma message "Implement when I can"
-#if 0
-#else
-    die(__FILE__ ":%d: "
-        "foreachHHObjptrInObject() does not support HEADER_ONLY objects!",
-        __LINE__);
-#endif
-  }
-  else if (FILL_TAG == tag) {
-#pragma message "Implement when I can"
-#if 0
-    GC_smallGapSize bytes;
-    bytes = *((GC_smallGapSize *)p);
-    p += GC_SMALL_GAP_SIZE_SIZE;
-    p += bytes;
-#else
-    die(__FILE__ ":%d: "
-        "foreachHHObjptrInObject() does not support FILL_TAG objects!",
-        __LINE__);
-#endif
-  }
-  else {
-    assert (0 and "unknown object tag type");
-  }
-
-  return p;
-}
-#endif /* MLTON_GC_INTERNAL_BASIS */
-
-void callIfIsHHObjptr (GC_state s,
-                       HHObjptrFunction f,
-                       struct HHObjptrFunctionArgs* fArgs,
-                       objptr* opp) {
-  if (isObjptr(*opp) && HM_HH_objptrInHierarchicalHeap(s, *opp)) {
-    f(s, fArgs, opp);
-  }
-}
-
-pointer copyObject(void** destinationLevelList,
-                   pointer p,
-                   size_t size,
-                   Word32 level) {
-  void* cursor;
-  for (cursor = *destinationLevelList;
-       (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
-       cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
-  }
-
-  void* chunk;
-  void* frontier;
-  if (NULL == cursor) {
-    /* need to create a new level */
-    void* chunkEnd;
-    chunk = HM_allocateLevelHeadChunk(destinationLevelList,
-                                      &chunkEnd,
-                                      size,
-                                      level,
-                                      NULL);
-    if (NULL == chunk) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-    }
-    frontier = HM_getChunkFrontier(chunk);
-  } else {
-    /* found the level, try to allocate in it */
-    chunk = HM_getChunkListLastChunk(cursor);
-    frontier = HM_getChunkFrontier(chunk);
-    void* limit = HM_getChunkLimit(chunk);
-
-    if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < size) {
-      /* need to allocate a new chunk */
-      void* chunkEnd;
-      chunk = HM_allocateChunk(cursor, &chunkEnd, size);
-      if (NULL == chunk) {
-        die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-      }
-      frontier = HM_getChunkFrontier(chunk);
-    }
-  }
-
-  GC_memcpy(p, frontier, size);
-  HM_updateChunkValues(chunk, ((void*)(((char*)(frontier)) + size)));
-
-  return frontier;
-}
-
 void forwardHHObjptr (GC_state s,
-                      struct HHObjptrFunctionArgs* args,
-                      objptr* opp) {
+                      objptr* opp,
+                      void* rawArgs) {
+  struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, s->heap->start);
   GC_header header;
@@ -516,7 +215,10 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)p);
   }
 
-  assert(HM_HH_objptrInHierarchicalHeap(s, *opp));
+  if (!HM_HH_objptrInHierarchicalHeap(s, *opp)) {
+    /* does not point to an HH objptr, so just return */
+    return;
+  }
 
   header = getHeader (p);
   if (GC_FORWARDED == header) {
@@ -671,56 +373,64 @@ void forwardHHObjptr (GC_state s,
   /* args->hh->newLevelList has containingHH set to NULL */
   assert (NULL == HM_HH_getContaining(s, *opp));
 }
+#endif /* MLTON_GC_INTERNAL_BASIS */
 
-void traceForHHObjptr(GC_state s,
-                      HHObjptrFunction f,
-                      struct HHObjptrFunctionArgs* fArgs,
-                      objptr* objectObjptr) {
-  if (!isObjptr(*objectObjptr)) {
-    /* nothing to do */
-    return;
+pointer copyObject(void** destinationLevelList,
+                   pointer p,
+                   size_t size,
+                   Word32 level) {
+  void* cursor;
+  for (cursor = *destinationLevelList;
+       (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
+       cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
   }
 
-  // construct ascendHook args
-  struct TraceHHObjptrAscendHookArgs ascendHookArgs = {
-    .f = f,
-    .fArgs = fArgs
-  };
+  void* chunk;
+  void* frontier;
+  if (NULL == cursor) {
+    /* need to create a new level */
+    void* chunkEnd;
+    chunk = HM_allocateLevelHeadChunk(destinationLevelList,
+                                      &chunkEnd,
+                                      size,
+                                      level,
+                                      NULL);
+    if (NULL == chunk) {
+      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+    }
+    frontier = HM_getChunkFrontier(chunk);
+  } else {
+    /* found the level, try to allocate in it */
+    chunk = HM_getChunkListLastChunk(cursor);
+    frontier = HM_getChunkFrontier(chunk);
+    void* limit = HM_getChunkLimit(chunk);
 
-  // trace
-  dfsMarkByModeCustom(s,
-                      objptrToPointer(*objectObjptr, s->heap->start),
-                      MARK_MODE,
-                      FALSE,
-                      FALSE,
-                      traceHHObjptrDescendHook,
-                      NULL,
-                      traceHHObjptrAscendHook,
-                      &ascendHookArgs);
-  dfsMarkByModeCustom(s,
-                      objptrToPointer(*objectObjptr, s->heap->start),
-                      UNMARK_MODE,
-                      FALSE,
-                      FALSE,
-                      traceHHObjptrDescendHook,
-                      NULL,
-                      noopAscendHook,
-                      NULL);
+    if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < size) {
+      /* need to allocate a new chunk */
+      void* chunkEnd;
+      chunk = HM_allocateChunk(cursor, &chunkEnd, size);
+      if (NULL == chunk) {
+        die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+      }
+      frontier = HM_getChunkFrontier(chunk);
+    }
+  }
 
-  // apply ascendHook to objectObjptr
-  callIfIsHHObjptr (s, f, fArgs, objectObjptr);
+  GC_memcpy(p, frontier, size);
+  HM_updateChunkValues(chunk, ((void*)(((char*)(frontier)) + size)));
+
+  return frontier;
 }
 
-bool traceHHObjptrDescendHook(GC_state s, void* rawArgs, objptr object) {
-  // silence compiler about unused variables
-  ((void)(rawArgs));
+bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
+  /* silence compliler */
+  ((void)(ignored));
 
   /* run through FALSE cases */
   GC_header header;
-  header = getHeader (objptrToPointer(object, s->heap->start));
-  if (HM_HH_objptrInHierarchicalHeap(s, object) ||
-      (GC_FORWARDED == header) ||
-      (GC_HIERARCHICAL_HEAP_HEADER == header)) {
+  header = getHeader(p);
+  if ((GC_HIERARCHICAL_HEAP_HEADER == header) ||
+      (GC_THREAD_HEADER == header)) {
     return FALSE;
   }
 
@@ -735,9 +445,19 @@ bool traceHHObjptrDescendHook(GC_state s, void* rawArgs, objptr object) {
   return TRUE;
 }
 
-void traceHHObjptrAscendHook(GC_state s, void* rawArgs, objptr* objectObjptr) {
-  struct TraceHHObjptrAscendHookArgs* args =
-      ((struct TraceHHObjptrAscendHookArgs*)(rawArgs));
+pointer maxGlobalHeapFrontier(GC_state s) {
+  pointer maxFrontier = 0;
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    pointer candidateFrontier = s->procStates[i].frontier;
+    if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(candidateFrontier,
+                                                          s->heap->start))) {
+      /* use the saved global frontier */
+      candidateFrontier = s->procStates[i].globalFrontier;
+    }
 
-  callIfIsHHObjptr (s, args->f, args->fArgs, objectObjptr);
+    maxFrontier = (candidateFrontier > maxFrontier) ?
+                  candidateFrontier : maxFrontier;
+  }
+
+  return maxFrontier;
 }

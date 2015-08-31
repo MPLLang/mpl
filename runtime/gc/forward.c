@@ -229,6 +229,9 @@ checkCard:
                                         objectStart,
                                         &cardEnd,
                                         FALSE,
+                                        FALSE,
+                                        trueObjptrPredicate,
+                                        NULL,
                                         forwardObjptrIfInNursery,
                                         NULL);
     s->cumulativeStatistics->bytesScannedMinor += (uintmax_t)(objectStart - lastObject);

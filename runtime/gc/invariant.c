@@ -106,6 +106,9 @@ bool invariantForGC (GC_state s) {
                         alignFrontier (s, s->heap->start),
                         &back,
                         FALSE,
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
                         assertIsObjptrReachable,
                         NULL);
   if (DEBUG_DETAILED)
@@ -117,6 +120,9 @@ bool invariantForGC (GC_state s) {
                             s->procStates[proc].start,
                             &s->procStates[proc].frontier,
                             FALSE,
+                            FALSE,
+                            trueObjptrPredicate,
+                            NULL,
                             assertIsObjptrReachable,
                             NULL);
       if (s->procStates[proc].start
@@ -127,6 +133,9 @@ bool invariantForGC (GC_state s) {
                           s->heap->nursery,
                           &firstStart,
                           FALSE,
+                          FALSE,
+                          trueObjptrPredicate,
+                          NULL,
                           assertIsObjptrReachable,
                           NULL);
   }
@@ -135,6 +144,9 @@ bool invariantForGC (GC_state s) {
                           s->start,
                           &s->frontier,
                           FALSE,
+                          FALSE,
+                          trueObjptrPredicate,
+                          NULL,
                           assertIsObjptrReachable,
                           NULL);
   }

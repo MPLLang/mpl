@@ -10,12 +10,6 @@ PRIVATE void Parallel_lockRelease (Pointer);
 PRIVATE void Parallel_dekkerTake (Bool, Pointer, Pointer, Pointer);
 PRIVATE void Parallel_dekkerRelease (Bool, Pointer, Pointer, Pointer);
 
-/* RAM_NOTE: Remove when sure I am done */
-#if 0
-void Parallel_lock (Int32);
-void Parallel_unlock (Int32);
-#endif
-
 PRIVATE Int32 Parallel_processorNumber (void);
 PRIVATE Int32 Parallel_numberOfProcessors (void);
 PRIVATE Word64 Parallel_maxBytesLive (void);

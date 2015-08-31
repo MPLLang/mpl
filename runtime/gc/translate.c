@@ -49,6 +49,9 @@ void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
                         alignFrontier (s, to),
                         &limit,
                         FALSE,
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
                         translateObjptr,
                         NULL);
 }

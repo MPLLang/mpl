@@ -6,6 +6,15 @@
  * See the file MLton-LICENSE for details.
  */
 
+/******************************/
+/* Static Function Prototypes */
+/******************************/
+pointer nextValidPointer(GC_state s, pointer p);
+
+/************************/
+/* Function Definitions */
+/************************/
+
 void callIfIsObjptr (GC_state s,
                      ForeachObjptrFunction f,
                      objptr *opp,
@@ -19,7 +28,9 @@ void callIfIsObjptr (GC_state s,
  *
  * Apply f to each global object pointer into the heap.
  */
-void foreachGlobalObjptr (GC_state s, ForeachObjptrFunction f, void* fArgs) {
+void foreachGlobalObjptr (GC_state s,
+                          ForeachObjptrFunction f,
+                          void* fArgs) {
   for (unsigned int i = 0; i < s->globalsLength; ++i) {
     if (DEBUG_DETAILED)
       fprintf (stderr, "foreachGlobal %u\n", i);
@@ -66,12 +77,16 @@ void foreachGlobalObjptr (GC_state s, ForeachObjptrFunction f, void* fArgs) {
 pointer foreachObjptrInObject (GC_state s,
                                pointer p,
                                bool skipWeaks,
+                               ObjptrPredicateFunction predicate,
+                               void* pArgs,
                                ForeachObjptrFunction f,
                                void* fArgs) {
   GC_header header;
   uint16_t bytesNonObjptrs;
   uint16_t numObjptrs;
   GC_objectTypeTag tag;
+
+  bool skip = !predicate(s, p, pArgs);
 
   header = getHeader (p);
   splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
@@ -87,6 +102,12 @@ pointer foreachObjptrInObject (GC_state s,
   if (NORMAL_TAG == tag) {
     p += bytesNonObjptrs;
     pointer max = p + (numObjptrs * OBJPTR_SIZE);
+
+    if (skip) {
+      p = max;
+      goto DONE;
+    }
+
     /* Apply f to all internal pointers. */
     for ( ; p < max; p += OBJPTR_SIZE) {
       if (DEBUG_DETAILED)
@@ -98,7 +119,7 @@ pointer foreachObjptrInObject (GC_state s,
   } else if (WEAK_TAG == tag) {
     p += bytesNonObjptrs;
     if (1 == numObjptrs) {
-      if (not skipWeaks) {
+      if ((!skipWeaks) && (!skip)) {
         callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
       }
       p += OBJPTR_SIZE;
@@ -122,6 +143,11 @@ pointer foreachObjptrInObject (GC_state s,
       ;
     } else {
       last = p + dataBytes;
+
+      if (skip) {
+        goto ARRAY_DOME;
+      }
+
       if (0 == bytesNonObjptrs) {
         /* Array with only pointers. */
         for ( ; p < last; p += OBJPTR_SIZE) {
@@ -149,6 +175,8 @@ pointer foreachObjptrInObject (GC_state s,
       assert (p == last);
       p -= dataBytes;
     }
+
+ ARRAY_DOME:
     p += alignWithExtra (s, dataBytes, GC_ARRAY_HEADER_SIZE);
   } else if (STACK_TAG == tag) {
     GC_stack stack;
@@ -158,6 +186,7 @@ pointer foreachObjptrInObject (GC_state s,
     GC_frameLayout frameLayout;
     GC_frameOffsets frameOffsets;
 
+
     stack = (GC_stack)p;
     bottom = getStackBottom (s, stack);
     top = getStackTop (s, stack);
@@ -165,6 +194,11 @@ pointer foreachObjptrInObject (GC_state s,
       fprintf (stderr, "  bottom = "FMTPTR"  top = "FMTPTR"\n",
                (uintptr_t)bottom, (uintptr_t)top);
     }
+
+    if (skip) {
+      goto STACK_DONE;
+    }
+
     assert (stack->used <= stack->reserved);
     while (top > bottom) {
       /* Invariant: top points just past a "return address". */
@@ -186,6 +220,8 @@ pointer foreachObjptrInObject (GC_state s,
       }
     }
     assert(top == bottom);
+
+ STACK_DONE:
     p += sizeof (struct GC_stack) + stack->reserved;
   } else if (HEADER_ONLY_TAG == tag) {
     /* do nothing for header-only objects */
@@ -198,6 +234,7 @@ pointer foreachObjptrInObject (GC_state s,
     assert (0 and "unknown object tag type");
   }
 
+DONE:
   return p;
 }
 
@@ -217,6 +254,9 @@ pointer foreachObjptrInRange (GC_state s,
                               pointer front,
                               pointer *back,
                               bool skipWeaks,
+                              bool unsynchronizedCall,
+                              ObjptrPredicateFunction predicate,
+                              void* pArgs,
                               ForeachObjptrFunction f,
                               void* fArgs) {
   pointer b;
@@ -231,13 +271,20 @@ pointer foreachObjptrInRange (GC_state s,
   while (front < b) {
     while (front < b) {
       assert (isAligned ((size_t)front, GC_MODEL_MINALIGN));
-      if (DEBUG_DETAILED)
+      if (DEBUG_DETAILED) {
         fprintf (stderr,
                  "  front = "FMTPTR"  *back = "FMTPTR"\n",
                  (uintptr_t)front, (uintptr_t)(*back));
+      }
+
       pointer p = advanceToObjectData (s, front);
       assert (isAligned ((size_t)p, s->alignment));
-      front = foreachObjptrInObject (s, p, skipWeaks, f, fArgs);
+      front =
+          foreachObjptrInObject (s, p, skipWeaks, predicate, pArgs, f, fArgs);
+      if (unsynchronizedCall) {
+        /* advance front until I am not in the middle of a per-proc nursery */
+        front = nextValidPointer(s, front);
+      }
     }
     b = *back;
   }
@@ -274,4 +321,42 @@ void foreachStackFrame (GC_state s, GC_foreachStackFrameFun f) {
   }
   if (DEBUG_PROFILE)
     fprintf (stderr, "done foreachStackFrame\n");
+}
+
+bool trueObjptrPredicate(GC_state s, pointer p, void* args) {
+  /* silence warnings */
+  ((void)(s));
+  ((void)(p));
+  ((void)(args));
+
+  return TRUE;
+}
+
+/*******************************/
+/* Static Function Definitions */
+/*******************************/
+pointer nextValidPointer(GC_state s, pointer p) {
+  pointer nextP = p;
+  bool modified;
+
+  do {
+    modified = FALSE;
+
+    for (int i = 0; i < s->numberOfProcs; i++) {
+      pointer nurseryFrontier = s->procStates[i].frontier;
+      pointer nurseryLimitPlusSlop = s->procStates[i].limitPlusSlop;
+      if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(nurseryFrontier,
+                                                            s->heap->start))) {
+        nurseryFrontier = s->procStates[i].globalFrontier;
+        nurseryLimitPlusSlop = s->procStates[i].globalLimitPlusSlop;
+      }
+
+      if (nextP >= nurseryFrontier && nextP < nurseryLimitPlusSlop) {
+        nextP = nurseryLimitPlusSlop;
+        modified = TRUE;
+      }
+    }
+  } while (modified);
+
+  return nextP;
 }

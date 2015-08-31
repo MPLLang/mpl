@@ -190,7 +190,7 @@ thread:
       gap += skipGap;
       front += size + skipFront;
       endOfLastMarked = front;
-      foreachObjptrInObject (s, p, FALSE, threadInternalObjptr, NULL);
+      foreachObjptrInObject (s, p, FALSE, trueObjptrPredicate, NULL, threadInternalObjptr, NULL);
       goto updateObject;
     } else {
       /* It's not marked. */

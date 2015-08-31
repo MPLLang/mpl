@@ -101,19 +101,7 @@ GC_frameLayout getStackTopFrameLayout (GC_state s, GC_stack stack) {
 uint16_t getStackTopFrameSize (GC_state s, GC_stack stack) {
   GC_frameLayout layout;
 
-#pragma message "Revert once invariant is restored"
-#if 0
   assert (not (isStackEmpty (stack)));
-#else
-#if ASSERT
-  if (isStackEmpty (stack)) {
-    fprintf (stderr,
-             "%s:%d: 'assert(not (isStackEmpty (stack)))' tripped\n",
-             __FILE__,
-             __LINE__);
-  }
-#endif /* ASSERT */
-#endif /* 0 */
   layout = getStackTopFrameLayout (s, stack);
   return layout->size;
 }

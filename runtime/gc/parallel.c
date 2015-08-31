@@ -36,14 +36,6 @@ void Parallel_yield (void) {
     ENTER0 (s);
     LEAVE0 (s);
   }
-  /*
-  else {
-    struct timespec ts;
-    ts.tv_sec = 0;
-    ts.tv_nsec = 5000;
-    nanosleep (&ts, NULL);
-  }
-  */
 }
 
 /* lock = int* >= 0 if held or -1 if no one */
@@ -204,67 +196,9 @@ void Parallel_resetBytesLive (void) {
   s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
 }
 
-/* RAM_NOTE: Remove when sure I am done */
-#if 0
-static void maybeWaitForGC (GC_state s) {
-  if (Proc_threadInSection ()) {
-    //fprintf (stderr, "waiting for gc [%d]\n", Proc_processorNumber (s));
-
-    /* SPOONHOWER_NOTE: hack? */
-    ENTER0 (s);
-    LEAVE0 (s);
-  }
-}
-
-//struct rusage ru_lock;
-
-void Parallel_lock (Int32 p) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  int32_t myNumber = Proc_processorNumber (s);
-
-  //fprintf (stderr, "lock\n");
-
-  /*
-  if (needGCTime (s))
-    startTiming (RUSAGE_THREAD, &ru_lock);
-  */
-
-  do {
-  AGAIN:
-    maybeWaitForGC (s);
-    if (Parallel_mutexes[p] >= 0)
-      goto AGAIN;
-  } while (not __sync_bool_compare_and_swap (&Parallel_mutexes[p],
-                                             -1,
-                                             myNumber));
-  /*
-  if (needGCTime (s))
-    stopTiming (RUSAGE_THREAD, &ru_lock, &s->cumulativeStatistics->ru_lock);
-  */
-}
-
-void Parallel_unlock (Int32 p) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  int32_t myNumber = Proc_processorNumber (s);
-
-  //fprintf (stderr, "unlock %d\n", Parallel_holdingMutex);
-
-  if (not __sync_bool_compare_and_swap (&Parallel_mutexes[p],
-                                        myNumber,
-                                        -1)) {
-    fprintf (stderr, "can't unlock if you don't hold the lock\n");
-  }
-}
-#endif
-
 uint64_t Parallel_getTimeInGC (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   uint64_t gcTime = rusageTime (&s->cumulativeStatistics->ru_gc);
-#pragma message "Remove dead code"
-  /*
-    fprintf (stderr, "total GC time: %s ms\n",
-             uintmaxToCommaString (gcTime));
-  */
   return gcTime;
 }
 

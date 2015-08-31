@@ -8,6 +8,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+typedef bool (*ObjptrPredicateFunction) (GC_state s, pointer p, void* args);
 typedef void (*ForeachObjptrFunction) (GC_state s, objptr *opp, void* args);
 
 static inline void callIfIsObjptr (GC_state s,
@@ -32,6 +33,8 @@ static inline void foreachGlobalObjptr (GC_state s,
 static inline pointer foreachObjptrInObject (GC_state s,
                                              pointer p,
                                              bool skipWeaks,
+                                             ObjptrPredicateFunction predicate,
+                                             void* pArgs,
                                              ForeachObjptrFunction f,
                                              void* fArgs);
 
@@ -50,6 +53,9 @@ static inline pointer foreachObjptrInRange (GC_state s,
                                             pointer front,
                                             pointer *back,
                                             bool skipWeaks,
+                                            bool unsynchronizedCall,
+                                            ObjptrPredicateFunction predicate,
+                                            void* pArgs,
                                             ForeachObjptrFunction f,
                                             void* fArgs);
 
@@ -60,5 +66,12 @@ typedef void (*GC_foreachStackFrameFun) (GC_state s, GC_frameIndex i);
  * Apply f to the frame index of each frame in the current stack.
  */
 static inline void foreachStackFrame (GC_state s, GC_foreachStackFrameFun f);
+
+/**
+ * ObjptrPredicateFunction that always returns true
+ *
+ * @return TRUE
+ */
+bool trueObjptrPredicate(GC_state s, pointer p, void* args);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
