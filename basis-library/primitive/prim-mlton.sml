@@ -195,13 +195,13 @@ structure HM =
             _import "HM_explicitExitGlobalHeap" runtime private:
             unit -> Word32.word;
 
-        val registerQueue: Int32.int * 'a array -> unit =
+        val registerQueue: Word32.word * 'a array -> unit =
             _import "HM_HHC_registerQueue" runtime private:
-            Int32.int * 'a array -> unit;
+            Word32.word * 'a array -> unit;
 
-        val registerQueueLock: Int32.int * Int32.int ref -> unit =
+        val registerQueueLock: Word32.word * Int32.int ref -> unit =
             _import "HM_HHC_registerQueueLock" runtime private:
-            Int32.int * Int32.int ref -> unit;
+            Word32.word * Int32.int ref -> unit;
     end
 
 structure Platform =

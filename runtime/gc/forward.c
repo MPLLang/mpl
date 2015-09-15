@@ -86,7 +86,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
 
       /* Check if the pointer is the current stack of any processor. */
       current = false;
-      for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
         current = current || (getStackCurrent(&s->procStates[proc]) == stack);
       }
       /* RAM_NOTE: used to have 'current &&= not isStackEmpty(stack)' here */

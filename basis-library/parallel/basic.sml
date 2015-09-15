@@ -12,7 +12,7 @@ struct
   datatype job = Work of (unit -> void)
                | Thread of unit T.t
 
-  val numberOfProcessors = I.numberOfProcessors
+  val numberOfProcessors = Word32.toInt I.numberOfProcessors
 
   structure Q = WorkQueue (struct
                              type work = job
@@ -25,7 +25,7 @@ struct
 
   type token = Q.token
 
-  val processorNumber = I.processorNumber
+  val processorNumber = Word32.toInt o I.processorNumber
   val profileDisable = _import "GC_profileDisable" runtime private: unit -> unit;
   val profileEnable = _import "GC_profileEnable" runtime private: unit -> unit;
 

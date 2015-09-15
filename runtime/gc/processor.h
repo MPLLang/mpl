@@ -32,7 +32,7 @@ typedef bool (*bspFunction)(void* arg);
 /* Interface */
 /*************/
 /* Unique number for this thread */
-int32_t Proc_processorNumber (GC_state s);
+uint32_t Proc_processorNumber (GC_state s);
 /* Is the current processor the primary processor? */
 bool Proc_amPrimary (GC_state s);
 

@@ -1,10 +1,9 @@
 structure MLtonParallelInternal =
 struct
-    val processorNumber: unit -> Int32.int =
-        _import "Parallel_processorNumber" runtime private: unit -> Int32.int;
+    val processorNumber: unit -> Word32.word =
+        _import "Parallel_processorNumber" runtime private: unit -> Word32.word;
 
-    val numberOfProcessors: Int32.int =
-        Int32.toInt ((_import
-                          "Parallel_numberOfProcessors"
-                          runtime private: unit -> Int32.int;) ())
+    val numberOfProcessors: Word32.word =
+        (_import "Parallel_numberOfProcessors" runtime private:
+         unit -> Word32.word;) ()
 end

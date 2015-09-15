@@ -40,7 +40,7 @@ void updateWeaksForCheneyCopy (GC_state s) {
 void swapHeapsForCheneyCopy (GC_state s) {
   GC_heap tempHeap;
 
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     tempHeap = s->procStates[proc].secondaryHeap;
     s->procStates[proc].secondaryHeap = s->procStates[proc].heap;
     s->procStates[proc].heap = tempHeap;
@@ -124,7 +124,7 @@ void minorCheneyCopyGC (GC_state s) {
     return;
   s->cumulativeStatistics->bytesAllocated += bytesAllocated;
   if (not s->canMinor) {
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       /* Add in the bonus slop now since we need to fill it */
       s->procStates[proc].limitPlusSlop += GC_BONUS_SLOP;
       if (s->procStates[proc].limitPlusSlop != s->heap->frontier) {

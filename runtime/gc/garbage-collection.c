@@ -148,7 +148,7 @@ void performGC (GC_state s,
       + stackBytesRequested;
 
   getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     /* It could be that other threads have already worked to satisfy their own
        requests.  We need to make sure that we don't invalidate the work
        they've done.
@@ -169,7 +169,7 @@ void performGC (GC_state s,
                             nurseryBytesRequested));
   unless (stackTopOk)
     growStackCurrent (s, TRUE);
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     /* SPOONHOWER_NOTE: must come first to setup maps properly */
     s->procStates[proc].generationalMaps = s->generationalMaps;
     setGCStateCurrentThreadAndStack (&s->procStates[proc]);
@@ -383,7 +383,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       and (hasHeapBytesFree (s, 0, stackBytesRequested))) {
     if (DEBUG or s->controls->messages)
       fprintf (stderr, "GC: growing stack locally... [%d]\n",
-               s->procStates ? Proc_processorNumber (s) : -1);
+               s->procStates ? Proc_processorNumber (s) : 0);
     growStackCurrent (s, FALSE);
     setGCStateCurrentThreadAndStack (s);
   }
@@ -394,7 +394,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
              hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested),
              Proc_threadInSection (),
              forceGC,
-             s->procStates ? Proc_processorNumber (s) : -1);
+             s->procStates ? Proc_processorNumber (s) : 0);
   }
 
   if (/* check the stack of the current thread */
@@ -425,13 +425,13 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
     }
     else
       if (DEBUG or s->controls->messages)
-        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n", s->procStates ? Proc_processorNumber (s) : -1);
+        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n", s->procStates ? Proc_processorNumber (s) : 0);
 
     LEAVE0 (s);
   }
   else {
     if (DEBUG or s->controls->messages)
-      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", s->procStates ? Proc_processorNumber (s) : -1);
+      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", s->procStates ? Proc_processorNumber (s) : 0);
 
     /* These are safe even without ENTER/LEAVE */
     assert (isAligned (s->heap->size, s->sysvals.pageSize));

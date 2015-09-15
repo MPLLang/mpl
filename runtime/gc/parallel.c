@@ -17,7 +17,7 @@ void Parallel_init (void) {
      * SPOONHOWER_NOTE: hack copy the call-from-c-handler into the worker
      * threads assumes this is called by the primary thread
      */
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].callFromCHandlerThread = pointerToObjptr(
         GC_copyThread (s, objptrToPointer(s->callFromCHandlerThread,
                                           s->heap->start)),
@@ -175,12 +175,12 @@ void Parallel_dekkerRelease (Bool amLeft, Pointer left, Pointer right, Pointer l
   __sync_bool_compare_and_swap (mine, 1, 0);
 }
 
-Int32 Parallel_processorNumber (void) {
+Word32 Parallel_processorNumber (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   return Proc_processorNumber (s);
 }
 
-Int32 Parallel_numberOfProcessors (void) {
+Word32 Parallel_numberOfProcessors (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   return s->numberOfProcs;
 }

@@ -42,7 +42,7 @@ struct ForwardHHObjptrArgs {
  * @param queuePointer pointer to an object in the global heap that is the queue
  * to register
  */
-PRIVATE void HM_HHC_registerQueue(int processor, pointer queuePointer);
+PRIVATE void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer);
 
 /**
  * This function registers 'queueLockPointer' as the work stealing queue lock
@@ -58,7 +58,7 @@ PRIVATE void HM_HHC_registerQueue(int processor, pointer queuePointer);
  * @param queueLockPointer pointer to an int ref in the global heap that is the
  * queue lock to register
  */
-PRIVATE void HM_HHC_registerQueueLock(int processor, pointer queueLockPointer);
+PRIVATE void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

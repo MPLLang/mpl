@@ -80,7 +80,7 @@ void setGCStateCurrentHeap (GC_state s,
 
   if (not duringInit) {
     nurseryBytesRequested = 0;
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       GC_thread thread = getThreadCurrent(&s->procStates[proc]);
       if (thread)
         nurseryBytesRequested += thread->bytesNeeded;
@@ -199,7 +199,7 @@ void setGCStateCurrentHeap (GC_state s,
   frontier = nursery;
 
   if (not duringInit) {
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].canMinor = s->canMinor;
       assert (isFrontierAligned (s, frontier));
       s->procStates[proc].start = s->procStates[proc].frontier = frontier;
@@ -221,7 +221,7 @@ void setGCStateCurrentHeap (GC_state s,
   else {
     assert (Proc_processorNumber (s) == 0);
     /* SPOONHOWER_NOTE: this is a lot of copy-paste */
-    for (int proc = 1; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].canMinor = s->canMinor;
       assert (isFrontierAligned (s, frontier));
       s->procStates[proc].start = s->procStates[proc].frontier = frontier;

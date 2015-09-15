@@ -39,7 +39,7 @@ void foreachGlobalObjptr (GC_state s,
   if (DEBUG_DETAILED)
     fprintf (stderr, "foreachGlobal threads\n");
   if (s->procStates) {
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].currentThread, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].currentHierarchicalHeap, fArgs);
@@ -343,7 +343,7 @@ pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes) {
     modified = FALSE;
 
     /* can only be as many holes as processors */
-    for (int i = 0; i < s->numberOfProcs; i++) {
+    for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       if (nextP >= holes[i].start && nextP < holes[i].end) {
         nextP = holes[i].end;
         modified = TRUE;

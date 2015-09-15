@@ -69,8 +69,8 @@ fun prepare (t: 'a t, v: 'a): Runnable.t =
 fun new f = T (ref (New f))
 
 local
-   val numProcessors = MLtonParallelInternal.numberOfProcessors
-   val procNum = MLtonParallelInternal.processorNumber
+   val numProcessors = Word32.toInt MLtonParallelInternal.numberOfProcessors
+   val procNum = Word32.toInt o MLtonParallelInternal.processorNumber
    local
       (* create one reference per processor *)
       val func: (unit -> unit) option Array.array =

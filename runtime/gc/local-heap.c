@@ -40,7 +40,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          size_t bytesRequested) {
   assert (bytesRequested >= GC_HEAP_LIMIT_SLOP);
 
-  int processor = s->procStates ? Proc_processorNumber (s) : -1;
+  int processor = s->procStates ? Proc_processorNumber (s) : 0;
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
   HM_debugMessage(s,

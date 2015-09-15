@@ -53,7 +53,7 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes);
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-void HM_HHC_registerQueue(int processor, pointer queuePointer) {
+void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
@@ -64,7 +64,7 @@ void HM_HHC_registerQueue(int processor, pointer queuePointer) {
                                                       s->heap->start);
 }
 
-void HM_HHC_registerQueueLock(int processor, pointer queueLockPointer) {
+void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
@@ -145,7 +145,7 @@ void HM_HHC_collectLocal(void) {
   struct GlobalHeapHole holes[MAX_NUM_HOLES];
   populateGlobalHeapHoles(s, holes);
   pointer frontier = ((pointer)(0));
-  for (int i = 0; i < s->numberOfProcs; i++) {
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     if (frontier < holes[i].start) {
       frontier = holes[i].start;
     }
@@ -459,7 +459,7 @@ bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
 }
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
-  for (int i = 0; i < s->numberOfProcs; i++) {
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     pointer start = s->procStates[i].frontier;
     pointer end = s->procStates[i].limitPlusSlop;
 

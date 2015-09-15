@@ -52,7 +52,7 @@ static inline void assertIsObjptrReachable (GC_state s,
 }
 
 bool invariantForGC (GC_state s) {
-  int proc;
+  uint32_t proc;
   if (DEBUG)
     fprintf (stderr, "invariantForGC\n");
   /* Frame layouts */

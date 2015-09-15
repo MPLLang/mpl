@@ -133,7 +133,7 @@ struct
                           (* fn _ => singleLock) *)
                           fn _ => Lock { thiefLock = ref ~1, ownerLock = dekkerInit () })
   val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
-                      MLtonHM.registerQueueLock (p, thiefLock))
+                      MLtonHM.registerQueueLock (Word32.fromInt p, thiefLock))
                   locks
 
   val suspending = A.array (numberOfProcessors,
@@ -145,7 +145,7 @@ struct
                                    else NONE)
   val () = A.appi (fn (p, q) => case q
                                  of SOME (Queue {work = ref q, ...}) =>
-                                    MLtonHM.registerQueue (p, q)
+                                    MLtonHM.registerQueue (Word32.fromInt p, q)
                                   | _ => ())
                   queues
 
@@ -370,7 +370,7 @@ struct
             work := w;
             top := i - j;
             bottom := 0;
-            MLtonHM.registerQueue (p, w)
+            MLtonHM.registerQueue (Word32.fromInt p, w)
           end
       end
 
@@ -636,7 +636,7 @@ struct
                 val q as Queue {work = ref qArray, ...}= newQueue p
             in
                 A.update (queues, p, SOME q);
-                MLtonHM.registerQueue (p, qArray)
+                MLtonHM.registerQueue (Word32.fromInt p, qArray)
             end;
         count p "start" 0;
         releaseLock thiefLock (* XTRA *)

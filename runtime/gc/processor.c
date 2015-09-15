@@ -12,11 +12,12 @@
 /***************************/
 /* variables used in processor initialization */
 static volatile bool Proc_beginInit = FALSE;
-static volatile int32_t Proc_initializedCount = 0;
+static volatile uint32_t Proc_initializedCount = 0;
 
 /* variables used in Proc_{begin,end}CriticalSection() */
-static volatile int32_t Proc_syncCount;
-static volatile int32_t Proc_criticalTicket;
+static volatile uint32_t Proc_syncCount;
+static volatile bool Proc_criticalTicketActive;
+static volatile uint32_t Proc_criticalTicket;
 
 /* variables used in Proc_BSP() */
 static volatile enum BSPState Proc_bspState;
@@ -30,7 +31,8 @@ static struct rusage ru_crit;
 /* different start values to allow for comparison without arithmetic */
 #define Proc_SYNC_COUNT_INITIALIZER 0
 #define Proc_SYNC_COUNT_FIRST 1
-#define Proc_CRITICAL_TICKET_INITIALIZER -1
+#define Proc_CRITICAL_TICKET_ACTIVE_INITIALIZER FALSE
+#define Proc_CRITICAL_TICKET_INITIALIZER 0
 #define Proc_BSP_COUNT_INITIALIZER 0
 #define Proc_BSP_COUNT_FIRST 1
 
@@ -40,10 +42,10 @@ static struct rusage ru_crit;
 
 /* RAM_NOTE: Lack of barriers in these functions only works on x86! */
 
-int32_t Proc_processorNumber (GC_state s) {
-  for (int proc = 0; proc < s->numberOfProcs; proc ++) {
+uint32_t Proc_processorNumber (GC_state s) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc ++) {
     if (s == &(s->procStates[proc])) {
-      return (int32_t)proc;
+      return proc;
     }
   }
 
@@ -67,6 +69,7 @@ void Proc_waitForInitialization (GC_state s) {
 
 void Proc_signalInitialization (GC_state s) {
   Proc_syncCount = Proc_SYNC_COUNT_INITIALIZER;
+  Proc_criticalTicketActive = Proc_CRITICAL_TICKET_ACTIVE_INITIALIZER;
   Proc_criticalTicket = Proc_CRITICAL_TICKET_INITIALIZER;
   Proc_bspState = DONE;
 
@@ -85,10 +88,10 @@ void Proc_beginCriticalSection (GC_state s) {
   static struct rusage ru_sync;
 
   if (Proc_isInitialized (s)) {
-    int32_t myTicket = Proc_processorNumber (s);
+    uint32_t myTicket = Proc_processorNumber (s);
 
     pthread_mutex_lock_safe(&Proc_syncCountLock);
-    int32_t mySyncCount = __sync_add_and_fetch(&Proc_syncCount, 1);
+    uint32_t mySyncCount = __sync_add_and_fetch(&Proc_syncCount, 1);
 
     if ((Proc_SYNC_COUNT_FIRST == mySyncCount) && needGCTime(s)) {
       /* first thread in this round, and need to keep track of sync time */
@@ -103,6 +106,7 @@ void Proc_beginCriticalSection (GC_state s) {
         startTiming (RUSAGE_SELF, &ru_crit);
       }
       Proc_criticalTicket = 0;
+      Proc_criticalTicketActive = TRUE;
     }
     pthread_mutex_unlock_safe(&Proc_syncCountLock);
 
@@ -111,7 +115,7 @@ void Proc_beginCriticalSection (GC_state s) {
      * round
      */
     /* RAM_NOTE: This really should be a condition variable */
-    while (Proc_criticalTicket != myTicket) {}
+    while ((!Proc_criticalTicketActive) || (Proc_criticalTicket != myTicket)) {}
   }
   else {
     Proc_syncCount = 1;
@@ -120,7 +124,7 @@ void Proc_beginCriticalSection (GC_state s) {
 
 void Proc_endCriticalSection (GC_state s) {
   if (Proc_isInitialized (s)) {
-    int32_t myTicket = __sync_add_and_fetch (&Proc_criticalTicket, 1);
+    uint32_t myTicket = __sync_add_and_fetch (&Proc_criticalTicket, 1);
     if (myTicket == s->numberOfProcs) {
       /* We are the last to finish, so allow everyone to leave */
 
@@ -132,11 +136,12 @@ void Proc_endCriticalSection (GC_state s) {
       /* reset for next round */
       Proc_syncCount = Proc_SYNC_COUNT_INITIALIZER;
       Proc_criticalTicket = Proc_CRITICAL_TICKET_INITIALIZER;
+      Proc_criticalTicketActive = Proc_CRITICAL_TICKET_ACTIVE_INITIALIZER;
       __sync_synchronize ();
     }
 
     /* RAM_NOTE: This should also be a condition variable */
-    while (Proc_criticalTicket >= 0) {}
+    while (Proc_criticalTicketActive) {}
   }
   else {
     Proc_syncCount = 0;
@@ -152,7 +157,7 @@ bool Proc_BSP(GC_state s,
               size_t numFunctions,
               void** args) {
   static pthread_mutex_t Proc_bspCountLock = PTHREAD_MUTEX_INITIALIZER;
-  static volatile int32_t Proc_bspCount = Proc_BSP_COUNT_INITIALIZER;
+  static volatile uint32_t Proc_bspCount = Proc_BSP_COUNT_INITIALIZER;
 
   static struct rusage ru_sync;
   static struct rusage ru_bsp;
@@ -178,7 +183,7 @@ bool Proc_BSP(GC_state s,
   }
 
   pthread_mutex_lock_safe(&Proc_bspCountLock);
-  int32_t myBSPCount = __sync_add_and_fetch(&Proc_bspCount, 1);
+  uint32_t myBSPCount = __sync_add_and_fetch(&Proc_bspCount, 1);
 
   if ((Proc_BSP_COUNT_FIRST != myBSPCount) && amInitiator) {
     /* I lost the BSP race */

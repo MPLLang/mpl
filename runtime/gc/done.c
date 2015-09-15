@@ -128,7 +128,7 @@ void GC_done (GC_state s) {
   out = stderr;
   if (s->controls->summary) {
     if (s->procStates) {
-      for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
         fprintf (out, "Thread [%d]::\n", proc);
         displayCumulativeStatistics (out, s->procStates[proc].cumulativeStatistics);
       }
