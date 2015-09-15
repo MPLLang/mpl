@@ -427,7 +427,7 @@ struct
                               releaseLock thiefLock (* XTRA *))
                   end
             fun maybeCleanup () =
-                if p' < numberOfProcessors then false (* can't remove owned queues *)
+                (if p' < numberOfProcessors then false (* can't remove owned queues *)
                 else if p' >= !activeQueues then false (* can't remove inactive queues *)
                 else
                   let
@@ -442,15 +442,19 @@ struct
                     moveQueue (b, a);
                     totalQueues := b;
                     true
-                  end
+                  end)
+                    handle Overflow => (print "446\n";
+                                        raise WorkQueue)
           in
             case A.sub (queues, p')
-             of NONE => (incr failedSteals; unsync (); yield (); NONE)
+             of NONE => ((incr failedSteals; unsync (); yield (); NONE)
+                         handle Overflow => (print "449!\n";
+                                             raise WorkQueue))
               | SOME (q as Queue { bottom, top, work, index, ... }) =>
                 let
                   val j = !bottom
                   val i = !top
-                in
+                in(
                   if i <> j then (* not empty *)
                     if P.stealEntireQueues andalso p' >= numberOfProcessors
                        andalso (not P.stealFromSuspendedQueues orelse p' < !activeQueues) then
@@ -470,15 +474,19 @@ struct
                         top := i - 1;
                         case A.sub (!work, i - 1)
                          of Empty => raise WorkQueue
-                          | Marker => (pr p "queue-steal(marker):";
+                          | Marker => ((pr p "queue-steal(marker):";
                                        (* count the steal here since we won't
                                            count it next time *)
                                        incr successfulSteals;
                                        NONE)
+                                       handle Overflow => (print "480\n";
+                                                           raise WorkQueue))
                           | Work tw =>
-                            (pr p "queue-steal:";
+                            ((pr p "queue-steal:";
                              incr successfulSteals;
                              SOME (true, #2 tw))
+                             handle Overflow => (print "486!\n";
+                                                 raise WorkQueue))
                       end
                         before (A.update (!work, i - 1, Empty);
                                 count p "queue-steal" ~1;
@@ -495,19 +503,24 @@ struct
                          of Empty => raise WorkQueue
                           | Marker => NONE
                           | Work tw =>
-                            (pr p "work-steal:";
+                            ((pr p "work-steal:";
                              incr successfulSteals;
                              SOME (true, #2 tw))
+                             handle Overflow => (print "507\n";
+                                                 raise WorkQueue))
                       end
                         before (count p "work-steal" ~1;
                                 unsync ())
                   else (* empty queue *)
-                    (ignore (maybeCleanup ());
+                    ((ignore (maybeCleanup ());
                      count p "failed-steal" 0;
                      incr failedSteals;
                      unsync (); yield (); NONE)
-
-                end
+                     handle Overflow => (print "517!\n";
+                                         raise WorkQueue)))
+                  end
+                  handle Overflow => (print "522!\n";
+                                      raise WorkQueue)
           end
     in
       case A.sub (queues, p)

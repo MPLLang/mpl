@@ -10,6 +10,8 @@ sig
   (* a suspended computation waiting for a value of type 'a *)
   type 'a t
 
+  val addtoio : unit t * (unit -> bool) -> unit
+
   (* Suspends the current thread of execution and runs the given function,
     passing in a reified form of the original thread.  The given function must
     not call any other function in this signature. *) 

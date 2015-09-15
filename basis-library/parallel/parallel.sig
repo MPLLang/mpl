@@ -7,6 +7,8 @@ sig
   structure FutureSuspend : MLTON_PARALLEL_FUTURE
   structure FutureSuspendDelay : MLTON_PARALLEL_FUTURE
   structure FutureSuspendMaybeDelay : MLTON_PARALLEL_FUTURE
+  structure SyncVarSuspend : MLTON_PARALLEL_SYNCVAR
+  (* structure IO : MLTON_PARALLEL_IO *)
 (*
   structure FutureCapture : MLTON_PARALLEL_FUTURE
   structure FutureCaptureDelay : MLTON_PARALLEL_FUTURE

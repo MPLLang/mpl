@@ -49,6 +49,11 @@ struct
                 B.suspend (fn k => (v := Waiting (k::readers); unlock r))
           end
 
+  fun poll (r, v) =
+      case !v of
+          Done a => SOME a
+        | Waiting _ => NONE
+
 (*
   fun read (r, v) =
       case !v

@@ -35,10 +35,46 @@ struct
 
   val enabled = ref true
 
+  val ioqueues = Array.array (numberOfProcessors, [])
+
+  fun addtoio ((t, f) : unit t * (unit -> bool)) =
+      let val p = processorNumber ()
+          val q = Array.sub (ioqueues, p)
+      in
+          Array.update (ioqueues, p, (t, f)::q)
+      end
+
+
+  fun resume (Suspend (k, q), v) =
+      let
+        val p = processorNumber ()
+      in
+        Q.resumeWork (p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
+      end
+    | resume (Capture k, v) =
+      let
+        val p = processorNumber ()
+      in
+        Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => v)))])
+      end
+
+  fun procio p =
+      let val q = Array.sub (ioqueues, p)
+          val q' =
+              List.foldl
+                  (fn ((t, f), r) => if f () then (resume (t, ()); r)
+                                     else (t, f)::r)
+                  []
+                  q
+      in
+          Array.update (ioqueues, p, q')
+      end
+
   fun schedule countSuspends () =
     let
       fun loop (countSuspends, p) =
-          let in
+          let val _ = procio p
+          in
             case Q.getWork p
              of NONE =>
                 let in
@@ -134,19 +170,6 @@ struct
             end
       in
         capture' (p, tail)
-      end
-
-  fun resume (Suspend (k, q), v) =
-      let
-        val p = processorNumber ()
-      in
-        Q.resumeWork (p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
-      end
-    | resume (Capture k, v) =
-      let
-        val p = processorNumber ()
-      in
-        Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => v)))])
       end
 
   fun yield () =

@@ -10,4 +10,6 @@ sig
   (* true if read led to a suspension *)
   val read : 'a t -> bool * 'a
 
+  val poll : 'a t -> 'a option
+
 end

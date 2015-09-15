@@ -12,6 +12,8 @@ sig
   (* force the execution of a future if that has not yet occured. *)
   val touch : 'a t -> 'a
 
+  val poll : 'a t -> 'a option
+
   val reportSuspends : unit -> int
   val resetSuspends : unit -> unit
 

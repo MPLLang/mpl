@@ -40,6 +40,12 @@ struct
         | Raised e => raise e
       end
 
+  fun poll v =
+      case V.poll v of
+          NONE => NONE
+        | SOME (Finished a) => SOME a
+        | SOME (Raised e) => raise e
+
   fun reportSuspends () = !suspends
   fun resetSuspends () = suspends := 0
 
