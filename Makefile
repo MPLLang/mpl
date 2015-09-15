@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/mlton-spoonhower
+MLTON := $(BIN)/mlton-parmem
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
@@ -46,7 +46,7 @@ else
 endif
 
 ifeq ($(origin VERSION), undefined)
-	VERSION := mlton-spoonhower.$(shell date +%Y%m%d)
+	VERSION := mlton-parmem.$(shell date +%Y%m%d)
 endif
 ifeq ($(origin RELEASE), undefined)
 	RELEASE := 1
