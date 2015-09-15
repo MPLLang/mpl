@@ -19,7 +19,6 @@
  * This is a convenience function for logging which automatically fetches the
  * processor number and function name
  *
- * @param s The GC_state to use to fetch the processor number
  * @param logPredicate See L_log()
  * @param flush See L_Log()
  * @param level See L_Log()
