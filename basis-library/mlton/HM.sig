@@ -17,10 +17,9 @@ signature MLTON_HM =
 
                       val setLevel: t * int -> unit
                       val getLevel: t -> int
-                      val setSharedLevel: t * int -> unit
                       val promoteChunks: t -> unit
 
-                      val appendChild: (t * t) -> unit
+                      val appendChild: (t * t * int) -> unit
                       val mergeIntoParent: t -> unit
 
                       val useHierarchicalHeap: unit -> unit

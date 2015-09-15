@@ -12,10 +12,13 @@
  * invariant.
  */
 void enter (GC_state s) {
-  LOG(s, DEBUG, true, L_DEBUG, "starting...");
+  LOG(DEBUG, true, L_DEBUG, "starting...");
 
-  #pragma message "This should be more nuanced with HH collection"
+#pragma message "Delete when confirmed correct"
+#if 0
+#pragma message "This should be more nuanced with HH collection"
   HM_enterGlobalHeap ();
+#endif
 
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -24,13 +27,16 @@ void enter (GC_state s) {
   Proc_beginCriticalSection(s);
   beginAtomic (s);
 
-  LOG(s, DEBUG, true, L_DEBUG, "locked");
+  LOG(DEBUG, true, L_DEBUG, "locked");
   if (DEBUG)
     displayGCState (s, stderr);
 
-  assert (invariantForGC (s));
+#pragma message "Adjust this invariant to take into account not-in-GH entries"
+#if 0
+    assert (invariantForGC (s));
+#endif
 
-  LOG(s, DEBUG, true, L_DEBUG, "okay");
+  LOG(DEBUG, true, L_DEBUG, "okay");
 
   switch (s->syncReason) {
     case SYNC_NONE:
@@ -58,21 +64,34 @@ void enter (GC_state s) {
       s->cumulativeStatistics->syncMisc++;
       break;
     default:
-      DIE(s, "Unknown sync reason!");
+      DIE("Unknown sync reason!");
   }
 }
 
 void leave (GC_state s) {
-  LOG(s, DEBUG, true, L_DEBUG, "starting...");
+  LOG(DEBUG, true, L_DEBUG, "starting...");
   /* The mutator frontier invariant may not hold
    * for functions that don't ensureBytesFree.
    */
-  assert (invariantForMutator (s, FALSE, TRUE));
+  /* Taken from assert (invariantForMutator (s, FALSE, TRUE)); */
+  if (DEBUG) {
+    displayGCState (s, stderr);
+  }
+  assert (invariantForMutatorStack(s));
+
+#pragma message "Adjust this invariant to take into account not-in-GH entries"
+#if 0
+  assert (invariantForGC (s));
+#endif
+
   endAtomic (s);
   s->syncReason = SYNC_NONE;
-  LOG(s, DEBUG, true, L_DEBUG, "okay");
+  LOG(DEBUG, true, L_DEBUG, "okay");
   Proc_endCriticalSection(s);
-  LOG(s, DEBUG, true, L_DEBUG, "unlocked");
+  LOG(DEBUG, true, L_DEBUG, "unlocked");
+#pragma message "Delete when confirmed correct"
+#if 0
 #pragma message "This should be more nuanced with HH collection"
   HM_exitGlobalHeap();
+#endif
 }

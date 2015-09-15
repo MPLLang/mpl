@@ -147,8 +147,9 @@ structure HM =
             struct
                 type t = HM.HierarchicalHeap.t
 
-                val appendChildHeap: t * t -> unit =
-                    _import "HM_HH_appendChild" runtime private: t * t -> unit;
+                val appendChildHeap: t * t * Word32.word -> unit =
+                    _import "HM_HH_appendChild" runtime private:
+                    t * t * Word32.word -> unit;
 
                 val getHierarchicalHeap: unit -> t =
                     _import "GC_getCurrentHierarchicalHeap" runtime private:
@@ -178,10 +179,6 @@ structure HM =
                 val setCurrentThreadUseHierarchicalHeap: unit -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"
                             runtime private: unit -> unit;
-
-                val setSharedLevel: t * Word32.word -> unit =
-                    _import "HM_HH_setSharedLevel" runtime private:
-                    t * Word32.word -> unit;
             end
 
         val enterGlobalHeap: unit -> unit =

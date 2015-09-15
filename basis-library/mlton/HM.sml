@@ -23,12 +23,13 @@ structure MLtonHM:> MLTON_HM =
                  fn (hh, level) => PrimHH.setLevel (hh, Word32.fromInt level)
                 val getLevel: t -> int =
                  fn hh => Word32.toInt (PrimHH.getLevel hh)
-                val setSharedLevel: t * int -> unit =
-                 fn (hh, level) => PrimHH.setSharedLevel (hh,
-                                                          Word32.fromInt level)
                 val promoteChunks: t -> unit = PrimHH.promoteChunks
 
-                val appendChild: (t * t) -> unit = PrimHH.appendChildHeap
+                val appendChild: (t * t * int) -> unit =
+                 fn (parentHH, childHH, stealLevel) =>
+                    PrimHH.appendChildHeap (parentHH,
+                                            childHH,
+                                            Word32.fromInt stealLevel)
                 val mergeIntoParent: t -> unit = PrimHH.mergeIntoParentHeap
 
                 val useHierarchicalHeap: unit -> unit =

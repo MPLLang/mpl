@@ -4,7 +4,7 @@ sig
   (* processor identifier *)
   type proc = int
   (* setSharedLevel parameters *)
-  type share = (MLtonHM.HierarchicalHeap.t * int) option
+  type share = MLtonHM.HierarchicalHeap.t * int option
   (* abstract type of work *)
   type work
   (* identifies a piece of work *)

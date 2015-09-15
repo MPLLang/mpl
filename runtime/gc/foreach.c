@@ -9,7 +9,7 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-pointer nextValidPointer(GC_state s, pointer p);
+pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes);
 
 /************************/
 /* Function Definitions */
@@ -254,7 +254,7 @@ pointer foreachObjptrInRange (GC_state s,
                               pointer front,
                               pointer *back,
                               bool skipWeaks,
-                              bool unsynchronizedCall,
+                              struct GlobalHeapHole* holes,
                               ObjptrPredicateFunction predicate,
                               void* pArgs,
                               ForeachObjptrFunction f,
@@ -281,9 +281,9 @@ pointer foreachObjptrInRange (GC_state s,
       assert (isAligned ((size_t)p, s->alignment));
       front =
           foreachObjptrInObject (s, p, skipWeaks, predicate, pArgs, f, fArgs);
-      if (unsynchronizedCall) {
+      if (NULL != holes) {
         /* advance front until I am not in the middle of a per-proc nursery */
-        front = nextValidPointer(s, front);
+        front = nextValidPointer(s, front, holes);
       }
     }
     b = *back;
@@ -335,24 +335,17 @@ bool trueObjptrPredicate(GC_state s, pointer p, void* args) {
 /*******************************/
 /* Static Function Definitions */
 /*******************************/
-pointer nextValidPointer(GC_state s, pointer p) {
+pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes) {
   pointer nextP = p;
   bool modified;
 
   do {
     modified = FALSE;
 
+    /* can only be as many holes as processors */
     for (int i = 0; i < s->numberOfProcs; i++) {
-      pointer nurseryFrontier = s->procStates[i].frontier;
-      pointer nurseryLimitPlusSlop = s->procStates[i].limitPlusSlop;
-      if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(nurseryFrontier,
-                                                            s->heap->start))) {
-        nurseryFrontier = s->procStates[i].globalFrontier;
-        nurseryLimitPlusSlop = s->procStates[i].globalLimitPlusSlop;
-      }
-
-      if (nextP >= nurseryFrontier && nextP < nurseryLimitPlusSlop) {
-        nextP = nurseryLimitPlusSlop;
+      if (nextP >= holes[i].start && nextP < holes[i].end) {
+        nextP = holes[i].end;
         modified = TRUE;
       }
     }

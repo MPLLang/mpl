@@ -125,7 +125,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   hh->lastAllocatedChunk = NULL;
   hh->lock = HM_HH_LOCK_INITIALIZER;
   hh->level = 0;
-  hh->lastSharedLevel = HM_HH_INVALID_LEVEL;
+  hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;
   hh->levelList = NULL;
   hh->parentHH = BOGUS_OBJPTR;

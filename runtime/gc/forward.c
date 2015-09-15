@@ -229,7 +229,7 @@ checkCard:
                                         objectStart,
                                         &cardEnd,
                                         FALSE,
-                                        FALSE,
+                                        NULL,
                                         trueObjptrPredicate,
                                         NULL,
                                         forwardObjptrIfInNursery,

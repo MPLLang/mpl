@@ -20,7 +20,7 @@
 /**
  * CHUNK_INVALID_LEVEL denotes an invalid level value for HM_ChunkInfo::level.
  */
-#define CHUNK_INVALID_LEVEL (~((size_t)(0LL)))
+#define CHUNK_INVALID_LEVEL (~((Word32)(0)))
 
 /**
  * @brief
@@ -34,9 +34,11 @@ struct HM_ChunkInfo {
 
   void* nextChunk; /**< The next chunk in the heap's chunk list */
 
-  size_t level; /**< The level of this chunk. If set to CHUNK_INVALID_LEVEL,
+  Word32 level; /**< The level of this chunk. If set to CHUNK_INVALID_LEVEL,
                  * this chunk is not a level head and the level can be found by
                  * following split::normal::levelHead fields. */
+
+  uint32_t padding; /**< Unused padding bytes to keep alignment */
 
   union {
     struct {
@@ -62,7 +64,8 @@ COMPILE_TIME_ASSERT(HM_ChunkInfo__packed,
                     sizeof(struct HM_ChunkInfo) ==
                     sizeof(void*) +
                     sizeof(void*) +
-                    sizeof(size_t) +
+                    sizeof(Word32) +
+                    sizeof(uint32_t) +
                     sizeof(void*) +
                     sizeof(void*) +
                     sizeof(struct HM_HierarchicalHeap*));
@@ -202,7 +205,7 @@ struct HM_HierarchicalHeap* HM_getContainingHierarchicalHeap(objptr object);
  * @return CHUNK_INVALID_LEVEL if levelList is empty, the highest level
  * otherwise
  */
-size_t HM_getHighestLevel(const void* levelList);
+Word32 HM_getHighestLevel(const void* levelList);
 
 /**
  * Gets the level of an objptr in the hierarchical heap
@@ -249,8 +252,9 @@ void HM_promoteChunks(void** levelList, size_t level);
  * macro.
  *
  * @param levelList The level list to assert invariants for.
+ * @param stealLevel The level this level list was stolen from.
  */
-void HM_assertLevelListInvariants(const void* levelList);
+void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel);
 
 /**
  * Updates the chunk's values to reflect mutator

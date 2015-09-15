@@ -22,7 +22,7 @@ functor WorkStealing (structure W : sig type work val numberOfProcessors : unit 
 struct
 
   type proc = int
-  type share = (MLtonHM.HierarchicalHeap.t * int) option
+  type share = MLtonHM.HierarchicalHeap.t * int option
   type work = W.work
 
   val successfulSteals = ref 0
@@ -77,6 +77,14 @@ struct
                flushOut stdErr;
                (* XX releaseLock (); *)
                raise Impossible)
+  end
+
+  local
+    exception Impossible
+    open TextIO
+  in
+      fun UBPrint m = (output (stdOut, m);
+                       flushOut stdOut)
   end
 
   exception WorkQueue
@@ -148,6 +156,24 @@ struct
   fun next () = !r before r := !r + 1
   end
 *)
+
+  fun assertToken location (Token t) p =
+      let
+          val pString = Int.toString p
+      in
+          case A.sub (queues, p)
+           of NONE => die ("assertToken(" ^ location ^"): Processor " ^
+                           pString ^ " does not have queue!")
+           | SOME pq => case !t
+                         of NONE => die ("assertToken(" ^ location ^
+                                         "): t is NONE!")
+                          | SOME tq => if tq <> pq
+                                       then die ("assertToken(" ^ location ^
+                                                 "): Token's queue does not" ^
+                                                 "match Processor " ^ pString ^
+                                                 " queue!")
+                                       else ()
+      end
 
   local
     structure I = Primitive.Int32
@@ -364,7 +390,8 @@ struct
           in
             r := SOME q;
             A.update (!work, i, Work (t, w, share));
-            top := i + 1
+            top := i + 1;
+            assertToken "add" t p
           end
     in
       app add tws;
@@ -502,8 +529,11 @@ struct
                       (*           unsync ()) *)
                     else
                       let (* Just steal the oldest task *)
+                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal start\n")
                         val w = A.sub (!work, j)
+                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal WIP\n")
                         val () = A.update (!work, j, Empty)
+                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal done\n")
                       in
                         if i = j + 1 andalso maybeCleanup () then ()
                         else ();
@@ -512,12 +542,23 @@ struct
                          of Empty => raise WorkQueue
                           | Marker => NONE
                           | Work tw =>
-                            (pr p "work-steal:";
+                            (assertToken "steal" (#1 tw) p';
+                             pr p "work-steal:";
                              incr successfulSteals;
                              (case #3 tw
-                               of NONE => ()
-                                | SOME (hh, sharedLevel) =>
-                                  HH.setSharedLevel (hh, sharedLevel));
+                               of (hh, NONE) => HH.set hh (*
+                                                           * This piece of work
+                                                           * isn't derived, so
+                                                           * no HH bookkeeping
+                                                           * to do
+                                                           *)
+                               | (hh, SOME sharedLevel) =>
+                                 let
+                                     val childHH = HH.new ()
+                                 in
+                                     HH.appendChild (hh, childHH, sharedLevel);
+                                     HH.set childHH
+                                 end);
                              SOME (true, #2 tw))
                       end
                         before (count p "work-steal" ~1;
@@ -543,16 +584,17 @@ struct
                    (* release lock in steal *)
                    steal ())
                 else if P.stealOldestFromSelf andalso A.sub (suspending, p) then
-                  (bottom := j + 1;
-                   pr p "get-oldest:";
-                   case A.sub (!work, j)
-                    of Empty => raise WorkQueue
-                     | Marker => NONE (* just return and loop again *)
-                     | Work tw => SOME (true, #2 tw))
-                  before (A.update (!work, j, Empty);
-                          count p "get-oldest" ~1;
-                          (* dekkerUnlock (true, lock); *)
-                          releaseLock thiefLock) (* XTRA *)
+                    die "Invalid Steal Mode"
+                    (* (bottom := j + 1; *)
+                    (*  pr p "get-oldest:"; *)
+                    (*  case A.sub (!work, j) *)
+                    (*   of Empty => raise WorkQueue *)
+                    (*    | Marker => NONE (* just return and loop again *) *)
+                    (*    | Work tw => SOME (true, #2 tw)) *)
+                    (* before (A.update (!work, j, Empty); *)
+                    (*         count p "get-oldest" ~1; *)
+                    (*         (* dekkerUnlock (true, lock); *) *)
+                    (*         releaseLock thiefLock) (* XTRA *) *)
                 else (* Take the youngest from our queue *)
                   (top := i - 1;
                    pr p "get:";
@@ -563,11 +605,18 @@ struct
                                   case getWork p
                                    of NONE => NONE
                                     | SOME (_, w) => SOME (true, w))
-                     | Work tw => SOME (false, #2 tw)
-                                  before (A.update (!work, i - 1, Empty);
-                                          count p "get" ~1;
-                                          (* dekkerUnlock (true, lock); *)
-                                          releaseLock thiefLock  ) (* XTRA *))
+                     | Work tw =>
+                       let
+                           val () = assertToken "normal" (#1 tw) p
+                           val (hh, _) = #3 tw
+                       in
+                           HH.set hh;
+                           SOME (false, #2 tw)
+                       end
+                       before (A.update (!work, i - 1, Empty);
+                               count p "get" ~1;
+                               (* dekkerUnlock (true, lock); *)
+                               releaseLock thiefLock  ) (* XTRA *))
               end
     end
   end

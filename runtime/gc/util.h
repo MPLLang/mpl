@@ -25,25 +25,27 @@
  * @param level See L_Log()
  * @param ... Both the format and the arguments for the message
  */
-#define LOG(s, logPredicate, flush, level, ...)  \
-  L_log(logPredicate,                                    \
-        flush,                                           \
-        level,                                           \
-        Proc_processorNumber(s),                         \
-        __func__,                                        \
-        __VA_ARGS__)
+#define LOG(logPredicate, flush, level, ...)                            \
+  do {                                                                  \
+    if (logPredicate) {                                                 \
+      L_log(flush,                                                      \
+            level,                                                      \
+            Proc_processorNumber(pthread_getspecific(gcstate_key)),     \
+            __func__,                                                   \
+            __VA_ARGS__);                                               \
+    }                                                                   \
+  } while(FALSE)
 
 /**
  * Improved die() using the logger
  *
- * @param s The GC_state to use to fetch the processor number. See 'LOG()'.
  * @param ... Both the format and the arguments for the message.
  */
-#define DIE(s, ...)                               \
+#define DIE(...)                                  \
   do {                                            \
     fflush(NULL);                                 \
-    LOG(s, true, true, L_ERROR, __VA_ARGS__);     \
+    LOG(true, true, L_ERROR, __VA_ARGS__);        \
     exit(1);                                      \
-  } while(false)
+  } while(FALSE)
 
 #endif /* UTIL_H_ */

@@ -191,7 +191,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
        *)
       val _ =
          let
-            fun handleStatement (Statement.T {exp, var, ...}) =
+            fun handleStatement (Statement.T {exp, ...}) =
                case exp of
                   ConApp {con, ...} => setConRep (con, ConRep.Useful)
                 | PrimApp {prim, ...} =>

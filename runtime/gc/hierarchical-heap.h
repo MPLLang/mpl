@@ -10,7 +10,8 @@
  * @author Ram Raghunathan
  *
  * @brief
- * Definition of the HierarchicalHeap object and management interface
+ * Definition of the HierarchicalHeap object and management interface. This
+ * module belongs in the HeapManagement::HierarchicalHeap (HM_HH) namespace
  */
 
 #ifndef HIERARCHICAL_HEAP_H_
@@ -18,6 +19,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 /* RAM_NOTE: May need to be rearranged for cache efficiency */
+/* RAM_NOTE: Needs to be renamed to HM_HH_HierarchicalHeap */
 /**
  * @brief
  * Represents a "node" of the hierarchical heap and contains various data
@@ -29,7 +31,7 @@
  * padding ::
  * lock (Int32) ::
  * level (Word32) ::
- * lastSharedLevel (Word32) ::
+ * stealLevel (Word32) ::
  * id (Word32) ::
  * chunkList (void*) ::
  * parentHH (objptr) ::
@@ -47,8 +49,7 @@ struct HM_HierarchicalHeap {
   Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
-  Word32 lastSharedLevel; /**< The last shared level for this heap, beyond which
-                           * I cannot locally collect */
+  Word32 stealLevel; /**< The parent's level that I stole from */
 
   Word32 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
@@ -68,8 +69,9 @@ struct HM_HierarchicalHeap {
                        * pointer for the intrusive linked list. */
 
   objptr childHHList; /**< The list of heaps that are derived from this
-                       * heap. All heaps in this list should have their
-                       * 'parentHH' set to this object. */
+                       * heap. All heaps in this list have their 'parentHH' set
+                       * to this object. In addition, it is in descending order
+                       * of 'stealLevel' */
 } __attribute__((packed));
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
@@ -89,7 +91,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
  * This value is an "invalid" level and used for HM_HierarchicalHeap
  * initialization
  */
-#define HM_HH_INVALID_LEVEL (~((Word32)(0)))
+#define HM_HH_INVALID_LEVEL CHUNK_INVALID_LEVEL
 
 /**
  * This is the value of HM_HierarchicalHeap::lock when locked
@@ -120,8 +122,11 @@ struct HM_HierarchicalHeap;
  * @param parentHH The source struct HM_HierarchicalHeap
  * @param childHH The struct HM_HierarchicalHeap set to be derived off of
  * 'parentHH'.
+ * @param stealLevel The level at the parent which the child has stolen off of.
  */
-PRIVATE void HM_HH_appendChild(pointer parentHHPointer, pointer childHHPointer);
+PRIVATE void HM_HH_appendChild(pointer parentHHPointer,
+                               pointer childHHPointer,
+                               Word32 stealLevel);
 
 /**
  * Gets the current level from a struct HM_HierarchicalHeap
@@ -162,14 +167,6 @@ PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
  * @param level The level to set
  */
 PRIVATE void HM_HH_setLevel(pointer hhPointer, size_t level);
-
-/**
- * Sets the shared level of the struct HM_HierarchicalHeap to include 'level'
- *
- * @param hhPointer The pointer to the struct HM_HierarchicalHeap to modify
- * @param level The level to include in the shared set.
- */
-PRIVATE void HM_HH_setSharedLevel(pointer hhPointer, size_t level);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -230,6 +227,27 @@ struct HM_HierarchicalHeap* HM_HH_getContaining(GC_state s, objptr object);
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
 
 /**
+ * Returns the highest stolen level
+ *
+ * @param s The GC_state to use
+ * @param hh The hierarchical heap to inspect
+ *
+ * @return HM_HH_INVALID_LEVEL if nothing was stolen, the highest stolen level
+ * otherwise
+ */
+Word32 HM_HH_getHighestStolenLevel(GC_state s,
+                                   const struct HM_HierarchicalHeap* hh);
+
+/**
+ * Gets the heap limit from a struct HM_HierarchicalHeap
+ *
+ * @param hh The struct HM_HierarchicalHeap to use
+ *
+ * @return the heap limit
+ */
+void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
+
+/**
  * Gets the level of an objptr in the hierarchical heap
  *
  * @attention
@@ -252,15 +270,6 @@ Word32 HM_HH_getObjptrLevel(GC_state s, objptr object);
  * exitLocalHeap().
  */
 void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh);
-
-/**
- * Gets the heap limit from a struct HM_HierarchicalHeap
- *
- * @param hh The struct HM_HierarchicalHeap to use
- *
- * @return the heap limit
- */
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Checks if 'candidateObjptr' belongs to the hierarchical heap space.

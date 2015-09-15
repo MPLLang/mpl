@@ -55,8 +55,10 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Entering "
                     "Management Heap GC\n",
                     processor);
+    HM_enterGlobalHeap();
     ENTER0(s);
     LEAVE0(s);
+    HM_exitGlobalHeap();
     HM_debugMessage(s,
                     "[%d] HM_ensureHierarchicalHeapAssurances(): Exiting "
                     "Management Heap GC\n",

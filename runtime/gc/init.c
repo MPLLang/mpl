@@ -198,7 +198,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (0 == strcmp(filePath, "-")) {
             L_setFile(stdout);
           } else {
-            FILE* file = fopen(argv[i++], "w");
+            FILE* file = fopen(filePath, "w");
             if (NULL == file) {
               diee("@MLton Could not open specified log file.");
             } else {

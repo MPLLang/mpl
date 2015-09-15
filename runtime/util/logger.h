@@ -49,7 +49,6 @@ void L_setFile(FILE* file);
  * As this function prepends the message with message metadata, the formatted
  * message length cannot exceed MAX_MESSAGE_LENGTH or it will be truncated.
  *
- * @param logPredicate Predicate for whether to log or not
  * @param flush Whether to flush after logging or not
  * @param level The log level of this message
  * @param processor The processor logging this message
@@ -57,13 +56,12 @@ void L_setFile(FILE* file);
  * @param format The format of the message as per 'printf()'
  * @param ... The format arguments as per 'printf()'
  */
-void L_log(bool logPredicate,
-           bool flush,
+void L_log(bool flush,
            enum LogLevel level,
            size_t processor,
            const char* function,
            const char* format,
            ...)
-    __attribute__((format (printf, 6, 7)));
+    __attribute__((format (printf, 5, 6)));
 
 #endif /* LOGGER_H_ */

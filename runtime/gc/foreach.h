@@ -8,6 +8,11 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+struct GlobalHeapHole {
+  pointer start;
+  pointer end;
+};
+
 typedef bool (*ObjptrPredicateFunction) (GC_state s, pointer p, void* args);
 typedef void (*ForeachObjptrFunction) (GC_state s, objptr *opp, void* args);
 
@@ -53,7 +58,7 @@ static inline pointer foreachObjptrInRange (GC_state s,
                                             pointer front,
                                             pointer *back,
                                             bool skipWeaks,
-                                            bool unsynchronizedCall,
+                                            struct GlobalHeapHole* holes,
                                             ObjptrPredicateFunction predicate,
                                             void* pArgs,
                                             ForeachObjptrFunction f,

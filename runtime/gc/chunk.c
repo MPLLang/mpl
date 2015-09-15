@@ -145,6 +145,9 @@ void* HM_allocateChunk(void* levelHeadChunk,
   /* populate chunkEnd */
   *chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
 
+  LOG(TRUE, TRUE, L_DEBUG,
+      "Allocate chunk at level %u", getChunkInfo(levelHeadChunk)->level);
+
   return chunk;
 }
 
@@ -175,6 +178,9 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   /* populate chunkEnd */
   *chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
 
+  LOG(TRUE, TRUE, L_DEBUG,
+      "Allocate chunk at level %u", level);
+
   return chunk;
 }
 
@@ -185,7 +191,8 @@ void HM_forwardHHObjptrsInLevelList(GC_state s,
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = minLevel,
-    .maxLevel = 0
+    .maxLevel = 0,
+    .log = FALSE
   };
 
   for (void* levelHead = *levelList;
@@ -222,9 +229,17 @@ void HM_freeChunks(void** levelList, Word32 minLevel) {
     .chunkList = NULL,
     .minLevel = minLevel
   };
+  LOG(TRUE, TRUE, L_DEBUG,
+      "START FreeChunks levelList = %p, minLevel = %u",
+      ((void*)(iteratorArgs.levelList)),
+      iteratorArgs.minLevel);
   LOCAL_USED_FOR_ASSERT bool result =
       ChunkPool_iteratedFree(HM_freeLevelListIterator, &iteratorArgs);
   assert(result);
+  LOG(TRUE, TRUE, L_DEBUG,
+      "END FreeChunks levelList = %p, minLevel = %u",
+      ((void*)(iteratorArgs.levelList)),
+      iteratorArgs.minLevel);
 }
 
 void* HM_getChunkFrontier(void* chunk) {
@@ -267,7 +282,7 @@ struct HM_HierarchicalHeap* HM_getContainingHierarchicalHeap(objptr object) {
   return getChunkInfo(levelHeadChunk)->split.levelHead.containingHH;
 }
 
-size_t HM_getHighestLevel(const void* levelList) {
+Word32 HM_getHighestLevel(const void* levelList) {
   if (NULL == levelList) {
     return CHUNK_INVALID_LEVEL;
   }
@@ -391,22 +406,24 @@ void HM_promoteChunks(void** levelList, size_t level) {
 }
 
 #if ASSERT
-void HM_assertLevelListInvariants(const void* levelList) {
-  size_t lastLevel = ~((size_t)(0LL));
+void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel) {
+  Word32 previousLevel = ~((Word32)(0));
   for (const void* chunkList = levelList;
        NULL != chunkList;
        chunkList = getChunkInfoConst(chunkList)->split.levelHead.nextHead) {
-    size_t level = getChunkInfoConst(chunkList)->level;
+    Word32 level = getChunkInfoConst(chunkList)->level;
     assert(CHUNK_INVALID_LEVEL != level);
-    assert(level < lastLevel);
-    lastLevel = level;
+    assert(level < previousLevel);
+    assert((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel));
+    previousLevel = level;
 
     HM_assertChunkListInvariants(chunkList);
   }
 }
 #else
-void HM_assertLevelListInvariants(const void* levelList) {
+void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel) {
   ((void)(levelList));
+  ((void)(stealLevel));
 }
 #endif /* ASSERT */
 
@@ -490,9 +507,17 @@ void* HM_freeLevelListIterator(void* arg) {
       return NULL;
     }
 
+    /* we should be at a levelHead */
+    assert(getChunkInfo(state->chunkList)->level != CHUNK_INVALID_LEVEL);
+
     /* this chunk list will be freed, so unlink and advance level list */
     *(state->levelList) =
         getChunkInfo(state->chunkList)->split.levelHead.nextHead;
+
+    LOG(TRUE, TRUE, L_DEBUG,
+        "Freeing chunk list at level %u %u",
+        getChunkInfo(state->chunkList)->level,
+        state->minLevel);
   }
 
   void* chunk = state->chunkList;

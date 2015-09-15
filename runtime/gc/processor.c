@@ -166,7 +166,7 @@ bool Proc_BSP(GC_state s,
   static void* * volatile sharedArgs;
 
   if (!Proc_isInitialized(s)) {
-    DIE(s, "Processors are not initialized!");
+    DIE("Processors are not initialized!");
   }
 
   bool amInitiator = (NULL != functions);

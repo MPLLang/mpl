@@ -268,7 +268,9 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 
         /* done with free list modifications at this point, so unlock */
         pthread_mutex_unlock_safe(&ChunkPool_lock);
-        return ChunkPool_chunkMetadataToChunk (cursor);
+        void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
+        LOG(TRUE, TRUE, L_DEBUG, "Allocating chunk %p", chunk);
+        return chunk;
       }
     }
   }
@@ -413,6 +415,8 @@ void ChunkPool_insertIntoFreeList (
 }
 
 bool ChunkPool_performFree(void* chunk) {
+  LOG(TRUE, TRUE, L_DEBUG, "Freeing chunk %p", chunk);
+
   struct ChunkPool_chunkMetadata* spanStart =
       ChunkPool_chunkToChunkMetadata (chunk);
 

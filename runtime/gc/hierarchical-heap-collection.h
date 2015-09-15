@@ -21,7 +21,10 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   size_t minLevel;
   size_t maxLevel;
+  bool log;
 };
+
+#define MAX_NUM_HOLES 512
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))

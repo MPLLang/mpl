@@ -70,7 +70,7 @@ struct
               val () = HH.setLevel (hh, level + 1)
 
               (* Offer the right side to any processor that wants it *)
-              val t = B.addRight (rightside, level + 1)(* might suspend *)
+              val t = B.addRight (rightside, level)(* might suspend *)
 
               (* Run the left side in the hierarchical heap *)
               val a = evaluateFunction f (fn () => (ignore (B.remove t);
@@ -102,7 +102,6 @@ struct
                * serially
                *)
               val () = HH.promoteChunks hh
-
 
               (* Reset level *)
               val () = HH.setLevel (hh, level)

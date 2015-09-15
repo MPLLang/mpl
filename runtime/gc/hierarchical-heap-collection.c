@@ -39,11 +39,15 @@ pointer copyObject(void** destinationLevelList,
 bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored);
 
 /**
- * Returns the maximum global heap frontier across all processors
+ * Populates 'holes' with the current global heap holes from all processors.
  *
- * @param s The GC_state to used
+ * @attention
+ * Must be run within an enter/leave in order to ensure correctness.
+ *
+ * @param s The GC_state to use
+ * @param holes The holes to populate.
  */
-pointer maxGlobalHeapFrontier(GC_state s);
+void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes);
 
 /************************/
 /* Function Definitions */
@@ -94,7 +98,8 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
-  int processor = s->procStates ? Proc_processorNumber (s) : -1;
+#pragma message "Fold this into Proc_processorNumber"
+  int processor = s->procStates ? Proc_processorNumber (s) : 0;
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Starting Local collection on "
@@ -112,8 +117,9 @@ void HM_HHC_collectLocal(void) {
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = hh->lastSharedLevel + 1,
-    .maxLevel = hh->level
+    .minLevel = HM_HH_getHighestStolenLevel(s, hh) + 1,
+    .maxLevel = hh->level,
+    .log = TRUE
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
@@ -129,23 +135,33 @@ void HM_HHC_collectLocal(void) {
                         forwardHHObjptr,
                         &forwardHHObjptrArgs);
 
-  LOG(s,
-      TRUE,
-      TRUE,
-      L_INFO,
+  LOG(TRUE, TRUE, L_DEBUG,
       "START foreach %ld MB",
       (s->heap->frontier - s->heap->start) / (1024 * 1024));
-  pointer frontier = maxGlobalHeapFrontier(s);
+
+#pragma message "Should be synchronized, but entrypoint for enter/leave is " \
+  "GC_collect :("
+  assert(s->numberOfProcs <= MAX_NUM_HOLES);
+  struct GlobalHeapHole holes[MAX_NUM_HOLES];
+  populateGlobalHeapHoles(s, holes);
+  pointer frontier = ((pointer)(0));
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    if (frontier < holes[i].start) {
+      frontier = holes[i].start;
+    }
+  }
+
   foreachObjptrInRange(s,
                        s->heap->start,
                        &frontier,
                        TRUE,
-                       TRUE,
+                       holes,
                        globalHeapObjptrPredicate,
                        NULL,
                        forwardHHObjptr,
                        &forwardHHObjptrArgs);
-  LOG(s, TRUE, TRUE, L_INFO, "END foreach");
+
+  LOG(TRUE, TRUE, L_DEBUG, "END foreach");
 
   /* do copy-collection */
   HM_forwardHHObjptrsInLevelList(s,
@@ -215,8 +231,9 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)p);
   }
 
-  if (!HM_HH_objptrInHierarchicalHeap(s, *opp)) {
-    /* does not point to an HH objptr, so just return */
+  if ((!HM_HH_objptrInHierarchicalHeap(s, *opp)) ||
+      (HM_HH_getContaining(s, op) != args->hh)) {
+    /* does not point to an HH objptr in my HH, so just return */
     return;
   }
 
@@ -316,6 +333,8 @@ void forwardHHObjptr (GC_state s,
                                      p - headerBytes,
                                      size,
                                      (level > args->maxLevel) ? (args->maxLevel) : (level));
+    LOG(args->log, TRUE, L_DEBUG,
+        "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
 #pragma message "Implement when I can"
@@ -424,40 +443,37 @@ pointer copyObject(void** destinationLevelList,
 
 bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
   /* silence compliler */
+  ((void)(s));
   ((void)(ignored));
 
   /* run through FALSE cases */
   GC_header header;
   header = getHeader(p);
-  if ((GC_HIERARCHICAL_HEAP_HEADER == header) ||
-      (GC_THREAD_HEADER == header)) {
-    return FALSE;
-  }
-
-  uint16_t bytesNonObjptrs;
-  uint16_t numObjptrs;
-  GC_objectTypeTag tag;
-  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
-  if (STACK_TAG == tag) {
+  if ((GC_STACK_HEADER == header) ||
+      (GC_THREAD_HEADER == header) ||
+      (GC_HIERARCHICAL_HEAP_HEADER == header)) {
     return FALSE;
   }
 
   return TRUE;
 }
 
-pointer maxGlobalHeapFrontier(GC_state s) {
-  pointer maxFrontier = 0;
+void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
   for (int i = 0; i < s->numberOfProcs; i++) {
-    pointer candidateFrontier = s->procStates[i].frontier;
-    if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(candidateFrontier,
+    pointer start = s->procStates[i].frontier;
+    pointer end = s->procStates[i].limitPlusSlop;
+
+    if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
                                                           s->heap->start))) {
+      assert(HM_HH_objptrInHierarchicalHeap(s,
+                                            pointerToObjptr(end,
+                                                            s->heap->start)));
       /* use the saved global frontier */
-      candidateFrontier = s->procStates[i].globalFrontier;
+      start = s->procStates[i].globalFrontier;
+      end = s->procStates[i].globalLimitPlusSlop;
     }
 
-    maxFrontier = (candidateFrontier > maxFrontier) ?
-                  candidateFrontier : maxFrontier;
+    holes[i].start = start;
+    holes[i].end = end;
   }
-
-  return maxFrontier;
 }
