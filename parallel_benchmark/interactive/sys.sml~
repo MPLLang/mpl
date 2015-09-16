@@ -1,0 +1,32 @@
+functor LamISys (structure I : INTERACTIVE,
+                 structure S : MLTON_PARALLEL_SYNCVAR) =
+struct
+
+open I
+
+datatype sig_ref = Sig of (Posix.Signal.signal * sig_ref) S.t
+val next_sig : sig_ref ref = ref (Sig (S.empty ()))
+fun handle_sig s () =
+    let val new_sig = S.empty () in
+        S.write (!next_sig, (s, Sig new_sig));
+        next_sig := Sig new_sig
+    end
+
+val signals =
+    let fun sig_gen sigs () =
+            let val (_, (s, Sig ns)) = S.read sigs in
+                (s, ftr (sig_gen ns))
+            end
+        val Sig first_sigs = !next_sig
+    in
+        ftr (sig_gen first_sigs)
+    end
+
+fun capture_signals sigs =
+    let fun do_one s =
+            MLton.Signal.setHandler
+                (s, MLton.Signal.Handler.simple (handle_sig s));;
+    in
+        List.map do_one sigs
+    end
+end
