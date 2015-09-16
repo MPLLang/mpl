@@ -98,8 +98,7 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
-#pragma message "Fold this into Proc_processorNumber"
-  int processor = s->procStates ? Proc_processorNumber (s) : 0;
+  int processor = Proc_processorNumber (s);
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Starting Local collection on "

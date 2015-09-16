@@ -79,7 +79,7 @@ size_t dfsMarkByModeCustom (GC_state s, pointer root,
   GC_returnAddress returnAddress;
   GC_frameLayout frameLayout;
   GC_frameOffsets frameOffsets;
-  uint32_t processor = s->procStates ? Proc_processorNumber (s) : 0;
+  uint32_t processor = Proc_processorNumber (s);
 
   LOG(TRUE, TRUE, L_DEBUG, "dfsMark(%p, %d)", ((void*)(root)), mode);
 

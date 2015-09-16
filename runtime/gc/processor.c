@@ -43,7 +43,15 @@ static struct rusage ru_crit;
 /* RAM_NOTE: Lack of barriers in these functions only works on x86! */
 
 uint32_t Proc_processorNumber (GC_state s) {
-  for (uint32_t proc = 0; proc < s->numberOfProcs; proc ++) {
+  if ((NULL == s) || (NULL == s->procStates)) {
+    /*
+     * s not initialized, or not running in multi-threaded mode, so must be
+     * processor 0
+     */
+    return 0;
+  }
+
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     if (s == &(s->procStates[proc])) {
       return proc;
     }

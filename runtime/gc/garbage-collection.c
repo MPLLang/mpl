@@ -383,7 +383,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       and (hasHeapBytesFree (s, 0, stackBytesRequested))) {
     if (DEBUG or s->controls->messages)
       fprintf (stderr, "GC: growing stack locally... [%d]\n",
-               s->procStates ? Proc_processorNumber (s) : 0);
+               Proc_processorNumber (s));
     growStackCurrent (s, FALSE);
     setGCStateCurrentThreadAndStack (s);
   }
@@ -394,7 +394,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
              hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested),
              Proc_threadInSection (),
              forceGC,
-             s->procStates ? Proc_processorNumber (s) : 0);
+             Proc_processorNumber (s));
   }
 
   if (/* check the stack of the current thread */
@@ -425,13 +425,14 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
     }
     else
       if (DEBUG or s->controls->messages)
-        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n", s->procStates ? Proc_processorNumber (s) : 0);
+        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n",
+                 Proc_processorNumber (s));
 
     LEAVE0 (s);
   }
   else {
     if (DEBUG or s->controls->messages)
-      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", s->procStates ? Proc_processorNumber (s) : 0);
+      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", Proc_processorNumber (s));
 
     /* These are safe even without ENTER/LEAVE */
     assert (isAligned (s->heap->size, s->sysvals.pageSize));
