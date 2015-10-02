@@ -12,6 +12,8 @@ sig
 
   val addtoio : unit t * (unit -> bool) -> unit
 
+  val processorNumber : unit -> int
+
   (* Suspends the current thread of execution and runs the given function,
     passing in a reified form of the original thread.  The given function must
     not call any other function in this signature. *) 
@@ -27,9 +29,11 @@ sig
     under some scheduling policies. *) 
   (* "Right" adds to the right of the current task -- lower priority than the 
     current task *)
+  val addRightLat : bool * work -> token
   val addRight : work -> token
   (* "Left" adds to the left of the current task -- higher priority than the
     current task *)
+  val addLeftLat : bool * work -> token
   val addLeft : work -> token
   (* Remove a task from the work queue if no processor has yet started work on
     it.  Returns true if the task was successfully removed and, we are
@@ -41,6 +45,7 @@ sig
     defined as the next time this task suspends: possibly one of suspend,
     capture, addRight, addLift, return, or yield.) This operation never
     suspend the current task. *)
+  val delayedAddLat : bool * work -> unit
   val delayedAdd : work -> unit
 
   (* End the current task *)

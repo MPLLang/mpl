@@ -51,7 +51,7 @@ static void MLton_callFromC (void* ffiArgs) {                           \
 void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
-  uint32_t num = Proc_processorNumber (s)                               \
+  uint32_t num = (Proc_processorNumber (s) / s->workersPerProc)                              \
       * s->controls->affinityStride                                     \
       + s->controls->affinityBase;                                      \
   set_cpu_affinity(num);                                                \

@@ -15,7 +15,7 @@ sig
   (* create a new identifier for work *)
   val newWork : proc -> token
   (* atomically add new work to the queue; highest-priority work appears first *)
-  val addWork : proc * (token * work) list -> unit
+  val addWork : bool * proc * (token * work) list -> unit
 
   (* remove the next, highest priority work.  the boolean indicates whether
    this is a "non-local" (i.e. stolen) job. *)
@@ -30,14 +30,14 @@ sig
   val suspendWork : proc -> susp
   (* mark suspended job as available -- it will then be returned by some
    future 'get' *)
-  val resumeWork : proc * susp * (token * work) -> unit
+  val resumeWork : bool * proc * susp * (token * work) -> unit
 
   (* removes a piece of work from the queue if it hasn't already been returned
     by getWork, work can only be removed after it has been added. *)
   val removeWork : proc * token -> bool
 
   (* is there higher priority work for the given processor? *)
-  val shouldYield : proc -> bool 
+  val shouldYield : proc -> bool
 
   (* name of the current policy *)
   val policyName : string

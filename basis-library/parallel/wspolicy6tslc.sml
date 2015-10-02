@@ -5,14 +5,14 @@ struct
   val resumeWorkLocally = true
   val stealEntireQueues = false (* NA *)
   val stealFromSuspendedQueues = false (* NA *)
-  fun workOnLatency n p = p = n - 1
+  fun workOnLatency n p = p mod 2 = 0
   val policyName = "ws6"
 end
 
 functor WorkQueue (W : sig type work val numberOfProcessors : unit -> int end) 
   : PARALLEL_WORKQUEUE =
 struct
-  structure WS = WorkStealing (structure W = W
-                               structure P = Policy)
+  structure WS = WorkStealingLC (structure W = W
+                                 structure P = Policy)
   open WS
 end

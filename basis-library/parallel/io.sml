@@ -11,6 +11,7 @@ fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) op
                | SOME _ => true)
             (* before
             print "out f\n" *))
+        (* val _ = print ("input1 on " ^ (Int.toString (B.processorNumber ())) ^ "\n") *)
     in
         if f () then
             TextIO.StreamIO.input1 is

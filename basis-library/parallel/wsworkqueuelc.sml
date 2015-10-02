@@ -20,9 +20,12 @@ sig
   val policyName : string
 end
 
-functor WorkStealing (structure W : sig type work val numberOfProcessors : unit -> int end
+functor WorkStealingLC (structure W : sig type work val numberOfProcessors : unit -> int end
                       structure P : POLICY) =
 struct
+
+  infix 3 /
+  fun x / y = Int.div (x, y)
 
   type proc = int
   type work = W.work
@@ -86,7 +89,8 @@ struct
 
   structure A = Array
   structure V = Vector
-  val numberOfProcessors = W.numberOfProcessors ()
+  val realNumberOfProcessors = W.numberOfProcessors ()
+  val numberOfProcessors = realNumberOfProcessors / 2
 
   val WORK_ARRAY_SIZE = 1024
   (* private state *)
@@ -130,12 +134,12 @@ struct
                             false)
   val QUEUE_ARRAY_SIZE = 8192
   val cqueues = A.tabulate (QUEUE_ARRAY_SIZE,
-                           fn i => if i < numberOfProcessors then
+                           fn i => if i < (numberOfProcessors) then
                                      SOME (newQueue false i)
                                    else NONE)
 
   val lqueues = A.tabulate (QUEUE_ARRAY_SIZE,
-                           fn i => if i < numberOfProcessors then
+                           fn i => if i < (numberOfProcessors) then
                                      SOME (newQueue true i)
                                    else NONE)
 
@@ -348,6 +352,7 @@ struct
   fun addWork (lat, p, tws) =
     let
       (* val () = pr p "before-add" *)
+      val p = p / 2
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
       val () = takeLock thiefLock; (* XTRA *)
       (* val () = dekkerLock (true, lock); *)
@@ -416,7 +421,8 @@ struct
   fun getWork p =
     let
       (* val () = pr p "before-get" *)
-      val lat = P.workOnLatency numberOfProcessors p
+      val lat = (p mod 2 = 0)
+      val p = p / 2
       val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
       val () = takeLock thiefLock (* XTRA *)
@@ -590,6 +596,7 @@ struct
 
   fun startWork p =
       let
+        val p = p / 2
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
         val () = takeLock thiefLock (* XTRA *)
@@ -612,6 +619,7 @@ struct
   fun suspendWork p =
       let
         (* val () = pr p "before-suspend" *)
+        val p = p / 2
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
         val () = takeLock thiefLock (* XTRA *)
@@ -649,6 +657,7 @@ struct
   fun resumeWork (lat, p, NONE, tw as (t as Token r, w)) =
       let
           (* val lat = P.workOnLatency numberOfProcessors p *)
+          val p = p / 2
           val queues = if lat then lqueues else cqueues
       in
       if P.resumeWorkLocally then
@@ -701,6 +710,7 @@ struct
       end
     | resumeWork (lat, p, q as SOME (Queue { work, top, index, ... }), tw as (t, w)) =
       let
+        val p = p / 2
         (* val () = pr p "before-resume-original" *)
         val () = takeLock masterLock
         val i = !top
@@ -728,6 +738,7 @@ struct
   fun removeWork (p', Token r) =
       let
         (* val () = pr p' "before-remove" *)
+        val p' = p' / 2
         val Queue { index, ... } = case !r of SOME q => q | NONE => (print "remove\n"; raise WorkQueue)
 (* this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
         val p = !index

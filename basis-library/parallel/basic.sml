@@ -6,8 +6,8 @@ struct
 
   structure T = MLtonThread
 
-  datatype job = Work of unit -> void
-               | Thread of unit T.t
+  datatype job = Work of (unit -> void)
+               | Thread of (unit T.t)
 
   val numberOfProcessors = MLtonParallelInternal.numberOfProcessors
 
@@ -17,8 +17,8 @@ struct
                            end)
     :> PARALLEL_WORKQUEUE where type work = job
 
-  datatype 'a t = Suspend of 'a T.t * Q.susp
-                | Capture of 'a T.t
+  datatype 'a t = Suspend of bool * 'a T.t * Q.susp
+                | Capture of bool * 'a T.t
 
   type token = Q.token
 
@@ -37,33 +37,47 @@ struct
 
   val ioqueues = Array.array (numberOfProcessors, [])
 
+  fun prerr s = (TextIO.output (TextIO.stdErr, s);
+                 TextIO.flushOut TextIO.stdErr)
+
   fun addtoio ((t, f) : unit t * (unit -> bool)) =
       let val p = processorNumber ()
+          (* val _ = print ("addtoio at " ^ (Int.toString p) ^ "\n") *)
           val q = Array.sub (ioqueues, p)
       in
           Array.update (ioqueues, p, (t, f)::q)
       end
 
 
-  fun resume (Suspend (k, q), v) =
+  fun resume (Suspend (lat, k, q), v) =
       let
         val p = processorNumber ()
       in
-        Q.resumeWork (p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
+        Q.resumeWork (lat, p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
       end
-    | resume (Capture k, v) =
+    | resume (Capture (lat, k), v) =
       let
         val p = processorNumber ()
       in
-        Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => v)))])
+        Q.addWork (lat, p, [(Q.newWork p, Thread (T.prepend (k, fn () => v)))])
       end
+
+  fun latency (Suspend (lat, _, _)) = lat
+    | latency (Capture (lat, _)) = lat
+
+  fun mkLat (Suspend (_, k, q)) = Suspend (true, k, q)
+    | mkLat (Capture (_, k)) = Capture (true, k)
 
   fun procio p =
       let val q = Array.sub (ioqueues, p)
           val q' =
               List.foldl
-                  (fn ((t, f), r) => if f () then (resume (t, ()); r)
-                                     else (t, f)::r)
+                  (fn ((t, f), r) =>
+                      (* if latency t then *)
+                          if f () then (resume (mkLat t, ()); r)
+                          else (t, f)::r
+                      (* else raise (Parallel "Invariant violated!\n") *)
+                  )
                   []
                   q
       in
@@ -73,7 +87,8 @@ struct
   fun schedule countSuspends () =
     let
       fun loop (countSuspends, p) =
-          let val _ = procio p
+          let
+              val _ = procio p
           in
             case Q.getWork p
              of NONE =>
@@ -134,7 +149,7 @@ struct
                 (* to disable hijacking, use this instead
                 val t = T.new schedule
                  *)
-                fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                fun add (lat, w) = Q.addWork (lat, p, [(Q.newWork p, Work w)])
               in
                 (* XX maybe this should move out (before suspend/finishWork) *)
                 (* add any delayed work *)
@@ -147,12 +162,13 @@ struct
   fun suspend f =
       let
         val p = processorNumber ()
+        (* val _ = print ("suspend at " ^ (Int.toString p) ^ "\n") *)
         fun tail (p, k) =
             let
               val () = incSuspends p
               val q = Q.suspendWork p
             in
-              f (Suspend (k, q))
+              f (Suspend (true, k, q)) (* XXX *)
             end
       in
         capture' (p, tail)
@@ -166,7 +182,7 @@ struct
               val () = incSuspends p
               val () = Q.finishWork p
             in
-              f (Capture k)
+              f (Capture (false, k)) (* XXX *)
             end
       in
         capture' (p, tail)
@@ -179,7 +195,7 @@ struct
         if Q.shouldYield p then
           capture' (p, fn (p, k) =>
                           let in
-                            Q.addWork (p, [(Q.newWork p, Thread k)]);
+                            Q.addWork (false, p, [(Q.newWork p, Thread k)]); (* XXX *)
                             incSuspends p;
                             Q.finishWork p
                           end)
@@ -187,7 +203,7 @@ struct
           ()
       end
 
-  fun addRight w =
+  fun addRightLat (lat, w) =
       let
         val p = processorNumber ()
         val t = Q.newWork p
@@ -197,25 +213,29 @@ struct
           capture' (p, fn (p, k) =>
                          let in
                            (* Add the continuation first -- it is higher priority *)
-                           Q.addWork (p, [(Q.newWork p, Thread (T.prepend (k, fn () => t))),
+                           Q.addWork (lat, p, [(Q.newWork p, Thread (T.prepend (k, fn () => t))),
                                           (t, Work w)]);
                            incSuspends p;
                            Q.finishWork p
                          end)
         else
           let
-            fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+            fun add (lat, w) = Q.addWork (lat, p, [(Q.newWork p, Work w)])
           in
             (* add any delayed work *)
             (* XXX maybe should run delayed work and queue the currrent thread too? *)
             app add (rev (Array.sub (delayed, p)));
             Array.update (delayed, p, nil);
-            Q.addWork (p, [(t, Work w)]);
+            Q.addWork (lat, p, [(t, Work w)]);
             t
           end
       end
 
-  fun addLeft w =
+  fun addRight w = addRightLat (false, w)
+
+  (* smuller: XXX This adds the current thread to the lqueue and so is totally
+     wrong. Fix it. *)
+  fun addLeftLat (lat, w) =
       let
         val p = processorNumber ()
         val t = Q.newWork p
@@ -223,7 +243,7 @@ struct
         if Q.shouldYield p then
           capture' (p, fn (p, k) =>
                          let in
-                           Q.addWork (p, [(Q.newWork p, Work w),
+                           Q.addWork (lat, p, [(Q.newWork p, Work w),
                                           (t, Thread (T.prepend (k, fn () => t)))]);
                            incSuspends p;
                            Q.finishWork p
@@ -233,28 +253,32 @@ struct
                        T.prepare
                        (T.new (fn () =>
                                   let
-                                    fun add w = Q.addWork (p, [(Q.newWork p, Work w)])
+                                    fun add (lat, w) = Q.addWork (lat, p, [(Q.newWork p, Work w)])
                                   in
                                     (* add any delayed work *)
                                     (* XXX maybe should run delayed work and queue the currrent thread too? *)
                                     app add (rev (Array.sub (delayed, p)));
                                     Array.update (delayed, p, nil);
-                                    Q.addWork (p, [(t, Thread (T.prepend (k, fn () => t)))]);
+                                    Q.addWork (lat, p, [(t, Thread (T.prepend (k, fn () => t)))]);
                                     w ()
                                   end), ()))
       end
 
+  fun addLeft w = addLeftLat (false, w)
+
   fun remove t = Q.removeWork (processorNumber (), t)
 
 (* XXX left? what about the right? *)
-  fun delayedAdd w =
+  fun delayedAddLat (lat, w) =
       let
         (* PERF use a array-based buffer to avoid allocation *)
         val p = processorNumber ()
         val ws = Array.sub (delayed, p)
       in
-        Array.update (delayed, p, w::ws)
+        Array.update (delayed, p, (lat, w)::ws)
       end
+
+  fun delayedAdd w = delayedAddLat (false, w)
 
   fun return () =
       let
@@ -267,17 +291,18 @@ struct
                     schedule true ())
           | ws =>
             let
-              val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match
+              val ((lat, w), ws) =
+                  case rev ws of (lat, w)::ws => ((lat, w), ws) | nil => raise Match
               val () = Array.update (delayed, p, nil)
               fun add nil = ()
-                | add (w::ws) =
-                  Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))])
+                | add ((lat, w)::ws) =
+                  Q.addWork (lat, p, [(Q.newWork p, Work (fn () => (add ws; w ())))])
               (* add any lower priority work *)
               val () = add ws
             in
               (* now what do to with w? *)
               if Q.shouldYield p then
-                (Q.addWork (p, [(Q.newWork p, Work w)]);
+                (Q.addWork (false, p, [(Q.newWork p, Work w)]); (* XXX *)
                  (* this is counted in schedule: incSuspends p; *)
                  Q.finishWork p;
                  schedule true ())

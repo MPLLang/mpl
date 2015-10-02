@@ -287,6 +287,11 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
+        } else if (0 == strcmp (arg, "workers-per-proc")) {
+          i++;
+          if (i == argc)
+            die ("@MLton workers-per-proc missing argument.");
+          s->workersPerProc = stringToFloat (argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -355,6 +360,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->lastMajorStatistics = newLastMajorStatistics();
 
   s->numberOfProcs = 1;
+  s->workersPerProc = 1;
   s->procStates = NULL;
   s->roots = NULL;
   s->rootsLength = 0;
@@ -460,6 +466,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->hashConsDuringGC = s->hashConsDuringGC;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
+  d->workersPerProc = s->workersPerProc;
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;

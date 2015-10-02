@@ -1,7 +1,7 @@
 functor MLtonParallelFuture (structure V : MLTON_PARALLEL_SYNCVAR
-                             structure B : sig 
+                             structure B : sig
                                type void
-                               val add : (unit -> void) -> unit
+                               val addLat : bool * (unit -> void) -> unit
                                val start : unit -> unit
                                val stop : unit -> unit
                                val return : unit -> void
@@ -18,24 +18,26 @@ struct
 
   type 'a t = 'a result V.t
 
-  fun future f =
-    let 
+  fun futureLat (lat, f) =
+    let
       val v = V.empty ()
-      val _ = B.add (fn () => (B.start ();
+      val _ = B.addLat (lat, (fn () => (B.start ();
                                V.write (v, Finished (f ())
                                            handle e => Raised e);
                                B.stop ();
-                               B.return ()))
+                               B.return ())))
     in
       v
     end
+
+  fun future f = futureLat (false, f)
 
   fun touch v =
       let
         val (susp, a) = V.read v
         val () = if susp then incr suspends else ()
       in
-        case a of 
+        case a of
           Finished v => v
         | Raised e => raise e
       end
@@ -55,14 +57,14 @@ local
 structure NoDelay =
 struct
   open MLtonParallelBasic
-  val add = ignore o addLeft
+  val addLat = ignore o addRightLat
   fun start () = ()
   fun stop () = ()
 end
 structure Delay =
 struct
   open MLtonParallelBasic
-  val add = delayedAdd
+  val addLat = delayedAddLat
   fun start () = ()
   fun stop () = ()
 end
@@ -71,10 +73,11 @@ struct
   open MLtonParallelBasic
   open MLtonParallelInternal
   val inFuture = Array.array (numberOfProcessors, false)
-  fun add f = if Array.sub (inFuture, processorNumber()) then
-                (delayedAdd f)
-              else
-                (ignore (addLeft f))
+  fun addLat (lat, f) =
+      if Array.sub (inFuture, processorNumber()) then
+          (delayedAddLat (lat, f))
+      else
+          (ignore (addLeftLat (lat, f)))
   fun start () = Array.update (inFuture, processorNumber (), true)
   fun stop () = Array.update (inFuture, processorNumber (), false)
 end
