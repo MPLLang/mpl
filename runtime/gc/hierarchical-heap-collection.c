@@ -460,7 +460,7 @@ bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     pointer start = s->procStates[i].frontier;
-    pointer end = s->procStates[i].limitPlusSlop;
+    pointer end = s->procStates[i].limitPlusSlop + GC_BONUS_SLOP;
 
     if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
                                                           s->heap->start))) {
@@ -469,7 +469,7 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
                                                             s->heap->start)));
       /* use the saved global frontier */
       start = s->procStates[i].globalFrontier;
-      end = s->procStates[i].globalLimitPlusSlop;
+      end = s->procStates[i].globalLimitPlusSlop + GC_BONUS_SLOP;
     }
 
     holes[i].start = start;

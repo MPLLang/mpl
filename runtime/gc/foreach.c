@@ -345,6 +345,13 @@ pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes) {
     /* can only be as many holes as processors */
     for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       if (nextP >= holes[i].start && nextP < holes[i].end) {
+        LOG(TRUE, TRUE, L_DEBUG,
+            "Skipping hole nextP = %p holeProc = %" PRIu32 " holeStart = %p "
+            "holeEnd = %p",
+            ((void*)(nextP)),
+            i,
+            ((void*)(holes[i].start)),
+            ((void*)(holes[i].end)));
         nextP = holes[i].end;
         modified = TRUE;
       }
