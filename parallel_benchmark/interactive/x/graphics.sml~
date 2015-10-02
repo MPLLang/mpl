@@ -1,0 +1,125 @@
+(* High-level graphics library *)
+(* Uses MLton-specific FFI for X Window System interface *)
+
+(* Stefan Muller *)
+
+structure Graphics : GRAPHICS =
+struct
+
+exception NoWindowOpen
+
+type color = MLX.color
+type button = MLX.button
+type event = MLX.event
+type font = MLX.font
+
+val dwgc : (MLX.display * MLX.window * MLX.gc) option ref = ref NONE
+
+fun openwindow (name : string option) ((w, h) : int * int) : unit =
+    let val d = MLX.opendisplay name
+        val rt = MLX.defaultrootwindow d
+        val w = MLX.createsimplewindow d rt 5 5 w h 1 0wx000000 0wx111111
+        val gc = MLX.creategc d (MLX.wd w)
+        val _ = MLX.mapwindow d w
+        val _ = MLX.raisewindow d w
+        val _ = MLX.setforeground d gc 0wx000000
+        val _ = MLX.flush d
+    in
+        dwgc := SOME (d, w, gc)
+    end
+
+
+
+fun setforeground (c: color) : unit =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, gc) => MLX.setforeground d gc c
+
+fun flush () : unit =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, _) => MLX.flush d
+
+fun closewindow () : unit =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, gc) => (MLX.freegc d gc;
+                            MLX.closedisplay d)
+
+fun selectinput (m: MLX.Mask.mask) : unit =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, _) => MLX.selectinput d w m
+
+fun nextevent () : event =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, _) => #4 (MLX.nextevent d)
+
+fun maskevent (m: MLX.Mask.mask) : event =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, _) => #4 (MLX.maskevent d m)
+
+fun checkmaskevent (m: MLX.Mask.mask) : event option =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, _, _) =>
+        (case MLX.checkmaskevent d m of
+             SOME (_, _, _, e) => SOME e
+           | NONE => NONE)
+
+fun mousepos () : int * int =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, _) => MLX.mousepos d w
+
+fun buttons () : button list =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, _) => MLX.buttons d w
+
+fun button () : bool =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, _) => MLX.button d w
+
+fun readkey () : char =
+    case maskevent (MLX.Mask.make [MLX.Mask.keypress]) of
+        MLX.Key (true, _, _, _, _, _, _, _, _, _, k, _) =>
+        Char.chr (Word32.toInt k)
+      | _ => readkey ()
+
+fun keyoption () : char option =
+    case checkmaskevent (MLX.Mask.make [MLX.Mask.keypress]) of
+        NONE => NONE
+      | SOME (MLX.Key (true, _, _, _, _, _, _, _, _, _, k, _)) =>
+        SOME (Char.chr (Word32.toInt k))
+      | _ => keyoption ()
+
+fun drawtext (f: font option) (x: int) (y: int) (text: string) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, gc) => MLX.drawtext d (MLX.wd w) gc f x y text
+
+fun drawpoint (x: int) (y: int) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, gc) => MLX.drawpoint d (MLX.wd w) gc x y
+
+fun fillrectangle (x: int) (y: int) (w: int) (h: int) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, win, gc) => MLX.fillrectangle d (MLX.wd win) gc x y w h
+
+fun drawrectangle (x: int) (y: int) (w: int) (h: int) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, win, gc) => MLX.fillrectangle d (MLX.wd win) gc x y w h
+
+fun drawline (x1: int) (y1: int) (x2: int) (y2: int) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, w, gc) => MLX.fillrectangle d (MLX.wd w) gc x1 y1 x2 y2
+
+end
