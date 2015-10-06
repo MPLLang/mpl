@@ -188,17 +188,35 @@ fun mouse () =
     	loop (); ()
 	end;
 
+val stdin = ref (TextIO.getInstream TextIO.stdIn)
+
+fun inputLine () =
+    let fun iL_int line =
+            case IO.input1 (!stdin) of
+                NONE => NONE
+              | SOME (c, is') =>
+                (stdin := is';
+                 if c = #"\n" then
+                     SOME line
+                 else
+                     iL_int (line ^ (str c)))
+    in
+        iL_int ""
+    end;
+
 
 fun analoop () = 
 	let 
 		val _ = print ("Insert a new string:\t")
-		val w = TextIO.inputLine (TextIO.stdIn)
-		val strw = valOf(w)
-		val w_i = String.substring(strw, 0, ((String.size(strw)) - 1))
+		val w = inputLine ()
 	in
-		print ((string_of_list (anagrams (w_i)))^("\n"));
-		print (valOf(w));
-		analoop ()
+		if w = NONE then
+			OS.Process.exit OS.Process.success
+		else
+			print ((string_of_list (anagrams (valOf(w))))^("\n"));
+			print (valOf(w));
+			analoop ();
+			()
 	end;
 
 fork ((fn () => (mouse();())), (fn () => (analoop ();())));
