@@ -1,8 +1,6 @@
 open Graphics
-(*val fork = MLton.Parallel.ForkJoin.fork *)
 
-fun seqfork (r1,r2) = ((r2 ()), (r1 ()));
-val fork = MLton.Parallel.ForkJoin.fork; (*seqfork*)
+val fork = MLton.Parallel.ForkJoin.fork;
 
 val _ = openwindow NONE (512, 512)
 
@@ -18,6 +16,14 @@ fun get_results() =
     in
         fib_data ^ clicks_data
     end
+
+fun show_status () = 
+    let 
+    in
+        clear ();
+        drawtext NONE 20 20 (get_results());
+        flush ()
+    end;
 
 fun fib 0 = 1
   | fib 1 = 1
@@ -37,7 +43,7 @@ fun print_results () = print (get_results ());
 fun fibs n =
     let val nf = fib n in
         lastfib := nf;
-        (* print_results(); *)
+        show_status ();
         fibs (n + 1)
     end
 
@@ -50,11 +56,8 @@ fun forever () =
              MLX.Button (true, _, _, _, _, x, y, _, _, _, b, _) =>
              let
              in
-                 clear ();
                  clicks := (!clicks) + 1;
-                 drawtext NONE 20 20 (get_results());
-                 (* print_results(); *)
-                 flush ();
+                 show_status ();
                  forever ()
              end
            | _ => forever ())

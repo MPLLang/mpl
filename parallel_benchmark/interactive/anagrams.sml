@@ -1,11 +1,8 @@
-val fork = MLton.Parallel.ForkJoin.fork;
 open Graphics
 
+val fork = MLton.Parallel.ForkJoin.fork;
+
 val _ = openwindow NONE (512, 512)
-
-fun seqfork (r1,r2) = ((r2 ()), (r1 ()));
-
-val fork = seqfork;
 
 fun strEq s1 s2 = String.compare(s1,s2) = EQUAL;
 
@@ -205,6 +202,3 @@ fun analoop () =
 	end;
 
 fork ((fn () => (mouse();())), (fn () => (analoop ();())));
-
-(* put the words in an array *)
-(* parallelize the search for each of the possibilities *)
