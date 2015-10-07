@@ -3,6 +3,7 @@ $(SML_LIB)/basis/mlton.mlb
 
 lami-sig.sml
 lami.sml
+x/graphics.mlb
 $(SML_LIB)/basis/parallel/io.sig
 $(SML_LIB)/basis/parallel/io.sml
 int_test.sml

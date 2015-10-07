@@ -24,7 +24,7 @@ val proc_std_in =
              case inputLine () of
                  NONE => OS.Process.exit OS.Process.success
                | SOME l =>
-                 (print "Processed\n";
+                 ((* print "Processed\n"; *)
                   ("Hi, " ^ l ^ "\n", eftr "proc_std_in" proc_std_in_gen)))
     in
         eftr "proc_std_in" proc_std_in_gen

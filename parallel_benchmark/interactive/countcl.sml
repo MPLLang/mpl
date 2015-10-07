@@ -1,4 +1,5 @@
-open Graphics
+open IO.Graphics
+(*val fork = MLton.Parallel.ForkJoin.fork *)
 
 val fork = MLton.Parallel.ForkJoin.fork;
 
@@ -56,7 +57,7 @@ fun fibs n =
 
 fun forever () =
     let in
-        (*print "Calling nextevent..."; *)
+        print "Calling nextevent...";
         (case nextevent () of
              MLX.Button (true, _, _, _, _, x, y, _, _, _, b, _) =>
              let
