@@ -46,8 +46,7 @@ C_Errno_t(C_Int_t) Posix_Signal_isIgnore (C_Int_t signum, Ref(C_Int_t) isIgn) {
 }
 
 C_Errno_t(C_Int_t) Posix_Signal_handlee (C_Int_t signum) {
-  /* XXX global state */
-  static struct sigaction sa;
+  struct sigaction sa;
 
   sigaddset (GC_getSignalsHandledAddr (), signum);
   memset (&sa, 0, sizeof(sa));
