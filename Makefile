@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/mlton
+MLTON := $(BIN)/mlton-spoonhower
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
@@ -46,7 +46,7 @@ else
 endif
 
 ifeq ($(origin VERSION), undefined)
-	VERSION := multi.$(shell date +%Y%m%d)
+	VERSION := mlton-spoonhower.$(shell date +%Y%m%d)
 endif
 ifeq ($(origin RELEASE), undefined)
 	RELEASE := 1
@@ -62,7 +62,7 @@ all-no-docs:
 # Remove $(AOUT) so that the $(MAKE) compiler below will remake MLton.
 # We also want to re-run the just-built tools (mllex and mlyacc)
 # because they may be better than those that were used for the first
-# round of compilation.  So, we clean out the front end. 
+# round of compilation.  So, we clean out the front end.
 ifeq (true, $(BOOTSTRAP_OTHER))
 	rm -f "$(COMP)/$(AOUT)$(EXE)"
 	$(MAKE) -C "$(COMP)/front-end" clean
@@ -327,17 +327,17 @@ install-no-docs:
 	mkdir -p "$(TLIB)" "$(TBIN)" "$(TMAN)"
 	$(CP) "$(LIB)/." "$(TLIB)/"
 	sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"			\
-		<"$(MLTON)" >"$(TBIN)/mlton"
-	chmod a+x "$(TBIN)/mlton"
+		<"$(MLTON)" >"$(TBIN)/$(MLTON)"
+	chmod a+x "$(TBIN)/$(MLTON)"
 	if [ -x "$(MLTON).trace" ]; then                            \
 		sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"		\
-			<"$(MLTON)trace" >"$(TBIN)/mlton.trace";   \
-		chmod a+x "$(TBIN)/mlton.trace";                        \
+			<"$(MLTON)trace" >"$(TBIN)/$(MLTON).trace";   \
+		chmod a+x "$(TBIN)/$(MLTON).trace";                        \
 	fi
 	if [ -x "$(MLTON).debug" ]; then                            \
 		sed "/^lib=/s;.*;lib='$(prefix)/$(ULIB)';"		\
-			<"$(MLTON).debug" >"$(TBIN)/mlton.debug";   \
-		chmod a+x "$(TBIN)/mlton.debug";                        \
+			<"$(MLTON).debug" >"$(TBIN)/$(MLTON).debug";   \
+		chmod a+x "$(TBIN)/$(MLTON).debug";                        \
 	fi
 	cd "$(BIN)" && $(CP) "$(LEX)$(EXE)" "$(NLFFIGEN)$(EXE)"		\
 		 "$(PROF)$(EXE)" "$(YACC)$(EXE)" "$(TBIN)/"
