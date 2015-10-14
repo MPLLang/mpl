@@ -79,14 +79,6 @@ struct
                raise Impossible)
   end
 
-  local
-    exception Impossible
-    open TextIO
-  in
-      fun UBPrint m = (output (stdOut, m);
-                       flushOut stdOut)
-  end
-
   exception WorkQueue
   exception QueueSize
 
@@ -529,11 +521,8 @@ struct
                       (*           unsync ()) *)
                     else
                       let (* Just steal the oldest task *)
-                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal start\n")
                         val w = A.sub (!work, j)
-                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal WIP\n")
                         val () = A.update (!work, j, Empty)
-                        val () = UBPrint ("[" ^ (Int.toString p) ^ "] steal done\n")
                       in
                         if i = j + 1 andalso maybeCleanup () then ()
                         else ();

@@ -72,14 +72,6 @@ struct
                                                     HH.useHierarchicalHeap ();
                                                     HM.exitGlobalHeap ())
 
-  local
-    exception Impossible
-    open TextIO
-  in
-      fun UBPrint m = (output (stdOut, m);
-                       flushOut stdOut)
-  end
-
   fun schedule countSuspends () =
       let
           fun loop (countSuspends, p) =
@@ -370,7 +362,6 @@ struct
                   let
                       val p = processorNumber ()
                   in
-                      UBPrint ("[" ^ (Int.toString p) ^ "] addWork resume\n");
                       Q.addWork (p, [(Q.newWork p,
                                       Thread (T.prepend (k, fn () => v)),
                                       (hh, NONE))])
@@ -392,9 +383,7 @@ struct
                           val hh = HH.get ()
                           val () =
                               capture' (p, fn (p, k) =>
-                                              (UBPrint ("[" ^ (Int.toString p) ^
-                                                        "] addWork yield\n");
-                                               Q.addWork (p,
+                                              (Q.addWork (p,
                                                           [(Q.newWork p,
                                                             Thread k,
                                                             (hh, NONE))]);
@@ -422,7 +411,6 @@ struct
                           capture' (p, fn (p, k) =>
                                           let in
                                               (* Add the continuation first -- it is higher priority *)
-                                              UBPrint ("[" ^ (Int.toString p) ^ "] addWork addRight1\n");
                                               Q.addWork (p,
                                                          [(Q.newWork p,
                                                            Thread (T.prepend (k, fn () => t)),
@@ -448,7 +436,6 @@ struct
                       (* (* XXX maybe should run delayed work and queue the currrent thread too? *) *)
                       (* app add (rev (Array.sub (delayed, p))); *)
                       (* Array.update (delayed, p, nil); *)
-                      UBPrint ("[" ^ (Int.toString p) ^ "] addWork addRight2\n");
                       Q.addWork (p, [(t,
                                       Work w,
                                       (currentHH, SOME level))]);
