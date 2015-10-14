@@ -57,10 +57,10 @@ fun fibs n =
 
 fun forever () =
     let in
-        print "Calling nextevent...";
-        (case nextevent () of
+        (* print "Calling nextevent..."; *)
+        (case maskevent (MLX.Mask.make [MLX.Mask.buttonpress, MLX.Mask.buttonrelease]) of
              MLX.Button (true, _, _, _, _, x, y, _, _, _, b, _) =>
-             let
+             let (* val _ = print "Button\n" *)
              in
                  clicks := (!clicks) + 1;
                  show_status ();

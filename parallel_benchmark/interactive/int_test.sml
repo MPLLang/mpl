@@ -2,6 +2,8 @@ open LamIFut
 
 (* val fork = MLton.Parallel.ForkJoin.fork *)
 
+val start = Time.now ()
+
 val stdin = ref (TextIO.getInstream TextIO.stdIn)
 
 fun inputLine () =
@@ -32,6 +34,15 @@ val proc_std_in =
 
 val fibs =
     let fun fib n =
+            if n > 42 then
+                let val finish = Time.now ()
+                    val diff = Time.-(finish, start)
+                    val diffi = LargeInt.toInt (Time.toMilliseconds diff)
+                in
+                    print ("exectime " ^ (Int.toString diffi) ^ "\n");
+                    OS.Process.exit OS.Process.success
+                end
+            else
             if n <= 1 then 1
             else
                 let

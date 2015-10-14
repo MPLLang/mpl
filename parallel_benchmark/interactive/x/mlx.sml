@@ -548,6 +548,16 @@ struct
             r := NONE
         end
 
+    fun initthreads () =
+       let val f =  _import "XInitThreads" : unit -> int;
+       in
+           if f () = 0 then
+               raise X "initthreads failed"
+           else
+               ()
+       end
+
+
     fun creategc (ref (SOME d)) (ref (SOME w)) : gc =
         let
             val cg = _import "ml_creategc" : pointer * pointer -> pointer ;

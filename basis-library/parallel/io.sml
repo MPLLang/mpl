@@ -40,7 +40,8 @@ val fg = ref 0wx000000
 val bg = ref 0wxffffff
 
 fun openwindow (name : string option) ((wi, h) : int * int) : unit =
-    let val d = MLX.opendisplay name
+    let val _ = MLX.initthreads ()
+        val d = MLX.opendisplay name
         val rt = MLX.defaultrootwindow d
         val w = MLX.createsimplewindow d rt 5 5 wi h 1 0wx000000 0wxffffff
         val gc = MLX.creategc d (MLX.wd w)
@@ -91,8 +92,7 @@ fun checkmaskevent (m: MLX.Mask.mask) : event option =
            | NONE => NONE)
 
 fun nextevent () : event =
-    let val m = MLX.Mask.make [MLX.Mask.noevent,
-                           MLX.Mask.keypress,
+    let val m = MLX.Mask.make [MLX.Mask.keypress,
                            MLX.Mask.keyrelease,
                            MLX.Mask.buttonpress,
                            MLX.Mask.buttonrelease,
@@ -140,13 +140,16 @@ fun nextevent () : event =
     end
 
 fun maskevent (m: MLX.Mask.mask) : event =
-    let fun me_int () =
-            let val (k: event option ref) = ref NONE
-                fun f () =
-                    (k := checkmaskevent m;
-                     case !k of
-                         NONE => false
-                       | SOME _ => true)
+    let val (k: event option ref) = ref NONE
+        fun me_int () =
+            let fun f () =
+                    case !k of
+                        NONE =>
+                        (k := checkmaskevent m;
+                         case !k of
+                             NONE => false
+                           | SOME _ => true)
+                      | SOME _ => true
             in
                 if f () then
                     case !k of

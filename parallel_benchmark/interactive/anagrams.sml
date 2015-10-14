@@ -1,4 +1,4 @@
-open Graphics
+open IO.Graphics
 
 val fork = MLton.Parallel.ForkJoin.fork;
 

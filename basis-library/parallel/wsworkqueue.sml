@@ -415,6 +415,9 @@ struct
   in
   fun getWork p =
     let
+        val _ =
+            if p = 0 then print ("getting work on " ^ (Int.toString p) ^ "\n")
+            else ()
       (* val () = pr p "before-get" *)
       val lat = P.workOnLatency numberOfProcessors p
       val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues

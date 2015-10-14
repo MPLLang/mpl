@@ -25,6 +25,8 @@ sig
 
     exception X of string
 
+    val initthreads : unit -> unit
+
     val opendisplay : string option -> display
 
     val defaultrootwindow : display -> window
