@@ -99,7 +99,7 @@ C_Errno_t(C_Int_t) Posix_Signal_sigismember (Vector(Word8_t) sigset, C_Signal_t 
 }
 
 C_Errno_t(C_Int_t) Posix_Signal_sigprocmask (C_Int_t how, Vector(Word8_t) sigset, Array(Word8_t) oldsigset) {
-  return sigprocmask (how, (sigset_t*)sigset, (sigset_t*)oldsigset);
+  return pthread_sigmask (how, (sigset_t*)sigset, (sigset_t*)oldsigset);
 }
 
 #if ASSERT
