@@ -61,7 +61,8 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
  * write of s->signalsInfo.signalsPending.  The signals are blocked
  * by Posix_Signal_handle (see Posix/Signal/Signal.c).
  */
-void GC_handler (GC_state s, int signum) {
+void GC_handler (int signum) {
+  GC_state s = pthread_getspecific (gcstate_key);
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_handler signum = %d [%d]\n", signum,
              Proc_processorNumber (s));
