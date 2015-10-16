@@ -37,9 +37,9 @@ sig
   (* possibly compute these two thunks in parallel *)
   val fork : (unit -> 'a) * (unit -> 'b) -> ('a * 'b)
 
-  type 'a future
-  val future : (unit -> 'a) -> 'a future
-  val touch : 'a future -> 'a
+  (* type 'a future *)
+  (* val future : (unit -> 'a) -> 'a future *)
+  (* val touch : 'a future -> 'a *)
 
   (* debugging *)
   val printArg : t -> unit

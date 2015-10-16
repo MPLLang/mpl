@@ -30,18 +30,18 @@ struct
   local
     structure V = MLton.Vector
   in
-  fun unfoldi _ = fn args => 
+  fun unfoldi _ = fn args =>
                      let val (a, x) = V.unfoldi args
-                     in 
-                       (full a, x) 
+                     in
+                       (full a, x)
                      end
   end
   val slice = subslice
 
-  fun halve a = 
-      let 
+  fun halve a =
+      let
         val l = length a div 2
-      in 
+      in
         (subslice (a, 0, SOME l), subslice (a, l, NONE))
       end
 
@@ -59,9 +59,9 @@ struct
   (* XXX make filter respect maxSeq *)
 
   val fork = MLton.Parallel.ForkJoin.fork
-  type 'a future = 'a MLton.Parallel.FutureSuspend.t
-  val future = MLton.Parallel.FutureSuspend.future
-  val touch = MLton.Parallel.FutureSuspend.touch
+  (* type 'a future = 'a MLton.Parallel.FutureSuspend.t *)
+  (* val future = MLton.Parallel.FutureSuspend.future *)
+  (* val touch = MLton.Parallel.FutureSuspend.touch *)
 
 end
 
@@ -72,9 +72,9 @@ struct
   (* XXX make filter respect maxSeq *)
 
   val fork = MLton.Parallel.ForkJoin.fork
-  type 'a future = 'a MLton.Parallel.FutureSuspendMaybeDelay.t
-  val future = MLton.Parallel.FutureSuspendMaybeDelay.future
-  val touch = MLton.Parallel.FutureSuspendMaybeDelay.touch
+  (* type 'a future = 'a MLton.Parallel.FutureSuspendMaybeDelay.t *)
+  (* val future = MLton.Parallel.FutureSuspendMaybeDelay.future *)
+  (* val touch = MLton.Parallel.FutureSuspendMaybeDelay.touch *)
 
 end
 
@@ -106,7 +106,7 @@ struct
 
   fun pivot a = sub (a, Random.randomInt (length a))
 
-  fun copy { src, dst, di } = 
+  fun copy { src, dst, di } =
       let
         val (a, i, _) = base dst
       in
@@ -115,10 +115,10 @@ struct
 
   val slice = subslice
 
-  fun halve a = 
-      let 
+  fun halve a =
+      let
         val l = length a div 2
-      in 
+      in
         (subslice (a, 0, SOME l), subslice (a, l, NONE))
       end
 
@@ -136,8 +136,8 @@ struct
   (* XXX make filter respect maxSeq *)
 
   val fork = MLton.Parallel.ForkJoin.fork
-  type 'a future = 'a MLton.Parallel.FutureSuspend.t
-  val future = MLton.Parallel.FutureSuspend.future
-  val touch = MLton.Parallel.FutureSuspend.touch
+  (* type 'a future = 'a MLton.Parallel.FutureSuspend.t *)
+  (* val future = MLton.Parallel.FutureSuspend.future *)
+  (* val touch = MLton.Parallel.FutureSuspend.touch *)
 
 end
