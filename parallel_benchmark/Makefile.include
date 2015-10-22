@@ -7,7 +7,7 @@ MLTON ?= ../../build/bin/mlton-parmem
 # eps
 
 # Parameters
-MLTON_FLAGS := -const 'Exn.keepHistory true' -expert true -link-opt '-Wl,--no-as-needed -lprofiler -Wl,--as-needed' -mlb-path-var "T7_SML_LIB $(T7_SML_LIB)" -mark-cards false
+MLTON_FLAGS := -const 'Exn.keepHistory true' -expert true -mlb-path-var "T7_SML_LIB $(T7_SML_LIB)" -mark-cards false
 
 ifneq (${KEEPG},)
 MLTON_FLAGS += -keep g

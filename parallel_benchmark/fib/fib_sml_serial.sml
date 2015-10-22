@@ -16,25 +16,12 @@ fun getIntOption (option) (args) : int option =
       of SOME arg => Int.fromString arg
        | NONE => NONE)
 
-fun serialFib granularity n =
+fun serialFib n =
     if n <= 1
     then 1
     else
         let
-            val (a, b) = (serialFib granularity (n - 1),
-                          serialFib granularity (n - 2))
-        in
-            a + b
-        end
-
-fun parallelFib granularity n =
-    if n <= 30
-    then serialFib granularity n
-    else
-        let
-            val (a, b) = MLton.Parallel.ForkJoin.fork
-                             (fn () => parallelFib granularity (n - 1),
-                              fn () => parallelFib granularity (n - 2))
+            val (a, b) = (serialFib (n - 1), serialFib (n - 2))
         in
             a + b
         end
@@ -50,12 +37,6 @@ fun iterFib n =
 
 fun main args =
     let
-        val fib = case getStringOption "-mode" args
-                   of SOME "parallel" => parallelFib
-                    | SOME "serial" => serialFib
-                    | SOME mode => die ("Unknown mode \"" ^ mode ^ "\"")
-                    | NONE => serialFib
-
         val granularity = case getIntOption "-granularity" args
                            of SOME g => g
                             | NONE => 20
@@ -68,7 +49,7 @@ fun main args =
                 fun run n =
                     let
                         val start = Time.now ()
-                        val r = fib granularity n
+                        val r = serialFib n
                         val diff = Time.- (Time.now (), start)
                         val r' = iterFib n
                         val () = if r <> r' then print ("expected " ^ Int.toString r' ^
@@ -85,7 +66,7 @@ fun main args =
             end
           | SOME n =>
             let
-                val r = fib granularity n
+                val r = serialFib n
             in
                 print ("finished with " ^ (Int.toString r) ^ "\n")
             end
