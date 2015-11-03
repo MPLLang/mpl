@@ -279,16 +279,9 @@ void forwardHHObjptr (GC_state s,
       headerBytes = GC_NORMAL_HEADER_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
     } else if (ARRAY_TAG == tag) {
-#pragma message "Implement when I can"
-#if 0
       headerBytes = GC_ARRAY_HEADER_SIZE;
       objectBytes = sizeofArrayNoHeader (s, getArrayLength (p),
                                          bytesNonObjptrs, numObjptrs);
-#else
-    die(__FILE__ ":%d: "
-        "forwardHHObjptr() does not support ARRAY_TAG objects!",
-        __LINE__);
-#endif
     } else {
       /* Stack. */
 #pragma message "Implement when I can"

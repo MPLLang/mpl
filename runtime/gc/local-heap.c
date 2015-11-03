@@ -38,8 +38,6 @@ void HM_exitLocalHeap (GC_state s) {
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
                                          size_t bytesRequested) {
-  assert (bytesRequested >= GC_HEAP_LIMIT_SLOP);
-
   int processor = Proc_processorNumber (s);
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
@@ -90,10 +88,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
     if (!HM_HH_extend(hh, bytesRequested)) {
-      HM_HHC_collectLocal();
-      if (!HM_HH_extend(hh, bytesRequested)) {
-        die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-      }
+      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
 
     s->frontier = HM_HH_getSavedFrontier(hh);
