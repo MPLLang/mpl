@@ -125,74 +125,51 @@ struct
           end
   end
 
-  local
-      fun doReduce maxSeq f g u n =
-          let
-              val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
+  fun reduce maxSeq f g u n =
+      let
+          val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
 
-              fun wrap i l () =
-                  if l <= maxSeq then
-                      let
-                          val stop = i + l
-                          fun loop j v = if j = stop then v
-                                         else loop (j + 1) (f (v, g j))
-                      in
-                          loop i u
-                      end
-                  else
-                      let
-                          val l' = l div 2
-                      in
-                          f (fork (wrap i l',
-                                   wrap (i + l') (l - l')))
-                      end
-          in
-              wrap 0 n ()
-          end
-  in
-      fun reduce maxSeq f g u n =
-          let
-              val _ = HM.enterGlobalHeap ()
-              val result = doReduce maxSeq f g u n
-              val _ = HM.exitGlobalHeap ()
-          in
-              result
-          end
-  end
+          fun wrap i l () =
+              if l <= maxSeq then
+                  let
+                      val stop = i + l
+                      fun loop j v = if j = stop then v
+                                     else loop (j + 1) (f (v, g j))
+                  in
+                      loop i u
+                  end
+              else
+                  let
+                      val l' = l div 2
+                  in
+                      f (fork (wrap i l',
+                               wrap (i + l') (l - l')))
+                  end
+      in
+          wrap 0 n ()
+      end
 
-  local
-      fun doReduce' maxSeq (g : int -> unit) n =
-          let
-              val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
+  fun reduce' maxSeq (g : int -> unit) n =
+      let
+          val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
 
-              fun wrap i l () =
-                  if l <= maxSeq then
-                      let
-                          val stop = i + l
-                          fun loop j = if j = stop then ()
-                                       else (g j; loop (j + 1))
-                      in
-                          loop i
-                      end
-                  else
-                      let
-                          val l' = l div 2
-                      in
-                          ignore (fork (wrap i l',
-                                        wrap (i + l') (l - l')))
-                      end
-          in
-              wrap 0 n ()
-          end
-  in
-      fun reduce' maxSeq g n =
-          let
-              val _ = HM.enterGlobalHeap ()
-              val result = doReduce' maxSeq g n
-              val _ = HM.exitGlobalHeap ()
-          in
-              result
-          end
-  end
-
+          fun wrap i l () =
+              if l <= maxSeq then
+                  let
+                      val stop = i + l
+                      fun loop j = if j = stop then ()
+                                   else (g j; loop (j + 1))
+                  in
+                      loop i
+                  end
+              else
+                  let
+                      val l' = l div 2
+                  in
+                      ignore (fork (wrap i l',
+                                    wrap (i + l') (l - l')))
+                  end
+      in
+          wrap 0 n ()
+      end
 end
