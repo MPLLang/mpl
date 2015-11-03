@@ -43,7 +43,7 @@
 #define DIE(...)                                  \
   do {                                            \
     fflush(NULL);                                 \
-    LOG(true, true, L_ERROR, __VA_ARGS__);        \
+    LOG(TRUE, TRUE, L_ERROR, __VA_ARGS__);        \
     exit(1);                                      \
   } while(FALSE)
 

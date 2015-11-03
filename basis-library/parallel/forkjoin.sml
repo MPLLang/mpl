@@ -21,50 +21,60 @@ struct
               val () = HM.exitGlobalHeap ()
               val result = (SOME(f ()), NONE)
                            (* SPOONHOWER_NOTE Do we need to execute g in the case where f raises? *)
-                           handle e => (exceptionHandler ();
-                                        (NONE, SOME(e)))
+                           handle e => (NONE, SOME e)
               val () = HM.enterGlobalHeap ()
           in
               case result
                of (SOME(r), NONE) => r
-                | (NONE, SOME(e)) => raise e
+                | (NONE, SOME(e)) => (exceptionHandler ();
+                                      raise e)
                 | _ => raise ShouldNotHappen
           end
   in
       fun fork (f, g) =
           let
               val () = HM.enterGlobalHeap ()
+
               (* make sure a hh is set *)
               val hh = HH.get ()
               val level = HH.getLevel hh
+
               (* Make sure calling thread is set to use hierarchical heaps *)
               val () = HH.useHierarchicalHeap ()
 
-              (*
-               * Used to hold the result of the right-hand side in the case
-               * where that code is executed in parallel. Should be on
-               * hierarchical heap as it points to HH data
-               *)
-              val inGlobalHeapCounter = HM.explicitExitGlobalHeap ()
-              val var = V.empty ()
-
-              (*
-               * Closure used to run the right-hand side... but only in the case
-               * where that code is run in parallel.
-               *)
-              val rightside = fn () =>
+              (* Allocate syncvar and closure in Hierarchical Heap *)
+              val (var, rightside) =
                   let
-                      val hh = HH.get ()
+                      val inGlobalHeapCounter = HM.explicitExitGlobalHeap ()
+
+                      (*
+                       * Used to hold the result of the right-hand side in the
+                       * case where that code is executed in parallel. Should be
+                       * on hierarchical heap as it points to HH data
+                       *)
+                      val var = V.empty ()
+
+                      (*
+                       * Closure used to run the right-hand side... but only in the case
+                       * where that code is run in parallel.
+                       *)
+                      val rightside = fn () =>
+                                         let
+                                             val hh = HH.get ()
+                                         in
+                                             V.write (var,
+                                                      Finished (g (), hh)
+                                                      handle e => Raised (e, hh));
+                                             B.return ()
+                                         end
+                                         handle B.Parallel msg =>
+                                                (print (msg ^ "\n");
+                                                 raise B.Parallel msg)
+
+                      val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
                   in
-                      V.write (var,
-                               Finished (g (), hh)
-                               handle e => Raised (e, hh));
-                      B.return ()
+                      (var, rightside)
                   end
-                  handle B.Parallel msg =>
-                         (print (msg ^ "\n");
-                          raise B.Parallel msg)
-              val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
 
               (* Increment level for chunks allocated by 'f' and 'g' *)
               val () = HH.setLevel (hh, level + 1)
@@ -76,8 +86,10 @@ struct
               val a = evaluateFunction f (fn () => (ignore (B.remove t);
                                                     B.yield ()))
 
-              (* Try to retract our offer -- if successful, run the right side
-          ourselves. *)
+              (*
+               * Try to retract our offer -- if successful, run the right side
+               * ourselves.
+               *)
               val b =
                   if B.remove t
                   then
@@ -105,6 +117,8 @@ struct
 
               (* Reset level *)
               val () = HH.setLevel (hh, level)
+
+              val () = HM.exitGlobalHeap ()
           in
               B.yield ();
               (a, b)

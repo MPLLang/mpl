@@ -108,6 +108,10 @@ Word32 HM_explicitExitGlobalHeap(void) {
   Word32 retVal = thread->inGlobalHeapCounter;
   thread->inGlobalHeapCounter = 0;
 
+  if (0 == retVal) {
+    DIE("Attempted to exit while GHC is zero!");
+  }
+
   /* return the old inGlobalHeapCounter */
   return retVal;
 }
@@ -117,6 +121,7 @@ Word32 HM_explicitExitGlobalHeap(void) {
 bool HM_inGlobalHeap (GC_state s) {
   GC_thread currentThread = getThreadCurrent (s);
 
-  return (0 != currentThread->inGlobalHeapCounter);
+  return (!currentThread->useHierarchicalHeap ||
+          (0 != currentThread->inGlobalHeapCounter));
 }
 #endif /* MLTON_GC_INTERNAL_FUNCS */
