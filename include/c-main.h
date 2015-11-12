@@ -48,14 +48,22 @@ static void MLton_callFromC (void* ffiArgs) {                           \
 }
 
 #define MLtonThreadFunc(mc, ml)                                         \
+  void threadn (void* arg) {                                            \
+  set_cpu_affinity(0);                                                  \
+    while(1) { usleep(1000); } }                                        \
 void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
-  uint32_t num = (Proc_processorNumber (s) / s->workersPerProc)         \
+  uint32_t num = (Proc_processorNumber (s))         \
       * s->controls->affinityStride                                     \
       + s->controls->affinityBase;                                      \
+  if ((s->workersPerProc == 2) &&                                       \
+      (Proc_processorNumber(s) == s->numberOfProcs - 1)) {                  \
+  printf("Trying to pin to %d\n", num - 1);                             \
+  set_cpu_affinity(num - 1);                                            \
+  } else {                                                              \
   set_cpu_affinity(num);                                                \
-  printf("Set affinity on %d\n", Proc_processorNumber (s));             \
+  }                                                                     \
                                                                         \
   /* Save our state locally */                                          \
   pthread_setspecific (gcstate_key, s);                                 \
@@ -82,10 +90,12 @@ void MLton_threadFunc (void* arg) {                                     \
     }                                                                   \
   }                                                                     \
   else {                                                                \
+    printf("Starting on %d!\n", Proc_processorNumber (s));               \
     Proc_waitForInitialization (s);                                     \
     Parallel_run ();                                                    \
   }                                                                     \
 }
+
 
 #define MLtonMain(al, mg, mfs, mmc, pk, ps, gnr, mc, ml)                \
   /* Globals */                                                         \
@@ -103,7 +113,7 @@ void MLton_threadFunc (void* arg) {                                     \
       /* Initialize with a generic state to read in @MLtons, etc */     \
       Initialize (s, al, mg, mfs, mmc, pk, ps, gnr);                    \
                                                                         \
-      threads = (pthread_t *) malloc ((s.numberOfProcs - 1) * sizeof (pthread_t)); \
+      threads = (pthread_t *) malloc ((s.numberOfProcs) * sizeof (pthread_t)); \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
       if (pthread_key_create(&gcstate_key, NULL)) {                     \
@@ -120,13 +130,18 @@ void MLton_threadFunc (void* arg) {                                     \
       Duplicate (&gcState[procNo], &gcState[0]);                        \
       gcState[procNo].procStates = gcState;                             \
     }                                                                   \
+    pthread_attr_t attr;                                                \
+    pthread_attr_init(&attr);                                            \
+    /* pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED); */  \
+    /* pthread_attr_setschedpolicy(&attr, SCHED_RR);  */                \
     /* Now create the threads */                                        \
     for (procNo = 1; procNo < gcState[0].numberOfProcs; procNo++) {     \
-      if (pthread_create (&threads[procNo - 1], NULL, &MLton_threadFunc, (void *)&gcState[procNo])) { \
+      if (pthread_create (&threads[procNo - 1], &attr, &MLton_threadFunc, (void *)&gcState[procNo])) { \
         fprintf (stderr, "pthread_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \
     }                                                                   \
+    pthread_create (&threads[procNo], NULL, &threadn, NULL);            \
     MLton_threadFunc ((void *)&gcState[0]);                             \
   }
 
