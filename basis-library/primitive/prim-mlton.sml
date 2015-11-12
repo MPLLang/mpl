@@ -141,6 +141,16 @@ structure GC =
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
    end
 
+structure Parallel =
+   struct
+      val numberOfProcessors =
+         _import "Parallel_numberOfProcessors" runtime private: unit -> Int32.int;
+      val numberOfProcessors = numberOfProcessors ()
+
+      val processorNumber =
+         _import "Parallel_processorNumber" runtime private: unit -> Int32.int;
+   end
+
 structure Platform =
    struct
       structure Arch =

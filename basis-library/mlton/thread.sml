@@ -69,12 +69,12 @@ fun prepare (t: 'a t, v: 'a): Runnable.t =
 fun new f = T (ref (New f))
 
 local
-   val numProcessors = MLtonParallelInternal.numberOfProcessors
-   val procNum = MLtonParallelInternal.processorNumber
+   val numProcs = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
+   val procNum = Int32.toInt o Primitive.MLton.Parallel.processorNumber
    local
       (* create one reference per processor *)
       val func: (unit -> unit) option Array.array =
-          Array.tabulate (numProcessors, fn _ => NONE)
+          Array.tabulate (numProcs, fn _ => NONE)
       val base: Prim.preThread =
          let
             val () = Prim.copyCurrent ()
@@ -104,7 +104,7 @@ local
             Prim.copy base
          end
    end
-   val switching = Array.tabulate (numProcessors, fn _ => false)
+   val switching = Array.tabulate (numProcs, fn _ => false)
 in
    fun 'a atomicSwitch (f: 'a t -> Runnable.t): 'a =
       let val proc = procNum () in
