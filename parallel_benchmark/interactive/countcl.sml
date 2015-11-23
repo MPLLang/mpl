@@ -1,7 +1,7 @@
 open IO.Graphics
 (*val fork = MLton.Parallel.ForkJoin.fork *)
 
-val fork = MLton.Parallel.ForkJoin.fork;
+val fork = MLton.Parallel.ForkJoin.forkLat;
 
 val _ = openwindow NONE (512, 512)
 
@@ -33,7 +33,7 @@ fun fib 0 = 1
   | fib 1 = 1
   | fib n =
     let
-        val (a,b) =  fork
+        val (a,b) =  fork false
                          (
                            (fn () => (fib (n-1))),
                            (fn () => (fib (n-2)))
@@ -57,7 +57,7 @@ fun fibs n =
 
 fun forever () =
     let in
-        (* print "Calling nextevent..."; *)
+        print "Calling nextevent...";
         (case maskevent (MLX.Mask.make [MLX.Mask.buttonpress, MLX.Mask.buttonrelease]) of
              MLX.Button (true, _, _, _, _, x, y, _, _, _, b, _) =>
              let (* val _ = print "Button\n" *)
@@ -70,10 +70,11 @@ fun forever () =
     end handle MLX.X s => (print ("exn: " ^ s ^ "\n"); forever ())
 
 fun mb () =
-    (case nextevent () of
+    (print "Hi\n";
+     case nextevent () of
          MLX.Motion (_, _, _, _, x, y, _, _, _, _, _) => forever ()
        | _ => mb ()) handle _ => mb ()
 
-val _ = fork (fn () => mb (), fn () => fibs 0)
+val _ = fork true (fn () => fibs 0, fn () => forever ())
 
 val _ = closewindow ()

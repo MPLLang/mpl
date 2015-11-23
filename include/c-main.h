@@ -54,16 +54,13 @@ static void MLton_callFromC (void* ffiArgs) {                           \
 void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
-  uint32_t num = (Proc_processorNumber (s))         \
+  uint32_t num = (Proc_processorNumber (s))        \
       * s->controls->affinityStride                                     \
       + s->controls->affinityBase;                                      \
   if ((s->workersPerProc == 2) &&                                       \
-      (Proc_processorNumber(s) == s->numberOfProcs - 1)) {                  \
-  printf("Trying to pin to %d\n", num - 1);                             \
-  set_cpu_affinity(num - 1);                                            \
-  } else {                                                              \
+	(Proc_processorNumber(s) == s->numberOfProcs - 1))              \
+    num--;                                                              \
   set_cpu_affinity(num);                                                \
-  }                                                                     \
                                                                         \
   /* Save our state locally */                                          \
   pthread_setspecific (gcstate_key, s);                                 \

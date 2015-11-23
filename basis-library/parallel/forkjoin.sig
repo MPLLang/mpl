@@ -4,6 +4,7 @@ sig
   (* run two functions, possibly in parallel, and return their results as the
    components of a pair *)
   val fork : (unit -> 'a) * (unit -> 'b) -> 'a * 'b
+  val forkLat : bool -> (unit -> 'a) * (unit -> 'b) -> 'a * 'b
 
   (* aggregate some intermediate results.  you can think of the arguments like
    the multiplication and unit operations of a group, along with an injection

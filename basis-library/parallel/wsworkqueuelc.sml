@@ -35,6 +35,7 @@ struct
   fun incr r = r := !r + 1
 
   val yield = _import "Parallel_yield" runtime private: unit -> unit;
+  val pthread_yield = _import "pthread_yield" : unit -> unit;
 
   val takeLock = _import "Parallel_lockTake" runtime private: int ref -> unit;
   val releaseLock = _import "Parallel_lockRelease" runtime private: int ref -> unit;
@@ -430,6 +431,12 @@ struct
 
       fun steal () =
           let
+              val _ =
+                (* If there's no work, yield to the throughput thread *)
+                if lat andalso !failedSteals > numberOfProcessors then
+                    (failedSteals := 0;
+                     pthread_yield ())
+                else ()
             (* Who to steal from? *)
             val p' = victim p
             val unsync =

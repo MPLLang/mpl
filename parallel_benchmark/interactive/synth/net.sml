@@ -25,7 +25,7 @@ fun inploop sock =
          if String.size s = 0 then
              (Socket.close sock; ())
          else
-             case String.compare (s, "done") of
+             case String.compare (s, "done\n") of
                  EQUAL => OS.Process.exit OS.Process.success
                | _ =>
                  (print ("Hi, " ^ s ^ "\n");

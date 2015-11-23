@@ -1,6 +1,7 @@
 open IO.Graphics
 
 val fork = MLton.Parallel.ForkJoin.fork;
+val forkLat = MLton.Parallel.ForkJoin.forkLat;
 
 val _ = openwindow NONE (512, 512)
 
@@ -112,32 +113,23 @@ fun permutations [] = []
 					) 
 			l)
 	end;
-	
-fun filter p nil = nil
-|	filter p (x::xs) = 
-	let 
-		val v1 = ref false
-		val v2 = ref nil
-		val _ = fork(
-			(fn () => 
-				(
-					v1 := (p x);
-					()
-				)
-			),
-			(fn () => 
-				(
-					v2 := (filter p xs);
-					()
-				)
-			)
-		)
-	in
-		if (!v1) then
-			(x::(!v2))
-		else
-			(!v2)
-	end;
+
+fun toList a s e =
+    Array.foldri (fn (i, x, r) => if i >= s andalso i <= e then x::r else r)
+                 [] a
+
+fun filter p a s e =
+    if e - s < 100 then
+        List.filter p (toList a s e)
+    else
+        let val piv = s + Int.div (e - s, 2)
+            (* val _ = print ((Int.toString s) ^ " " ^ (Int.toString e) ^ "\n") *)
+            val (l, r) =
+                fork ((fn () => filter p a s piv),
+                      (fn () => filter p a (piv + 1) e))
+        in
+            l @ r
+        end
 
 fun binarySearch e arr = 
 	let 
@@ -168,8 +160,10 @@ fun anagrams w =
 	let
 		fun filterPredicate e = binaryBelongs e words
 		val possibilities = getPossibilities w
+        val _ = print "got possibilities\n"
 	in
-		filter filterPredicate possibilities
+		filter filterPredicate (Array.fromList possibilities)
+               0 (List.length possibilities)
 	end;
 
 fun stats x y = ("Mouse: (" ^ (Int.toString x) ^ ", " ^ (Int.toString y) ^ ")\n");
@@ -210,13 +204,12 @@ fun analoop () =
 		val _ = print ("Insert a new string:\t")
 		val w = inputLine ()
 	in
-		if w = NONE then
-			OS.Process.exit OS.Process.success
-		else
-			print ((string_of_list (anagrams (valOf(w))))^("\n"));
-			print (valOf(w));
-			analoop ();
-			()
+        case w of 
+            NONE => OS.Process.exit OS.Process.success
+          | SOME w =>
+            (print ("Anagramming " ^ w ^ "\n");
+			print ((string_of_list (anagrams w))^("\n"));
+			analoop ())
 	end;
 
-fork ((fn () => (mouse();())), (fn () => (analoop ();())));
+val _ = analoop () (* forkLat true (analoop, mouse) *)

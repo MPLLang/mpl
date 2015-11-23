@@ -8,7 +8,7 @@ struct
      Finished of 'a
    | Raised of exn
 
-  fun fork (f, g) =
+  fun forkLat gl (f, g) =
       let
         (* Used to hold the result of the right-hand side in the case where
           that code is executed in parallel. *) 
@@ -20,7 +20,7 @@ struct
                             B.return ())
 
         (* Offer the right side to any processor that wants it *)
-        val t = B.addRight rightside (* might suspend *)
+        val t = B.addRightLat (gl, rightside) (* might suspend *)
         (* Run the left side *)
         val a = f ()
             (* XXX Do we need to execute g in the case where f raises? *)
@@ -39,6 +39,8 @@ struct
         B.yield ();
         (a, b)
       end
+
+  fun fork (f, g) = forkLat false (f, g)
 
   fun reduce maxSeq f g u n =
     let

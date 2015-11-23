@@ -1,12 +1,8 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 
-../x/graphics.mlb
+x/graphics.mlb
 $(SML_LIB)/basis/parallel/io.sig
 $(SML_LIB)/basis/parallel/io.sml
-sha1-sig.sml
-sha1.sml
-MersenneTwister.sml
-RANDOM210.sig
-DotMix.sml
-uts_term.sml
+
+fibserv.sml

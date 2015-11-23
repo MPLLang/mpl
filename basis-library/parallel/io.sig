@@ -51,11 +51,27 @@ sig
     val drawline : int -> int -> int -> int -> unit
 end
 
+signature NETWORK =
+sig
+    val accept : ('af, Socket.passive Socket.stream) Socket.sock
+                 -> ('af, Socket.active Socket.stream) Socket.sock *
+                    'af Socket.sock_addr
+    val connect : ('af, 'sock_type) Socket.sock * 'af Socket.sock_addr -> unit
+    val sendString : ('af, Socket.active Socket.stream) Socket.sock * string -> int
+    val recvString : ('af, Socket.active Socket.stream) Socket.sock * int -> string
+end
+
 signature MLTON_PARALLEL_IO =
 sig
 
 val input1 : TextIO.StreamIO.instream -> (char * TextIO.StreamIO.instream) option
 
+val print : string -> unit
+
+val yield : unit -> unit
+
 structure Graphics : GRAPHICS
+
+structure Network : NETWORK
 
 end

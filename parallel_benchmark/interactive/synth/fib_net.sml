@@ -45,19 +45,16 @@ fun fib n =
             (a + b)
         end
 
-fun fibloop n =
-    (if n > 42 then
-        let val finish = Time.now ()
-            val diff = Time.-(finish, start)
-            val diffi = LargeInt.toInt (Time.toMilliseconds diff)
-        in
-            print ("exectime " ^ (Int.toString diffi) ^ "\n");
-            OS.Process.exit OS.Process.success
-        end
-    else
-        (print ("fib(" ^ (Int.toString n) ^ ") = " ^ (Int.toString (fib n)) ^ "\n");
-         fibloop (n + 1))
-    )
+fun fibdo n =
+    let val f = fib n
+        val _ = print ("fib(" ^ (Int.toString n) ^ ") = " ^ (Int.toString (fib n)) ^ "\n")
+        val finish = Time.now ()
+        val diff = Time.-(finish, start)
+        val diffi = LargeInt.toInt (Time.toMilliseconds diff)
+    in
+        print ("exectime " ^ (Int.toString diffi) ^ "\n");
+        OS.Process.exit OS.Process.success
+    end
 
 fun inploop sock =
     (let (* val _ = print "receiving\n" *)
@@ -89,7 +86,7 @@ fun acceptloop sock =
 
 in
 
-MLton.Parallel.ForkJoin.forkLat true ((fn () => fibloop 0),
+MLton.Parallel.ForkJoin.forkLat true ((fn () => fibdo 43),
                                               (fn () => acceptloop sock))
 (* val _ = loop fibs fibs *)
 end

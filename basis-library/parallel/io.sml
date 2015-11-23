@@ -23,6 +23,20 @@ fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) op
              input1 is)
     end
 
+fun print s = MLton.Thread.atomically (fn () => TextIO.print s)
+
+fun yield () =
+    let val ready = ref false
+        fun f () =
+            let val r = !ready
+                val _ = ready := true
+            in
+                r
+            end
+    in
+        B.suspend (fn t => B.addtoio (t, f))
+    end
+
 structure Graphics : GRAPHICS =
 struct
 
@@ -237,7 +251,7 @@ fun drawrectangle (x: int) (y: int) (w: int) (h: int) =
 fun drawline (x1: int) (y1: int) (x2: int) (y2: int) =
     case !dwgc of
         NONE => raise NoWindowOpen
-      | SOME (d, w, gc) => MLX.fillrectangle d (MLX.wd w) gc x1 y1 x2 y2
+      | SOME (d, w, gc) => MLX.drawline d (MLX.wd w) gc x1 y1 x2 y2
 
 fun clear () =
     let val (w, h) = !size
@@ -248,6 +262,54 @@ fun clear () =
         setforeground oldfg
     end
 
+end
+
+structure Network : NETWORK =
+struct
+
+open Socket
+
+fun B_of_NB (f: 'a -> 'b option) (v: 'a) : 'b =
+    let val (r: 'b option ref) = ref NONE
+        fun f' () =
+            (case !r of
+                 NONE => (r := f v;
+                          case !r of
+                              NONE => false
+                            | SOME _ => true)
+               | SOME _ => true)
+        fun bnb_rec () =
+            if f' () then
+                case !r of
+                    NONE => raise OS.SysErr ("Impossible", NONE)
+                  | SOME c => c
+            else
+                (B.suspend (fn t => B.addtoio (t, f'));
+                 bnb_rec ())
+    in
+        bnb_rec ()
+    end
+
+fun accept s = B_of_NB acceptNB s
+fun connect s =
+    B_of_NB (fn s => if connectNB s then SOME () else NONE) s
+
+fun sendString (sock, str) =
+    let val arr = Array.tabulate (String.size str,
+                                 fn i => Word8.fromInt (Char.ord (String.sub (str, i))))
+        val slice = ArraySlice.slice (arr, 0, NONE)
+    in
+        B_of_NB sendArrNB (sock, slice)
+    end
+
+fun recvString (sock, n) =
+    let val v = B_of_NB recvVecNB (sock, n)
+    in
+        Vector.foldl (fn (c, s) =>
+                         s ^ (String.str (Char.chr (Word8.toInt c))))
+                     ""
+                     v
+    end
 end
 
 end
