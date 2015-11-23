@@ -424,8 +424,6 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
 
     ENTER0 (s);
-    /* XXX should this go here? */
-    switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
     /* Recheck invariants now that we hold the lock */
     if ((ensureStack and not invariantForMutatorStack (s))
@@ -465,6 +463,11 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* SPOONHOWER_NOTE: Used to be enter() here */
+  /* XXX copied from enter() */
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
 
   /* When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
@@ -474,20 +477,17 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
     /* first make sure that I hit the minimum */
     bytesRequested = s->controls->allocChunkSize;
   }
-
   /* add extra slop */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  /* XXX copied from enter() */
-  /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
   ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
                                                   TRUE, TRUE,
                                                   0, 0);
+
+  endAtomic (s);
 }
 
 pointer FFI_getArgs (GC_state s) {

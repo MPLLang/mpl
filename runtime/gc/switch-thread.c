@@ -47,10 +47,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
     s->atomicState--;
-    /* SPOONHOWER_NOTE: don't bother to check the signal handler here since we
-       (probably) aren't bothering to synchronize.  we'll get it on the next
-       failed allocation request. */
-    //switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
+    switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
                                                     TRUE, TRUE,
                                                     0, 0);
