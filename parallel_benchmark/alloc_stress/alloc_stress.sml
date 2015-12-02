@@ -39,8 +39,6 @@ fun getByteSizeOption (option : string) (args : string list) : int option =
 
 fun doit (allocSize : int) (numAllocs : int) (numTasks : int) =
     let
-        val fork = MLton.Parallel.ForkJoin.fork
-
         fun allocArray 0 = ()
           | allocArray n =
               let
@@ -58,7 +56,8 @@ fun doit (allocSize : int) (numAllocs : int) (numTasks : int) =
 
         fun forker (task::tasks) =
             let
-                val _ = fork (fn () => forker tasks, task)
+                val _ = MLton.Parallel.ForkJoin.fork (fn () => forker tasks,
+                                                      task)
             in
                 ()
             end
@@ -77,9 +76,11 @@ fun main args =
                          of SOME v => v
                           | NONE => 1000
 
-        val numTasks = case getIntOption "-num-tasks" args
-                        of SOME v => v
-                         | NONE => 1
+        val numTasks = case getStringOption "-num-tasks" args
+                        of SOME "p" => MLton.Parallel.Basic.numberOfProcessors
+                         | _ => case getIntOption "-num-tasks" args
+                                of SOME v => v
+                                 | NONE => 1
     in
         print (String.concat ["allocSize: ",
                               Int.toString allocSize,
