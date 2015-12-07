@@ -27,14 +27,16 @@ struct
             handle e => (ignore (B.remove t); B.yield (); raise e)
         (* Try to retract our offer -- if successful, run the right side
           ourselves. *)
-        val b = if B.remove t then
+        val b = if B.removeLat gl t then
                  (* no need to yield since we expect this work to be the next thing
                     in the queue *)
-                  g ()
+                    ((* print "should have removed...\n"; *)
+                     g ())
                   handle e => (B.yield (); raise e)
                 else
+                    ((if not gl then print "stolen\n" else ());
                   case V.read var of (_, Finished b) => b
-                                   | (_, Raised e) => (B.yield (); raise e)
+                                   | (_, Raised e) => (B.yield (); raise e))
       in
         B.yield ();
         (a, b)

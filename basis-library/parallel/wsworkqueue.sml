@@ -814,6 +814,8 @@ struct
         before unsync ()
       end
 
+  fun removeWorkLat (_, p, t) = removeWork (p, t)
+
   fun shouldYield _ = false
 
   val policyName = P.policyName

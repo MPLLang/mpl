@@ -40,6 +40,7 @@ sig
     guaranteed that no other processor will execute that task.  At most call
     to remove work (for a given task) will return true. *)
   val remove : token -> bool
+  val removeLat : bool -> token -> bool
 
   (* Adds to the queue after the current task has finished.  (Finished is
     defined as the next time this task suspends: possibly one of suspend,

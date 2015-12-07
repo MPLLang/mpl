@@ -35,6 +35,7 @@ sig
   (* removes a piece of work from the queue if it hasn't already been returned
     by getWork, work can only be removed after it has been added. *)
   val removeWork : proc * token -> bool
+  val removeWorkLat : bool * proc * token -> bool
 
   (* is there higher priority work for the given processor? *)
   val shouldYield : proc -> bool

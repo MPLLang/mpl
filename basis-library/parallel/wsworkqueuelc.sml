@@ -95,23 +95,84 @@ struct
 
   val WORK_ARRAY_SIZE = 1024
   (* private state *)
+
+  type age = Word32.word
+
+  val maxsize = 65536
+  fun tag age = Word32.toInt (Word32.>> (age, 0w16))
+  fun top age = Word32.toInt (Word32.>> (Word32.<< (age, 0w48), 0w48))
+  fun packAge (tag, top) =
+      Word32.+ (Word32.<< (Word32.fromInt tag, 0w16), Word32.fromInt top)
+
   datatype entry = Empty | Work of (token * W.work (* * int *)) | Marker
+  and q = Q of { age : age ref,
+                 bot : int ref,
+                 deq : entry A.array }
   and queue = Queue of {
-                              top : int ref,
-                              bottom : int ref,
-                              index : int ref,
-                              work : entry (* (token * W.work (* * int *) ) option *) A.array ref,
+                              work : q ref,
                               lat : bool
                             }
   and token = Token of queue option ref
   type susp = queue option
 
+  val cas = _import "Parallel_compareAndSwap" runtime private:
+             Word32.word ref * Word32.word * Word32.word -> bool;
+
+  fun pushBottom (Q {age, bot, deq}: q) (e: entry) : unit =
+      let val localBot = !bot
+      in
+          if localBot > maxsize then (print "exceeded size\n"; raise WorkQueue)
+          else
+              (A.update (deq, localBot, e);
+               bot := localBot + 1)
+      end
+
+  fun popTop (Q {age, bot, deq}: q) : entry option =
+      let val oldAge = !age
+          val localBot = !bot
+      in
+          if localBot <= top oldAge then NONE
+          else
+              let val node = A.sub (deq, top oldAge)
+                  val newAge = packAge (tag oldAge, (top oldAge) + 1)
+              in
+                  if cas (age, oldAge, newAge) then
+                      SOME node
+                  else
+                      NONE
+              end
+      end
+
+  fun popBottom (Q {age, bot, deq}: q) : entry option =
+      let val localBot = !bot
+      in
+          if localBot = 0 then NONE else
+          let val localBot = localBot - 1
+              val _ = bot := localBot
+              val node = A.sub (deq, localBot)
+              val oldAge = !age
+          in
+              if localBot > top oldAge then
+                  SOME node
+              else
+                  (bot := 0;
+                   let val newAge = packAge ((tag oldAge) + 1, 0)
+                   in
+                       if (localBot = top oldAge) andalso
+                          (cas (age, oldAge, newAge))
+                       then
+                           SOME node
+                       else
+                           (age := newAge;
+                            NONE)
+                   end)
+          end
+      end
+
   fun newQueue lat index =
       Queue {
-              top = ref 0,
-              bottom = ref 0,
-              index = ref index,
-              work = ref (A.array (WORK_ARRAY_SIZE, Empty)),
+              work = ref (Q {age = ref 0w0, bot = ref 0,
+                             deq = A.array (maxsize, Empty)}),
               lat = lat
             }
 
@@ -316,7 +377,10 @@ struct
   fun newWork p = Token (ref NONE)
 
   (* must already hold the lock! *)
-  fun resize p (Queue { top, bottom, work, ... }) =
+  fun resize p (Queue q) =
+      (print "resize not supported\n";
+       raise WorkQueue)
+(*
       let
         val i = !top
         val j = !bottom
@@ -349,16 +413,14 @@ struct
             bottom := 0
           end
       end
+*)
 
   fun addWork (lat, p, tws) =
     let
       (* val () = pr p "before-add" *)
       val p = p / 2
-      val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-      val () = takeLock thiefLock; (* XTRA *)
-      (* val () = dekkerLock (true, lock); *)
 
-      val q as Queue { top, work, ... } =
+      val q as Queue { work, ... } =
           if lat then
               ((* print "adding latency task\n"; *)
                case A.sub (lqueues, p)
@@ -367,25 +429,18 @@ struct
               case A.sub (cqueues, p)
                of SOME q => q | NONE => (print "add\n"; raise WorkQueue)
       fun add (tw as (t as Token r, w)) =
-          let
-            val i = !top
-            val () = if i = A.length (!work) then resize p q else ()
-            val i = !top (* in case of resize *)
-          in
-            r := SOME q;
-            A.update (!work, i, Work (* tw *) (t, w (*, next () *)));
-            top := i + 1
-          end
+          (r := SOME q;
+           pushBottom (!work) (Work (t, w)))
     in
       app add tws;
       pr p "add:";
-      count p "add" (length tws);
-      (* dekkerUnlock (true, lock); *)
-      releaseLock thiefLock (* XTRA *)
+      count p "add" (length tws)
     end
 
 (* move queue at a into p', assumes the master lock is held *)
   fun moveQueue lat (a, p') =
+      ()
+(*
       if a = p' then ()
       else
         let
@@ -402,6 +457,7 @@ struct
           index := p';
           A.update (if lat then lqueues else cqueues, p', SOME q)
         end
+*)
 
   local
     fun victim p =
@@ -425,9 +481,6 @@ struct
       val lat = (p mod 2 = 0)
       val p = p / 2
       val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
-      val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-      val () = takeLock thiefLock (* XTRA *)
-      (* val () = dekkerLock (true, lock) *)
 
       fun steal () =
           let
@@ -439,30 +492,6 @@ struct
                 else ()
             (* Who to steal from? *)
             val p' = victim p
-            val unsync =
-                if p' < numberOfProcessors then
-                  let
-                    (* Release our own lock *)
-                    (* val () = dekkerUnlock (true, lock) *)
-                    val () = releaseLock thiefLock (* XTRA *)
-                    (* Take the victim's lock *)
-                    val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
-                    val () = takeLock thiefLock
-                    (* val () = dekkerLock (false, ownerLock) *)
-                  in
-                    fn () => ((* dekkerUnlock (false, ownerLock); *)
-                              releaseLock thiefLock)
-                  end
-                else
-                  let
-                    (* Here we hold on to our own lock, since we might modify
-                      our own queue. *)
-                    val () = takeLock masterLock
-                  in
-                    fn () => (releaseLock masterLock;
-                              (* dekkerUnlock (true, lock); *)
-                              releaseLock thiefLock (* XTRA *))
-                  end
             fun maybeCleanup () =
                 (if p' < numberOfProcessors then false (* can't remove owned queues *)
                 else if p' >= !activeQueues then false (* can't remove inactive queues *)
@@ -484,141 +513,63 @@ struct
                                         raise WorkQueue)
           in
             case A.sub (queues, p')
-             of NONE => ((incr failedSteals; unsync (); yield (); NONE)
+             of NONE => ((incr failedSteals; yield (); NONE)
                          handle Overflow => (print "449!\n";
                                              raise WorkQueue))
-              | SOME (q as Queue { bottom, top, work, index, ... }) =>
-                let
-                  val j = !bottom
-                  val i = !top
-                in(
-                  if i <> j then (* not empty *)
-                    if P.stealEntireQueues andalso p' >= numberOfProcessors
-                       andalso (not P.stealFromSuspendedQueues orelse p' < !activeQueues) then
-                      let (* Steal the whole queue *)
-                        val a = !activeQueues - 1
-                        val b = !totalQueues - 1
-                      in
-                        index := p;
-                        A.update (queues, p, SOME q);
-                        (* Shuffle the other queues around *)
-                        moveQueue lat (a, p');
-                        activeQueues := a;
-                        moveQueue lat (b, a);
-                        totalQueues := b;
-                        A.update (queues, b, NONE);
-                        (* Update our new state *)
-                        top := i - 1;
-                        case A.sub (!work, i - 1)
-                         of Empty => raise WorkQueue
-                          | Marker => ((pr p "queue-steal(marker):";
-                                       (* count the steal here since we won't
-                                           count it next time *)
-                                       incr successfulSteals;
-                                       NONE)
-                                       handle Overflow => (print "480\n";
-                                                           raise WorkQueue))
-                          | Work tw =>
-                            ((pr p "queue-steal:";
-                             incr successfulSteals;
-                             SOME (true, #2 tw))
-                             handle Overflow => (print "486!\n";
-                                                 raise WorkQueue))
-                      end
-                        before (A.update (!work, i - 1, Empty);
-                                count p "queue-steal" ~1;
-                                unsync ())
-                    else
-                      let (* Just steal the oldest task *)
-                        val w = A.sub (!work, j)
-                        val () = A.update (!work, j, Empty)
-                      in
-                        if i = j + 1 andalso maybeCleanup () then ()
-                        else ();
-                        bottom := j + 1;
-                        case w
-                         of Empty => raise WorkQueue
-                          | Marker => NONE
-                          | Work tw =>
-                            ((pr p "work-steal:";
-                             incr successfulSteals;
-                             SOME (true, #2 tw))
-                             handle Overflow => (print "507\n";
-                                                 raise WorkQueue))
-                      end
-                        before (count p "work-steal" ~1;
-                                unsync ())
-                  else (* empty queue *)
-                    ((ignore (maybeCleanup ());
-                     count p "failed-steal" 0;
-                     incr failedSteals;
-                     unsync (); yield (); NONE)
-                     handle Overflow => (print "517!\n";
-                                         raise WorkQueue)))
-                  end
-                  handle Overflow => (print "522!\n";
-                                      raise WorkQueue)
+              | SOME (q as Queue { work,  ... }) =>
+                (case popTop (!work) of
+                     SOME w =>
+                     (case w of
+                          Empty => ((if not lat then print "steal\n" else ()); raise WorkQueue)
+                        | Marker => NONE
+                        | Work tw =>
+                          ((pr p "work-steal:";
+                            print "steal\n";
+                            incr successfulSteals;
+                            SOME (true, #2 tw))
+                           handle Overflow => (print "507\n";
+                                               raise WorkQueue))
+                     )
+                     before (count p "work-steal" ~1)
+                   | NONE => (* empty queue *)
+                     ((ignore (maybeCleanup ());
+                       count p "failed-steal" 0;
+                       incr failedSteals;
+                       yield (); NONE)
+                      handle Overflow => (print "517!\n";
+                                          raise WorkQueue)))
           end
     in
       case A.sub (queues, p)
            of NONE => steal ()
-            | SOME (Queue { top, bottom, work, ... }) =>
-              let
-                val i = !top
-                val j = !bottom
-              in
-                if i = j then
-                  (if i <> 0 then (top := 0; bottom := 0) else (); (* PERF unconditional? *)
-                   (* release lock in steal *)
-                   steal ())
-                else if P.stealOldestFromSelf andalso A.sub (suspending, p) then
-                  (bottom := j + 1;
-                   pr p "get-oldest:";
-                   case A.sub (!work, j)
-                    of Empty => raise WorkQueue
-                     | Marker => NONE (* just return and loop again *)
-                     | Work tw => SOME (true, #2 tw))
-                  before (A.update (!work, j, Empty);
-                          count p "get-oldest" ~1;
-                          (* dekkerUnlock (true, lock); *)
-                          releaseLock thiefLock) (* XTRA *)
-                else (* Take the youngest from our queue *)
-                  (top := i - 1;
-                   pr p "get:";
-                   case A.sub (!work, i - 1)
-                    of Empty => raise WorkQueue
-                     | Marker => (A.update (!work, i - 1, Empty);
-                                  releaseLock thiefLock;
-                                  case getWork p
+            | SOME (Queue { work, ... }) =>
+              (case popBottom (!work) of
+                   NONE => steal ()
+                 | SOME Empty => (print "getWork\n"; raise WorkQueue)
+                 | SOME Marker => ((* XXX A.update (!work, i - 1, Empty); *)
+                                   case getWork p
                                    of NONE => NONE
                                     | SOME (_, w) => SOME (true, w))
-                     | Work tw => SOME (false, #2 tw)
-                                  before (A.update (!work, i - 1, Empty);
-                                          count p "get" ~1;
-                                          (* dekkerUnlock (true, lock); *)
-                                          releaseLock thiefLock  ) (* XTRA *))
-              end
+                 | SOME (Work tw) => SOME (false, #2 tw)
+                                  (* XXX before (A.update (!work, i - 1, Empty);
+                                          count p "get" ~1) *)
+              )
     end
   end
 
   fun startWork p =
       let
         val p = p / 2
-        val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
-        (* val () = dekkerLock (true, ownerLock) *)
-        val () = takeLock thiefLock (* XTRA *)
       in
         A.update (suspending, p, false);
         (* Initialize a queue for this processor if none exists *)
-        case A.sub (cqueues, p)
+        (case A.sub (cqueues, p)
          of SOME _ => ()
-          | NONE => A.update (cqueues, p, SOME (newQueue false p));
-        case A.sub (lqueues, p)
+          | NONE => A.update (cqueues, p, SOME (newQueue false p)));
+        (case A.sub (lqueues, p)
          of SOME _ => ()
-          | NONE => A.update (lqueues, p, SOME (newQueue true p));
-        count p "start" 0;
-        releaseLock thiefLock (* XTRA *)
-        (* dekkerLock *)
+          | NONE => A.update (lqueues, p, SOME (newQueue true p)));
+        count p "start" 0
       end
 
   fun finishWork p = ()
@@ -627,13 +578,13 @@ struct
       let
         (* val () = pr p "before-suspend" *)
         val p = p / 2
-        val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
-        (* val () = dekkerLock (true, ownerLock) *)
-        val () = takeLock thiefLock (* XTRA *)
         val lat = P.workOnLatency numberOfProcessors p
         val queues = if lat then lqueues else cqueues
       in
         (if P.suspendEntireQueues then
+             (print "suspendEntireQueues\n";
+              raise WorkQueue)
+(*
            let
              val () = takeLock masterLock
              val q as Queue { index, ... } = case A.sub (queues, p)
@@ -652,13 +603,12 @@ struct
              releaseLock masterLock;
              SOME q
            end
+*)
          else
            let in
              A.update (suspending, p, true);
              NONE
            end)
-        before ((* dekkerUnlock (true, ownerLock); *)
-                releaseLock thiefLock) (* XTRA *)
       end
 
   fun resumeWork (lat, p, NONE, tw as (t as Token r, w)) =
@@ -670,28 +620,16 @@ struct
       if P.resumeWorkLocally then
         let
           (* val () = pr p "before-resume-local" *)
-          val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-          val q as Queue { top, work, ... } = case A.sub (queues, p)
+          val q as Queue { work, ... } = case A.sub (queues, p)
                                                of SOME q => q | NONE => (print "resume-add\n"; raise WorkQueue)
           fun add w =
-              let
-                val i = !top
-                val () = if i = A.length (!work) then resize p q else ()
-                val i = !top (* in case of resize *)
-              in
-                A.update (!work, i, w);
-                top := i + 1
-              end
+              pushBottom (!work) w
           val () = r := SOME q;
         in
-          takeLock thiefLock; (* XTRA *)
-          (* dekkerLock (true, lock); *)
           add Marker;
           add (Work tw);
           add Marker;
-          pr p "local-resume:";
-          (* dekkerUnlock (true, lock); *)
-          releaseLock thiefLock (* XTRA *)
+          pr p "local-resume:"
         end
 
       else (* make a new queue *)
@@ -701,11 +639,9 @@ struct
           val a = !activeQueues
           val b = !totalQueues
           val () = if b >= QUEUE_ARRAY_SIZE then (print "queues2\n"; raise QueueSize) else ()
-          val q as Queue { work, top, ... } = newQueue lat a
-          val i = !top (* top should be 0 *)
+          val q as Queue { work, ... } = newQueue lat a
         in
-          A.update (!work, i, Work (t, w (*, next () *)));
-          top := i + 1;
+          pushBottom (!work) (Work (t, w));
           totalQueues := b + 1;
           moveQueue lat (a, b);
           activeQueues := a + 1;
@@ -715,7 +651,10 @@ struct
           releaseLock masterLock
         end
       end
-    | resumeWork (lat, p, q as SOME (Queue { work, top, index, ... }), tw as (t, w)) =
+    | resumeWork (lat, p, q as SOME (Queue { work, ... }), tw as (t, w)) =
+      (print "don't know how to do this\n";
+       raise WorkQueue)
+(*
       let
         val p = p / 2
         (* val () = pr p "before-resume-original" *)
@@ -738,11 +677,31 @@ struct
         count p "resume" 1;
         releaseLock masterLock
       end
+*)
 
 (* what if a job J is added, then that queue is suspended, then resumed by a
   different processor.  then the token (the proc number at the time J was
   added) doesn't reflect which lock should be take nor which queue *)
-  fun removeWork (p', Token r) =
+  fun removeWorkLat (lat, p, Token r) =
+      (* XXX this isn't general *)
+      let val p = p / 2
+          val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
+      in
+      case A.sub (queues, p)
+           of NONE => false
+            | SOME (Queue { work, ... }) =>
+              (case popBottom (!work) of
+                   NONE => false
+                 | SOME Empty => false
+                 | SOME Marker => false
+                 | SOME (Work (t, w)) =>
+                   if t = Token r then true
+                   else
+                       (pushBottom (!work) (Work (t, w));
+                        false)
+              )
+    end
+(*
       let
         (* val () = pr p' "before-remove" *)
         val p' = p' / 2
@@ -807,6 +766,9 @@ struct
         found
         before unsync ()
       end
+*)
+
+  fun removeWork (p, t) = removeWorkLat (false, p, t)
 
   fun shouldYield _ = false
 

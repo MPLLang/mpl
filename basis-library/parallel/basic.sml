@@ -107,7 +107,14 @@ struct
                               | Thread k => T.switch (fn _ => T.prepare (k, ())))
                       (* PERF? this handle only makes sense for the Work case *)
                       (* PERF? move this handler out to the native entry point? *)
-                      handle e => (TextIO.output (TextIO.stdErr,
+                      handle Parallel s =>
+                             (TextIO.output (TextIO.stdErr,
+                                             ("WARNING: Caught parallel exception \""
+                                                   ^ s
+                                                   ^ "\" in parallel scheduler!\n"));
+                                   TextIO.flushOut TextIO.stdErr;
+                                   MLtonProcess.exit MLtonProcess.Status.failure)
+                             | e => (TextIO.output (TextIO.stdErr,
                                                   ("WARNING: Caught exception \""
                                                    ^ (General.exnMessage e)
                                                    ^ "\" in parallel scheduler!\n"));
@@ -267,6 +274,7 @@ struct
 
   fun addLeft w = addLeftLat (false, w)
 
+  fun removeLat lat t = Q.removeWorkLat (lat, processorNumber (), t)
   fun remove t = Q.removeWork (processorNumber (), t)
 
 (* XXX left? what about the right? *)
