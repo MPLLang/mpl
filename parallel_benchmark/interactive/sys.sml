@@ -4,30 +4,35 @@ struct
 
 open I
 
-datatype sig_ref = Sig of (Posix.Signal.signal * sig_ref) S.t
-val next_sig : sig_ref ref = ref (Sig (S.empty ()))
+datatype sig_ref = Sig of int * (Posix.Signal.signal * sig_ref) S.t
+val next_sig : sig_ref ref = ref (Sig (0, S.empty ()))
 fun handle_sig s () =
     let val new_sig = S.empty ()
-        val Sig sv = !next_sig
+        val Sig (n, sv) = !next_sig
         val _ = print "signal!\n"
     in
-        S.write (sv, (s, Sig new_sig));
-        next_sig := Sig new_sig
+        next_sig := Sig (n+1, new_sig);
+        (* print ("writing to " ^ (Int.toString n) ^ "\n"); *)
+        S.write (sv, (s, Sig (n + 1, new_sig)))
+        (* print "wrote\n" *)
     end
 
 exception SyncVarOverflow
 
 val signals =
-    let fun sig_gen sigs () =
-            let val (_, (s, Sig ns)) =
-                    S.read sigs
+    let fun sig_gen n sigs () =
+            let (*  val Sig sigs = !next_sig *)
+                val (_, (s, Sig (n', ns))) =
+                    (* print ("reading from " ^ (Int.toString n) ^ "\n");*)
+                     S.read sigs
+                     (* before print "read\n" *)
                     handle Overflow => raise SyncVarOverflow
             in
-                (s, eftr "signals" (sig_gen ns))
+                (s, eftr "signals" (sig_gen n' ns))
             end
-        val Sig first_sigs = !next_sig
+        val Sig (n, first_sigs) = !next_sig
     in
-        eftr "signals" (sig_gen first_sigs)
+        eftr "signals" (sig_gen n first_sigs)
     end
 
 fun capture_signals sigs =
@@ -40,9 +45,11 @@ fun capture_signals sigs =
 
 val inchar =
     let fun inchar_gen is () =
-            case TextIO.StreamIO.input1 is of
+            case IO.input1 is of
                 SOME (c, is') => (c, eftr "inchar" (inchar_gen is'))
-              | NONE => OS.Process.exit OS.Process.success
+              | NONE =>
+                (print "NONE\n";
+                 OS.Process.exit OS.Process.success)
     in
         eftr "inchar" (inchar_gen (TextIO.getInstream TextIO.stdIn))
     end

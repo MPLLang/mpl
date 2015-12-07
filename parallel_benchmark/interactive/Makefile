@@ -13,11 +13,11 @@ fibserv: fibserv.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map -output fibserv-ws6 fibserv.mlb
 	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6o-map -output fibserv-ws6o fibserv.mlb
 
-game: game.sml
+game: gamed.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map game.mlb ../../../sml-lib/mlton/x/mlx.o
 
-shell: shell.sml lami
-	../../build/bin/mlton -const 'Exn.keepHistory true' -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws3-map -output shell shell.mlb
+shell: lami.sml sys.sml shell.sml
+	../../build/bin/mlton -const 'Exn.keepHistory true' -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map -output shell shell.mlb
 
 countcl: countcl.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6ts-map countcl.mlb ../../../sml-lib/mlton/x/mlx.o

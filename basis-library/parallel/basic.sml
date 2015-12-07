@@ -52,8 +52,9 @@ struct
   fun resume (Suspend (lat, k, q), v) =
       let
         val p = processorNumber ()
+        (* val _ = print "resuming\n" *)
       in
-        Q.resumeWork (lat, p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
+        Q.resumeWork (true, p, q, (Q.newWork p, Thread (T.prepend (k, fn () => v))))
       end
     | resume (Capture (lat, k), v) =
       let
@@ -90,7 +91,7 @@ struct
           let
               val _ = procio p
           in
-            case Q.getWork p
+            case MLtonThread.atomically (fn () => Q.getWork p)
              of NONE =>
                 let in
                   (* if !enabled then (enabled := false; profileDisable ()) else (); *)

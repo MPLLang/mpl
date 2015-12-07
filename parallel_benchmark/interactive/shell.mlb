@@ -2,6 +2,10 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 $(SML_LIB)/basis/parallel/syncvar.sig
 
-lami.mlb
+lami-sig.sml
+lami.sml
+x/graphics.mlb
+$(SML_LIB)/basis/parallel/io.sig
+$(SML_LIB)/basis/parallel/io.sml
 sys.sml
 shell.sml

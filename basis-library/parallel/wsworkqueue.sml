@@ -417,11 +417,9 @@ struct
   in
   fun getWork p =
     let
-(*
-        val _ =
+       (* val _ =
             if p = 0 then print ("getting work on " ^ (Int.toString p) ^ "\n")
-            else ()
-*)
+            else () *)
       (* val () = pr p "before-get" *)
       val lat = P.workOnLatency numberOfProcessors p
     in
@@ -429,6 +427,7 @@ struct
         let
       val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
+      (* val () = print "takeLock getWork\n"*)
       val () = takeLock thiefLock (* XTRA *)
       (* val () = dekkerLock (true, lock) *)
 
@@ -450,10 +449,12 @@ struct
                     val () = releaseLock thiefLock (* XTRA *)
                     (* Take the victim's lock *)
                     val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
+                    (* val () = print "takeLock unsync\n" *)
                     val () = takeLock thiefLock
                     (* val () = dekkerLock (false, ownerLock) *)
                   in
                     fn () => ((* dekkerUnlock (false, ownerLock); *)
+                        (* print "unsync\n"; *)
                               releaseLock thiefLock)
                   end
                 else
@@ -463,6 +464,7 @@ struct
                     val () = takeLock masterLock
                   in
                     fn () => (releaseLock masterLock;
+                              (* print "unsync"; *)
                               (* dekkerUnlock (true, lock); *)
                               releaseLock thiefLock (* XTRA *))
                   end
@@ -610,6 +612,7 @@ struct
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
         val () = takeLock thiefLock (* XTRA *)
+        (* val () = print "takeLock startWork\n"*)
       in
         A.update (suspending, p, false);
         (* Initialize a queue for this processor if none exists *)
@@ -632,6 +635,7 @@ struct
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
         val () = takeLock thiefLock (* XTRA *)
+        (* val () = print "takeLock suspendWork\n" *)
         val lat = P.workOnLatency numberOfProcessors p
         val queues = if lat then lqueues else cqueues
       in
@@ -685,7 +689,9 @@ struct
               end
           val () = r := SOME q;
         in
+            (* print "resumeWork\n"; *)
           takeLock thiefLock; (* XTRA *)
+          (* print "got lock in resumeWork\n"; *)
           (* dekkerLock (true, lock); *)
           add Marker;
           add (Work tw);
@@ -693,6 +699,7 @@ struct
           pr p "local-resume:";
           (* dekkerUnlock (true, lock); *)
           releaseLock thiefLock (* XTRA *)
+          (* print "relased lock\n" *)
         end
 
       else (* make a new queue *)

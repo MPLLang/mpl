@@ -263,7 +263,7 @@ fun reap children =
 and waitfg job (st as {children, history}) s_input s_kills () =
     let val {pid = pid, jid = jid, ...} = job
         val _ = print "waitfg\n"
-        val (si, t) = equery s_kills ()
+        val (si, s_kills) = equery s_kills ()
     in
         (NONE,
         if si = Posix.Signal.chld then
@@ -401,7 +401,7 @@ and inploop line (st as {children, history}) pos hf hr s_kills s_inchar () =
     fun repeat n l = if n = 0 then [] else l@(repeat (n - 1) l)
     val eraseline = (repeat pos left)@erase
     val len = String.size line
-    fun proc_char c s_inchar =
+    fun proc_char c s_inchar s_kills =
         if c = #"\n" then
             (SOME c, mainloop {children = children,
                                history = line::history}
@@ -459,7 +459,7 @@ and inploop line (st as {children, history}) pos hf hr s_kills s_inchar () =
                             (echo_chars
                                 echo
                                 (ftr (inploop newline st newpos newhf newhr
-                                              s_kills s_inchar ))) ()
+                                              s_kills s))) ()
                     end
                 else
                     (SOME c, ftr (inploop (line^(String.str c)) st
@@ -468,10 +468,23 @@ and inploop line (st as {children, history}) pos hf hr s_kills s_inchar () =
         else
             (SOME c, ftr (inploop (line^(String.str c)) st
                                   (pos + 1) hf hr s_kills s_inchar))
-    val (c, s_inchar') = equery s_inchar ()
+    (* val _ = print "inploop\n" *)
     in
-        proc_char c s_inchar'
-    end;;
+        case eaquery true s_kills () of
+            ENow (s, s_kills') =>
+            let val _ = print "got a signal\n"
+                val nc = if s = Posix.Signal.chld then reap children else
+                         children
+                val st' = {children = nc, history = #history st}
+            in
+                inploop line st' pos hf hr s_kills' s_inchar ()
+            end
+          | ELater s_kills' =>
+            (case eaquery true s_inchar () of
+                 ENow (c, s_inchar') => proc_char c s_inchar' s_kills'
+               | ELater s_inchar' =>
+                 inploop line st pos hf hr s_kills' s_inchar' ())
+    end
 
 val result = (stream_string
                   (cur_prompt ())

@@ -97,7 +97,7 @@ fun eaquery lat (EG s : ('f, 'p, 'r) egftr) (p : 'f) : ('p, 'r) eaview =
     case #efut s of
         NONE =>
         let val g = #egen s
-            val f = F.futureLat (lat, fn () => g p)
+            val f = F.futureLat (lat, fn () => (print "in future\n"; g p))
         in
             case F.poll f of
                 SOME (v, EG s') => ENow (v, EG {egen = #egen s', dead = #dead s',

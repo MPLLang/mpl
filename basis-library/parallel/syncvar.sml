@@ -19,16 +19,20 @@ struct
         | Waiting _ =>
           let
             (* First take the lock *)
+              (* val () = print "locking\n" *)
             val () = lock r
+            (* val () = print "got lock\n" *)
             (* Now read the wait list *)
             val readers = case !v
                            of Waiting w => w
                             | Done _ => raise B.Parallel "async write to sync var!"
             val () = v := Done a
             val () = unlock r
+            (* val () = print ("unlocked, waking " ^ (Int.toString (List.length readers)) ^ " readers\n") *)
           in
             (* Add readers to the queue *)
             app (fn k => B.resume (k, (true, a))) readers
+            (* print "done\n" *)
           end
 
   fun read (r, v) =
