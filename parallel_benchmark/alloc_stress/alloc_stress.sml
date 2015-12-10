@@ -81,16 +81,22 @@ fun main args =
                          | _ => case getIntOption "-num-tasks" args
                                 of SOME v => v
                                  | NONE => 1
-    in
-        print (String.concat ["allocSize: ",
-                              Int.toString allocSize,
-                              " numAllocs: ",
-                              Int.toString numAllocs,
-                              " numTasks: ",
-                              Int.toString numTasks,
-                              "\n"]);
 
-        doit allocSize numAllocs numTasks
+        val () = print (String.concat ["allocSize: ",
+                                       Int.toString allocSize,
+                                       " numAllocs: ",
+                                       Int.toString numAllocs,
+                                       " numTasks: ",
+                                       Int.toString numTasks,
+                                       "\n"]);
+        val ts = Time.now ()
+        val () = doit allocSize numAllocs numTasks
+        val te = Time.now ()
+        val elapsed = Time.- (te, ts)
+    in
+        print (String.concat ["# ",
+                              (LargeInt.toString o Time.toMilliseconds) elapsed,
+                              " ms (0 ms in GC) END\n"])
     end
 
 val _ = main (CommandLine.arguments ())
