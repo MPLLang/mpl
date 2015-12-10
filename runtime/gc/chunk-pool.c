@@ -198,7 +198,7 @@ void ChunkPool_initialize (size_t poolSize) {
   void* region = mmap (NULL,
                        adjustedPoolSize,
                        PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                        -1,
                        0);
   if (MAP_FAILED == region) {
