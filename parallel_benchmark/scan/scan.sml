@@ -54,11 +54,7 @@ fun doit (arraySize : int) : unit =
             time (fn () => AS.scan op+ (Word.fromInt 0) arr)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print (String.concat ["(",
-                              AS.toString Word.toString rs,
-                              ", ",
-                              Word.toString rf,
-                              ")\n"])
+        print (String.concat [Word.toString rf, "\n"])
     end
 
 fun main (args : string list) : unit =
