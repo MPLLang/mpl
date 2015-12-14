@@ -2,8 +2,6 @@ structure AS = ArraySequence
 
 exception Invariant
 
-val fork = MLton.Parallel.ForkJoin.fork
-
 fun die message =
     (TextIO.output (TextIO.stdErr, message ^ "\n");
      OS.Process.exit OS.Process.failure)
