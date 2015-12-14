@@ -37,12 +37,17 @@ fun getByteSizeOption (option : string) (args : string list) : int option =
      of SOME arg => stringToBytes arg
       | NONE => NONE
 
-fun doit (allocSize : int) (numAllocs : int) (numTasks : int) =
+fun doit (allocSize : int)
+         (numAllocs : int)
+         (numTasks : int)
+         (initArray : bool) =
     let
         fun allocArray 0 = ()
           | allocArray n =
               let
-                  val _ = Int8Array.array (allocSize, 0)
+                  val _ = if initArray
+                          then Int8Array.array (allocSize, 0)
+                          else Unsafe.Int8Array.create allocSize
               in
                   allocArray (n - 1)
               end
@@ -82,15 +87,23 @@ fun main args =
                                 of SOME v => v
                                  | NONE => 1
 
+        val initArray = case getStringOption "-init-array" args
+                         of SOME "true" => true
+                          | SOME "false" => false
+                          | SOME s => die ("Invalid -init-array \"" ^ s ^ "\"")
+                          | NONE => true
+
         val () = print (String.concat ["allocSize: ",
                                        Int.toString allocSize,
                                        " numAllocs: ",
                                        Int.toString numAllocs,
                                        " numTasks: ",
                                        Int.toString numTasks,
+                                       " initArray: ",
+                                       Bool.toString initArray,
                                        "\n"]);
         val ts = Time.now ()
-        val () = doit allocSize numAllocs numTasks
+        val () = doit allocSize numAllocs numTasks initArray
         val te = Time.now ()
         val elapsed = Time.- (te, ts)
     in
