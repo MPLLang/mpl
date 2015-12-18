@@ -47,14 +47,22 @@ fun formatTimeString (total, gc) = String.concat ["# ",
                                                   timeToString gc,
                                                   " ms in GC)\n"]
 
-fun doit (arraySize : int) : unit =
+fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
     let
-        val (r, elapsed) = time (fn () => AS.tabulate
-                                              (fn i => serialFib (i mod 30))
-                                              arraySize)
+        fun loop 1 = AS.tabulate (fn i => serialFib (i mod granularity))
+                                 arraySize
+          | loop n =
+            let
+                val k = AS.tabulate (fn i => serialFib (i mod granularity))
+                                    arraySize
+            in
+                loop (n - 1)
+            end
+
+        val (r, elapsed) = time (fn () => loop iterations)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((AS.toString Int.toString r) ^ "\n")
+        print ((Int.toString (AS.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =
@@ -62,11 +70,23 @@ fun main (args : string list) : unit =
         val arraySize = case getIntOption "-array-size" args
                          of SOME v => v
                           | NONE => 1000
+
+        val granularity = case getIntOption "-granularity" args
+                           of SOME v => v
+                            | NONE => 30
+
+        val iterations = case getIntOption "-iterations" args
+                          of SOME v => v
+                           | NONE => 1
     in
         print (String.concat ["arraySize: ",
                               Int.toString arraySize,
+                              " granularity: ",
+                              Int.toString granularity,
+                              " iterations: ",
+                              Int.toString iterations,
                               "\n"]);
-        doit arraySize
+        doit arraySize granularity iterations
     end
 
 val _ = main (CommandLine.arguments ())
