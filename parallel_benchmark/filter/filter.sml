@@ -21,11 +21,12 @@ fun getIntOption (option) (args) : int option =
        | NONE => NONE)
 
 fun serialFib n =
-    if n <= 1
-    then 1
+    if n <= (Word.fromInt 1)
+    then (Word.fromInt 1)
     else
         let
-            val (a, b) = (serialFib (n - 1), serialFib (n - 2))
+            val (a, b) = (serialFib (n - (Word.fromInt 1)),
+                          serialFib (n - (Word.fromInt 2)))
         in
             a + b
         end
@@ -47,12 +48,20 @@ fun formatTimeString (total, gc) = String.concat ["# ",
                                                   timeToString gc,
                                                   " ms in GC)\n"]
 
-fun doit (arraySize : int) : unit =
+fun doit (arraySize : int) (granularity : int) : unit =
     let
+        val granularity = Word.fromInt granularity
         val arr = AS.tabulate (fn _ => MLton.Random.rand ()) arraySize
+
         val (r, elapsed) =
-            time (fn () => AS.filter (fn x => (x mod (Word.fromInt 2)) =
-                                              (Word.fromInt 0))
+            time (fn () => AS.filter (fn x =>
+                                         let
+                                             val fib =
+                                                 serialFib (x mod granularity)
+                                         in
+                                             (fib mod (Word.fromInt 2)) =
+                                             (Word.fromInt 0)
+                                         end)
                                      arr)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
@@ -65,11 +74,17 @@ fun main (args : string list) : unit =
         val arraySize = case getIntOption "-array-size" args
                          of SOME v => v
                           | NONE => 1000
+
+        val granularity = case getIntOption "-granularity" args
+                           of SOME v => v
+                            | NONE => 30
     in
         print (String.concat ["arraySize: ",
                               Int.toString arraySize,
+                              " granularity: ",
+                              Int.toString granularity,
                               "\n"]);
-        doit arraySize
+        doit arraySize granularity
     end
 
 val _ = main (CommandLine.arguments ())
