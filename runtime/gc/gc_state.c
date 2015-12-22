@@ -364,9 +364,10 @@ struct rusage* GC_getRusageGCAddr (void) {
   return &(s->cumulativeStatistics->ru_gc);
 }
 
+// Signal disposition is per-process; use primary to maintain handled set.
 sigset_t* GC_getSignalsHandledAddr (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return &(s->signalsInfo.signalsHandled);
+  return &(s->procStates[0].signalsInfo.signalsHandled);
 }
 
 sigset_t* GC_getSignalsPendingAddr (void) {
