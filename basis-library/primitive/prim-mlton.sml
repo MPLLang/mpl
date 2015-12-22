@@ -351,10 +351,10 @@ structure Thread =
       val returnToC = _prim "Thread_returnToC": unit -> unit;
       val saved = _import "GC_getSavedThread" runtime private: unit -> thread;
       val savedPre = _import "GC_getSavedThread" runtime private: unit -> preThread;
-      val setCallFromCHandler =
-         _import "GC_setCallFromCHandlerThread" runtime private: thread -> unit;
-      val setSignalHandler =
-         _import "GC_setSignalHandlerThread" runtime private: thread -> unit;
+      val setCallFromCHandlers =
+         _import "GC_setCallFromCHandlerThreads" runtime private: thread array -> unit;
+      val setSignalHandlers =
+         _import "GC_setSignalHandlerThreads" runtime private: thread array -> unit;
       val setSaved = _import "GC_setSavedThread" runtime private: thread -> unit;
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: unit -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;

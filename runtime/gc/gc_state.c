@@ -318,10 +318,12 @@ pointer GC_getCallFromCHandlerThread (void) {
   return p;
 }
 
-void GC_setCallFromCHandlerThread (pointer p) {
+void GC_setCallFromCHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr op = pointerToObjptr (p, s->heap->start);
-  s->callFromCHandlerThread = op;
+  assert(getArrayLength (p) == s->numberOfProcs);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
+  }
 }
 
 pointer GC_getCurrentThread (void) {
@@ -349,10 +351,12 @@ void GC_setSavedThread (pointer p) {
   s->savedThread = op;
 }
 
-void GC_setSignalHandlerThread (pointer p) {
+void GC_setSignalHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr op = pointerToObjptr (p, s->heap->start);
-  s->signalHandlerThread = op;
+  assert(getArrayLength (p) == s->numberOfProcs);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    s->procStates[proc].signalHandlerThread = ((objptr*)p)[proc];
+  }
 }
 
 struct rusage* GC_getRusageGCAddr (void) {
