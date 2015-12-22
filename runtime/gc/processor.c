@@ -1,17 +1,7 @@
-
 #include <pthread.h>
 
 int32_t Proc_processorNumber (GC_state s) {
-  for (int proc = 0; proc < s->numberOfProcs; proc ++) {
-    if (s == &(s->procStates[proc])) {
-      return (int32_t)proc;
-    }
-  }
-
-  /* XXX shouldn't get here */
-  fprintf (stderr, "don't know my own processor number (signals?)\n");
-  exit (1);
-  return 0;
+  return s->procNumber;
 }
 
 bool Proc_amPrimary (GC_state s) {
