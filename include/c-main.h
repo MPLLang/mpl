@@ -67,7 +67,7 @@ void MLton_threadFunc (void* arg) {                                     \
     cont.nextChunk = nextChunks[cont.nextFun];                          \
   }                                                                     \
   /* Check to see whether or not we are the first thread */             \
-  if (Proc_amPrimary (s)) {                                             \
+  if (Proc_processorNumber (s) == 0) {                                  \
     /* Trampoline */                                                    \
     while (1) {                                                         \
       cont=(*(struct cont(*)(uintptr_t))cont.nextChunk)(cont.nextFun);  \

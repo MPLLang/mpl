@@ -4,10 +4,6 @@ int32_t Proc_processorNumber (GC_state s) {
   return s->procNumber;
 }
 
-bool Proc_amPrimary (GC_state s) {
-  return Proc_processorNumber (s) == 0;
-}
-
 volatile bool Proc_beginInit = FALSE;
 volatile int32_t Proc_initialized = 0;
 volatile int32_t Proc_criticalCount;
