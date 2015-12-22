@@ -375,9 +375,10 @@ sigset_t* GC_getSignalsPendingAddr (void) {
   return &(s->signalsInfo.signalsPending);
 }
 
+// Signal disposition is per-process; use primary to maintain handled set.
 void GC_setGCSignalHandled (bool b) {
   GC_state s = pthread_getspecific (gcstate_key);
-  s->signalsInfo.gcSignalHandled = b;
+  s->procStates[0].signalsInfo.gcSignalHandled = b;
 }
 
 bool GC_getGCSignalPending (void) {

@@ -201,7 +201,7 @@ void performGC (GC_state s,
              100.0 * ((double)(nurserySize) / (double)(s->heap->size)));
   }
   /* Send a GC signal. */
-  if (s->signalsInfo.gcSignalHandled
+  if (s->procStates[0].signalsInfo.gcSignalHandled
       and s->signalHandlerThread != BOGUS_OBJPTR) {
     if (DEBUG_SIGNALS)
       fprintf (stderr, "GC Signal pending.\n");
