@@ -1,4 +1,4 @@
-structure AS = ArraySequence
+structure ASG = ArraySequenceG
 
 exception Invariant
 
@@ -37,15 +37,15 @@ fun formatTimeString (total, gc) = String.concat ["# ",
                                                   timeToString gc,
                                                   " ms in GC)\n"]
 
-fun doit (arraySize : int) : unit =
+fun doit (arraySize : int) (g : int) : unit =
     let
-        val (a, b) = Primitives.par (fn () => AS.tabulate (fn i => i) 10,
-                                     fn () => AS.tabulate (fn i => i) 10)
-        val arr = AS.tabulate (fn _ => MLton.Random.rand ()) arraySize
-        val (r, elapsed) = time (fn () => AS.sort Word.compare arr)
+        val (a, b) = Primitives.par (fn () => ASG.tabulate 1 (fn i => i) 10,
+                                     fn () => ASG.tabulate 1 (fn i => i) 10)
+        val arr = ASG.tabulate g (fn _ => MLton.Random.rand ()) arraySize
+        val (r, elapsed) = time (fn () => ASG.sort g Word.compare arr)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((Word.toString (AS.nth r 0)) ^ "\n")
+        print ((Word.toString (ASG.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =
@@ -53,11 +53,17 @@ fun main (args : string list) : unit =
         val arraySize = case getIntOption "-array-size" args
                          of SOME v => v
                           | NONE => 1000
+
+        val granularity = case getIntOption "-granularity" args
+                         of SOME v => v
+                          | NONE => 1000
     in
         print (String.concat ["arraySize: ",
                               Int.toString arraySize,
+                              " granularity: ",
+                              Int.toString granularity,
                               "\n"]);
-        doit arraySize
+        doit arraySize granularity
     end
 
 val _ = main (CommandLine.arguments ())
