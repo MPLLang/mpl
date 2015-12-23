@@ -2,8 +2,6 @@ structure AS = ArraySequence
 
 exception Invariant
 
-val fork = Primitives.par
-
 fun die message =
     (TextIO.output (TextIO.stdErr, message ^ "\n");
      OS.Process.exit OS.Process.failure)
@@ -41,6 +39,8 @@ fun formatTimeString (total, gc) = String.concat ["# ",
 
 fun doit (arraySize : int) : unit =
     let
+        val (a, b) = Primitives.par (fn () => AS.tabulate (fn i => i) 10,
+                                     fn () => AS.tabulate (fn i => i) 10)
         val arr = AS.tabulate (fn _ => MLton.Random.rand ()) arraySize
         val (r, elapsed) = time (fn () => AS.sort Word.compare arr)
     in

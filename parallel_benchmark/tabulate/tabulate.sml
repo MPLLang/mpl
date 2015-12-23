@@ -49,6 +49,9 @@ fun formatTimeString (total, gc) = String.concat ["# ",
 
 fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
     let
+        val (a, b) = Primitives.par (fn () => Array.tabulate (10, fn i => i),
+                                     fn () => Array.tabulate (10, fn i => i))
+
         fun loop 1 = AS.tabulate (fn i => serialFib (i mod granularity))
                                  arraySize
           | loop n =
