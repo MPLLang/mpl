@@ -73,7 +73,7 @@ void MLton_threadFunc (void* arg) {                                     \
     cont.nextChunk = nextChunks[cont.nextFun];                          \
   }                                                                     \
   /* Check to see whether or not we are the first thread */             \
-  if (Proc_amPrimary (s)) {                                             \
+  if (Proc_processorNumber (s) == 0) {                                  \
     /* Trampoline */                                                    \
     while (1) {                                                         \
       cont=(*(struct cont(*)(uintptr_t))cont.nextChunk)(cont.nextFun);  \
@@ -120,12 +120,14 @@ void MLton_threadFunc (void* arg) {                                     \
       /* Now copy initialization to the first processor state */        \
       memcpy (&gcState[0], &s, sizeof (struct GC_state));               \
       gcState[0].procStates = gcState;                                  \
+      gcState[0].procNumber = 0;                                        \
       GC_lateInit (&gcState[0]);                                        \
     }                                                                   \
     /* Fill in per-processor data structures */                         \
     for (procNo = 1; procNo < gcState[0].numberOfProcs; procNo++) {     \
       Duplicate (&gcState[procNo], &gcState[0]);                        \
       gcState[procNo].procStates = gcState;                             \
+      gcState[procNo].procNumber = procNo;                              \
     }                                                                   \
     pthread_attr_t attr;                                                \
     pthread_attr_init(&attr);                                            \
