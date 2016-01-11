@@ -393,10 +393,11 @@ in
    ../parallel/parallel.sig
    ann "allowFFI true" in
       ../parallel/wsworkqueue.sml
+      ../parallel/wsworkqueuets.sml
       ../parallel/wsworkqueuelc.sml
       ../parallel/wsworkqueueo.sml
       ../parallel/$(WORK_QUEUE).sml
-      ../parallel/basic.sml
+      ../parallel/$(BASIC).sml
       ../parallel/syncvar.sml
       ../parallel/future.sml
       ../parallel/forkjoin.sml

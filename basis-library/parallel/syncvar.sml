@@ -16,7 +16,7 @@ struct
   fun write ((r, v), a) =
       case !v
        of Done _ => (* XXX silently ignore write *)
-          ()
+          print "two writes to sync var\n"
           (* raise B.Parallel "two writes to sync var!" *)
         | Waiting _ =>
           let

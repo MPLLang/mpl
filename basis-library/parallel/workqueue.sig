@@ -12,6 +12,8 @@ sig
   (* these take the identifier of the current processor as their first
    argument *)
 
+  val stringOfToken : token -> string
+
   (* create a new identifier for work *)
   val newWork : proc -> token
   (* atomically add new work to the queue; highest-priority work appears first *)

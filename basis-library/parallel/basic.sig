@@ -10,6 +10,8 @@ sig
   (* a suspended computation waiting for a value of type 'a *)
   type 'a t
 
+  val stringOfToken : token -> string
+
   val addtoio : unit t * (unit -> bool) -> unit
 
   val processorNumber : unit -> int

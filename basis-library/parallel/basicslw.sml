@@ -8,6 +8,7 @@ struct
 
   datatype job = Work of (unit -> void)
                | Thread of (unit T.t)
+               | RThread of T.Runnable.t
 
   val numberOfProcessors = MLtonParallelInternal.numberOfProcessors
 
@@ -75,18 +76,19 @@ struct
 
   fun procio p =
       let val q = Array.sub (ioqueues, p)
-          val q' =
+          val (resumed, q') =
               List.foldl
-                  (fn ((t, f), r) =>
+                  (fn ((t, f), (rsm, r)) =>
                       (* if latency t then *)
-                          if f () then (resume (mkLat t, ()); r)
-                          else (t, f)::r
+                          if f () then (resume (mkLat t, ()); (true, r))
+                          else (rsm, (t, f)::r)
                       (* else raise (Parallel "Invariant violated!\n") *)
                   )
-                  []
+                  (false, [])
                   q
       in
-          Array.update (ioqueues, p, q')
+          Array.update (ioqueues, p, q');
+          resumed
       end
 
   fun schedule countSuspends () =
@@ -108,7 +110,8 @@ struct
                   val () = Q.startWork p
                   val () = (case j
                              of Work w => w ()
-                              | Thread k => T.switch (fn _ => T.prepare (k, ())))
+                              | Thread k => T.switch (fn _ => T.prepare (k, ()))
+                              | RThread r => T.switch (fn _ => r))
                       (* PERF? this handle only makes sense for the Work case *)
                       (* PERF? move this handler out to the native entry point? *)
                       handle Parallel s =>
@@ -161,6 +164,8 @@ struct
                         (print "before-prepend\n";
                          T.prepend (k', fn () => (Q.startWork p))
                          before print "after-prepend\n")
+                      | SOME (_, RThread r) =>
+                        T.new (fn () => (Q.startWork p; T.switch (fn _ => r)))
                       | NONE => T.new (schedule false)
                 (* to disable hijacking, use this instead
                 val t = T.new schedule
@@ -333,7 +338,41 @@ struct
             end
       end
 
-  val () = (_export "Parallel_run": (unit -> void) -> unit;) (schedule false)
+  structure S = MLtonSignal
+
+  fun interrupt p t =
+      (print "interrupt\n"; t)
+(*
+       Q.addWork (false, p, [(Q.newWork p, RThread t)]);
+       T.prepare (T.new (schedule true), ()))
+*)
+
+  fun simple () =
+      print "interrupt\n"
+
+  val p = processorNumber ()
+  val _ = print ("setting handler on " ^ (Int.toString p) ^ "\n")
+  val sg = MLtonItimer.signal MLtonItimer.Real
+  (* val _ = S.setHandler (sg, (S.Handler.handler (interrupt p))) *)
+  val _ = S.setHandler (sg, (S.Handler.ignore))
+
+  fun init () =
+      let val p = processorNumber ()
+          val _ = print ("in init " ^ (Int.toString p) ^ "\n")
+          val iv = Time.fromMilliseconds 1000
+      in
+          (if p = numberOfProcessors - 1 then
+               ((* MLtonItimer.set (MLtonItimer.Real,
+                                   {interval = iv, value = iv}); *)
+                S.Mask.unblock (S.Mask.some [sg])
+                )
+           else
+               ());
+          print ("initialized " ^ (Int.toString p) ^ "\n");
+          schedule false ()
+      end
+
+  val () = (_export "Parallel_run": (unit -> void) -> unit;) (init)
   (* init MUST come after schedulerLoop has been exported *)
   val () = (_import "Parallel_init" runtime private: unit -> unit;) ()
 

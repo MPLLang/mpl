@@ -59,6 +59,12 @@ void MLton_threadFunc (void* arg) {                                     \
       + s->controls->affinityBase;                                      \
   set_cpu_affinity(num);                                                \
                                                                         \
+  /* Every thread blocks SIGALRM by default. */                         \
+  sigset_t mask;                                                        \
+  sigemptyset(&mask);                                                   \
+  sigaddset(&mask, SIGALRM);                                            \
+  pthread_sigmask(SIG_BLOCK, &mask, NULL);                              \
+                                                                        \
   /* Save our state locally */                                          \
   pthread_setspecific (gcstate_key, s);                                 \
   if (s->amOriginal) {                                                  \
@@ -135,7 +141,6 @@ void MLton_threadFunc (void* arg) {                                     \
         exit (1);                                                       \
       }                                                                 \
     }                                                                   \
-    pthread_create (&threads[procNo], NULL, &threadn, NULL);            \
     MLton_threadFunc ((void *)&gcState[0]);                             \
   }
 

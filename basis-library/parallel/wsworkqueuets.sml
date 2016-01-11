@@ -1,4 +1,4 @@
-functor WorkStealingLC (structure W : sig type work val numberOfProcessors : unit -> int end) =
+functor WorkStealingTS (structure W : sig type work val numberOfProcessors : unit -> int end) =
 struct
 
   infix 3 /
@@ -14,18 +14,17 @@ struct
   val yield = _import "Parallel_yield" runtime private: unit -> unit;
   val pthread_yield = _import "pthread_yield" : unit -> unit;
 
-  val takeLock = (* fn _ => () *)
-    _import "Parallel_lockTake" runtime private: int ref -> unit;
-  val releaseLock = (* fn _ => () *)
-    _import "Parallel_lockRelease" runtime private: int ref -> unit;
+  val takeLock = fn _ => ()
+    (* _import "Parallel_lockTake" runtime private: int ref -> unit; *)
+  val releaseLock = fn _ => ()
+    (* _import "Parallel_lockRelease" runtime private: int ref -> unit; *)
 
   exception WorkQueue
   exception QueueSize
 
   structure A = Array
   structure V = Vector
-  val realNumberOfProcessors = W.numberOfProcessors ()
-  val numberOfProcessors = realNumberOfProcessors / 2
+  val numberOfProcessors = W.numberOfProcessors ()
 
   (* private state *)
 
@@ -43,7 +42,7 @@ struct
              bot : int ref,
              deq : entry A.array,
              lock : int ref,
-             onBot : bool ref }
+             onBot : bool ref}
   type queue = { work : q ref,
                  lat : bool
                }
@@ -53,10 +52,14 @@ struct
   val cas = _import "Parallel_compareAndSwap":
              Word32.word ref * Word32.word * Word32.word -> bool;
 
+  val fetchAndAdd =
+      _import "Parallel_fetchAndAdd":
+      int ref * int -> int;
+
   val stringOfToken = Int.toString
 
   fun pushBottom ({age, bot, deq, lock, onBot}: q) (e: entry) : unit =
-      let (* val _ = takeLock lock *)
+      let val _ = takeLock lock
           val _ = if !onBot then print "already in\n" else ()
           val _ = onBot := true
           val localBot = !bot
@@ -65,12 +68,15 @@ struct
           else
               (A.update (deq, localBot, e);
                bot := localBot + 1;
-               onBot := false (*;
-               releaseLock lock *))
+               (* Don't need a fetchAndAdd for atomicity, just want a
+                  memory fence. *)
+               (* ignore (fetchAndAdd (bot, 1)); *)
+               onBot := false;
+               releaseLock lock)
       end
 
   fun popTop ({age, bot, deq, lock, onBot}: q) : entry option =
-      let (* val _ = takeLock lock *)
+      let val _ = takeLock lock
           val oldAge = !age
           val localBot = !bot
       in
@@ -85,22 +91,33 @@ struct
                       let val age' = !age
                           (* val _ = print ("new top: " ^ (Int.toString (top age')) ^ "\n") *)
                       in
-                          SOME node
+                          if (top age' <> (top oldAge) + 1)
+                                 andalso (top age' <> 0) then
+                              (print "88\n";
+                               raise WorkQueue)
+                          else
+                              SOME node
                       end
                   else
                       NONE
               end
       end
-      (* before releaseLock lock *)
+      before releaseLock lock
 
   fun popBottom ({age, bot, deq, lock, onBot}: q) : entry option =
-      let (* val _ = takeLock lock *)
+      let val _ = takeLock lock
           val _ = if !onBot then print "already\n" else ()
           val _ = onBot := true
           val localBot = !bot
       in
           if localBot = 0 then NONE else
           let val localBot = localBot - 1
+              (* Don't need a fetchAndAdd for atomicity, just want a
+                  memory fence. *)
+              (* val newBot = fetchAndAdd(bot, ~1)
+              val _ = if newBot <> localBot + 1 then
+                          (print "117\n"; raise WorkQueue)
+                      else () *)
               val _ = bot := localBot
               val node = A.sub (deq, localBot)
               val oldAge = !age
@@ -121,7 +138,7 @@ struct
                    end)
           end
       end
-      before (onBot := false (*; releaseLock lock *))
+      before (onBot := false ; releaseLock lock)
 
   fun newQueue lat _ =
       { work = ref {age = ref 0w0, bot = ref 0,
@@ -130,9 +147,6 @@ struct
         lat = lat
       }
 
-  (* protects the array of queues -- specifically those queues not owned by
-    any processor -- and the total number of active queues *)
-  val masterLock = ref ~1
   val activeQueues = ref numberOfProcessors
   val totalQueues = ref numberOfProcessors
 
@@ -143,7 +157,7 @@ struct
 
   val lqueues = A.tabulate (numberOfProcessors, newQueue true)
 
-  val nexttoken = A.tabulate (realNumberOfProcessors, fn _ => 0)
+  val nexttoken = A.tabulate (numberOfProcessors, fn _ => 0)
 
 (*
   local
@@ -318,7 +332,7 @@ struct
       let val t = A.sub (nexttoken, p)
       in
           A.update (nexttoken, p, t + 1);
-          t * realNumberOfProcessors + p
+          t * numberOfProcessors + p
       end
 
   (* must already hold the lock! *)
@@ -362,9 +376,8 @@ struct
 
   fun addWork (lat, p, tws) =
     let
+        val _ = if lat then print "add lat\n" else ()
       (* val () = pr p "before-add" *)
-      val p = p / 2
-
       val q as { work, ... } =
           if lat then A.sub (lqueues, p)
           else A.sub (cqueues, p)
@@ -385,24 +398,18 @@ struct
       (* val () = pr p "before-get" *)
       val lat = (p mod 2 = 1)
       (* val _ = if not lat then print "getWork\n" else () *)
-      val p = p / 2
       val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
 
       fun steal () =
-          let
-              val _ =
-                (* If there's no work, yield to the throughput thread *)
-                if lat andalso !failedSteals > numberOfProcessors then
-                    (failedSteals := 0;
-                     pthread_yield ())
-                else ()
+          let val _ = pthread_yield ()
             (* Who to steal from? *)
             val p' = victim p
             val (q as {work, ...}) = A.sub (queues, p')
           in
             case popTop (!work) of
                 SOME w =>
-                (case w of
+                ((if lat then print "stole lat\n" else ());
+                 case w of
                      Empty => (print "steal\n"; raise WorkQueue)
                    | Marker => NONE
                    | Work (tw as (t, w)) =>
@@ -426,7 +433,8 @@ struct
           end
       val { work, ...} = A.sub (queues, p)
     in
-        if lat then (yield (); NONE) else
+        (* if lat then (yield (); NONE) else *)
+        let val res =
       case popBottom (!work) of
           NONE => steal ()
         | SOME Empty => (print "getWork\n"; raise WorkQueue)
@@ -434,15 +442,23 @@ struct
             case getWork p
              of NONE => NONE
               | SOME (_, w) => SOME (true, w))
-        | SOME (Work tw) => SOME (false, #2 tw)
+        | SOME (Work tw) =>
+          ((if lat then print "got lat\n" else ());
+           SOME (false, #2 tw))
       (* XXX before (A.update (!work, i - 1, Empty);
                                           count p "get" ~1) *)
+        in
+            case res of
+                NONE => res
+              | SOME _ =>
+                ((if lat then print "some lat\n" else ());
+                 res)
+        end
     end
   end
 
   fun startWork p =
       let
-        val p = p / 2
       in
         A.update (suspending, p, false);
         count p "start" 0
@@ -453,7 +469,6 @@ struct
   fun suspendWork p =
       let
         (* val () = pr p "before-suspend" *)
-        val p = p / 2
       in
           A.update (suspending, p, true);
           NONE
@@ -462,7 +477,6 @@ struct
   fun resumeWork (lat, p, NONE, tw as (t, w)) =
       let
           (* val lat = P.workOnLatency numberOfProcessors p *)
-          val p = p / 2
           val queues = if lat then lqueues else cqueues
           (* val () = pr p "before-resume-local" *)
           val q as { work, ... } = A.sub (queues, p)
@@ -507,8 +521,7 @@ struct
   added) doesn't reflect which lock should be take nor which queue *)
   fun removeWorkLat (lat, p, t') =
       (* XXX this isn't general *)
-      let val p = p / 2
-          val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
+      let val queues = if lat then ((* print ("Got work on " ^ (Int.toString p) ^ "\n"); *) lqueues) else cqueues
           val { work, ... } = A.sub (queues, p)
       in
           case popBottom (!work) of

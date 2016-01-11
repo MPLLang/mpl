@@ -20,8 +20,19 @@ sig
   val policyName : string
 end
 
-functor WorkStealing (structure W : sig type work val numberOfProcessors : unit -> int end
-                      structure P : POLICY) =
+structure P : POLICY =
+struct
+  val suspendEntireQueues = false
+  val stealOldestFromSelf = false
+  val resumeWorkLocally = true
+  val stealEntireQueues = false (* NA *)
+  val stealFromSuspendedQueues = false (* NA *)
+  fun workOnLatency n p = p = n - 1
+  val policyName = "ws6"
+end
+
+functor WorkQueue (W : sig type work val numberOfProcessors : unit -> int end)
+        : PARALLEL_WORKQUEUE =
 struct
 
   type proc = int
@@ -140,6 +151,8 @@ struct
                            fn i => if i < numberOfProcessors then
                                      SOME (newQueue true i)
                                    else NONE)
+
+
 
 (*
   local
@@ -415,13 +428,12 @@ struct
             Word.toIntX (MLtonRandom.rand ()) mod n
         end
   in
-  fun getWork p =
+  fun getWorkLat lat p =
     let
        (* val _ =
             if p = 0 then print ("getting work on " ^ (Int.toString p) ^ "\n")
             else () *)
       (* val () = pr p "before-get" *)
-      val lat = P.workOnLatency numberOfProcessors p
     in
         (* if lat then (print "Hi\n"; usleep 1000000; getWork p)  else *)
         let
@@ -595,7 +607,7 @@ struct
                     of Empty => raise WorkQueue
                      | Marker => (A.update (!work, i - 1, Empty);
                                   releaseLock thiefLock;
-                                  case getWork p
+                                  case getWorkLat lat p
                                    of NONE => NONE
                                     | SOME (_, w) => SOME (true, w))
                      | Work tw => SOME (false, #2 tw)
@@ -607,6 +619,19 @@ struct
     end
   end
   end
+
+  fun getWork p =
+      let val lat = P.workOnLatency numberOfProcessors p
+          val try = getWorkLat lat p
+      in
+          if lat then
+              case try of
+                  SOME _ => try
+                | NONE => getWorkLat false p
+          else
+              try
+      end
+
   fun startWork p =
       let
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
