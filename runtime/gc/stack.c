@@ -19,15 +19,15 @@ void displayStack (__attribute__ ((unused)) GC_state s,
 
 
 #if ASSERT
-bool isStackEmpty (GC_stack stack) {
-  return 0 == stack->used;
-}
-
 bool isStackReservedAligned (GC_state s, size_t reserved) {
   return isAligned (GC_STACK_HEADER_SIZE + sizeof (struct GC_stack) + reserved,
                     s->alignment);
 }
 #endif
+
+bool isStackEmpty (GC_stack stack) {
+  return 0 == stack->used;
+}
 
 /* sizeofStackSlop returns the amount of "slop" space needed between
  * the top of the stack and the end of the stack space.

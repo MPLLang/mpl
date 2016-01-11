@@ -318,10 +318,12 @@ pointer GC_getCallFromCHandlerThread (void) {
   return p;
 }
 
-void GC_setCallFromCHandlerThread (pointer p) {
+void GC_setCallFromCHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr op = pointerToObjptr (p, s->heap->start);
-  s->callFromCHandlerThread = op;
+  assert(getArrayLength (p) == s->numberOfProcs);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
+  }
 }
 
 pointer GC_getCurrentThread (void) {
@@ -349,10 +351,12 @@ void GC_setSavedThread (pointer p) {
   s->savedThread = op;
 }
 
-void GC_setSignalHandlerThread (pointer p) {
+void GC_setSignalHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr op = pointerToObjptr (p, s->heap->start);
-  s->signalHandlerThread = op;
+  assert(getArrayLength (p) == s->numberOfProcs);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    s->procStates[proc].signalHandlerThread = ((objptr*)p)[proc];
+  }
 }
 
 struct rusage* GC_getRusageGCAddr (void) {
@@ -360,9 +364,10 @@ struct rusage* GC_getRusageGCAddr (void) {
   return &(s->cumulativeStatistics->ru_gc);
 }
 
+// Signal disposition is per-process; use primary to maintain handled set.
 sigset_t* GC_getSignalsHandledAddr (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return &(s->signalsInfo.signalsHandled);
+  return &(s->procStates[0].signalsInfo.signalsHandled);
 }
 
 sigset_t* GC_getSignalsPendingAddr (void) {
@@ -370,9 +375,10 @@ sigset_t* GC_getSignalsPendingAddr (void) {
   return &(s->signalsInfo.signalsPending);
 }
 
+// Signal disposition is per-process; use primary to maintain handled set.
 void GC_setGCSignalHandled (bool b) {
   GC_state s = pthread_getspecific (gcstate_key);
-  s->signalsInfo.gcSignalHandled = b;
+  s->procStates[0].signalsInfo.gcSignalHandled = b;
 }
 
 bool GC_getGCSignalPending (void) {

@@ -1,9 +1,7 @@
 structure MLtonParallelInternal =
 struct
 
-val numberOfProcessors =
-    Int32.toInt ((_import "Parallel_numberOfProcessors" runtime private: unit -> Int32.int;) ())
-
-val processorNumber = _import "Parallel_processorNumber" runtime private: unit -> Int32.int;
+   val numberOfProcessors = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
+   val processorNumber = Int32.toInt o Primitive.MLton.Parallel.processorNumber
 
 end

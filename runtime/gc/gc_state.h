@@ -58,6 +58,7 @@ struct GC_state {
   GC_objectHashTable objectHashTable;
   GC_objectType objectTypes; /* Array of object types. */
   uint32_t objectTypesLength; /* Cardinality of objectTypes array. */
+  int32_t procNumber;
   /* States for each processor */
   GC_state procStates;
   struct GC_profiling profiling;
@@ -117,11 +118,11 @@ PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
-PRIVATE void GC_setCallFromCHandlerThread (pointer p);
+PRIVATE void GC_setCallFromCHandlerThreads (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);
 PRIVATE pointer GC_getSavedThread (void);
 PRIVATE void GC_setSavedThread (pointer p);
-PRIVATE void GC_setSignalHandlerThread (pointer p);
+PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

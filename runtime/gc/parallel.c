@@ -1,4 +1,3 @@
-
 #include <pthread.h>
 #include <time.h>
 #include "platform.h"
@@ -12,15 +11,7 @@ void Parallel_init (void) {
   if (!Proc_isInitialized (s)) {
     Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
 
-    /* Set up call-back state in each worker thread */
-    /* XXX hack copy the call-from-c-handler into the worker threads
-       assumes this is called by the primary thread */
     for (int proc = 0; proc < s->numberOfProcs; proc++) {
-      s->procStates[proc].callFromCHandlerThread = pointerToObjptr(
-        GC_copyThread (s, objptrToPointer(s->callFromCHandlerThread,
-                                          s->heap->start)),
-        s->heap->start);
-
       Parallel_mutexes[proc] = -1;
     }
     /* Now wake them up! */
