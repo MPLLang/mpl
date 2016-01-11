@@ -266,10 +266,10 @@ uint64_t Parallel_getTimeInGC (void) {
   return gcTime;
 }
 
-Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
+inline Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
   return __sync_fetch_and_add ((Int32 *)p, v);
 }
 
-bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
+inline bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
   return __sync_bool_compare_and_swap ((Int32 *)p, old, new);
 }
