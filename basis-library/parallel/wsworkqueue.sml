@@ -22,7 +22,6 @@ functor WorkStealing (structure W : sig type work val numberOfProcessors : unit 
 struct
 
   type proc = int
-  type share = MLtonHM.HierarchicalHeap.t * int option
   type work = W.work
 
   val successfulSteals = ref 0
@@ -83,20 +82,17 @@ struct
   exception QueueSize
 
   structure A = Array
-  structure HH = MLtonHM.HierarchicalHeap
   structure V = Vector
 
   val numberOfProcessors = W.numberOfProcessors ()
 
   val WORK_ARRAY_SIZE = 1024
   (* private state *)
-  datatype entry = Empty | Work of (token * W.work * share) | Marker
-  and queue = Queue of {
-                              top : int ref,
-                              bottom : int ref,
-                              index : int ref,
-                              work : entry (* (token * W.work (* * int *) ) option *) A.array ref
-                            }
+  datatype entry = Empty | Work of token * W.work | Marker
+  and queue = Queue of {top : int ref,
+                        bottom : int ref,
+                        index : int ref,
+                        work : entry (* (token * W.work (* * int *) ) option *) A.array ref}
   and token = Token of queue option ref
   type susp = queue option
 
@@ -374,14 +370,14 @@ struct
       (* val () = dekkerLock (true, lock); *)
       val q as Queue { top, work, ... } = case A.sub (queues, p)
                                       of SOME q => q | NONE => (print "add\n"; raise WorkQueue)
-      fun add (tw as (t as Token r, w, share)) =
+      fun add (tw as (t as Token r, w)) =
           let
             val i = !top
             val () = if i = A.length (!work) then resize p q else ()
             val i = !top (* in case of resize *)
           in
             r := SOME q;
-            A.update (!work, i, Work (t, w, share));
+            A.update (!work, i, Work (t, w));
             top := i + 1;
             assertToken "add" t p
           end
@@ -534,20 +530,6 @@ struct
                             (assertToken "steal" (#1 tw) p';
                              pr p "work-steal:";
                              incr successfulSteals;
-                             (case #3 tw
-                               of (hh, NONE) => HH.set hh (*
-                                                           * This piece of work
-                                                           * isn't derived, so
-                                                           * no HH bookkeeping
-                                                           * to do
-                                                           *)
-                               | (hh, SOME sharedLevel) =>
-                                 let
-                                     val childHH = HH.new ()
-                                 in
-                                     HH.appendChild (hh, childHH, sharedLevel);
-                                     HH.set childHH
-                                 end);
                              SOME (true, #2 tw))
                       end
                         before (count p "work-steal" ~1;
@@ -597,9 +579,7 @@ struct
                      | Work tw =>
                        let
                            val () = assertToken "normal" (#1 tw) p
-                           val (hh, _) = #3 tw
                        in
-                           HH.set hh;
                            SOME (false, #2 tw)
                        end
                        before (A.update (!work, i - 1, Empty);
@@ -670,7 +650,7 @@ struct
                 releaseLock thiefLock) (* XTRA *)
       end
 
-  fun resumeWork (p, NONE, tw as (t as Token r, w, share)) =
+  fun resumeWork (p, NONE, tw as (t as Token r, w)) =
       if P.resumeWorkLocally then
         let
           (* val () = pr p "before-resume-local" *)
@@ -719,7 +699,7 @@ struct
         (*   count p "non-local-resume" 1; *)
         (*   releaseLock masterLock *)
         (* end *)
-    | resumeWork (p, q as SOME (Queue { work, top, index, ... }), tw as (t, w, share)) =
+    | resumeWork (p, q as SOME (Queue { work, top, index, ... }), tw as (t, w)) =
       die "Tried to resume entire queue"
       (* let *)
       (*   (* val () = pr p "before-resume-original" *) *)
