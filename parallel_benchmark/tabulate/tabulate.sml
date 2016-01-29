@@ -1,4 +1,4 @@
-structure AS = ArraySequence
+structure TS = TreeSequence
 
 exception Invariant
 
@@ -52,11 +52,11 @@ fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
         val (a, b) = Primitives.par (fn () => Array.tabulate (10, fn i => i),
                                      fn () => Array.tabulate (10, fn i => i))
 
-        fun loop 1 = AS.tabulate (fn i => serialFib (i mod granularity))
+        fun loop 1 = TS.tabulate (fn i => serialFib (i mod granularity))
                                  arraySize
           | loop n =
             let
-                val k = AS.tabulate (fn i => serialFib (i mod granularity))
+                val k = TS.tabulate (fn i => serialFib (i mod granularity))
                                     arraySize
             in
                 loop (n - 1)
@@ -65,7 +65,7 @@ fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
         val (r, elapsed) = time (fn () => loop iterations)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((Int.toString (AS.nth r 0)) ^ "\n")
+        print ((Int.toString (TS.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =

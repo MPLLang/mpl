@@ -1,5 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
-$(LIB210)/210lib.mlb
+$(LIB210)
 
 scan.sml

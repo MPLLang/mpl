@@ -1,4 +1,4 @@
-structure AS = ArraySequence
+structure TS = TreeSequence
 
 exception Invariant
 
@@ -51,10 +51,10 @@ fun formatTimeString (total, gc) = String.concat ["# ",
 fun doit (arraySize : int) (granularity : int) : unit =
     let
         val granularity = Word.fromInt granularity
-        val arr = AS.tabulate (fn _ => MLton.Random.rand ()) arraySize
+        val arr = TS.tabulate (fn _ => MLton.Random.rand ()) arraySize
 
         val ((rs, rf), elapsed) =
-            time (fn () => AS.scan (fn (a, b) =>
+            time (fn () => TS.scan (fn (a, b) =>
                                        let
                                            val fa = serialFib (a mod granularity)
                                            val fb = serialFib (b mod granularity)

@@ -1,4 +1,4 @@
-structure AS = ArraySequence
+structure TS = TreeSequence
 
 exception Invariant
 
@@ -41,42 +41,42 @@ fun formatTimeString (total, gc) = String.concat ["# ",
 
 fun qsort cmp arr =
     let
-        val size = AS.length arr
+        val size = TS.length arr
     in
         if 0 = size
-        then AS.empty ()
+        then TS.empty ()
         else if 1 = size
         then arr
         else
             let
-                val pivot = AS.nth arr 0
-                val arr = AS.drop arr 1
-                val (L, R) = fork (fn () => AS.filter
+                val pivot = TS.nth arr 0
+                val arr = TS.drop arr 1
+                val (L, R) = fork (fn () => TS.filter
                                                 (fn x => case cmp (x, pivot)
                                                           of EQUAL => true
                                                            | LESS => true
                                                            | GREATER => false)
                                                 arr,
-                                   fn () => AS.filter
+                                   fn () => TS.filter
                                                 (fn x => case cmp (x, pivot)
                                                           of EQUAL => false
                                                            | LESS => false
                                                            | GREATER => true)
                                                 arr)
             in
-                AS.append (qsort cmp L,
-                           AS.append (AS.singleton pivot,
+                TS.append (qsort cmp L,
+                           TS.append (TS.singleton pivot,
                                       qsort cmp R))
             end
     end
 
 fun doit (arraySize : int) : unit =
     let
-        val arr = AS.tabulate (fn _ => MLton.Random.rand ()) arraySize
+        val arr = TS.tabulate (fn _ => MLton.Random.rand ()) arraySize
         val (r, elapsed) = time (fn () => qsort Word.compare arr)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((Word.toString (AS.nth r 0)) ^ "\n")
+        print ((Word.toString (TS.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =
