@@ -16,15 +16,6 @@ void displayGCState (GC_state s, FILE *stream) {
                                 + offsetofThread (s)),
                  stream);
 
-  fprintf (stream,
-           "\tcurrentHierarchicalHeap = "FMTOBJPTR"\n",
-           s->currentHierarchicalHeap);
-  HM_HH_display(
-      ((struct HM_HierarchicalHeap*)(
-          objptrToPointer(s->currentHierarchicalHeap, s->heap->start) +
-          HM_HH_offsetof(s))),
-      stream);
-
   fprintf (stream, "\tgenerational\n");
   displayGenerationalMaps (s, &s->generationalMaps,
                            stream);
@@ -352,14 +343,15 @@ void GC_setCurrentThreadUseHierarchicalHeap (void) {
 
 pointer GC_getCurrentHierarchicalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
+  GC_thread t = getThreadCurrent(s);
 
   pointer retVal;
-  if (BOGUS_OBJPTR != s->currentHierarchicalHeap) {
-    retVal = objptrToPointer (s->currentHierarchicalHeap, s->heap->start);
+  if (BOGUS_OBJPTR != t->hierarchicalHeap) {
+    retVal = objptrToPointer (t->hierarchicalHeap, s->heap->start);
   } else {
     /* create a new hierarchical heap to return */
     retVal = HM_newHierarchicalHeap(s);
-    s->currentHierarchicalHeap = pointerToObjptr(retVal, s->heap->start);
+    t->hierarchicalHeap = pointerToObjptr(retVal, s->heap->start);
   }
 
   return retVal;
@@ -368,7 +360,8 @@ pointer GC_getCurrentHierarchicalHeap (void) {
 void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  s->currentHierarchicalHeap = pointerToObjptr (hhPointer, s->heap->start);
+  getThreadCurrent(s)->hierarchicalHeap = pointerToObjptr (hhPointer,
+                                                           s->heap->start);
 }
 
 pointer GC_getSavedThread (void) {

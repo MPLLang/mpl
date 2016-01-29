@@ -34,6 +34,8 @@ void switchToThread (GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
+  assert(HM_inGlobalHeap(s));
+
   if (DEBUG_THREADS)
     fprintf (stderr,
              "GC_switchToThread ("FMTPTR", %"PRIuMAX") [%d]\n",

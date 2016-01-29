@@ -26,7 +26,7 @@ GC_stack getStackCurrent (GC_state s) {
 }
 
 objptr getHierarchicalHeapCurrentObjptr (GC_state s) {
-  return s->currentHierarchicalHeap;
+  return getThreadCurrent(s)->hierarchicalHeap;
 }
 
 struct HM_HierarchicalHeap* getHierarchicalHeapCurrent (GC_state s) {

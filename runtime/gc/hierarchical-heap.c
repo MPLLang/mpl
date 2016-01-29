@@ -254,7 +254,7 @@ struct HM_HierarchicalHeap* HM_HH_getContaining(ARG_USED_FOR_ASSERT GC_state s,
 }
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
-  return HHObjptrToStruct(s, s->currentHierarchicalHeap);
+  return HHObjptrToStruct(s, getThreadCurrent(s)->hierarchicalHeap);
 }
 
 Word32 HM_HH_getHighestStolenLevel(GC_state s,

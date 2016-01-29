@@ -27,13 +27,16 @@ void displayThread (GC_state s,
           "\t\texnStack = %"PRIuMAX"\n"
           "\t\tbytesNeeded = %"PRIuMAX"\n"
           "\t\tinGlobalHeapCounter = %"PRIuMAX"\n"
-          "\t\tstack = "FMTOBJPTR"\n",
+          "\t\tstack = "FMTOBJPTR"\n"
+          "\t\thierarchicalHeap = "FMTOBJPTR"\n",
           (uintmax_t)thread->exnStack,
           (uintmax_t)thread->bytesNeeded,
           ((uintmax_t)(thread->inGlobalHeapCounter)),
-          thread->stack);
+          thread->stack,
+          thread->hierarchicalHeap);
   displayStack (s, (GC_stack)(objptrToPointer (thread->stack, s->heap->start)),
                 stream);
+  /* RAM_NOTE: displayHH! */
 }
 
 size_t sizeofThread (GC_state s) {

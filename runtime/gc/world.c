@@ -21,7 +21,6 @@ void loadWorldFromFILE (GC_state s, FILE *f) {
   s->atomicState = readUint32 (f);
   s->callFromCHandlerThread = readObjptr (f);
   s->currentThread = readObjptr (f);
-  s->currentHierarchicalHeap = readObjptr (f);
   s->signalHandlerThread = readObjptr (f);
   createHeap (s, s->heap,
               sizeofHeapDesired (s, s->heap->oldGenSize, 0),

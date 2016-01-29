@@ -102,8 +102,7 @@ struct
                  * could be a resume parent
                  *)
                 T.switch
-                    (fn _ => T.prepare (T.prepend (k, fn () => setAndUseHH hh),
-                                        ())))
+                    (fn _ => T.prepare (k, ())))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
            handle e => (HM.enterGlobalHeap ();
@@ -209,8 +208,7 @@ struct
                                         ))
                           end
 
-                        | SOME (_, Thread (k, hh)) =>
-                          T.prepend (k, fn _ => (Q.startWork p; setAndUseHH hh))
+                        | SOME (_, Thread (k, hh)) => k
 
                         | NONE => T.new (schedule false)
                   (* to disable hijacking, use this instead

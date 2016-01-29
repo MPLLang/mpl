@@ -16,7 +16,8 @@
  * padding ::
  * bytesNeeded (size_t) ::
  * exnStack (size_t) ::
- * stack (object-pointer)
+ * stack (object-pointer) ::
+ * hierarchicalHeap (object-pointer)
  *
  * There may be zero or more bytes of padding for alignment purposes.
  *
@@ -26,7 +27,11 @@
  * The exnStack size_t is an offset added to stackBottom that
  * specifies the top of the exnStack.
  *
- * The final component is the stack object-pointer.
+ * The stack objptr is the stack object-pointer.
+ *
+ * The final component is the hierarchcialHeap objptr. Note that BOGUS_OBJPTR is
+ * a valid value for this when the thread has not been paired to a hierarchical
+ * heap yet.
  *
  * Note that the order of the fields is important.  The non-objptr
  * fields must be first, because a thread object must appear to be a
@@ -38,6 +43,7 @@ typedef struct GC_thread {
   size_t bytesNeeded;
   size_t exnStack;
   objptr stack;
+  objptr hierarchicalHeap;
 } __attribute__ ((packed)) *GC_thread;
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
@@ -46,6 +52,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(Bool) +
                     sizeof(size_t) +
                     sizeof(size_t) +
+                    sizeof(objptr) +
                     sizeof(objptr));
 
 #define BOGUS_EXN_STACK ((size_t)(-1))

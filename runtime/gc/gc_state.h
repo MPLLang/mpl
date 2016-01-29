@@ -35,10 +35,6 @@ struct GC_state {
   struct GC_controls *controls;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
-  objptr currentHierarchicalHeap; /*
-                                   * hierarchical heap to use for executing
-                                   * thread
-                                   */
   objptr wsQueue; /* The work-stealing queue for this processor */
   objptr wsQueueLock; /* The work-stealing queue lock for this processor */
   /* RAM_NOTE: Is this the right type? */

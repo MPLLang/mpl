@@ -443,6 +443,8 @@ structure ObjectType =
                           Bits.toBytes (Type.width (Type.exnStack ()))
                       val bytesStack =
                           Bits.toBytes (Type.width (Type.stack ()))
+                      val bytesHierarchicalHeap =
+                          Bits.toBytes (Type.width (Type.stack ()))
 
                       val bytesObject =
                           let
@@ -454,7 +456,8 @@ structure ObjectType =
                               bytesUseHierarchicalHeap +
                               bytesBytesNeeded +
                               bytesExnStack +
-                              bytesStack
+                              bytesStack +
+                              bytesHierarchicalHeap
                           end
 
                       val bytesTotal = Bytes.align (bytesObject,
@@ -465,12 +468,14 @@ structure ObjectType =
                   end
           in
               Normal {hasIdentity = true,
-                      ty = Type.seq (Vector.fromList [padding,
-                                                      Type.word32,
-                                                      Type.bool,
-                                                      Type.csize (),
-                                                      Type.exnStack (),
-                                                      Type.stack ()])}
+                      ty =
+                      Type.seq (Vector.fromList [padding,
+                                                 Type.word32,
+                                                 Type.bool,
+                                                 Type.csize (),
+                                                 Type.exnStack (),
+                                                 Type.stack (),
+                                                 Type.hierarchicalHeap ()])}
           end
 
       val hierarchicalHeap =
