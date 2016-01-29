@@ -1,4 +1,4 @@
-structure TS = TreeSequence
+structure TSG = TreeSequenceG
 
 exception Invariant
 
@@ -47,17 +47,23 @@ fun formatTimeString (total, gc) = String.concat ["# ",
                                                   timeToString gc,
                                                   " ms in GC)\n"]
 
-fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
+fun doit (arraySize : int)
+         (granularity : int)
+         (iterations : int)
+         (fibarg : int) : unit =
     let
+        (* start using HH *)
         val (a, b) = Primitives.par (fn () => Array.tabulate (10, fn i => i),
                                      fn () => Array.tabulate (10, fn i => i))
 
-        fun loop 1 = TS.tabulate (fn i => serialFib (i mod granularity))
-                                 arraySize
+        fun loop 1 = TSG.tabulate granularity
+                                  (fn i => serialFib fibarg)
+                                  arraySize
           | loop n =
             let
-                val k = TS.tabulate (fn i => serialFib (i mod granularity))
-                                    arraySize
+                val k = TSG.tabulate granularity
+                                     (fn i => serialFib fibarg)
+                                     arraySize
             in
                 loop (n - 1)
             end
@@ -65,7 +71,7 @@ fun doit (arraySize : int) (granularity : int) (iterations : int) : unit =
         val (r, elapsed) = time (fn () => loop iterations)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((Int.toString (TS.nth r 0)) ^ "\n")
+        print ((Int.toString (TSG.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =
@@ -81,6 +87,10 @@ fun main (args : string list) : unit =
         val iterations = case getIntOption "-iterations" args
                           of SOME v => v
                            | NONE => 1
+
+        val fibarg = case getIntOption "-fib-arg" args
+                      of SOME v => v
+                       | NONE => 30
     in
         print (String.concat ["arraySize: ",
                               Int.toString arraySize,
@@ -88,8 +98,10 @@ fun main (args : string list) : unit =
                               Int.toString granularity,
                               " iterations: ",
                               Int.toString iterations,
+                              " fibarg: ",
+                              Int.toString fibarg,
                               "\n"]);
-        doit arraySize granularity iterations
+        doit arraySize granularity iterations fibarg
     end
 
 val _ = main (CommandLine.arguments ())
