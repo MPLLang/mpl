@@ -32,6 +32,8 @@ struct HM_ChunkInfo {
   /* common between all chunks */
   void* frontier; /**< The end of the allocations in this chunk */
 
+  void* limit; /**< The limit of the chunk. */
+
   void* nextChunk; /**< The next chunk in the heap's chunk list */
 
   Word32 level; /**< The level of this chunk. If set to CHUNK_INVALID_LEVEL,
@@ -62,6 +64,7 @@ struct HM_ChunkInfo {
 
 COMPILE_TIME_ASSERT(HM_ChunkInfo__packed,
                     sizeof(struct HM_ChunkInfo) ==
+                    sizeof(void*) +
                     sizeof(void*) +
                     sizeof(void*) +
                     sizeof(Word32) +

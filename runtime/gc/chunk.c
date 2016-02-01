@@ -126,9 +126,13 @@ void* HM_allocateChunk(void* levelHeadChunk,
 
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
   chunkInfo->frontier = HM_getChunkStart(chunk);
+  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_size(chunk)));
   chunkInfo->level = CHUNK_INVALID_LEVEL;
   chunkInfo->split.normal.levelHead = levelHeadChunk;
   chunkInfo->split.levelHead.containingHH = NULL;
+
+  /* chunk size should be non-zero! */
+  assert(chunkInfo->limit != chunk);
 
   /* insert into list */
   chunkInfo->nextChunk = NULL;
@@ -166,11 +170,15 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   /* setup chunk info */
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
   chunkInfo->frontier = HM_getChunkStart(chunk);
+  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_size(chunk)));
   chunkInfo->nextChunk = NULL;
   chunkInfo->level = level;
   chunkInfo->split.levelHead.nextHead = NULL;
   chunkInfo->split.levelHead.lastChunk = chunk;
   chunkInfo->split.levelHead.containingHH = hh;
+
+  /* chunk size should be non-zero! */
+  assert(chunkInfo->limit != chunk);
 
   /* insert into level list */
   HM_mergeLevelList(levelList, chunk);
@@ -247,10 +255,7 @@ void* HM_getChunkFrontier(void* chunk) {
 }
 
 void* HM_getChunkLimit(void* chunk) {
-  size_t size = ChunkPool_size(chunk);
-  assert(0 != size);
-
-  return ((void*)(((char*)(chunk)) + size));
+  return getChunkInfo(chunk)->limit;
 }
 
 void* HM_getChunkStart(void* chunk) {
