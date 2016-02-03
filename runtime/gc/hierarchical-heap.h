@@ -260,16 +260,14 @@ void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
  */
 Word32 HM_HH_getObjptrLevel(GC_state s, objptr object);
 
-/* RAM_NOTE: This should be renamed to getFrontier */
 /**
- * Gets the saved frontier from a struct HM_HierarchicalHeap
+ * Gets the frontier from a struct HM_HierarchicalHeap
  *
  * @param hh The struct HM_HierarchicalHeap to use
  *
- * @return the frontier of the last allocated chunk, which is saved on every
- * exitLocalHeap().
+ * @return the frontier of the currently active chunk.
  */
-void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh);
+void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Checks if 'candidateObjptr' belongs to the hierarchical heap space.

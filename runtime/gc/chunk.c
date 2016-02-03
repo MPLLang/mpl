@@ -114,9 +114,7 @@ static const void* getLevelHeadChunkConst(const void* chunk);
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-void* HM_allocateChunk(void* levelHeadChunk,
-                       void** chunkEnd,
-                       size_t allocableSize) {
+void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
   size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
   void* chunk = ChunkPool_allocate(&totalSize);
 
@@ -129,7 +127,6 @@ void* HM_allocateChunk(void* levelHeadChunk,
   chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_size(chunk)));
   chunkInfo->level = CHUNK_INVALID_LEVEL;
   chunkInfo->split.normal.levelHead = levelHeadChunk;
-  chunkInfo->split.levelHead.containingHH = NULL;
 
   /* chunk size should be non-zero! */
   assert(chunkInfo->limit != chunk);
@@ -146,9 +143,6 @@ void* HM_allocateChunk(void* levelHeadChunk,
     getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
   }
 
-  /* populate chunkEnd */
-  *chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
-
   LOG(TRUE, TRUE, L_DEBUG,
       "Allocate chunk at level %u", getChunkInfo(levelHeadChunk)->level);
 
@@ -156,7 +150,6 @@ void* HM_allocateChunk(void* levelHeadChunk,
 }
 
 void* HM_allocateLevelHeadChunk(void** levelList,
-                                void** chunkEnd,
                                 size_t allocableSize,
                                 Word32 level,
                                 struct HM_HierarchicalHeap* hh) {
@@ -182,9 +175,6 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 
   /* insert into level list */
   HM_mergeLevelList(levelList, chunk);
-
-  /* populate chunkEnd */
-  *chunkEnd = ((void*)(((char*)(chunk)) + totalSize));
 
   LOG(TRUE, TRUE, L_DEBUG,
       "Allocate chunk at level %u", level);

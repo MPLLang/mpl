@@ -225,16 +225,14 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
 
   Word32 level = HM_getHighestLevel(hh->levelList);
   void* chunk;
-  void* chunkEnd;
   assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
   if ((CHUNK_INVALID_LEVEL == level) || (hh->level > level)) {
     chunk = HM_allocateLevelHeadChunk(&(hh->levelList),
-                                      &chunkEnd,
                                       bytesRequested,
                                       hh->level,
                                       hh);
   } else {
-    chunk = HM_allocateChunk(hh->levelList, &chunkEnd, bytesRequested);
+    chunk = HM_allocateChunk(hh->levelList, bytesRequested);
   }
 
   if (NULL == chunk) {
@@ -277,7 +275,7 @@ Word32 HM_HH_getObjptrLevel(GC_state s, objptr object) {
   return HM_getObjptrLevel(s, object);
 }
 
-void* HM_HH_getSavedFrontier(const struct HM_HierarchicalHeap* hh) {
+void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 

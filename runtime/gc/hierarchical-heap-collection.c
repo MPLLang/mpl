@@ -400,12 +400,7 @@ pointer copyObject(void** destinationLevelList,
   void* frontier;
   if (NULL == cursor) {
     /* need to create a new level */
-    void* chunkEnd;
-    chunk = HM_allocateLevelHeadChunk(destinationLevelList,
-                                      &chunkEnd,
-                                      size,
-                                      level,
-                                      NULL);
+    chunk = HM_allocateLevelHeadChunk(destinationLevelList, size, level, NULL);
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
@@ -418,8 +413,7 @@ pointer copyObject(void** destinationLevelList,
 
     if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < size) {
       /* need to allocate a new chunk */
-      void* chunkEnd;
-      chunk = HM_allocateChunk(cursor, &chunkEnd, size);
+      chunk = HM_allocateChunk(cursor, size);
       if (NULL == chunk) {
         die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
       }

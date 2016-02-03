@@ -86,22 +86,18 @@ struct HM_ChunkInfo;
  *
  * @param levelHeadChunk The head chunk of the level to insert this new chunk
  * into.
- * @param chunkEnd to be populated with the end of the chunk
  * @param allocableSize The minimum number of allocable bytes in the chunk
  *
  * @return NULL if no chunk could be allocated, with chunkEnd undefined, or
  * chunk pointer otherwise with chunkEnd set to the end of the returned chunk.
  */
-void* HM_allocateChunk(void* levelHeadChunk,
-                       void** chunkEnd,
-                       size_t allocableSize);
+void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize);
 
 /**
  * This function allocates and initializes a level head chunk of at least
  * allocableSize allocable bytes.
  *
  * @param levelList The list to insert this new chunk into.
- * @param chunkEnd to be populated with the end of the chunk
  * @param allocableSize The minimum number of allocable bytes in the chunk
  * @param level The level to assign to this head chunk
  * @param hh The hierarchical heap this chunk belongs to
@@ -110,7 +106,6 @@ void* HM_allocateChunk(void* levelHeadChunk,
  * chunk pointer otherwise with chunkEnd set to the end of the returned chunk.
  */
 void* HM_allocateLevelHeadChunk(void** levelList,
-                                void** chunkEnd,
                                 size_t allocableSize,
                                 Word32 level,
                                 struct HM_HierarchicalHeap* hh);
