@@ -169,6 +169,7 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   chunkInfo->split.levelHead.nextHead = NULL;
   chunkInfo->split.levelHead.lastChunk = chunk;
   chunkInfo->split.levelHead.containingHH = hh;
+  chunkInfo->split.levelHead.toChunkList = NULL;
 
   /* chunk size should be non-zero! */
   assert(chunkInfo->limit != chunk);
@@ -266,15 +267,35 @@ void* HM_getChunkListLastChunk(void* chunkList) {
   return getChunkInfo(chunkList)->split.levelHead.lastChunk;
 }
 
-struct HM_HierarchicalHeap* HM_getContainingHierarchicalHeap(objptr object) {
-  void* chunk = ChunkPool_find(objptrToPointer(object, 0));
-  void* levelHeadChunk;
-  for(levelHeadChunk = chunk;
-      CHUNK_INVALID_LEVEL == getChunkInfo(levelHeadChunk)->level;
-      levelHeadChunk = getChunkInfo(levelHeadChunk)->split.normal.levelHead) {
+void* HM_getChunkListToChunkList(void* chunkList) {
+  assert(NULL != chunkList);
+  assert(CHUNK_INVALID_LEVEL != getChunkInfo(chunkList)->level);
+
+  return getChunkInfo(chunkList)->split.levelHead.toChunkList;
+}
+
+void HM_setChunkListToChunkList(void* chunkList, void* toChunkList) {
+  assert(NULL != chunkList);
+  assert(CHUNK_INVALID_LEVEL != getChunkInfo(chunkList)->level);
+
+  getChunkInfo(chunkList)->split.levelHead.toChunkList = toChunkList;
+}
+
+void HM_getObjptrInfo(GC_state s,
+                      objptr object,
+                      struct HM_ObjptrInfo* info) {
+  assert(HM_HH_objptrInHierarchicalHeap(s, object));
+
+  void* chunk = ChunkPool_find(objptrToPointer(object, s->heap->start));
+  void* chunkList;
+  for(chunkList = chunk;
+      CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level;
+      chunkList = getChunkInfo(chunkList)->split.normal.levelHead) {
   }
 
-  return getChunkInfo(levelHeadChunk)->split.levelHead.containingHH;
+  info->hh = getChunkInfo(chunkList)->split.levelHead.containingHH;
+  info->chunkList = chunkList;
+  info->level = getChunkInfo(chunkList)->level;
 }
 
 Word32 HM_getHighestLevel(const void* levelList) {
@@ -284,17 +305,6 @@ Word32 HM_getHighestLevel(const void* levelList) {
 
   assert(CHUNK_INVALID_LEVEL != getChunkInfoConst(levelList)->level);
   return (getChunkInfoConst(levelList)->level);
-}
-
-Word32 HM_getObjptrLevel(GC_state s, objptr object) {
-  void* chunk = ChunkPool_find(objptrToPointer(object, s->heap->start));
-  void* levelHeadChunk;
-  for(levelHeadChunk = chunk;
-      CHUNK_INVALID_LEVEL == getChunkInfo(levelHeadChunk)->level;
-      levelHeadChunk = getChunkInfo(levelHeadChunk)->split.normal.levelHead) {
-  }
-
-  return getChunkInfo(levelHeadChunk)->level;
 }
 
 void HM_mergeLevelList(void** destinationLevelList, void* levelList) {

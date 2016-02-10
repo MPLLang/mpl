@@ -25,13 +25,15 @@
  * @param p The pointer to copy
  * @param size The number of bytes to copy
  * @param level The level to copy into
+ * @param fromChunkList The ChunkList that 'p' resides in.
  *
  * @return pointer to the copied object
  */
 pointer copyObject(void** destinationLevelList,
                    pointer p,
                    size_t size,
-                   Word32 level);
+                   Word32 level,
+                   void* fromChunkList);
 
 /**
  * ObjptrPredicateFunction for skipping global heap objects we don't care about
@@ -230,8 +232,15 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)p);
   }
 
-  if ((!HM_HH_objptrInHierarchicalHeap(s, *opp)) ||
-      (HM_HH_getContaining(s, op) != args->hh)) {
+  if (!HM_HH_objptrInHierarchicalHeap(s, op)) {
+    /* does not point to an HH objptr, so not in scope for collection */
+    return;
+  }
+
+  struct HM_ObjptrInfo opInfo;
+  HM_getObjptrInfo(s, op, &opInfo);
+
+  if (opInfo.hh != args->hh) {
     /* does not point to an HH objptr in my HH, so just return */
     return;
   }
@@ -243,18 +252,17 @@ void forwardHHObjptr (GC_state s,
     }
 
     /* if forwarded, must be in my own HierarchicalHeap! */
-    assert(HM_HH_getContaining(s, op) == args->hh);
+    assert(opInfo.hh == args->hh);
 
     /* should not have forwarded anything below 'args->minLevel'! */
-    assert(HM_HH_getObjptrLevel(s, op) >= args->minLevel);
+    assert(opInfo.level >= args->minLevel);
   }
 
   if (GC_FORWARDED != header) {
-    Word32 level = HM_HH_getObjptrLevel(s, op);
 #pragma message "More nuanced with non-local collection"
-    if ((HM_HH_getContaining(s, op) != args->hh) ||
+    if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
-        (level < args->minLevel)) {
+        (opInfo.level < args->minLevel)) {
       return;
     }
     /* maybe forward the object */
@@ -321,10 +329,15 @@ void forwardHHObjptr (GC_state s,
 
     size_t size = headerBytes + objectBytes;
     /* Copy the object. */
+    if (opInfo.level > args->maxLevel) {
+      DIE("Pointer Invariant violated!");
+    }
+
     pointer copyPointer = copyObject(&(args->hh->newLevelList),
                                      p - headerBytes,
                                      size,
-                                     (level > args->maxLevel) ? (args->maxLevel) : (level));
+                                     opInfo.level,
+                                     opInfo.chunkList);
     LOG(args->log, TRUE, L_DEBUG,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
@@ -374,6 +387,7 @@ void forwardHHObjptr (GC_state s,
     }
   }
 
+
   *opp = *((objptr*)(p));
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -381,46 +395,75 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)*opp);
   }
 
+#if ASSERT
   /* args->hh->newLevelList has containingHH set to NULL */
-  assert (NULL == HM_HH_getContaining(s, *opp));
+  HM_getObjptrInfo(s, *opp, &opInfo);
+  assert (NULL == opInfo.hh);
+#endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 pointer copyObject(void** destinationLevelList,
                    pointer p,
                    size_t size,
-                   Word32 level) {
-  void* cursor;
-  for (cursor = *destinationLevelList;
-       (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
-       cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
-  }
+                   Word32 level,
+                   void* fromChunkList) {
+  static size_t maxSize = 0;
 
+  /* get the saved level head */
+  void* chunkList = HM_getChunkListToChunkList(fromChunkList);
+#if ASSERT
+  if (NULL == chunkList) {
+    void* cursor;
+    for (cursor = *destinationLevelList;
+         (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
+         cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
+    }
+    assert((NULL == cursor) || (HM_getChunkListLevel(cursor) != level));
+  } else {
+    assert(HM_getChunkListLevel(chunkList) == level);
+
+    void* cursor;
+    for (cursor = *destinationLevelList;
+         (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
+         cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
+    }
+    assert(chunkList == cursor);
+  }
+#endif
+
+  /* get the chunk to allocate in */
   void* chunk;
-  void* frontier;
-  if (NULL == cursor) {
-    /* need to create a new level */
+  if (NULL == chunkList) {
+    /* Level does not exist, so create it */
     chunk = HM_allocateLevelHeadChunk(destinationLevelList, size, level, NULL);
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
-    frontier = HM_getChunkFrontier(chunk);
+
+    /* update toChunkList for fast access later */
+    HM_setChunkListToChunkList(fromChunkList, chunk);
   } else {
-    /* found the level, try to allocate in it */
-    chunk = HM_getChunkListLastChunk(cursor);
-    frontier = HM_getChunkFrontier(chunk);
+    /* level exists, get the chunk from it */
+    chunk = HM_getChunkListLastChunk(chunkList);
+    void* frontier = HM_getChunkFrontier(chunk);
     void* limit = HM_getChunkLimit(chunk);
 
     if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < size) {
       /* need to allocate a new chunk */
-      chunk = HM_allocateChunk(cursor, size);
+      chunk = HM_allocateChunk(chunkList, size);
       if (NULL == chunk) {
         die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
       }
-      frontier = HM_getChunkFrontier(chunk);
     }
   }
 
+  if (size > maxSize) {
+    maxSize = size;
+  }
+
+  /* get frontier of chunk and do the copy */
+  void* frontier = HM_getChunkFrontier(chunk);
   GC_memcpy(p, frontier, size);
   HM_updateChunkValues(chunk, ((void*)(((char*)(frontier)) + size)));
 

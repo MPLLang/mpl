@@ -52,6 +52,9 @@ struct HM_ChunkInfo {
 
       struct HM_HierarchicalHeap* containingHH; /**< The hierarchical heap
                                                  * containing this chunk */
+
+      void* toChunkList; /**< The corresponding Chunk List in the to-LevelList
+                          * during GC */
     } levelHead; /**< The struct containing information for level head chunks */
 
     struct {
@@ -71,10 +74,18 @@ COMPILE_TIME_ASSERT(HM_ChunkInfo__packed,
                     sizeof(uint32_t) +
                     sizeof(void*) +
                     sizeof(void*) +
-                    sizeof(struct HM_HierarchicalHeap*));
+                    sizeof(struct HM_HierarchicalHeap*) +
+                    sizeof(void*));
 
 COMPILE_TIME_ASSERT(HM_ChunkInfo__aligned,
                     (sizeof(struct HM_ChunkInfo) % 8) == 0);
+
+struct HM_ObjptrInfo {
+  struct HM_HierarchicalHeap* hh;
+  void* chunkList;
+  Word32 level;
+};
+
 #else
 struct HM_ChunkInfo;
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -184,16 +195,35 @@ Word32 HM_getChunkListLevel(void* chunk);
 void* HM_getChunkListLastChunk(void* chunkList);
 
 /**
- * Gets the containing hierarchical heap for the given objptr
+ * This function returns the to-ChunkList corresponding to the specified
+ * ChunkList during garbage collection.
+ *
+ * @param chunkList The ChunkList to get the to-ChunkList for
+ *
+ * @return NULL if no to-ChunkList has been set, the to-ChunkList otherwise.
+ */
+void* HM_getChunkListToChunkList(void* chunkList);
+
+/**
+ * This function sets the to-ChunkList corresponding to the specified ChunkList
+ * during garbage collection.
+ *
+ * @param chunkList The ChunkList to set the to-ChunkList for.
+ * @param toChunkList The ChunkList set the to-ChunkList to.
+ */
+void HM_setChunkListToChunkList(void* chunkList, void* toChunkList);
+
+/**
+ * Gets the info for the given objptr
  *
  * @attention
  * object <em>must</em> be within the hierarchical heap!
  *
+ * @param s The GC_state to use
  * @param object The objptr to get the Hierarchical Heap for
- *
- * @return The struct HM_HierarchicalHeap that 'object' belongs to
+ * @param retVal Pointer to the struct to populate with 'object''s info.
  */
-struct HM_HierarchicalHeap* HM_getContainingHierarchicalHeap(objptr object);
+void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
 /**
  * This functions returns the highest level in a level list
@@ -204,19 +234,6 @@ struct HM_HierarchicalHeap* HM_getContainingHierarchicalHeap(objptr object);
  * otherwise
  */
 Word32 HM_getHighestLevel(const void* levelList);
-
-/**
- * Gets the level of an objptr in the hierarchical heap
- *
- * @attention
- * objptr must be a valid, allocated HierarchicalHeap objptr!
- *
- * @param s The GC_state to use
- * @param object The objptr
- *
- * @return the level of the objptr
- */
-Word32 HM_getObjptrLevel(GC_state s, objptr object);
 
 /**
  * Merges 'levelList' into 'destinationLevelList'.

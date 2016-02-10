@@ -244,13 +244,6 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   return TRUE;
 }
 
-struct HM_HierarchicalHeap* HM_HH_getContaining(ARG_USED_FOR_ASSERT GC_state s,
-                                                objptr object) {
-  assert(HM_HH_objptrInHierarchicalHeap(s, object));
-
-  return HM_getContainingHierarchicalHeap(object);
-}
-
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
   return HHObjptrToStruct(s, getThreadCurrent(s)->hierarchicalHeap);
 }
@@ -269,10 +262,6 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
 
 void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkLimit(hh->lastAllocatedChunk);
-}
-
-Word32 HM_HH_getObjptrLevel(GC_state s, objptr object) {
-  return HM_getObjptrLevel(s, object);
 }
 
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {

@@ -205,19 +205,6 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 
 /**
- * Gets the containing hierarchical heap for the given objptr
- *
- * @attention
- * object <em>must</em> be within the hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap for
- *
- * @return The struct HM_HierarchicalHeap that 'object' belongs to
- */
-struct HM_HierarchicalHeap* HM_HH_getContaining(GC_state s, objptr object);
-
-/**
  * Returns the current hierarchical heap in use
  *
  * @param s The GC_state to use
@@ -246,19 +233,6 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
  * @return the heap limit
  */
 void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
-
-/**
- * Gets the level of an objptr in the hierarchical heap
- *
- * @attention
- * objptr must be a valid, allocated HierarchicalHeap objptr!
- *
- * @param s The GC_state to use
- * @param object The objptr
- *
- * @return the level of the objptr
- */
-Word32 HM_HH_getObjptrLevel(GC_state s, objptr object);
 
 /**
  * Gets the frontier from a struct HM_HierarchicalHeap
