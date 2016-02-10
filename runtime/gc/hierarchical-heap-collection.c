@@ -172,6 +172,44 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
+  /*
+   * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
+   * instead of iterating
+   */
+#if 0
+  if (DEBUG_HEAP_MANAGEMENT or s->controls->HMMessages) {
+    /* count number of from-bytes */
+    size_t fromBytes = 0;
+    for (void* chunkList = hh->levelList;
+         (NULL != chunkList) && (HM_getChunkListLevel(chunkList) >=
+                                 forwardHHObjptrArgs.minLevel);
+         chunkList = getChunkInfo(chunkList)->split.levelHead.nextHead) {
+      for (void* chunk = chunkList;
+           NULL != chunk;
+           chunk = getChunkInfo(chunk)->nextChunk) {
+        fromBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
+      }
+    }
+
+    /* count number of to-chunks */
+    size_t toBytes = 0;
+    for (void* chunkList = hh->newLevelList;
+         NULL != chunkList;
+         chunkList = getChunkInfo(chunkList)->split.levelHead.nextHead) {
+      for (void* chunk = chunkList;
+           NULL != chunk;
+           chunk = getChunkInfo(chunk)->nextChunk) {
+        toBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
+      }
+    }
+
+    LOG(TRUE, TRUE, L_INFO,
+        "Collection went from %zu bytes to %zu bytes",
+        fromBytes,
+        toBytes);
+  }
+#endif
+
   /* free old chunks */
   HM_freeChunks(&(hh->levelList), forwardHHObjptrArgs.minLevel);
 
