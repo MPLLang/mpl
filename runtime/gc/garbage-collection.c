@@ -457,16 +457,23 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* SPOONHOWER_NOTE: Used to be enter() here */
 
-  /* When the mutator requests zero bytes, it may actually need as
+  bool inGlobalHeap = !getThreadCurrent(s)->useHierarchicalHeap ||
+                      HM_inGlobalHeap(s);
+
+  /* adjust bytesRequested */
+  /*
+   * When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */
-  if (bytesRequested < s->controls->allocChunkSize) {
-    /* first make sure that I hit the minimum */
+  bytesRequested += GC_HEAP_LIMIT_SLOP;
+
+  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+    /*
+     * first make sure that I hit the minimum if I am doing a global heap
+     * allocation
+     */
     bytesRequested = s->controls->allocChunkSize;
   }
-
-  /* add extra slop */
-  bytesRequested += GC_HEAP_LIMIT_SLOP;
 
   /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
@@ -474,7 +481,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
 
-  if (!getThreadCurrent(s)->useHierarchicalHeap || HM_inGlobalHeap(s)) {
+  if (inGlobalHeap) {
     ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
                                                     TRUE, TRUE,
                                                     0, 0);
