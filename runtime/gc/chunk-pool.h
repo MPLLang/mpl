@@ -35,13 +35,21 @@ typedef void* (*ChunkPool_BatchFreeFunction) (void* args);
 void ChunkPool_initialize (size_t poolSize);
 
 /**
+ * @brief Adjusts the pool size for overHalfAllocated() checks
+ *
+ * If the current pool size has less than half the space free, the current pool
+ * size is at most doubled for future allocations.
+ */
+void ChunkPool_adjustPoolSize(void);
+
+/**
  * @brief Allocates a new chunk from the pool
  *
  * This function allocates a new chunk from the pool with <em>at least</em>
  * <tt>*bytesRequested</tt> bytes of space. The actual number of bytes in the
  * allocated chunk is stored in <tt>bytesRequested</tt> on return. However,
  * <tt>*bytesRequested</tt> is undefined upon a NULL return, when a chunk could
- * not be allocated
+m * not be allocated
  *
  * @param bytesRequested Pointer to the number of bytes requested. Note that
  * <tt>*bytesRequested</tt> is undefined on a NULL return and set to the space

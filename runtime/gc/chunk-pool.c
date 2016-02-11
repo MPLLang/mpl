@@ -157,6 +157,7 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
 #define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
 /* 2^12 bytes == 4KiB */
 #define ChunkPool_MINIMUMCHUNKSIZE (1ULL << 12)
+#define ChunkPool_MINIMUMPOOLSIZE (ChunkPool_MINIMUMCHUNKSIZE * 1000)
 #define ChunkPool_NUMFREELISTS (256)
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
@@ -171,6 +172,8 @@ static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
 static size_t ChunkPool_bytesAllocated = 0;
+static size_t ChunkPool_currentPoolSize = 0;
+static size_t ChunkPool_maxPoolSize = 0;
 
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatas = NULL;
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatasEnd = NULL;
@@ -208,6 +211,11 @@ void ChunkPool_initialize (size_t poolSize) {
   /* setup pool variables */
   ChunkPool_poolStart = region;
   ChunkPool_poolEnd = ((uint8_t*)(region)) + adjustedPoolSize;
+  ChunkPool_maxPoolSize = adjustedPoolSize;
+  ChunkPool_currentPoolSize =
+      (ChunkPool_MINIMUMPOOLSIZE > ChunkPool_maxPoolSize) ?
+      ChunkPool_maxPoolSize : ChunkPool_MINIMUMPOOLSIZE;
+
 
   /* setup metadatas variable */
   size_t numChunks = adjustedPoolSize / ChunkPool_MINIMUMCHUNKSIZE;
@@ -218,6 +226,18 @@ void ChunkPool_initialize (size_t poolSize) {
 
   /* Add the giant chunk into the free list */
   ChunkPool_insertIntoFreeList (ChunkPool_chunkMetadatas);
+}
+
+/**
+ * Currently, this function fakes the increase by allowing more of the fixed
+ * chunk pool to be allocated. This call is *not* serialized.
+ */
+void ChunkPool_adjustPoolSize(void) {
+  if (ChunkPool_overHalfAllocated()) {
+    size_t preferredNewPoolSize = ChunkPool_currentPoolSize * 2;
+    ChunkPool_currentPoolSize = (preferredNewPoolSize > ChunkPool_maxPoolSize) ?
+                                ChunkPool_maxPoolSize : preferredNewPoolSize;
+  }
 }
 
 /**
@@ -354,8 +374,7 @@ void* ChunkPool_find (void* object) {
 }
 
 bool ChunkPool_overHalfAllocated(void) {
-  return (((((size_t)(ChunkPool_poolEnd)) -
-            ((size_t)(ChunkPool_poolStart))) / 2) < ChunkPool_bytesAllocated);
+  return (ChunkPool_bytesAllocated > (ChunkPool_currentPoolSize / 2));
 }
 
 /**

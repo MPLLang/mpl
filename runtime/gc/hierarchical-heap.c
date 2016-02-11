@@ -213,15 +213,13 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
 }
 
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-#pragma message "Revert when done"
-#if 1
   if (ChunkPool_overHalfAllocated()) {
     /* collect first to free up some space */
     LOG(TRUE, TRUE, L_DEBUG, "START collectLocal");
     HM_HHC_collectLocal();
     LOG(TRUE, TRUE, L_DEBUG, "END collectLocal");
   }
-#endif
+  ChunkPool_adjustPoolSize();
 
   Word32 level = HM_getHighestLevel(hh->levelList);
   void* chunk;
