@@ -1,4 +1,4 @@
-structure TS = TreeSequence
+structure TSG = TreeSequenceG
 
 exception Invariant
 
@@ -39,44 +39,54 @@ fun formatTimeString (total, gc) = String.concat ["# ",
                                                   timeToString gc,
                                                   " ms in GC)\n"]
 
-fun qsort cmp arr =
+fun qsort g cmp arr =
     let
-        val size = TS.length arr
+        val size = TSG.length arr
     in
         if 0 = size
-        then TS.empty ()
+        then TSG.empty ()
         else if 1 = size
         then arr
         else
             let
-                val pivot = TS.nth arr 0
-                val arr = TS.drop arr 1
-                val (L, R) = fork (fn () => TS.filter
-                                                (fn x => case cmp (x, pivot)
-                                                          of EQUAL => true
-                                                           | LESS => true
-                                                           | GREATER => false)
-                                                arr,
-                                   fn () => TS.filter
-                                                (fn x => case cmp (x, pivot)
-                                                          of EQUAL => false
-                                                           | LESS => false
-                                                           | GREATER => true)
-                                                arr)
+                val pivot = TSG.nth arr 0
+                val arr = TSG.drop g arr 1
+
+                fun filterL () = TSG.filter
+                                     g
+                                     (fn x => case cmp (x, pivot)
+                                               of EQUAL => true
+                                                | LESS => true
+                                                | GREATER => false)
+                                     arr
+
+                fun filterR () = TSG.filter
+                                     g
+                                     (fn x => case cmp (x, pivot)
+                                               of EQUAL => false
+                                                | LESS => false
+                                                | GREATER => true)
+                                     arr
+
+                val (L, R) = if size <= g
+                             then (filterL (), filterR ())
+                             else fork (filterL, filterR)
             in
-                TS.append (qsort cmp L,
-                           TS.append (TS.singleton pivot,
-                                      qsort cmp R))
+                TSG.append g (qsort g cmp L,
+                              TSG.append g (TSG.singleton pivot,
+                                            qsort g cmp R))
             end
     end
 
-fun doit (arraySize : int) : unit =
+fun doit (arraySize : int) (granularity : int) : unit =
     let
-        val arr = TS.tabulate (fn _ => MLton.Random.rand ()) arraySize
-        val (r, elapsed) = time (fn () => qsort Word.compare arr)
+        val arr = TSG.tabulate granularity
+                               (fn _ => MLton.Random.rand ())
+                               arraySize
+        val (r, elapsed) = time (fn () => qsort granularity Word.compare arr)
     in
         print (formatTimeString (elapsed, Time.zeroTime));
-        print ((Word.toString (TS.nth r 0)) ^ "\n")
+        print ((Word.toString (TSG.nth r 0)) ^ "\n")
     end
 
 fun main (args : string list) : unit =
@@ -84,11 +94,17 @@ fun main (args : string list) : unit =
         val arraySize = case getIntOption "-array-size" args
                          of SOME v => v
                           | NONE => 1000
+
+        val granularity = case getIntOption "-granularity" args
+                           of SOME v => v
+                            | NONE => 1
     in
         print (String.concat ["arraySize: ",
                               Int.toString arraySize,
+                              " granularity: ",
+                              Int.toString granularity,
                               "\n"]);
-        doit arraySize
+        doit arraySize granularity
     end
 
 val _ = main (CommandLine.arguments ())
