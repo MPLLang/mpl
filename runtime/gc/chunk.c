@@ -287,10 +287,20 @@ void HM_getObjptrInfo(GC_state s,
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
   void* chunk = ChunkPool_find(objptrToPointer(object, s->heap->start));
+
   void* chunkList;
   for(chunkList = chunk;
       CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level;
-      chunkList = getChunkInfo(chunkList)->split.normal.levelHead) {
+      chunkList = getChunkInfo(chunkList)->split.normal.levelHead) { }
+
+  /* now that I have the chunkList, path compress */
+  void* parentChunk = NULL;
+  while (chunkList != chunk) {
+    assert(CHUNK_INVALID_LEVEL == getChunkInfo(chunk)->level);
+
+    parentChunk = getChunkInfo(chunk)->split.normal.levelHead;
+    getChunkInfo(chunk)->split.normal.levelHead = chunkList;
+    chunk = parentChunk;
   }
 
   info->hh = getChunkInfo(chunkList)->split.levelHead.containingHH;
