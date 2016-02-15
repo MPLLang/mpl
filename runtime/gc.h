@@ -23,8 +23,10 @@ typedef GC_state GCState_t;
 #error POINTER_BITS not defined
 #endif
 
+#include "gc/chunk-pool.h"
 #include "gc/debug.h"
 #include "gc/util.h"
+
 
 #include "gc/align.h"
 #include "gc/model.h"
@@ -77,7 +79,6 @@ typedef GC_state GCState_t;
 #include "gc/share.h"
 #include "gc/parallel.h"
 #include "gc/processor.h"
-#include "gc/chunk-pool.h"
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/heap-utils.h"

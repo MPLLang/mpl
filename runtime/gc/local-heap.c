@@ -87,8 +87,24 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
+
+    double allocatedRatio = ChunkPool_allocatedRatio();
+    if (allocatedRatio < s->controls->hhRatios.allocatedRatio) {
+      /* too much allocated, so let's collect */
+      HM_HHC_collectLocal();
+
+      LOG(TRUE, FALSE, L_INFO,
+          "Live Ratio %.2f < %.2f, performed local collection to increase "
+          "ratio to %.2f",
+          allocatedRatio,
+          s->controls->hhRatios.allocatedRatio,
+          ChunkPool_allocatedRatio());
+
+      ChunkPool_maybeResize();
+    }
+
     if (!HM_HH_extend(hh, bytesRequested)) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+      DIE("Ran out of space for Hierarchical Heap!");
     }
 
     s->frontier = HM_HH_getFrontier(hh);

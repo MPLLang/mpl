@@ -27,6 +27,7 @@
  */
 
 #include "chunk-pool.h"
+#include "util.h"
 
 #include <pthread.h>
 
@@ -157,7 +158,6 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
 #define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
 /* 2^12 bytes == 4KiB */
 #define ChunkPool_MINIMUMCHUNKSIZE (1ULL << 12)
-#define ChunkPool_MINIMUMPOOLSIZE (ChunkPool_MINIMUMCHUNKSIZE * 1000)
 #define ChunkPool_NUMFREELISTS (256)
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
@@ -169,11 +169,11 @@ static bool ChunkPool_initialized = FALSE;
 
 static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static struct ChunkPool_config ChunkPool_config;
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
 static size_t ChunkPool_bytesAllocated = 0;
 static size_t ChunkPool_currentPoolSize = 0;
-static size_t ChunkPool_maxPoolSize = 0;
 
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatas = NULL;
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatasEnd = NULL;
@@ -185,59 +185,92 @@ ChunkPool_freeLists[ChunkPool_NUMFREELISTS] = {0};
 /* Functions */
 /*************/
 /**
- * This function <em>must</em> be called before calling any other functions. It
- * is not thread-safe. The actual maximum pool size will be the maximum multiple
- * of <tt>ChunkPool_MINIMUMCHUNKSIZE</tt> that is less than or equal to
- * <tt>poolSize</tt>.
+ * This function is not thread-safe.
  */
-void ChunkPool_initialize (size_t poolSize) {
-  /* I die if I hit an error anyways, so just set this early */
-  ChunkPool_initialized = TRUE;
+void ChunkPool_initialize (struct ChunkPool_config* config) {
+  assert(!ChunkPool_initialized);
 
-  /* get adjusted pool size */
-  size_t adjustedPoolSize = poolSize & ~ChunkPool_CHUNKADDRESSMASK;
+  ChunkPool_config = *config;
+
+  /* adjust and assert inputs */
+  /* round down maxSize */
+  ChunkPool_config.maxSize =
+      ChunkPool_config.maxSize & ~ChunkPool_CHUNKADDRESSMASK;
+
+  /* round down initialSize to a minimum of the page size */
+  ChunkPool_config.initialSize =
+      ChunkPool_config.initialSize & ~ChunkPool_CHUNKADDRESSMASK;
+  ChunkPool_config.initialSize =
+      (0 == ChunkPool_config.initialSize) ?
+      (ChunkPool_MINIMUMCHUNKSIZE) : (ChunkPool_config.initialSize);
+
+  if (ChunkPool_config.liveRatio < 1.0) {
+    DIE("ChunkPool live ratio %f < 1.0 is illegal.",
+        ChunkPool_config.liveRatio);
+  }
+
+  if (ChunkPool_config.growRatio <= 1.0) {
+    DIE("ChunkPool grow ratio %f <= 1.0 is illegal",
+        ChunkPool_config.growRatio);
+  }
+
+  /* at this point, the inputs are adjusted and ready to use */
 
   /* map the chunks */
   void* region = mmap (NULL,
-                       adjustedPoolSize,
+                       ChunkPool_config.maxSize,
                        PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                        -1,
                        0);
   if (MAP_FAILED == region) {
-    diee(__FILE__ ":%d: mmap() failed with errno %d", __LINE__, errno);
+    DIE("mmap() failed with errno %d.", errno);
   }
 
   /* setup pool variables */
   ChunkPool_poolStart = region;
-  ChunkPool_poolEnd = ((uint8_t*)(region)) + adjustedPoolSize;
-  ChunkPool_maxPoolSize = adjustedPoolSize;
-  ChunkPool_currentPoolSize =
-      (ChunkPool_MINIMUMPOOLSIZE > ChunkPool_maxPoolSize) ?
-      ChunkPool_maxPoolSize : ChunkPool_MINIMUMPOOLSIZE;
-
+  ChunkPool_poolEnd = ((uint8_t*)(region)) + ChunkPool_config.maxSize;
+  ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
 
   /* setup metadatas variable */
-  size_t numChunks = adjustedPoolSize / ChunkPool_MINIMUMCHUNKSIZE;
+  size_t numChunks = ChunkPool_config.maxSize / ChunkPool_MINIMUMCHUNKSIZE;
   ChunkPool_chunkMetadatas = malloc_safe (numChunks *
                                           sizeof(*ChunkPool_chunkMetadatas));
   ChunkPool_chunkMetadatasEnd = ChunkPool_chunkMetadatas + numChunks;
   ChunkPool_chunkMetadatas->spanInfo.numChunksInSpan = numChunks;
+
+  ChunkPool_initialized = TRUE;
 
   /* Add the giant chunk into the free list */
   ChunkPool_insertIntoFreeList (ChunkPool_chunkMetadatas);
 }
 
 /**
- * Currently, this function fakes the increase by allowing more of the fixed
- * chunk pool to be allocated. This call is *not* serialized.
+ * Currently, this function fakes the resize by changing the reported pool
+ * size. This call is *not* serialized.
  */
-void ChunkPool_adjustPoolSize(void) {
-  if (ChunkPool_overHalfAllocated()) {
-    size_t preferredNewPoolSize = ChunkPool_currentPoolSize * 2;
-    ChunkPool_currentPoolSize = (preferredNewPoolSize > ChunkPool_maxPoolSize) ?
-                                ChunkPool_maxPoolSize : preferredNewPoolSize;
+void ChunkPool_maybeResize(void) {
+  size_t oldPoolSize = ChunkPool_currentPoolSize;
+
+  double ratio = ((double)(ChunkPool_currentPoolSize)) /
+                 ((double)(ChunkPool_bytesAllocated));
+
+  if (ratio < ChunkPool_config.liveRatio) {
+    /* grow */
+    size_t preferredNewPoolSize =
+        ((size_t)(ChunkPool_currentPoolSize * ChunkPool_config.growRatio));
+
+    ChunkPool_currentPoolSize =
+        (preferredNewPoolSize > ChunkPool_config.maxSize) ?
+        ChunkPool_config.maxSize : preferredNewPoolSize;
   }
+
+  LOG(oldPoolSize != ChunkPool_currentPoolSize, FALSE, L_INFO,
+      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
+      ratio,
+      ChunkPool_config.liveRatio,
+      oldPoolSize,
+      ChunkPool_currentPoolSize);
 }
 
 /**
@@ -373,8 +406,9 @@ void* ChunkPool_find (void* object) {
   return chunk;
 }
 
-bool ChunkPool_overHalfAllocated(void) {
-  return (ChunkPool_bytesAllocated > (ChunkPool_currentPoolSize / 2));
+double ChunkPool_allocatedRatio(void) {
+  return (((double)(ChunkPool_currentPoolSize)) /
+      ((double)(ChunkPool_bytesAllocated)));
 }
 
 /**

@@ -26,7 +26,7 @@
  */
 #define LOG(logPredicate, flush, level, ...)                            \
   do {                                                                  \
-    if (logPredicate) {                                                 \
+    if ((L_levelEnabled(level)) && (logPredicate)) {                    \
       L_log(flush,                                                      \
             level,                                                      \
             Proc_processorNumber(pthread_getspecific(gcstate_key)),     \

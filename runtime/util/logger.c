@@ -20,7 +20,7 @@
 /* Global Constants */
 /********************/
 static const char* LogLevelToString[] = {
-  "NONE",
+  "FORCE",
   "ERROR",
   "WARN",
   "INFO",
@@ -46,13 +46,17 @@ void L_setFile(FILE* file) {
   logFile = file;
 }
 
+bool L_levelEnabled(enum LogLevel level) {
+  return (level <= logLevel);
+}
+
 void L_log(bool flush,
            enum LogLevel level,
            size_t processor,
            const char* function,
            const char* format,
            ...) {
-  if (level > logLevel) {
+  if (!L_levelEnabled(level)) {
     /* shouldn't log this message */
     return;
   }

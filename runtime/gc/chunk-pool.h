@@ -1,4 +1,4 @@
-/* Copyright (C) 2014 Ram Raghunathan.
+/* Copyright (C) 2014-2016 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -10,7 +10,7 @@
  * @author Ram Raghunathan
  *
  * @brief
- * The Chunk Pool defines black box from which the Hierarchical Heap (HH)
+ * The Chunk Pool defines the black box from which the Hierarchical Heap (HH)
  * allocates and frees chunks. It also defines a mechanism to get the containing
  * chunk of an arbitrary object, if it exists.
  */
@@ -19,28 +19,48 @@
 #define CHUNK_POOL_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+/**
+ * @brief This struct contains the configuration information for the chunk pool
+ */
+struct ChunkPool_config {
+  size_t initialSize; /**< Initial size of the chunk pool in bytes */
+
+  size_t maxSize; /**< Maximum size of the pool, in bytes */
+
+  double liveRatio; /**< Heap:Live ratio over which resize is triggered. Must
+                     * be greater than or equal to 1.0 */
+
+  double growRatio; /**< NewHeap:OldHeap ratio to maintain on resize. Must be
+                     * greater than 1.0 */
+};
+
 typedef void* (*ChunkPool_BatchFreeFunction) (void* args);
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 /**
- * @brief Initializes the ChunkPool with the given <tt>poolSize</tt>
+ * @brief Initializes the ChunkPool with the given configuration.
  *
- * <tt>poolSize</tt> is the maximum size of the pool. This function
- * <em>must</em> be called before any other functions can be called.
+ * @note
+ * 'config->initialSize' and 'config->maxSize' will be rounded down to an
+ * integral multiple of the page size. 'liveRatio' must be greater than or equal
+ * to 1.0. 'growRatio' must be greater than 1.0.
  *
- * @param poolSize Maximum size of the pool, in bytes
+ * @attention
+ * This function <em>must</em> be called before any other functions can be
+ * called. It can only be called once.
+ *
+ * @param config The ChunkPool configuration as defined by struct
+ * ChunkPool_config.
  */
-void ChunkPool_initialize (size_t poolSize);
+void ChunkPool_initialize (struct ChunkPool_config* config);
 
 /**
- * @brief Adjusts the pool size for overHalfAllocated() checks
- *
- * If the current pool size has less than half the space free, the current pool
- * size is at most doubled for future allocations.
+ * @brief
+ * Resizes the chunk pool if necessary according the initialization parameters.
  */
-void ChunkPool_adjustPoolSize(void);
+void ChunkPool_maybeResize(void);
 
 /**
  * @brief Allocates a new chunk from the pool
@@ -104,12 +124,11 @@ bool ChunkPool_free (void* chunk);
 void* ChunkPool_find (void* object);
 
 /**
- * This function returns if half of the chunk pool has been allocated
+ * This function returns the current ratio of chunk pool size to allocated size
  *
- * @return TRUE if more than half of the chunk pool's space has been allocated,
- * FALSE otherwise
+ * @return The ratio PoolSize:AllocatedSize
  */
-bool ChunkPool_overHalfAllocated(void);
+double ChunkPool_allocatedRatio(void);
 
 /**
  * This functions checks if 'pointer' is within the ChunkPool space

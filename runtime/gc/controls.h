@@ -41,6 +41,14 @@ struct GC_ratios {
   float available;
 };
 
+/**
+ * Ratios for Hierarchical Heap operations
+ */
+struct HM_HierarchicalHeapRatios {
+  double allocatedRatio; /**< the ratio of PoolSize:AllocatedBytes under which a
+                          * collection is triggered */
+};
+
 enum HHCollectionLevel {
   ALL,
   LOCAL,
@@ -62,6 +70,8 @@ struct GC_controls {
   int32_t affinityStride; /* Number of processors between first and second */
   bool restrictAvailableSize; /* Use smaller heaps to improve space profiling accuracy */
   struct GC_ratios ratios;
+  struct HM_HierarchicalHeapRatios hhRatios;
+  struct ChunkPool_config chunkPoolConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
   enum HHCollectionLevel hhCollectionLevel;

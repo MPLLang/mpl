@@ -19,7 +19,7 @@
 #include <stdio.h>
 
 enum LogLevel {
-  L_NONE = 0,
+  L_FORCE = 0,
   L_ERROR = 1,
   L_WARNING = 2,
   L_INFO = 3,
@@ -41,6 +41,15 @@ void L_setLevel(enum LogLevel level);
  * @param file The file object to log to
  */
 void L_setFile(FILE* file);
+
+/**
+ * Checks if logging at the given level is enabled.
+ *
+ * @param level The level to check.
+ *
+ * @return TRUE if logging at 'level' will succeed, FALSE otherwise
+ */
+bool L_levelEnabled(enum LogLevel level);
 
 /**
  * This function creates a log message

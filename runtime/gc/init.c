@@ -45,7 +45,7 @@ static int32_t stringToInt (char *s) {
   return i;
 }
 
-static size_t stringToBytes (char *s) {
+static size_t stringToBytes (const char *s) {
   double d;
   char *endptr;
   size_t factor;
@@ -211,8 +211,8 @@ int processAtMLton (GC_state s, int argc, char **argv,
             die("@MLton log-level missing argument.");
           }
           char* levelString = argv[i++];
-          if (0 == strcasecmp(levelString, "none")) {
-            L_setLevel(L_NONE);
+          if (0 == strcasecmp(levelString, "force")) {
+            L_setLevel(L_FORCE);
           } else if (0 == strcasecmp(levelString, "error")) {
             L_setLevel(L_ERROR);
           } else if (0 == strcasecmp(levelString, "warning")) {
@@ -328,12 +328,50 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp (arg, "fixed-chunk-pool")) {
+        } else if (0 == strcmp(arg, "min-chunk-pool")) {
           i++;
           if (i == argc) {
-            die ("@MLton fixed-chunk-pool missing argument.");
+            die ("@MLton min-chunk-pool missing argument.");
           }
-          ChunkPool_initialize(stringToBytes (argv[i++]));
+
+          s->controls->chunkPoolConfig.initialSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "max-chunk-pool")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton max-chunk-pool missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.maxSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "chunk-pool-live-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton chunk-pool-live-ratio missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.liveRatio = stringToFloat(argv[i++]);
+          if (s->controls->chunkPoolConfig.liveRatio < 1.0) {
+            die("@MLton chunk-pool-live-ratio must be at least 1.0");
+          }
+        } else if (0 == strcmp(arg, "chunk-pool-grow-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton chunk-pool-grow-ratio missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.growRatio = stringToFloat(argv[i++]);
+          if (s->controls->chunkPoolConfig.growRatio <= 1.0) {
+            die("@MLton chunk-pool-live-ratio must be greater than 1.0");
+          }
+        } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-allocated-ratio missing argument.");
+          }
+
+          s->controls->hhRatios.allocatedRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhRatios.allocatedRatio < 2.0) {
+            die("@MLton hh-allocated-ratio must be at least 2.0");
+          }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
           i++;
           if (i == argc) {
@@ -360,6 +398,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
       }
     }
   }
+
   return i;
 }
 
@@ -406,6 +445,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
+  s->controls->hhRatios.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
+  s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.liveRatio = 2; /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.growRatio = 16; /* RAM_NOTE: Arbitrary! */
   s->controls->summary = FALSE;
   s->controls->hhCollectionLevel = ALL;
 
@@ -493,6 +537,10 @@ int GC_init (GC_state s, int argc, char **argv) {
                  ]);
     }
   }
+
+  /* now that options are processed, initialize Chunk Pool */
+  ChunkPool_initialize(&(s->controls->chunkPoolConfig));
+
   return res;
 }
 
