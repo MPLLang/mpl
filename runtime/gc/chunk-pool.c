@@ -264,7 +264,7 @@ void ChunkPool_maybeResize(void) {
   LOG(oldPoolSize != ChunkPool_currentPoolSize, FALSE, L_INFO,
       "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
       ratio,
-      ChunkPool_config.liveRatio,
+      2 * (ChunkPool_config.liveRatio + 1),
       oldPoolSize,
       ChunkPool_currentPoolSize);
 
