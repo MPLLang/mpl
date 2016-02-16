@@ -27,11 +27,7 @@ struct ChunkPool_config {
 
   size_t maxSize; /**< Maximum size of the pool, in bytes */
 
-  double liveRatio; /**< Heap:Live ratio over which resize is triggered. Must
-                     * be greater than or equal to 1.0 */
-
-  double growRatio; /**< NewHeap:OldHeap ratio to maintain on resize. Must be
-                     * greater than 1.0 */
+  double liveRatio; /**< minimum Heap:Live ratio to maintain */
 };
 
 typedef void* (*ChunkPool_BatchFreeFunction) (void* args);

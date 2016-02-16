@@ -209,11 +209,6 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
         ChunkPool_config.liveRatio);
   }
 
-  if (ChunkPool_config.growRatio <= 1.0) {
-    DIE("ChunkPool grow ratio %f <= 1.0 is illegal",
-        ChunkPool_config.growRatio);
-  }
-
   /* at this point, the inputs are adjusted and ready to use */
 
   /* map the chunks */
@@ -255,6 +250,26 @@ void ChunkPool_maybeResize(void) {
   double ratio = ((double)(ChunkPool_currentPoolSize)) /
                  ((double)(ChunkPool_bytesAllocated));
 
+
+
+  if (ratio < (2 * (ChunkPool_config.liveRatio + 1))) {
+    size_t preferredNewPoolSize =
+        (2 * (ChunkPool_config.liveRatio + 1)) * ChunkPool_bytesAllocated;
+
+    ChunkPool_currentPoolSize =
+        (preferredNewPoolSize > ChunkPool_config.maxSize) ?
+        ChunkPool_config.maxSize : preferredNewPoolSize;
+  }
+
+  LOG(oldPoolSize != ChunkPool_currentPoolSize, FALSE, L_INFO,
+      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
+      ratio,
+      ChunkPool_config.liveRatio,
+      oldPoolSize,
+      ChunkPool_currentPoolSize);
+
+
+#if 0
   if (ratio < ChunkPool_config.liveRatio) {
     /* grow */
     size_t preferredNewPoolSize =
@@ -271,6 +286,7 @@ void ChunkPool_maybeResize(void) {
       ChunkPool_config.liveRatio,
       oldPoolSize,
       ChunkPool_currentPoolSize);
+#endif
 }
 
 /**

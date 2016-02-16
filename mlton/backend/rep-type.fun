@@ -618,7 +618,6 @@ open Type
 
 structure GCField = Runtime.GCField
 
-(* RAM_NOTE: Add currentHierarchicalHeap here? *)
 fun ofGCField (f: GCField.t): t =
    let
       datatype z = datatype GCField.t

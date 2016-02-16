@@ -352,16 +352,6 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (s->controls->chunkPoolConfig.liveRatio < 1.0) {
             die("@MLton chunk-pool-live-ratio must be at least 1.0");
           }
-        } else if (0 == strcmp(arg, "chunk-pool-grow-ratio")) {
-          i++;
-          if (i == argc) {
-            die ("@MLton chunk-pool-grow-ratio missing argument.");
-          }
-
-          s->controls->chunkPoolConfig.growRatio = stringToFloat(argv[i++]);
-          if (s->controls->chunkPoolConfig.growRatio <= 1.0) {
-            die("@MLton chunk-pool-live-ratio must be greater than 1.0");
-          }
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
           if (i == argc) {
@@ -448,8 +438,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhRatios.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
   s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
   s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
-  s->controls->chunkPoolConfig.liveRatio = 2; /* RAM_NOTE: Arbitrary! */
-  s->controls->chunkPoolConfig.growRatio = 16; /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->summary = FALSE;
   s->controls->hhCollectionLevel = ALL;
 
