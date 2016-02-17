@@ -119,23 +119,67 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->syncMisc));
 }
 
-void GC_done (GC_state s) {
-  FILE *out;
+static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
+  struct rusage ru_total;
+  uintmax_t totalTime;
 
+  getrusage (RUSAGE_THREAD, &ru_total);
+  totalTime = rusageTime (&ru_total);
+
+  fprintf(out, "{ ");
+
+  {
+    /* Print per-thread statistics */
+    fprintf(out, "\"perThread\" : ");
+    fprintf(out, "[");
+    {
+      if (s->procStates) {
+        /* print cumulativeStatistics for each processor, separated by commas */
+        uint32_t proc;
+        for (proc = 0; proc < s->numberOfProcs - 1; proc++) {
+          S_outputCumulativeStatisticsJSON(
+              out, s->procStates[proc].cumulativeStatistics);
+          fprintf(out, ", ");
+        }
+        S_outputCumulativeStatisticsJSON(
+            out, s->procStates[proc].cumulativeStatistics);
+      } else {
+        S_outputCumulativeStatisticsJSON(out, s->cumulativeStatistics);
+      }
+    }
+    fprintf(out, "]");
+
+    fprintf(out, ", ");
+
+    /* print global statistics */
+    fprintf(out, "\"totalTime\" : %"PRIuMAX, totalTime);
+  }
+
+  fprintf(out, " }");
+}
+
+void GC_done (GC_state s) {
   s->syncReason = SYNC_FORCE;
   ENTER0 (s);
   minorGC (s);
-  out = stderr;
   if (s->controls->summary) {
-    if (s->procStates) {
-      for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
-        fprintf (out, "Thread [%d]::\n", proc);
-        displayCumulativeStatistics (out, s->procStates[proc].cumulativeStatistics);
+    if (HUMAN == s->controls->summaryFormat) {
+      if (s->procStates) {
+        for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
+          fprintf (s->controls->summaryFile, "Thread [%d]::\n", proc);
+          displayCumulativeStatistics
+              (s->controls->summaryFile,
+               s->procStates[proc].cumulativeStatistics);
+        }
+      } else {
+        displayCumulativeStatistics(s->controls->summaryFile,
+                                    s->cumulativeStatistics);
       }
-    } else {
-      displayCumulativeStatistics (out, s->cumulativeStatistics);
+    } else if (JSON == s->controls->summaryFormat) {
+      displayCumulativeStatisticsJSON(s->controls->summaryFile, s);
+      fprintf(s->controls->summaryFile, "\n");
     }
   }
-  releaseHeap (s, s->heap);
-  releaseHeap (s, s->secondaryHeap);
+  releaseHeap(s, s->heap);
+  releaseHeap(s, s->secondaryHeap);
 }

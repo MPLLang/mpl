@@ -131,6 +131,40 @@ int processAtMLton (GC_state s, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;
+        } else if (0 == strcmp (arg, "gc-summary-format")) {
+          i++;
+
+          if (i == argc) {
+            die ("@MLton gc-summary-format missing argument.");
+          }
+
+          const char* format = argv[i++];
+          if (0 == strcmp (format, "human")) {
+            s->controls->summaryFormat = HUMAN;
+          } else if (0 == strcmp (format, "json")) {
+            s->controls->summaryFormat = JSON;
+          } else {
+            die ("@MLton gc-summary-format \"%s\" invalid. Must be one of "
+                 "human or json.",
+                 format);
+          }
+        } else if (0 == strcmp(arg, "gc-summary-file")) {
+          i++;
+          if (i == argc) {
+            die("@MLton gc-summary-file missing argument.");
+          }
+
+          const char* filePath = argv[i++];
+          if (0 == strcmp(filePath, "-")) {
+            s->controls->summaryFile = stdout;
+          } else {
+            FILE* file = fopen(filePath, "w");
+            if (NULL == file) {
+              diee("@MLton Could not open specified GC summary file.");
+            } else {
+              s->controls->summaryFile = file;
+            }
+          }
         } else if (0 == strcmp (arg, "alloc-chunk")) {
           i++;
           if (i == argc)
@@ -440,6 +474,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
   s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->summary = FALSE;
+  s->controls->summaryFormat = HUMAN;
+  s->controls->summaryFile = stderr;
   s->controls->hhCollectionLevel = ALL;
 
   s->cumulativeStatistics = newCumulativeStatistics();

@@ -8,6 +8,8 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+#include <stdio.h>
+
 enum {
   SYNC_NONE = 0,
   SYNC_OLD_GEN_ARRAY,
@@ -75,5 +77,8 @@ struct GC_lastMajorStatistics {
 
 struct GC_cumulativeStatistics* newCumulativeStatistics(void);
 struct GC_lastMajorStatistics* newLastMajorStatistics(void);
+
+void S_outputCumulativeStatisticsJSON(
+    FILE* out, struct GC_cumulativeStatistics* statistics);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

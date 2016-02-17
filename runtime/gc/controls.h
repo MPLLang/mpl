@@ -56,6 +56,11 @@ enum HHCollectionLevel {
   NONE
 };
 
+enum SummaryFormat {
+  HUMAN,
+  JSON
+};
+
 struct GC_controls {
   size_t fixedHeap; /* If 0, then no fixed heap. */
   size_t maxHeap; /* if zero, then unlimited, else limit total heap */
@@ -74,6 +79,8 @@ struct GC_controls {
   struct ChunkPool_config chunkPoolConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
+  enum SummaryFormat summaryFormat;
+  FILE* summaryFile;
   enum HHCollectionLevel hhCollectionLevel;
 };
 
