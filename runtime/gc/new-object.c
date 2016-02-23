@@ -132,6 +132,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   hh->newLevelList = NULL;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
+  hh->retVal = NULL;
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;

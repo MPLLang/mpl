@@ -9,8 +9,8 @@ struct
   structure I = MLtonParallelInternal
   structure T = MLtonThread
 
-  datatype job = Work of (unit -> void) * HH.t * int
-               | Thread of unit T.t * HH.t
+  datatype job = Work of (unit -> void) * unit HH.t * int
+               | Thread of unit T.t * unit HH.t
 
   val numberOfProcessors = Word32.toInt I.numberOfProcessors
 
@@ -20,8 +20,8 @@ struct
                            end)
     :> PARALLEL_WORKQUEUE where type work = job
 
-  datatype 'a t = Suspend of 'a T.t * HH.t * Q.susp
-                | Capture of 'a T.t * HH.t
+  datatype 'a t = Suspend of 'a T.t * unit HH.t * Q.susp
+                | Capture of 'a T.t * unit HH.t
 
   type token = Q.token
 
@@ -68,10 +68,10 @@ struct
   (* Comment out to enable debug messages *)
   fun dbgmsg m = ()
 
-  fun setAndUseHH (hh : HH.t) : unit = (HM.enterGlobalHeap ();
-                                        HH.set hh;
-                                        HH.useHierarchicalHeap ();
-                                        HM.exitGlobalHeap ())
+  fun setAndUseHH (hh : unit HH.t) : unit = (HM.enterGlobalHeap ();
+                                             HH.set hh;
+                                             HH.useHierarchicalHeap ();
+                                             HM.exitGlobalHeap ())
 
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =

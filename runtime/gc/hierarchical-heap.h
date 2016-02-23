@@ -45,7 +45,6 @@ struct HM_HierarchicalHeap {
 
   Int32 lock; /**< The spinlock for exclusive access to the childHHList */
 
-  /* RAM_NOTE: can be lesser width if I add another field */
   Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
@@ -67,6 +66,12 @@ struct HM_HierarchicalHeap {
   Word64 locallyCollectibleHeapSize; /** < The size in bytes of locally
                                       * collectible heap size, used for
                                       * collection decisions */
+  /*
+   * RAM_NOTE: I would rather this be an objptr, but not sure how safe that
+   * is...
+   */
+  pointer retVal; /**< Pointer to the return value of the computation associated
+                   * with this HM_HierarchicalHeap */
 
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
@@ -92,6 +97,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(void*) +
                     sizeof(Word64) +
                     sizeof(Word64) +
+                    sizeof(pointer) +
                     sizeof(objptr) +
                     sizeof(objptr) +
                     sizeof(objptr));
@@ -163,6 +169,24 @@ PRIVATE size_t HM_HH_getLevel(pointer hhPointer);
 PRIVATE void HM_HH_mergeIntoParent(pointer hhPointer);
 
 /**
+ * Merges the specified hierarchical heap back into its source hierarchical
+ * heap.
+ *
+ * @attention
+ * The specified heap must already be fully merged (i.e. its childHHList should
+ * be empty).
+ *
+ * @attention
+ * Once this function completes, the passed-in heap should be considered used
+ * and all references to it dropped.
+ *
+ * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
+ *
+ * @return The return value set on this HH.
+ */
+PRIVATE pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer);
+
+/**
  * Promotes the chunks at the last level to the parent's level
  *
  * @param hhPointer The HM_HierarchicalHeap to modify
@@ -176,6 +200,27 @@ PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
  * @param level The level to set
  */
 PRIVATE void HM_HH_setLevel(pointer hhPointer, size_t level);
+
+/**
+ * Sets the return value for the struct HM_HierarchicalHeap
+ *
+ * @attention
+ * The return value <em>must</em> reside in the HH provided! Else, does not make
+ * semantic sense.
+ *
+ * @note
+ * This function returns the same hhPointer passed in. While seemingly not
+ * necessary, it is required to satisfy the polymorphic typing on the SML side.
+ *
+ * @param hhPointer Pointer to the struct HM_HierarchicalHeap to set return
+ * value of
+ * @param retVal Pointer to the object to set as the return value. Must reside
+ * in the HH specified.
+ *
+ * @return The struct HM_HierarchicalHeap passed in, to satisfy typing on the
+ * SML side
+ */
+PRIVATE pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

@@ -211,6 +211,25 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   unlockHH(hh);
 }
 
+pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+#if ASSERT
+  assert(NULL != hh->retVal);
+  objptr retValObjptr = pointerToObjptr(hh->retVal, s->heap->start);
+  struct HM_ObjptrInfo retValInfo;
+  HM_getObjptrInfo(s, retValObjptr, &retValInfo);
+  assert(hh == retValInfo.hh);
+#endif
+
+  /* merge, then return retVal */
+  HM_HH_mergeIntoParent(hhPointer);
+  return hh->retVal;
+}
+
 void HM_HH_promoteChunks(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
@@ -234,6 +253,24 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
 
   hh->level = level;
+}
+
+pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
+
+#if ASSERT
+  assert(NULL != retVal);
+  objptr retValObjptr = pointerToObjptr(retVal, s->heap->start);
+  struct HM_ObjptrInfo retValInfo;
+  HM_getObjptrInfo(s, retValObjptr, &retValInfo);
+  assert(hh == retValInfo.hh);
+#endif
+
+  hh->retVal = retVal;
+  return hhPointer;
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

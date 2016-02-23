@@ -9,9 +9,8 @@ struct
 
   exception ShouldNotHappen
 
-  datatype 'a result =
-     Finished of 'a * HH.t
-   | Raised of exn * HH.t
+  datatype 'a result = Finished of 'a ref HH.t
+                     | Raised of exn ref HH.t
 
   val numTasks = Array.array (Word32.toInt I.numberOfProcessors, 0)
   fun incrTask n =
@@ -84,18 +83,33 @@ struct
                        * Closure used to run the right-hand side... but only in the case
                        * where that code is run in parallel.
                        *)
-                      val rightside = fn () =>
+                      val rightside =
+                       fn () =>
+                          let
+                              (*
+                               * RAM_NOTE: Is there a way to force a ref without
+                               * explicitly putting it in one?
+                               *)
+                              val hh = HH.get ()
+                              val r =
+                                  let
+                                      val r = ref (g ())
+                                  in
+                                      Finished (HH.setReturnValue (hh, r))
+                                  end
+                                  handle e =>
                                          let
-                                             val hh = HH.get ()
+                                             val e = ref e
                                          in
-                                             V.write (var,
-                                                      Finished (g (), hh)
-                                                      handle e => Raised (e, hh));
-                                             B.return ()
+                                             Raised (HH.setReturnValue (hh, e))
                                          end
-                                         handle B.Parallel msg =>
-                                                (print (msg ^ "\n");
-                                                 raise B.Parallel msg)
+                          in
+                              V.write (var, r);
+                              B.return ()
+                          end
+                          handle B.Parallel msg =>
+                                 (print (msg ^ "\n");
+                                  raise B.Parallel msg)
 
                       val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
                   in
@@ -132,13 +146,27 @@ struct
                       (* must have been stolen, so I have a heap to merge *)
                       (dbgmsg ("(" ^ (Int.toString level) ^ "): right stolen");
                        case V.read var
-                        of (_, Finished (b, childHH)) =>
-                           (HH.mergeIntoParent childHH;
-                            b)
-                         | (_, Raised (e, childHH)) =>
-                           (HH.mergeIntoParent childHH;
-                            B.yield ();
-                            raise e))
+                        of (_, Finished (childHH)) =>
+                           let
+                               val b = HH.mergeIntoParentAndGetReturnValue childHH
+                           in
+                               case b
+                                of NONE => raise ShouldNotHappen
+                                 | SOME b => !b
+                           end
+                         | (_, Raised (childHH)) =>
+                           (*
+                            * RAM_NOTE: This definitely needs to be handled
+                            * differently wrt HH operations later.
+                            *)
+                           let
+                               val e = HH.mergeIntoParentAndGetReturnValue childHH;
+                           in
+                               B.yield ();
+                               case e
+                                of NONE => raise ShouldNotHappen
+                                 | SOME e => raise !e
+                           end)
               val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END right")
 
               (*

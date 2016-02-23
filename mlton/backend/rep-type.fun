@@ -501,6 +501,10 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesID =
                           Bits.toBytes (Type.width Type.word32)
+                      (*
+                       * RAM_NOTE: Not sure if I can use cpointer for both
+                       * pointer and void*
+                       *)
                       val bytesLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesNewLevelList =
@@ -509,6 +513,8 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word64)
                       val bytesLocallyCollectibleHeapSize =
                           Bits.toBytes (Type.width Type.word64)
+                      val bytesRetVal =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesNextChildHH =
@@ -530,6 +536,7 @@ structure ObjectType =
                               bytesNewLevelList +
                               bytesLocallyCollectibleSize +
                               bytesLocallyCollectibleHeapSize +
+                              bytesRetVal +
 			      bytesParentHH +
 			      bytesNextChildHH +
 			      bytesChildHHList
@@ -553,6 +560,7 @@ structure ObjectType =
                                                       Type.cpointer (),
                                                       Type.word64,
                                                       Type.word64,
+                                                      Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap ()])}

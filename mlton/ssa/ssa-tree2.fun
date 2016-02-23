@@ -117,7 +117,7 @@ structure Type =
       and tree =
           CPointer
         | Datatype of Tycon.t
-        | HierarchicalHeap
+        | HierarchicalHeap of t
         | IntInf
         | Object of {args: t Prod.t,
                      con: ObjectCon.t}
@@ -160,7 +160,7 @@ structure Type =
          val same: tree * tree -> bool =
             fn (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
-             | (HierarchicalHeap, HierarchicalHeap) => true
+             | (HierarchicalHeap t1, HierarchicalHeap t2) => equals (t1, t2)
              | (IntInf, IntInf) => true
              | (Object {args = a1, con = c1}, Object {args = a2, con = c2}) =>
                   ObjectCon.equals (c1, c2)
@@ -200,6 +200,10 @@ structure Type =
          val weak = make Weak
       end
 
+      fun hierarchicalHeap t =
+          lookup (Word.xorb (Tycon.hash Tycon.hierarchicalHeap, hash t),
+                  HierarchicalHeap t)
+
       val datatypee: Tycon.t -> t =
          fn t => lookup (Tycon.hash t, Datatype t)
 
@@ -209,7 +213,6 @@ structure Type =
          fun make (tycon, tree) = lookup (Tycon.hash tycon, tree)
       in
          val cpointer = make (Tycon.cpointer, CPointer)
-         val hierarchicalHeap = make (Tycon.hierarchicalHeap, HierarchicalHeap)
          val intInf = make (Tycon.intInf, IntInf)
          val thread = make (Tycon.thread, Thread)
       end
@@ -290,7 +293,7 @@ structure Type =
               case dest t of
                  CPointer => str "cpointer"
                | Datatype t => Tycon.layout t
-               | HierarchicalHeap => str "hierarchicalHeap"
+               | HierarchicalHeap t => seq [layout t, str " hierarchicalHeap"]
                | IntInf => str "intInf"
                | Object {args, con} =>
                     if isUnit t
@@ -322,6 +325,7 @@ structure Type =
                        result = result,
                        typeOps = {deArray = fn _ => raise BadPrimApp,
                                   deArrow = fn _ => raise BadPrimApp,
+                                  deHierarchicalHeap = fn _ => raise BadPrimApp,
                                   deRef = fn _ => raise BadPrimApp,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
@@ -352,6 +356,7 @@ structure Type =
 
             datatype z = datatype Prim.Name.t
             fun arg i = Vector.sub (args, i)
+            fun noArgs f = 0 = Vector.length args andalso f ()
             fun oneArg f = 1 = Vector.length args andalso f (arg 0)
             val seqIndex = word (WordSize.seqIndex ())
          in
@@ -373,6 +378,10 @@ structure Type =
                                         (not vi orelse ai)
                                         andalso equals (ae, ve))
                     | _ => false)
+             | HierarchicalHeap_new =>
+               noArgs (fn () => case dest result
+                                 of HierarchicalHeap _ => true
+                                  | _ => false)
              | _ => default ()
          end
    end
@@ -1996,7 +2005,7 @@ structure Program =
                        case Type.dest t of
                           CPointer => ()
                         | Datatype _ => ()
-                        | HierarchicalHeap => ()
+                        | HierarchicalHeap t => countType t
                         | IntInf => ()
                         | Object {args, ...} => Prod.foreach (args, countType)
                         | Real _ => ()

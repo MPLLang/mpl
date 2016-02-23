@@ -49,6 +49,7 @@ signature ABSTRACT_VALUE =
       val coerce: {from: t, to: t} -> unit
       val ssaType: t -> Ssa.Type.t option ref
       val deArray: t -> t
+      val deHierarchicalHeap: t -> t
       val deRef: t -> t
       val deWeak: t -> t
       val dest: t -> dest
