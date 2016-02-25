@@ -250,8 +250,6 @@ void ChunkPool_maybeResize(void) {
   double ratio = ((double)(ChunkPool_currentPoolSize)) /
                  ((double)(ChunkPool_bytesAllocated));
 
-
-
   if (ratio < (2 * (ChunkPool_config.liveRatio + 1))) {
     size_t preferredNewPoolSize =
         (2 * (ChunkPool_config.liveRatio + 1)) * ChunkPool_bytesAllocated;
@@ -267,26 +265,6 @@ void ChunkPool_maybeResize(void) {
       2 * (ChunkPool_config.liveRatio + 1),
       oldPoolSize,
       ChunkPool_currentPoolSize);
-
-
-#if 0
-  if (ratio < ChunkPool_config.liveRatio) {
-    /* grow */
-    size_t preferredNewPoolSize =
-        ((size_t)(ChunkPool_currentPoolSize * ChunkPool_config.growRatio));
-
-    ChunkPool_currentPoolSize =
-        (preferredNewPoolSize > ChunkPool_config.maxSize) ?
-        ChunkPool_config.maxSize : preferredNewPoolSize;
-  }
-
-  LOG(oldPoolSize != ChunkPool_currentPoolSize, FALSE, L_INFO,
-      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
-      ratio,
-      ChunkPool_config.liveRatio,
-      oldPoolSize,
-      ChunkPool_currentPoolSize);
-#endif
 }
 
 /**
@@ -422,15 +400,18 @@ void* ChunkPool_find (void* object) {
   return chunk;
 }
 
-double ChunkPool_allocatedRatio(void) {
-  return (((double)(ChunkPool_currentPoolSize)) /
-      ((double)(ChunkPool_bytesAllocated)));
+size_t ChunkPool_allocated(void) {
+  return ChunkPool_bytesAllocated;
+}
+
+size_t ChunkPool_size(void) {
+  return ChunkPool_currentPoolSize;
 }
 
 /**
  * This function serializes against nothing
  */
-size_t ChunkPool_size(void* chunk) {
+size_t ChunkPool_chunkSize(void* chunk) {
   assert (chunk >= ChunkPool_poolStart);
   assert (chunk < ChunkPool_poolEnd);
   assert(((void*)(((size_t)(chunk)) & ~ChunkPool_CHUNKADDRESSMASK)) == chunk);

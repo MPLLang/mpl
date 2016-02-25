@@ -196,6 +196,18 @@ void S_outputCumulativeStatisticsJSON(
 
     fprintf(out, ", ");
 
+    fprintf(out,
+            "\"maxChunkPoolBytesLive\" : %"PRIuMAX,
+            statistics->maxChunkPoolBytesLive);
+
+    fprintf(out, ", ");
+
+    fprintf(out,
+            "\"maxChunkPoolSize\" : %"PRIuMAX,
+            statistics->maxChunkPoolSize);
+
+    fprintf(out, ", ");
+
     fprintf(out, "\"maxStackSize\" : %"PRIuMAX, statistics->maxStackSize);
 
     fprintf(out, ", ");

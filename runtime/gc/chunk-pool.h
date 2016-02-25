@@ -120,11 +120,18 @@ bool ChunkPool_free (void* chunk);
 void* ChunkPool_find (void* object);
 
 /**
- * This function returns the current ratio of chunk pool size to allocated size
+ * This function returns the current number of bytes allocated from the pool.
  *
- * @return The ratio PoolSize:AllocatedSize
+ * @return current number of bytes allocated.
  */
-double ChunkPool_allocatedRatio(void);
+size_t ChunkPool_allocated(void);
+
+/**
+ * This function returns the current size of the pool, in bytes.
+ *
+ * @return current size of the pool in bytes.
+ */
+size_t ChunkPool_size(void);
 
 /**
  * This functions checks if 'pointer' is within the ChunkPool space
@@ -147,7 +154,7 @@ bool ChunkPool_pointerInChunkPool (void* pointer);
  *
  * @return size of 'chunk' or 0 on error
  */
-size_t ChunkPool_size(void* chunk);
+size_t ChunkPool_chunkSize(void* chunk);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

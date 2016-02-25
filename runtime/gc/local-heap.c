@@ -88,19 +88,40 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
 
-    double allocatedRatio = ChunkPool_allocatedRatio();
+    size_t chunkPoolBytesAllocated = ChunkPool_allocated();
+    size_t chunkPoolSize = ChunkPool_size();
+    double allocatedRatio = ((double)(chunkPoolSize)) /
+                            ((double)(chunkPoolBytesAllocated));
     if (allocatedRatio < s->controls->hhRatios.allocatedRatio) {
+      /* I may have reached a new maxChunkPoolBytesLive, so check */
+      if (s->cumulativeStatistics->maxChunkPoolBytesLive <
+          chunkPoolBytesAllocated) {
+        s->cumulativeStatistics->maxChunkPoolBytesLive =
+            chunkPoolBytesAllocated;
+      }
+
       /* too much allocated, so let's collect */
       HM_HHC_collectLocal();
+
+      chunkPoolBytesAllocated = ChunkPool_allocated();
+      chunkPoolSize = ChunkPool_size();
+      double newAllocatedRatio = ((double)(chunkPoolSize)) /
+                                 ((double)(chunkPoolBytesAllocated));
 
       LOG(TRUE, FALSE, L_INFO,
           "Live Ratio %.2f < %.2f, performed local collection to increase "
           "ratio to %.2f",
           allocatedRatio,
           s->controls->hhRatios.allocatedRatio,
-          ChunkPool_allocatedRatio());
+          newAllocatedRatio);
 
       ChunkPool_maybeResize();
+
+      /* I may have reached a new maxChunkPoolSize, so check */
+      chunkPoolSize = ChunkPool_size();
+      if (s->cumulativeStatistics->maxChunkPoolSize < chunkPoolSize) {
+        s->cumulativeStatistics->maxChunkPoolSize = chunkPoolSize;
+      }
     }
 
     if (!HM_HH_extend(hh, bytesRequested)) {

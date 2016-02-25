@@ -124,7 +124,7 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
 
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
   chunkInfo->frontier = HM_getChunkStart(chunk);
-  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_size(chunk)));
+  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
   chunkInfo->level = CHUNK_INVALID_LEVEL;
   chunkInfo->split.normal.levelHead = levelHeadChunk;
 
@@ -163,7 +163,7 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   /* setup chunk info */
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
   chunkInfo->frontier = HM_getChunkStart(chunk);
-  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_size(chunk)));
+  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
   chunkInfo->nextChunk = NULL;
   chunkInfo->level = level;
   chunkInfo->split.levelHead.nextHead = NULL;
