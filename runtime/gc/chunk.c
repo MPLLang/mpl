@@ -183,16 +183,12 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   return chunk;
 }
 
-void HM_forwardHHObjptrsInLevelList(GC_state s,
-                                    void** levelList,
-                                    struct HM_HierarchicalHeap* hh,
-                                    size_t minLevel) {
-  struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
-    .hh = hh,
-    .minLevel = minLevel,
-    .maxLevel = 0,
-    .log = FALSE
-  };
+void HM_forwardHHObjptrsInLevelList(
+    GC_state s,
+    void** levelList,
+    struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
+  Word32 savedMaxLevel = forwardHHObjptrArgs->maxLevel;
+  forwardHHObjptrArgs->maxLevel = 0;
 
   for (void* levelHead = *levelList;
        NULL != levelHead;
@@ -206,20 +202,22 @@ void HM_forwardHHObjptrsInLevelList(GC_state s,
         LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;
 
         p = advanceToObjectData(s, p);
-        forwardHHObjptrArgs.maxLevel = getChunkInfo(levelHead)->level;
+        forwardHHObjptrArgs->maxLevel = getChunkInfo(levelHead)->level;
         p = foreachObjptrInObject(s,
                                   p,
                                   FALSE,
                                   trueObjptrPredicate,
                                   NULL,
                                   forwardHHObjptr,
-                                  &forwardHHObjptrArgs);
+                                  forwardHHObjptrArgs);
 
         /* asserts that no new lower level has been created */
         assert(savedLevelList == *levelList);
       }
     }
   }
+
+  forwardHHObjptrArgs->maxLevel = savedMaxLevel;
 }
 
 void HM_freeChunks(void** levelList, Word32 minLevel) {

@@ -19,9 +19,10 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
-  size_t minLevel;
-  size_t maxLevel;
+  Word32 minLevel;
+  Word32 maxLevel;
   bool log;
+  size_t bytesCopied;
 };
 
 #define MAX_NUM_HOLES 512

@@ -131,13 +131,12 @@ void* HM_allocateLevelHeadChunk(void** levelList,
  *
  * @param s The GC_state to use
  * @param levelList The level list to iterate over
- * @param hh The struct HM_HierarchicalHeap to pass to 'f'
- * @param minLevel The minLevel to pass to 'f'
+ * @param forwardHHObjptrArgs the args to use for forwardHHObjptr()
  */
-void HM_forwardHHObjptrsInLevelList(GC_state s,
-                                    void** levelList,
-                                    struct HM_HierarchicalHeap* hh,
-                                    size_t minLevel);
+void HM_forwardHHObjptrsInLevelList(
+    GC_state s,
+    void** levelList,
+    struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
 
 /**
  * Frees chunks in the level list up to the level specified, inclusive

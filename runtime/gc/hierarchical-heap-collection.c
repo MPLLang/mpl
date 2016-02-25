@@ -120,7 +120,8 @@ void HM_HHC_collectLocal(void) {
     .hh = hh,
     .minLevel = HM_HH_getHighestStolenLevel(s, hh) + 1,
     .maxLevel = hh->level,
-    .log = TRUE
+    .log = TRUE,
+    .bytesCopied = 0
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
@@ -165,11 +166,7 @@ void HM_HHC_collectLocal(void) {
   LOG(TRUE, TRUE, L_DEBUG, "END foreach");
 
   /* do copy-collection */
-  HM_forwardHHObjptrsInLevelList(s,
-                                 &(hh->newLevelList),
-                                 hh,
-                                 forwardHHObjptrArgs.minLevel);
-
+  HM_forwardHHObjptrsInLevelList(s, &(hh->newLevelList), &forwardHHObjptrArgs);
   assertInvariants(s, hh);
 
   /*
@@ -239,7 +236,9 @@ void HM_HHC_collectLocal(void) {
                   processor,
                   ((void*)(hh)));
 
-  /* enter timing info if necessary */
+  s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
+
+  /* enter statistics if necessary */
   if (needGCTime(s)) {
     if (detailedGCTime(s)) {
       stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
@@ -376,6 +375,8 @@ void forwardHHObjptr (GC_state s,
                                      size,
                                      opInfo.level,
                                      opInfo.chunkList);
+
+    args->bytesCopied += size;
     LOG(args->log, TRUE, L_DEBUG,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
