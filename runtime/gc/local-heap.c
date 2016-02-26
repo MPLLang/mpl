@@ -110,10 +110,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
       LOG(TRUE, FALSE, L_INFO,
           "Live Ratio %.2f < %.2f, performed local collection to increase "
-          "ratio to %.2f",
+          "ratio to %.2f (%zu / %zu)",
           allocatedRatio,
           s->controls->hhRatios.allocatedRatio,
-          newAllocatedRatio);
+          newAllocatedRatio,
+          chunkPoolSize,
+          chunkPoolBytesAllocated);
 
       ChunkPool_maybeResize();
 
