@@ -279,9 +279,12 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   *bytesRequested = (*bytesRequested + ChunkPool_MINIMUMCHUNKSIZE - 1) &
                     ~ChunkPool_CHUNKADDRESSMASK;
   size_t chunksRequested = *bytesRequested / ChunkPool_MINIMUMCHUNKSIZE;
-  ChunkPool_bytesAllocated += *bytesRequested;
 
   pthread_mutex_lock_safe(&ChunkPool_lock);
+
+  ChunkPool_bytesAllocated += *bytesRequested;
+  assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
+
   /* Search for chunk to satisfy */
   for (int freeListIndex =
            ChunkPool_findFreeListIndexForNumChunks (chunksRequested);
@@ -326,7 +329,10 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
    * If execution reaches here, then I do not have a span to satisfy the request
    */
   ChunkPool_bytesAllocated -= *bytesRequested;
+  assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
+
   pthread_mutex_unlock_safe(&ChunkPool_lock);
+
   return NULL;
 }
 
@@ -476,6 +482,7 @@ bool ChunkPool_performFree(void* chunk) {
 
   ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
                               ChunkPool_MINIMUMCHUNKSIZE;
+  assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
 
   /* Get the previous and next spans for coalescing */
   bool coalesced = FALSE;
