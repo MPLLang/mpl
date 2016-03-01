@@ -120,6 +120,9 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert (BOGUS_OBJPTR != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
 
+  /* can only merge from the thread that owns the parent hierarchical heap! */
+  assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap());
+
   lockHH(hh);
   lockHH(parentHH);
 
@@ -162,6 +165,8 @@ void HM_HH_promoteChunks(pointer hhPointer) {
 
   assert(HM_getHighestLevel(hh->levelList) <= hh->level);
   HM_promoteChunks(&(hh->levelList), hh->level);
+
+  assertInvariants(s, hh);
 }
 
 void HM_HH_setLevel(pointer hhPointer, size_t level) {
@@ -208,8 +213,6 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
   }
-
-  assertInvariants(pthread_getspecific(gcstate_key), hh);
 }
 
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {

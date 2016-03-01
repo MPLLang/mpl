@@ -152,6 +152,7 @@ void HM_HHC_collectLocal(void) {
       frontier = holes[i].start;
     }
   }
+  frontier = s->heap->frontier;
 
   foreachObjptrInRange(s,
                        s->heap->start,

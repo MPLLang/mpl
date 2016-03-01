@@ -156,8 +156,8 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
  * will be satisfied with chunks that are at least this size
  */
 #define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
-/* 2^12 bytes == 4KiB */
-#define ChunkPool_MINIMUMCHUNKSIZE (1ULL << 12)
+/* 16KiB */
+#define ChunkPool_MINIMUMCHUNKSIZE (8 * 1024)
 #define ChunkPool_NUMFREELISTS (256)
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
@@ -213,7 +213,7 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
 
   /* map the chunks */
   void* region = mmap (NULL,
-                       ChunkPool_config.maxSize,
+                       ChunkPool_config.maxSize + ChunkPool_MINIMUMCHUNKSIZE,
                        PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
                        -1,
@@ -223,8 +223,11 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   }
 
   /* setup pool variables */
-  ChunkPool_poolStart = region;
-  ChunkPool_poolEnd = ((uint8_t*)(region)) + ChunkPool_config.maxSize;
+  ChunkPool_poolStart =
+      ((void*)((((size_t)(region)) + ChunkPool_MINIMUMCHUNKSIZE - 1) &
+               ~ChunkPool_CHUNKADDRESSMASK));
+  ChunkPool_poolEnd = ((uint8_t*)(ChunkPool_poolStart)) +
+                      ChunkPool_config.maxSize;
   ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
 
   /* setup metadatas variable */
@@ -284,6 +287,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 
   ChunkPool_bytesAllocated += *bytesRequested;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
+  assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
   /* Search for chunk to satisfy */
   for (int freeListIndex =
@@ -330,6 +334,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
    */
   ChunkPool_bytesAllocated -= *bytesRequested;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
+  assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
   pthread_mutex_unlock_safe(&ChunkPool_lock);
 
@@ -483,6 +488,7 @@ bool ChunkPool_performFree(void* chunk) {
   ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
                               ChunkPool_MINIMUMCHUNKSIZE;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
+  assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
   /* Get the previous and next spans for coalescing */
   bool coalesced = FALSE;
@@ -596,6 +602,21 @@ void ChunkPool_removeFromFreeList (
     assert (NULL == chunkMetadata->previous);
     *list = chunkMetadata->next;
   }
+
+#if ASSERT
+  {
+    /* make sure chunkMetadata is NOT in the free list! */
+    bool found = FALSE;
+    for (const struct ChunkPool_chunkMetadata* cursor = *list;
+         NULL != cursor;
+         cursor = cursor->next) {
+      if (chunkMetadata == cursor) {
+        found = TRUE;
+      }
+    }
+    assert(!found);
+  }
+#endif
 }
 
 void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
