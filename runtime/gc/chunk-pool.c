@@ -156,9 +156,9 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
  * will be satisfied with chunks that are at least this size
  */
 #define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
-/* 16KiB */
-#define ChunkPool_MINIMUMCHUNKSIZE (8 * 1024)
-#define ChunkPool_NUMFREELISTS (256)
+/* 4KiB */
+#define ChunkPool_MINIMUMCHUNKSIZE ((size_t)(4ULL * 1024))
+#define ChunkPool_NUMFREELISTS ((size_t)(256ULL))
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
 
@@ -172,13 +172,13 @@ static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct ChunkPool_config ChunkPool_config;
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
-static size_t ChunkPool_bytesAllocated = 0;
-static size_t ChunkPool_currentPoolSize = 0;
+static size_t ChunkPool_bytesAllocated = 0ULL;
+static size_t ChunkPool_currentPoolSize = 0ULL;
 
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatas = NULL;
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatasEnd = NULL;
 static struct ChunkPool_chunkMetadata*
-ChunkPool_freeLists[ChunkPool_NUMFREELISTS] = {0};
+ChunkPool_freeLists[ChunkPool_NUMFREELISTS] = {NULL};
 
 
 /*************/
@@ -290,7 +290,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
   /* Search for chunk to satisfy */
-  for (int freeListIndex =
+  for (size_t freeListIndex =
            ChunkPool_findFreeListIndexForNumChunks (chunksRequested);
        freeListIndex < ChunkPool_NUMFREELISTS;
        freeListIndex++) {
@@ -490,22 +490,19 @@ bool ChunkPool_performFree(void* chunk) {
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
-  /* Get the previous and next spans for coalescing */
-  bool coalesced = FALSE;
 #pragma message "Resolve"
 #if 0
+  /* Get the previous and next spans for coalescing */
+  bool coalesced = FALSE;
   struct ChunkPool_chunkMetadata* previousSpanStart = spanStart - 1;
   previousSpanStart = (previousSpanStart >= ChunkPool_chunkMetadatas) ?
                       (previousSpanStart) : (NULL);
-#endif
 
   struct ChunkPool_chunkMetadata* nextSpanStart =
       spanStart + (spanStart->spanInfo.numChunksInSpan);
   nextSpanStart = (nextSpanStart < ChunkPool_chunkMetadatasEnd) ?
                   (nextSpanStart) : (NULL);
 
-#pragma message "Resolve"
-#if 0
   if ((NULL != previousSpanStart) &&
       (ChunkPool_NONFIRSTCHUNK == previousSpanStart->previous)) {
     /* go to first chunk in previous span if necessary */
@@ -533,7 +530,6 @@ bool ChunkPool_performFree(void* chunk) {
 
     coalesced = TRUE;
   }
-#endif
 
   if ((NULL != nextSpanStart) &&
       (ChunkPool_ALLOCATED != nextSpanStart->previous)) {
@@ -548,8 +544,6 @@ bool ChunkPool_performFree(void* chunk) {
     coalesced = TRUE;
   }
 
-#pragma message "Resolve"
-#if 0
   /*
    * At this point, spanStart points to the possible coalesced span. Reinsert it
    * into the free list!
@@ -660,13 +654,19 @@ void* ChunkPool_chunkMetadataToChunk (
     const struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
-  unsigned int chunkIndex = chunkMetadata - ChunkPool_chunkMetadatas;
+  size_t chunkIndex = chunkMetadata - ChunkPool_chunkMetadatas;
+  assert(chunkIndex <= SIZE_MAX / ChunkPool_MINIMUMCHUNKSIZE);
+  assert(chunkIndex < ((((size_t)(ChunkPool_chunkMetadatasEnd)) -
+                        ((size_t)(ChunkPool_chunkMetadatas))) /
+                       sizeof(struct ChunkPool_chunkMetadata)));
 
-  assert (((void*)(((uint8_t*)(ChunkPool_poolStart)) +
-                   (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE))) <
-          ChunkPool_poolEnd);
-  return (((uint8_t*)(ChunkPool_poolStart)) +
-          (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE));
+  void* chunk = ((void*)(((size_t)(ChunkPool_poolStart)) +
+                         (chunkIndex * ChunkPool_MINIMUMCHUNKSIZE)));
+  assert (0 == (((size_t)(chunk)) & ChunkPool_CHUNKADDRESSMASK));
+  assert(chunk >= ChunkPool_poolStart);
+  assert(chunk < ChunkPool_poolEnd);
+
+  return chunk;
 }
 
 struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
@@ -677,8 +677,12 @@ struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
   assert (chunk >= ChunkPool_poolStart);
   assert (chunk < ChunkPool_poolEnd);
 
-  unsigned int chunkIndex = (((const uint8_t*)(chunk)) -
-                             ((const uint8_t*)(ChunkPool_poolStart))) /
-                            ChunkPool_MINIMUMCHUNKSIZE;
+  size_t chunkIndex =
+      (((const size_t)(chunk)) - ((const size_t)(ChunkPool_poolStart))) /
+      ChunkPool_MINIMUMCHUNKSIZE;
+  assert(chunkIndex < ((((size_t)(ChunkPool_chunkMetadatasEnd)) -
+                        ((size_t)(ChunkPool_chunkMetadatas))) /
+                       sizeof(struct ChunkPool_chunkMetadata)));
+
   return (ChunkPool_chunkMetadatas + chunkIndex);
 }
