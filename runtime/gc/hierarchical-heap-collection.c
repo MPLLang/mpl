@@ -15,6 +15,16 @@
 
 #include "hierarchical-heap-collection.h"
 
+/********************************/
+/* Static Structures and Macros */
+/********************************/
+#if ASSERT
+#define COPY_OBJECT_HH_VALUE                            \
+  ((struct HM_HierarchicalHeap*)(0x0112358DABBAD00))
+#else
+#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(NULL))
+#endif
+
 /******************************/
 /* Static Function Prototypes */
 /******************************/
@@ -152,7 +162,6 @@ void HM_HHC_collectLocal(void) {
       frontier = holes[i].start;
     }
   }
-  frontier = s->heap->frontier;
 
   foreachObjptrInRange(s,
                        s->heap->start,
@@ -436,9 +445,9 @@ void forwardHHObjptr (GC_state s,
   }
 
 #if ASSERT
-  /* args->hh->newLevelList has containingHH set to NULL */
+  /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
   HM_getObjptrInfo(s, *opp, &opInfo);
-  assert (NULL == opInfo.hh);
+  assert (COPY_OBJECT_HH_VALUE == opInfo.hh);
 #endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
@@ -476,7 +485,10 @@ pointer copyObject(void** destinationLevelList,
   void* chunk;
   if (NULL == chunkList) {
     /* Level does not exist, so create it */
-    chunk = HM_allocateLevelHeadChunk(destinationLevelList, size, level, NULL);
+    chunk = HM_allocateLevelHeadChunk(destinationLevelList,
+                                      size,
+                                      level,
+                                      COPY_OBJECT_HH_VALUE);
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
