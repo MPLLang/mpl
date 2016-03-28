@@ -9,7 +9,10 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes);
+pointer nextValidPointer(pointer* end,
+                         GC_state s,
+                         pointer p,
+                         struct GlobalHeapHole* holes);
 
 /************************/
 /* Function Definitions */
@@ -258,6 +261,7 @@ pointer foreachObjptrInRange (GC_state s,
                               ForeachObjptrFunction f,
                               void* fArgs) {
   pointer b;
+  pointer end;
 
   assert (isFrontierAligned (s, front));
   if (DEBUG_DETAILED)
@@ -265,9 +269,14 @@ pointer foreachObjptrInRange (GC_state s,
              "foreachObjptrInRange  front = "FMTPTR"  *back = "FMTPTR"\n",
              (uintptr_t)front, (uintptr_t)(*back));
   b = *back;
+  if (NULL != holes) {
+    /* advance front until I am not in the middle of a per-proc nursery */
+    front = nextValidPointer(&end, s, front, holes);
+  }
+
   assert (front <= b);
   while (front < b) {
-    while (front < b) {
+    while (((NULL == holes) || (front < end)) && (front < b)) {
       assert (isAligned ((size_t)front, GC_MODEL_MINALIGN));
       if (DEBUG_DETAILED) {
         fprintf (stderr,
@@ -279,12 +288,12 @@ pointer foreachObjptrInRange (GC_state s,
       assert (isAligned ((size_t)p, s->alignment));
       front =
           foreachObjptrInObject (s, p, skipWeaks, predicate, pArgs, f, fArgs);
-      if (NULL != holes) {
-        /* advance front until I am not in the middle of a per-proc nursery */
-        front = nextValidPointer(s, front, holes);
-      }
     }
     b = *back;
+    if (NULL != holes) {
+      /* advance front until I am not in the middle of a per-proc nursery */
+      front = nextValidPointer(&end, s, front, holes);
+    }
   }
   return front;
 }
@@ -333,10 +342,14 @@ bool trueObjptrPredicate(GC_state s, pointer p, void* args) {
 /*******************************/
 /* Static Function Definitions */
 /*******************************/
-pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes) {
+pointer nextValidPointer(pointer* end,
+                         GC_state s,
+                         pointer p,
+                         struct GlobalHeapHole* holes) {
   pointer nextP = p;
   bool modified;
 
+  /* find nextP */
   do {
     modified = FALSE;
 
@@ -355,6 +368,16 @@ pointer nextValidPointer(GC_state s, pointer p, struct GlobalHeapHole* holes) {
       }
     }
   } while (modified);
+
+  /* find end */
+  *end = ((pointer)(UINTPTR_MAX));
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    pointer candidate = holes[i].start;
+
+    if ((nextP <= candidate) && (candidate < *end)) {
+      *end = candidate;
+    }
+  }
 
   return nextP;
 }
