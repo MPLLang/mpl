@@ -40,5 +40,6 @@
 #include "util/align.h"
 #include "util/endian.h"
 #include "util/logger.h"
+#include "util/spinlock.h"
 
 #endif /* MLTON_UTIL_H_ */
