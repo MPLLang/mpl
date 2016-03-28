@@ -157,7 +157,7 @@ static struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
  */
 #define ChunkPool_CHUNKADDRESSMASK (ChunkPool_MINIMUMCHUNKSIZE - 1)
 /* 4KiB */
-#define ChunkPool_MINIMUMCHUNKSIZE ((size_t)(4ULL * 1024))
+#define ChunkPool_MINIMUMCHUNKSIZE ((size_t)(512ULL * 1024))
 #define ChunkPool_NUMFREELISTS ((size_t)(256ULL))
 #define ChunkPool_NONFIRSTCHUNK ((struct ChunkPool_chunkMetadata*)(-1LL))
 #define ChunkPool_ALLOCATED ((struct ChunkPool_chunkMetadata*)(-2LL))
