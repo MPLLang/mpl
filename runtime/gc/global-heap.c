@@ -46,9 +46,11 @@ void HM_enterGlobalHeap (void) {
     assert (NULL != s->globalLimitPlusSlop);
     HM_exitLocalHeap (s);
 
+    spinlock_lock(&(s->lock));
     s->frontier = s->globalFrontier;
     s->limitPlusSlop = s->globalLimitPlusSlop;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    spinlock_unlock(&(s->lock));
   }
 }
 
@@ -70,9 +72,11 @@ void HM_exitGlobalHeap (void) {
   }
 
   if (0 == currentThread->inGlobalHeapCounter) {
+    spinlock_lock(&(s->lock));
     s->globalFrontier = s->frontier;
     s->globalLimitPlusSlop = s->limitPlusSlop;
     HM_enterLocalHeap (s);
+    spinlock_unlock(&(s->lock));
   }
 }
 

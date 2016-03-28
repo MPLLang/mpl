@@ -519,6 +519,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;
+  s->lock = SPINLOCK_INITIALIZER;
 
   unless (isAligned (s->sysvals.pageSize, CARD_SIZE))
     die ("Page size must be a multiple of card size.");
@@ -635,5 +636,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   // Multi-processor support is incompatible with saved-worlds
   assert (d->amOriginal);
   duplicateWorld (d, s);
+  d->lock = s->lock;
   s->amInGC = FALSE;
 }

@@ -93,13 +93,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     double allocatedRatio = ((double)(chunkPoolSize)) /
                             ((double)(chunkPoolBytesAllocated));
     if (allocatedRatio < s->controls->hhRatios.allocatedRatio) {
-      /* I may have reached a new maxChunkPoolBytesLive, so check */
-      if (s->cumulativeStatistics->maxChunkPoolBytesLive <
-          chunkPoolBytesAllocated) {
-        s->cumulativeStatistics->maxChunkPoolBytesLive =
-            chunkPoolBytesAllocated;
-      }
-
       /* too much allocated, so let's collect */
       HM_HHC_collectLocal();
 
@@ -118,6 +111,13 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
           chunkPoolBytesAllocated);
 
       ChunkPool_maybeResize();
+
+      /* I may have reached a new maxChunkPoolBytesLive, so check */
+      if (s->cumulativeStatistics->maxChunkPoolBytesLive <
+          chunkPoolBytesAllocated) {
+        s->cumulativeStatistics->maxChunkPoolBytesLive =
+            chunkPoolBytesAllocated;
+      }
 
       /* I may have reached a new maxChunkPoolSize, so check */
       chunkPoolSize = ChunkPool_size();

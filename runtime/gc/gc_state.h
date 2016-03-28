@@ -93,6 +93,7 @@ struct GC_state {
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
+  spinlock_t lock;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
