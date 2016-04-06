@@ -42,6 +42,7 @@ bool spinlock_trylock(spinlock_t* lock) {
 }
 
 void spinlock_unlock(spinlock_t* lock) {
+  __sync_synchronize();
   *lock = SPINLOCK_UNLOCKED;
   __sync_synchronize();
 }
