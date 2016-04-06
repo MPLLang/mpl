@@ -277,17 +277,23 @@ void HM_setChunkListToChunkList(void* chunkList, void* toChunkList) {
   getChunkInfo(chunkList)->split.levelHead.toChunkList = toChunkList;
 }
 
-void HM_getObjptrInfo(GC_state s,
+bool HM_getObjptrInfo(GC_state s,
                       objptr object,
                       struct HM_ObjptrInfo* info) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
   void* chunk = ChunkPool_find(objptrToPointer(object, s->heap->start));
+  assert(NULL != chunk);
 
   void* chunkList;
   for(chunkList = chunk;
-      CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level;
+      (NULL != chunkList) &&
+                  (CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level);
       chunkList = getChunkInfo(chunkList)->split.normal.levelHead) { }
+
+  if (NULL == chunkList) {
+    return FALSE;
+  }
 
   /* now that I have the chunkList, path compress */
   void* parentChunk = NULL;
@@ -302,6 +308,8 @@ void HM_getObjptrInfo(GC_state s,
   info->hh = getChunkInfo(chunkList)->split.levelHead.containingHH;
   info->chunkList = chunkList;
   info->level = getChunkInfo(chunkList)->level;
+
+  return TRUE;
 }
 
 Word32 HM_getHighestLevel(const void* levelList) {

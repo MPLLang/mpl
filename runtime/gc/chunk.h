@@ -221,8 +221,10 @@ void HM_setChunkListToChunkList(void* chunkList, void* toChunkList);
  * @param s The GC_state to use
  * @param object The objptr to get the Hierarchical Heap for
  * @param retVal Pointer to the struct to populate with 'object''s info.
+ *
+ * @return TRUE if info was successfully retrieved, FALSE otherwise.
  */
-void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
+bool HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
 /**
  * This functions returns the highest level in a level list

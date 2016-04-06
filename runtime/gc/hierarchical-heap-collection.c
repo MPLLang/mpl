@@ -285,10 +285,13 @@ void forwardHHObjptr (GC_state s,
   }
 
   struct HM_ObjptrInfo opInfo;
-  HM_getObjptrInfo(s, op, &opInfo);
+  bool gotObjptrInfo = HM_getObjptrInfo(s, op, &opInfo);
 
-  if (opInfo.hh != args->hh) {
-    /* does not point to an HH objptr in my HH, so just return */
+  if ((!gotObjptrInfo) || (opInfo.hh != args->hh)) {
+    /*
+     * Either did not successfully get the objptr info (which means I don't own
+     * it) or opp does not point to an HH objptr in my HH, so just return.
+     */
     return;
   }
 
@@ -446,8 +449,9 @@ void forwardHHObjptr (GC_state s,
 
 #if ASSERT
   /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
-  HM_getObjptrInfo(s, *opp, &opInfo);
-  assert (COPY_OBJECT_HH_VALUE == opInfo.hh);
+  gotObjptrInfo = HM_getObjptrInfo(s, *opp, &opInfo);
+  assert(gotObjptrInfo);
+  assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
 #endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
