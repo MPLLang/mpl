@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <time.h>
 #include "platform.h"
+#include "stdatomic.h"
 
 /* num of holding thread or -1 if no one*/
 volatile int32_t *Parallel_mutexes;
@@ -272,4 +273,48 @@ Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
 
 bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
   return __sync_bool_compare_and_swap ((Int32 *)p, old, new);
+}
+
+Int32 Parallel_load(Pointer p, Int32 memory_order) {
+  return atomic_load_explicit(p, memory_order);
+}
+
+void Parallel_store(Pointer p, Int32 val, Int32 memory_order) {
+  atomic_store_explicit(p, val, memory_order);
+}
+
+Int32 Parallel_exchange(Pointer p, Int32 desired, Int32 memory_order) {
+  return atomic_exchange_explicit(p, desired, memory_order);
+}
+
+Bool Parallel_compare_exchange_strong(Pointer p, Pointer old, Int32 new, Int32 mo_succ, Int32 mo_fail) {
+  return atomic_compare_exchange_strong_explicit(p, old, new, mo_succ, mo_fail);
+}
+
+Bool Parallel_compare_exchange_weak(Pointer p, Pointer old, Int32 new, Int32 mo_succ, Int32 mo_fail) {
+  return atomic_compare_exchange_weak_explicit(p, old, new, mo_succ, mo_fail);
+}
+
+Int32 Parallel_fetch_add(Pointer p, Int32 arg, Int32 memory_order) {
+  return atomic_fetch_add_explicit(p, arg, memory_order);
+}
+
+Int32 Parallel_fetch_sub(Pointer p, Int32 arg, Int32 memory_order) {
+  return atomic_fetch_sub_explicit(p, arg, memory_order);
+}
+
+Int32 Parallel_fetch_or(Pointer p, Int32 arg, Int32 memory_order) {
+  return atomic_fetch_or_explicit(p, arg, memory_order);
+}
+
+Int32 Parallel_fetch_xor(Pointer p, Int32 arg, Int32 memory_order) {
+  return atomic_fetch_xor_explicit(p, arg, memory_order);
+}
+
+Int32 Parallel_fetch_and(Pointer p, Int32 arg, Int32 memory_order) {
+  return atomic_fetch_and_explicit(p, arg, memory_order);
+}
+
+void Parallel_thread_fence(Int32 memory_order) {
+  atomic_thread_fence(memory_order);
 }

@@ -300,8 +300,10 @@ in
    ../mlton/exn.sig
    ../mlton/exn.sml
 
+   ../parallel/atomic.sig
    ann "allowFFI true" in
       ../parallel/internal.sml
+      ../parallel/atomic.sml
    end
    ../mlton/thread.sig
    ../mlton/thread.sml
