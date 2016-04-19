@@ -11,14 +11,17 @@ PATH := ../bin:$(shell echo $$PATH)
 
 TARGET := self
 
+# AR:=ar
+# RANLIB:=ranlib
+
 ifeq ($(TARGET), self)
 CC := gcc -std=gnu99
-AR := ar rc
-RANLIB := ranlib
+AR := $(AR) rc
+RANLIB := $(RANLIB)
 else
 CC := $(TARGET)-gcc -std=gnu99
-AR := $(TARGET)-ar rc
-RANLIB := $(TARGET)-ranlib
+AR := $(TARGET)-$(AR) rc
+RANLIB := $(TARGET)-$(RANLIB)
 endif
 
 TARGET_ARCH := $(shell ../bin/host-arch)
@@ -36,6 +39,10 @@ EXE :=
 # These flags can be overridden by the user
 CPPFLAGS :=
 CFLAGS :=
+
+ifeq ($(USE_LTO), 1)
+CFLAGS += -flto
+endif
 
 WARNXCFLAGS :=
 WARNXCFLAGS += -pedantic -Wall
