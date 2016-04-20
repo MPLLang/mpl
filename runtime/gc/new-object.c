@@ -27,6 +27,7 @@ pointer newObject (GC_state s,
   if (allocInOldGen) {
     /* NB you must have exclusive access to the runtime state
        if you are allocating in the older generation! */
+    assert(HM_inGlobalHeap(s));
     frontier = s->heap->start + s->heap->oldGenSize;
     s->heap->oldGenSize += bytesRequested;
     s->cumulativeStatistics->bytesAllocated += bytesRequested;
@@ -57,9 +58,6 @@ GC_stack newStack (GC_state s,
                    bool allocInOldGen) {
   GC_stack stack;
 
-  /* RAM_NOTE: Figure out a way to put this in the hierarchical heaps */
-  HM_enterGlobalHeap();
-
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
@@ -73,8 +71,6 @@ GC_stack newStack (GC_state s,
              (uintptr_t)stack,
              (uintmax_t)reserved);
 
-  HM_exitGlobalHeap();
-
   return stack;
 }
 
@@ -83,16 +79,21 @@ GC_thread newThread (GC_state s, size_t reserved) {
   GC_thread thread;
   pointer res;
 
-  HM_enterGlobalHeap();
-
   assert (isStackReservedAligned (s, reserved));
-  ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+  if (HM_inGlobalHeap(s)) {
+    ensureHasHeapBytesFreeAndOrInvariantForMutator (
+        s, FALSE, FALSE, FALSE,
+        0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+  } else {
+    HM_ensureHierarchicalHeapAssurances(
+        s, FALSE, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+  }
   stack = newStack (s, reserved, FALSE);
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
-  thread->inGlobalHeapCounter = 0;
+  thread->inGlobalHeapCounter = 1;
   thread->useHierarchicalHeap = FALSE;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
@@ -101,8 +102,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
-
-  HM_exitGlobalHeap();
+  LOG(TRUE, TRUE, L_INFO,
+      FMTPTR" = newThreadOfSize (%"PRIuMAX")",
+      (uintptr_t)thread,
+      (uintmax_t)reserved);
 
   return thread;
 }

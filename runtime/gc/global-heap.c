@@ -123,6 +123,10 @@ Word32 HM_explicitExitGlobalHeap(void) {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 bool HM_inGlobalHeap (GC_state s) {
+  if (BOGUS_OBJPTR == getThreadCurrentObjptr(s)) {
+    return TRUE;
+  }
+
   GC_thread currentThread = getThreadCurrent (s);
 
   return (!currentThread->useHierarchicalHeap ||

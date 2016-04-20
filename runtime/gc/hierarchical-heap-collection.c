@@ -132,6 +132,11 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
+  /* RAM_NOTE: Should probably extend to forward all globals, just in case */
+  /* forward thread (and therefore stack) */
+  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+
+  /* forward contents of stack */
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
                                         s->heap->start),
@@ -157,6 +162,7 @@ void HM_HHC_collectLocal(void) {
     }
   }
 
+  /* forward global heap */
   foreachObjptrInRange(s,
                        s->heap->start,
                        &frontier,

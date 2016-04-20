@@ -20,28 +20,17 @@ void switchToThread (GC_state s, objptr op) {
              op, (uintmax_t)stack->used, (uintmax_t)stack->reserved);
   }
 
-#if ASSERT
-  if (BOGUS_OBJPTR != s->currentThread) {
-    if (getThreadCurrent(s)->useHierarchicalHeap) {
-      /* switching threads should only happen in the global heap! */
-      assert (HM_inGlobalHeap(s));
-    }
-  }
-#endif
-
   s->currentThread = op;
   setGCStateCurrentThreadAndStack (s);
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  assert(HM_inGlobalHeap(s));
+  LOG (DEBUG_THREADS, TRUE, L_DEBUG,
+       "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
+       objptrToPointer(getThreadCurrentObjptr(s), s->heap->start),
+       p,
+       ensureBytesFree);
 
-  if (DEBUG_THREADS)
-    fprintf (stderr,
-             "GC_switchToThread ("FMTPTR", %"PRIuMAX") [%d]\n",
-             (uintptr_t)p,
-             (uintmax_t)ensureBytesFree,
-             Proc_processorNumber (s));
   /* RAM_NOTE: Switch to other branch when I can */
   if (TRUE) {
     /* This branch is slower than the else branch, especially
@@ -56,8 +45,11 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     getThreadCurrent(s)->exnStack = s->exnStack;
     beginAtomic (s);
 
+    HM_enterGlobalHeap();
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
+    HM_exitGlobalHeap();
+
     s->atomicState--;
     /* SPOONHOWER_NOTE: don't bother to check the signal handler here since we
        (probably) aren't bothering to synchronize.  we'll get it on the next
