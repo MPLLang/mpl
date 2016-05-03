@@ -40,6 +40,7 @@ struct FreeLevelListIteratorArgs {
  */
 static void appendChunkList(void* destinationChunkList, void* chunkList);
 
+#if ASSERT
 /**
  * This function asserts the chunk invariants
  *
@@ -52,6 +53,7 @@ static void appendChunkList(void* destinationChunkList, void* chunkList);
  */
 static void HM_assertChunkInvariants(const void* chunk,
                                      const void* levelHeadChunk);
+#endif
 
 /**
  * This function asserts the chunk list invariants
@@ -557,11 +559,6 @@ void HM_assertChunkListInvariants(const void* chunkList) {
   assert(getChunkInfoConst(chunkList)->split.levelHead.size == size);
 }
 #else
-void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {
-  ((void)(chunk));
-  ((void)(levelHeadChunk));
-}
-
 void HM_assertChunkListInvariants(const void* chunkList) {
   ((void)(chunkList));
 }

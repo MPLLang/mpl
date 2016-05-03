@@ -71,7 +71,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
   GC_thread fromThread;
   GC_stack fromStack;
   GC_thread toThread;
-  GC_stack toStack;
+  LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
   if (DEBUG_THREADS)
     fprintf (stderr, "GC_copyThread ("FMTPTR") [%d]\n", (uintptr_t)p,
