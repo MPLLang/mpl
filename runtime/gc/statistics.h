@@ -35,8 +35,8 @@ struct GC_cumulativeStatistics {
   size_t maxBytesLiveSinceReset;
   size_t maxHeapSize;
 
-  size_t maxChunkPoolBytesLive;
-  size_t maxChunkPoolSize;
+  size_t maxHHLCS;
+  size_t maxHHLCHS;
 
   uintmax_t maxPauseTime;
   size_t maxStackSize;

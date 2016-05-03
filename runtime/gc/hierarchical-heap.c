@@ -326,6 +326,29 @@ void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 
+void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
+  size_t oldLCHS = hh->locallyCollectibleHeapSize;
+
+  double ratio = ((double)(hh->locallyCollectibleHeapSize)) /
+                 ((double)(hh->locallyCollectibleSize));
+
+  if (ratio < (2 * (s->controls->hhConfig.liveLCRatio + 1))) {
+    size_t preferredNewLCHS = (2 * (s->controls->hhConfig.liveLCRatio + 1)) *
+                              hh->locallyCollectibleSize;
+
+    hh->locallyCollectibleHeapSize =
+        (preferredNewLCHS > s->controls->hhConfig.maxLCHS) ?
+        s->controls->hhConfig.maxLCHS : preferredNewLCHS;
+  }
+
+  LOG(oldLCHS != hh->locallyCollectibleHeapSize, FALSE, L_INFO,
+      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
+      ratio,
+      2 * (s->controls->hhConfig.liveLCRatio + 1),
+      oldLCHS,
+      hh->locallyCollectibleHeapSize);
+}
+
 /* RAM_NOTE: should this be moved to local-heap.h? */
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);

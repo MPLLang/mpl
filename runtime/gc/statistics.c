@@ -39,6 +39,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
   cumulativeStatistics->maxHeapSize = 0;
+  cumulativeStatistics->maxHHLCS = 0;
+  cumulativeStatistics->maxHHLCHS = 0;
   cumulativeStatistics->maxPauseTime = 0;
   cumulativeStatistics->maxStackSize = 0;
   cumulativeStatistics->syncForOldGenArray = 0;
@@ -197,14 +199,14 @@ void S_outputCumulativeStatisticsJSON(
     fprintf(out, ", ");
 
     fprintf(out,
-            "\"maxChunkPoolBytesLive\" : %"PRIuMAX,
-            statistics->maxChunkPoolBytesLive);
+            "\"maxHHLCS\" : %"PRIuMAX,
+            statistics->maxHHLCS);
 
     fprintf(out, ", ");
 
     fprintf(out,
-            "\"maxChunkPoolSize\" : %"PRIuMAX,
-            statistics->maxChunkPoolSize);
+            "\"maxHHLCHS\" : %"PRIuMAX,
+            statistics->maxHHLCHS);
 
     fprintf(out, ", ");
 

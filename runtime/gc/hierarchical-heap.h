@@ -253,6 +253,15 @@ void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
 
 /**
+ * Resizes the locally collectible heap size, if necessary, according the
+ * initialization parameters.
+ *
+ * @param s The GC_state to get ratios off of.
+ * @param hh The hierarchical heap to maybe resize.
+ */
+void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh);
+
+/**
  * Checks if 'candidateObjptr' belongs to the hierarchical heap space.
  *
  * @param s The GC_state to use

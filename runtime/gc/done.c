@@ -99,10 +99,10 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
   fprintf (out, "max heap size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHeapSize));
-  fprintf (out, "max Chunk Pool bytes live: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxChunkPoolBytesLive));
-  fprintf (out, "max Chunk Pool size: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxChunkPoolSize));
+  fprintf (out, "max hierarchical heap LC size: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->maxHHLCS));
+  fprintf (out, "max hierarchical heap LC heap size: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->maxHHLCHS));
   fprintf (out, "max stack size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxStackSize));
   fprintf (out, "num cards marked: %s\n",
