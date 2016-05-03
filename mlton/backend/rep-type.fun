@@ -127,6 +127,7 @@ structure Type =
       val word0: t = bits Bits.zero
       val word8: t = word WordSize.word8
       val word32: t = word WordSize.word32
+      val word64: t = word WordSize.word64
 
       val wordVector: WordSize.t -> t =
          objptr o ObjptrTycon.wordVector o WordSize.bits
@@ -504,6 +505,10 @@ structure ObjectType =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesNewLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLocallyCollectibleSize =
+                          Bits.toBytes (Type.width Type.word64)
+                      val bytesLocallyCollectibleHeapSize =
+                          Bits.toBytes (Type.width Type.word64)
                       val bytesParentHH =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesNextChildHH =
@@ -523,6 +528,8 @@ structure ObjectType =
                               bytesID +
                               bytesLevelList +
                               bytesNewLevelList +
+                              bytesLocallyCollectibleSize +
+                              bytesLocallyCollectibleHeapSize +
 			      bytesParentHH +
 			      bytesNextChildHH +
 			      bytesChildHHList
@@ -544,6 +551,8 @@ structure ObjectType =
                                                       Type.word32,
                                                       Type.cpointer (),
                                                       Type.cpointer (),
+                                                      Type.word64,
+                                                      Type.word64,
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap ()])}

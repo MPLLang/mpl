@@ -61,6 +61,13 @@ struct HM_HierarchicalHeap {
                        * garbage collection. See HM_ChunkInfo for more
                        information */
 
+  Word64 locallyCollectibleSize; /**< The size in bytes of the locally
+                                  * collectable heap. */
+
+  Word64 locallyCollectibleHeapSize; /** < The size in bytes of locally
+                                      * collectible heap size, used for
+                                      * collection decisions */
+
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
 
@@ -83,6 +90,8 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(Word32) +
                     sizeof(void*) +
                     sizeof(void*) +
+                    sizeof(Word64) +
+                    sizeof(Word64) +
                     sizeof(objptr) +
                     sizeof(objptr) +
                     sizeof(objptr));

@@ -126,10 +126,11 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
   chunkInfo->level = CHUNK_INVALID_LEVEL;
   chunkInfo->split.normal.levelHead = levelHeadChunk;
 
-  /* chunk size should be non-zero! */
+  /* assert that it is initialized correctly */
   assert(chunkInfo->limit != chunk);
+  assert(totalSize == HM_getChunkSize(chunk));
 
-  /* insert into list */
+  /* insert into list and update levelHeadChunk */
   chunkInfo->nextChunk = NULL;
   if (NULL == getChunkInfo(levelHeadChunk)->nextChunk) {
     /* empty list */
@@ -140,6 +141,8 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
     getChunkInfo(lastChunk)->nextChunk = chunk;
     getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
   }
+
+  getChunkInfo(levelHeadChunk)->split.levelHead.size += totalSize;
 
   LOG(TRUE, TRUE, L_DEBUG,
       "Allocate chunk at level %u", getChunkInfo(levelHeadChunk)->level);
@@ -168,9 +171,11 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   chunkInfo->split.levelHead.lastChunk = chunk;
   chunkInfo->split.levelHead.containingHH = hh;
   chunkInfo->split.levelHead.toChunkList = NULL;
+  chunkInfo->split.levelHead.size = totalSize;
 
-  /* chunk size should be non-zero! */
+  /* assert that it is initialized correctly */
   assert(chunkInfo->limit != chunk);
+  assert(totalSize == HM_getChunkSize(chunk));
 
   /* insert into level list */
   HM_mergeLevelList(levelList, chunk);
@@ -245,6 +250,10 @@ void* HM_getChunkLimit(void* chunk) {
   return getChunkInfo(chunk)->limit;
 }
 
+Word64 HM_getChunkSize(const void* chunk) {
+  return (((Word64)(getChunkInfoConst(chunk)->limit)) - ((Word64)(chunk)));
+}
+
 void* HM_getChunkStart(void* chunk) {
   return ((void*)(((char*)(chunk)) + sizeof(struct HM_ChunkInfo)));
 }
@@ -268,6 +277,19 @@ void* HM_getChunkListToChunkList(void* chunkList) {
   assert(CHUNK_INVALID_LEVEL != getChunkInfo(chunkList)->level);
 
   return getChunkInfo(chunkList)->split.levelHead.toChunkList;
+}
+
+Word64 HM_getLevelSize(void* levelList, Word32 level) {
+  void* cursor;
+  for (cursor = levelList;
+       (cursor != NULL) && (getChunkInfo(cursor)->level > level);
+       cursor = getChunkInfo(cursor)->split.levelHead.nextHead) { }
+
+  if ((NULL == cursor) || (getChunkInfo(cursor)->level != level)) {
+    return 0;
+  }
+
+  return getChunkInfo(cursor)->split.levelHead.size;
 }
 
 void HM_setChunkListToChunkList(void* chunkList, void* toChunkList) {
@@ -482,9 +504,11 @@ void appendChunkList(void* destinationChunkList, void* chunkList) {
   assert(NULL == getChunkInfo(lastDestinationChunk)->nextChunk);
   getChunkInfo(lastDestinationChunk)->nextChunk = chunkList;
 
-  /* update pointers */
+  /* update level head chunk */
   void* lastChunk = HM_getChunkListLastChunk(chunkList);
   getChunkInfo(destinationChunkList)->split.levelHead.lastChunk = lastChunk;
+  getChunkInfo(destinationChunkList)->split.levelHead.size +=
+      getChunkInfo(chunkList)->split.levelHead.size;
 
   /* demote chunkList's level head chunk */
 #if ASSERT
@@ -497,7 +521,6 @@ void appendChunkList(void* destinationChunkList, void* chunkList) {
   getChunkInfo(chunkList)->split.levelHead.toChunkList =
       ((void*)(0xcafed00dbaadf00d));
 #endif
-
   getChunkInfo(chunkList)->level = CHUNK_INVALID_LEVEL;
   getChunkInfo(chunkList)->split.normal.levelHead = destinationChunkList;
 
@@ -523,11 +546,15 @@ void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {
 }
 
 void HM_assertChunkListInvariants(const void* chunkList) {
+  Word64 size = 0;
   for (const void* chunk = chunkList;
        NULL != chunk;
        chunk = getChunkInfoConst(chunk)->nextChunk) {
     HM_assertChunkInvariants(chunk, chunkList);
+    size += HM_getChunkSize(chunk);
   }
+
+  assert(getChunkInfoConst(chunkList)->split.levelHead.size == size);
 }
 #else
 void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {

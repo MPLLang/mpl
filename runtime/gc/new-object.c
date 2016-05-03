@@ -129,6 +129,10 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;
   hh->levelList = NULL;
+  hh->newLevelList = NULL;
+  hh->locallyCollectibleSize = 0;
+  /* RAM_NOTE:  Make this an init option */
+  hh->locallyCollectibleHeapSize = 1 * 1024 * 1024;
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;

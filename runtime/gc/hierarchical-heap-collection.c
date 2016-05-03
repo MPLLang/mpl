@@ -108,8 +108,6 @@ void HM_HHC_collectLocal(void) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
-  assertInvariants(s, hh);
-
   int processor = Proc_processorNumber (s);
 
   HM_debugMessage(s,
@@ -124,6 +122,9 @@ void HM_HHC_collectLocal(void) {
 
   /* lock queue to prevent steals */
   Parallel_lockTake(objptrToPointer(s->wsQueueLock, s->heap->start));
+  lockHH(hh);
+
+  assertInvariants(s, hh);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
@@ -224,6 +225,21 @@ void HM_HHC_collectLocal(void) {
   HM_updateLevelListPointers(hh->newLevelList, hh);
   HM_mergeLevelList(&(hh->levelList), hh->newLevelList);
 
+  /*
+   * RAM_NOTE: Really should get this off of forwardHHObjptrArgs instead of
+   * summing up
+   */
+  /* update locally collectible size */
+  /* off-by-one loop to prevent underflow and infinite loop */
+  hh->locallyCollectibleSize = 0;
+  Word32 level;
+  for (level = hh->level;
+       level > (HM_HH_getHighestStolenLevel(s, hh) + 1);
+       level--) {
+    hh->locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
+  }
+  hh->locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
+
   /* update lastAllocatedChunk and associated */
   void* lastChunk = HM_getChunkListLastChunk(hh->levelList);
   if (NULL == lastChunk) {
@@ -235,7 +251,8 @@ void HM_HHC_collectLocal(void) {
   }
 
   /* RAM_NOTE: This can be moved earlier? */
-  /* unlock queue */
+  /* unlock hh and queue */
+  unlockHH(hh);
   Parallel_lockRelease(objptrToPointer(s->wsQueueLock, s->heap->start));
 
   assertInvariants(s, hh);

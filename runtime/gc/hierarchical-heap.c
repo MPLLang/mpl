@@ -75,6 +75,9 @@ void HM_HH_appendChild(pointer parentHHPointer,
   lockHH(parentHH);
   lockHH(childHH);
 
+  assertInvariants(s, parentHH);
+  Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
+
   /* childHH should be a orphan! */
   assert (BOGUS_OBJPTR == childHH->parentHH);
   assert (BOGUS_OBJPTR == childHH->nextChildHH);
@@ -95,7 +98,30 @@ void HM_HH_appendChild(pointer parentHHPointer,
   childHH->nextChildHH = *cursorPointer;
   *cursorPointer = childHHObjptr;
 
+  if ((HM_HH_INVALID_LEVEL == oldHighestStolenLevel) ||
+      (stealLevel > oldHighestStolenLevel)) {
+    /* need to update locally collectible size */
+    Word64 sizeDelta = 0;
+    /* off-by-one loop to prevent underflow and infinite loop */
+    Word32 level;
+    for (level = stealLevel;
+         level > (oldHighestStolenLevel + 1);
+         level--) {
+      sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+    }
+    sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+
+    LOG(TRUE, TRUE, L_INFO,
+        "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
+        ((void*)(parentHH)),
+        parentHH->locallyCollectibleSize,
+        sizeDelta,
+        parentHH->locallyCollectibleSize - sizeDelta);
+    parentHH->locallyCollectibleSize -= sizeDelta;
+  }
+
   /* cannot assert parentHH as it is still running! */
+  assertInvariants(s, parentHH);
   assertInvariants(s, childHH);
 
   unlockHH(childHH);
@@ -147,8 +173,36 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert(BOGUS_OBJPTR != *cursor);
   *cursor = hh->nextChildHH;
 
+  /* update locally collectible size */
+  Word64 sizeDelta = 0;
+  /* off-by-one loop to prevent underflow and infinite loop */
+  Word32 level;
+  Word32 highestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
+  for (level = hh->stealLevel;
+       level > (highestStolenLevel + 1);
+       level--) {
+    sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+  }
+  sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+
+  LOG(TRUE, TRUE, L_INFO,
+      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
+      ((void*)(parentHH)),
+      parentHH->locallyCollectibleSize,
+      sizeDelta,
+      parentHH->locallyCollectibleSize + sizeDelta);
+  parentHH->locallyCollectibleSize += sizeDelta;
+
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList);
+
+  LOG(TRUE, TRUE, L_INFO,
+      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
+      ((void*)(parentHH)),
+      parentHH->locallyCollectibleSize,
+      hh->locallyCollectibleSize,
+      parentHH->locallyCollectibleSize + hh->locallyCollectibleSize);
+  parentHH->locallyCollectibleSize += hh->locallyCollectibleSize;
 
   assertInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
@@ -163,10 +217,14 @@ void HM_HH_promoteChunks(pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
   struct HM_HierarchicalHeap* hh = HHObjptrToStruct(s, hhObjptr);
 
+  lockHH(hh);
+
   assert(HM_getHighestLevel(hh->levelList) <= hh->level);
   HM_promoteChunks(&(hh->levelList), hh->level);
 
   assertInvariants(s, hh);
+
+  unlockHH(hh);
 }
 
 void HM_HH_setLevel(pointer hhPointer, size_t level) {
@@ -216,6 +274,8 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
 }
 
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
+  lockHH(hh);
+
   Word32 level = HM_getHighestLevel(hh->levelList);
   void* chunk;
 
@@ -231,11 +291,14 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   }
 
   if (NULL == chunk) {
+    unlockHH(hh);
     return FALSE;
   }
 
   hh->lastAllocatedChunk = chunk;
+  hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
+  unlockHH(hh);
   return TRUE;
 }
 
@@ -330,6 +393,17 @@ void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
          ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
 
+  Word64 locallyCollectibleSize = 0;
+  /* off-by-one loop to prevent underflow and infinite loop */
+  Word32 level;
+  for (level = hh->level;
+       level > (HM_HH_getHighestStolenLevel(s, hh) + 1);
+       level--) {
+    locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
+  }
+  locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
+  assert(hh->locallyCollectibleSize == locallyCollectibleSize);
+
   struct HM_HierarchicalHeap* parentHH = HHObjptrToStruct(s, hh->parentHH);
   if (NULL != parentHH) {
     /* Make sure I am in parentHH->childHHList */
@@ -385,7 +459,6 @@ void lockHH(struct HM_HierarchicalHeap* hh) {
 
 void unlockHH(struct HM_HierarchicalHeap* hh) {
   assert(HM_HH_LOCK_LOCKED == hh->lock);
-  __sync_bool_compare_and_swap (&(hh->lock),
-                                HM_HH_LOCK_LOCKED,
-                                HM_HH_LOCK_UNLOCKED);
+  __sync_synchronize();
+  hh->lock = HM_HH_LOCK_UNLOCKED;
 }
