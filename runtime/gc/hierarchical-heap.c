@@ -295,6 +295,15 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
     return FALSE;
   }
 
+  GC_state s = pthread_getspecific (gcstate_key);
+  if (NULL != hh->lastAllocatedChunk) {
+    void* lastAllocatedChunkFrontier = HM_getChunkFrontier(hh->lastAllocatedChunk);
+    void* lastAllocatedChunkStart = HM_getChunkStart(hh->lastAllocatedChunk);
+    s->cumulativeStatistics->bytesAllocated +=
+        ((size_t)(lastAllocatedChunkFrontier)) -
+        ((size_t)(lastAllocatedChunkStart));
+  }
+
   hh->lastAllocatedChunk = chunk;
   hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
