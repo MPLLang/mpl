@@ -93,7 +93,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
                    sizeofThread (s),
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
-  thread->inGlobalHeapCounter = 1;
+  thread->inGlobalHeapCounter = 0;
   thread->useHierarchicalHeap = FALSE;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;

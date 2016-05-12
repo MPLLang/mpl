@@ -46,10 +46,35 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     getThreadCurrent(s)->exnStack = s->exnStack;
     beginAtomic (s);
 
-    HM_enterGlobalHeap();
+    if (!HM_inGlobalHeap(s)) {
+      /* save HH info for from-thread */
+      /* copied from HM_enterGlobalHeap() */
+      HM_exitLocalHeap(s);
+
+      spinlock_lock(&(s->lock));
+      s->frontier = s->globalFrontier;
+      s->limitPlusSlop = s->globalLimitPlusSlop;
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+      spinlock_unlock(&(s->lock));
+    }
+
+    /*
+     * at this point, the processor is in the global heap, but the thread is
+     * not.
+     */
+
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
-    HM_exitGlobalHeap();
+
+    if (!HM_inGlobalHeap(s)) {
+      /* I need to switch to the HH for the to-thread */
+      /* copied from HM_exitGlobalHeap() */
+      spinlock_lock(&(s->lock));
+      s->globalFrontier = s->frontier;
+      s->globalLimitPlusSlop = s->limitPlusSlop;
+      HM_enterLocalHeap (s);
+      spinlock_unlock(&(s->lock));
+    }
 
     s->atomicState--;
     /* SPOONHOWER_NOTE: don't bother to check the signal handler here since we

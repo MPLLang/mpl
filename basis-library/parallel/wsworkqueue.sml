@@ -23,6 +23,7 @@ struct
 
   type proc = int
   type work = W.work
+  type unlocker = unit -> unit
 
   val successfulSteals = ref 0
   val failedSteals = ref 0
@@ -442,7 +443,7 @@ struct
                     (* val () = dekkerLock (false, ownerLock) *)
                   in
                     fn () => ((* dekkerUnlock (false, ownerLock); *)
-                              releaseLock thiefLock)
+                        releaseLock thiefLock)
                   end
                 else
                     die "Victim is not a processor"
@@ -525,15 +526,15 @@ struct
                         bottom := j + 1;
                         case w
                          of Empty => raise WorkQueue
-                          | Marker => NONE
+                          | Marker => (unsync ();
+                                       NONE)
                           | Work tw =>
                             (assertToken "steal" (#1 tw) p';
                              pr p "work-steal:";
                              incr successfulSteals;
-                             SOME (true, #2 tw))
+                             SOME (true, unsync, #2 tw))
                       end
-                        before (count p "work-steal" ~1;
-                                unsync ())
+                        before (count p "work-steal" ~1)
                   else (* empty queue *)
                     (ignore (maybeCleanup ());
                      count p "failed-steal" 0;
@@ -575,42 +576,41 @@ struct
                                   releaseLock thiefLock;
                                   case getWork p
                                    of NONE => NONE
-                                    | SOME (_, w) => SOME (true, w))
+                                    | SOME (_, unlocker, w) => SOME (true, unlocker, w))
                      | Work tw =>
                        let
                            val () = assertToken "normal" (#1 tw) p
                        in
-                           SOME (false, #2 tw)
+                           SOME (false, fn () => releaseLock thiefLock, #2 tw)
                        end
                        before (A.update (!work, i - 1, Empty);
-                               count p "get" ~1;
-                               (* dekkerUnlock (true, lock); *)
-                               releaseLock thiefLock  ) (* XTRA *))
+                               count p "get" ~1))
               end
     end
   end
 
   fun startWork p =
-      let
-        val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
-        (* val () = dekkerLock (true, ownerLock) *)
-        val () = takeLock thiefLock (* XTRA *)
-      in
-        A.update (suspending, p, false);
-        (* Initialize a queue for this processor if none exists *)
-        case A.sub (queues, p)
-         of SOME _ => ()
-          | NONE =>
-            let
-                val q as Queue {work = ref qArray, ...}= newQueue p
-            in
-                A.update (queues, p, SOME q);
-                MLtonHM.registerQueue (Word32.fromInt p, qArray)
-            end;
-        count p "start" 0;
-        releaseLock thiefLock (* XTRA *)
-        (* dekkerLock *)
-      end
+      die "Tried to call startWork"
+      (* let *)
+      (*   val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p) *)
+      (*   (* val () = dekkerLock (true, ownerLock) *) *)
+      (*   val () = takeLock thiefLock (* XTRA *) *)
+      (* in *)
+      (*   A.update (suspending, p, false); *)
+      (*   (* Initialize a queue for this processor if none exists *) *)
+      (*   case A.sub (queues, p) *)
+      (*    of SOME _ => () *)
+      (*     | NONE => *)
+      (*       let *)
+      (*           val q as Queue {work = ref qArray, ...}= newQueue p *)
+      (*       in *)
+      (*           A.update (queues, p, SOME q); *)
+      (*           MLtonHM.registerQueue (Word32.fromInt p, qArray) *)
+      (*       end; *)
+      (*   count p "start" 0; *)
+      (*   releaseLock thiefLock (* XTRA *) *)
+      (*   (* dekkerLock *) *)
+      (* end *)
 
   fun finishWork p = ()
 

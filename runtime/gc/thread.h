@@ -66,12 +66,12 @@ typedef struct GC_thread *GC_thread;
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 /**
- * This function sets the current thread to use the hierarchical heap.
+ * This function sets the current thread to either use or not use the
+ * hierarchical heap.
  *
- * @attention
- * Once set, this cannot be unset
+ * @param use TRUE if using the Hierarchical Heap, FALSE otherwise.
  */
-PRIVATE void T_setCurrentThreadUseHierarchicalHeap(void);
+PRIVATE void T_setCurrentThreadUseHierarchicalHeap(Bool use);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

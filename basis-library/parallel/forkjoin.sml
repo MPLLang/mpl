@@ -39,11 +39,9 @@ struct
       fun evaluateFunction f (exceptionHandler: unit -> unit) =
           let
               (* RAM_NOTE: I need an uncounted enter/exit heap *)
-              val () = HM.exitGlobalHeap ()
               val result = (SOME(f ()), NONE)
                            (* SPOONHOWER_NOTE Do we need to execute g in the case where f raises? *)
                            handle e => (NONE, SOME e)
-              val () = HM.enterGlobalHeap ()
           in
               case result
                of (SOME(r), NONE) => r
@@ -54,7 +52,16 @@ struct
   in
       fun fork (f, g) =
           let
-              val () = HM.enterGlobalHeap ()
+              (* Make sure calling thread is set to use hierarchical heaps *)
+              val () =
+                  let
+                      val () = HM.enterGlobalHeap ()
+                      val () = HH.setUseHierarchicalHeap true
+                      val hh = HH.get ()
+                      val () = HM.exitGlobalHeap ()
+                  in
+                      ()
+                  end
 
               (* increment task by two *)
               val () = incrTask 2
@@ -64,26 +71,9 @@ struct
               val level = HH.getLevel hh
               val () = dbgmsg ("(" ^ (Int.toString level) ^ "): Called fork")
 
-              (* Make sure calling thread is set to use hierarchical heaps *)
-              val () = HH.useHierarchicalHeap ()
+              val var = V.empty ()
 
-              (* Allocate syncvar and closure in Hierarchical Heap *)
-              val (var, rightside) =
-                  let
-                      val inGlobalHeapCounter = HM.explicitExitGlobalHeap ()
-
-                      (*
-                       * Used to hold the result of the right-hand side in the
-                       * case where that code is executed in parallel. Should be
-                       * on hierarchical heap as it points to HH data
-                       *)
-                      val var = V.empty ()
-
-                      (*
-                       * Closure used to run the right-hand side... but only in the case
-                       * where that code is run in parallel.
-                       *)
-                      val rightside =
+              val rightside =
                        fn () =>
                           let
                               (*
@@ -111,11 +101,6 @@ struct
                                  (print (msg ^ "\n");
                                   raise B.Parallel msg)
 
-                      val () = HM.explicitEnterGlobalHeap inGlobalHeapCounter
-                  in
-                      (var, rightside)
-                  end
-
               (* Increment level for chunks allocated by 'f' and 'g' *)
               val () = HH.setLevel (hh, level + 1)
 
@@ -124,8 +109,7 @@ struct
 
               (* Run the left side in the hierarchical heap *)
               val () = dbgmsg ("(" ^ (Int.toString level) ^ "): START left")
-              val a = evaluateFunction f (fn () => (ignore (B.remove t);
-                                                    B.yield ()))
+              val a = evaluateFunction f (fn () => (ignore (B.remove t)))
               val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END left")
 
               (*
@@ -141,7 +125,7 @@ struct
                        * next thing in the queue
                        *)
                       (dbgmsg ("(" ^ (Int.toString level) ^ "): right not stolen");
-                       evaluateFunction g (fn () => B.yield ()))
+                       evaluateFunction g (fn () => ()))
                   else
                       (* must have been stolen, so I have a heap to merge *)
                       (dbgmsg ("(" ^ (Int.toString level) ^ "): right stolen");
@@ -162,11 +146,11 @@ struct
                            let
                                val e = HH.mergeIntoParentAndGetReturnValue childHH;
                            in
-                               B.yield ();
                                case e
                                 of NONE => raise ShouldNotHappen
                                  | SOME e => raise !e
                            end)
+
               val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END right")
 
               (*
@@ -177,10 +161,7 @@ struct
 
               (* Reset level *)
               val () = HH.setLevel (hh, level)
-
-              val () = HM.exitGlobalHeap ()
           in
-              B.yield ();
               (a, b)
           end
   end

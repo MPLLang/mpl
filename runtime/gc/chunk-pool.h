@@ -156,6 +156,6 @@ bool ChunkPool_pointerInChunkPool (void* pointer);
  */
 size_t ChunkPool_chunkSize(void* chunk);
 
-#endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
+#endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #endif /* CHUNK_POOL_H_ */

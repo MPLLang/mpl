@@ -133,7 +133,7 @@ structure MLtonHM:> MLTON_HM =
                                     PrimHH.promoteChunks
                                     hh
 
-                val useHierarchicalHeap: unit -> unit =
+                val setUseHierarchicalHeap: bool -> unit =
                     PrimHH.setCurrentThreadUseHierarchicalHeap
             end
 

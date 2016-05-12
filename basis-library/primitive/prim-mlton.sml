@@ -173,9 +173,9 @@ structure HM =
                 val promoteChunks: 'a t -> unit =
                     _import "HM_HH_promoteChunks" runtime private: 'a t -> unit;
 
-                val setCurrentThreadUseHierarchicalHeap: unit -> unit =
+                val setCurrentThreadUseHierarchicalHeap: bool -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"
-                            runtime private: unit -> unit;
+                            runtime private: bool -> unit;
 
                 val setHierarchicalHeap: 'a t -> unit =
                     _import "GC_setCurrentHierarchicalHeap" runtime private:

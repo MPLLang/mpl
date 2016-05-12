@@ -23,7 +23,7 @@ signature MLTON_HM =
                       val mergeIntoParentAndGetReturnValue: 'a t -> 'a option
                       val promoteChunks: 'a t -> unit
 
-                      val useHierarchicalHeap: unit -> unit
+                      val setUseHierarchicalHeap: bool -> unit
                   end
 
         val enterGlobalHeap: unit -> unit
