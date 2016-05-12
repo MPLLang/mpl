@@ -273,6 +273,10 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
   }
 }
 
+/*
+ * RAM_NOTE: Should maybe be split off into a levelList function to shared with
+ * copyObject
+ */
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   lockHH(hh);
 

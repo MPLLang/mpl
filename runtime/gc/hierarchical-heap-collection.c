@@ -569,9 +569,12 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
 
     if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
                                                           s->heap->start))) {
+#if 0
       assert(HM_HH_objptrInHierarchicalHeap(s,
                                             pointerToObjptr(end,
                                                             s->heap->start)));
+#endif
+
       /* use the saved global frontier */
       start = s->procStates[i].globalFrontier;
       end = s->procStates[i].globalLimitPlusSlop + GC_BONUS_SLOP;
