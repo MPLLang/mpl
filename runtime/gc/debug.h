@@ -10,6 +10,7 @@
 #define DEBUG FALSE
 #endif
 
+#pragma message "Move over to logger"
 enum {
   DEBUG_ARRAY = FALSE,
   DEBUG_CALL_STACK = FALSE,

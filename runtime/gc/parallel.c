@@ -57,6 +57,10 @@ void Parallel_lockTake (Pointer p_) {
     startWallTiming (&tv_lock);
   */
   //fprintf (stdout, "%d trying for %llX\n", myNumber, (unsigned long long)p);
+  LOG(LM_PARALLEL, LL_DEBUG,
+      "%d trying for %p",
+      myNumber,
+      ((void*)(p)));
   do {
     if (Proc_threadInSection ()) {
       //fprintf (stderr, "waiting for gc [%d]\n", Proc_processorNumber (s));
@@ -78,6 +82,10 @@ void Parallel_lockTake (Pointer p_) {
   } while (*p >= 0 or
            (not __sync_bool_compare_and_swap (p, -1, myNumber)));
   //fprintf (stdout, "%d got %llX\n", myNumber, (unsigned long long)p);
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "%d got %p",
+      myNumber,
+      ((void*)(p)));
   //*p = myNumber;
   /*
   if (needGCTime (s))
@@ -93,6 +101,10 @@ void Parallel_lockRelease (Pointer p_) {
   int32_t myNumber = 1;
 
   //fprintf (stdout, "%d releasing' %llX\n", myNumber, (unsigned long long)p);
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "%d releasing %p",
+      myNumber,
+      ((void*)(p)));
 
   /* paranoid mode: */
   if (*p != myNumber) {

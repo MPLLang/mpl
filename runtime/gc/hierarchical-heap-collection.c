@@ -146,7 +146,7 @@ void HM_HHC_collectLocal(void) {
                         forwardHHObjptr,
                         &forwardHHObjptrArgs);
 
-  LOG(TRUE, TRUE, L_DEBUG,
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START foreach %ld MB",
       (s->heap->frontier - s->heap->start) / (1024 * 1024));
 
@@ -173,7 +173,7 @@ void HM_HHC_collectLocal(void) {
                        forwardHHObjptr,
                        &forwardHHObjptrArgs);
 
-  LOG(TRUE, TRUE, L_DEBUG, "END foreach");
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "END foreach");
 
   /* do copy-collection */
   HM_forwardHHObjptrsInLevelList(s, &(hh->newLevelList), &forwardHHObjptrArgs);
@@ -210,7 +210,7 @@ void HM_HHC_collectLocal(void) {
       }
     }
 
-    LOG(TRUE, TRUE, L_INFO,
+    LOG(LM_HH_COLLECTION, LL_INFO,
         "Collection went from %zu bytes to %zu bytes",
         fromBytes,
         toBytes);
@@ -442,7 +442,7 @@ void forwardHHObjptr (GC_state s,
                                      opInfo.chunkList);
 
     args->bytesCopied += size;
-    LOG(TRUE, TRUE, L_INFO,
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {

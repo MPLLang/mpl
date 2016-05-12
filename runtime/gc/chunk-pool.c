@@ -263,12 +263,15 @@ void ChunkPool_maybeResize(void) {
         ChunkPool_config.maxSize : preferredNewPoolSize;
   }
 
-  LOG(oldPoolSize != ChunkPool_currentPoolSize, FALSE, L_INFO,
-      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
-      ratio,
-      2 * (ChunkPool_config.liveRatio + 1),
-      oldPoolSize,
-      ChunkPool_currentPoolSize);
+  if (oldPoolSize != ChunkPool_currentPoolSize) {
+    LOG(LM_CHUNK_POOL, LL_INFO,
+        "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu "
+        "bytes",
+        ratio,
+        2 * (ChunkPool_config.liveRatio + 1),
+        oldPoolSize,
+        ChunkPool_currentPoolSize);
+  }
 }
 
 /**
@@ -324,7 +327,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         /* done with free list modifications at this point, so unlock */
         pthread_mutex_unlock_safe(&ChunkPool_lock);
         void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
-        LOG(TRUE, TRUE, L_INFO, "Allocating chunk %p", chunk);
+        LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
         return chunk;
       }
     }
@@ -480,7 +483,7 @@ void ChunkPool_insertIntoFreeList (
 }
 
 bool ChunkPool_performFree(void* chunk) {
-  LOG(TRUE, TRUE, L_INFO, "Freeing chunk %p", chunk);
+  LOG(LM_CHUNK_POOL, LL_DEBUG, "Freeing chunk %p", chunk);
 
   struct ChunkPool_chunkMetadata* spanStart =
       ChunkPool_chunkToChunkMetadata (chunk);

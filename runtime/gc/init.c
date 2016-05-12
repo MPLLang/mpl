@@ -11,7 +11,7 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
-#include "strings.h"
+#include <strings.h>
 
 static bool stringToBool (char *s) {
   if (0 == strcmp (s, "false"))
@@ -244,18 +244,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc) {
             die("@MLton log-level missing argument.");
           }
+
           char* levelString = argv[i++];
-          if (0 == strcasecmp(levelString, "force")) {
-            L_setLevel(L_FORCE);
-          } else if (0 == strcasecmp(levelString, "error")) {
-            L_setLevel(L_ERROR);
-          } else if (0 == strcasecmp(levelString, "warning")) {
-            L_setLevel(L_WARNING);
-          } else if (0 == strcasecmp(levelString, "info")) {
-            L_setLevel(L_INFO);
-          }  else if (0 == strcasecmp(levelString, "debug")) {
-            L_setLevel(L_DEBUG);
-          } else {
+          if (!initLogLevels(levelString)) {
             die ("@MLton log-level invalid argument");
           }
         } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {

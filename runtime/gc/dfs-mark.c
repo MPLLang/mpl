@@ -81,7 +81,7 @@ size_t dfsMarkByModeCustom (GC_state s, pointer root,
   GC_frameOffsets frameOffsets;
   uint32_t processor = Proc_processorNumber (s);
 
-  LOG(TRUE, TRUE, L_DEBUG, "dfsMark(%p, %d)", ((void*)(root)), mode);
+  LOG(LM_DFS_MARK, LL_DEBUG, "dfsMark(%p, %d)", ((void*)(root)), mode);
 
   if (DEBUG_DFS_MARK) {
     fprintf(stderr,
@@ -91,7 +91,7 @@ size_t dfsMarkByModeCustom (GC_state s, pointer root,
     fflush(stderr);
   }
 
-  LOG(TRUE, TRUE, L_DEBUG, "descend(%p)@%d", ((void*)(root)), __LINE__);
+  LOG(LM_DFS_MARK, LL_DEBUG, "descend(%p)@%d", ((void*)(root)), __LINE__);
   if (isPointerMarkedByMode (root, mode) ||
       !descendHook(s, descendHookArgs, pointerToObjptr(root, s->heap->start))) {
     /* Object has already been marked or should not be descended into. */
@@ -141,7 +141,7 @@ markNext:
   storeObjptrFromPointer (todo, prev, s->heap->start);
   prev = cur;
   cur = next;
-  LOG(TRUE, TRUE, L_DEBUG, "descend(%p)@%d", ((void*)(cur)), __LINE__);
+  LOG(LM_DFS_MARK, LL_DEBUG, "descend(%p)@%d", ((void*)(cur)), __LINE__);
   if (!descendHook(s, descendHookArgs, pointerToObjptr(cur, s->heap->start))) {
     // should not descend into this object, so pop back
     if (DEBUG_DFS_MARK) {
@@ -221,7 +221,7 @@ markNextInNormal:
       if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
       }
-      LOG(TRUE, TRUE, L_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
+      LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
       /* Call the ascendHook since we will not be descending into 'next' */
       ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markNextInNormal;
@@ -316,7 +316,7 @@ markNextInArray:
       if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
       }
-      LOG(TRUE, TRUE, L_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
+      LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
       /* Call the ascendHook since we will not be descending into 'next' */
       ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markNextInArray;
@@ -377,7 +377,7 @@ markInFrame:
       if (shouldHashCons) {
         shareObjptr (s, (objptr*)todo);
       }
-      LOG(TRUE, TRUE, L_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
+      LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
       /* Call the ascendHook since we will not be descending into 'next' */
       ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
       goto markInFrame;
@@ -432,7 +432,7 @@ ret:
     storeObjptrFromPointer (todo, next, s->heap->start);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
-    LOG(TRUE, TRUE, L_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
+    LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
     /* Call the ascendHook now that we are done with 'cur' */
     ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
     if (DEBUG_DFS_MARK) {

@@ -94,6 +94,9 @@ void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
 
   /* restore inGlobalHeapCounter */
   getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "inGlobalHeapCounter = %d",
+      inGlobalHeapCounter);
 }
 
 Word32 HM_explicitExitGlobalHeap(void) {
@@ -115,6 +118,10 @@ Word32 HM_explicitExitGlobalHeap(void) {
   if (0 == retVal) {
     DIE("Attempted to exit while GHC is zero!");
   }
+
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "inGlobalHeapCounter = %d",
+      retVal);
 
   /* return the old inGlobalHeapCounter */
   return retVal;

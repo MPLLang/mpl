@@ -25,10 +25,11 @@ void switchToThread (GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  LOG (DEBUG_THREADS, TRUE, L_DEBUG,
+  LOG (LM_THREAD, LL_DEBUG,
        "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
-       objptrToPointer(getThreadCurrentObjptr(s), s->heap->start),
-       p,
+       ((uintptr_t)(objptrToPointer(getThreadCurrentObjptr(s),
+                                    s->heap->start))),
+       ((uintptr_t)(p)),
        ensureBytesFree);
 
   /* RAM_NOTE: Switch to other branch when I can */

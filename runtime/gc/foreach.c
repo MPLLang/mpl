@@ -363,7 +363,7 @@ pointer nextValidPointer(pointer* end,
     /* can only be as many holes as processors */
     for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       if (nextP >= holes[i].start && nextP < holes[i].end) {
-        LOG(TRUE, TRUE, L_INFO,
+        LOG(LM_FOREACH, LL_DEBUG,
             "Skipping hole nextP = %p holeProc = %" PRIu32 " holeStart = %p "
             "holeEnd = %p",
             ((void*)(nextP)),

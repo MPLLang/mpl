@@ -23,11 +23,11 @@ typedef GC_state GCState_t;
 #error POINTER_BITS not defined
 #endif
 
-#include "gc/chunk-pool.h"
+
 #include "gc/debug.h"
-#include "gc/util.h"
+#include "gc/logger.h"
 
-
+#include "gc/chunk-pool.h"
 #include "gc/align.h"
 #include "gc/model.h"
 #include "gc/pointer.h"

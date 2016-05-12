@@ -144,9 +144,7 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
     getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
   }
 
-  getChunkInfo(levelHeadChunk)->split.levelHead.size += totalSize;
-
-  LOG(TRUE, TRUE, L_DEBUG,
+  LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk at level %u", getChunkInfo(levelHeadChunk)->level);
 
   return chunk;
@@ -182,7 +180,7 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   /* insert into level list */
   HM_mergeLevelList(levelList, chunk, hh);
 
-  LOG(TRUE, TRUE, L_DEBUG,
+  LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk at level %u", level);
 
   return chunk;
@@ -231,14 +229,14 @@ void HM_freeChunks(void** levelList, Word32 minLevel) {
     .chunkList = NULL,
     .minLevel = minLevel
   };
-  LOG(TRUE, TRUE, L_DEBUG,
+  LOG(LM_CHUNK, LL_DEBUG,
       "START FreeChunks levelList = %p, minLevel = %u",
       ((void*)(iteratorArgs.levelList)),
       iteratorArgs.minLevel);
   LOCAL_USED_FOR_ASSERT bool result =
       ChunkPool_iteratedFree(HM_freeLevelListIterator, &iteratorArgs);
   assert(result);
-  LOG(TRUE, TRUE, L_DEBUG,
+  LOG(LM_CHUNK, LL_DEBUG,
       "END FreeChunks levelList = %p, minLevel = %u",
       ((void*)(iteratorArgs.levelList)),
       iteratorArgs.minLevel);
@@ -617,7 +615,7 @@ void* HM_freeLevelListIterator(void* arg) {
     *(state->levelList) =
         getChunkInfo(state->chunkList)->split.levelHead.nextHead;
 
-    LOG(TRUE, TRUE, L_DEBUG,
+    LOG(LM_CHUNK, LL_DEBUG,
         "Freeing chunk list at level %u %u",
         getChunkInfo(state->chunkList)->level,
         state->minLevel);

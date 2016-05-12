@@ -1,18 +1,18 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2015,2016 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
  */
 
 /**
- * @file logger.c
+ * @file log.c
  *
  * @author Ram Raghunathan
  *
- * This file implements the logger interface defined in logger.h
+ * This file implements the log interface defined in log.h
  */
 
-#include "logger.h"
+#include "log.h"
 
 #include <stdio.h>
 
@@ -32,22 +32,17 @@ static const int LEVEL_FIELD_WIDTH = sizeof("ERROR") - 1;
 /********************/
 /* Global Variables */
 /********************/
-static enum LogLevel logLevel = L_ERROR;
 static FILE* logFile = NULL;
 
 /************************/
 /* Function Definitions */
 /************************/
-void L_setLevel(enum LogLevel level) {
-  logLevel = level;
-}
-
 void L_setFile(FILE* file) {
   logFile = file;
 }
 
-bool L_levelEnabled(enum LogLevel level) {
-  return (level <= logLevel);
+bool L_levelEnabled(enum LogLevel messageLevel, enum LogLevel logLevel) {
+  return (messageLevel <= logLevel);
 }
 
 void L_log(bool flush,
@@ -56,11 +51,6 @@ void L_log(bool flush,
            const char* function,
            const char* format,
            ...) {
-  if (!L_levelEnabled(level)) {
-    /* shouldn't log this message */
-    return;
-  }
-
   char formattedMessage[L_MAX_MESSAGE_LENGTH];
   va_list substitutions;
   va_start(substitutions, format);
@@ -70,7 +60,7 @@ void L_log(bool flush,
   fprintf(logFile,
           "%-*s [P%02zd/%s]: %s\n",
           LEVEL_FIELD_WIDTH,
-          LogLevelToString[logLevel],
+          LogLevelToString[level],
           processor,
           function,
           formattedMessage);

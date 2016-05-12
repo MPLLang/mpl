@@ -96,7 +96,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                                  ((double)(hh->locallyCollectibleSize));
 
-      LOG(TRUE, FALSE, L_INFO,
+      LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
           "Live Ratio %.2f < %.2f, performed local collection to increase "
           "ratio to %.2f (%zu / %zu)",
           allocatedRatio,

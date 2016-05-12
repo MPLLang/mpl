@@ -102,7 +102,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
-  LOG(TRUE, TRUE, L_INFO,
+  LOG(LM_ALLOCATION, LL_INFO,
       FMTPTR" = newThreadOfSize (%"PRIuMAX")",
       (uintptr_t)thread,
       (uintmax_t)reserved);
