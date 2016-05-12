@@ -13,6 +13,14 @@ struct
      Finished of 'a * HH.t
    | Raised of exn * HH.t
 
+  val numTasks = Array.array (Word32.toInt I.numberOfProcessors, 0)
+  fun incrTask n =
+      let
+          val p = (Word32.toInt o I.processorNumber) ()
+      in
+          Array.update (numTasks, p, Array.sub (numTasks, p) + n)
+      end
+
   (* RAM_NOTE: How to handle exceptions and heaps? *)
   local
       fun evaluateFunction f (exceptionHandler: unit -> unit) =
@@ -34,6 +42,9 @@ struct
       fun fork (f, g) =
           let
               val () = HM.enterGlobalHeap ()
+
+              (* increment task by two *)
+              val () = incrTask 2
 
               (* make sure a hh is set *)
               val hh = HH.get ()
@@ -124,6 +135,8 @@ struct
               (a, b)
           end
   end
+
+  fun getNumTasks () = Array.foldl (op+) 0 numTasks
 
   fun reduce maxSeq f g u n =
       let
