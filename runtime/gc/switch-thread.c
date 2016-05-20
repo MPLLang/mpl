@@ -25,10 +25,10 @@ void switchToThread (GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
+  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), s->heap->start);
   LOG (LM_THREAD, LL_DEBUG,
        "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
-       ((uintptr_t)(objptrToPointer(getThreadCurrentObjptr(s),
-                                    s->heap->start))),
+       ((uintptr_t)(currentP)),
        ((uintptr_t)(p)),
        ensureBytesFree);
 
@@ -51,7 +51,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
       /* copied from HM_enterGlobalHeap() */
       HM_exitLocalHeap(s);
 
-      spinlock_lock(&(s->lock));
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
       s->frontier = s->globalFrontier;
       s->limitPlusSlop = s->globalLimitPlusSlop;
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -69,7 +69,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     if (!HM_inGlobalHeap(s)) {
       /* I need to switch to the HH for the to-thread */
       /* copied from HM_exitGlobalHeap() */
-      spinlock_lock(&(s->lock));
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
       s->globalFrontier = s->frontier;
       s->globalLimitPlusSlop = s->limitPlusSlop;
       HM_enterLocalHeap (s);

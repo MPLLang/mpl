@@ -608,7 +608,7 @@ bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    spinlock_lock(&(s->procStates[i].lock));
+    spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));
 
     pointer start = s->procStates[i].frontier;
     pointer end = s->procStates[i].limitPlusSlop + GC_BONUS_SLOP;

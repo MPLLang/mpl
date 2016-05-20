@@ -22,7 +22,7 @@ typedef volatile uint32_t spinlock_t;
 /**
  * Macro to initialize a spinlock by simple assignment
  */
-#define SPINLOCK_INITIALIZER ((spinlock_t)(0))
+#define SPINLOCK_INITIALIZER ((spinlock_t)(~0))
 
 /**
  * Initializes a spinlock
@@ -32,23 +32,27 @@ typedef volatile uint32_t spinlock_t;
 void spinlock_init(spinlock_t* lock);
 
 /**
- * Locks a spinlock.
+ * Locks a spinlock with the given value.
  *
  * @note
  * This function blocks until the lock is acquired
  *
  * @param lock The lock to initialize
+ * @param value the value to lock the lock with. This value should be unique
+ * per-processor and is used for deadlock detection assertions.
  */
-void spinlock_lock(spinlock_t* lock);
+void spinlock_lock(spinlock_t* lock, uint32_t value);
 
 /**
- * Attempts to lock a spinlock without blocking.
+ * Attempts to lock a spinlock with the given value without blocking.
  *
  * @param lock The lock to attempt to lock without blocking.
+ * @param value the value to lock the lock with. This value should be unique
+ * per-processor and is used for deadlock detection assertions.
  *
  * @return TRUE if the attempt succeeded, FALSE otherwise.
  */
-bool spinlock_trylock(spinlock_t* lock);
+bool spinlock_trylock(spinlock_t* lock, uint32_t value);
 
 /**
  * Unlocks a spinlock.

@@ -19,7 +19,6 @@
 /***********/
 
 #define SPINLOCK_UNLOCKED SPINLOCK_INITIALIZER
-#define SPINLOCK_LOCKED (~SPINLOCK_INITIALIZER)
 
 /************************/
 /* Function Definitions */
@@ -29,20 +28,21 @@ void spinlock_init(spinlock_t* lock) {
   *lock = SPINLOCK_INITIALIZER;
 }
 
-void spinlock_lock(spinlock_t* lock) {
+void spinlock_lock(spinlock_t* lock, uint32_t value) {
   do {
-  } while (!spinlock_trylock(lock));
+  } while (!spinlock_trylock(lock, value));
 }
 
 
-bool spinlock_trylock(spinlock_t* lock) {
-  return (__sync_bool_compare_and_swap (lock,
-                                        SPINLOCK_UNLOCKED,
-                                        SPINLOCK_LOCKED));
+bool spinlock_trylock(spinlock_t* lock, uint32_t value) {
+  assert(SPINLOCK_UNLOCKED != value);
+  assert(*lock != value);
+  return (__sync_bool_compare_and_swap(lock,
+                                       SPINLOCK_UNLOCKED,
+                                       value));
 }
 
 void spinlock_unlock(spinlock_t* lock) {
   __sync_synchronize();
   *lock = SPINLOCK_UNLOCKED;
-  __sync_synchronize();
 }
