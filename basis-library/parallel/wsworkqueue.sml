@@ -31,8 +31,9 @@ struct
 
   val yield = _import "Parallel_yield" runtime private: unit -> unit;
 
-  val takeLock = _import "Parallel_lockTake" runtime private: int ref -> unit;
-  val releaseLock = _import "Parallel_lockRelease" runtime private: int ref -> unit;
+  val lockInit = _import "Parallel_lockInit" runtime private: Word32.word ref -> unit;
+  val takeLock = _import "Parallel_lockTake" runtime private: Word32.word ref -> unit;
+  val releaseLock = _import "Parallel_lockRelease" runtime private: Word32.word ref -> unit;
 
   local
     val takeDekker = _import "Parallel_dekkerTake" runtime private: bool * bool ref * bool ref * bool ref -> unit;
@@ -106,21 +107,26 @@ struct
             }
 
   datatype lock = Lock of {
-                            thiefLock : int ref,
+                            thiefLock : Word32.word ref,
                             ownerLock : dekker
                           }
   (* protects the array of queues -- specifically those queues not owned by
     any processor -- and the total number of active queues *)
-  val masterLock = ref ~1
+  val masterLock = ref (Word32.fromInt ~1)
   val activeQueues = ref numberOfProcessors
   val totalQueues = ref numberOfProcessors
 
   val singleLock = Lock { thiefLock = masterLock, ownerLock = dekkerInit () }
+  val () = case singleLock of Lock {thiefLock, ...} => lockInit thiefLock
 
   (* protects access to those queues owned by processors *)
   val locks = A.tabulate (numberOfProcessors,
                           (* fn _ => singleLock) *)
-                          fn _ => Lock { thiefLock = ref ~1, ownerLock = dekkerInit () })
+                          fn _ => Lock { thiefLock = ref (Word32.fromInt ~1),
+                                         ownerLock = dekkerInit () })
+  val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
+                      lockInit thiefLock)
+                  locks
   val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
                       MLtonHM.registerQueueLock (Word32.fromInt p, thiefLock))
                   locks
@@ -367,7 +373,9 @@ struct
     let
       (* val () = pr p "before-add" *)
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
+      val () = print "tyring lock 1\n"
       val () = takeLock thiefLock; (* XTRA *)
+      val () = print "got lock 1\n"
       (* val () = dekkerLock (true, lock); *)
       val q as Queue { top, work, ... } = case A.sub (queues, p)
                                       of SOME q => q | NONE => (print "add\n"; raise WorkQueue)
@@ -424,7 +432,9 @@ struct
     let
       (* val () = pr p "before-get" *)
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
+      val () = print "tyring lock 2\n"
       val () = takeLock thiefLock (* XTRA *)
+      val () = print "got lock 2\n"
       (* val () = dekkerLock (true, lock) *)
 
       fun steal () =
@@ -439,7 +449,9 @@ struct
                     val () = releaseLock thiefLock (* XTRA *)
                     (* Take the victim's lock *)
                     val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
+                    val () = print "tyring lock 3\n"
                     val () = takeLock thiefLock
+                    val () = print "got lock 3\n"
                     (* val () = dekkerLock (false, ownerLock) *)
                   in
                     fn () => ((* dekkerUnlock (false, ownerLock); *)
@@ -619,7 +631,9 @@ struct
         (* val () = pr p "before-suspend" *)
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
+        val () = print "tyring lock 4\n"
         val () = takeLock thiefLock (* XTRA *)
+        val () = print "got lock 4\n"
       in
         (if P.suspendEntireQueues then
            die "Tried to suspend entire queue"
@@ -668,7 +682,9 @@ struct
               end
           val () = r := SOME q;
         in
+          print "tyring lock 5\n";
           takeLock thiefLock; (* XTRA *)
+          print "got lock 5\n";
           (* dekkerLock (true, lock); *)
           add Marker;
           add (Work tw);
@@ -735,12 +751,14 @@ struct
             if p < numberOfProcessors then
               let
                 val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p)
+                val () = print "tyring lock 6\n"
                 val () = if p = p' then
                            (takeLock thiefLock; (* XTRA *)
                             (* dekkerLock (true, ownerLock) *) ())
                          else
                            (takeLock thiefLock;
                             (* dekkerLock (false, ownerLock) *) ())
+                val () = print "got lock 6\n"
               in
                 fn _ => if p = p' then
                           ((* dekkerUnlock (true, ownerLock); *)

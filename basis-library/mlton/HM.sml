@@ -145,6 +145,6 @@ structure MLtonHM:> MLTON_HM =
             PrimHM.explicitExitGlobalHeap
 
         val registerQueue: Word32.word * 'a array -> unit = PrimHM.registerQueue
-        val registerQueueLock: Word32.word * int ref -> unit =
+        val registerQueueLock: Word32.word * Word32.word ref -> unit =
             PrimHM.registerQueueLock
     end

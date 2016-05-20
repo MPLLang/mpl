@@ -40,79 +40,42 @@ void Parallel_yield (void) {
 
 /* lock = int* >= 0 if held or -1 if no one */
 
-Pointer Parallel_lockInit (Pointer p_) {
-  Int32 *p = (Int32 *)p_;
-  *p = -1;
-  return (Pointer)p;
+void Parallel_lockInit (Pointer arg) {
+  spinlock_t* lock = ((spinlock_t*)(arg));
+  spinlock_init(lock);
 }
 
-void Parallel_lockTake (Pointer p_) {
-  Int32 *p = (Int32 *)p_;
-  //GC_state s = pthread_getspecific (gcstate_key);
-  //int32_t myNumber = Proc_processorNumber (s);
-  int32_t myNumber = 1;
-  /*
-  struct timeval tv_lock;
-  if (needGCTime (s))
-    startWallTiming (&tv_lock);
-  */
-  //fprintf (stdout, "%d trying for %llX\n", myNumber, (unsigned long long)p);
+void Parallel_lockTake (Pointer arg) {
+  spinlock_t* lock = ((spinlock_t*)(arg));
+  uint32_t lockValue = Proc_processorNumber(pthread_getspecific(gcstate_key));
+
   LOG(LM_PARALLEL, LL_DEBUG,
-      "%d trying for %p",
-      myNumber,
-      ((void*)(p)));
+      "trying to lock %p to %u",
+      ((void*)(lock)),
+      lockValue);
+
   do {
     if (Proc_threadInSection ()) {
-      //fprintf (stderr, "waiting for gc [%d]\n", Proc_processorNumber (s));
       GC_state s = pthread_getspecific (gcstate_key);
-      /*
-      if (needGCTime (s))
-        stopWallTiming (&tv_lock, &s->cumulativeStatistics->tv_lock);
-      */
 
-      ENTER1 (s, p_);
-      LEAVE1 (s, p_);
-      p = (Int32 *)p_;
-      /*
-      if (needGCTime (s))
-        startWallTiming (&tv_lock);
-      */
+      ENTER1(s, arg);
+      LEAVE1(s, arg);
+      lock = ((spinlock_t*)(arg));
     }
-    //if (*p == myNumber) break;
-  } while (*p >= 0 or
-           (not __sync_bool_compare_and_swap (p, -1, myNumber)));
-  //fprintf (stdout, "%d got %llX\n", myNumber, (unsigned long long)p);
+  } while (!spinlock_trylock(lock, lockValue));
+
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-      "%d got %p",
-      myNumber,
-      ((void*)(p)));
-  //*p = myNumber;
-  /*
-  if (needGCTime (s))
-    stopWallTiming (&tv_lock, &s->cumulativeStatistics->tv_lock);
-  ++s->cumulativeStatistics->numLocks;
-  */
+      "locked");
 }
 
-void Parallel_lockRelease (Pointer p_) {
-  Int32 *p = (Int32 *)p_;
-  //GC_state s = pthread_getspecific (gcstate_key);
-  //int32_t myNumber = Proc_processorNumber (s);
-  int32_t myNumber = 1;
+void Parallel_lockRelease (Pointer arg) {
+  spinlock_t* lock = ((spinlock_t*)(arg));
 
-  //fprintf (stdout, "%d releasing' %llX\n", myNumber, (unsigned long long)p);
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-      "%d releasing %p",
-      myNumber,
-      ((void*)(p)));
+      "releasing %p",
+      ((void*)(lock)));
 
-  /* paranoid mode: */
-  if (*p != myNumber) {
-    fprintf (stdout, "can't unlock if you don't hold the lock; me: %d, lock: %d\n", myNumber, *p);
-    return;
-  }
-  __sync_bool_compare_and_swap (p, myNumber, -1);
-  //*p = -1;
+  spinlock_unlock(lock);
 }
 
 void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer leftsTurn_)

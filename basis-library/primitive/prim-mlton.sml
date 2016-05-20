@@ -208,9 +208,9 @@ structure HM =
             _import "HM_HHC_registerQueue" runtime private:
             Word32.word * 'a array -> unit;
 
-        val registerQueueLock: Word32.word * Int32.int ref -> unit =
+        val registerQueueLock: Word32.word * Word32.word ref -> unit =
             _import "HM_HHC_registerQueueLock" runtime private:
-            Word32.word * Int32.int ref -> unit;
+            Word32.word * Word32.word ref -> unit;
     end
 
 structure Platform =
