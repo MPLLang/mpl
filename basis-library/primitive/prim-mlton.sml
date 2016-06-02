@@ -138,6 +138,7 @@ structure GC =
       val setRusageMeasureGC =
          _import "GC_setControlsRusageMeasureGC" runtime private: bool -> unit;
       val setSummary = _import "GC_setControlsSummary" runtime private: bool -> unit;
+      val time = _import "GC_getCumulativeStatisticsGCTime" runtime private: unit -> C_UIntmax.t;
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
    end
 

@@ -112,6 +112,7 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
