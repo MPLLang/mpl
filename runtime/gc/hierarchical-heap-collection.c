@@ -296,7 +296,7 @@ void forwardHHObjptr (GC_state s,
   }
 
   header = getHeader (p);
-  if (GC_FORWARDED == header) {
+  if (not (GC_VALID_HEADER_MASK & header)) {
     if (DEBUG_DETAILED) {
       fprintf (stderr, "  already FORWARDED\n");
     }
@@ -308,7 +308,7 @@ void forwardHHObjptr (GC_state s,
     assert(opInfo.level >= args->minLevel);
   }
 
-  if (GC_FORWARDED != header) {
+  if (GC_VALID_HEADER_MASK & header) {
 #pragma message "More nuanced with non-local collection"
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
@@ -420,16 +420,16 @@ void forwardHHObjptr (GC_state s,
 #endif
     }
 
-    /* Store the forwarding pointer in the old object. */
-    *((GC_header*)(p - GC_HEADER_SIZE)) = GC_FORWARDED;
-    *((objptr*)(p)) = pointerToObjptr(copyPointer + headerBytes,
-                                      s->heap->start);
+    /* Store the forwarding pointer in the old object header. */
+    *((objptr*)(p - GC_HEADER_SIZE)) = pointerToObjptr (copyPointer + headerBytes,
+                                                        s->heap->start);
+    assert (not (GC_VALID_HEADER_MASK & getHeader (p)));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
 #pragma message "Shouldn't happen!"
 #if 0
       /* update level chunk head containingHH pointers */
-      HM_HH_updateLevelListPointers(*((objptr*)(p)));
+      HM_HH_updateLevelListPointers(*((objptr*)(p - GC_HEADER_SIZE)));
 #else
     die(__FILE__ ":%d: "
         "forwardHHObjptr() does not support GC_HIERARCHICAL_HEAP_HEADER "
@@ -440,7 +440,7 @@ void forwardHHObjptr (GC_state s,
   }
 
 
-  *opp = *((objptr*)(p));
+  *opp = *((objptr*)(p - GC_HEADER_SIZE));
   if (DEBUG_DETAILED) {
     fprintf (stderr,
              "forwardHHObjptr --> *opp = "FMTPTR"\n",
