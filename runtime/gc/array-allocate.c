@@ -57,10 +57,9 @@ pointer GC_arrayAllocate (GC_state s,
       Proc_processorNumber (s));
 
   /* Check for overflow when computing arraySize.
-   * Note: bytesPerElement > 0
    */
   bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-  if (numElements > (SIZE_MAX / bytesPerElement)) {
+  if (bytesPerElement > 0 and numElements > (SIZE_MAX / bytesPerElement)) {
     goto doOverflow;
   }
 
