@@ -271,7 +271,7 @@ bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
 
 /* RAM_NOTE: Should be able to compute once and save result */
 size_t HM_HH_offsetof(GC_state s) {
-  return (HM_HH_sizeof(s) - (GC_NORMAL_HEADER_SIZE +
+  return (HM_HH_sizeof(s) - (GC_NORMAL_METADATA_SIZE +
                              sizeof (struct HM_HierarchicalHeap)));
 }
 
@@ -282,7 +282,7 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
 
 /* RAM_NOTE: Should be able to compute once and save result */
 size_t HM_HH_sizeof(GC_state s) {
-  size_t result = GC_NORMAL_HEADER_SIZE + sizeof (struct HM_HierarchicalHeap);
+  size_t result = GC_NORMAL_METADATA_SIZE + sizeof (struct HM_HierarchicalHeap);
   result = align (result, s->alignment);
 
   if (DEBUG) {
@@ -295,7 +295,7 @@ size_t HM_HH_sizeof(GC_state s) {
                  &bytesNonObjptrs,
                  &numObjptrs);
 
-    size_t check = GC_NORMAL_HEADER_SIZE +
+    size_t check = GC_NORMAL_METADATA_SIZE +
                    (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
 
     if (DEBUG_DETAILED) {

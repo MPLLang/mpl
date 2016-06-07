@@ -322,7 +322,7 @@ void forwardHHObjptr (GC_state s,
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
     /* Compute the space taken by the header and object body. */
-    size_t headerBytes;
+    size_t metaDataBytes;
     size_t objectBytes;
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
 #pragma message "Implement when I can"
@@ -334,12 +334,12 @@ void forwardHHObjptr (GC_state s,
             __LINE__);
       }
 #endif
-      headerBytes = GC_NORMAL_HEADER_SIZE;
+      metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
     } else if (ARRAY_TAG == tag) {
-      headerBytes = GC_ARRAY_HEADER_SIZE;
-      objectBytes = sizeofArrayNoHeader (s, getArrayLength (p),
-                                         bytesNonObjptrs, numObjptrs);
+      metaDataBytes = GC_ARRAY_METADATA_SIZE;
+      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
+                                           bytesNonObjptrs, numObjptrs);
     } else {
       /* Stack. */
 #pragma message "Implement when I can"
@@ -349,7 +349,7 @@ void forwardHHObjptr (GC_state s,
       GC_stack stack;
 
       assert (STACK_TAG == tag);
-      headerBytes = GC_STACK_HEADER_SIZE;
+      metaDataBytes = GC_STACK_HEADER_SIZE;
       stack = (GC_stack)p;
 
       /* Check if the pointer is the current stack of any processor. */
@@ -377,21 +377,21 @@ void forwardHHObjptr (GC_state s,
 #endif
     }
 
-    size_t size = headerBytes + objectBytes;
+    size_t size = metaDataBytes + objectBytes;
     /* Copy the object. */
     if (opInfo.level > args->maxLevel) {
       DIE("Pointer Invariant violated!");
     }
 
     pointer copyPointer = copyObject(&(args->hh->newLevelList),
-                                     p - headerBytes,
+                                     p - metaDataBytes,
                                      size,
                                      opInfo.level,
                                      opInfo.chunkList);
 
     args->bytesCopied += size;
     LOG(args->log, TRUE, L_DEBUG,
-        "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
+        "%p --> %p", ((void*)(p - metaDataBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
 #pragma message "Implement when I can"
@@ -421,7 +421,7 @@ void forwardHHObjptr (GC_state s,
     }
 
     /* Store the forwarding pointer in the old object header. */
-    *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + headerBytes,
+    *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
                                         s->heap->start);
     assert (hasFwdPtr(p));
 

@@ -174,7 +174,7 @@ pointer foreachObjptrInObject (GC_state s,
     }
 
  ARRAY_DOME:
-    p += alignWithExtra (s, dataBytes, GC_ARRAY_HEADER_SIZE);
+    p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
   } else if (STACK_TAG == tag) {
     GC_stack stack;
     pointer top, bottom;

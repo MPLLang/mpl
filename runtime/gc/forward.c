@@ -82,7 +82,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
     size_t size, skip;
 
     GC_header header;
-    size_t headerBytes, objectBytes;
+    size_t metaDataBytes, objectBytes;
     GC_objectTypeTag tag;
     uint16_t bytesNonObjptrs, numObjptrs;
 
@@ -91,13 +91,13 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
 
     /* Compute the space taken by the header and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
-      headerBytes = GC_NORMAL_HEADER_SIZE;
+      metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       skip = 0;
     } else if (ARRAY_TAG == tag) {
-      headerBytes = GC_ARRAY_HEADER_SIZE;
-      objectBytes = sizeofArrayNoHeader (s, getArrayLength (p),
-                                         bytesNonObjptrs, numObjptrs);
+      metaDataBytes = GC_ARRAY_METADATA_SIZE;
+      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
+                                           bytesNonObjptrs, numObjptrs);
       skip = 0;
     } else { /* Stack. */
       bool current;
@@ -105,7 +105,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       GC_stack stack;
 
       assert (STACK_TAG == tag);
-      headerBytes = GC_STACK_HEADER_SIZE;
+      metaDataBytes = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
       /* Check if the pointer is the current stack of any processor. */
@@ -128,17 +128,17 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       objectBytes = sizeof (struct GC_stack) + stack->used;
       skip = stack->reserved - stack->used;
     }
-    size = headerBytes + objectBytes;
+    size = metaDataBytes + objectBytes;
     assert (s->forwardState.back + size + skip <= s->forwardState.toLimit);
     /* Copy the object. */
-    GC_memcpy (p - headerBytes, s->forwardState.back, size);
+    GC_memcpy (p - metaDataBytes, s->forwardState.back, size);
     /* If the object has a valid weak pointer, link it into the weaks
      * for update after the copying GC is done.
      */
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
       GC_weak w;
 
-      w = (GC_weak)(s->forwardState.back + GC_NORMAL_HEADER_SIZE + offsetofWeak (s));
+      w = (GC_weak)(s->forwardState.back + GC_NORMAL_METADATA_SIZE + offsetofWeak (s));
       if (DEBUG_WEAK)
         fprintf (stderr, "forwarding weak "FMTPTR" ",
                  (uintptr_t)w);
@@ -156,12 +156,12 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
     }
 
     /* Store the forwarding pointer in the old object header. */
-    *(getFwdPtrp(p)) = pointerToObjptr (s->forwardState.back + headerBytes,
+    *(getFwdPtrp(p)) = pointerToObjptr (s->forwardState.back + metaDataBytes,
                                         s->forwardState.toStart);
     assert (hasFwdPtr(p));
     /* Update the back of the queue. */
     s->forwardState.back += size + skip;
-    assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_HEADER_SIZE,
+    assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_METADATA_SIZE,
                        s->alignment));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
