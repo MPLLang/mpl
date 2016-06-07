@@ -429,8 +429,8 @@ structure ObjectType =
                           case !Control.align
                            of Control.Align4 => Bytes.fromInt 4
                             | Control.Align8 => Bytes.fromInt 8
-                      val bytesHeader =
-                          Bits.toBytes (Control.Target.Size.header ())
+                      val bytesMetaData =
+                          Bits.toBytes (Control.Target.Size.metaData ())
                       val bytesInGlobalHeapCounter =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesUseHierarchicalHeap =
@@ -449,7 +449,7 @@ structure ObjectType =
                               infix 6 +
                               val op+ = Bytes.+
                           in
-                              bytesHeader +
+                              bytesMetaData +
                               bytesInGlobalHeapCounter +
                               bytesUseHierarchicalHeap +
                               bytesBytesNeeded +
@@ -486,8 +486,8 @@ structure ObjectType =
                               Control.Align4 => Bytes.fromInt 4
                             | Control.Align8 => Bytes.fromInt 8
 
-                      val bytesHeader =
-                          Bits.toBytes (Control.Target.Size.header ())
+                      val bytesMetaData =
+                          Bits.toBytes (Control.Target.Size.metaData ())
                       val bytesLastAllocatedChunk =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesLock =
@@ -513,7 +513,7 @@ structure ObjectType =
                               infix 6 +
                               val op+ = Bytes.+
                           in
-                              bytesHeader +
+                              bytesMetaData +
                               bytesLastAllocatedChunk +
                               bytesLock +
                               bytesLevel +
