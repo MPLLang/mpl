@@ -22,7 +22,7 @@ clean:
 
 RESOLVE_SCOPES = program topdec strdec dec
 OBJPTR_MAPS = objptr-rep32.map objptr-rep64.map 
-METADATA_MAPS = metadata-size32.map metadata-size64.map
+METADATA_MAPS = metadata-size32.map metadata-size64.map metadata-size128.map
 SEQINDEX_MAPS = seqindex-int32.map seqindex-int64.map 
 DEFAULT_CHAR = char8
 DEFAULT_INT = int32 int64 intinf

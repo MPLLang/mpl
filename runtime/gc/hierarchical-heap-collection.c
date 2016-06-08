@@ -321,7 +321,7 @@ void forwardHHObjptr (GC_state s,
     header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    /* Compute the space taken by the header and object body. */
+    /* Compute the space taken by the metadata and object body. */
     size_t metaDataBytes;
     size_t objectBytes;
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
@@ -420,7 +420,7 @@ void forwardHHObjptr (GC_state s,
 #endif
     }
 
-    /* Store the forwarding pointer in the old object header. */
+    /* Store the forwarding pointer in the old object metadata. */
     *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
                                         s->heap->start);
     assert (hasFwdPtr(p));

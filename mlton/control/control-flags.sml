@@ -1079,17 +1079,21 @@ fun mlbPathMap () =
              path = (case Bits.toInt (Target.Size.objptr ()) of
                         32 => "rep32"
                       | 64 => "rep64"
-                      | _ => Error.bug "Control.mlbPathMap")},
+                      | b => Error.bug (concat ["Control.mlbPathMap: OBJPTR_REP (",
+                                                Int.toString b, ")"]))},
             {var = "METADATA_SIZE",
              path = (case Bits.toInt (Target.Size.metaData ()) of
                         32 => "size32"
                       | 64 => "size64"
-                      | _ => Error.bug "Control.mlbPathMap")},
+                      | 128 => "size128"
+                      | b => Error.bug (concat ["Control.mlbPathMap: METADATA_SIZE (",
+                                                Int.toString b, ")"]))},
             {var = "SEQINDEX_INT",
              path = (case Bits.toInt (Target.Size.seqIndex ()) of
                         32 => "int32"
                       | 64 => "int64"
-                      | _ => Error.bug "Control.mlbPathMap")},
+                      | b => Error.bug (concat ["Control.mlbPathMap: SEQINDEX_INT (",
+                                                Int.toString b, ")"]))},
             {var = "DEFAULT_CHAR",
              path = !defaultChar},
             {var = "DEFAULT_WIDECHAR",

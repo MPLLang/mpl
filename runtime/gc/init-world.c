@@ -67,6 +67,8 @@ void initVectors (GC_state s) {
     }
     *((GC_header*)(frontier)) = buildHeaderFromTypeIndex (typeIndex);
     frontier = frontier + GC_HEADER_SIZE;
+    *((objptr*)(frontier)) = BOGUS_OBJPTR;
+    frontier = frontier + OBJPTR_SIZE;
     s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, s->heap->start);
     if (DEBUG_DETAILED)
       fprintf (stderr, "allocated vector at "FMTPTR"\n",

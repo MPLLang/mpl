@@ -31,7 +31,8 @@ const char* objectTypeTagToString (GC_objectTypeTag tag) {
  * Returns a pointer to the header for the object pointed to by p.
  */
 GC_header* getHeaderp (pointer p) {
-  return (GC_header*)(p 
+  return (GC_header*)(p
+                      - OBJPTR_SIZE
                       - GC_HEADER_SIZE);
 }
 

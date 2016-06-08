@@ -28,7 +28,8 @@ bool isObjptrInToSpace (GC_state s, objptr op) {
  * Returns a pointer to the forwarding pointer for the object pointed to by p.
  */
 objptr* getFwdPtrp (pointer p) {
-  return (objptr*)(getHeaderp(p));
+  return (objptr*)(p
+                   - OBJPTR_SIZE);
 }
 
 /* getFwdPtr (p)
@@ -44,7 +45,7 @@ objptr getFwdPtr (pointer p) {
  * Returns true if the object pointed to by p has a valid forwarding pointer.
  */
 bool hasFwdPtr (pointer p) {
-  return (not (GC_VALID_HEADER_MASK & getHeader(p)));
+  return (getFwdPtr (p) != BOGUS_OBJPTR);
 }
 
 /* forward (s, opp)
@@ -89,7 +90,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
     header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    /* Compute the space taken by the header and object body. */
+    /* Compute the space taken by the metadata and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
       metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
@@ -155,7 +156,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       }
     }
 
-    /* Store the forwarding pointer in the old object header. */
+    /* Store the forwarding pointer in the old object metadata. */
     *(getFwdPtrp(p)) = pointerToObjptr (s->forwardState.back + metaDataBytes,
                                         s->forwardState.toStart);
     assert (hasFwdPtr(p));

@@ -40,8 +40,11 @@ pointer newObject (GC_state s,
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
-  *((GC_header*)frontier) = header;
-  result = frontier + GC_HEADER_SIZE;
+  *((GC_header*)(frontier)) = header;
+  frontier = frontier + GC_HEADER_SIZE;
+  *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  frontier = frontier + OBJPTR_SIZE;
+  result = frontier;
   assert (isAligned ((size_t)result, s->alignment));
   if (DEBUG)
     fprintf (stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX", %s)\n",

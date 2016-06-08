@@ -28,6 +28,7 @@
  * HierarchicalHeap objects are normal objects with the following layout:
  *
  * header ::
+ * fwdptr (object-pointer) ::
  * padding ::
  * lock (Int32) ::
  * level (Word32) ::

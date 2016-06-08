@@ -386,20 +386,31 @@ structure Statement =
             datatype z = datatype Operand.t
             fun bytes (b: Bytes.t): Operand.t =
                Word (WordX.fromIntInf (Bytes.toIntInf b, WordSize.csize ()))
-            val temp = Register (Register.new (Type.cpointer (), NONE))
+            val bytesNonMetaData = Bytes.- (size, Runtime.metaDataSize ())
          in
-            Vector.new4
-            (Move {dst = Contents {oper = Frontier,
+            Vector.new6
+            ((* *(( GC_header* )frontier) = header; *)
+             Move {dst = Contents {oper = Frontier,
                                    ty = Type.objptrHeader ()},
                    src = Word (WordX.fromIntInf (Word.toIntInf header,
                                                  WordSize.objptrHeader ()))},
-             PrimApp {args = Vector.new2 (Frontier,
-                                          bytes (Runtime.metaDataSize ())),
-                      dst = SOME temp,
+             (* frontier = frontier + GC_HEADER_SIZE *)
+             PrimApp {args = Vector.new2 (Frontier, bytes (Runtime.headerSize ())),
+                      dst = SOME Frontier,
+                      prim = Prim.cpointerAdd},
+             (* *(( objptr* )frontier) = BOGUS_OBJPTR; *)
+             Move {dst = Contents {oper = Frontier,
+                                   ty = Type.word (WordSize.objptr ())},
+                   src = Word (WordX.one (WordSize.objptr ()))},
+             (* frontier = frontier + OBJPTR_SIZE *)
+             PrimApp {args = Vector.new2 (Frontier, bytes (Runtime.objptrSize ())),
+                      dst = SOME Frontier,
                       prim = Prim.cpointerAdd},
              (* CHECK; if objptr <> cpointer, need non-trivial coercion here. *)
-             Move {dst = dst, src = Cast (temp, Operand.ty dst)},
-             PrimApp {args = Vector.new2 (Frontier, bytes size),
+             (* dst = frontier *)
+             Move {dst = dst, src = Cast (Frontier, Operand.ty dst)},
+             (* frontier = frontier + bytesNonMetaData *)
+             PrimApp {args = Vector.new2 (Frontier, bytes bytesNonMetaData),
                       dst = SOME Frontier,
                       prim = Prim.cpointerAdd})
          end
