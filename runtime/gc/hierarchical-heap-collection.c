@@ -268,7 +268,6 @@ void forwardHHObjptr (GC_state s,
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, s->heap->start);
-  GC_header header;
 
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -295,8 +294,7 @@ void forwardHHObjptr (GC_state s,
     return;
   }
 
-  header = getHeader (p);
-  if (not (GC_VALID_HEADER_MASK & header)) {
+  if (hasFwdPtr(p)) {
     if (DEBUG_DETAILED) {
       fprintf (stderr, "  already FORWARDED\n");
     }
@@ -308,7 +306,7 @@ void forwardHHObjptr (GC_state s,
     assert(opInfo.level >= args->minLevel);
   }
 
-  if (GC_VALID_HEADER_MASK & header) {
+  if (not (hasFwdPtr(p))) {
 #pragma message "More nuanced with non-local collection"
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
@@ -316,9 +314,11 @@ void forwardHHObjptr (GC_state s,
       return;
     }
     /* maybe forward the object */
+    GC_header header;
     GC_objectTypeTag tag;
     uint16_t bytesNonObjptrs;
     uint16_t numObjptrs;
+    header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
     /* Compute the space taken by the header and object body. */
@@ -421,15 +421,15 @@ void forwardHHObjptr (GC_state s,
     }
 
     /* Store the forwarding pointer in the old object header. */
-    *((objptr*)(p - GC_HEADER_SIZE)) = pointerToObjptr (copyPointer + headerBytes,
-                                                        s->heap->start);
-    assert (not (GC_VALID_HEADER_MASK & getHeader (p)));
+    *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + headerBytes,
+                                        s->heap->start);
+    assert (hasFwdPtr(p));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
 #pragma message "Shouldn't happen!"
 #if 0
       /* update level chunk head containingHH pointers */
-      HM_HH_updateLevelListPointers(*((objptr*)(p - GC_HEADER_SIZE)));
+      HM_HH_updateLevelListPointers(getFwdPtr(p));
 #else
     die(__FILE__ ":%d: "
         "forwardHHObjptr() does not support GC_HIERARCHICAL_HEAP_HEADER "
@@ -440,7 +440,7 @@ void forwardHHObjptr (GC_state s,
   }
 
 
-  *opp = *((objptr*)(p - GC_HEADER_SIZE));
+  *opp = getFwdPtr(p);
   if (DEBUG_DETAILED) {
     fprintf (stderr,
              "forwardHHObjptr --> *opp = "FMTPTR"\n",
