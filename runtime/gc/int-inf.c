@@ -1,4 +1,4 @@
-/* Copyright (C) 2012,2014 Matthew Fluet.
+/* Copyright (C) 2012,2014,2016 Matthew Fluet.
  * Copyright (C) 1999-2005, 2007-2008 Henry Cejtin, Matthew Fluet,
  *    Suresh Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -213,6 +213,7 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
   bp->counter = (GC_arrayCounter)0;
   bp->length = (GC_arrayLength)(size + 1); /* +1 for isneg field */
   bp->header = GC_INTINF_HEADER;
+  bp->fwdptr = BOGUS_OBJPTR;
   return pointerToObjptr ((pointer)&bp->obj, s->heap->start);
 }
 
@@ -316,6 +317,7 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->counter = (GC_arrayCounter)0;
   sp->length = (GC_arrayLength)size;
   sp->header = GC_STRING8_HEADER;
+  sp->fwdptr = BOGUS_OBJPTR;
   return pointerToObjptr ((pointer)&sp->obj, s->heap->start);
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2012,2014 Matthew Fluet.
+/* Copyright (C) 2012,2014,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -20,6 +20,7 @@ typedef struct GC_intInf {
   GC_arrayCounter counter;
   GC_arrayLength length;
   GC_header header;
+  objptr fwdptr;
   struct GC_intInf_obj obj;
 } __attribute__ ((packed)) *GC_intInf;
 
@@ -27,7 +28,8 @@ COMPILE_TIME_ASSERT(GC_intInf__obj_packed,
                     offsetof(struct GC_intInf, obj) ==
                     sizeof(GC_arrayCounter)
                     + sizeof(GC_arrayLength)
-                    + sizeof(GC_header));
+                    + sizeof(GC_header)
+                    + sizeof(objptr));
 COMPILE_TIME_ASSERT(GC_intInf_obj__isneg_packed,
                     offsetof(struct GC_intInf_obj, isneg) ==
                     0);
