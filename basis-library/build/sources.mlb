@@ -300,9 +300,6 @@ in
    ../mlton/exn.sig
    ../mlton/exn.sml
 
-   ann "allowFFI true" in
-      ../parallel/internal.sml
-   end
    ../mlton/thread.sig
    ../mlton/thread.sml
    ../mlton/signal.sig
@@ -384,6 +381,7 @@ in
    ../mlton/mono-array.sig
    ../mlton/mono-vector.sig
 
+   ../parallel/internal.sml
    ../parallel/workqueue.sig
    ../parallel/basic.sig
    ../parallel/syncvar.sig
