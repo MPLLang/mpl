@@ -178,23 +178,24 @@ fun click () =
 
 fun loop clfut pts hullfs ctr =
     let val _ = IO.yield ()
-        val hullfs =
-            if ctr = 0 then
-                List.foldl
-                    (fn (((x, y), hullf), r) =>
-                        case MLton.Parallel.FutureSuspend.poll hullf of
-                            SOME hull =>
-                            ((if List.length hull > 0 then
-                                  (drawlines (hull @ [List.hd hull]);
-                                   print ("hull (" ^ (Int.toString x) ^ ", " ^
-                                          (Int.toString y) ^ ")\n"))
-                              else ());
-                             r)
-                          | NONE => ((x, y), hullf)::r)
-                    []
-                    hullfs
-            else hullfs
-        val (clfut, hullfs) =
+        fun inner () =
+        let val hullfs =
+                if ctr = 0 then
+                    List.foldl
+                        (fn (((x, y), hullf), r) =>
+                            case MLton.Parallel.FutureSuspend.poll hullf of
+                                SOME hull =>
+                                ((if List.length hull > 0 then
+                                      (drawlines (hull @ [List.hd hull]);
+                                       print ("hull (" ^ (Int.toString x) ^ ", " ^
+                                              (Int.toString y) ^ ")\n"))
+                                  else ());
+                                 r)
+                              | NONE => ((x, y), hullf)::r)
+                        []
+                        hullfs
+                else hullfs
+        in
             case MLton.Parallel.FutureSuspend.poll clfut of
                 SOME (x, y) =>
                 let val pts' = add (x, y) pts
@@ -205,8 +206,10 @@ fun loop clfut pts hullfs ctr =
                      ((x, y), f)::hullfs)
                 end
               | NONE => (clfut,  hullfs)
+        end
+        val (clfut', hullfs') = (* MLton.Parallel.Basic.event *) inner ()
     in
-        loop clfut pts hullfs ((ctr + 1) mod 1000)
+        loop clfut' pts hullfs' ((ctr + 1) mod 1000)
     end
 
 val _ = MLton.Random.srand (case MLton.Random.seed () of
@@ -226,9 +229,9 @@ val r = 400.0
 val cx = 400.0
 val cy = 400.0
 fun randpt () =
-    let val th = randang ()
-        val x = cx + r * Math.cos th
-        val y = cy + r * Math.sin th
+    let (* val th = randang () *)
+        val x = randint () (* cx + r * Math.cos th *)
+        val y = randint () (* cy + r * Math.sin th *)
     in
         (Real.floor x, Real.floor y)
     end
@@ -237,15 +240,20 @@ fun randpoints n =
     if n = 0 then [] else
     (randpt ())::(randpoints (n - 1))
 
-val ptsl = randpoints 2000000
+val ptsl = randpoints 10
 val pts = fromList ptsl (* Array.tabulate (3500000, randpt) *)
 val f = MLton.Parallel.FutureSuspend.future (fn () => (print "starting\n";
                                                        qhull pts
                                                        before (print "done\n")))
-val _ = MLton.Parallel.ForkJoin.forkLat true
+val _ = loop
+            (MLton.Parallel.FutureSuspend.futureLat (true, click))
+            pts [((0, 0), f)] 0
+(*
+val _ = MLton.Parallel.ForkJoin.forkLat false
             ((fn () => ()),
              (fn () =>
                  ((* List.app (fn (x, y) => drawpoint NONE x y) ptsl; *)
                   loop
                       (MLton.Parallel.FutureSuspend.futureLat (true, click))
                       pts [((0, 0), f)] 0)))
+*)

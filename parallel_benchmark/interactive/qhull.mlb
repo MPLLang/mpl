@@ -17,4 +17,4 @@ x/graphics.mlb
 $(SML_LIB)/basis/parallel/io.sig
 $(SML_LIB)/basis/parallel/io.sml
 
-qhull.sml
+qhull2.sml

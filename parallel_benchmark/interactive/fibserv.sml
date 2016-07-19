@@ -17,9 +17,10 @@ fun inputLine () =
 (* Compute and print Fibonacci of $n$  *)
 fun fib n () =
   let fun fib' n () =
-      if n <= 1 then n
-      else let fun fork (f, g) = if n < 20 then (f (), g ()) else
-                              MLton.Parallel.ForkJoin.fork (f, g)
+      if n <= 1 then 1
+      else let fun fork (f, g) = if n <= 20 then (f (), g ()) else
+                                 ((* print ((Int.toString n) ^ "\n"); *)
+                                  MLton.Parallel.ForkJoin.fork (f, g))
                val (r1, r2) =
                  fork (fib' (n-1), fib' (n-2))
            in r1 + r2
@@ -30,7 +31,8 @@ fun fib n () =
 (* Read request from user and compute if needed. *)
 fun fib_server () =
   let fun loop futures =
-        let val request = inputLine ()
+        let val _ = print "Enter a number.\n"
+            val request = inputLine ()
         in case request of
              NONE => List.app MLton.Parallel.FutureSuspend.touch futures
            | SOME s =>
@@ -38,10 +40,12 @@ fun fib_server () =
                   NONE => loop futures
                 | SOME n =>
                   let val _ = print ("Computing fib(" ^ (Int.toString n) ^ ")\n")
-                      val f = MLton.Parallel.FutureSuspend.future (fib n)
+                      val f = MLton.Parallel.FutureSuspend.futureLat (false, fib n)
                   in loop (f::futures) end)
         end
   in loop []
   end
 
-val _ = fib_server ()
+val _ = print "Starting\n"
+
+val _ = MLton.Parallel.ForkJoin.forkLat true ((fn () => ()), fib_server)
