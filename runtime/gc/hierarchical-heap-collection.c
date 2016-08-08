@@ -15,23 +15,13 @@
 
 #include "hierarchical-heap-collection.h"
 
-/********************************/
-/* Static Structures and Macros */
-/********************************/
-#if ASSERT
-#define COPY_OBJECT_HH_VALUE                            \
-  ((struct HM_HierarchicalHeap*)(0x0112358DABBAD00))
-#else
-#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(NULL))
-#endif
-
 /******************************/
 /* Static Function Prototypes */
 /******************************/
 /**
- * Copies the object into the destination level list
+ * Copies the object into the new level list of the hierarchical heap provided.
  *
- * @param destinationLevelList The level list to copy the object into
+ * @param hh The hierarchical heap to operate on.
  * @param p The pointer to copy
  * @param size The number of bytes to copy
  * @param level The level to copy into
@@ -39,7 +29,7 @@
  *
  * @return pointer to the copied object
  */
-pointer copyObject(void** destinationLevelList,
+pointer copyObject(struct HM_HierarchicalHeap* hh,
                    pointer p,
                    size_t size,
                    Word32 level,
@@ -397,17 +387,18 @@ void forwardHHObjptr (GC_state s,
     size_t size = headerBytes + objectBytes;
     /* Copy the object. */
     if (opInfo.level > args->maxLevel) {
+      assert(FALSE && "Entanglement Detected!");
       DIE("Pointer Invariant violated!");
     }
 
-    pointer copyPointer = copyObject(&(args->hh->newLevelList),
+    pointer copyPointer = copyObject(args->hh,
                                      p - headerBytes,
                                      size,
                                      opInfo.level,
                                      opInfo.chunkList);
 
     args->bytesCopied += size;
-    LOG(args->log, TRUE, L_DEBUG,
+    LOG(TRUE, TRUE, L_INFO,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
@@ -458,34 +449,45 @@ void forwardHHObjptr (GC_state s,
 
 
   *opp = *((objptr*)(p));
+#pragma message "Redone as log message"
+#if 0
   if (DEBUG_DETAILED) {
     fprintf (stderr,
              "forwardHHObjptr --> *opp = "FMTPTR"\n",
              (uintptr_t)*opp);
   }
+#else
+  LOG(TRUE, TRUE, L_INFO,
+      "opp %p set to %p",
+      opp,
+      *opp);
+#endif
 
 #if ASSERT
   /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
   gotObjptrInfo = HM_getObjptrInfo(s, *opp, &opInfo);
   assert(gotObjptrInfo);
-  assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
+  assert(args->hh == opInfo.hh);
 #endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
-pointer copyObject(void** destinationLevelList,
+pointer copyObject(struct HM_HierarchicalHeap* hh,
                    pointer p,
                    size_t size,
                    Word32 level,
                    void* fromChunkList) {
+#pragma message "Remove when done"
+#if 1
   static size_t maxSize = 0;
+#endif
 
   /* get the saved level head */
   void* chunkList = HM_getChunkListToChunkList(fromChunkList);
 #if ASSERT
   if (NULL == chunkList) {
     void* cursor;
-    for (cursor = *destinationLevelList;
+    for (cursor = hh->newLevelList;
          (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
          cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
     }
@@ -494,7 +496,7 @@ pointer copyObject(void** destinationLevelList,
     assert(HM_getChunkListLevel(chunkList) == level);
 
     void* cursor;
-    for (cursor = *destinationLevelList;
+    for (cursor = hh->newLevelList;
          (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
          cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
     }
@@ -506,10 +508,10 @@ pointer copyObject(void** destinationLevelList,
   void* chunk;
   if (NULL == chunkList) {
     /* Level does not exist, so create it */
-    chunk = HM_allocateLevelHeadChunk(destinationLevelList,
+    chunk = HM_allocateLevelHeadChunk(&(hh->newLevelList),
                                       size,
                                       level,
-                                      COPY_OBJECT_HH_VALUE);
+                                      hh);
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }

@@ -54,6 +54,17 @@ struct
        TextIO.flushOut TextIO.stdErr;
        MLtonProcess.exit MLtonProcess.Status.failure)
 
+  fun dbgmsg m =
+      let
+          val p = Word32.toInt (I.processorNumber ())
+      in
+          print (String.concat ["[",
+                                Int.toString p,
+                                "] ",
+                                m,
+                                "\n"])
+      end
+
   fun setAndUseHH (hh : HH.t) : unit = (HM.enterGlobalHeap ();
                                         HH.set hh;
                                         HH.useHierarchicalHeap ();
@@ -75,6 +86,8 @@ struct
            else ();
 
            (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
+
+           dbgmsg "stole work";
 
            Q.startWork p;
 

@@ -23,6 +23,10 @@ void callIfIsObjptr (GC_state s,
                      objptr *opp,
                      void* fArgs) {
   if (isObjptr (*opp)) {
+    LOG(TRUE, TRUE, L_DEBUG,
+        "Calling for opp %p op %p",
+        opp,
+        *opp);
     f(s, opp, fArgs);
   }
 }
@@ -283,6 +287,9 @@ pointer foreachObjptrInRange (GC_state s,
                  "  front = "FMTPTR"  *back = "FMTPTR"\n",
                  (uintptr_t)front, (uintptr_t)(*back));
       }
+      LOG(TRUE, TRUE, L_DEBUG,
+          "front = "FMTPTR"  *back = "FMTPTR,
+          (uintptr_t)front, (uintptr_t)(*back));
 
       pointer p = advanceToObjectData (s, front);
       assert (isAligned ((size_t)p, s->alignment));
@@ -356,7 +363,7 @@ pointer nextValidPointer(pointer* end,
     /* can only be as many holes as processors */
     for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       if (nextP >= holes[i].start && nextP < holes[i].end) {
-        LOG(TRUE, TRUE, L_DEBUG,
+        LOG(TRUE, TRUE, L_INFO,
             "Skipping hole nextP = %p holeProc = %" PRIu32 " holeStart = %p "
             "holeEnd = %p",
             ((void*)(nextP)),

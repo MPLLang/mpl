@@ -16,9 +16,20 @@ struct
   val numTasks = Array.array (Word32.toInt I.numberOfProcessors, 0)
   fun incrTask n =
       let
-          val p = (Word32.toInt o I.processorNumber) ()
+          val p = Word32.toInt (I.processorNumber ())
       in
           Array.update (numTasks, p, Array.sub (numTasks, p) + n)
+      end
+
+  fun dbgmsg m =
+      let
+          val p = Word32.toInt (I.processorNumber ())
+      in
+          print (String.concat ["[",
+                                Int.toString p,
+                                "] ",
+                                m,
+                                "\n"])
       end
 
   (* RAM_NOTE: How to handle exceptions and heaps? *)
@@ -49,6 +60,7 @@ struct
               (* make sure a hh is set *)
               val hh = HH.get ()
               val level = HH.getLevel hh
+              val () = dbgmsg ("(" ^ (Int.toString level) ^ "): Called fork")
 
               (* Make sure calling thread is set to use hierarchical heaps *)
               val () = HH.useHierarchicalHeap ()
@@ -94,13 +106,16 @@ struct
               val t = B.addRight (rightside, level)(* might suspend *)
 
               (* Run the left side in the hierarchical heap *)
+              val () = dbgmsg ("(" ^ (Int.toString level) ^ "): START left")
               val a = evaluateFunction f (fn () => (ignore (B.remove t);
                                                     B.yield ()))
+              val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END left")
 
               (*
                * Try to retract our offer -- if successful, run the right side
                * ourselves.
                *)
+              val () = dbgmsg ("(" ^ (Int.toString level) ^ "): START right")
               val b =
                   if B.remove t
                   then
@@ -108,17 +123,20 @@ struct
                        * no need to yield since we expect this work to be the
                        * next thing in the queue
                        *)
-                      evaluateFunction g (fn () => B.yield ())
+                      (dbgmsg ("(" ^ (Int.toString level) ^ "): right not stolen");
+                       evaluateFunction g (fn () => B.yield ()))
                   else
                       (* must have been stolen, so I have a heap to merge *)
-                      case V.read var
-                       of (_, Finished (b, childHH)) =>
-                          (HH.mergeIntoParent childHH;
-                           b)
-                        | (_, Raised (e, childHH)) =>
-                          (HH.mergeIntoParent childHH;
-                           B.yield ();
-                           raise e)
+                      (dbgmsg ("(" ^ (Int.toString level) ^ "): right stolen");
+                       case V.read var
+                        of (_, Finished (b, childHH)) =>
+                           (HH.mergeIntoParent childHH;
+                            b)
+                         | (_, Raised (e, childHH)) =>
+                           (HH.mergeIntoParent childHH;
+                            B.yield ();
+                            raise e))
+              val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END right")
 
               (*
                * At this point, g is done and merged, as if it was performed

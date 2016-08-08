@@ -136,7 +136,7 @@ static void ChunkPool_maybeSplitSpan (
  * @return The corresponding chunk
  */
 static void* ChunkPool_chunkMetadataToChunk (
-    const struct ChunkPool_chunkMetadata* chunkMetadata);
+    const volatile struct ChunkPool_chunkMetadata* chunkMetadata);
 
 /**
  * Map chunk pointer to the chunkMetadata object
@@ -323,7 +323,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         /* done with free list modifications at this point, so unlock */
         pthread_mutex_unlock_safe(&ChunkPool_lock);
         void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
-        LOG(TRUE, TRUE, L_DEBUG, "Allocating chunk %p", chunk);
+        LOG(TRUE, TRUE, L_INFO, "Allocating chunk %p", chunk);
         return chunk;
       }
     }
@@ -391,7 +391,7 @@ void* ChunkPool_find (void* object) {
 
   const void* containingChunk = ((void*)(((size_t)(object)) &
                                          ~ChunkPool_CHUNKADDRESSMASK));
-  const struct ChunkPool_chunkMetadata* chunkMetadata =
+  const volatile struct ChunkPool_chunkMetadata* chunkMetadata =
       ChunkPool_chunkToChunkMetadata (containingChunk);
   void* chunk = NULL;
 
@@ -403,10 +403,11 @@ void* ChunkPool_find (void* object) {
     chunk = ChunkPool_chunkMetadataToChunk(chunkMetadata);
   }
 
-  assert(ChunkPool_ALLOCATED ==
-         ChunkPool_chunkToChunkMetadata(chunk)->previous);
-  assert(ChunkPool_ALLOCATED ==
-         ChunkPool_chunkToChunkMetadata(chunk)->next);
+#if ASSERT
+  chunkMetadata = ChunkPool_chunkToChunkMetadata(chunk);
+  assert(ChunkPool_ALLOCATED == chunkMetadata->previous);
+  assert(ChunkPool_ALLOCATED == chunkMetadata->next);
+#endif
 
   return chunk;
 }
@@ -427,7 +428,7 @@ size_t ChunkPool_chunkSize(void* chunk) {
   assert (chunk < ChunkPool_poolEnd);
   assert(((void*)(((size_t)(chunk)) & ~ChunkPool_CHUNKADDRESSMASK)) == chunk);
 
-  const struct ChunkPool_chunkMetadata* chunkMetadata =
+  const volatile struct ChunkPool_chunkMetadata* chunkMetadata =
       ChunkPool_chunkToChunkMetadata(chunk);
 
 
@@ -476,7 +477,7 @@ void ChunkPool_insertIntoFreeList (
 }
 
 bool ChunkPool_performFree(void* chunk) {
-  LOG(TRUE, TRUE, L_DEBUG, "Freeing chunk %p", chunk);
+  LOG(TRUE, TRUE, L_INFO, "Freeing chunk %p", chunk);
 
   struct ChunkPool_chunkMetadata* spanStart =
       ChunkPool_chunkToChunkMetadata (chunk);
@@ -651,7 +652,7 @@ void ChunkPool_maybeSplitSpan (
 }
 
 void* ChunkPool_chunkMetadataToChunk (
-    const struct ChunkPool_chunkMetadata* chunkMetadata) {
+    const volatile struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
   size_t chunkIndex = chunkMetadata - ChunkPool_chunkMetadatas;
