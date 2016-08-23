@@ -19,7 +19,8 @@ fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) op
             TextIO.StreamIO.input1 is
         else
             (* Performing the input would block *)
-            (B.suspend (fn t => B.addtoio (t, f));
+            (print "calling suspend\n";
+             B.suspend (fn t => B.addtoio (t, f));
              input1 is)
     end
 
@@ -27,12 +28,13 @@ fun print s = MLton.Thread.atomically (fn () => TextIO.print s)
 
 fun yield () =
     let val ready = ref false
-        fun f () =
-            let val r = !ready
+        fun f () = true
+(*            let val r = !ready
                 val _ = ready := true
             in
                 r
             end
+*)
     in
         B.suspend (fn t => B.addtoio (t, f))
     end

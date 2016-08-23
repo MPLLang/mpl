@@ -320,7 +320,7 @@ struct
           end
         else
           let
-            val () = print "resizing!"
+            (* val () = print "resizing!" *)
             val w = A.tabulate (l * 2,
                                 fn k => if k < (i - j) then A.sub (w, k + j)
                                         else Empty)
@@ -474,7 +474,7 @@ struct
                           | Work tw =>
                             (pr p "queue-steal:";
                              incr successfulSteals;
-                             SOME (true, #2 tw))
+                             SOME (true, false, #2 tw))
                       end
                         before (A.update (!work, i - 1, Empty);
                                 count p "queue-steal" ~1;
@@ -493,7 +493,7 @@ struct
                           | Work tw =>
                             (pr p "work-steal:";
                              incr successfulSteals;
-                             SOME (true, #2 tw))
+                             SOME (true, false, #2 tw))
                       end
                         before (count p "work-steal" ~1;
                                 unsync ())
@@ -523,7 +523,7 @@ struct
                    case A.sub (!work, j)
                     of Empty => raise WorkQueue
                      | Marker => NONE (* just return and loop again *)
-                     | Work tw => SOME (true, #2 tw))
+                     | Work tw => SOME (true, false, #2 tw))
                   before (A.update (!work, j, Empty);
                           count p "get-oldest" ~1;
                           (* dekkerUnlock (true, lock); *)
@@ -537,8 +537,8 @@ struct
                                   releaseLock thiefLock;
                                   case getWork p
                                    of NONE => NONE
-                                    | SOME (_, w) => SOME (true, w))
-                     | Work tw => SOME (false, #2 tw)
+                                    | SOME (_, _, w) => SOME (true, false, w))
+                     | Work tw => SOME (false, false, #2 tw)
                                   before (A.update (!work, i - 1, Empty);
                                           count p "get" ~1;
                                           (* dekkerUnlock (true, lock); *)
@@ -673,7 +673,7 @@ struct
 (* what if a job J is added, then that queue is suspended, then resumed by a
   different processor.  then the token (the proc number at the time J was
   added) doesn't reflect which lock should be take nor which queue *)
-  fun removeWork (p', Token r) =
+  fun removeWorkLat (_, p', Token r) =
       let
         (* val () = pr p' "before-remove" *)
         val Queue { index, ... } = case !r of SOME q => q | NONE => (print "remove\n"; raise WorkQueue)
@@ -737,6 +737,10 @@ struct
         found
         before unsync ()
       end
+
+  fun removeWork (a, b) = removeWorkLat (false, a, b)
+
+  fun stringOfToken _ = ""
 
   fun shouldYield _ = false
 

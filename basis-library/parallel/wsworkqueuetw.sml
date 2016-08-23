@@ -418,8 +418,8 @@ struct
                   else
                     !activeQueues
         in
-            (* XXX uncomment this Word.toIntX (MLtonRandom.rand ()) mod n *)
-            (if p = 3 then 2 else 3) mod n
+            Word.toIntX (MLtonRandom.rand ()) mod n
+            (* (if p = 3 then 2 else 3) mod n *)
         end
   in
   fun getWorkLat lat p =
@@ -456,33 +456,7 @@ struct
                 else ()
             (* Who to steal from? *)
             val p' = victim p
-            val unsync =
-                if p' < numberOfProcessors then
-                  let
-                    (* Release our own lock *)
-                    (* val () = dekkerUnlock (true, lock) *)
-                    val () = releaseLock thiefLock (* XTRA *)
-                    (* Take the victim's lock *)
-                    val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
-                    (* val () = print "takeLock unsync\n" *)
-                    val () = takeLock thiefLock
-                    (* val () = dekkerLock (false, ownerLock) *)
-                  in
-                    fn () => ((* dekkerUnlock (false, ownerLock); *)
-                        (* print "unsync\n"; *)
-                              releaseLock thiefLock)
-                  end
-                else
-                  let
-                    (* Here we hold on to our own lock, since we might modify
-                      our own queue. *)
-                    val () = takeLock masterLock
-                  in
-                    fn () => (releaseLock masterLock;
-                              (* print "unsync"; *)
-                              (* dekkerUnlock (true, lock); *)
-                              releaseLock thiefLock (* XTRA *))
-                  end
+            fun unsync1 () = releaseLock thiefLock
             fun maybeCleanup () =
                 (if p' < numberOfProcessors then false (* can't remove owned queues *)
                 else if p' >= !activeQueues then false (* can't remove inactive queues *)
@@ -504,7 +478,7 @@ struct
                                         raise WorkQueue)
           in
             case A.sub (queues, p')
-             of NONE => ((incr failedSteals; unsync (); yield (); NONE)
+             of NONE => ((incr failedSteals; unsync1 (); yield (); NONE)
                          handle Overflow => (print "449!\n";
                                              raise WorkQueue))
               | SOME (q as Queue { bottom, top, work, index, ... }) =>
@@ -512,7 +486,47 @@ struct
                   val j = !bottom
                   val i = !top
                 in(
+                    (* Check queue without lock first *)
                     if i <> j then (* not empty *)
+                        let
+            val unsync =
+                if p' < numberOfProcessors then
+                  let
+                    (* Release our own lock *)
+                    (* val () = dekkerUnlock (true, lock) *)
+                    val () = unsync1 () (* XTRA *)
+                    (* Take the victim's lock *)
+                    val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
+                    (* val () = print "takeLock unsync\n" *)
+                    val () = takeLock thiefLock
+                    (* val () = dekkerLock (false, ownerLock) *)
+                  in
+                    fn () => ((* dekkerUnlock (false, ownerLock); *)
+                        (* print "unsync\n"; *)
+                              releaseLock thiefLock)
+                  end
+                else
+                  let
+                    (* Here we hold on to our own lock, since we might modify
+                      our own queue. *)
+                    val () = takeLock masterLock
+                  in
+                    fn () => (releaseLock masterLock;
+                              (* print "unsync"; *)
+                              (* dekkerUnlock (true, lock); *)
+                              releaseLock thiefLock (* XTRA *))
+                  end
+                        in
+            case A.sub (queues, p')
+             of NONE => ((incr failedSteals; unsync (); yield (); NONE)
+                         handle Overflow => (print "449!\n";
+                                             raise WorkQueue))
+              | SOME (q as Queue { bottom, top, work, index, ... }) =>
+                let
+                  val j = !bottom
+                  val i = !top
+                in (
+                    if i <> j then (* check again *)
                     (* if Int.abs (i - j) > 1 then *)
                     if P.stealEntireQueues andalso p' >= numberOfProcessors
                        andalso (not P.stealFromSuspendedQueues orelse p' < !activeQueues) then
@@ -542,7 +556,6 @@ struct
                           | Work tw =>
                             ((pr p "queue-steal:";
                              incr successfulSteals;
-                             print "steal\n";
                              SOME (true, lat, #2 tw))
                              handle Overflow => (print "486!\n";
                                                  raise WorkQueue))
@@ -563,7 +576,6 @@ struct
                           | Marker => NONE
                           | Work tw =>
                             ((pr p "work-steal:";
-                              print "steal\n";
                              incr successfulSteals;
                              SOME (true, lat, #2 tw))
                              handle Overflow => (print "507\n";
@@ -576,6 +588,16 @@ struct
                      count p "failed-steal" 0;
                      incr failedSteals;
                      unsync (); (* (if lat then usleep 1000 else *) yield ();
+                     NONE)
+                     handle Overflow => (print "517!\n";
+                                         raise WorkQueue)))
+                end
+                        end
+                   else
+                    ((count p "failed-steal" 0;
+                     incr failedSteals;
+                     unsync1 ();
+                     yield ();
                      NONE)
                      handle Overflow => (print "517!\n";
                                          raise WorkQueue)))

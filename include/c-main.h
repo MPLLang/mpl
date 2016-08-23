@@ -63,6 +63,7 @@ void MLton_threadFunc (void* arg) {                                     \
   sigset_t mask;                                                        \
   sigemptyset(&mask);                                                   \
   sigaddset(&mask, SIGALRM);                                            \
+  sigaddset(&mask, SIGUSR1);                                            \
   pthread_sigmask(SIG_BLOCK, &mask, NULL);                              \
                                                                         \
   /* Save our state locally */                                          \
@@ -105,9 +106,14 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
   MLtonThreadFunc(mc, ml)                                               \
                                                                         \
+  pthread_t *threads;                                                   \
+                                                                        \
+  void signal_thread(int p, int sig) {                                  \
+    pthread_kill(threads[p], sig);                                      \
+  }                                                                     \
+                                                                        \
   PUBLIC int MLton_main (int argc, char* argv[]) {                      \
     int procNo;                                                         \
-    pthread_t *threads;                                                 \
     {                                                                   \
       struct GC_state s;                                                \
       /* Initialize with a generic state to read in @MLtons, etc */     \

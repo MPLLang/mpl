@@ -430,6 +430,15 @@ struct
   in
   fun getWorkLat lat p =
     let
+        (*
+        val _ = takeLock masterLock
+        val _ =
+            if lat then
+                print ("getting latency work on " ^ (Int.toString p) ^ "\n")
+            else
+                print ("getting non-latency work on " ^ (Int.toString p) ^ "\n")
+        val _ = releaseLock masterLock
+        *)
        (* val _ =
             if p = 0 then print ("getting work on " ^ (Int.toString p) ^ "\n")
             else () *)
@@ -620,17 +629,22 @@ struct
   end
   end
 
-  fun getWork p =
+  fun getWorkN n p =
       let val lat = P.workOnLatency numberOfProcessors p
-          val try = getWorkLat lat p
       in
-          if lat then
-              case try of
-                  SOME _ => try
-                | NONE => getWorkLat false p
+          if n = 0 then
+              ((* print "hit base case\n"; *)
+               getWorkLat false p)
           else
-              try
+              case getWorkLat lat p of
+                  SOME w =>
+                  ((* print ("latency on " ^ (Int.toString p) ^ "\n"); *)
+                   SOME w)
+                | NONE => getWorkN (n - 1) p
       end
+
+  fun getWork p =
+      getWorkN (numberOfProcessors * 10) p
 
   fun startWork p =
       let

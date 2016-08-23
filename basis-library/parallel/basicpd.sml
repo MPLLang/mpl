@@ -6,7 +6,14 @@ val releaseLock = _import "Parallel_lockRelease" runtime private: int ref -> uni
 
 val printLock = ref ~1
 
-fun print s =
+fun print s = ()
+(*
+    (takeLock printLock;
+     TextIO.print s;
+     releaseLock printLock)
+*)
+
+fun eprint s =
     (takeLock printLock;
      TextIO.print s;
      releaseLock printLock)
@@ -43,7 +50,7 @@ structure S = MLtonSignal
 val prim_sig = MLtonItimer.signal MLtonItimer.Real
 val sec_sig = Posix.Signal.usr1
 
-val delta = 100 (* microseconds *)
+val delta = 1000 (* microseconds *)
 
 fun block_sigs p =
     if p = 0 then
@@ -93,8 +100,21 @@ fun newQueue lat =
       lat = lat
     }
 
-val fqueues = A.array (P, newQueue true)
-val bqueues = A.array (P, newQueue false)
+val fqueues = A.tabulate (P, fn _ => newQueue true)
+val bqueues = A.tabulate (P, fn _ => newQueue false)
+
+fun test () =
+    let val Queue {top = top1, bottom = _, work = _, lat = _} = A.sub (fqueues, 0)
+        val Queue {top = top2, bottom = _, work = _, lat = _} = A.sub (fqueues, 1)
+    in
+        top1 := 42;
+        print ((Int.toString (!top2)) ^ "\n")
+    end
+
+(* val _ = if top1 = top2 then
+            eprint "Aliasing!\n"
+        else () *)
+
 
 val successfulSteals = ref 0
 fun resetSteals () = successfulSteals := 0
@@ -102,8 +122,11 @@ fun incSteals () = successfulSteals := !successfulSteals + 1
 fun reportSuccessfulSteals () = !successfulSteals
 fun reportFailedSteals () = 0
 
-val waiting = ~1
-val notwaiting = ~2
+val notwaiting = ~1
+val notask = ~2
+val bgtask = ~3
+val fgtask = ~4
+
 type cellval = (bool * job) option
 val commcells = V.tabulate (P, fn _ => ref notwaiting)
 val taskcells = A.array (P, NONE)
@@ -150,6 +173,22 @@ fun resize (Queue {top, bottom, work, ... }) =
             end
     end
 
+fun queuesWithWork lat =
+    let fun hasWork p =
+            let val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
+                val Queue {top, bottom, ...} = q
+                val i = !top
+                val j = !bottom
+            in
+                if i <> j then
+                    (print ((Int.toString p) ^ " has " ^ (Int.toString (i - j)) ^ "\n");
+                     true)
+                else false
+            end
+    in
+        List.length (List.filter hasWork (List.tabulate (P, fn i => i)))
+    end
+
 fun add (q as Queue {top, bottom, work, ... }) (tw as (t, w)) =
     let
         val i = !top
@@ -174,7 +213,7 @@ fun popTop (q as Queue {top, bottom, work, ... }) =
              case A.sub (w, j) of
                  Empty => raise WorkQueue
                | Work (t, w) => w)
-            handle e => (print "here 174\n"; raise e)
+            handle e => (print "here 215\n"; raise e)
     end
 
 fun topIsRThread (q as Queue {top, bottom, work, ... }) =
@@ -188,6 +227,20 @@ fun topIsRThread (q as Queue {top, bottom, work, ... }) =
           | _ => false
     end
 
+fun popBottom  (q as Queue {top, bottom, work, ... }) =
+    let val i = !top
+        val j = !bottom
+        val w = !work
+    in
+        if i = j then raise WorkQueue (* empty *)
+        else
+            (top := i - 1;
+             case A.sub (w, i - 1) of
+                 Empty => raise WorkQueue
+               | Work (t, w) => w)
+            handle e => (print "here 240\n"; raise e)
+    end
+
 fun dealAttempt p =
     let val (fq as Queue {top, bottom, work, ...}) = A.sub (fqueues, p)
         val fi = !top
@@ -197,36 +250,44 @@ fun dealAttempt p =
         val bi = !top
         val bj = !bottom
         val bw = !work
-    in
-        if (fi = fj orelse topIsRThread fq) andalso
-           (bi = bj orelse topIsRThread bq) then (* both empty *)
-            false
-        else
-            let val p' = Word.toIntX (MLtonRandom.rand ()) mod P
-                val c = V.sub (commcells, p')
-                (* val _ = A.update (taskcells, p, NONE)
-                   Shouldn't do this; the receiver should reset it. *)
+        val p' = Word.toIntX (MLtonRandom.rand ()) mod P
+        val c = V.sub (commcells, p')
+        val vv = !c
+        val havefg = fi <> fj (* andalso not (topIsRThread fq) *)
+        val havebg = bi <> bj (* andalso not (topIsRThread bq) *)
+        fun haveBetter pri =
+            (print ("fg: " ^ (Int.toString (fi - fj)) ^ ", bg: " ^
+                    (Int.toString (bi - bj)) ^ "\n");
+             print ("pri = " ^ (Int.toString pri) ^ "\n");
+             print ("havefg: " ^ (Bool.toString havefg) ^ ", havebg: " ^
+                     (Bool.toString havebg) ^ "\n");
+            let val hb = (pri = notask andalso (havefg orelse havebg))
+                         orelse
+                         (pri = bgtask andalso havefg)
             in
-                if p' = p then false
+                print (if hb then "true\n" else "false\n");
+                hb
+            end)
+    in
+        if p' = p orelse vv >= notwaiting orelse not (haveBetter vv)
+        then false
+        else
+            (case A.sub (taskcells, p) of
+                SOME _ => false (* have an outstanding deal *)
+              | NONE =>
+                if compareAndSwap (c, vv, p) then
+                    let val (isLat, q) =
+                            if havefg then (true, fq)
+                            else (false, bq)
+                    in
+                        A.update (taskcells, p, SOME (isLat, popTop q));
+                        print ("Dealt a task to " ^ (Int.toString p') ^ "\n");
+                        true
+                    end
                 else
-                    if !c = waiting then
-                        case A.sub (taskcells, p) of
-                            NONE =>
-                            if compareAndSwap (c, waiting, p) then
-                                let val (isLat, q) =
-                                        if (fi = fj orelse topIsRThread fq)
-                                        then (false, bq)
-                                        else (true, fq)
-                                in
-                                    A.update (taskcells, p,
-                                              SOME (isLat, popTop q));
-                                    true
-                                end
-                            else
-                                false
-                          | SOME _ => false
-                    else false
-            end
+                    (* Someone else dealt a task *)
+                    (print "failed at 281\n"; false)
+            )
     end
 
 fun communicate p =
@@ -250,11 +311,30 @@ fun communicate p =
     else
         ()
 
+fun checkP ln p =
+    let val p' = processorNumber () in
+        if p <> p' then
+            eprint ("wrong p at " ^ (Int.toString ln) ^ ": " ^
+                   (Int.toString p) ^ " != " ^ (Int.toString p') ^ "\n")
+        else ()
+    end
+
 
 fun addWork (lat, p, tws) =
-    let val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
+    let val n = queuesWithWork lat
+        val _ = checkP 271 p
+        val _ = print ("Added " ^ (if lat then "lat " else "") ^ "work(" ^
+                       (Int.toString (List.length tws)) ^ ") on " ^
+                       (Int.toString p) ^ "\n")
+        val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
+        val _ = ignore (List.map (add q) tws)
+        val n' = queuesWithWork lat
     in
-        ignore (List.map (add q) tws)
+        if n' - n > 1 then
+            eprint ("Added more work: n = " ^ (Int.toString n) ^ ", n' = "
+                    ^ (Int.toString n') ^ "\n")
+        else
+            ()
     end
 
 fun maybeMove {top, bottom, work} =
@@ -357,7 +437,8 @@ val policyName = "Prompt private deques"
   val inpio = ref false
 
   fun procio p =
-      let (* val _ = if p = 1 then print "enter procio\n" else () *)
+      let val _ = checkP 387 p
+          (* val _ = if p = 1 then print "enter procio\n" else () *)
           val _ = if p = 0 then ((if !inpio then
                                      print "Entered procio twice!\n"
                                  else ());
@@ -368,7 +449,7 @@ val policyName = "Prompt private deques"
               List.foldl
                   (fn ((t, f), (rsm, r)) =>
                       (* if latency t then *)
-                          if f () then (print "resumed\n"; resume (mkLat t, ()); (true, r))
+                          if f () then (print ("resumed on " ^ (Int.toString p) ^ "\n"); resume (mkLat t, ()); (true, r))
                                        handle e => (print "here 142\n"; raise e)
                           else (rsm, (t, f)::r)
                       (* else raise (Parallel "Invariant violated!\n") *)
@@ -383,6 +464,7 @@ val policyName = "Prompt private deques"
 
 val waitingForTask = ref false
 
+(*
 fun getWorkLat lat p =
     let (* val _ = print "getWorkLat\n" *)
         val _ = if p <> processorNumber () then
@@ -469,14 +551,6 @@ fun getWorkLat lat p =
             handle e => (print "here 437\n"; raise e)
     end
 
-fun checkP ln p =
-    let val p' = processorNumber () in
-        if p <> p' then
-            print ("wrong p at " ^ (Int.toString ln) ^ ": " ^
-                   (Int.toString p) ^ " != " ^ (Int.toString p') ^ "\n")
-        else ()
-    end
-
 fun getWork p =
     (case getWorkLat true p of
         NONE => getWorkLat false p
@@ -485,9 +559,12 @@ fun getWork p =
     (if p <> processorNumber () then
          print "wrong p at 478\n"
      else ())
+*)
 
-fun getWorkMaybeLat lat p =
-    let val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
+
+fun getWorkLat lat p =
+    let val _ = checkP 513 p
+        val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
         val Queue {top, bottom, work, ...} = q
         val i = !top
         val j = !bottom
@@ -495,17 +572,15 @@ fun getWorkMaybeLat lat p =
     in
         if i = j then NONE
         else
-            (case A.sub (w, i - 1) of
-                Empty => raise WorkQueue
-              | Work (_, wrk) =>
-                (top := i - 1;
-                 SOME (false, lat, wrk)))
-            handle e => (print "here 460\n"; raise e)
+            (checkP 525 p;
+             print ("got work on " ^ (Int.toString p) ^ "\n");
+             SOME (false, lat, popBottom q))
+            handle e => (print "here 513\n"; raise e)
     end
 
-fun getWorkMaybe p =
-    case getWorkMaybeLat true p of
-        NONE => getWorkMaybeLat false p
+fun getWork p =
+    case getWorkLat true p of
+        NONE => getWorkLat false p
       | SOME w => SOME w
 
 fun startWork p = ()
@@ -521,23 +596,63 @@ fun checkAndLoop p () =
     end
 
 fun suspendWork p = NONE
-  fun schedule countSuspends () =
+  fun schedule countSuspends k () =
     let
-        fun busyloop p n =
+        fun waitForTask' p' =
+            (case A.sub (taskcells, p') of
+                 NONE => (print ("waitForTask on " ^ (Int.toString (processorNumber ())) ^ "\n");
+                          waitForTask' p')
+               | SOME (b, RThread t) => (print "stole RThread\n";
+                                         (b, RThread t))
+                                        before A.update (taskcells, p', NONE)
+               | SOME bw => bw
+                            before A.update (taskcells, p', NONE))
+            handle e => (print "here 384\n"; raise e)
+        fun busyloop () =
             (yield ();
-             (if n = 0 then print ((Int.toString p) ^ "\n")
-              else ());
-            busyloop p ((n + 1) mod 1000000) )
-      fun loop (countSuspends, p) =
+             busyloop ())
+        fun tryToUpdate p c v ev =
+            if compareAndSwap (c, ev, v) then
+                ()
+            else
+                if !c > notwaiting then
+                    let val (nlat, w) = waitForTask' (!c)
+                    in
+                        addWork (nlat, p, [(newWork p, w)]);
+                        c := v
+                    end
+                else
+                    raise (Parallel "comm cell updated to non-processor value")
+        fun loop (countSuspends, k, p) =
           let
+              fun setLFW () = Array.update (lookingForWork, p, true)
+              fun clearLFW () = Array.update (lookingForWork, p, false)
+              val lfw = Array.sub (lookingForWork, p)
+              val lat = Array.sub (workingOnLatency, p)
+              val _ = setLFW ()
               val p = processorNumber ()
               val _ = MLtonThread.atomically (fn () => procio p)
               val _ = communicate p
+              val c = V.sub (commcells, p)
+              val p' = !c
+              val _ = if p' > notwaiting then
+                          let val (nlat, w) = waitForTask' p'
+                          in
+                              addWork (nlat, p, [(newWork p, w)]);
+                              c := notwaiting
+                          end
+                      else
+                          ()
               (* val _ = Array.update (lookingForWork, p, true) *)
-              fun setLFW () = Array.update (lookingForWork, p, true)
-              fun clearLFW () = Array.update (lookingForWork, p, false)
-              val _ = setLFW ()
+
               val _ = checkP 523 p
+              val _ =
+                  case k of
+                      NONE =>  ()
+                    | SOME t =>
+                      if not lfw then
+                          addWork (lat, p, [(newWork p, RThread (t, p))])
+                      else ()
           in
             case atomically
                      (fn () => ((checkP 526 p;
@@ -551,7 +666,8 @@ fun suspendWork p = NONE
              of NONE =>
                 let (* val _ = print "didn't actually get work\n" *) in
                   (* if !enabled then (enabled := false; profileDisable ()) else (); *)
-                  loop (countSuspends, p)
+                    tryToUpdate p c notask p';
+                    loop (countSuspends, NONE, p)
                 end
               | SOME (nonlocal, lat, j) =>
                 let
@@ -559,10 +675,12 @@ fun suspendWork p = NONE
                     val _ = clearLFW ()
                     (* val p = processorNumber () *)
                   val _ = print ("starting " ^ (if nonlocal then "nonlocal "
-                                                else "") ^ "thread\n")
+                                                else "") ^ "thread on "
+                                 ^ (Int.toString p) ^ "\n")
 (*                    val () = print ("updating latency to " ^
                                     (if lat then "true" else "false") ^ "\n") *)
                     val () = Array.update (workingOnLatency, p, lat)
+                    val () = tryToUpdate p c (if lat then fgtask else bgtask) p'
 
                   val () = if countSuspends andalso nonlocal then incSuspends p else ()
                   (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
@@ -572,14 +690,14 @@ fun suspendWork p = NONE
                              of JWork w => (print "starting JWork\n"; w ())
                               | Thread k => (print "starting Thread\n";
                                              (T.switch (fn _ => T.prepare (k, ())))
-                                            handle e => (print "here 472\n";
+                                            handle e => (eprint "here 472\n";
                                                          raise e))
                               | RThread (r, p') => (print "starting RThread\n";
                                                     (if p' <> p then
                                                          print ("RThread was stolen from " ^ (Int.toString p') ^ ". I'm " ^ (Int.toString p) ^ "\n")
                                                      else ());
                                               T.switch (fn _ => r)
-                                              handle e => (print "here 512\n";
+                                              handle e => (eprint "here 512\n";
                                                          raise e)))
                       (* PERF? this handle only makes sense for the Work case *)
                       (* PERF? move this handler out to the native entry point? *)
@@ -604,12 +722,12 @@ fun suspendWork p = NONE
                   val () = incSuspends p
                   val () = finishWork p
                 in
-                  loop (false, p)
+                  loop (false, NONE, p)
                 end
           end
     in
         (* checkAndLoop (processorNumber ()) () *)
-        loop (countSuspends, processorNumber ())
+        loop (countSuspends, k, processorNumber ())
         (* busyloop (processorNumber ()) 0 *)
     end
 
@@ -629,7 +747,7 @@ fun suspendWork p = NONE
                   hijack that thread to run the tail of the current job.
                   Otherwise, create a new thread. *)
                 val t =
-                    case getWorkMaybe p
+                    case getWork p
                      of SOME (_, _, JWork w) => T.new (fn () => (startWork p; w ()))
                       | SOME (_, _, Thread k') =>
                         (print "before-prepend\n";
@@ -637,7 +755,7 @@ fun suspendWork p = NONE
                          before print "after-prepend\n")
                       | SOME (_, _,  RThread (r, _)) =>
                         T.new (fn () => (startWork p; T.switch (fn _ => r)))
-                      | NONE => T.new (schedule false)
+                      | NONE => T.new (schedule false NONE)
                 (* to disable hijacking, use this instead
                 val t = T.new schedule
                  *)
@@ -816,7 +934,7 @@ fun suspendWork p = NONE
         case Array.sub (delayed, p)
          of nil => ((* this is counted in schedule: incSuspends p;  *)
                     finishWork p;
-                    schedule true ())
+                    schedule true NONE ())
           | ws =>
             let
               val ((lat, w), ws) =
@@ -833,7 +951,7 @@ fun suspendWork p = NONE
                 (addWork (false, p, [(newWork p, JWork w)]); (* XXX *)
                  (* this is counted in schedule: incSuspends p; *)
                  finishWork p;
-                 schedule true ())
+                 schedule true NONE ())
               else
                 w ()
             end
@@ -852,32 +970,27 @@ fun suspendWork p = NONE
           val _ = if !waitingForTask then print "interrupt while waiting!!!\n"
                   else ()
           val _ = block_sigs p
-          val _ = procio p
-          val _ = communicate p
-          val lat = Array.sub (workingOnLatency, p)
-          val lfw = Array.sub (lookingForWork, p)
+          (* val _ = procio p *)
+          (* val _ = communicate p *)
       in
        (print ("interruptFst on " ^ (Int.toString p) ^ "\n");
         signalOthers p sec_sig 0;
         (* signalThread (0, Posix.Signal.toWord sec_sig); *)
-        (if not lfw then addWork (lat, p, [(newWork p, RThread (t, p))]) else ());
         unblock_sigs p;
-        (* T.prepare (T.new (schedule true), ())) *)
-        T.prepare (T.new (checkAndLoop p), ()))
+        T.prepare (T.new (schedule true (SOME t)), ()))
+        (* T.prepare (T.new (checkAndLoop p), ())) *)
       end
 
   fun interrupt t =
       let val p = processorNumber ()
           val _ = block_sigs p
-          val _ = procio p
-          val _ = communicate p
-          val lat = Array.sub (workingOnLatency, p)
-          val lfw = Array.sub (lookingForWork, p)
+          (* val _ = procio p *)
+          (*val _ = communicate p *)
+          val p' = !(V.sub (commcells, p))
       in
        (print ("interrupt on " ^ (Int.toString p) ^ "\n");
-        (if not lfw then addWork (lat, p, [(newWork p, RThread (t, p))]) else ());
         unblock_sigs p;
-        T.prepare (T.new (schedule true), ()))
+        T.prepare (T.new (schedule true (SOME t)), ()))
         (* if p = 1 then t (* *)
         else
             T.prepare (T.new (checkAndLoop p), ())) *)
@@ -896,7 +1009,7 @@ fun suspendWork p = NONE
           val _ = S.setHandler (prim_sig, (S.Handler.handler interruptFst))
           val _ = S.setHandler (sec_sig, (S.Handler.handler interrupt))
           (* val _ = print ("in init " ^ (Int.toString p) ^ "\n") *)
-          val iv = Time.fromMilliseconds 1000
+          val iv = Time.fromMicroseconds (LargeInt.fromInt delta)
       in
           (if p = 0 then
                (MLtonItimer.set (MLtonItimer.Real,
@@ -914,7 +1027,7 @@ fun suspendWork p = NONE
   fun prun () =
       (init ();
        (* print ("initialized; starting"); *)
-       schedule false ())
+       schedule false NONE ())
 
   val () = init ()
 

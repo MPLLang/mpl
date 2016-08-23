@@ -13,7 +13,8 @@ qhull: qhull2.sml qhull-nopoll.sml
 fibserv: fibserv.sml
 #	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map -output fibserv-ws6 fibserv.mlb
 #	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6o-map -output fibserv-ws6o fibserv.mlb
-	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6tw-map -output fibserv-tw fibserv.mlb
+#	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6tw-map -output fibserv-tw fibserv.mlb
+	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/pd-map -output fibserv-pd fibserv.mlb
 
 game: gamed.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map game.mlb ../../../sml-lib/mlton/x/mlx.o

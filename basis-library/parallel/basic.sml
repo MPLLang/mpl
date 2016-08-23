@@ -74,7 +74,8 @@ struct
     | mkLat (Capture (_, k)) = Capture (true, k)
 
   fun procio p =
-      let val q = Array.sub (ioqueues, p)
+      let (* val _ = print ("procio on " ^ (Int.toString p) ^ "\n") *)
+          val q = Array.sub (ioqueues, p)
           val q' =
               List.foldl
                   (fn ((t, f), r) =>
@@ -101,7 +102,7 @@ struct
                   (* if !enabled then (enabled := false; profileDisable ()) else (); *)
                   loop (countSuspends, p)
                 end
-              | SOME (nonlocal, j) =>
+              | SOME (nonlocal, _,  j) =>
                 let
                   val () = if countSuspends andalso nonlocal then incSuspends p else ()
                   (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
@@ -156,11 +157,11 @@ struct
                   Otherwise, create a new thread. *)
                 val t =
                     case Q.getWork p
-                     of SOME (_, Work w) => T.new (fn () => (Q.startWork p; w ()))
-                      | SOME (_, Thread k') =>
-                        (print "before-prepend\n";
+                     of SOME (_, _, Work w) => T.new (fn () => (Q.startWork p; w ()))
+                      | SOME (_, _, Thread k') =>
+                        ((* print "before-prepend\n"; *)
                          T.prepend (k', fn () => (Q.startWork p))
-                         before print "after-prepend\n")
+                         (* before print "after-prepend\n" *))
                       | NONE => T.new (schedule false)
                 (* to disable hijacking, use this instead
                 val t = T.new schedule
@@ -180,7 +181,7 @@ struct
   fun suspend f =
       let
         val p = processorNumber ()
-        val _ = print "suspend\n"
+        (* val _ = print "suspend\n" *)
         (* val _ = print ("suspend at " ^ (Int.toString p) ^ "\n") *)
         fun tail (p, k) =
             let
@@ -222,6 +223,9 @@ struct
         else
           ()
       end
+
+  fun event f =
+      raise (Parallel "not supported")
 
   fun addRightLat (lat, w) =
       let

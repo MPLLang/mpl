@@ -47,7 +47,7 @@ fun fib n =
 
 fun fibdo n =
     let val f = fib n
-        val _ = print ("fib(" ^ (Int.toString n) ^ ") = " ^ (Int.toString (fib n)) ^ "\n")
+        val _ = print ("fib(" ^ (Int.toString n) ^ ") = " ^ (Int.toString f) ^ "\n")
         val finish = Time.now ()
         val diff = Time.-(finish, start)
         val diffi = LargeInt.toInt (Time.toMilliseconds diff)

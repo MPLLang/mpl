@@ -25,7 +25,9 @@ fun fib n () =
                  fork (fib' (n-1), fib' (n-2))
            in r1 + r2
            end
-  in print ((Int.toString (fib' n ())) ^ "\n")
+  in
+      print "starting fib\n";
+      print ((Int.toString (fib' n ())) ^ "\n")
   end
 
 (* Read request from user and compute if needed. *)
@@ -40,7 +42,8 @@ fun fib_server () =
                   NONE => loop futures
                 | SOME n =>
                   let val _ = print ("Computing fib(" ^ (Int.toString n) ^ ")\n")
-                      val f = MLton.Parallel.FutureSuspend.futureLat (false, fib n)
+                      val f = MLton.Parallel.FutureSuspend.futureLat (false,
+                                                                      fib n)
                   in loop (f::futures) end)
         end
   in loop []

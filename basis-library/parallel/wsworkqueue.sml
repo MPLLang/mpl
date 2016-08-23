@@ -526,7 +526,7 @@ struct
                           | Work tw =>
                             ((pr p "queue-steal:";
                              incr successfulSteals;
-                             SOME (true, #2 tw))
+                             SOME (true, lat, #2 tw))
                              handle Overflow => (print "486!\n";
                                                  raise WorkQueue))
                       end
@@ -547,7 +547,7 @@ struct
                           | Work tw =>
                             ((pr p "work-steal:";
                              incr successfulSteals;
-                             SOME (true, #2 tw))
+                             SOME (true, lat, #2 tw))
                              handle Overflow => (print "507\n";
                                                  raise WorkQueue))
                       end
@@ -583,7 +583,7 @@ struct
                    case A.sub (!work, j)
                     of Empty => raise WorkQueue
                      | Marker => NONE (* just return and loop again *)
-                     | Work tw => SOME (true, #2 tw))
+                     | Work tw => SOME (true, lat, #2 tw))
                   before (A.update (!work, j, Empty);
                           count p "get-oldest" ~1;
                           (* dekkerUnlock (true, lock); *)
@@ -597,8 +597,8 @@ struct
                                   releaseLock thiefLock;
                                   case getWork p
                                    of NONE => NONE
-                                    | SOME (_, w) => SOME (true, w))
-                     | Work tw => SOME (false, #2 tw)
+                                    | SOME (_, _, w) => SOME (true, lat, w))
+                     | Work tw => SOME (false, lat, #2 tw)
                                   before (A.update (!work, i - 1, Empty);
                                           count p "get" ~1;
                                           (* dekkerUnlock (true, lock); *)

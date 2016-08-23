@@ -341,38 +341,44 @@ struct
   structure S = MLtonSignal
 
   fun interrupt p t =
-      (print "interrupt\n"; t)
-(*
-       Q.addWork (false, p, [(Q.newWork p, RThread t)]);
-       T.prepare (T.new (schedule true), ()))
-*)
+       (print ("interrupt on " ^ (Int.toString p) ^ "\n");
+        Q.addWork (false, p, [(Q.newWork p, RThread t)]);
+        T.prepare (T.new (schedule true), ()))
 
   fun simple () =
       print "interrupt\n"
 
   val p = processorNumber ()
-  val _ = print ("setting handler on " ^ (Int.toString p) ^ "\n")
-  val sg = MLtonItimer.signal MLtonItimer.Real
-  (* val _ = S.setHandler (sg, (S.Handler.handler (interrupt p))) *)
-  val _ = S.setHandler (sg, (S.Handler.ignore))
+
+ (*  val _ = S.setHandler (sg, (S.Handler.ignore)) *)
 
   fun init () =
       let val p = processorNumber ()
+          val _ = print ("setting handler on " ^ (Int.toString p) ^ "\n")
+          val sg = MLtonItimer.signal MLtonItimer.Real
+          val _ = S.setHandler (sg, (S.Handler.handler (interrupt p)))
           val _ = print ("in init " ^ (Int.toString p) ^ "\n")
-          val iv = Time.fromMilliseconds 1000
+          val iv = Time.fromMilliseconds 500
       in
-          (if p = numberOfProcessors - 1 then
-               ((* MLtonItimer.set (MLtonItimer.Real,
-                                   {interval = iv, value = iv}); *)
+          if true (* p = numberOfProcessors - 1 *) then
+               (MLtonItimer.set (MLtonItimer.Real,
+                                   {interval = iv, value = iv});
                 S.Mask.unblock (S.Mask.some [sg])
                 )
            else
-               ());
-          print ("initialized " ^ (Int.toString p) ^ "\n");
-          schedule false ()
+               ()
+          (* print ("initialized " ^ (Int.toString p) ^ "\n"); *)
+          (* schedule false () *)
       end
 
-  val () = (_export "Parallel_run": (unit -> void) -> unit;) (init)
+  fun prun () =
+      (init ();
+       schedule false ())
+
+  val () = init ()
+
+  val () = (_export "Parallel_run": (unit -> void) -> unit;) (prun)
+  val () = (_export "Parallel_sched_init": (unit -> void) -> unit;) (init)
   (* init MUST come after schedulerLoop has been exported *)
   val () = (_import "Parallel_init" runtime private: unit -> unit;) ()
 

@@ -3,72 +3,41 @@ struct
 
   structure B = MLtonParallelBasic
   structure V = MLtonParallelSyncVarCapture
-  structure T = MLtonThread
 
   datatype 'a result = 
      Finished of 'a
    | Raised of exn
 
-  exception Impossible
-  exception Impossible2
+  fun forkLat lat (f, g) =
+      let
+        (* Used to hold the result of the right-hand side in the case where
+          that code is executed in parallel. *) 
+        val var = V.empty ()
+        (* Closure used to run the right-hand side... but only in the case
+          where that code is run in parallel. *)
+        fun rightside () = (V.write (var, Finished (g ())
+                                          handle e => Raised e);
+                            B.return ())
 
-  val fetch_and_add = _import "Parallel_fetchAndAdd" : int ref * int -> int;
-
-  fun forkLat gl (f, g) =
-      let fun doFork k =
-              let val left = ref NONE
-                  val right = ref NONE
-                  val trr = ref ""
-                  val join = ref 0
-                  val doRight = ref 0
-                  (* Closure used to run the right-hand side... but
-                     only in the case where that code is run in parallel. *)
-                  (* XXX  TODO Handle exceptions *)
-                  fun rightside () =
-                      (let val r = fetch_and_add (doRight, 1)
-                           val _ = if r > 0 then
-                                       (print "BAD!"; raise Impossible)
-                                   else ()
-                           (* val _ = print ("Doing " ^ (!trr) ^ "\n") *)
-                           val res = g () in
-                           (case !right of
-                                NONE => ()
-                              | SOME _ => raise Impossible2);
-                           right := SOME res;
-                           if fetch_and_add (join, 1) = 1 then
-                               (* left side already finished; do the join *)
-                               case !left of
-                                   NONE => raise Impossible
-                                 | SOME l => ((* print "resuming on right\n"; *)
-                                              B.resume (k, (l, res));
-                                              B.return ())
-                           else
-                               B.return ()
-                       end)
-                  fun leftside () =
-                      (let val res = f () in
-                           (case !left of
-                                NONE => ()
-                              | SOME _ => raise Impossible2);
-                           left := SOME res;
-                           if fetch_and_add (join, 1) = 1 then
-                               (* right side already finished; do the join *)
-                               case !right of
-                                   NONE => raise Impossible
-                                 | SOME r => ((* print "resuming on left\n"; *)
-                                              B.resume (k, (res, r));
-                                              B.return ())
-                           else
-                               B.return ()
-                       end)
-                  (* Offer the right side to any processor that wants it *)
-                  val tr = B.addRightLat (gl, rightside) (* might suspend *)
-                  val tl = B.addRightLat (gl, leftside)
-              in
-                  trr := (B.stringOfToken tr)
-              end
+        (* Offer the right side to any processor that wants it *)
+        val t = B.addRightLat (lat, rightside) (* might suspend *)
+        (* Run the left side *)
+        val a = f ()
+            (* XXX Do we need to execute g in the case where f raises? *)
+            handle e => (ignore (B.remove t); B.yield (); raise e)
+        (* Try to retract our offer -- if successful, run the right side
+          ourselves. *)
+        val b = if B.remove t then
+                 (* no need to yield since we expect this work to be the next thing
+                    in the queue *)
+                  g ()
+                  handle e => (B.yield (); raise e)
+                else
+                  case V.read var of (_, Finished b) => b
+                                   | (_, Raised e) => (B.yield (); raise e)
       in
-        B.capture doFork
+        B.yield ();
+        (a, b)
       end
 
   fun fork (f, g) = forkLat false (f, g)

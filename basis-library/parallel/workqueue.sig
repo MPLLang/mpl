@@ -20,8 +20,9 @@ sig
   val addWork : bool * proc * (token * work) list -> unit
 
   (* remove the next, highest priority work.  the boolean indicates whether
-   this is a "non-local" (i.e. stolen) job. *)
-  val getWork : proc -> (bool * work) option
+   this is a "non-local" (i.e. stolen) job. The second boolean indicates
+   whether this is a latency-sensitive job. *)
+  val getWork : proc -> (bool * bool * work) option
   (* begin work -- added jobs should be considered children *)
   val startWork : proc -> unit
   (* mark the most recent unit of work as done *)

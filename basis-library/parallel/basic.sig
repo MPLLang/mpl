@@ -25,6 +25,9 @@ sig
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
   val capture : ('a t -> unit) -> 'a
 
+  (* Run the given work as a latency-sensitive task *)
+  val event : (unit -> 'a) -> 'a
+
   (* Add the given work to the queue; the work is consider to have lower
     priority than the current task.  Returns a token that may be used to
     remove this task from the scheduling queue.  This operation may suspend
