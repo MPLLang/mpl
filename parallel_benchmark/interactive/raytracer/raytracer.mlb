@@ -1,0 +1,12 @@
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/mlton.mlb
+../x/graphics.mlb
+$(SML_LIB)/basis/parallel/io.sig
+$(SML_LIB)/basis/parallel/io.sml
+
+PRIMITIVES.sig
+Primitives.sml
+SEQUENCE_G.sig
+TreeSequenceG.sml
+id-raytracer-fj.sml
+main.sml
