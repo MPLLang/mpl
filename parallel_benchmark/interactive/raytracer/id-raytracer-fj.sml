@@ -1,5 +1,7 @@
 functor IdRaytracer (S : SEQUENCE_G)  =
 struct
+
+open IO
   (* definitions to match the Manticore basis *)
   type double = real
   val sqrtd = Math.sqrt
@@ -500,25 +502,37 @@ and shadowed (world, pos, dir, lcolor) =
     let
       val (firstray, scrnx, scrny) =
           camparams (lookfrom, lookat, vup, fov, winsize)
+      val pixels = ref 0
       fun f (i, j) =
         let
           val (r, g, b) =
               tracepixel (world, lights, i, j, lookfrom, firstray, scrnx, scrny)
         in
+            pixels := (!pixels) + 1;
+            (* print ("Rendered " ^ (Int.toString (!pixels)) ^ " pixels\n"); *)
             Graphics.setforeground (MLX.fromrgb r g b);
             Graphics.drawpoint i j;
             (r, g, b)
         end
 (*      SEQUENCE_G version *)
-	fun row i = S.tabulate 20 (fn j => f (i, j)) winsize
+(*	fun row i = S.tabulate 20 (fn j => f (i, j)) winsize
         val seqs = S.tabulate 20 row winsize
+*)
 (*      SEQUENCE version *)
 (*
         fun row i = S.tabulate (fn j => f (i, j)) winsize
         val seqs = S.tabulate row winsize
 *)
-
+      fun doit r c =
+          if r >= winsize then
+              if c >= winsize then
+                  ()
+              else
+                  doit 0 (c + 1)
+          else
+              (ignore (f (r, c));
+               doit (r + 1) c)
     in
-        ()
+       doit 0 0
     end
 end
