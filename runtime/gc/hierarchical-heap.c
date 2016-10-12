@@ -111,7 +111,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
     }
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-    LOG(TRUE, TRUE, L_INFO,
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
         "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
         ((void*)(parentHH)),
         parentHH->locallyCollectibleSize,
@@ -185,7 +185,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   }
   sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-  LOG(TRUE, TRUE, L_INFO,
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
@@ -196,7 +196,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH);
 
-  LOG(TRUE, TRUE, L_INFO,
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
@@ -391,12 +391,14 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
         s->controls->hhConfig.maxLCHS : preferredNewLCHS;
   }
 
-  LOG(oldLCHS != hh->locallyCollectibleHeapSize, FALSE, L_INFO,
-      "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
-      ratio,
-      2 * (s->controls->hhConfig.liveLCRatio + 1),
-      oldLCHS,
-      hh->locallyCollectibleHeapSize);
+  if (oldLCHS != hh->locallyCollectibleHeapSize) {
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+        "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu bytes",
+        ratio,
+        2 * (s->controls->hhConfig.liveLCRatio + 1),
+        oldLCHS,
+        hh->locallyCollectibleHeapSize);
+  }
 }
 
 /* RAM_NOTE: should this be moved to local-heap.h? */

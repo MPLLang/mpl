@@ -297,7 +297,7 @@ void HM_setChunkListToChunkList(void* chunkList, void* toChunkList) {
   assert(CHUNK_INVALID_LEVEL != getChunkInfo(chunkList)->level);
 
   getChunkInfo(chunkList)->split.levelHead.toChunkList = toChunkList;
-  LOG(TRUE, TRUE, L_INFO,
+  LOG(LM_CHUNK, LL_DEBUG,
       "Set toChunkList of chunk %p to %p",
       chunkList,
       toChunkList);
@@ -318,7 +318,7 @@ bool HM_getObjptrInfo(GC_state s,
       chunkList = getChunkInfo(chunkList)->split.normal.levelHead) { }
 
   if (NULL == chunkList) {
-    LOG(TRUE, TRUE, L_INFO,
+    LOG(LM_CHUNK, LL_DEBUG,
         "Couldn't get objptrinfo for %p",
         ((void*)(object)));
     return FALSE;

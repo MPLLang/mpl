@@ -208,7 +208,9 @@ bool stringToLogModule(enum LogModule* module, const char* moduleString) {
        {.string = "chunk-pool", .module = LM_CHUNK_POOL},
        {.string = "dfs-mark", .module = LM_DFS_MARK},
        {.string = "foreach", .module = LM_FOREACH},
+       {.string = "garbage-collection", .module = LM_GARBAGE_COLLECTION},
        {.string = "global-local-heap", .module = LM_GLOBAL_LOCAL_HEAP},
+       {.string = "hierarchical-heap", .module = LM_HIERARCHICAL_HEAP},
        {.string = "hh-collection", .module = LM_HH_COLLECTION},
        {.string = "parallel", .module = LM_PARALLEL},
        {.string = "thread", .module = LM_THREAD}};

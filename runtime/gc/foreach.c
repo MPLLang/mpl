@@ -23,7 +23,7 @@ void callIfIsObjptr (GC_state s,
                      objptr *opp,
                      void* fArgs) {
   if (isObjptr (*opp)) {
-    LOG(TRUE, TRUE, L_DEBUG,
+    LOG(LM_FOREACH, LL_DEBUG,
         "Calling for opp "FMTPTR" op "FMTOBJPTR,
         ((uintptr_t)(opp)),
         *opp);
@@ -287,7 +287,7 @@ pointer foreachObjptrInRange (GC_state s,
                  "  front = "FMTPTR"  *back = "FMTPTR"\n",
                  (uintptr_t)front, (uintptr_t)(*back));
       }
-      LOG(TRUE, TRUE, L_DEBUG,
+      LOG(LM_FOREACH, LL_DEBUG,
           "front = "FMTPTR"  *back = "FMTPTR,
           (uintptr_t)front, (uintptr_t)(*back));
 

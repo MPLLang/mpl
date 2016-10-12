@@ -413,7 +413,7 @@ void* ChunkPool_find (void* object) {
   assert(ChunkPool_ALLOCATED == chunkMetadata->next);
 #endif
 
-  LOG(TRUE, TRUE, L_DEBUG, "pointer %p in chunk %p", object, chunk);
+  LOG(LM_CHUNK_POOL, LL_DEBUG, "pointer %p in chunk %p", object, chunk);
 
   return chunk;
 }
