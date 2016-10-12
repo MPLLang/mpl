@@ -65,6 +65,9 @@ struct
                                 "\n"])
       end
 
+  (* Comment out to enable debug messages *)
+  fun dbgmsg m = ()
+
   fun setAndUseHH (hh : HH.t) : unit = (HM.enterGlobalHeap ();
                                         HH.set hh;
                                         HH.useHierarchicalHeap ();

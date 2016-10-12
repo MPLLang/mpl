@@ -32,6 +32,9 @@ struct
                                 "\n"])
       end
 
+  (* Comment out to enable debug messages *)
+  fun dbgmsg m = ()
+
   (* RAM_NOTE: How to handle exceptions and heaps? *)
   local
       fun evaluateFunction f (exceptionHandler: unit -> unit) =
