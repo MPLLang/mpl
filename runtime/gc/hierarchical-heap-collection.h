@@ -21,8 +21,6 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
-#pragma message "Remove!"
-  bool log;
   size_t bytesCopied;
 };
 

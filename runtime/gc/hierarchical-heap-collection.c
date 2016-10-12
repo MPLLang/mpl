@@ -124,7 +124,6 @@ void HM_HHC_collectLocal(void) {
     .hh = hh,
     .minLevel = HM_HH_getHighestStolenLevel(s, hh) + 1,
     .maxLevel = hh->level,
-    .log = TRUE,
     .bytesCopied = 0
   };
 
