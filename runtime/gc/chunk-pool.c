@@ -1,3 +1,4 @@
+
 /* Copyright (C) 2015,2014 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
@@ -408,6 +409,8 @@ void* ChunkPool_find (void* object) {
   assert(ChunkPool_ALLOCATED == chunkMetadata->previous);
   assert(ChunkPool_ALLOCATED == chunkMetadata->next);
 #endif
+
+  LOG(TRUE, TRUE, L_DEBUG, "pointer %p in chunk %p", object, chunk);
 
   return chunk;
 }

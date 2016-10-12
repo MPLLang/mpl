@@ -24,8 +24,8 @@ void callIfIsObjptr (GC_state s,
                      void* fArgs) {
   if (isObjptr (*opp)) {
     LOG(TRUE, TRUE, L_DEBUG,
-        "Calling for opp %p op %p",
-        opp,
+        "Calling for opp "FMTPTR" op "FMTOBJPTR,
+        ((uintptr_t)(opp)),
         *opp);
     f(s, opp, fArgs);
   }

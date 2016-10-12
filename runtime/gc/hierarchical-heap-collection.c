@@ -89,6 +89,9 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
+  LOG(TRUE, TRUE, L_DEBUG,
+      "START");
+
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
   }
@@ -267,6 +270,9 @@ void HM_HHC_collectLocal(void) {
      */
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
+
+  LOG(TRUE, TRUE, L_DEBUG,
+      "END");
 }
 
 void forwardHHObjptr (GC_state s,
@@ -286,8 +292,19 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)p);
   }
 
+  LOG(TRUE, TRUE, L_DEBUG,
+      "opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR,
+      (uintptr_t)opp,
+      op,
+      (uintptr_t)p);
+
   if (!HM_HH_objptrInHierarchicalHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
+    LOG(TRUE, TRUE, L_DEBUG,
+        "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",
+        (uintptr_t)opp,
+        op,
+        (uintptr_t)p);
     return;
   }
 
@@ -299,6 +316,20 @@ void forwardHHObjptr (GC_state s,
      * Either did not successfully get the objptr info (which means I don't own
      * it) or opp does not point to an HH objptr in my HH, so just return.
      */
+    LOG(!gotObjptrInfo, TRUE, L_DEBUG,
+        "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": could not get objptrInfo.",
+        (uintptr_t)opp,
+        op,
+        (uintptr_t)p);
+
+    LOG(opInfo.hh != args->hh, TRUE, L_DEBUG,
+        "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": opInfo.hh (%p) != args->hh (%p).",
+        (uintptr_t)opp,
+        op,
+        (uintptr_t)p,
+        ((void*)(opInfo.hh)),
+        ((void*)(args->hh)));
+
     return;
   }
 
@@ -320,6 +351,13 @@ void forwardHHObjptr (GC_state s,
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
         (opInfo.level < args->minLevel)) {
+      LOG(TRUE, TRUE, L_DEBUG,
+          "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": level %d < minLevel %d.",
+          (uintptr_t)opp,
+          op,
+          (uintptr_t)p,
+          opInfo.level,
+          args->minLevel);
       return;
     }
     /* maybe forward the object */
@@ -457,9 +495,9 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)*opp);
   }
 #else
-  LOG(TRUE, TRUE, L_INFO,
-      "opp %p set to %p",
-      opp,
+  LOG(TRUE, TRUE, L_DEBUG,
+      "opp "FMTPTR" set to "FMTOBJPTR,
+      ((uintptr_t)(opp)),
       *opp);
 #endif
 
