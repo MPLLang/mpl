@@ -194,7 +194,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   parentHH->locallyCollectibleSize += sizeDelta;
 
   /* merge level lists */
-  HM_mergeLevelList(&(parentHH->levelList), hh->levelList);
+  HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH);
 
   LOG(TRUE, TRUE, L_INFO,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
@@ -425,7 +425,7 @@ void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   assert((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
          (hh->level > hh->stealLevel));
 
-  HM_assertLevelListInvariants(hh->levelList, hh->stealLevel);
+  HM_assertLevelListInvariants(hh->levelList, hh, hh->stealLevel);
   assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
          ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
 
@@ -456,6 +456,7 @@ void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
     assert(foundInParentList);
   }
 
+  /* make sure childHHList is sorted by steal level */
   Word32 previousStealLevel = ~((Word32)(0));
   for (struct HM_HierarchicalHeap* childHH = HHObjptrToStruct(s,
                                                               hh->childHHList);

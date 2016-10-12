@@ -273,8 +273,11 @@ Word32 HM_getHighestLevel(const void* levelList);
  *
  * @param destinationLevelList The destination of the merge
  * @param levelList The list to merge
+ * @param hh The HH containing the destination level list.
  */
-void HM_mergeLevelList(void** destinationLevelList, void* levelList);
+void HM_mergeLevelList(void** destinationLevelList,
+                       void* levelList,
+                       const struct HM_HierarchicalHeap* hh);
 
 /**
  * This function promotes the chunks from level 'level' to the level 'level -
@@ -293,9 +296,12 @@ void HM_promoteChunks(void** levelList, size_t level);
  * macro.
  *
  * @param levelList The level list to assert invariants for.
+ * @param hh The hierarchical heap this level list belongs to.
  * @param stealLevel The level this level list was stolen from.
  */
-void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel);
+void HM_assertLevelListInvariants(const void* levelList,
+                                  const struct HM_HierarchicalHeap* hh,
+                                  Word32 stealLevel);
 
 /**
  * Updates the chunk's values to reflect mutator

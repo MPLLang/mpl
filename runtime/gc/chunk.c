@@ -180,7 +180,7 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   assert(totalSize == HM_getChunkSize(chunk));
 
   /* insert into level list */
-  HM_mergeLevelList(levelList, chunk);
+  HM_mergeLevelList(levelList, chunk, hh);
 
   LOG(TRUE, TRUE, L_DEBUG,
       "Allocate chunk at level %u", level);
@@ -352,7 +352,9 @@ Word32 HM_getHighestLevel(const void* levelList) {
   return (getChunkInfoConst(levelList)->level);
 }
 
-void HM_mergeLevelList(void** destinationLevelList, void* levelList) {
+void HM_mergeLevelList(void** destinationLevelList,
+                       void* levelList,
+                       const struct HM_HierarchicalHeap* hh) {
   void* newLevelList = NULL;
 
   /* construct newLevelList */
@@ -394,6 +396,9 @@ void HM_mergeLevelList(void** destinationLevelList, void* levelList) {
         cursor1 = getChunkInfo(cursor1)->split.levelHead.nextHead;
       }
 
+      /* set HH of this chunk list */
+      getChunkInfo(*previousChunkList)->split.levelHead.containingHH = hh;
+
       /* advance previousChunkList */
       previousChunkList =
           &(getChunkInfo(*previousChunkList)->split.levelHead.nextHead);
@@ -410,16 +415,26 @@ void HM_mergeLevelList(void** destinationLevelList, void* levelList) {
       /* append the remainder of cursor2 */
       *previousChunkList = cursor2;
     }
+
+    /* set HH for remaining chunk lists */
+    for (void* chunkList = *previousChunkList;
+         NULL != chunkList;
+         chunkList = getChunkInfo(chunkList)->split.levelHead.nextHead) {
+      getChunkInfo(chunkList)->split.levelHead.containingHH = hh;
+    }
   }
 
-  HM_assertLevelListInvariants(newLevelList, HM_HH_INVALID_LEVEL);
+  HM_assertLevelListInvariants(newLevelList, hh, HM_HH_INVALID_LEVEL);
 
   /* update destinationChunkList */
   *destinationLevelList = newLevelList;
 }
 
 void HM_promoteChunks(void** levelList, size_t level) {
-  HM_assertLevelListInvariants(*levelList, HM_HH_INVALID_LEVEL);
+  const struct HM_HierarchicalHeap* hh =
+      getChunkInfoConst(*levelList)->split.levelHead.containingHH;
+
+  HM_assertLevelListInvariants(*levelList, hh, HM_HH_INVALID_LEVEL);
 
   /* find the pointer to level list of level 'level' */
   void** cursor;
@@ -458,27 +473,37 @@ void HM_promoteChunks(void** levelList, size_t level) {
     *cursor = chunkList;
   }
 
-  HM_assertLevelListInvariants(*levelList, HM_HH_INVALID_LEVEL);
+  HM_assertLevelListInvariants(*levelList, hh, HM_HH_INVALID_LEVEL);
 }
 
 #if ASSERT
-void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel) {
+void HM_assertLevelListInvariants(const void* levelList,
+                                  const struct HM_HierarchicalHeap* hh,
+                                  Word32 stealLevel) {
   Word32 previousLevel = ~((Word32)(0));
   for (const void* chunkList = levelList;
        NULL != chunkList;
        chunkList = getChunkInfoConst(chunkList)->split.levelHead.nextHead) {
     Word32 level = getChunkInfoConst(chunkList)->level;
+    struct HM_HierarchicalHeap* levelListHH =
+        getChunkInfoConst(chunkList)->split.levelHead.containingHH;
+
     assert(CHUNK_INVALID_LEVEL != level);
     assert(level < previousLevel);
     assert((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel));
     previousLevel = level;
 
+    assert(hh == levelListHH);
+
     HM_assertChunkListInvariants(chunkList);
   }
 }
 #else
-void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel) {
+void HM_assertLevelListInvariants(const void* levelList,
+                                  const struct HM_HierarchicalHeap* hh,
+                                  Word32 stealLevel) {
   ((void)(levelList));
+  ((void)(hh));
   ((void)(stealLevel));
 }
 #endif /* ASSERT */

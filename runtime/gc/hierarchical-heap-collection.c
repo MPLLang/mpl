@@ -216,7 +216,7 @@ void HM_HHC_collectLocal(void) {
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);
-  HM_mergeLevelList(&(hh->levelList), hh->newLevelList);
+  HM_mergeLevelList(&(hh->levelList), hh->newLevelList, hh);
 
   /*
    * RAM_NOTE: Really should get this off of forwardHHObjptrArgs instead of
