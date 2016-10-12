@@ -25,6 +25,8 @@ struct
   type work = W.work
   type unlocker = unit -> unit
 
+  val dbgmsg = fn _ => ()
+
   val successfulSteals = ref 0
   val failedSteals = ref 0
   fun incr r = r := !r + 1
@@ -229,7 +231,7 @@ struct
             else if p >= b then
               case A.sub (queues, p)
                of NONE => outer (p + 1, x)
-                | SOME _ => (print (concat [s, "found SOME queue at ",
+                | SOME _ => (dbgmsg (concat [s, "found SOME queue at ",
                                             Int.toString p, " with total = ",
                                             Int.toString b, "\n"]);
                              error := true;
@@ -240,7 +242,7 @@ struct
                 | SOME (Queue { top, bottom, work, index, ... }) =>
                   let
                     val () = if !index <> p then
-                               (print (concat [s, "index (", Int.toString (!index),
+                               (dbgmsg (concat [s, "index (", Int.toString (!index),
                                                ") does not match location (",
                                                Int.toString p, ")\n"]);
                                 error := true)
@@ -256,21 +258,21 @@ struct
                           case A.sub (work, k)
                            of NONE => inner (k + 1, x)
 (*
-                            | Marker => (print (concat [s, "found marker at ",
+                            | Marker => (dbgmsg (concat [s, "found marker at ",
                                                         Int.toString k, " with bottom = ",
                                                         Int.toString j, " and top = ",
                                                         Int.toString i, "\n"]);
                                          error := true;
                                          inner (k + 1, x))
 *)
-                            | SOME _ => (print (concat [s, "found work at ",
+                            | SOME _ => (dbgmsg (concat [s, "found work at ",
                                                         Int.toString k, " with bottom = ",
                                                         Int.toString j, " and top = ",
                                                         Int.toString i, "\n"]);
                                          error := true;
                                          inner (k + 1, x))
                         else case A.sub (work, k)
-                              of NONE => (print (concat [s, "found empty at ",
+                              of NONE => (dbgmsg (concat [s, "found empty at ",
                                                           Int.toString k, " with bottom = ",
                                                           Int.toString j, " and top = ",
                                                           Int.toString i, "\n"]);
@@ -287,7 +289,7 @@ struct
         val newCount = outer (0, 0)
         val () = if !lastCount + delta = newCount
                  then lastCount := newCount
-                 else (print (concat [s, "new count (", Int.toString newCount,
+                 else (dbgmsg (concat [s, "new count (", Int.toString newCount,
                                       ") does not match last count (", Int.toString (!lastCount),
                                       ") plus delta (", Int.toString delta, ")\n"]);
                        error := true)
@@ -326,7 +328,7 @@ struct
             | NONE => (* each (p' - 1) *) ""
       in
         (* each (numberOfProcessors - 1); *)
-        print (intToString p p ^ " " ^ s ^ each p ^ "\n");
+        dbgmsg (intToString p p ^ " " ^ s ^ each p ^ "\n");
         TextIO.flushOut TextIO.stdOut
       end
 *)
@@ -343,7 +345,7 @@ struct
       in
         if i - j < l div 2 then
           let
-            val () = print "copying!"
+            val () = dbgmsg "copying!"
             fun erase k = if k = i then ()
                           else (A.update (w, k, Empty);
                                 erase (k + 1))
@@ -357,7 +359,7 @@ struct
           end
         else
           let
-            val () = print "resizing!"
+            val () = dbgmsg "resizing!"
             val w = A.tabulate (l * 2,
                                 fn k => if k < (i - j) then A.sub (w, k + j)
                                         else Empty)
@@ -373,12 +375,12 @@ struct
     let
       (* val () = pr p "before-add" *)
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-      val () = print "tyring lock 1\n"
+      val () = dbgmsg "tyring lock 1\n"
       val () = takeLock thiefLock; (* XTRA *)
-      val () = print "got lock 1\n"
+      val () = dbgmsg "got lock 1\n"
       (* val () = dekkerLock (true, lock); *)
       val q as Queue { top, work, ... } = case A.sub (queues, p)
-                                      of SOME q => q | NONE => (print "add\n"; raise WorkQueue)
+                                      of SOME q => q | NONE => (dbgmsg "add\n"; raise WorkQueue)
       fun add (tw as (t as Token r, w)) =
           let
             val i = !top
@@ -405,7 +407,7 @@ struct
       (*   let *)
       (*     val q as Queue { index, work = ref qArray } = *)
       (*         case A.sub (queues, a) of SOME q => q *)
-      (*                                 | NONE => (print "move\n"; raise WorkQueue) *)
+      (*                                 | NONE => (dbgmsg "move\n"; raise WorkQueue) *)
       (*   in *)
       (*     index := p'; *)
       (*     A.update (queues, p', SOME q); *)
@@ -432,9 +434,9 @@ struct
     let
       (* val () = pr p "before-get" *)
       val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-      val () = print "tyring lock 2\n"
+      val () = dbgmsg "tyring lock 2\n"
       val () = takeLock thiefLock (* XTRA *)
-      val () = print "got lock 2\n"
+      val () = dbgmsg "got lock 2\n"
       (* val () = dekkerLock (true, lock) *)
 
       fun steal () =
@@ -449,9 +451,9 @@ struct
                     val () = releaseLock thiefLock (* XTRA *)
                     (* Take the victim's lock *)
                     val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
-                    val () = print "tyring lock 3\n"
+                    val () = dbgmsg "tyring lock 3\n"
                     val () = takeLock thiefLock
-                    val () = print "got lock 3\n"
+                    val () = dbgmsg "got lock 3\n"
                     (* val () = dekkerLock (false, ownerLock) *)
                   in
                     fn () => ((* dekkerUnlock (false, ownerLock); *)
@@ -631,18 +633,18 @@ struct
         (* val () = pr p "before-suspend" *)
         val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
         (* val () = dekkerLock (true, ownerLock) *)
-        val () = print "tyring lock 4\n"
+        val () = dbgmsg "tyring lock 4\n"
         val () = takeLock thiefLock (* XTRA *)
-        val () = print "got lock 4\n"
+        val () = dbgmsg "got lock 4\n"
       in
         (if P.suspendEntireQueues then
            die "Tried to suspend entire queue"
            (* let *)
            (*   val () = takeLock masterLock *)
            (*   val q as Queue { index, ... } = case A.sub (queues, p) *)
-           (*                                    of SOME q => q | NONE => (print "suspend\n"; raise WorkQueue) *)
+           (*                                    of SOME q => q | NONE => (dbgmsg "suspend\n"; raise WorkQueue) *)
            (*   val a = !totalQueues *)
-           (*   val () = if a >= QUEUE_ARRAY_SIZE then (print "queues1\n"; raise QueueSize) else () *)
+           (*   val () = if a >= QUEUE_ARRAY_SIZE then (dbgmsg "queues1\n"; raise QueueSize) else () *)
            (* in *)
            (*   index := a; *)
            (*   A.update (queues, a, SOME q); *)
@@ -670,7 +672,7 @@ struct
           (* val () = pr p "before-resume-local" *)
           val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
           val q as Queue { top, work, ... } = case A.sub (queues, p)
-                                               of SOME q => q | NONE => (print "resume-add\n"; raise WorkQueue)
+                                               of SOME q => q | NONE => (dbgmsg "resume-add\n"; raise WorkQueue)
           fun add w =
               let
                 val i = !top
@@ -682,9 +684,9 @@ struct
               end
           val () = r := SOME q;
         in
-          print "tyring lock 5\n";
+          dbgmsg "tyring lock 5\n";
           takeLock thiefLock; (* XTRA *)
-          print "got lock 5\n";
+          dbgmsg "got lock 5\n";
           (* dekkerLock (true, lock); *)
           add Marker;
           add (Work tw);
@@ -701,7 +703,7 @@ struct
         (*   val () = takeLock masterLock *)
         (*   val a = !activeQueues *)
         (*   val b = !totalQueues *)
-        (*   val () = if b >= QUEUE_ARRAY_SIZE then (print "queues2\n"; raise QueueSize) else () *)
+        (*   val () = if b >= QUEUE_ARRAY_SIZE then (dbgmsg "queues2\n"; raise QueueSize) else () *)
         (*   val q as Queue { work, top, ... } = newQueue a *)
         (*   val i = !top (* top should be 0 *) *)
         (* in *)
@@ -744,21 +746,21 @@ struct
   fun removeWork (p', Token r) =
       let
         (* val () = pr p' "before-remove" *)
-        val Queue { index, ... } = case !r of SOME q => q | NONE => (print "remove\n"; raise WorkQueue)
+        val Queue { index, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove\n"; raise WorkQueue)
 (* SPOONHOWER_NOTE: this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
         val p = !index
         val unsync =
             if p < numberOfProcessors then
               let
                 val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p)
-                val () = print "tyring lock 6\n"
+                val () = dbgmsg "tyring lock 6\n"
                 val () = if p = p' then
                            (takeLock thiefLock; (* XTRA *)
                             (* dekkerLock (true, ownerLock) *) ())
                          else
                            (takeLock thiefLock;
                             (* dekkerLock (false, ownerLock) *) ())
-                val () = print "got lock 6\n"
+                val () = dbgmsg "got lock 6\n"
               in
                 fn _ => if p = p' then
                           ((* dekkerUnlock (true, ownerLock); *)
@@ -775,7 +777,7 @@ struct
               (*   fn _ => releaseLock masterLock *)
               (* end *)
 
-        val Queue { top, bottom, work, ... } = case !r of SOME q => q | NONE => (print "remove2\n"; raise WorkQueue)
+        val Queue { top, bottom, work, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove2\n"; raise WorkQueue)
         val last = !top - 1
         val j = !bottom
 

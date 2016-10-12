@@ -12,6 +12,8 @@ struct
   datatype job = Work of (unit -> void) * unit HH.t * int
                | Thread of unit T.t * unit HH.t
 
+  val dbgmsg = fn _ => ()
+
   val numberOfProcessors = Word32.toInt I.numberOfProcessors
 
   structure Q = WorkQueue (struct
@@ -56,20 +58,6 @@ struct
        TextIO.flushOut TextIO.stdErr;
        MLtonProcess.exit MLtonProcess.Status.failure)
 
-  fun dbgmsg m =
-      let
-          val p = Word32.toInt (I.processorNumber ())
-      in
-          print (String.concat ["[",
-                                Int.toString p,
-                                "] ",
-                                m,
-                                "\n"])
-      end
-
-  (* Comment out to enable debug messages *)
-  fun dbgmsg m = ()
-
   fun useHH (hh : unit HH.t) : unit = (HM.enterGlobalHeap ();
                                        HH.set hh;
                                        HH.setUseHierarchicalHeap true;
@@ -86,19 +74,14 @@ struct
   fun schedule' p countSuspends =
       case Q.getWork p
        of NONE =>
-          (* if !enabled then (enabled := false; profileDisable ()) else (); *)
           schedule' p countSuspends
 
         | SOME (nonlocal, unlocker, j) =>
-          (if countSuspends andalso nonlocal
+          (dbgmsg "stole work";
+
+           if countSuspends andalso nonlocal
            then incSuspends p
            else ();
-
-           (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
-
-           dbgmsg "stole work";
-
-           Q.startWork p;
 
            (case j
              of Work (w, parentHH, sharedLevel) =>

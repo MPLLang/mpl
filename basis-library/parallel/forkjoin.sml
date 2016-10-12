@@ -12,6 +12,8 @@ struct
   datatype 'a result = Finished of 'a ref HH.t
                      | Raised of exn ref HH.t
 
+  val dbgmsg = fn _ => ()
+
   val numTasks = Array.array (Word32.toInt I.numberOfProcessors, 0)
   fun incrTask n =
       let
@@ -19,20 +21,6 @@ struct
       in
           Array.update (numTasks, p, Array.sub (numTasks, p) + n)
       end
-
-  fun dbgmsg m =
-      let
-          val p = Word32.toInt (I.processorNumber ())
-      in
-          print (String.concat ["[",
-                                Int.toString p,
-                                "] ",
-                                m,
-                                "\n"])
-      end
-
-  (* Comment out to enable debug messages *)
-  fun dbgmsg m = ()
 
   (* RAM_NOTE: How to handle exceptions and heaps? *)
   local
