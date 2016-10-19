@@ -143,6 +143,7 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
     getChunkInfo(lastChunk)->nextChunk = chunk;
     getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
   }
+  getChunkInfo(levelHeadChunk)->split.levelHead.size += totalSize;
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk at level %u", getChunkInfo(levelHeadChunk)->level);
