@@ -8,6 +8,7 @@ sig
   (* identifies a piece of work *)
   type token
   type susp
+  type unlocker = unit -> unit
 
   (* these take the identifier of the current processor as their first
    argument *)
@@ -19,7 +20,7 @@ sig
 
   (* remove the next, highest priority work.  the boolean indicates whether
    this is a "non-local" (i.e. stolen) job. *)
-  val getWork : proc -> (bool * work) option
+  val getWork : proc -> (bool * unlocker * work) option
   (* begin work -- added jobs should be considered children *)
   val startWork : proc -> unit
   (* mark the most recent unit of work as done *)

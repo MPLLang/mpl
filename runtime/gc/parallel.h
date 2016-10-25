@@ -4,7 +4,7 @@
 PRIVATE void Parallel_init (void);
 
 PRIVATE void Parallel_yield (void);
-PRIVATE Pointer Parallel_lockInit (Pointer);
+PRIVATE void Parallel_lockInit (Pointer);
 PRIVATE void Parallel_lockTake (Pointer);
 PRIVATE void Parallel_lockRelease (Pointer);
 PRIVATE void Parallel_dekkerTake (Bool, Pointer, Pointer, Pointer);

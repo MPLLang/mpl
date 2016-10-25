@@ -1138,7 +1138,7 @@ fun 'a checkApp (prim: 'a t,
                              cpointer: 'a,
                              equals: 'a * 'a -> bool,
                              exn: 'a,
-                             hierarchicalHeap: 'a,
+                             hierarchicalHeap: 'a -> 'a,
                              intInf: 'a,
                              real: RealSize.t -> 'a,
                              reff: 'a -> 'a,
@@ -1268,7 +1268,7 @@ fun 'a checkApp (prim: 'a t,
        | FFI_getArgs => noTargs (fn () => (noArgs, cpointer))
        | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
-       | HierarchicalHeap_new => noTargs (fn () => (noArgs, hierarchicalHeap))
+       | HierarchicalHeap_new => oneTarg (fn targ => (noArgs, hierarchicalHeap targ))
        | IntInf_add => intInfBinary ()
        | IntInf_andb => intInfBinary ()
        | IntInf_arshift => intInfShift ()
@@ -1405,6 +1405,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                             result: 'a,
                             typeOps = {deArray: 'a -> 'a,
                                        deArrow: 'a -> 'a * 'a,
+                                       deHierarchicalHeap: 'a -> 'a,
                                        deRef: 'a -> 'a,
                                        deVector: 'a -> 'a,
                                        deWeak: 'a -> 'a}}) =
@@ -1424,6 +1425,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | CPointer_setObjptr => one (arg 2)
        | Exn_extra => one result
        | Exn_setExtendExtra => one (#2 (deArrow (arg 0)))
+       | HierarchicalHeap_new => one (deHierarchicalHeap result)
        | MLton_bogus => one result
        | MLton_deserialize => one result
        | MLton_eq => one (arg 0)

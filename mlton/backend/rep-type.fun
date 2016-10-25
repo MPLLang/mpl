@@ -127,6 +127,7 @@ structure Type =
       val word0: t = bits Bits.zero
       val word8: t = word WordSize.word8
       val word32: t = word WordSize.word32
+      val word64: t = word WordSize.word64
 
       val wordVector: WordSize.t -> t =
          objptr o ObjptrTycon.wordVector o WordSize.bits
@@ -500,9 +501,19 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesID =
                           Bits.toBytes (Type.width Type.word32)
+                      (*
+                       * RAM_NOTE: Not sure if I can use cpointer for both
+                       * pointer and void*
+                       *)
                       val bytesLevelList =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesNewLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLocallyCollectibleSize =
+                          Bits.toBytes (Type.width Type.word64)
+                      val bytesLocallyCollectibleHeapSize =
+                          Bits.toBytes (Type.width Type.word64)
+                      val bytesRetVal =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesParentHH =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
@@ -523,6 +534,9 @@ structure ObjectType =
                               bytesID +
                               bytesLevelList +
                               bytesNewLevelList +
+                              bytesLocallyCollectibleSize +
+                              bytesLocallyCollectibleHeapSize +
+                              bytesRetVal +
 			      bytesParentHH +
 			      bytesNextChildHH +
 			      bytesChildHHList
@@ -543,6 +557,9 @@ structure ObjectType =
                                                       Type.word32,
                                                       Type.word32,
                                                       Type.cpointer (),
+                                                      Type.cpointer (),
+                                                      Type.word64,
+                                                      Type.word64,
                                                       Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),

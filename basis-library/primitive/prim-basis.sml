@@ -71,7 +71,7 @@ structure HM =
     struct
         structure HierarchicalHeap =
             struct
-                type t = hierarchicalHeap
+                type 'a t = 'a hierarchicalHeap
             end
     end
 

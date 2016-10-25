@@ -9,8 +9,10 @@ struct
   structure I = MLtonParallelInternal
   structure T = MLtonThread
 
-  datatype job = Work of (unit -> void) * HH.t * int
-               | Thread of unit T.t * HH.t
+  datatype job = Work of (unit -> void) * unit HH.t * int
+               | Thread of unit T.t * unit HH.t
+
+  val dbgmsg = fn _ => ()
 
   val numberOfProcessors = Word32.toInt I.numberOfProcessors
 
@@ -20,8 +22,8 @@ struct
                            end)
     :> PARALLEL_WORKQUEUE where type work = job
 
-  datatype 'a t = Suspend of 'a T.t * HH.t * Q.susp
-                | Capture of 'a T.t * HH.t
+  datatype 'a t = Suspend of 'a T.t * Q.susp
+                | Capture of 'a T.t * unit HH.t
 
   type token = Q.token
 
@@ -33,6 +35,8 @@ struct
 
   val suspends = Array.array (numberOfProcessors, 0)
   fun incSuspends p = Array.update (suspends, p, Array.sub (suspends, p) + 1)
+
+  val schedThreads = Array.array (numberOfProcessors, NONE)
 
   (* RAM_NOTE: Restore futures are reintegrated *)
   (* val delayed = Array.array (numberOfProcessors, nil) *)
@@ -54,10 +58,14 @@ struct
        TextIO.flushOut TextIO.stdErr;
        MLtonProcess.exit MLtonProcess.Status.failure)
 
-  fun setAndUseHH (hh : HH.t) : unit = (HM.enterGlobalHeap ();
-                                        HH.set hh;
-                                        HH.useHierarchicalHeap ();
-                                        HM.exitGlobalHeap ())
+  fun useHH (hh : unit HH.t) : unit = (HM.enterGlobalHeap ();
+                                       HH.set hh;
+                                       HH.setUseHierarchicalHeap true;
+                                       HM.exitGlobalHeap ())
+
+  fun stopUseHH (() : unit) : unit = (HM.enterGlobalHeap ();
+                                      HH.setUseHierarchicalHeap false;
+                                      HM.exitGlobalHeap ())
 
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =
@@ -66,17 +74,14 @@ struct
   fun schedule' p countSuspends =
       case Q.getWork p
        of NONE =>
-          (* if !enabled then (enabled := false; profileDisable ()) else (); *)
           schedule' p countSuspends
 
-        | SOME (nonlocal, j) =>
-          (if countSuspends andalso nonlocal
+        | SOME (nonlocal, unlocker, j) =>
+          (dbgmsg "stole work";
+
+           if countSuspends andalso nonlocal
            then incSuspends p
            else ();
-
-           (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
-
-           Q.startWork p;
 
            (case j
              of Work (w, parentHH, sharedLevel) =>
@@ -90,10 +95,25 @@ struct
                                        "ERROR: work exists on queue?!")
 
                     val childHH = HH.new ()
+                    val () = HH.appendChild (parentHH, childHH, sharedLevel)
                 in
-                    HH.appendChild (parentHH, childHH, sharedLevel);
-                    setAndUseHH childHH;
-                    w ()
+                    (* switch to childHH to allocate the thread there *)
+                    T.switch (fn st : unit T.t =>
+                                 (Array.update (schedThreads,
+                                                p,
+                                                SOME (T.prepare (st, ())));
+                                  useHH childHH;
+                                  T.prepare (T.new (fn () =>
+                                                       (*
+                                                        * make sure to use
+                                                        * the HH in the new
+                                                        * thread too.
+                                                        *)
+                                                       (useHH childHH;
+                                                        unlocker ();
+                                                        w ())),
+                                             ())));
+                    stopUseHH ()
                 end
 
               | Thread (k, hh) =>
@@ -101,8 +121,13 @@ struct
                  * This doesn't have to be stolen as it
                  * could be a resume parent
                  *)
-                T.switch
-                    (fn _ => T.prepare (k, ())))
+                (T.switch (fn st =>
+                              (Array.update (schedThreads,
+                                             p,
+                                             SOME (T.prepare (st, ())));
+                               useHH hh;
+                               T.prepare (T.prepend (k, fn () => unlocker ()), ())));
+                 stopUseHH ()))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
            handle e => (HM.enterGlobalHeap ();
@@ -110,9 +135,26 @@ struct
                              ^ (General.exnMessage e)
                              ^ "\" in parallel scheduler!\n"));
 
-           die "MLton.Parallel.Basic.schedule: ERROR: scheduled work returned?")
+           schedule' p countSuspends)
 
-  fun schedule countSuspends () = schedule' (processorNumber ()) countSuspends
+  fun schedule () =
+      let
+          val p = processorNumber ()
+      in
+          schedule' p false
+      end
+
+  val () =
+      let
+          fun loop i n =
+              if i >= n
+              then ()
+              else Array.update (schedThreads,
+                                 i,
+                                 SOME (T.initPrimitive (T.new schedule)))
+      in
+          loop 0 numberOfProcessors
+      end
 
   (* RAM_NOTE: This is the older version that includes support for futures *)
   (* fun schedule countSuspends () = *)
@@ -175,57 +217,68 @@ struct
   (*   end *)
 
   fun capture' (p, tail) =
-      T.switch
-          (fn k =>
-              (* Note that we cannot call Q.addWork on the current thread!
+      let
+          val r =
+              T.switch
+                  (fn k =>
+                      (* Note that we cannot call Q.addWork on the current thread!
                 Also, we can't call directly schedule here because we need to
                 preserve the current thread/stack. Instead we switch to a
                 different thread that will continue by calling f and then
                 schedule.  This avoids a whole host of bugs related to f
                 leaking out k to another thread and that thread resuming k
                 before f has finished. *)
-              let
-                  (* Check to see what the next job is.  If it's a thread, then
+                      let
+                          (* Check to see what the next job is.  If it's a thread, then
                   hijack that thread to run the tail of the current job.
                   Otherwise, create a new thread. *)
-                  val t =
-                      case Q.getWork p
-                       of SOME (nonlocal, Work (w, parentHH, sharedLevel)) =>
-                          let
-                              val _ = if nonlocal
-                                      then ()
-                                      else die ("MLton.Parallel.Basic.schedule: " ^
-                                                "ERROR: work exists on queue?!")
+                          (* val t = *)
+                          (*     case Q.getWork p *)
+                          (*      of SOME (nonlocal, Work (w, parentHH, sharedLevel)) => *)
+                          (*         let *)
+                          (*             val _ = if nonlocal *)
+                          (*                     then () *)
+                          (*                     else die ("MLton.Parallel.Basic.schedule: " ^ *)
+                          (*                               "ERROR: work exists on queue?!") *)
 
-                              val childHH = HH.new ()
-                          in
-                              HH.appendChild (parentHH, childHH, sharedLevel);
-                              T.new (fn () =>
-                                        (Q.startWork p;
-                                         setAndUseHH childHH;
-                                         w ()
-                                        (* RAM_NOTE: Do I need to switch heaps on exception here? *)
-                                        ))
-                          end
+                          (*             val childHH = HH.new () *)
+                          (*         in *)
+                          (*             HH.appendChild (parentHH, childHH, sharedLevel); *)
+                          (*             T.new (fn () => *)
+                          (*                       (Q.startWork p; *)
+                          (*                        setAndUseHH childHH; *)
+                          (*                        w () *)
+                          (*                       (* RAM_NOTE: Do I need to switch heaps on exception here? *) *)
+                          (*                       )) *)
+                          (*         end *)
 
-                        | SOME (_, Thread (k, hh)) => k
+                          (*       | SOME (_, Thread (k, hh)) => k *)
 
-                        | NONE => T.new (schedule false)
-                  (* to disable hijacking, use this instead
+                          (*       | NONE => T.new (schedule false) *)
+                          (* to disable hijacking, use this instead
                 val t = T.new schedule
-                   *)
-                  (* val currentHH = HH.get () *)
-                  (* fun add w = Q.addWork (p, *)
-                  (*                        [(Q.newWork p, Work (w, currentHH))]) *)
-              in
-                  (* RAM_NOTE: Disabled until reintegrated *)
-                  (* (* XX maybe this should move out (before suspend/finishWork) *) *)
-                  (* (* add any delayed work *) *)
-                  (* app add (rev (Array.sub (delayed, p))); *)
-                  (* Array.update (delayed, p, nil); *)
-                  (* return the new thread to switch to *)
-                  T.prepare (T.prepend (t, tail), (p, k))
-              end)
+                           *)
+                          (* val currentHH = HH.get () *)
+                          (* fun add w = Q.addWork (p, *)
+                          (*                        [(Q.newWork p, Work (w, currentHH))]) *)
+
+                          val () = tail (p, k)
+
+                          val () = HM.enterGlobalHeap ()
+                          val t = valOf (Array.sub (schedThreads, p))
+                      in
+                          (* RAM_NOTE: Disabled until reintegrated *)
+                          (* (* XX maybe this should move out (before suspend/finishWork) *) *)
+                          (* (* add any delayed work *) *)
+                          (* app add (rev (Array.sub (delayed, p))); *)
+                          (* Array.update (delayed, p, nil); *)
+                          (* return the new thread to switch to *)
+                          t
+                      end)
+          val () = HM.exitGlobalHeap ()
+      in
+          r
+      end
 
   (* Original capture' *)
   (* fun capture' (p, tail) = *)
@@ -309,8 +362,6 @@ struct
 
   fun capture (f: 'a t -> unit) =
       let
-          val _ = HM.enterGlobalHeap ()
-
           val p = processorNumber ()
           val hh = HH.get ()
           fun tail (p, k) =
@@ -321,63 +372,59 @@ struct
                 f (Capture (k, hh))
               end
           val result = capture' (p, tail)
-
-          val _  = HM.exitGlobalHeap ()
       in
           result
       end
 
   fun resume suspension =
-      let
-          val _ = HM.enterGlobalHeap ()
-
-          val result =
-              case suspension of
-                  (Suspend (k, hh, q), v) =>
-                  die "MLton.Parallel.Basic.resume: Suspend objects shouldn't exist!"
-                  (* let *)
-                  (*     val p = processorNumber () *)
-                  (* in *)
-                  (*     Q.resumeWork (p, *)
-                  (*                   q, *)
-                  (*                   (Q.newWork p, *)
-                  (*                    Thread (T.prepend (k, fn () => v), hh), *)
-                  (*                    NONE)) *)
-                  (* end *)
-                | (Capture (k, hh), v) =>
+      case suspension of
+          (Suspend (k, q), v) =>
+          die "MLton.Parallel.Basic.resume: Suspend objects shouldn't exist!"
+        (* let *)
+        (*     val p = processorNumber () *)
+        (* in *)
+        (*     Q.resumeWork (p, *)
+        (*                   q, *)
+        (*                   (Q.newWork p, *)
+        (*                    Thread (T.prepend (k, fn () => v), hh), *)
+        (*                    NONE)) *)
+        (* end *)
+        | (Capture (k, hh), v) =>
+          let
+              val p = processorNumber ()
+              val myHH = HH.get ()
+              val t =
                   let
-                      val p = processorNumber ()
+                      val () = useHH hh
+                      val t = Thread (T.prepend (k, fn () => v), hh)
+                      val () = useHH myHH
                   in
-                      Q.addWork (p, [(Q.newWork p,
-                                      Thread (T.prepend (k, fn () => v), hh))])
+                      t
                   end
-
-          val _ = HM.exitGlobalHeap ()
-      in
-          result
-      end
+          in
+              Q.addWork (p, [(Q.newWork p, t)])
+          end
 
   val yield =
-      evaluateInGlobalHeap
-          (fn () =>
-              let
-                  val p = processorNumber ()
-              in
-                  if Q.shouldYield p
-                  then
-                      let
-                          val hh = HH.get ()
-                      in
-                          capture' (p,
-                                    fn (p, k) =>
-                                       (Q.addWork (p, [(Q.newWork p,
-                                                        Thread (k, hh))]);
-                                        incSuspends p;
-                                        Q.finishWork p))
-                      end
-                  else
-                      ()
-              end)
+      die "MLton.Parallel.Basic.yield: yield is not supported!"
+      (* let *)
+      (*     val p = processorNumber () *)
+      (* in *)
+      (*     if Q.shouldYield p *)
+      (*     then *)
+      (*         let *)
+      (*             val hh = HH.get () *)
+      (*         in *)
+      (*             capture' (p, *)
+      (*                       fn (p, k) => *)
+      (*                          (Q.addWork (p, [(Q.newWork p, *)
+      (*                                           Thread k)]); *)
+      (*                           incSuspends p; *)
+      (*                           Q.finishWork p)) *)
+      (*         end *)
+      (*     else *)
+      (*         () *)
+      (* end *)
 
   local
       fun doAddRight (w, level) =
@@ -425,7 +472,7 @@ struct
                   end
           end
   in
-      val addRight = evaluateInGlobalHeap doAddRight
+      val addRight = doAddRight
   end
 
   (* RAM_NOTE: Disabled until reintegrated *)
@@ -462,8 +509,7 @@ struct
   (*     val addLeft = evaluateInGlobalHeap doAddLeft *)
   (* end *)
 
-  val remove =
-      evaluateInGlobalHeap (fn t => Q.removeWork (processorNumber (), t))
+  fun remove t = Q.removeWork (processorNumber (), t)
 
   (* XXX left? what about the right? *)
   val delayedAdd =
@@ -478,43 +524,46 @@ struct
       (*             Array.update (delayed, p, w::ws) *)
       (*         end) *)
 
-  val return =
-      evaluateInGlobalHeap
-          (fn () =>
-              let
-                  val p = processorNumber ()
-              in
-                  Q.finishWork p;
-                  T.switch (fn _ => T.prepare (T.new (schedule true), ()))
-                  (* (* Look for delayed work *) *)
-                  (* case Array.sub (delayed, p) of *)
-                  (*     nil => *)
-                  (*     (* this is counted in schedule: incSuspends p;  *) *)
-                  (*     () *)
-                  (*   | ws => *)
-                  (*     let *)
-                  (*         val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match *)
-                  (*         val () = Array.update (delayed, p, nil) *)
-                  (*         fun add nil = () *)
-                  (*           | add (w::ws) = *)
-                  (*             Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))]) *)
-                  (*         (* add any lower priority work *) *)
-                  (*         val () = add ws *)
-                  (*     in *)
-                  (*         (* now what do to with w? *) *)
-                  (*         if Q.shouldYield p then *)
-                  (*             (Q.addWork (p, [(Q.newWork p, Work w)]); *)
-                  (*              (* this is counted in schedule: incSuspends p; *) *)
-                  (*              Q.finishWork p; *)
-                  (*              schedule true ()) *)
-                  (*         else *)
-                  (*             (HM.exitGlobalHeap (); *)
-                  (*              w ()) *)
-                  (*     end *)
-              end)
+  fun return (() : unit) : void =
+      let
+          val p = processorNumber ()
+      in
+          Q.finishWork p;
+          T.switch (fn _ =>
+                       let
+                           val () = HM.enterGlobalHeap ()
+                           val t = valOf (Array.sub (schedThreads, p))
+                       in
+                           t
+                       end)
+          (* (* Look for delayed work *) *)
+          (* case Array.sub (delayed, p) of *)
+          (*     nil => *)
+          (*     (* this is counted in schedule: incSuspends p;  *) *)
+          (*     () *)
+          (*   | ws => *)
+          (*     let *)
+          (*         val (w, ws) = case rev ws of w::ws => (w, ws) | nil => raise Match *)
+          (*         val () = Array.update (delayed, p, nil) *)
+          (*         fun add nil = () *)
+          (*           | add (w::ws) = *)
+          (*             Q.addWork (p, [(Q.newWork p, Work (fn () => (add ws; w ())))]) *)
+          (*         (* add any lower priority work *) *)
+          (*         val () = add ws *)
+          (*     in *)
+          (*         (* now what do to with w? *) *)
+          (*         if Q.shouldYield p then *)
+          (*             (Q.addWork (p, [(Q.newWork p, Work w)]); *)
+          (*              (* this is counted in schedule: incSuspends p; *) *)
+          (*              Q.finishWork p; *)
+          (*              schedule true ()) *)
+          (*         else *)
+          (*             (HM.exitGlobalHeap (); *)
+          (*              w ()) *)
+          (*     end *)
+      end
 
-
-  val () = (_export "Parallel_run": (unit -> void) -> unit;) (fn () => schedule false ())
+  val () = (_export "Parallel_run": (unit -> void) -> unit;) schedule
   (* init MUST come after schedulerLoop has been exported *)
 
   val () = print ("**************************\n" ^
@@ -541,5 +590,6 @@ struct
                   resetBytesLive ()
               end)
   val suspends = evaluateInGlobalHeap (fn () => Array.foldl op+ 0 suspends)
+
 
 end

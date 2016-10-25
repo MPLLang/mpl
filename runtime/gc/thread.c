@@ -11,11 +11,11 @@
 /* Function definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-void T_setCurrentThreadUseHierarchicalHeap(void) {
+void T_setCurrentThreadUseHierarchicalHeap(Bool use) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = getThreadCurrent(s);
 
-  thread->useHierarchicalHeap = TRUE;
+  thread->useHierarchicalHeap = use;
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

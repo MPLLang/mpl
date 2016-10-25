@@ -46,7 +46,7 @@ void HM_enterGlobalHeap (void) {
     assert (NULL != s->globalLimitPlusSlop);
     HM_exitLocalHeap (s);
 
-    spinlock_lock(&(s->lock));
+    spinlock_lock(&(s->lock), Proc_processorNumber(s));
     s->frontier = s->globalFrontier;
     s->limitPlusSlop = s->globalLimitPlusSlop;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -72,7 +72,7 @@ void HM_exitGlobalHeap (void) {
   }
 
   if (0 == currentThread->inGlobalHeapCounter) {
-    spinlock_lock(&(s->lock));
+    spinlock_lock(&(s->lock), Proc_processorNumber(s));
     s->globalFrontier = s->frontier;
     s->globalLimitPlusSlop = s->limitPlusSlop;
     HM_enterLocalHeap (s);
@@ -94,6 +94,9 @@ void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
 
   /* restore inGlobalHeapCounter */
   getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "inGlobalHeapCounter = %d",
+      inGlobalHeapCounter);
 }
 
 Word32 HM_explicitExitGlobalHeap(void) {
@@ -116,6 +119,10 @@ Word32 HM_explicitExitGlobalHeap(void) {
     DIE("Attempted to exit while GHC is zero!");
   }
 
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+      "inGlobalHeapCounter = %d",
+      retVal);
+
   /* return the old inGlobalHeapCounter */
   return retVal;
 }
@@ -123,6 +130,10 @@ Word32 HM_explicitExitGlobalHeap(void) {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 bool HM_inGlobalHeap (GC_state s) {
+  if (BOGUS_OBJPTR == getThreadCurrentObjptr(s)) {
+    return TRUE;
+  }
+
   GC_thread currentThread = getThreadCurrent (s);
 
   return (!currentThread->useHierarchicalHeap ||

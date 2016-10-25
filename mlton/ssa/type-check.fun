@@ -66,7 +66,7 @@ fun checkScopes (program as
                     Array ty => loopType ty
                   | CPointer => ()
                   | Datatype tycon => getTycon tycon
-                  | HierarchicalHeap => ()
+                  | HierarchicalHeap ty => loopType ty
                   | IntInf => ()
                   | Real _ => ()
                   | Ref ty => loopType ty

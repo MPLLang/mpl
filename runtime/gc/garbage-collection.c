@@ -334,6 +334,11 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
         fprintf (stderr, "[GC: Local alloction of chunk @ "FMTPTR".]\n",
                  (uintptr_t)newProcFrontier);
 
+      LOG(LM_GARBAGE_COLLECTION, LL_DEBUG,
+          "[GC: Local alloction of chunk @ "FMTPTR" -- "FMTPTR"]",
+          (uintptr_t)newProcFrontier,
+          (uintptr_t)newHeapFrontier);
+
       s->start = newStart;
       s->frontier = newProcFrontier;
       assert (isFrontierAligned (s, s->frontier));

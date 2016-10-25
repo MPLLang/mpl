@@ -61,6 +61,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/invariant.c"
 #include "gc/global-heap.c"
 #include "gc/local-heap.c"
+#include "gc/logger.c"
 #include "gc/mark-compact.c"
 #include "gc/model.c"
 #include "gc/new-object.c"

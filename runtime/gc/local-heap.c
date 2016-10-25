@@ -87,42 +87,36 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* Not enough space, so add new chunk */
-
-    size_t chunkPoolBytesAllocated = ChunkPool_allocated();
-    size_t chunkPoolSize = ChunkPool_size();
-    double allocatedRatio = ((double)(chunkPoolSize)) /
-                            ((double)(chunkPoolBytesAllocated));
-    if (allocatedRatio < s->controls->hhRatios.allocatedRatio) {
+    double allocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
+                            ((double)(hh->locallyCollectibleSize));
+    if (allocatedRatio < s->controls->hhConfig.allocatedRatio) {
       /* too much allocated, so let's collect */
       HM_HHC_collectLocal();
 
-      chunkPoolBytesAllocated = ChunkPool_allocated();
-      chunkPoolSize = ChunkPool_size();
-      double newAllocatedRatio = ((double)(chunkPoolSize)) /
-                                 ((double)(chunkPoolBytesAllocated));
+      double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
+                                 ((double)(hh->locallyCollectibleSize));
 
-      LOG(TRUE, FALSE, L_INFO,
+      LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
           "Live Ratio %.2f < %.2f, performed local collection to increase "
           "ratio to %.2f (%zu / %zu)",
           allocatedRatio,
-          s->controls->hhRatios.allocatedRatio,
+          s->controls->hhConfig.allocatedRatio,
           newAllocatedRatio,
-          chunkPoolSize,
-          chunkPoolBytesAllocated);
+          hh->locallyCollectibleHeapSize,
+          hh->locallyCollectibleSize);
 
-      ChunkPool_maybeResize();
+      HM_HH_maybeResizeLCHS(s, hh);
 
-      /* I may have reached a new maxChunkPoolBytesLive, so check */
-      if (s->cumulativeStatistics->maxChunkPoolBytesLive <
-          chunkPoolBytesAllocated) {
-        s->cumulativeStatistics->maxChunkPoolBytesLive =
-            chunkPoolBytesAllocated;
+      /* I may have reached a new maxHHLCS, so check */
+      if (s->cumulativeStatistics->maxHHLCS <
+          hh->locallyCollectibleSize) {
+        s->cumulativeStatistics->maxHHLCS =
+            hh->locallyCollectibleSize;
       }
 
-      /* I may have reached a new maxChunkPoolSize, so check */
-      chunkPoolSize = ChunkPool_size();
-      if (s->cumulativeStatistics->maxChunkPoolSize < chunkPoolSize) {
-        s->cumulativeStatistics->maxChunkPoolSize = chunkPoolSize;
+      /* I may have reached a new maxHHLHCS, so check */
+      if (s->cumulativeStatistics->maxHHLCHS < hh->locallyCollectibleHeapSize) {
+        s->cumulativeStatistics->maxHHLCHS = hh->locallyCollectibleHeapSize;
       }
     }
 

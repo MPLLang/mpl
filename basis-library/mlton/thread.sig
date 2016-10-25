@@ -48,7 +48,7 @@ signature MLTON_THREAD =
        * that will evaluate t on v.
        *)
       val prepare: 'a t * 'a -> Runnable.t
-      (* switch f 
+      (* switch f
        * apply f to the current thread to get rt, and then start
        * running thread rt.  It is an error for f to
        * perform another switch.  f is guaranteed to run
@@ -65,4 +65,6 @@ signature MLTON_THREAD_EXTRA =
       val register: int * (MLtonPointer.t -> unit) -> unit
       val setSignalHandler: (Runnable.t -> Runnable.t) -> unit
       val switchToSignalHandler: unit -> unit
+
+      val initPrimitive: unit t -> Runnable.t
    end

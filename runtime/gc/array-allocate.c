@@ -49,7 +49,7 @@ pointer GC_arrayAllocate (GC_state s,
 
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
 
-  LOG(DEBUG || s->controls->messages, FALSE, L_DEBUG,
+  LOG(LM_ALLOCATION, LL_INFO,
       "GC_arrayAllocate (%"PRIuMAX", "FMTARRLEN", "FMTHDR") [%d]\n",
       (uintmax_t)ensureBytesFree,
       numElements, header,
@@ -82,7 +82,7 @@ pointer GC_arrayAllocate (GC_state s,
     arraySizeAligned = align(GC_ARRAY_HEADER_SIZE + OBJPTR_SIZE, s->alignment);
   }
 
-  LOG(DEBUG_ARRAY, FALSE, L_DEBUG,
+  LOG(LM_ALLOCATION, LL_DEBUG,
       "Array with "FMTARRLEN" elts of size %"PRIuMAX" and total size %s and "
       "total aligned size %s. Ensure %s bytes free.\n",
       numElements,
@@ -153,7 +153,7 @@ pointer GC_arrayAllocate (GC_state s,
     if ((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) <
         bytesRequested) {
       /* current chunk does not have enough space */
-      LOG(DEBUG_ARRAY, FALSE, L_DEBUG,
+      LOG(LM_ALLOCATION, LL_DEBUG,
           "Current Chunk has %zu bytes, need %zu bytes. Ensuring.",
           (((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))),
           bytesRequested);
@@ -186,7 +186,7 @@ pointer GC_arrayAllocate (GC_state s,
 
   GC_profileAllocInc (s, arraySizeAligned);
 
-  LOG(DEBUG_ARRAY, FALSE, L_DEBUG,
+  LOG(LM_ALLOCATION, LL_DEBUG,
       "GC_arrayAllocate done.  result = "FMTPTR"  frontier = "FMTPTR" [%d]\n",
       (uintptr_t)result,
       (uintptr_t)s->frontier,

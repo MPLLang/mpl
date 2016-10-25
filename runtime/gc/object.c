@@ -31,13 +31,13 @@ const char* objectTypeTagToString (GC_objectTypeTag tag) {
  * Returns a pointer to the header for the object pointed to by p.
  */
 GC_header* getHeaderp (pointer p) {
-  return (GC_header*)(p 
+  return (GC_header*)(p
                       - GC_HEADER_SIZE);
 }
 
-/* getHeader (p) 
+/* getHeader (p)
  *
- * Returns the header for the object pointed to by p. 
+ * Returns the header for the object pointed to by p.
  */
 GC_header getHeader (pointer p) {
   return *(getHeaderp(p));
@@ -54,34 +54,35 @@ GC_header buildHeaderFromTypeIndex (uint32_t t) {
 void splitHeader(GC_state s, GC_header header,
                  GC_objectTypeTag *tagRet, bool *hasIdentityRet,
                  uint16_t *bytesNonObjptrsRet, uint16_t *numObjptrsRet) {
-  unsigned int objectTypeIndex; 
-  GC_objectType objectType; 
+  unsigned int objectTypeIndex;
+  GC_objectType objectType;
   GC_objectTypeTag tag;
   bool hasIdentity;
   uint16_t bytesNonObjptrs, numObjptrs;
 
-  assert (1 == (header & GC_VALID_HEADER_MASK)); 
-  objectTypeIndex = (header & TYPE_INDEX_MASK) >> TYPE_INDEX_SHIFT; 
-  assert (objectTypeIndex < s->objectTypesLength); 
+  assert (1 == (header & GC_VALID_HEADER_MASK));
+  objectTypeIndex = (header & TYPE_INDEX_MASK) >> TYPE_INDEX_SHIFT;
+  assert (objectTypeIndex < s->objectTypesLength);
   objectType = &(s->objectTypes[objectTypeIndex]);
-  tag = objectType->tag; 
-  hasIdentity = objectType->hasIdentity; 
-  bytesNonObjptrs = objectType->bytesNonObjptrs; 
-  numObjptrs = objectType->numObjptrs; 
+  tag = objectType->tag;
+  hasIdentity = objectType->hasIdentity;
+  bytesNonObjptrs = objectType->bytesNonObjptrs;
+  numObjptrs = objectType->numObjptrs;
 
-  if (DEBUG_DETAILED) 
-    fprintf (stderr, 
-             "splitHeader ("FMTHDR")" 
+  if (DEBUG_DETAILED) {
+    fprintf (stderr,
+             "splitHeader ("FMTHDR")"
              "  objectTypeIndex = %u"
-             "  tag = %s" 
-             "  hasIdentity = %s" 
-             "  bytesNonObjptrs = %"PRIu16 
-             "  numObjptrs = %"PRIu16"\n", 
-             header, 
+             "  tag = %s"
+             "  hasIdentity = %s"
+             "  bytesNonObjptrs = %"PRIu16
+             "  numObjptrs = %"PRIu16"\n",
+             header,
              objectTypeIndex,
-             objectTypeTagToString(tag), 
-             boolToString(hasIdentity), 
-             bytesNonObjptrs, numObjptrs); 
+             objectTypeTagToString(tag),
+             boolToString(hasIdentity),
+             bytesNonObjptrs, numObjptrs);
+  }
 
   if (tagRet != NULL)
     *tagRet = tag;

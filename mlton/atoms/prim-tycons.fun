@@ -117,7 +117,7 @@ val prims =
               (bool, Arity 0, Sometimes),
               (cpointer, Arity 0, Always),
               (exn, Arity 0, Never),
-              (hierarchicalHeap, Arity 0, Never),
+              (hierarchicalHeap, Arity 1, Never),
               (intInf, Arity 0, Sometimes),
               (list, Arity 1, Sometimes),
               (reff, Arity 1, Always),

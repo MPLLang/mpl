@@ -176,6 +176,7 @@ fun toPrimitive (t as T r : unit t): Prim.thread =
           ; f (fn () => ())
           ; t)
 
+val initPrimitive: unit t -> unit t = fromPrimitive o toPrimitive
 
 local
   (* SPOONHOWER_NOTE: spoons global state in signal handlers (but that's not the

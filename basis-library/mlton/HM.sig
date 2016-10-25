@@ -8,21 +8,22 @@ signature MLTON_HM =
     sig
         structure HierarchicalHeap:
                   sig
-                      type t
+                      type 'a t
 
-                      val new: unit -> t
+                      val new: unit -> unit t
 
-                      val set: t -> unit
-                      val get: unit -> t
+                      val set: 'a t -> unit
+                      val get: unit -> unit t
 
-                      val setLevel: t * int -> unit
-                      val getLevel: t -> int
-                      val promoteChunks: t -> unit
+                      val setLevel: 'a t * int -> unit
+                      val getLevel: 'a t -> int
 
-                      val appendChild: (t * t * int) -> unit
-                      val mergeIntoParent: t -> unit
+                      val appendChild: 'a t * 'b t * int -> unit
+                      val setReturnValue: 'a t * 'b -> 'b t
+                      val mergeIntoParentAndGetReturnValue: 'a t -> 'a option
+                      val promoteChunks: 'a t -> unit
 
-                      val useHierarchicalHeap: unit -> unit
+                      val setUseHierarchicalHeap: bool -> unit
                   end
 
         val enterGlobalHeap: unit -> unit
@@ -31,5 +32,5 @@ signature MLTON_HM =
         val explicitExitGlobalHeap: unit -> Word32.word
 
         val registerQueue: Word32.word * 'a array -> unit
-        val registerQueueLock: Word32.word * int ref -> unit
+        val registerQueueLock: Word32.word * Word32.word ref -> unit
     end

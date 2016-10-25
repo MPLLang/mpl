@@ -229,7 +229,7 @@ signature PRIM =
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,
                                       exn: 'a,
-                                      hierarchicalHeap: 'a,
+                                      hierarchicalHeap: 'a -> 'a,
                                       intInf: 'a,
                                       real: RealSize.t -> 'a,
                                       reff: 'a -> 'a,
@@ -254,6 +254,7 @@ signature PRIM =
                                 result: 'b,
                                 typeOps: {deArray: 'b -> 'b,
                                           deArrow: 'b -> 'b * 'b,
+                                          deHierarchicalHeap: 'b -> 'b,
                                           deRef: 'b -> 'b,
                                           deVector: 'b -> 'b,
                                           deWeak: 'b -> 'b}} -> 'b vector

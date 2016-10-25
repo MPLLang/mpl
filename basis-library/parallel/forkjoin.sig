@@ -5,12 +5,14 @@ sig
    components of a pair *)
   val fork : (unit -> 'a) * (unit -> 'b) -> 'a * 'b
 
+  val getNumTasks : unit -> int
+
   (* aggregate some intermediate results.  you can think of the arguments like
    the multiplication and unit operations of a group, along with an injection
    function from the integers.  reduce tabulates the integers from zero
    (inclusive) to "length" (exclusion), injects them into the group and then
    multiplies them up.
-     
+
    "*" must be associative and the unit must really be the identity element of
    the group.  assuming these are true, reduce behaves according to the
    following equivalence:

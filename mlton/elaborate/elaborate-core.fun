@@ -793,7 +793,6 @@ structure Type =
          in
             [("Bool", CType.bool, Tycon.bool),
              ("CPointer", CType.cpointer, Tycon.cpointer),
-             ("HierarchicalHeap", CType.hierarchicalHeap, Tycon.hierarchicalHeap),
              ("Real32", CType.real RealSize.R32, Tycon.real RealSize.R32),
              ("Real64", CType.real RealSize.R64, Tycon.real RealSize.R64),
              ("Thread", CType.thread, Tycon.thread)]
@@ -822,7 +821,7 @@ structure Type =
                    {ctype = ctype, name = name, tycon = tycon})
 
       val unary: Tycon.t list =
-         [Tycon.array, Tycon.reff, Tycon.vector]
+         [Tycon.array, Tycon.hierarchicalHeap, Tycon.reff, Tycon.vector]
 
       fun toNullaryCType (t: t): {ctype: CType.t, name: string} option =
          case deConOpt t of
@@ -887,8 +886,8 @@ structure Type =
                  case toCBaseType (ty, runtimeImport) of
                     NONE => esc NONE
                   | SOME z => z))
-      fun toCRetType (ty: t): z option option =
-         case toCBaseType (ty, false) of
+      fun toCRetType ((ty, runtimeImport): t * bool): z option option =
+         case toCBaseType (ty, runtimeImport) of
             NONE => if Type.isUnit ty
                        then SOME NONE
                        else NONE
@@ -901,7 +900,7 @@ structure Type =
                (case toCArgType (arg, runtimeImport) of
                    NONE => NONE
                  | SOME arg =>
-                      (case toCRetType ret of
+                      (case toCRetType (ret, runtimeImport) of
                           NONE => NONE
                         | SOME ret => SOME (arg, ret)))
       fun toCPtrType (ty: t): z option =
@@ -1087,6 +1086,7 @@ fun primApp {args, prim, result: Type.t} =
                                       result = result,
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = Type.deArrow,
+                                                 deHierarchicalHeap = Type.deHierarchicalHeap,
                                                  deRef = Type.deRef,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}})

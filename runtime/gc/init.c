@@ -11,7 +11,7 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
-#include "strings.h"
+#include <strings.h>
 
 static bool stringToBool (char *s) {
   if (0 == strcmp (s, "false"))
@@ -244,18 +244,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc) {
             die("@MLton log-level missing argument.");
           }
+
           char* levelString = argv[i++];
-          if (0 == strcasecmp(levelString, "force")) {
-            L_setLevel(L_FORCE);
-          } else if (0 == strcasecmp(levelString, "error")) {
-            L_setLevel(L_ERROR);
-          } else if (0 == strcasecmp(levelString, "warning")) {
-            L_setLevel(L_WARNING);
-          } else if (0 == strcasecmp(levelString, "info")) {
-            L_setLevel(L_INFO);
-          }  else if (0 == strcasecmp(levelString, "debug")) {
-            L_setLevel(L_DEBUG);
-          } else {
+          if (!initLogLevels(levelString)) {
             die ("@MLton log-level invalid argument");
           }
         } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {
@@ -362,17 +353,17 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp(arg, "min-chunk-pool")) {
+        } else if (0 == strcmp(arg, "initial-chunk-pool-size")) {
           i++;
           if (i == argc) {
-            die ("@MLton min-chunk-pool missing argument.");
+            die ("@MLton initial-chunk-pool-size missing argument.");
           }
 
           s->controls->chunkPoolConfig.initialSize = stringToBytes(argv[i++]);
-        } else if (0 == strcmp(arg, "max-chunk-pool")) {
+        } else if (0 == strcmp(arg, "max-chunk-pool-size")) {
           i++;
           if (i == argc) {
-            die ("@MLton max-chunk-pool missing argument.");
+            die ("@MLton max-chunk-pool-size missing argument.");
           }
 
           s->controls->chunkPoolConfig.maxSize = stringToBytes(argv[i++]);
@@ -392,8 +383,8 @@ int processAtMLton (GC_state s, int argc, char **argv,
             die ("@MLton hh-allocated-ratio missing argument.");
           }
 
-          s->controls->hhRatios.allocatedRatio = stringToFloat(argv[i++]);
-          if (s->controls->hhRatios.allocatedRatio < 2.0) {
+          s->controls->hhConfig.allocatedRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.allocatedRatio < 2.0) {
             die("@MLton hh-allocated-ratio must be at least 2.0");
           }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
@@ -413,6 +404,30 @@ int processAtMLton (GC_state s, int argc, char **argv,
                  "none, superlocal, or local.",
                  level);
           }
+        } else if (0 == strcmp(arg, "hh-live-lc-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-live-lc-ratio missing argument.");
+          }
+
+          s->controls->hhConfig.liveLCRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.liveLCRatio < 1.0) {
+            die("@MLton hh-live-lc-ratio must be at least 2.0");
+          }
+        } else if (0 == strcmp(arg, "hh-initial-lc-heap-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-initial-lc-heap-size missing argument.");
+          }
+
+          s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-max-lc-heap-size missing argument.");
+          }
+
+          s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -469,7 +484,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
-  s->controls->hhRatios.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.maxLCHS = 1; /* RAM_NOTE: Sentinel value */
   s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
   s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
   s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
@@ -564,7 +582,11 @@ int GC_init (GC_state s, int argc, char **argv) {
     }
   }
 
-  /* now that options are processed, initialize Chunk Pool */
+  /* now that options are processed, do post options init. */
+  if (1 == s->controls->hhConfig.maxLCHS) {
+    /* maxLCHS wasn't set, so default to max chunk pool */
+    s->controls->hhConfig.maxLCHS = s->controls->chunkPoolConfig.maxSize;
+  }
   ChunkPool_initialize(&(s->controls->chunkPoolConfig));
 
   return res;

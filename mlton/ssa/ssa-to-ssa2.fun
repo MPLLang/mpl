@@ -40,7 +40,8 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
               S.Type.Array t => S2.Type.array1 (convertType t)
             | S.Type.CPointer => S2.Type.cpointer
             | S.Type.Datatype tycon => S2.Type.datatypee tycon
-            | S.Type.HierarchicalHeap => S2.Type.hierarchicalHeap
+            | S.Type.HierarchicalHeap t =>
+              S2.Type.hierarchicalHeap (convertType t)
             | S.Type.IntInf => S2.Type.intInf
             | S.Type.Real s => S2.Type.real s
             | S.Type.Ref t => S2.Type.reff1 (convertType t)

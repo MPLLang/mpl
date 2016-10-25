@@ -20,28 +20,18 @@ void switchToThread (GC_state s, objptr op) {
              op, (uintmax_t)stack->used, (uintmax_t)stack->reserved);
   }
 
-#if ASSERT
-  if (BOGUS_OBJPTR != s->currentThread) {
-    if (getThreadCurrent(s)->useHierarchicalHeap) {
-      /* switching threads should only happen in the global heap! */
-      assert (HM_inGlobalHeap(s));
-    }
-  }
-#endif
-
   s->currentThread = op;
   setGCStateCurrentThreadAndStack (s);
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  assert(HM_inGlobalHeap(s));
+  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), s->heap->start);
+  LOG (LM_THREAD, LL_DEBUG,
+       "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
+       ((uintptr_t)(currentP)),
+       ((uintptr_t)(p)),
+       ensureBytesFree);
 
-  if (DEBUG_THREADS)
-    fprintf (stderr,
-             "GC_switchToThread ("FMTPTR", %"PRIuMAX") [%d]\n",
-             (uintptr_t)p,
-             (uintmax_t)ensureBytesFree,
-             Proc_processorNumber (s));
   /* RAM_NOTE: Switch to other branch when I can */
   if (TRUE) {
     /* This branch is slower than the else branch, especially
@@ -56,8 +46,36 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     getThreadCurrent(s)->exnStack = s->exnStack;
     beginAtomic (s);
 
+    if (!HM_inGlobalHeap(s)) {
+      /* save HH info for from-thread */
+      /* copied from HM_enterGlobalHeap() */
+      HM_exitLocalHeap(s);
+
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
+      s->frontier = s->globalFrontier;
+      s->limitPlusSlop = s->globalLimitPlusSlop;
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+      spinlock_unlock(&(s->lock));
+    }
+
+    /*
+     * at this point, the processor is in the global heap, but the thread is
+     * not.
+     */
+
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
+
+    if (!HM_inGlobalHeap(s)) {
+      /* I need to switch to the HH for the to-thread */
+      /* copied from HM_exitGlobalHeap() */
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
+      s->globalFrontier = s->frontier;
+      s->globalLimitPlusSlop = s->limitPlusSlop;
+      HM_enterLocalHeap (s);
+      spinlock_unlock(&(s->lock));
+    }
+
     s->atomicState--;
     /* SPOONHOWER_NOTE: don't bother to check the signal handler here since we
        (probably) aren't bothering to synchronize.  we'll get it on the next

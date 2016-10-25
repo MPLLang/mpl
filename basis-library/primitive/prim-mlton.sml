@@ -145,40 +145,49 @@ structure HM =
     struct
         structure HierarchicalHeap =
             struct
-                type t = HM.HierarchicalHeap.t
+                type 'a t = 'a HM.HierarchicalHeap.t
 
-                val appendChildHeap: t * t * Word32.word -> unit =
+                val appendChildHeap: 'a t * 'b t * Word32.word -> unit =
                     _import "HM_HH_appendChild" runtime private:
-                    t * t * Word32.word -> unit;
+                    'a t * 'b t * Word32.word -> unit;
 
-                val getHierarchicalHeap: unit -> t =
-                    _import "GC_getCurrentHierarchicalHeap" runtime private:
-                    unit -> t;
+                val getHierarchicalHeap: unit -> unit t =
+                   _import "GC_getCurrentHierarchicalHeap" runtime private:
+                    unit -> unit t;
 
-                val getLevel: t -> Word32.word =
+                val getLevel: 'a t -> Word32.word =
                     _import "HM_HH_getLevel" runtime private:
-                    t -> Word32.word;
+                    'a t -> Word32.word;
 
-                val mergeIntoParentHeap: t -> unit =
-                    _import "HM_HH_mergeIntoParent" runtime private: t -> unit;
+                val mergeIntoParentHeap: 'a t -> unit =
+                    _import "HM_HH_mergeIntoParent" runtime private:
+                    'a t -> unit;
 
-                val newHierarchicalHeap: unit -> t =
-                    _prim "HierarchicalHeap_new": unit -> t;
+                val mergeIntoParentHeapAndGetReturnValue: 'a t -> 'a =
+                    _import "HM_HH_mergeIntoParentAndGetReturnValue" runtime private:
+                    'a t -> 'a;
 
-                val promoteChunks: t -> unit =
-                    _import "HM_HH_promoteChunks" runtime private: t -> unit;
+                val newHierarchicalHeap: unit -> 'a t =
+                    _prim "HierarchicalHeap_new": unit -> 'a t;
 
-                val setHierarchicalHeap: t -> unit =
-                    _import "GC_setCurrentHierarchicalHeap" runtime private:
-                    t -> unit;
+                val promoteChunks: 'a t -> unit =
+                    _import "HM_HH_promoteChunks" runtime private: 'a t -> unit;
 
-                val setLevel: t * Word32.word -> unit =
-                    _import "HM_HH_setLevel" runtime private:
-                    t * Word32.word -> unit;
-
-                val setCurrentThreadUseHierarchicalHeap: unit -> unit =
+                val setCurrentThreadUseHierarchicalHeap: bool -> unit =
                     _import "T_setCurrentThreadUseHierarchicalHeap"
-                            runtime private: unit -> unit;
+                            runtime private: bool -> unit;
+
+                val setHierarchicalHeap: 'a t -> unit =
+                    _import "GC_setCurrentHierarchicalHeap" runtime private:
+                    'a t -> unit;
+
+                val setLevel: 'a t * Word32.word -> unit =
+                    _import "HM_HH_setLevel" runtime private:
+                    'a t * Word32.word -> unit;
+
+                val setReturnValue: 'a t * 'b -> 'b t =
+                    _import "HM_HH_setReturnValue" runtime private:
+                    'a t * 'b -> 'b t;
             end
 
         val enterGlobalHeap: unit -> unit =
@@ -199,9 +208,9 @@ structure HM =
             _import "HM_HHC_registerQueue" runtime private:
             Word32.word * 'a array -> unit;
 
-        val registerQueueLock: Word32.word * Int32.int ref -> unit =
+        val registerQueueLock: Word32.word * Word32.word ref -> unit =
             _import "HM_HHC_registerQueueLock" runtime private:
-            Word32.word * Int32.int ref -> unit;
+            Word32.word * Word32.word ref -> unit;
     end
 
 structure Platform =

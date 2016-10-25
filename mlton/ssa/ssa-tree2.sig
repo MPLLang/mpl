@@ -53,7 +53,7 @@ signature SSA_TREE2 =
             datatype dest =
                CPointer
              | Datatype of Tycon.t
-             | HierarchicalHeap
+             | HierarchicalHeap of t
              | IntInf
              | Object of {args: t Prod.t,
                           con: ObjectCon.t}
@@ -72,7 +72,7 @@ signature SSA_TREE2 =
             val datatypee: Tycon.t -> t
             val dest: t -> dest
             val equals: t * t -> bool
-            val hierarchicalHeap: t
+            val hierarchicalHeap: t -> t
             val intInf: t
             val isVector: t -> bool
             val isUnit: t -> bool

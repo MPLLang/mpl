@@ -22,7 +22,7 @@ structure Type =
           Array of t
         | CPointer
         | Datatype of Tycon.t
-        | HierarchicalHeap
+        | HierarchicalHeap of t
         | IntInf
         | Real of RealSize.t
         | Ref of t
@@ -58,6 +58,7 @@ structure Type =
       in
          val (_,deArray,_) = make (fn Array t => SOME t | _ => NONE)
          val (_,deDatatype,_) = make (fn Datatype tyc => SOME tyc | _ => NONE)
+         val (_,deHierarchicalHeap,_) = make (fn HierarchicalHeap t => SOME t | _ => NONE)
          val (_,deRef,_) = make (fn Ref t => SOME t | _ => NONE)
          val (deTupleOpt,deTuple,isTuple) = make (fn Tuple ts => SOME ts | _ => NONE)
          val (_,deVector,_) = make (fn Vector t => SOME t | _ => NONE)
@@ -69,7 +70,7 @@ structure Type =
             fn (Array t1, Array t2) => equals (t1, t2)
              | (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
-             | (HierarchicalHeap, HierarchicalHeap) => true
+             | (HierarchicalHeap t1, HierarchicalHeap t2) => equals (t1, t2)
              | (IntInf, IntInf) => true
              | (Real s1, Real s2) => RealSize.equals (s1, s2)
              | (Ref t1, Ref t2) => equals (t1, t2)
@@ -107,6 +108,7 @@ structure Type =
             end
       in
          val array = make Array
+         val hierarchicalHeap = make HierarchicalHeap
          val reff = make Ref
          val vector = make Vector
          val weak = make Weak
@@ -121,7 +123,6 @@ structure Type =
          fun make (tycon, tree) = lookup (Tycon.hash tycon, tree)
       in
          val cpointer = make (Tycon.cpointer, CPointer)
-         val hierarchicalHeap = make (Tycon.hierarchicalHeap, HierarchicalHeap)
          val intInf = make (Tycon.intInf, IntInf)
          val thread = make (Tycon.thread, Thread)
       end
@@ -177,7 +178,7 @@ structure Type =
                  Array t => seq [layout t, str " array"]
                | CPointer => str "pointer"
                | Datatype t => Tycon.layout t
-               | HierarchicalHeap => str "hierarchicalHeap"
+               | HierarchicalHeap t => seq [layout t, str " hierarchicalheap"]
                | IntInf => str "intInf"
                | Real s => str (concat ["real", RealSize.toString s])
                | Ref t => seq [layout t, str " ref"]
@@ -1762,7 +1763,7 @@ structure Program =
                           Array t => countType t
                         | CPointer => ()
                         | Datatype _ => ()
-                        | HierarchicalHeap => ()
+                        | HierarchicalHeap t => countType t
                         | IntInf => ()
                         | Real _ => ()
                         | Ref t => countType t

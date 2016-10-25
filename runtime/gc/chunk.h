@@ -55,6 +55,9 @@ struct HM_ChunkInfo {
 
       void* toChunkList; /**< The corresponding Chunk List in the to-LevelList
                           * during GC */
+
+      Word64 size; /**< The size in number of bytes of this level, both
+                      allocated and unallocated. */
     } levelHead; /**< The struct containing information for level head chunks */
 
     struct {
@@ -75,7 +78,8 @@ COMPILE_TIME_ASSERT(HM_ChunkInfo__packed,
                     sizeof(void*) +
                     sizeof(void*) +
                     sizeof(struct HM_HierarchicalHeap*) +
-                    sizeof(void*));
+                    sizeof(void*) +
+                    sizeof(Word64));
 
 COMPILE_TIME_ASSERT(HM_ChunkInfo__aligned,
                     (sizeof(struct HM_ChunkInfo) % 8) == 0);
@@ -165,6 +169,15 @@ void* HM_getChunkFrontier(void* chunk);
 void* HM_getChunkLimit(void* chunk);
 
 /**
+ * This function returns the size of the chunk in bytes.
+ *
+ * @param chunk The chunk to return the size of.
+ *
+ * @return the size of the chunk in bytes.
+ */
+Word64 HM_getChunkSize(const void* chunk);
+
+/**
  * This function returns the start of allocable area of the chunk (pointer to
  * the first byte that can be allocated), usually used as the initial heap
  * frontier.
@@ -202,6 +215,18 @@ void* HM_getChunkListLastChunk(void* chunkList);
  * @return NULL if no to-ChunkList has been set, the to-ChunkList otherwise.
  */
 void* HM_getChunkListToChunkList(void* chunkList);
+
+/**
+ * This function returns the size in bytes of the specified level in a level
+ * list.
+ *
+ * @param levelList The level list to search through.
+ * @param level The level to get the size of.
+ *
+ * @return 0 if the level does not exist in the level list, or the size of the
+ * level in bytes otherwise.
+ */
+Word64 HM_getLevelSize(void* levelList, Word32 level);
 
 /**
  * This function sets the to-ChunkList corresponding to the specified ChunkList
@@ -248,8 +273,11 @@ Word32 HM_getHighestLevel(const void* levelList);
  *
  * @param destinationLevelList The destination of the merge
  * @param levelList The list to merge
+ * @param hh The HH containing the destination level list.
  */
-void HM_mergeLevelList(void** destinationLevelList, void* levelList);
+void HM_mergeLevelList(void** destinationLevelList,
+                       void* levelList,
+                       const struct HM_HierarchicalHeap* hh);
 
 /**
  * This function promotes the chunks from level 'level' to the level 'level -
@@ -268,9 +296,12 @@ void HM_promoteChunks(void** levelList, size_t level);
  * macro.
  *
  * @param levelList The level list to assert invariants for.
+ * @param hh The hierarchical heap this level list belongs to.
  * @param stealLevel The level this level list was stolen from.
  */
-void HM_assertLevelListInvariants(const void* levelList, Word32 stealLevel);
+void HM_assertLevelListInvariants(const void* levelList,
+                                  const struct HM_HierarchicalHeap* hh,
+                                  Word32 stealLevel);
 
 /**
  * Updates the chunk's values to reflect mutator

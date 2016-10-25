@@ -1,39 +1,33 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2016 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
  */
 
 /**
- * @file logging.h
+ * @file log.h
  *
  * @author Ram Raghunathan
  *
- * This file provides logging function for runtime logging. By default, the log
- * level is ERROR and the log file is stderr.
+ * This file provides logging function for runtime logging.
  */
 
-#ifndef LOGGER_H_
-#define LOGGER_H_
+#ifndef LOG_H_
+#define LOG_H_
 
 #include <stdio.h>
 
 enum LogLevel {
-  L_FORCE = 0,
-  L_ERROR = 1,
-  L_WARNING = 2,
-  L_INFO = 3,
-  L_DEBUG = 4
+  LL_FORCE = 0,
+  LL_ERROR = 1,
+  LL_WARNING = 2,
+  LL_INFO = 3,
+  LL_DEBUG = 4
 };
 
-static const size_t L_MAX_MESSAGE_LENGTH = 8196;
+#define L_MAX_LOG_LEVEL_LENGTH 128
+#define L_MAX_MESSAGE_LENGTH 8196
 
-/**
- * Sets the global log level
- *
- * @param level The level to set to
- */
-void L_setLevel(enum LogLevel level);
 
 /**
  * Sets the global log file
@@ -43,13 +37,15 @@ void L_setLevel(enum LogLevel level);
 void L_setFile(FILE* file);
 
 /**
- * Checks if logging at the given level is enabled.
+ * Checks if logging is enabled for the given message and log levels.
  *
- * @param level The level to check.
+ * @param messageLevel The level of the message to be logged.
+ * @param logLevel The level of the logger system for this message.
  *
- * @return TRUE if logging at 'level' will succeed, FALSE otherwise
+ * @return TRUE if this message's level is enabled according to 'logLevel',
+ * FALSE otherwise
  */
-bool L_levelEnabled(enum LogLevel level);
+bool L_levelEnabled(enum LogLevel messageLevel, enum LogLevel logLevel);
 
 /**
  * This function creates a log message

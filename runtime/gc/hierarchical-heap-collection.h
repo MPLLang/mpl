@@ -21,8 +21,8 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
-  bool log;
   size_t bytesCopied;
+  uint64_t objectsCopied;
 };
 
 #define MAX_NUM_HOLES 512

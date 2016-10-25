@@ -2524,7 +2524,7 @@ fun compute (program as Ssa.Program.T {datatypes, ...}) =
                     in
                        r'
                     end
-               | HierarchicalHeap =>
+               | HierarchicalHeap _ =>
                     constant (Rep.T {rep = Rep.Objptr {endsIn00 = true},
                                      ty = Type.hierarchicalHeap ()})
                | IntInf =>

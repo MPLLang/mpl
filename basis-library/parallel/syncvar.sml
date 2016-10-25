@@ -52,11 +52,9 @@ struct
   in
       fun write argument =
           let
-              val () = HM.enterGlobalHeap ()
               val result = doWrite argument
                            handle e => (HM.exitGlobalHeap ();
                                         raise e)
-              val () = HM.exitGlobalHeap ()
           in
               result
           end
@@ -83,9 +81,7 @@ struct
   in
       fun read argument =
           let
-              val () = HM.enterGlobalHeap ()
               val result = doRead argument
-              val () = HM.exitGlobalHeap ()
           in
               result
           end
