@@ -22,6 +22,7 @@ struct ForwardHHObjptrArgs {
   Word32 minLevel;
   Word32 maxLevel;
   size_t bytesCopied;
+  uint64_t objectsCopied;
 };
 
 #define MAX_NUM_HOLES 512

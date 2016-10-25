@@ -124,17 +124,23 @@ void HM_HHC_collectLocal(void) {
     .hh = hh,
     .minLevel = HM_HH_getHighestStolenLevel(s, hh) + 1,
     .maxLevel = hh->level,
-    .bytesCopied = 0
+    .bytesCopied = 0,
+    .objectsCopied = 0
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
+  forwardHHObjptrArgs.objectsCopied = 0;
   /* RAM_NOTE: Should probably extend to forward all globals, just in case */
   /* forward thread (and therefore stack) */
   forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from thread",
+      forwardHHObjptrArgs.objectsCopied);
 
+  forwardHHObjptrArgs.objectsCopied = 0;
   /* forward contents of stack */
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
@@ -144,7 +150,25 @@ void HM_HHC_collectLocal(void) {
                         NULL,
                         forwardHHObjptr,
                         &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from stack",
+      forwardHHObjptrArgs.objectsCopied);
 
+  forwardHHObjptrArgs.objectsCopied = 0;
+  /* forward contents of deque */
+  foreachObjptrInObject(s,
+                        objptrToPointer(s->wsQueue,
+                                        s->heap->start),
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
+                        forwardHHObjptr,
+                        &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from deque",
+      forwardHHObjptrArgs.objectsCopied);
+
+#if ASSERT
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START foreach %ld MB",
       (s->heap->frontier - s->heap->start) / (1024 * 1024));
@@ -161,6 +185,7 @@ void HM_HHC_collectLocal(void) {
     }
   }
 
+  forwardHHObjptrArgs.objectsCopied = 0;
   /* forward global heap */
   foreachObjptrInRange(s,
                        s->heap->start,
@@ -171,11 +196,20 @@ void HM_HHC_collectLocal(void) {
                        NULL,
                        forwardHHObjptr,
                        &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from global heap",
+      forwardHHObjptrArgs.objectsCopied);
+#endif
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END foreach");
 
   /* do copy-collection */
+  forwardHHObjptrArgs.objectsCopied = 0;
   HM_forwardHHObjptrsInLevelList(s, &(hh->newLevelList), &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects in copy-collection",
+      forwardHHObjptrArgs.objectsCopied);
+
   assertInvariants(s, hh);
 
   /*
@@ -445,6 +479,7 @@ void forwardHHObjptr (GC_state s,
                                      opInfo.chunkList);
 
     args->bytesCopied += size;
+    args->objectsCopied++;
     LOG(LM_HH_COLLECTION, LL_DEBUG,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
@@ -592,6 +627,8 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
   return frontier;
 }
 
+#pragma message "Resolve when done"
+#if 0
 bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
   /* silence compliler */
   ((void)(s));
@@ -608,6 +645,25 @@ bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
 
   return TRUE;
 }
+#else
+bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
+  /* silence compliler */
+  ((void)(s));
+  ((void)(ignored));
+
+  /* run through FALSE cases */
+  GC_header header;
+  header = getHeader(p);
+  if ((objptrToPointer(s->wsQueue, s->heap->start) == p) ||
+      (GC_STACK_HEADER == header) ||
+      (GC_THREAD_HEADER == header) ||
+      (GC_HIERARCHICAL_HEAP_HEADER == header)) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+#endif
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
