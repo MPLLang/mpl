@@ -66,6 +66,8 @@ void GC_handler (int signum) {
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_handler signum = %d [%d]\n", signum,
              Proc_processorNumber (s));
+  if (s == NULL)
+    return;
   // Signal disposition is per-process; use primary to maintain handled set.
   assert (sigismember (&s->procStates[0].signalsInfo.signalsHandled, signum));
   if (s->atomicState == 0)

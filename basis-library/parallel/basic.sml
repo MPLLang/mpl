@@ -225,7 +225,8 @@ struct
       end
 
   fun event f =
-      raise (Parallel "not supported")
+      f ()
+      (* raise (Parallel "not supported") *)
 
   fun addRightLat (lat, w) =
       let

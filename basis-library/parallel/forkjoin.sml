@@ -40,7 +40,37 @@ struct
         (a, b)
       end
 
-  fun fork (f, g) = forkLat false (f, g)
+  fun fork (f, g) =
+      let
+        (* Used to hold the result of the right-hand side in the case where
+          that code is executed in parallel. *) 
+        val var = V.empty ()
+        (* Closure used to run the right-hand side... but only in the case
+          where that code is run in parallel. *)
+        fun rightside () = (V.write (var, Finished (g ())
+                                          handle e => Raised e);
+                            B.return ())
+
+        (* Offer the right side to any processor that wants it *)
+        val t = B.addRight rightside (* might suspend *)
+        (* Run the left side *)
+        val a = f ()
+            (* XXX Do we need to execute g in the case where f raises? *)
+            handle e => (ignore (B.remove t); B.yield (); raise e)
+        (* Try to retract our offer -- if successful, run the right side
+          ourselves. *)
+        val b = if B.remove t then
+                 (* no need to yield since we expect this work to be the next thing
+                    in the queue *)
+                  g ()
+                  handle e => (B.yield (); raise e)
+                else
+                  case V.read var of (_, Finished b) => b
+                                   | (_, Raised e) => (B.yield (); raise e)
+      in
+        B.yield ();
+        (a, b)
+      end
 
   fun reduce maxSeq f g u n =
     let

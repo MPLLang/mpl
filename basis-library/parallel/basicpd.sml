@@ -6,6 +6,9 @@ val releaseLock = _import "Parallel_lockRelease" runtime private: int ref -> uni
 
 val printLock = ref ~1
 
+val tasksAdded = ref 0
+val tasksRun = ref 0
+
 fun print s = ()
 (*
     (takeLock printLock;
@@ -44,13 +47,14 @@ structure Tm = Time
 
 val yield = _import "Parallel_yield" runtime private: unit -> unit;
 val compareAndSwap = _import "Parallel_compareAndSwap" runtime private: int ref * int * int -> bool;
+val fetchAndAdd = _import "Parallel_fetchAndAdd" runtime private: int ref * int -> int;
 
 structure S = MLtonSignal
 
 val prim_sig = MLtonItimer.signal MLtonItimer.Real
 val sec_sig = Posix.Signal.usr1
 
-val delta = 1000 (* microseconds *)
+val delta = 50000 (* microseconds *)
 
 fun block_sigs p =
     if p = 0 then
@@ -131,6 +135,7 @@ type cellval = (bool * job) option
 val commcells = V.tabulate (P, fn _ => ref notwaiting)
 val taskcells = A.array (P, NONE)
 val nextdeal = A.array (P, Tm.zeroTime)
+val reqcells = V.tabulate (P, fn _ => ref ~1)
 
 val nextToken = ref 0
 
@@ -181,7 +186,7 @@ fun queuesWithWork lat =
                 val j = !bottom
             in
                 if i <> j then
-                    (print ((Int.toString p) ^ " has " ^ (Int.toString (i - j)) ^ "\n");
+                    ((* print ((Int.toString p) ^ " has " ^ (Int.toString (i - j)) ^ "\n"); *)
                      true)
                 else false
             end
@@ -210,6 +215,7 @@ fun popTop (q as Queue {top, bottom, work, ... }) =
         if i = j then raise WorkQueue (* empty *)
         else
             (bottom := j + 1;
+             ignore (fetchAndAdd (tasksAdded, ~1));
              case A.sub (w, j) of
                  Empty => raise WorkQueue
                | Work (t, w) => w)
@@ -250,11 +256,19 @@ fun dealAttempt p =
         val bi = !top
         val bj = !bottom
         val bw = !work
-        val p' = Word.toIntX (MLtonRandom.rand ()) mod P
+        val p' =
+            if !(V.sub (reqcells, p)) = ~1 then
+                (p + 1 + ((Word.toIntX (MLtonRandom.rand ())) mod (P - 1))) mod P
+            else !(V.sub (reqcells, p))
+        (* val _ = print ((Int.toString P) ^ "\n")
+        val _ = print ((Word.toString r) ^ "\n")
+        val _ = print ((Int.toString (Word.toIntX r)) ^ "\n") *)
+        val _ = print ((Int.toString p) ^ " attempting to deal to " ^
+                       (Int.toString p') ^ "\n")
         val c = V.sub (commcells, p')
         val vv = !c
         val havefg = fi <> fj (* andalso not (topIsRThread fq) *)
-        val havebg = bi <> bj (* andalso not (topIsRThread bq) *)
+        val havebg = bi - bj > 1 (* andalso not (topIsRThread bq) *)
         fun haveBetter pri =
             (print ("fg: " ^ (Int.toString (fi - fj)) ^ ", bg: " ^
                     (Int.toString (bi - bj)) ^ "\n");
@@ -291,8 +305,9 @@ fun dealAttempt p =
     end
 
 fun communicate p =
-    if Time.> (Time.now (), A.sub (nextdeal, p)) then
-        ((dealAttempt p
+    if P > 1 andalso Time.> (Time.now (), A.sub (nextdeal, p)) then
+        ((print ("communicating on " ^ (Int.toString p) ^ "\n");
+         (dealAttempt p
          handle e => (print "here 219\n"; raise e));
          let val now = Time.now ()
              val mi = case Int.maxInt of SOME i => i | NONE => 1000000
@@ -308,6 +323,7 @@ fun communicate p =
              A.update (nextdeal, p, Tm.- (Tm.now (),
                                           Tm.fromMicroseconds us))
          end)
+        handle e => (print "here 312\n"; raise e))
     else
         ()
 
@@ -320,22 +336,27 @@ fun checkP ln p =
     end
 
 
-fun addWork (lat, p, tws) =
-    let val n = queuesWithWork lat
+fun addWorkLat (lat, p, tws) =
+    (let val n = queuesWithWork lat
         val _ = checkP 271 p
-        val _ = print ("Added " ^ (if lat then "lat " else "") ^ "work(" ^
+        (* val _ = print ("Added " ^ (if lat then "lat " else "") ^ "work(" ^
                        (Int.toString (List.length tws)) ^ ") on " ^
-                       (Int.toString p) ^ "\n")
+                       (Int.toString p) ^ "\n") *)
         val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
         val _ = ignore (List.map (add q) tws)
         val n' = queuesWithWork lat
     in
+        ignore (fetchAndAdd (tasksAdded, 1));
         if n' - n > 1 then
             eprint ("Added more work: n = " ^ (Int.toString n) ^ ", n' = "
                     ^ (Int.toString n') ^ "\n")
         else
             ()
     end
+    ) handle e => (print "here 341\n"; raise e)
+
+fun addWork (p, tws) =
+    addWorkLat (Array.sub (workingOnLatency, p), p, tws)
 
 fun maybeMove {top, bottom, work} =
     let val i = !top
@@ -348,7 +369,7 @@ fun maybeMove {top, bottom, work} =
             ()
     end
 
-fun resumeWork (lat, p, (t, w)) = addWork (lat, p, [(t, w)])
+fun resumeWork (lat, p, (t, w)) = addWorkLat (lat, p, [(t, w)])
 
 fun removeWork (p, Token (ti, qr)) =
     case !qr of
@@ -368,7 +389,9 @@ fun removeWork (p, Token (ti, qr)) =
                         Empty => raise WorkQueue
                       | Work (Token (t, _), w) =>
                         if t = ti then
-                            (unloop i; true)
+                            (unloop i;
+                             fetchAndAdd (tasksAdded, ~1);
+                             true)
                         else
                             loop (i + 1)
         in
@@ -416,7 +439,7 @@ val policyName = "Prompt private deques"
         val p = processorNumber ()
         (* val _ = print "resuming\n" *)
       in
-        addWork (lat, p, [(newWork p, Thread (T.prepend (k, fn () => v)))])
+        addWorkLat (lat, p, [(newWork p, Thread (T.prepend (k, fn () => v)))])
         handle e => (print "here 67\n"; raise e)
       end
 
@@ -449,7 +472,7 @@ val policyName = "Prompt private deques"
               List.foldl
                   (fn ((t, f), (rsm, r)) =>
                       (* if latency t then *)
-                          if f () then (print ("resumed on " ^ (Int.toString p) ^ "\n"); resume (mkLat t, ()); (true, r))
+                          if f () then (print ("resumed on " ^ (Int.toString p) ^ "\n"); resume ((* mkLat *) t, ()); (true, r))
                                        handle e => (print "here 142\n"; raise e)
                           else (rsm, (t, f)::r)
                       (* else raise (Parallel "Invariant violated!\n") *)
@@ -579,9 +602,12 @@ fun getWorkLat lat p =
     end
 
 fun getWork p =
+(
     case getWorkLat true p of
         NONE => getWorkLat false p
       | SOME w => SOME w
+)
+handle Range => (print "here 588\n"; raise Range)
 
 fun startWork p = ()
 
@@ -596,8 +622,7 @@ fun checkAndLoop p () =
     end
 
 fun suspendWork p = NONE
-  fun schedule countSuspends k () =
-    let
+
         fun waitForTask' p' =
             (case A.sub (taskcells, p') of
                  NONE => (print ("waitForTask on " ^ (Int.toString (processorNumber ())) ^ "\n");
@@ -608,22 +633,44 @@ fun suspendWork p = NONE
                | SOME bw => bw
                             before A.update (taskcells, p', NONE))
             handle e => (print "here 384\n"; raise e)
+
+fun makeRequest p =
+    let val mi = case Int.maxInt of SOME i => i | NONE => 1000000
+        val rnd = Real.abs
+                      (Real./
+                       (Real.fromInt (Word.toIntX (MLtonRandom.rand ())),
+                        Real.fromInt mi))
+                  handle Overflow => (print "here 171\n"; raise Overflow)
+        val mult = Math.ln rnd
+        val us = LargeInt.fromInt
+                     (Real.floor (Real.* (Real.fromInt delta, mult)))
+        val p' =
+            (p + 1 + ((Word.toIntX (MLtonRandom.rand ())) mod (P - 1))) mod P
+        val c = V.sub (reqcells, p')
+    in
+        c := p;
+        Tm.- (Tm.now (), Tm.fromMicroseconds us)
+    end
+
+fun tryToUpdate p c v ev =
+    if compareAndSwap (c, ev, v) then
+        ()
+    else
+        if !c > notwaiting then
+            let val (nlat, w) = waitForTask' (!c)
+            in
+                addWorkLat (nlat, p, [(newWork p, w)]);
+                c := v
+            end
+        else
+            raise (Parallel "comm cell updated to non-processor value")
+
+  fun schedule countSuspends k () =
+    let
         fun busyloop () =
             (yield ();
              busyloop ())
-        fun tryToUpdate p c v ev =
-            if compareAndSwap (c, ev, v) then
-                ()
-            else
-                if !c > notwaiting then
-                    let val (nlat, w) = waitForTask' (!c)
-                    in
-                        addWork (nlat, p, [(newWork p, w)]);
-                        c := v
-                    end
-                else
-                    raise (Parallel "comm cell updated to non-processor value")
-        fun loop (countSuspends, k, p) =
+        fun loop (countSuspends, k, p, nextReq) =
           let
               fun setLFW () = Array.update (lookingForWork, p, true)
               fun clearLFW () = Array.update (lookingForWork, p, false)
@@ -632,13 +679,15 @@ fun suspendWork p = NONE
               val _ = setLFW ()
               val p = processorNumber ()
               val _ = MLtonThread.atomically (fn () => procio p)
+              val _ = block_sigs p
               val _ = communicate p
+              val _ = unblock_sigs p
               val c = V.sub (commcells, p)
               val p' = !c
               val _ = if p' > notwaiting then
                           let val (nlat, w) = waitForTask' p'
                           in
-                              addWork (nlat, p, [(newWork p, w)]);
+                              addWorkLat (nlat, p, [(newWork p, w)]);
                               c := notwaiting
                           end
                       else
@@ -651,8 +700,9 @@ fun suspendWork p = NONE
                       NONE =>  ()
                     | SOME t =>
                       if not lfw then
-                          addWork (lat, p, [(newWork p, RThread (t, p))])
-                      else ()
+                          (print "pushing continuation\n";
+                           addWorkLat (lat, p, [(newWork p, RThread (t, p))]))
+                      else print "was looking for work\n"
           in
             case atomically
                      (fn () => ((checkP 526 p;
@@ -667,12 +717,15 @@ fun suspendWork p = NONE
                 let (* val _ = print "didn't actually get work\n" *) in
                   (* if !enabled then (enabled := false; profileDisable ()) else (); *)
                     tryToUpdate p c notask p';
-                    loop (countSuspends, NONE, p)
+                    if Time.> (Time.now (), nextReq) then
+                        loop (countSuspends, NONE, p, makeRequest p)
+                    else loop (countSuspends, NONE, p, nextReq)
                 end
               | SOME (nonlocal, lat, j) =>
                 let
                     val _ = checkP 541 p
                     val _ = clearLFW ()
+                    val _ = fetchAndAdd (tasksRun, 1)
                     (* val p = processorNumber () *)
                   val _ = print ("starting " ^ (if nonlocal then "nonlocal "
                                                 else "") ^ "thread on "
@@ -722,12 +775,12 @@ fun suspendWork p = NONE
                   val () = incSuspends p
                   val () = finishWork p
                 in
-                  loop (false, NONE, p)
+                  loop (false, NONE, p, nextReq)
                 end
           end
     in
         (* checkAndLoop (processorNumber ()) () *)
-        loop (countSuspends, k, processorNumber ())
+        loop (countSuspends, k, processorNumber (), Time.zeroTime)
         (* busyloop (processorNumber ()) 0 *)
     end
 
@@ -746,7 +799,8 @@ fun suspendWork p = NONE
                 (* Check to see what the next job is.  If it's a thread, then
                   hijack that thread to run the tail of the current job.
                   Otherwise, create a new thread. *)
-                val t =
+                (*
+                  val t =
                     case getWork p
                      of SOME (_, _, JWork w) => T.new (fn () => (startWork p; w ()))
                       | SOME (_, _, Thread k') =>
@@ -756,10 +810,12 @@ fun suspendWork p = NONE
                       | SOME (_, _,  RThread (r, _)) =>
                         T.new (fn () => (startWork p; T.switch (fn _ => r)))
                       | NONE => T.new (schedule false NONE)
-                (* to disable hijacking, use this instead
-                val t = T.new schedule
-                 *)
-                fun add (lat, w) = addWork (lat, p, [(newWork p, JWork w)])
+                *)
+                (* to disable hijacking, use this instead *)
+                  val _ = Array.update (lookingForWork, p, true)
+                  val _ = Array.update (workingOnLatency, p, false)
+                val t = T.new (schedule false NONE)
+                fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
               in
                 (* XX maybe this should move out (before suspend/finishWork) *)
                 (* add any delayed work *)
@@ -775,16 +831,18 @@ fun suspendWork p = NONE
   fun suspend f =
       let
         val p = processorNumber ()
+        (* Block signals so we don't preempt while we are suspending *)
+        val () = block_sigs p
+        val lat = Array.sub (workingOnLatency, p)
         val _ = print "suspend\n"
         (* val _ = print ("suspend at " ^ (Int.toString p) ^ "\n") *)
         fun tail (p, k) =
             let
               val () = incSuspends p
               val q = suspendWork p
-              (* Block signals so we don't preempt while we are suspending *)
-              (* val () = block_sigs p *)
             in
-              f (Suspend (false, k)) (* XXX *)
+              f (Suspend (lat, k))
+              before (unblock_sigs p)
             end
       in
         capture' (p, tail)
@@ -812,7 +870,7 @@ fun suspendWork p = NONE
         if shouldYield p then
           capture' (p, fn (p, k) =>
                           let in
-                            addWork (false, p, [(newWork p, Thread k)]); (* XXX *)
+                            addWorkLat (false, p, [(newWork p, Thread k)]); (* XXX *)
                             incSuspends p;
                             finishWork p
                           end)
@@ -822,6 +880,7 @@ fun suspendWork p = NONE
 
   fun event f =
       let val p = processorNumber ()
+          val c = Vector.sub (commcells, p)
           val _ = print "event\n"
       in
 (*
@@ -830,8 +889,10 @@ fun suspendWork p = NONE
           else
 *)
               let
+                  val _ = tryToUpdate p c fgtask
                   val _ = Array.update(workingOnLatency, p, true)
                   val res = f ()
+                  val _ = tryToUpdate p c bgtask
                   val _ = Array.update(workingOnLatency, p, false)
               in
                   res
@@ -853,7 +914,7 @@ fun suspendWork p = NONE
           capture' (p, fn (p, k) =>
                          let in
                            (* Add the continuation first -- it is higher priority *)
-                           addWork (lat, p, [(newWork p, Thread (T.prepend (k, fn () => t))),
+                           addWorkLat (lat, p, [(newWork p, Thread (T.prepend (k, fn () => t))),
                                           (t, JWork w')])
                            handle e => (print "here 622\n"; raise e);
                            incSuspends p;
@@ -861,19 +922,52 @@ fun suspendWork p = NONE
                          end)
         else
           let
-            fun add (lat, w) = addWork (lat, p, [(newWork p, JWork w)])
+            fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
           in
             (* add any delayed work *)
             (* XXX maybe should run delayed work and queue the currrent thread too? *)
             app add (rev (Array.sub (delayed, p)));
             Array.update (delayed, p, nil);
-            addWork (lat, p, [(t, JWork w')]);
+            addWorkLat (lat, p, [(t, JWork w')]);
             unblock_sigs p;
             t
           end
       end
 
-  fun addRight w = addRightLat (false, w)
+  fun addRight w =
+      let
+        val p = processorNumber ()
+        val _ = block_sigs p
+        val t = newWork p
+        val sw = ref false
+        fun w' () = if !sw then raise Parallel "work run twice"
+                    else (sw := true; w ())
+
+      in
+        if shouldYield p then
+          (* Switch to a new thread *)
+          capture' (p, fn (p, k) =>
+                         let in
+                           (* Add the continuation first -- it is higher priority *)
+                           addWork (p, [(newWork p, Thread (T.prepend (k, fn () => t))),
+                                          (t, JWork w')])
+                           handle e => (print "here 622\n"; raise e);
+                           incSuspends p;
+                           finishWork p
+                         end)
+        else
+          let
+            fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
+          in
+            (* add any delayed work *)
+            (* XXX maybe should run delayed work and queue the currrent thread too? *)
+            app add (rev (Array.sub (delayed, p)));
+            Array.update (delayed, p, nil);
+            addWork (p, [(t, JWork w')]);
+            unblock_sigs p;
+            t
+          end
+      end
 
   (* smuller: XXX This adds the current thread to the lqueue and so is totally
      wrong. Fix it. *)
@@ -886,7 +980,7 @@ fun suspendWork p = NONE
         if shouldYield p then
           capture' (p, fn (p, k) =>
                          let in
-                           addWork (lat, p, [(newWork p, JWork w),
+                           addWorkLat (lat, p, [(newWork p, JWork w),
                                           (t, Thread (T.prepend (k, fn () => t)))])
                          handle e => (print "here 654\n"; raise e);
                            incSuspends p;
@@ -897,19 +991,49 @@ fun suspendWork p = NONE
                        T.prepare
                        (T.new (fn () =>
                                   let
-                                    fun add (lat, w) = addWork (lat, p, [(newWork p, JWork w)])
+                                    fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
                                   in
                                     (* add any delayed work *)
                                     (* XXX maybe should run delayed work and queue the currrent thread too? *)
                                     app add (rev (Array.sub (delayed, p)));
                                     Array.update (delayed, p, nil);
-                                    addWork (lat, p, [(t, Thread (T.prepend (k, fn () => t)))])
+                                    addWorkLat (lat, p, [(t, Thread (T.prepend (k, fn () => t)))])
                                     handle e => (print "here 670\n"; raise e);
                                     w ()
                                   end), ()))
       end
 
-  fun addLeft w = addLeftLat (false, w)
+  fun addLeft w =
+      let
+        val p = processorNumber ()
+        val t = newWork p
+        val _ = print "addLeft\n"
+      in
+        if shouldYield p then
+          capture' (p, fn (p, k) =>
+                         let in
+                           addWork (p, [(newWork p, JWork w),
+                                          (t, Thread (T.prepend (k, fn () => t)))])
+                         handle e => (print "here 654\n"; raise e);
+                           incSuspends p;
+                           finishWork p
+                         end)
+        else
+          T.switch (fn k =>
+                       T.prepare
+                       (T.new (fn () =>
+                                  let
+                                    fun add (lat, w) = addWork (p, [(newWork p, JWork w)])
+                                  in
+                                    (* add any delayed work *)
+                                    (* XXX maybe should run delayed work and queue the currrent thread too? *)
+                                    app add (rev (Array.sub (delayed, p)));
+                                    Array.update (delayed, p, nil);
+                                    addWork (p, [(t, Thread (T.prepend (k, fn () => t)))])
+                                    handle e => (print "here 670\n"; raise e);
+                                    w ()
+                                  end), ()))
+      end
 
   fun removeLat lat t = removeWorkLat (lat, processorNumber (), t)
   fun remove t = removeWork (processorNumber (), t)
@@ -942,13 +1066,13 @@ fun suspendWork p = NONE
               val () = Array.update (delayed, p, nil)
               fun add nil = ()
                 | add ((lat, w)::ws) =
-                  addWork (lat, p, [(newWork p, JWork (fn () => (add ws; w ())))])
+                  addWorkLat (lat, p, [(newWork p, JWork (fn () => (add ws; w ())))])
               (* add any lower priority work *)
               val () = add ws
             in
               (* now what do to with w? *)
               if shouldYield p then
-                (addWork (false, p, [(newWork p, JWork w)]); (* XXX *)
+                (addWorkLat (false, p, [(newWork p, JWork w)]); (* XXX *)
                  (* this is counted in schedule: incSuspends p; *)
                  finishWork p;
                  schedule true NONE ())
@@ -961,22 +1085,52 @@ fun suspendWork p = NONE
       if n = numberOfProcessors - 1 then ()
       else if n = p - 1 then signalOthers p sg (n + 1)
       else
-          ((* print ("signaling" ^ (Int.toString n) ^ "\n"); *)
-           signalThread (n, Posix.Signal.toWord sg);
+          (print ("signaling" ^ (Int.toString n) ^ "\n");
+           ((signalThread (n, Posix.Signal.toWord sg);
+             print "signaled\n")
+           handle _ => print "signal failed\n");
            signalOthers p sg (n + 1))
+
+  fun countWork lat =
+    let fun cWork p =
+            let val q = if lat then A.sub (fqueues, p) else A.sub (bqueues, p)
+                val Queue {top, bottom, ...} = q
+                val i = !top
+                val j = !bottom
+            in
+                i - j
+            end
+        fun add (a, b) = a + b
+    in
+        List.foldl add 0 (List.tabulate (P, fn i => cWork i))
+    end
+
 
   fun interruptFst t =
       let val p = processorNumber ()
           val _ = if !waitingForTask then print "interrupt while waiting!!!\n"
                   else ()
           val _ = block_sigs p
+          val _ =
+              if (queuesWithWork false) + (queuesWithWork true) = 0 then
+                  eprint "There's no work left!\n"
+              else ()
+          val shouldBe = !tasksAdded - !tasksRun
+          val thereAre = (countWork true) + (countWork false)
+          val _ = if shouldBe <> thereAre then
+                      eprint ("Work was lost. There should be " ^
+                              (Int.toString shouldBe) ^ ". There are " ^
+                              (Int.toString thereAre) ^ ".\n")
+                  else
+                      ()
           (* val _ = procio p *)
           (* val _ = communicate p *)
       in
        (print ("interruptFst on " ^ (Int.toString p) ^ "\n");
         signalOthers p sec_sig 0;
         (* signalThread (0, Posix.Signal.toWord sec_sig); *)
-        unblock_sigs p;
+        (* unblock_sigs p; *)
+        (* print ("signaled others\n"); *)
         T.prepare (T.new (schedule true (SOME t)), ()))
         (* T.prepare (T.new (checkAndLoop p), ())) *)
       end
@@ -1003,8 +1157,16 @@ fun suspendWork p = NONE
 
  (*  val _ = S.setHandler (sg, (S.Handler.ignore)) *)
 
+  val procsInit = ref 0
+
   fun init () =
       let val p = processorNumber ()
+          val pi = fetchAndAdd (procsInit, 1)
+          val _ = MLtonRandom.srand
+                      (case MLtonRandom.seed () of
+                           SOME s => s
+                         | NONE => (eprint "Warning: RNG not seeded properly";
+                                    0w0))
           (* val _ = print ("setting handler on " ^ (Int.toString p) ^ "\n") *)
           val _ = S.setHandler (prim_sig, (S.Handler.handler interruptFst))
           val _ = S.setHandler (sec_sig, (S.Handler.handler interrupt))
@@ -1012,14 +1174,18 @@ fun suspendWork p = NONE
           val iv = Time.fromMicroseconds (LargeInt.fromInt delta)
       in
           (if p = 0 then
-               (MLtonItimer.set (MLtonItimer.Real,
-                                 {interval = iv, value = iv});
-                S.Mask.unblock (S.Mask.some [prim_sig]);
-                S.Mask.block (S.Mask.some [sec_sig]))
+               (S.Mask.unblock (S.Mask.some [prim_sig]);
+                S.Mask.block (S.Mask.some [sec_sig]);
+                Array.update (lookingForWork, p, false))
            else
                (S.Mask.block (S.Mask.some [prim_sig]);
                 S.Mask.unblock (S.Mask.some [sec_sig]))
-          )
+          );
+          (if pi = P - 1 then
+               MLtonItimer.set (MLtonItimer.Real,
+                                 {interval = iv, value = iv})
+           else
+               ())
           (* print ("initialized " ^ (Int.toString p) ^ "\n") *)
           (* schedule false () *)
       end
