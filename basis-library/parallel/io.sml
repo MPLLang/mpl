@@ -269,7 +269,6 @@ end
 structure Network : NETWORK =
 struct
 
-open Socket
 
 fun B_of_NB (f: 'a -> 'b option) (v: 'a) : 'b =
     let val (r: 'b option ref) = ref NONE
@@ -292,20 +291,25 @@ fun B_of_NB (f: 'a -> 'b option) (v: 'a) : 'b =
         bnb_rec ()
     end
 
-fun accept s = B_of_NB acceptNB s
+fun accept s = B_of_NB Socket.acceptNB s
 fun connect s =
-    B_of_NB (fn s => if connectNB s then SOME () else NONE) s
+    B_of_NB (fn s => if Socket.connectNB s then SOME () else NONE) s
+
+fun sendArr s = B_of_NB Socket.sendArrNB s
+fun sendVec s = B_of_NB Socket.sendVecNB s
+fun recvArr s = B_of_NB Socket.recvArrNB s
+fun recvVec s = B_of_NB Socket.recvVecNB s
 
 fun sendString (sock, str) =
     let val arr = Array.tabulate (String.size str,
                                  fn i => Word8.fromInt (Char.ord (String.sub (str, i))))
         val slice = ArraySlice.slice (arr, 0, NONE)
     in
-        B_of_NB sendArrNB (sock, slice)
+        sendArr (sock, slice)
     end
 
 fun recvString (sock, n) =
-    let val v = B_of_NB recvVecNB (sock, n)
+    let val v = recvVec (sock, n)
     in
         Vector.foldl (fn (c, s) =>
                          s ^ (String.str (Char.chr (Word8.toInt c))))

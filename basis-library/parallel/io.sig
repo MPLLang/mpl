@@ -59,6 +59,10 @@ sig
     val connect : ('af, 'sock_type) Socket.sock * 'af Socket.sock_addr -> unit
     val sendString : ('af, Socket.active Socket.stream) Socket.sock * string -> int
     val recvString : ('af, Socket.active Socket.stream) Socket.sock * int -> string
+    val sendArr : ('af, Socket.active Socket.stream) Socket.sock * Word8ArraySlice.slice -> int
+    val recvArr : ('af, Socket.active Socket.stream) Socket.sock * Word8ArraySlice.slice -> int
+    val sendVec : ('af, Socket.active Socket.stream) Socket.sock * Word8VectorSlice.slice -> int
+    val recvVec : ('af, Socket.active Socket.stream) Socket.sock * int -> Word8Vector.vector
 end
 
 signature MLTON_PARALLEL_IO =
