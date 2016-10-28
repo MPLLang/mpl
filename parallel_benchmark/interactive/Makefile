@@ -7,7 +7,7 @@ lami:
 #	../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../build/lib/sml/basis/parallel/ws6tslc-map -output int_test-ws6tslc lami.mlb
 
 qhull: qhull2.sml qhull-nopoll.sml
-	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6tw-map -output qhull-tw qhull.mlb ../../../sml-lib/mlton/x/mlx.o
+	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -link-opt -lSDL -mlb-path-map ../../build/lib/sml/basis/parallel/pd-map -output qhull-pd qhull.mlb ../../../sml-lib/mlton/x/mlx.o viewer/MLSDL/srcC/MLTon/SDLFuncs/SDLFuncs.o
 #	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map -output qhull-ws6 qhull-nopoll.mlb ../../../sml-lib/mlton/x/mlx.o
 
 fibserv: fibserv.sml

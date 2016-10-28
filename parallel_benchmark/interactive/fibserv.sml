@@ -51,4 +51,4 @@ fun fib_server () =
 
 val _ = print "Starting\n"
 
-val _ = MLton.Parallel.ForkJoin.forkLat true ((fn () => ()), fib_server)
+val _ = MLton.Parallel.Basic.event fib_server
