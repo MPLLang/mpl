@@ -10,10 +10,6 @@ sig
   (* a suspended computation waiting for a value of type 'a *)
   type 'a t
 
-  (* Suspends the current thread of execution and runs the given function,
-    passing in a reified form of the original thread.  The given function must
-    not call any other function in this signature. *)
-  val suspend : ('a t -> unit) -> 'a
   (* Re-enable a suspended computation and continue with the current job *)
   val resume : ('a t * 'a) -> unit
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
@@ -36,17 +32,8 @@ sig
     to remove work (for a given task) will return true. *)
   val remove : token -> bool
 
-  (* Adds to the queue after the current task has finished.  (Finished is
-    defined as the next time this task suspends: possibly one of suspend,
-    capture, addRight, addLift, return, or yield.) This operation never
-    suspend the current task. *)
-  val delayedAdd : work -> unit
-
   (* End the current task *)
   val return : unit -> void
-
-  (* Temporarily yield, but continue as scheduling policy permits. *)
-  val yield : unit -> unit
 
   (* general errors related to parallelism *)
   exception Parallel of string

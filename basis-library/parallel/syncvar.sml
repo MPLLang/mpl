@@ -1,7 +1,6 @@
-functor MLtonParallelSyncVar (structure B : MLTON_PARALLEL_BASIC)
-        :> MLTON_PARALLEL_SYNCVAR =
+structure MLtonParallelSyncVar :> MLTON_PARALLEL_SYNCVAR =
 struct
-
+  structure B = MLtonParallelBasic
   structure HM = MLtonHM
 
   datatype 'a state =
@@ -76,7 +75,7 @@ struct
                       (unlock r; (false, a))
                     | Waiting readers =>
                       (checkZeroReader readers;
-                       B.suspend (fn k => (v := Waiting (k::readers); unlock r)))
+                       B.capture (fn k => (v := Waiting (k::readers); unlock r)))
               end
   in
       fun read argument =
@@ -86,22 +85,4 @@ struct
               result
           end
   end
-
-(*
-  fun read (r, v) =
-      case !v
-       (* Do the easy case first *)
-       of Done a => a
-        (* Synchronization required... *)
-        | s as Waiting ks =>
-          B.suspend (fn k =>
-            if compareAndSwap (v, s, Waiting k::ks) then ()
-            else valOf (!b)
-*)
 end
-
-structure MLtonParallelSyncVarSuspend = MLtonParallelSyncVar (structure B = MLtonParallelBasic)
-structure MLtonParallelSyncVarCapture = MLtonParallelSyncVar (structure B = struct
-                                                                open MLtonParallelBasic
-                                                                val suspend = capture
-                                                              end)
