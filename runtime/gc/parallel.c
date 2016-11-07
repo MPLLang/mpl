@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <time.h>
 #include "platform.h"
+#include <signal.h>
 
 /* num of holding thread or -1 if no one*/
 volatile int32_t *Parallel_mutexes;
@@ -261,6 +262,29 @@ inline Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
   return __sync_fetch_and_add ((Int32 *)p, v);
 }
 
-inline bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
-  return __sync_bool_compare_and_swap ((Int32 *)p, old, new);
+inline Int32 Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
+  if(__sync_bool_compare_and_swap ((Int32 *)p, old, new)) {
+    //printf("cas(%d, %d, %d) succeeded\n", p, old, new);
+    return 1;
+  } else {
+    //printf("cas(%d, %d, %d) failed\n", p, old, new);
+    return 0;
+  }
+}
+
+void Parallel_block_sig (int sig) {
+  sigset_t s;
+  sigemptyset(&s);
+  sigaddset(&s, sig);
+  pthread_sigmask (SIG_BLOCK, &s, NULL);
+}
+void Parallel_unblock_sig (int sig) {
+  sigset_t s;
+  sigemptyset(&s);
+  sigaddset(&s, sig);
+  pthread_sigmask (SIG_UNBLOCK, &s, NULL);
+}
+
+int refToInt (int *p) {
+  return ((int) p);
 }

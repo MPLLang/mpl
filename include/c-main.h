@@ -109,7 +109,9 @@ void MLton_threadFunc (void* arg) {                                     \
   pthread_t *threads;                                                   \
                                                                         \
   void signal_thread(int p, int sig) {                                  \
+    /* printf("signal_thread\n"); */                                    \
     pthread_kill(threads[p], sig);                                      \
+    /* printf("signaled thread\n"); */                                  \
   }                                                                     \
                                                                         \
   PUBLIC int MLton_main (int argc, char* argv[]) {                      \
