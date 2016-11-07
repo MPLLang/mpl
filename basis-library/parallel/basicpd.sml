@@ -476,26 +476,32 @@ val policyName = "Prompt private deques"
   fun prerr s = (TextIO.output (TextIO.stdErr, s);
                  TextIO.flushOut TextIO.stdErr)
 
-
-  fun resume (Suspend (lat, k), v) =
+  fun resumeInt p (Suspend (lat, k), v) =
       let
-        val p = processorNumber ()
         val _ = if p = 0 then print "enter resume\n" else ()
         val t = T.prepend (k, fn () => v)
                 (* handle e => (eprint "here 117\n"; raise e) *)
       in
         (resumeWork (lat, p, (newWork p, Thread t))
         (* handle e => (eprint "here 59\n"; raise e) *))
-        before (if p = 0 then print "leave resume\n" else ())
+        before ((if p = 0 then print "leave resume\n" else ()))
       end
-    | resume (Capture (lat, k), v) =
+    | resumeInt p (Capture (lat, k), v) =
       let
-        val p = processorNumber ()
         (* val _ = print "resuming\n" *)
       in
         addWorkLat (lat, p, [(newWork p, Thread (T.prepend (k, fn () => v)))])
         (* handle e => (eprint "here 67\n"; raise e) *)
       end
+
+  fun resume (t, v) =
+      let val p = processorNumber ()
+      in
+          block_sigs p;
+          resumeInt p (t, v);
+          unblock_sigs p
+      end
+
 
   fun latency (Suspend (lat, _)) = lat
     | latency (Capture (lat, _)) = lat
@@ -526,7 +532,7 @@ val policyName = "Prompt private deques"
               List.foldl
                   (fn ((t, f), (rsm, r)) =>
                       (* if latency t then *)
-                          if f () then ((* print ("resumed on " ^ (Int.toString p) ^ "\n");  *)resume ((* mkLat *) t, ()); (true, r))
+                          if f () then ((* print ("resumed on " ^ (Int.toString p) ^ "\n");  *)resumeInt p ((* mkLat *) t, ()); (true, r))
                                        (* handle e => (eprint "here 142\n"; raise e) *)
                           else (rsm, (t, f)::r)
                       (* else raise (Parallel "Invariant violated!\n") *)
@@ -714,13 +720,6 @@ fun tryToUpdate p c v =
             in
                 addWorkLat (nlat, p, [(newWork p, w)]);
                 c := v
-(*
-                if compareAndSwap (c, ev, v) then
-                    ()
-                else
-                    (eprint ("Someone updated " ^ (Int.toString p) ^ "'s cell\n");
-                     c := v)
-*)
             end
         else
             if ev = v then ()
@@ -953,6 +952,7 @@ fun tryToUpdate p c v =
   fun capture f =
       let
         val p = processorNumber ()
+        val () = block_sigs p
         (* val _ = print "capture\n" *)
         fun tail (p, k) =
             let
@@ -960,6 +960,7 @@ fun tryToUpdate p c v =
               val () = finishWork p
             in
               f (Capture (false, k)) (* XXX *)
+              before (unblock_sigs p)
             end
       in
         capture' (p, tail)
@@ -1165,11 +1166,13 @@ fun tryToUpdate p c v =
   fun return () =
       let
         val p = processorNumber ()
+        val _ = block_sigs p
       in
         (* Look for delayed work *)
         case Array.sub (delayed, p)
          of nil => ((* this is counted in schedule: incSuspends p;  *)
                     finishWork p;
+                    unblock_sigs p;
                     schedule true NONE ())
           | ws =>
             let
@@ -1187,6 +1190,7 @@ fun tryToUpdate p c v =
                 (addWorkLat (false, p, [(newWork p, JWork w)]); (* XXX *)
                  (* this is counted in schedule: incSuspends p; *)
                  finishWork p;
+                 unblock_sigs p;
                  schedule true NONE ())
               else
                 w ()
@@ -1232,10 +1236,13 @@ fun tryToUpdate p c v =
 
   fun interruptFst t =
       let val p = processorNumber ()
+          val _ = MLtonItimer.set (MLtonItimer.Real,
+                                   {interval = Time.zeroTime,
+                                    value = Time.zeroTime})
           val _ = if !waitingForTask then print "interrupt while waiting!!!\n"
                   else ()
-          val _ = block_sigs p
-
+          (* val _ = block_sigs p *)
+          val iv = Time.fromMicroseconds (LargeInt.fromInt delta)
           (* val _ = procio p *)
           (* val _ = communicate p *)
       in
@@ -1258,7 +1265,9 @@ fun tryToUpdate p c v =
           else ());
          (* print ("interruptFst on " ^ (Int.toString p) ^ "\n"); *)
          signalOthers p sec_sig 0;
-         (* signal2Others p sec_sig;*)
+         MLtonItimer.set (MLtonItimer.Real,
+                          {interval = iv, value = iv});
+         (* signal2Others p sec_sig; *)
          (* signalThread (0, Posix.Signal.toWord sec_sig); *)
          (* unblock_sigs p; *)
          (* print ("signaled others\n"); *)
