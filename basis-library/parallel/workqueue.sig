@@ -14,7 +14,7 @@ sig
    argument *)
 
   (* create a new identifier for work *)
-  val newWork : proc -> token
+  val newWork : unit -> token
   (* atomically add new work to the queue; highest-priority work appears first *)
   val addWork : proc * (token * work) list -> unit
 

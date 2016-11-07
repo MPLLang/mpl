@@ -38,40 +38,6 @@ struct
   val releaseLock = _import "Parallel_lockRelease" runtime private: Word32.word ref -> unit;
 
   local
-    val takeDekker = _import "Parallel_dekkerTake" runtime private: bool * bool ref * bool ref * bool ref -> unit;
-    val releaseDekker = _import "Parallel_dekkerRelease" runtime private: bool * bool ref * bool ref * bool ref -> unit;
-  in
-  type dekker = bool ref * bool ref * bool ref
-  fun dekkerInit () = (ref false, ref false, ref true)
-  fun dekkerLock (amLeft, (left, right, leftsTurn)) = takeDekker (amLeft, left, right, leftsTurn)
-(*
-      let
-        val (mine, other) = if amLeft
-                            then (left, right)
-                            else (right, left)
-      in
-        mine := true;
-        while !other
-        do if amLeft <> !leftsTurn then
-             let in
-               mine := false;
-               while amLeft <> !leftsTurn do yield ();
-               mine := true
-             end
-           else ()
-      end
-*)
-  fun dekkerUnlock (amLeft, (left, right, leftsTurn)) = releaseDekker (amLeft, left, right, leftsTurn)
-(*
-      let in
-        leftsTurn := (not amLeft);
-        (if amLeft then left else right) := false
-      end
-*)
-  end
-
-
-  local
     exception Impossible
     open TextIO
   in
@@ -96,7 +62,7 @@ struct
   and queue = Queue of {top : int ref,
                         bottom : int ref,
                         index : int ref,
-                        work : entry (* (token * W.work (* * int *) ) option *) A.array ref}
+                        work : entry A.array ref}
   and token = Token of queue option ref
   type susp = queue option
 
@@ -108,24 +74,11 @@ struct
               work = ref (A.array (WORK_ARRAY_SIZE, Empty))
             }
 
-  datatype lock = Lock of {
-                            thiefLock : Word32.word ref,
-                            ownerLock : dekker
-                          }
-  (* protects the array of queues -- specifically those queues not owned by
-    any processor -- and the total number of active queues *)
-  val masterLock = ref (Word32.fromInt ~1)
-  val activeQueues = ref numberOfProcessors
-  val totalQueues = ref numberOfProcessors
-
-  val singleLock = Lock { thiefLock = masterLock, ownerLock = dekkerInit () }
-  val () = case singleLock of Lock {thiefLock, ...} => lockInit thiefLock
+  datatype lock = Lock of { thiefLock : Word32.word ref }
 
   (* protects access to those queues owned by processors *)
   val locks = A.tabulate (numberOfProcessors,
-                          (* fn _ => singleLock) *)
-                          fn _ => Lock { thiefLock = ref (Word32.fromInt ~1),
-                                         ownerLock = dekkerInit () })
+                          fn _ => Lock { thiefLock = ref (Word32.fromInt ~1) })
   val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
                       lockInit thiefLock)
                   locks
@@ -133,8 +86,6 @@ struct
                       MLtonHM.registerQueueLock (Word32.fromInt p, thiefLock))
                   locks
 
-  val suspending = A.array (numberOfProcessors,
-                            false)
   val QUEUE_ARRAY_SIZE = 8192
   val queues = A.tabulate (QUEUE_ARRAY_SIZE,
                            fn i => if i < numberOfProcessors then
@@ -145,14 +96,6 @@ struct
                                     MLtonHM.registerQueue (Word32.fromInt p, q)
                                   | _ => ())
                   queues
-
-(*
-  local
-    val r = ref 100
-  in
-  fun next () = !r before r := !r + 1
-  end
-*)
 
   fun assertToken location (Token t) p =
       let
@@ -172,168 +115,7 @@ struct
                                        else ()
       end
 
-  local
-    structure I = Primitive.Int32
-    open I
-    val precision': Int.int = Primitive.Int32.zextdToInt sizeInBits
-    val maxNumDigits = Int.+ (precision', 1)
-    val fromInt = I.schckFromInt
-    val toInt = I.schckToInt
-
-    val bufs = A.array (W.numberOfProcessors (), CharArray.array (maxNumDigits, #"\000"))
-  in
-  fun intToString p n =
-      let
-        val buf = A.sub (bufs, p)
-        val radix = fromInt (StringCvt.radixToInt StringCvt.DEC)
-        fun loop (q, i: Int.int) =
-            let
-              val _ =
-                  CharArray.update
-                      (buf, i, StringCvt.digitToChar (toInt (~? (rem (q, radix)))))
-              val q = quot (q, radix)
-            in
-              if q = zero
-              then
-                let
-                  val start =
-                      if n < zero
-                      then
-                        let
-                          val i = Int.- (i, 1)
-                          val () = CharArray.update (buf, i, #"~")
-                        in
-                          i
-                        end
-                      else i
-                in
-                  CharArraySlice.vector
-                      (CharArraySlice.slice (buf, start, NONE))
-                end
-              else loop (q, Int.- (i, 1))
-            end
-      in
-        loop (if n < zero then n else ~? n, Int.- (maxNumDigits, 1))
-      end
-  end
-
-(* XX more compositional way of writing these assertions *)
-  val lastCount = ref 0
-  fun count p s delta = ()
-(*
-      let
-        val s = Int.toString p ^ " " ^ s ^ " FAIL: "
-        val error = ref false
-
-        val b = !totalQueues
-        fun outer (p, x) : int =
-            if p = QUEUE_ARRAY_SIZE then x
-            else if p >= b then
-              case A.sub (queues, p)
-               of NONE => outer (p + 1, x)
-                | SOME _ => (dbgmsg (concat [s, "found SOME queue at ",
-                                            Int.toString p, " with total = ",
-                                            Int.toString b, "\n"]);
-                             error := true;
-                             outer (p + 1, x))
-            else
-              case A.sub (queues, p)
-               of NONE => outer (p + 1, x)
-                | SOME (Queue { top, bottom, work, index, ... }) =>
-                  let
-                    val () = if !index <> p then
-                               (dbgmsg (concat [s, "index (", Int.toString (!index),
-                                               ") does not match location (",
-                                               Int.toString p, ")\n"]);
-                                error := true)
-                             else ()
-
-                    val i = !top
-                    val j = !bottom
-                    val work = !work
-
-                    fun inner (k, x) : int =
-                        if k = WORK_ARRAY_SIZE then outer (p + 1, x)
-                        else if k < j orelse k >= i then
-                          case A.sub (work, k)
-                           of NONE => inner (k + 1, x)
-(*
-                            | Marker => (dbgmsg (concat [s, "found marker at ",
-                                                        Int.toString k, " with bottom = ",
-                                                        Int.toString j, " and top = ",
-                                                        Int.toString i, "\n"]);
-                                         error := true;
-                                         inner (k + 1, x))
-*)
-                            | SOME _ => (dbgmsg (concat [s, "found work at ",
-                                                        Int.toString k, " with bottom = ",
-                                                        Int.toString j, " and top = ",
-                                                        Int.toString i, "\n"]);
-                                         error := true;
-                                         inner (k + 1, x))
-                        else case A.sub (work, k)
-                              of NONE => (dbgmsg (concat [s, "found empty at ",
-                                                          Int.toString k, " with bottom = ",
-                                                          Int.toString j, " and top = ",
-                                                          Int.toString i, "\n"]);
-                                           error := true;
-                                           inner (k + 1, x))
-(*
-                               | Marker => inner (k + 1, x)
-*)
-                               | SOME _ => inner (k + 1, x + 1)
-                  in
-                    inner (0, x)
-                  end
-
-        val newCount = outer (0, 0)
-        val () = if !lastCount + delta = newCount
-                 then lastCount := newCount
-                 else (dbgmsg (concat [s, "new count (", Int.toString newCount,
-                                      ") does not match last count (", Int.toString (!lastCount),
-                                      ") plus delta (", Int.toString delta, ")\n"]);
-                       error := true)
-      in
-        if !error then raise WorkQueue
-        else error := false
-      end
-*)
-
-  fun pr p s = ()
-(*
-      let
-        fun (* each ~1 = ()
-          | *) each p' =
-            case A.sub (queues, p') of
-              SOME (Queue { top, bottom, work, ... }) =>
-              let
-(*
-                fun loop i = if i < !bottom then ""
-                             else (intToString p ((#3 (valOf (A.sub (!work, i)))))
-                                   ^ " "
-                                   ^ (loop (i - 1)))
-*)
-              in
-                concat [" ", intToString p p',
-                        " size = ", intToString p (!top - !bottom),
-                        " active-queues = ", intToString p (!activeQueues),
-                        " total-queues = ", intToString p (!totalQueues),
-(*
-                        "; queue = ",
-                        (loop (!top - 1)),
-*)
-                        " "]
-                (* each (p' - 1) *)
-              end
-            | NONE => (* each (p' - 1) *) ""
-      in
-        (* each (numberOfProcessors - 1); *)
-        dbgmsg (intToString p p ^ " " ^ s ^ each p ^ "\n");
-        TextIO.flushOut TextIO.stdOut
-      end
-*)
-
-  fun newWork p = Token (ref NONE)
+  fun newWork () = Token (ref NONE)
 
   (* must already hold the lock! *)
   fun resize p (Queue { top, bottom, work, ... }) =
@@ -373,12 +155,10 @@ struct
 
   fun addWork (p, tws) =
     let
-      (* val () = pr p "before-add" *)
-      val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
+      val Lock { thiefLock, ... } = A.sub (locks, p)
       val () = dbgmsg "tyring lock 1\n"
       val () = takeLock thiefLock; (* XTRA *)
       val () = dbgmsg "got lock 1\n"
-      (* val () = dekkerLock (true, lock); *)
       val q as Queue { top, work, ... } = case A.sub (queues, p)
                                       of SOME q => q | NONE => (dbgmsg "add\n"; raise WorkQueue)
       fun add (tw as (t as Token r, w)) =
@@ -394,101 +174,35 @@ struct
           end
     in
       app add tws;
-      pr p "add:";
-      count p "add" (length tws);
-      (* dekkerUnlock (true, lock); *)
       releaseLock thiefLock (* XTRA *)
     end
 
-(* move queue at a into p', assumes the master lock is held *)
-  fun moveQueue (a, p') = die "Tried to Move Queue"
-      (* if a = p' then () *)
-      (* else *)
-      (*   let *)
-      (*     val q as Queue { index, work = ref qArray } = *)
-      (*         case A.sub (queues, a) of SOME q => q *)
-      (*                                 | NONE => (dbgmsg "move\n"; raise WorkQueue) *)
-      (*   in *)
-      (*     index := p'; *)
-      (*     A.update (queues, p', SOME q); *)
-      (*     MLtonHM.registerQueue (p', qArray) *)
-      (*   end *)
-
   local
-    fun victim p =
-        let
-          (* SPOONHOWER_NOTE: this is not greedy *)
-
-          (* SPOONHOWER_NOTE: this is unprotected access to totalQueues and activeQueues.
-            However, if one is being concurrently updated we will still given
-            sequentializable behavior. *)
-          val n = if P.stealFromSuspendedQueues then
-                    !totalQueues
-                  else
-                    !activeQueues
-        in
-          Word.toIntX (MLtonRandom.rand ()) mod n
-        end
+    fun victim p = Word.toIntX (MLtonRandom.rand ()) mod numberOfProcessors
   in
   fun getWork p =
     let
-      (* val () = pr p "before-get" *)
-      val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
+      val Lock { thiefLock, ... } = A.sub (locks, p)
       val () = dbgmsg "tyring lock 2\n"
       val () = takeLock thiefLock (* XTRA *)
       val () = dbgmsg "got lock 2\n"
-      (* val () = dekkerLock (true, lock) *)
 
       fun steal () =
           let
             (* Who to steal from? *)
             val p' = victim p
             val unsync =
-                if p' < numberOfProcessors then
-                  let
-                    (* Release our own lock *)
-                    (* val () = dekkerUnlock (true, lock) *)
-                    val () = releaseLock thiefLock (* XTRA *)
-                    (* Take the victim's lock *)
-                    val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p')
-                    val () = dbgmsg "tyring lock 3\n"
-                    val () = takeLock thiefLock
-                    val () = dbgmsg "got lock 3\n"
-                    (* val () = dekkerLock (false, ownerLock) *)
-                  in
-                    fn () => ((* dekkerUnlock (false, ownerLock); *)
-                        releaseLock thiefLock)
-                  end
-                else
-                    die "Victim is not a processor"
-                  (* let *)
-                  (*   (* Here we hold on to our own lock, since we might modify *)
-                  (*     our own queue. *) *)
-                  (*   val () = takeLock masterLock *)
-                  (* in *)
-                  (*   fn () => (releaseLock masterLock; *)
-                  (*             (* dekkerUnlock (true, lock); *) *)
-                  (*             releaseLock thiefLock (* XTRA *)) *)
-                  (* end *)
-
-            fun maybeCleanup () =
-                if p' < numberOfProcessors then false (* can't remove owned queues *)
-                else die "Tried to cleanup"
-                    (* if p' >= !activeQueues then false (* can't remove inactive queues *) *)
-                    (* else *)
-                    (*     let *)
-                    (*         (* assumes we hold masterLock and there is nothing in p' *) *)
-                    (*         val a = !activeQueues - 1 *)
-                    (*         val b = !totalQueues - 1 *)
-                    (*     in *)
-                    (*         (* If this is the last queue then we need to clear it explicitly *) *)
-                    (*         A.update (queues, p', NONE); *)
-                    (*         moveQueue (a, p'); *)
-                    (*         activeQueues := a; *)
-                    (*         moveQueue (b, a); *)
-                    (*         totalQueues := b; *)
-                    (*         true *)
-                    (*     end *)
+                let
+                  (* Release our own lock *)
+                  val () = releaseLock thiefLock (* XTRA *)
+                  (* Take the victim's lock *)
+                  val Lock { thiefLock, ... } = A.sub (locks, p')
+                  val () = dbgmsg "tyring lock 3\n"
+                  val () = takeLock thiefLock
+                  val () = dbgmsg "got lock 3\n"
+                in
+                  fn () => (releaseLock thiefLock)
+                end
           in
             case A.sub (queues, p')
              of NONE => (incr failedSteals; unsync (); yield (); NONE)
@@ -497,62 +211,24 @@ struct
                   val j = !bottom
                   val i = !top
                 in
-                  if i <> j then (* not empty *)
-                    if P.stealEntireQueues andalso p' >= numberOfProcessors
-                       andalso (not P.stealFromSuspendedQueues orelse p' < !activeQueues) then
-                        die "Invalid steal"
-                      (* let (* Steal the whole queue *) *)
-                      (*   val a = !activeQueues - 1 *)
-                      (*   val b = !totalQueues - 1 *)
-                      (* in *)
-                      (*   index := p; *)
-                      (*   A.update (queues, p, SOME q); *)
-                      (*   (* Shuffle the other queues around *) *)
-                      (*   moveQueue (a, p'); *)
-                      (*   activeQueues := a; *)
-                      (*   moveQueue (b, a); *)
-                      (*   totalQueues := b; *)
-                      (*   A.update (queues, b, NONE); *)
-                      (*   (* Update our new state *) *)
-                      (*   top := i - 1; *)
-                      (*   case A.sub (!work, i - 1) *)
-                      (*    of Empty => raise WorkQueue *)
-                      (*     | Marker => (pr p "queue-steal(marker):"; *)
-                      (*                  (* count the steal here since we won't *)
-                      (*                      count it next time *) *)
-                      (*                  incr successfulSteals; *)
-                      (*                  NONE) *)
-                      (*     | Work tw => *)
-                      (*       (pr p "queue-steal:"; *)
-                      (*        incr successfulSteals; *)
-                      (*        SOME (true, #2 tw)) *)
-                      (* end *)
-                      (*   before (A.update (!work, i - 1, Empty); *)
-                      (*           count p "queue-steal" ~1; *)
-                      (*           unsync ()) *)
-                    else
-                      let (* Just steal the oldest task *)
-                        val w = A.sub (!work, j)
-                        val () = A.update (!work, j, Empty)
-                      in
-                        if i = j + 1 andalso maybeCleanup () then ()
-                        else ();
-                        bottom := j + 1;
-                        case w
-                         of Empty => raise WorkQueue
-                          | Marker => (unsync ();
-                                       NONE)
-                          | Work tw =>
-                            (assertToken "steal" (#1 tw) p';
-                             pr p "work-steal:";
-                             incr successfulSteals;
-                             SOME (true, unsync, #2 tw))
-                      end
-                        before (count p "work-steal" ~1)
+                  if i <> j
+                  then (* not empty *)
+                    let (* Just steal the oldest task *)
+                      val w = A.sub (!work, j)
+                      val () = A.update (!work, j, Empty)
+                    in
+                      bottom := j + 1;
+                      case w
+                       of Empty => raise WorkQueue
+                        | Marker => (unsync ();
+                                     NONE)
+                        | Work tw =>
+                          (assertToken "steal" (#1 tw) p';
+                           incr successfulSteals;
+                           SOME (true, unsync, #2 tw))
+                    end
                   else (* empty queue *)
-                    (ignore (maybeCleanup ());
-                     count p "failed-steal" 0;
-                     incr failedSteals;
+                    (incr failedSteals;
                      unsync (); yield (); NONE)
 
                 end
@@ -569,213 +245,51 @@ struct
                   (if i <> 0 then (top := 0; bottom := 0) else (); (* PERF unconditional? *)
                    (* release lock in steal *)
                    steal ())
-                else if P.stealOldestFromSelf andalso A.sub (suspending, p) then
-                    die "Invalid Steal Mode"
-                    (* (bottom := j + 1; *)
-                    (*  pr p "get-oldest:"; *)
-                    (*  case A.sub (!work, j) *)
-                    (*   of Empty => raise WorkQueue *)
-                    (*    | Marker => NONE (* just return and loop again *) *)
-                    (*    | Work tw => SOME (true, #2 tw)) *)
-                    (* before (A.update (!work, j, Empty); *)
-                    (*         count p "get-oldest" ~1; *)
-                    (*         (* dekkerUnlock (true, lock); *) *)
-                    (*         releaseLock thiefLock) (* XTRA *) *)
-                else (* Take the youngest from our queue *)
-                  (top := i - 1;
-                   pr p "get:";
-                   case A.sub (!work, i - 1)
-                    of Empty => raise WorkQueue
-                     | Marker => (A.update (!work, i - 1, Empty);
-                                  releaseLock thiefLock;
-                                  case getWork p
-                                   of NONE => NONE
-                                    | SOME (_, unlocker, w) => SOME (true, unlocker, w))
-                     | Work tw =>
-                       let
-                           val () = assertToken "normal" (#1 tw) p
-                       in
-                           SOME (false, fn () => releaseLock thiefLock, #2 tw)
-                       end
-                       before (A.update (!work, i - 1, Empty);
-                               count p "get" ~1))
+                else (top := i - 1;
+                      case A.sub (!work, i - 1)
+                       of Empty => raise WorkQueue
+                        | Marker => (A.update (!work, i - 1, Empty);
+                                     releaseLock thiefLock;
+                                     case getWork p
+                                      of NONE => NONE
+                                       | SOME (_, unlocker, w) => SOME (true, unlocker, w))
+                        | Work tw =>
+                          let
+                            val () = assertToken "normal" (#1 tw) p
+                          in
+                            SOME (false, fn () => releaseLock thiefLock, #2 tw)
+                          end
+                          before (A.update (!work, i - 1, Empty)))
               end
     end
   end
-
-  fun startWork p =
-      die "Tried to call startWork"
-      (* let *)
-      (*   val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p) *)
-      (*   (* val () = dekkerLock (true, ownerLock) *) *)
-      (*   val () = takeLock thiefLock (* XTRA *) *)
-      (* in *)
-      (*   A.update (suspending, p, false); *)
-      (*   (* Initialize a queue for this processor if none exists *) *)
-      (*   case A.sub (queues, p) *)
-      (*    of SOME _ => () *)
-      (*     | NONE => *)
-      (*       let *)
-      (*           val q as Queue {work = ref qArray, ...}= newQueue p *)
-      (*       in *)
-      (*           A.update (queues, p, SOME q); *)
-      (*           MLtonHM.registerQueue (Word32.fromInt p, qArray) *)
-      (*       end; *)
-      (*   count p "start" 0; *)
-      (*   releaseLock thiefLock (* XTRA *) *)
-      (*   (* dekkerLock *) *)
-      (* end *)
-
-  fun finishWork p = ()
-
-  fun suspendWork p =
-      let
-        (* val () = pr p "before-suspend" *)
-        val Lock { ownerLock, thiefLock, ... } = A.sub (locks, p)
-        (* val () = dekkerLock (true, ownerLock) *)
-        val () = dbgmsg "tyring lock 4\n"
-        val () = takeLock thiefLock (* XTRA *)
-        val () = dbgmsg "got lock 4\n"
-      in
-        (if P.suspendEntireQueues then
-           die "Tried to suspend entire queue"
-           (* let *)
-           (*   val () = takeLock masterLock *)
-           (*   val q as Queue { index, ... } = case A.sub (queues, p) *)
-           (*                                    of SOME q => q | NONE => (dbgmsg "suspend\n"; raise WorkQueue) *)
-           (*   val a = !totalQueues *)
-           (*   val () = if a >= QUEUE_ARRAY_SIZE then (dbgmsg "queues1\n"; raise QueueSize) else () *)
-           (* in *)
-           (*   index := a; *)
-           (*   A.update (queues, a, SOME q); *)
-           (*   totalQueues := a + 1; *)
-           (*   pr p "suspend:"; *)
-           (*   (* XX this is because we currently add delayed tasks (in *)
-           (*    schedule) after a suspend *) *)
-           (*   A.update (queues, p, (* XXX PERF? NONE *) SOME (newQueue p)); *)
-           (*   count p "suspend" 0; *)
-           (*   releaseLock masterLock; *)
-           (*   SOME q *)
-           (* end *)
-         else
-           let in
-             A.update (suspending, p, true);
-             NONE
-           end)
-        before ((* dekkerUnlock (true, ownerLock); *)
-                releaseLock thiefLock) (* XTRA *)
-      end
-
-  fun resumeWork (p, NONE, tw as (t as Token r, w)) =
-      if P.resumeWorkLocally then
-        let
-          (* val () = pr p "before-resume-local" *)
-          val Lock { ownerLock = lock, thiefLock, ... } = A.sub (locks, p)
-          val q as Queue { top, work, ... } = case A.sub (queues, p)
-                                               of SOME q => q | NONE => (dbgmsg "resume-add\n"; raise WorkQueue)
-          fun add w =
-              let
-                val i = !top
-                val () = if i = A.length (!work) then resize p q else ()
-                val i = !top (* in case of resize *)
-              in
-                A.update (!work, i, w);
-                top := i + 1
-              end
-          val () = r := SOME q;
-        in
-          dbgmsg "tyring lock 5\n";
-          takeLock thiefLock; (* XTRA *)
-          dbgmsg "got lock 5\n";
-          (* dekkerLock (true, lock); *)
-          add Marker;
-          add (Work tw);
-          add Marker;
-          pr p "local-resume:";
-          (* dekkerUnlock (true, lock); *)
-          releaseLock thiefLock (* XTRA *)
-        end
-
-      else (* make a new queue *)
-          die "Tried to resume work non-locally"
-        (* let *)
-        (*   (* val () = pr p "before-resume-non-local" *) *)
-        (*   val () = takeLock masterLock *)
-        (*   val a = !activeQueues *)
-        (*   val b = !totalQueues *)
-        (*   val () = if b >= QUEUE_ARRAY_SIZE then (dbgmsg "queues2\n"; raise QueueSize) else () *)
-        (*   val q as Queue { work, top, ... } = newQueue a *)
-        (*   val i = !top (* top should be 0 *) *)
-        (* in *)
-        (*   A.update (!work, i, Work (t, w (*, next () *))); *)
-        (*   top := i + 1; *)
-        (*   totalQueues := b + 1; *)
-        (*   moveQueue (a, b); *)
-        (*   activeQueues := a + 1; *)
-        (*   A.update (queues, a, SOME q); *)
-        (*   pr p "non-local-resume:"; *)
-        (*   count p "non-local-resume" 1; *)
-        (*   releaseLock masterLock *)
-        (* end *)
-    | resumeWork (p, q as SOME (Queue { work, top, index, ... }), tw as (t, w)) =
-      die "Tried to resume entire queue"
-      (* let *)
-      (*   (* val () = pr p "before-resume-original" *) *)
-      (*   val () = takeLock masterLock *)
-      (*   val i = !top *)
-      (*   val a = !activeQueues *)
-      (*   val p' = !index *)
-      (*   val () = if i = WORK_ARRAY_SIZE then resize p (valOf q) else () *)
-      (*   val i = !top (* in case of resize *) *)
-      (* in *)
-      (*   A.update (!work, i, Work (t, w (*, next () *))); *)
-      (*   top := i + 1; *)
-      (*   (* Swap this queue in as the last active one *) *)
-      (*   moveQueue (a, p'); *)
-      (*   index := a; *)
-      (*   A.update (queues, a, q); *)
-      (*   activeQueues := a + 1; *)
-      (*   pr p "resume:"; *)
-      (*   count p "resume" 1; *)
-      (*   releaseLock masterLock *)
-      (* end *)
 
 (* what if a job J is added, then that queue is suspended, then resumed by a
   different processor.  then the token (the proc number at the time J was
   added) doesn't reflect which lock should be take nor which queue *)
   fun removeWork (p', Token r) =
       let
-        (* val () = pr p' "before-remove" *)
         val Queue { index, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove\n"; raise WorkQueue)
 (* SPOONHOWER_NOTE: this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
         val p = !index
         val unsync =
             if p < numberOfProcessors then
               let
-                val Lock { thiefLock, ownerLock, ... } = A.sub (locks, p)
+                val Lock { thiefLock, ... } = A.sub (locks, p)
                 val () = dbgmsg "tyring lock 6\n"
                 val () = if p = p' then
-                           (takeLock thiefLock; (* XTRA *)
-                            (* dekkerLock (true, ownerLock) *) ())
+                           takeLock thiefLock (* XTRA *)
                          else
-                           (takeLock thiefLock;
-                            (* dekkerLock (false, ownerLock) *) ())
+                           takeLock thiefLock
                 val () = dbgmsg "got lock 6\n"
               in
                 fn _ => if p = p' then
-                          ((* dekkerUnlock (true, ownerLock); *)
-                           releaseLock thiefLock) (* XTRA *)
+                          releaseLock thiefLock (* XTRA *)
                         else
-                          ((* dekkerUnlock (false, ownerLock); *)
-                           releaseLock thiefLock)
+                          releaseLock thiefLock
               end
             else
                 die "Tried to resume work from unowned queue"
-              (* let *)
-              (*   val () = takeLock masterLock *)
-              (* in *)
-              (*   fn _ => releaseLock masterLock *)
-              (* end *)
 
         val Queue { top, bottom, work, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove2\n"; raise WorkQueue)
         val last = !top - 1
@@ -804,8 +318,6 @@ struct
                   end
 
         val found = loop last
-        val () = pr p "remove:"
-        val () = count p "remove" (if found then ~1 else 0)
       in
         found
         before unsync ()
@@ -819,4 +331,11 @@ struct
   fun reportFailedSteals () = !failedSteals
   fun resetSteals () = (successfulSteals := 0;
                         failedSteals := 0)
+
+  (* Unused function *)
+  val startWork : proc -> unit = fn _ => die "startWork called"
+  val finishWork : proc -> unit = fn _ => die "finishWork called"
+  val suspendWork : proc -> susp = fn _ => die "suspendWork called"
+  val resumeWork : proc * susp * (token * work) -> unit =
+   fn _ => die "resumeWork called"
 end
