@@ -14,15 +14,18 @@ fun inputLine () =
         iL_int ""
     end
 
+fun seqfib n =
+    if n <= 1 then 1
+    else let val (r1, r2) = (seqfib (n-1), seqfib (n-2))
+         in r1 + r2
+         end
+
 (* Compute and print Fibonacci of $n$  *)
 fun fib n () =
   let fun fib' n () =
       if n <= 1 then 1
-      else let fun fork (f, g) = if n <= 20 then (f (), g ()) else
-                                 ((* print ((Int.toString n) ^ "\n"); *)
-                                  MLton.Parallel.ForkJoin.fork (f, g))
-               val (r1, r2) =
-                 fork (fib' (n-1), fib' (n-2))
+      else if n <= 20 then seqfib n
+      else let val (r1, r2) = MLton.Parallel.ForkJoin.fork (fib' (n-1), fib' (n-2))
            in r1 + r2
            end
   in

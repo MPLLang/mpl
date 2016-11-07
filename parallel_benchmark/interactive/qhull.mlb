@@ -16,6 +16,6 @@ $(SML_LIB)/basis/mlton.mlb
 x/graphics.mlb
 viewer/MLSDL/srcSML/MLTon/SDLFuncs/SDLFuncs.sml
 $(SML_LIB)/basis/parallel/io.sig
-$(SML_LIB)/basis/parallel/io-sdl.sml
+$(SML_LIB)/basis/parallel/io.sml
 
 qhull-nopoll.sml

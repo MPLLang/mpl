@@ -6,4 +6,4 @@ sha1.sml
 MersenneTwister.sml
 RANDOM210.sig
 DotMix.sml
-plainuts2.sml
+plainuts.sml

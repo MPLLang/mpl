@@ -8,6 +8,7 @@ functor MkDotMixParams
 struct
 
   structure W = Word32
+  structure V = Vector
 
   (* 4,294,967,291 is the 203,280,221st prime, if anyone's counting. *)
   val magicPrime : W.word = 0w4294967291 (* 2^32 - 5 *)
@@ -15,23 +16,27 @@ struct
   (* need constant vector of randoms, uniform in [0, magicPrime). Use
    * MersenneTwister just for these. *)
   val randoms =
-    let fun generate n r =
-          if n = 0 then [] else
-          let val (wd, r') = MersenneTwister.randomWord r (* wd is 32-bits *)
-          in W.fromLarge (wd mod W.toLarge magicPrime) :: generate (n-1) r'
-          end
-    in generate maxDepth (MersenneTwister.fromInt init)
-    end
+      let val r = ref (MersenneTwister.fromInt init)
+          fun f _ =
+              let val (wd, r') = MersenneTwister.randomWord (!r)
+              (* wd is 32-bits *)
+              in
+                  r := r';
+                  W.fromLarge (wd mod W.toLarge magicPrime)
+              end
+      in
+          V.tabulate (maxDepth, f)
+      end
 
   (* rand type is basically a pedigree *)
-  type rand = {seed : W.word, depth : int, rank : W.word, parents : W.word list}
+  type rand = {seed : W.word, depth : int, rank : W.word,
+               parents : W.word V.vector}
 
   exception TooDeep
 
   fun fromInt (x : int) : rand =
-    {seed = W.fromInt x, depth = 1, rank = 0w0, parents = []}
-
-  fun toList ({rank, parents, ...} : rand) = List.rev (rank :: parents)
+    {seed = W.fromInt x, depth = 1, rank = 0w0,
+     parents = V.tabulate (0, (fn _ => 0w0))}
 
   fun advanceBy (k : int) ({seed, depth, rank, parents} : rand) : rand =
     {seed = seed, depth = depth, rank = rank + (W.fromInt k), parents = parents}
@@ -40,7 +45,16 @@ struct
 
   fun selectChildOf ({seed, depth, rank, parents} : rand) (i : int) : rand =
     if depth = maxDepth then raise TooDeep else
-    {seed = seed, depth = depth + 1, rank = 0w0, parents = (rank + W.fromInt i) :: parents}
+    let val n = V.length parents
+        fun f ind =
+            if ind < n then
+                V.sub (parents, ind)
+            else
+                rank + W.fromInt i
+    in
+        {seed = seed, depth = depth + 1, rank = 0w0,
+         parents = V.tabulate (n + 1, f)}
+    end
 
   fun split r =
     (advanceBy 2 r, (selectChildOf r 0, selectChildOf r 1))
@@ -52,19 +66,16 @@ struct
     (advanceBy n r, selectChildOf r)
 
   (* DotMix procedures: compression and mixing *)
-  fun compress r =
+  fun compress ({seed, depth, rank, parents} : rand) =
     let
-      fun zip (xs, ys) =
-        case (xs, ys) of
-          ([], _) => []
-        | (_, []) => []
-        | (x :: xs', y :: ys') => (x, y) :: zip (xs', ys')
-
       (* ensure pedigree values j are bounded by 1 <= j < magicPrime *)
-      val J = List.map (fn j => 0w1 + W.mod (j, magicPrime - 0w1)) (toList r)
-
       (* perform dot product with `randoms` *)
-      val dotted = List.foldl op+ 0w0 (List.map op* (zip (J, randoms)))
+      val dotted = V.foldli
+                       (fn (i, j, sum) =>
+                           sum + (0w1 + W.mod (j, magicPrime - 0w1))
+                                 * (V.sub (randoms, i)))
+                       0w0
+                       parents
     in
       W.mod (dotted, magicPrime)
     end

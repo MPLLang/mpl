@@ -4,4 +4,5 @@ $(SML_LIB)/basis/mlton.mlb
 ../x/graphics.mlb
 $(SML_LIB)/basis/parallel/io.sig
 $(SML_LIB)/basis/parallel/io.sml
+atomint.sml
 fib_net.sml

@@ -60,7 +60,7 @@ fun fibdo n =
         val diff = Time.-(finish, start)
         val diffi = LargeInt.toInt (Time.toMilliseconds diff)
     in
-        print ("exectime " ^ (Int.toString diffi) ^ "\n");
+        print ("exectime " ^ (aIntToString diffi) ^ "\n");
         OS.Process.exit OS.Process.success
     end
 
@@ -75,6 +75,6 @@ fun inploop () =
 (*val _ = fibdo 36 *)
 val _ = print "Starting fib_term\n"
 val _ = MLton.Parallel.ForkJoin.fork ((fn () => MLton.Parallel.FutureFGBG.fg inploop),
-                                      (fn () => fibdo 43)
+                                      (fn () => fibdo 45)
                                       )
 (* val _ = loop fibs fibs *)

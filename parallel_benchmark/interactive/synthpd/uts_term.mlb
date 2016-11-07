@@ -9,4 +9,5 @@ sha1.sml
 MersenneTwister.sml
 RANDOM210.sig
 DotMix.sml
+atomint.sml
 uts_term.sml

@@ -7,10 +7,6 @@ structure SHA1 :> SHA1 =
 struct
   exception Unimplemented
 
-  val lock = _import "Parallel_lockTake" runtime private: int ref -> unit;
-  val unlock = _import "Parallel_lockRelease" runtime private: int ref -> unit;
-  val mut = ref ~1
-
   val xorb = Word32.xorb
   val andb = Word32.andb
   val orb  = Word32.orb
@@ -43,12 +39,9 @@ struct
 
     
   (* executes f for each index lo..hi-1 inclusive *)
-  fun for lo hi s f =
-      if lo >= hi then s
-      else
-          let val s' = f (lo, s) in
-              for (lo + 1) hi s' f
-          end
+  fun for lo hi f =
+      if lo >= hi then ()
+      else (ignore (f lo); for (lo + 1) hi f)
 
   fun ford lo hi b f =
       if lo >= hi then b
@@ -68,46 +61,33 @@ struct
 
       fun mb n = Word32.fromInt (ord (CharVector.sub(msg, n)))
 
-      val W = (* Vector.tabulate(80, fn _ => 0w0) *)
-          List.tabulate(80, fn _ => 0w0)
-      fun Ws (W, x) = (* Vector.sub(W, x) *) List.nth (W, x)
+      val W = Array.array(80, 0w0)
+      fun Ws x = Array.sub(W, x)
 
-      fun update (l, i, v) =
-          case l of
-              [] => []
-            | h::t => if i = 0 then v::t
-                      else h::(update (t, i - 1, v))
-
-      val W = 
-        ford 0 16 W
-        (fn (t, W) =>
+      val _ = 
+        for 0 16
+        (fn t =>
          let in
-           (* Vector.update(W, t,  *) update (W, t,
+           Array.update(W, t, 
                         (mb (t * 4    ) << 0w24) orb 
                         (mb (t * 4 + 1) << 0w16) orb
                         (mb (t * 4 + 2) << 0w8)  orb
                         (mb (t * 4 + 3)))
          end)
            
-      (* val _ = lock mut *)
-
-      val W =
-        ford 16 80 W
-        (fn (t, W) =>
+      val _ =
+        for 16 80
+        (fn t =>
          let 
            val n = 
-             Ws (W, t-3)  xorb
-             Ws (W, t-8)  xorb
-             Ws (W, t-14) xorb
-             Ws (W, t-16)
+             Ws (t-3)  xorb
+             Ws (t-8)  xorb
+             Ws (t-14) xorb
+             Ws (t-16)
            val zz = ROL(n, 0w1)
          in
-           (*Vector.*)update(W, t, zz)
+           Array.update(W, t, zz)
          end)
-
-      (* val _ = unlock mut *)
-
-      fun Ws x = (* Vector.sub(W, x) *) List.nth (W, x)
 
 
       val (A, B, C, D, E) = (aa, bb, cc, dd, ee)
@@ -248,106 +228,14 @@ struct
       implode (w2b a @ w2b b @ w2b c @ w2b d @ w2b e)
     end
 
-fun copy s =
-    CharVector.tabulate (CharVector.length s,
-                        (fn i => CharVector.sub (s, i)))
-
-  (* turn a stream of oddly chunked strings into
-     one with 512-bit blocks *)
-  fun chunk_512_string s =
-    let
-
-      (* the padding required to make a message of length l (bytes)
-         a proper SHA-1 input. Returns either one or two Cons cells.
-         tail is the end of the input (63 bytes or less)
-         l is the total length of the input, *including* the length of the
-         tail end *)
-      fun padding tail l =
-          let val v = l mod 64 in
-            if v < 56 then
-              let val p = 56 - v
-                val padding = implode (List.tabulate (p - 1, fn _ => chr 0))
-              in Cons (tail ^ str (chr 0x80) ^ padding ^ lenbits l,
-                    fn _ => Nil) 
-              end
-            else if v < 64 then
-              let val p = 64 - v
-                val padding1 = implode (List.tabulate (p - 1, fn _ => chr 0))
-                val padding2 = implode (List.tabulate (56, fn _ => chr 0))
-              in Cons (tail ^ str (chr 0x80) ^ padding1,
-                    fn _ => Cons (padding2 ^ lenbits l, fn _ => Nil))
-              end
-            else raise Unimplemented (* Impossible? *)
-          end
-
-      (* n is the bytes we've already output.
-         cur is a string (of 64 bytes or less) that will
-         be our next chunk.
-         rest,sofar is a string and index indicating the
-         next bit of data. *)
-      (* PERF Could be more efficient by using an 
-         accumulating array instead of a string for cur *)
-      fun ch n cur sofar startat () =
-        (* if we already have 64 bytes, return it *)
-        if size cur = 64
-        then 
-          let in
-            Cons(cur, ch (n + 64) "" sofar startat)
-          end
-        else
-          (* do we have any in 'sofar'? *)
-          if startat < size sofar
-          then let 
-                 val get = Int.min(size sofar - startat,
-                                   64 - size cur)
-               in
-                 (* be eager, since we need to return something now *)
-                 ch n (cur ^ String.substring(sofar, startat, get))
-                    sofar (startat + get) ()
-               end
-          else
-              padding cur (n + size cur)
-    in
-      ch 0 "" (copy s) 0
-    end
-
   fun hash m = 
-    let
-
-      val stream512 = chunk_512_string m
-
-
-      (* gets hash context, length of string so far (bytes),
-         and tail of stream *)
-      fun hash_rest stream ctxt =
-        (case stream() of
-           Cons (s, stream) =>
-             let (* val _ = lock mut *)
-                 val ctxt = doblock ctxt s
-                 (* val _ = unlock mut *)
-             in  hash_rest stream ctxt
-             end
-         | Nil => ctxt)
-
-      val init =
-        (wc 0wx6745 0wx2301,
-         wc 0wxefcd 0wxab89,
-         wc 0wx98ba 0wxdcfe,
-         wc 0wx1032 0wx5476,
-         wc 0wxc3d2 0wxe1f0)
-
-      val (a, b, c, d, e) = hash_rest stream512 init
-    in
-      implode (w2b a @ w2b b @ w2b c @ w2b d @ w2b e)
-    end
-(*
+    hash_stream 
     (let val r = ref true
      in (fn () => 
          if !r 
-         then (lock mut; r := false; unlock mut; SOME m)
+         then (r := false; SOME m)
          else NONE)
      end)
-*)
 
   val digits = "0123456789ABCDEF"
   fun bintohex s =

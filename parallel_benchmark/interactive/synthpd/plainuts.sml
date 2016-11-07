@@ -16,55 +16,55 @@ fun forkn n f =
         fork_int n 0
     end
 
-fun word_to_string w =
-    if Word.< (w, Word.fromInt 256) then
-        String.str (Char.chr (Word.toInt w))
-    else
-        let val d = Word.div (w, Word.fromInt 256)
-            val r = Word.mod (w, Word.fromInt 256)
-        in
-            (word_to_string d) ^
-            (String.str (Char.chr (Word.toInt r)))
-        end
 
-fun string_to_word s =
-    let val bytes = Int.div (Word.wordSize, 8)
-        val ss = String.substring (SHA1.bintohex s, 0, 4)
+(* Convert a random number r in (0, 1) to a sample from a geometric dist.
+ with parameter p *)
+fun geom p r =
+    let fun pr k =
+            Math.pow (1.0 - p, (Real.fromInt k) - 1.0) * p
+        fun cumu a k =
+            let val pk = pr k
+                val a' = a + pk
+            in
+                if r < a' then k else cumu a' (k + 1)
+            end
     in
-    case Word.fromString ss of
-        SOME i => i
-      | NONE => (print "error\n"; Word.fromInt 0)
+        cumu 0.0 1
     end
 
-fun bad_hash s =
-    let val w = string_to_word s in
-        word_to_string (Word.xorb (w, Word.>> (w, 0w2)))
-    end
-
-fun new_sha sha i =
-    (* atomically (fn () => *)
-    bad_hash (sha ^ (Int.toString i))
-    (* sha ^ (Int.toString i) *)
-
-fun copy s =
-    CharVector.tabulate (CharVector.length s,
-                        (fn i => CharVector.sub (s, i)))
-
-fun explore d l sha =
+(* Sequential base case *)
+fun seqexplore d b rnd =
     if d <= 1 then 0 else
     1 +
-    (let val r = (* atomically (fn () => MLton.Random.rand ()) *)
-             string_to_word sha
-        val cs = (Word.toInt (Word.mod (r, Word.fromInt 3))) + 7
-        val _ = if d = 1 andalso l then print ((Int.toString cs) ^ "\n") else ()
-    in
-        List.foldl op+ 0 (forkn cs
-                                (fn i => explore (d - 1) (l andalso i = cs - 1)
-                                                 (new_sha (copy sha) i)))
+    (let val i = DotMix.boundedInt (0, 1000000000) rnd
+          (* Draw number of children from a geometric distribution *)
+         val cs = (geom (1.0 / b) (Real./ (Real.fromInt i, 1000000000.0)))
+          (* Generate new seeds for next level *)
+         val (_, rs) = DotMix.splitTab (rnd, cs)
+     in
+         List.foldl op+ 0 (List.tabulate (cs,
+                                          (fn i => seqexplore (d - 1) b
+                                                              (rs i))))
     end)
 
+(* Explore an unbalanced tree with depth d and average branching factor b *)
+fun explore d b rnd =
+    if d <= 1 then 0 else
+    if d <= 6 then seqexplore d b rnd else
+    (1 +
+    (let val i = DotMix.boundedInt (0, 1000000000) rnd
+        val cs = (geom (1.0 / b) (Real./ (Real.fromInt i, 1000000000.0)))
+        val (_, rs) = DotMix.splitTab (rnd, cs)
+    in
+        List.foldl op+ 0 (forkn cs
+                                (fn i => explore (d - 1) b
+                                                 (rs i)))
+    end))
+(* handle Overflow => (print "here 140\n"; 1) *)
+
 fun top_explore () =
-    let val nodes = explore 10 true (SHA1.hash "a different seed")
+    let val nodes = (explore 12 5.5 (DotMix.fromInt 827346237 (* 42 *)))
+        (* handle e => (print "here 164\n"; raise e) *)
         val finish = Time.now ()
         val diff = Time.-(finish, start)
         val diffi = LargeInt.toInt (Time.toMilliseconds diff)
