@@ -190,14 +190,14 @@ struct
           result
       end
 
-  fun resume (Capture (k, hh), v) =
+  fun resume (Capture (k, hh): unit t): unit =
       let
               val p = processorNumber ()
               val myHH = HH.get ()
               val () =
                   let
                       val () = useHH hh
-                      val t = Thread (T.prepend (k, fn () => v), hh)
+                      val t = Thread (k, hh)
                       val () = Q.addWork (p, [(Q.newWork p, t)])
                       val () = useHH myHH
                   in

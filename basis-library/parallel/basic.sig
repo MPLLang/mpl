@@ -11,7 +11,7 @@ sig
   type 'a t
 
   (* Re-enable a suspended computation and continue with the current job *)
-  val resume : ('a t * 'a) -> unit
+  val resume : unit t -> unit
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
   val capture : ('a t -> unit) -> 'a
 

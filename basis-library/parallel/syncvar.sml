@@ -4,7 +4,7 @@ struct
   structure HM = MLtonHM
 
   datatype 'a state =
-      Waiting of (bool * 'a) B.t list
+      Waiting of unit B.t list
     | Done of 'a
 
   type 'a t = int ref * 'a state ref
@@ -30,59 +30,44 @@ struct
         | [_] => ()
         | _ => die "syncvar.sml: more than one reader waiting?!\n"
 
-  local
-      fun doWrite ((r, v), a) =
-          case !v of
-              Done _ => raise B.Parallel "two writes to sync var!"
-            | Waiting _ =>
-              let
-                  (* First take the lock *)
-                  val () = lock r
-                  (* Now read the wait list *)
-                  val readers = case !v
-                                 of Waiting w => w
-                                  | Done _ => raise B.Parallel "async write to sync var!"
-                  val () = v := Done a
-                  val () = unlock r
-                  val () = checkMaxOneReader readers
-              in
-                  app (fn k => B.resume (k, (true, a))) readers
-              end
-  in
-      fun write argument =
+  fun write ((r, v), a) =
+      case !v of
+          Done _ => raise B.Parallel "two writes to sync var!"
+        | Waiting _ =>
           let
-              val result = doWrite argument
-                           handle e => (HM.exitGlobalHeap ();
-                                        raise e)
+            (* First take the lock *)
+            val () = lock r
+            (* Now read the wait list *)
+            val readers = case !v
+                           of Waiting w => w
+                            | Done _ => raise B.Parallel "async write to sync var!"
+            val () = v := Done a
+            val () = unlock r
+            val () = checkMaxOneReader readers
           in
-              result
+            app (fn k => B.resume k) readers
           end
-  end
 
-  local
-      fun doRead (r, v) =
-          case !v of
-              Done a => (false, a) (* Do the easy case first *)
-            | Waiting _ =>
-              (* Synchronization required... *)
-              let
-                  (* Take the lock *)
-                  val () = lock r
-              in
-                  (* Read again *)
-                  case !v
-                   of Done a =>
-                      (unlock r; (false, a))
-                    | Waiting readers =>
-                      (checkZeroReader readers;
-                       B.capture (fn k => (v := Waiting (k::readers); unlock r)))
-              end
-  in
-      fun read argument =
+  fun read (r, v) =
+      case !v of
+          Done a => (false, a) (* Do the easy case first *)
+        | Waiting _ =>
+          (* Synchronization required... *)
           let
-              val result = doRead argument
+            (* Take the lock *)
+            val () = lock r
           in
-              result
+            (* Read again *)
+            case !v
+             of Done a =>
+                (unlock r;
+                 (false, a))
+              | Waiting readers =>
+                (checkZeroReader readers;
+                 B.capture (fn k => (v := Waiting (k::readers);
+                                     unlock r));
+                 (case !v
+                   of Done a => (true, a)
+                    | Waiting _ => die "Syncvar unwritten after resume."))
           end
-  end
 end
