@@ -203,6 +203,8 @@ sig
     val drawline : display -> drawable -> gc -> int -> int -> int -> int -> unit
     val drawrectangle : display -> drawable -> gc -> int -> int -> int -> int -> unit
 
+    val drawrgbarray : display -> drawable -> gc -> int -> int -> int -> int -> char Array.array-> unit
+
     (* usleep microseconds *)
     val usleep : int -> unit
 

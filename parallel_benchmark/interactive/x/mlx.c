@@ -233,3 +233,22 @@ int MLX_FocusChangeMask = FocusChangeMask;
 int MLX_PropertyChangeMask = PropertyChangeMask;
 int MLX_ColormapChangeMask = ColormapChangeMask;
 int MLX_OwnerGrabButtonMask = OwnerGrabButtonMask;
+
+void drawrgbarray (Display *display, Drawable d, GC gc,
+                   int x, int y, int width, int height,
+                   char *arr)
+{
+  int i = 0;
+  int sx = x;
+  int sy = y;
+  for (i = 0; i < width * height * 3; i += 3) {
+    unsigned int col = (arr[i] << 16) + (arr[i + 1] << 8) + arr[i + 2];
+    XSetForeground(display, gc, col);
+    XDrawPoint(display, d, gc, sx, sy);
+    sx++;
+    if (sx >= x + width) {
+      sx = x;
+      sy++;
+    }
+  }
+}

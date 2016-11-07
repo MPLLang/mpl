@@ -51,6 +51,8 @@ sig
     val fillrectangle : int -> int -> int -> int -> unit
     val drawrectangle : int -> int -> int -> int -> unit
 
+    val drawrgbarray : int -> int -> int -> int -> char Array.array -> unit
+
     (* drawline x1 y1 x2 y2 *)
     val drawline : int -> int -> int -> int -> unit
 end

@@ -679,6 +679,16 @@ struct
         end
       | drawline _ _ _ _ _ _ _ = raise X "drawline: bad display / window / gc"
 
+    fun drawrgbarray (ref (SOME d)) (ref (SOME w)) (ref (SOME g)) x y wd ht arr =
+        let
+            val da = _import "drawrgbarray" : pointer * pointer * pointer *
+                int * int * int * int * char Array.array -> unit ;
+        in
+            da (d, w, g, x, y, wd, ht, arr)
+        end
+      | drawrgbarray _ _ _ _ _ _ _ _ = raise X "drawrgbarray: bad display / window / gc"
+
+
     fun setforeground (ref (SOME d)) (ref (SOME g)) color =
         let
             val sf = _import "XSetForeground" : pointer * pointer * Word32.word -> unit ;

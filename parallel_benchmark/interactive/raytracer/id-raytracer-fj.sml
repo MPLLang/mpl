@@ -13,6 +13,35 @@ open IO
   val clampd = fn d => if d < 0.0 then 0.0 else if d > 1.0 then 1.0 else d
   val gettimeofday = Time.toReal o Time.now
 
+  val prim_sig = MLton.Itimer.signal MLton.Itimer.Real
+  val sec_sig = Posix.Signal.usr1
+
+  structure Si = MLton.Signal
+
+  fun block_sigs p =
+      if p = 0 then
+          Si.Mask.block (Si.Mask.some [prim_sig])
+      (* S.Mask.block S.Mask.all *)
+      else
+          Si.Mask.block (Si.Mask.some [sec_sig])
+  (* S.Mask.block S.Mask.all *)
+
+  fun unblock_sigs p =
+      if p = 0 then
+          Si.Mask.unblock (Si.Mask.some [prim_sig])
+      else
+          Si.Mask.unblock (Si.Mask.some [sec_sig])
+
+  fun atom f =
+      let val p = MLton.Parallel.Basic.processorNumber ()
+      in
+          block_sigs;
+          MLton.Thread.atomically f;
+          unblock_sigs
+      end
+
+  (* fun print s = () *)
+
   abstype image = Img of (Word8.word * Word8.word * Word8.word) Array2.array
                                                                 with
   fun newImage (wid, ht) = Img(Array2.array(ht, wid, (0w0, 0w0, 0w0)))
@@ -498,41 +527,112 @@ and shadowed (world, pos, dir, lcolor) =
     % "main" routine
 *)
 
+val last = ref NONE
+val lastrowpainted = ref 0
+val lastproc = ref ~1
+
+fun hdl t =
+           (print ((Int.toString (!lastrowpainted)) ^ " " ^
+                   (Int.toString (!lastproc)) ^ "\n");
+            t)
+
+val _ =
+    MLton.Signal.setHandler
+        (Posix.Signal.tstp, MLton.Signal.Handler.handler hdl)
+
   fun render lookfrom lookat world lights winsize =
     let
       val (firstray, scrnx, scrny) =
           camparams (lookfrom, lookat, vup, fov, winsize)
       val pixels = ref 0
+      fun prpixels n = false
+(*
+          (n > 155000 andalso n mod 100 = 0) orelse
+          (n > 159600 andalso n mod 10 = 0) orelse
+          (n > 159700 andalso n mod 5 = 0) orelse
+          (n > 159800 andalso n mod 2 = 0) orelse
+          (n > 159950) orelse (n mod 10000 = 0)
+*)
       fun f (i, j) =
         let
           val (r, g, b) =
               tracepixel (world, lights, i, j, lookfrom, firstray, scrnx, scrny)
+              handle e => (print "here 549\n"; raise e)
         in
-            pixels := (!pixels) + 1;
-            (* print ("Rendered " ^ (Int.toString (!pixels)) ^ " pixels\n"); *)
-            Graphics.setforeground (MLX.fromrgb r g b);
-            Graphics.drawpoint i j;
+            atom (fn _ => pixels := (!pixels) + 1);
+            (if prpixels (!pixels) then
+                 print ("Rendered " ^ (Int.toString (!pixels)) ^ " pixels\n")
+             else ());
             (r, g, b)
         end
 (*      SEQUENCE_G version *)
-(*	fun row i = S.tabulate 20 (fn j => f (i, j)) winsize
+      val _ = print "starting raytracer\n"
+      fun row i =
+          ((* print ("row " ^ (Int.toString i) ^ "\n"); *)
+           S.tabulate 20 (fn j => ((* (if i = 399 then print ("col " ^ (Int.toString j) ^ "\n") else ()); *) f (i, j))) winsize)
         val seqs = S.tabulate 20 row winsize
-*)
 (*      SEQUENCE version *)
 (*
         fun row i = S.tabulate (fn j => f (i, j)) winsize
         val seqs = S.tabulate row winsize
 *)
-      fun doit r c =
-          if r >= winsize then
-              if c >= winsize then
-                  ()
+        val _ = print "raytracing done\n"
+        fun samecol ((r1, g1, b1), (r2, g2, b2)) =
+            (* (MLX.fromrgb r1 g1 b1) = (MLX.fromrgb r2 g2 b2) *)
+            Real.abs (r1 - r2) < 0.000001 andalso
+            Real.abs (g1 - g2) < 0.000001 andalso
+            Real.abs (b1 - b2) < 0.000001
+      fun paint row col =
+          if row >= winsize - 1 then
+              if col >= winsize - 1 then
+                  (print ("painted row " ^ (Int.toString col) ^ "\n");
+                   lastproc := MLton.Parallel.Basic.processorNumber ();
+                   lastrowpainted := col)
               else
-                  doit 0 (c + 1)
+                  ((* print ("painted row " ^ (Int.toString col) ^ "\n"); *)
+                    lastrowpainted := col;
+                    MLton.Parallel.Basic.processorNumber ();
+                   paint 0 (col + 1))
           else
-              (ignore (f (r, c));
-               doit (r + 1) c)
+              let val (r, g, b) = S.nth (S.nth seqs row) col
+                  val (rf, gf, bf) = (Real.round (r * 255.0),
+                                   Real.round (g * 255.0),
+                                   Real.round (b * 255.0))
+                  val dopaint =
+                      case !last of
+                          NONE => true
+                        | SOME lasts =>
+                          not (samecol ((r, g, b), S.nth (S.nth lasts row) col))
+              in
+                  (if dopaint then
+                      (Graphics.setforeground (rf, gf, bf) (* (MLX.fromrgb r g b) *)
+                       handle Overflow =>
+                              Graphics.setforeground (0, 0, 0) (* (MLX.fromrgb 0.0 0.0 0.0) *);
+                       Graphics.drawpoint row col
+                       )
+                   else
+                      ());
+                  paint (row + 1) col
+              end
+      val pixels = Array.tabulate
+                       (winsize * winsize,
+                        (fn n =>
+                            let val col = Int.div (n, winsize)
+                                val row = n mod winsize
+                                val (rf, gf, bf) = S.nth (S.nth seqs row) col
+                                val (r, g, b) = (Real.round (rf * 255.0),
+                                                 Real.round (gf * 255.0),
+                                                 Real.round (bf * 255.0))
+                            in
+                                r * 256 * 256 + g * 256 + b
+                            end
+                        )
+                       )
     in
-       doit 0 0
+        (* paint 0 0; *)
+        Graphics.putpixels pixels (winsize * winsize * 4);
+        Graphics.flush ();
+        print "done painting\n";
+        last := SOME seqs
     end
 end

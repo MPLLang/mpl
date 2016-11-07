@@ -141,12 +141,17 @@ fun fillrectangle (x: int) (y: int) (w: int) (h: int) =
 fun drawrectangle (x: int) (y: int) (w: int) (h: int) =
     case !dwgc of
         NONE => raise NoWindowOpen
-      | SOME (d, win, gc) => MLX.fillrectangle d (MLX.wd win) gc x y w h
+      | SOME (d, win, gc) => MLX.drawrectangle d (MLX.wd win) gc x y w h
 
 fun drawline (x1: int) (y1: int) (x2: int) (y2: int) =
     case !dwgc of
         NONE => raise NoWindowOpen
-      | SOME (d, w, gc) => MLX.fillrectangle d (MLX.wd w) gc x1 y1 x2 y2
+      | SOME (d, w, gc) => MLX.drawline d (MLX.wd w) gc x1 y1 x2 y2
+
+fun drawrgbarray (x: int) (y: int) (w: int) (h: int) (arr: char Array.array) =
+    case !dwgc of
+        NONE => raise NoWindowOpen
+      | SOME (d, win, gc) => MLX.drawrgbarray d (MLX.wd win) gc x y w h arr
 
 fun clear () =
     let val (w, h) = !size
