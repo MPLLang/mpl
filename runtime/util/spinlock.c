@@ -46,3 +46,7 @@ void spinlock_unlock(spinlock_t* lock) {
   __sync_synchronize();
   *lock = SPINLOCK_UNLOCKED;
 }
+
+uint32_t spinlock_value(spinlock_t* lock) {
+  return *lock;
+}

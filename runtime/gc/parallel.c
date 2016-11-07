@@ -78,6 +78,13 @@ void Parallel_lockRelease (Pointer arg) {
   spinlock_unlock(lock);
 }
 
+bool Parallel_alreadyLockedByMe (Pointer arg) {
+  spinlock_t* lock = ((spinlock_t*)(arg));
+  uint32_t lockValue = Proc_processorNumber(pthread_getspecific(gcstate_key));
+
+  return (lockValue == spinlock_value(lock));
+}
+
 void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer leftsTurn_)
 {
   Bool *mine, *other, *leftsTurn;

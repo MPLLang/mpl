@@ -39,7 +39,8 @@ void spinlock_init(spinlock_t* lock);
  *
  * @param lock The lock to initialize
  * @param value the value to lock the lock with. This value should be unique
- * per-processor and is used for deadlock detection assertions.
+ * per-processor and is used for deadlock detection assertions. It cannot be
+ * ~0.
  */
 void spinlock_lock(spinlock_t* lock, uint32_t value);
 
@@ -48,7 +49,8 @@ void spinlock_lock(spinlock_t* lock, uint32_t value);
  *
  * @param lock The lock to attempt to lock without blocking.
  * @param value the value to lock the lock with. This value should be unique
- * per-processor and is used for deadlock detection assertions.
+ * per-processor and is used for deadlock detection assertions. It cannot be
+ * ~0.
  *
  * @return TRUE if the attempt succeeded, FALSE otherwise.
  */
@@ -63,5 +65,15 @@ bool spinlock_trylock(spinlock_t* lock, uint32_t value);
  * @param lock The lock to initialize
  */
 void spinlock_unlock(spinlock_t* lock);
+
+/**
+ * Returns the current value of a lock.
+ *
+ * @param lock The lock to return the value of
+ *
+ * @return ~0 if the lock is unlocked, the value of the lock otherwise
+ */
+uint32_t spinlock_value(spinlock_t* lock);
+
 
 #endif /* SPINLOCK_H_ */

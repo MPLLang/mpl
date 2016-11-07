@@ -83,9 +83,17 @@ void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
+  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, s->heap->start);
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
+    return;
+  }
+
+  if (Parallel_alreadyLockedByMe(wsQueueLock)) {
+    /* in a scheduler critical section, so cannot collect */
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+        "Queue locked by mutator/scheduler so cannot collect");
     return;
   }
 
@@ -114,7 +122,7 @@ void HM_HHC_collectLocal(void) {
   hh->newLevelList = NULL;
 
   /* lock queue to prevent steals */
-  Parallel_lockTake(objptrToPointer(s->wsQueueLock, s->heap->start));
+  Parallel_lockTake(wsQueueLock);
   lockHH(hh);
 
   assertInvariants(s, hh);
@@ -168,7 +176,7 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied);
 
-#if ASSERT
+#if 0
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START foreach %ld MB",
       (s->heap->frontier - s->heap->start) / (1024 * 1024));
