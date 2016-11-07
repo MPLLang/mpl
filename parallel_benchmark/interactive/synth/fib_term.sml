@@ -57,5 +57,5 @@ fun inploop () =
 
 (*val _ = fibdo 36 *)
 val _ = print "Starting\n"
-val _ = MLton.Parallel.ForkJoin.fork ((fn () => fibdo 43), inploop)
+val _ = MLton.Parallel.ForkJoin.fork ((fn () => fibdo 45), inploop)
 (* val _ = loop fibs fibs *)

@@ -86,7 +86,7 @@ fun acceptloop sock =
 
 in
 
-MLton.Parallel.ForkJoin.forkLat true ((fn () => fibdo 43),
+MLton.Parallel.ForkJoin.forkLat true ((fn () => fibdo 45),
                                               (fn () => acceptloop sock))
 (* val _ = loop fibs fibs *)
 end

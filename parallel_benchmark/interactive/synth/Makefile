@@ -53,3 +53,17 @@ countcl: countcl.sml
 
 anagrams: anagrams.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map anagrams.mlb ../../../sml-lib/mlton/x/mlx.o
+
+fib_term-pd: fib_term.sml
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_term-pd fib_term.mlb
+
+fib_net-pd: fib_net.sml
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_net-pd fib_net.mlb
+
+uts_term-pd: uts_term.sml
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output uts_term-pd uts_term.mlb
+
+uts_net-pd: uts_net.sml
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output uts_net-pd uts_net.mlb
+
+pd: fib_term-pd fib_net-pd uts_term-pd uts_net-pd
