@@ -423,7 +423,8 @@ size_t ChunkPool_allocated(void) {
 }
 
 size_t ChunkPool_size(void) {
-  return ChunkPool_currentPoolSize;
+  #pragma message "Make correct when done"
+  return ChunkPool_config.maxSize;
 }
 
 /**
