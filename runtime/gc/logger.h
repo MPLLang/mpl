@@ -37,6 +37,12 @@ extern enum LogLevel L_logLevels[NUM_LOG_MODULES];
 extern bool L_flushLog[NUM_LOG_MODULES];
 
 /**
+ * These macros are stringification helpers
+ */
+#define STRFY1(x) #x
+#define STRFY(x) STRFY1(x)
+
+/**
  * This is a convenience function for logging which automatically fetches the
  * processor number and function name.
  *
@@ -51,7 +57,7 @@ extern bool L_flushLog[NUM_LOG_MODULES];
       L_log(L_flushLog[module],                                         \
             level,                                                      \
             Proc_processorNumber(pthread_getspecific(gcstate_key)),     \
-            __func__,                                                   \
+            __func__,                                             \
             __VA_ARGS__);                                               \
     }                                                                   \
   } while(FALSE)
@@ -64,13 +70,13 @@ extern bool L_flushLog[NUM_LOG_MODULES];
  */
 #define DIE(...)                                                        \
   do {                                                                  \
-    fflush(NULL);                                                       \
-    L_log(TRUE,                                                         \
-          LL_ERROR,                                                     \
-          Proc_processorNumber(pthread_getspecific(gcstate_key)),       \
-          __func__,                                                     \
-          __VA_ARGS__);                                                 \
-    exit(1);                                                            \
+      fflush(NULL);                                                     \
+      L_log(TRUE,                                                       \
+              LL_ERROR,                                                 \
+              Proc_processorNumber(pthread_getspecific(gcstate_key)),   \
+              STRFY(__func__) " (" STRFY(__FILE__) ":" STRFY(__LINE__) ")", \
+              __VA_ARGS__);                                             \
+      exit(1);                                                          \
   } while(FALSE)
 
 /**
