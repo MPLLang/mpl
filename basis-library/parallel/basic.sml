@@ -22,9 +22,9 @@ struct
                            end)
     :> PARALLEL_WORKQUEUE where type work = job
 
-  datatype 'a t = Capture of 'a T.t * unit HH.t
-
   type token = Q.token
+
+  datatype t = Capture of token * job
 
   val processorNumber = Word32.toInt o I.processorNumber
   val profileDisable = _import "GC_profileDisable" runtime private: unit -> unit;
@@ -162,7 +162,8 @@ struct
             T.switch
                 (fn k =>
                     let
-                      val () = tail (p, k)
+                      (* Save the full work object here *)
+                      val () = tail (p, (Q.newWork (), Thread (k, HH.get ())))
 
                       val () = HM.enterGlobalHeap ()
                       val t = valOf (Array.sub (schedThreads, p))
@@ -174,43 +175,31 @@ struct
           r
       end
 
-  fun capture (f: 'a t -> unit) =
+  fun capture (f: t -> unit): unit =
       let
           val p = processorNumber ()
-          val hh = HH.get ()
-          fun tail (p, k) =
+          fun tail (p, w) =
               let
                   val () = incSuspends p
-                  val () = Q.finishWork p
               in
-                f (Capture (k, hh))
+                f (Capture w)
               end
           val result = capture' (p, tail)
       in
           result
       end
 
-  fun resume (Capture (k, hh): unit t): unit =
+  fun resume (Capture w: t): unit =
       let
-              val p = processorNumber ()
-              val myHH = HH.get ()
-              val () =
-                  let
-                      val () = useHH hh
-                      val t = Thread (k, hh)
-                      val () = Q.addWork (p, [(Q.newWork p, t)])
-                      val () = useHH myHH
-                  in
-                      ()
-                  end
-          in
-            ()
-          end
+        val p = processorNumber ()
+      in
+        Q.addWork (p, [w])
+      end
 
   fun addRight (w, level) =
           let
               val p = processorNumber ()
-              val t = Q.newWork p
+              val t = Q.newWork ()
               val currentHH = HH.get ()
           in
             Q.addWork (p, [(t, Work (w, currentHH, level))]);
@@ -223,7 +212,6 @@ struct
       let
           val p = processorNumber ()
       in
-          Q.finishWork p;
           T.switch (fn _ =>
                        let
                            val () = HM.enterGlobalHeap ()

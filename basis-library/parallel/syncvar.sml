@@ -4,7 +4,7 @@ struct
   structure HM = MLtonHM
 
   datatype 'a state =
-      Waiting of unit B.t list
+      Waiting of B.t list
     | Done of 'a
 
   type 'a t = int ref * 'a state ref

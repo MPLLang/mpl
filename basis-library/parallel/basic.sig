@@ -8,12 +8,12 @@ sig
   (* uniquely identifies a job in the queue *)
   type token
   (* a suspended computation waiting for a value of type 'a *)
-  type 'a t
+  type t
 
   (* Re-enable a suspended computation and continue with the current job *)
-  val resume : unit t -> unit
+  val resume : t -> unit
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
-  val capture : ('a t -> unit) -> 'a
+  val capture : (t -> unit) -> unit
 
   (* Add the given work to the queue; the work is consider to have lower
     priority than the current task.  Returns a token that may be used to
