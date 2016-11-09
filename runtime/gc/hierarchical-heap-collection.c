@@ -290,12 +290,12 @@ void HM_HHC_collectLocal(void) {
     hh->lastAllocatedChunk = lastChunk;
   }
 
+  assertInvariants(s, hh);
+
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */
   unlockHH(hh);
   Parallel_lockRelease(objptrToPointer(s->wsQueueLock, s->heap->start));
-
-  assertInvariants(s, hh);
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "
