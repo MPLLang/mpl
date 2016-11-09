@@ -38,7 +38,6 @@ void HM_exitLocalHeap (GC_state s) {
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
                                          size_t bytesRequested) {
-  int processor = Proc_processorNumber (s);
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
@@ -117,8 +116,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
     if (NULL == hh->lastAllocatedChunk) {
       /* collected everything! */
-      s->frontier = GC_HEAP_LIMIT_SLOP;
-      s->limitPlusSlop = GC_HEAP_LIMIT_SLOP;
+      s->frontier = ((pointer)(GC_HEAP_LIMIT_SLOP));
+      s->limitPlusSlop = ((pointer)(GC_HEAP_LIMIT_SLOP));
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     } else {
       s->frontier = HM_HH_getFrontier(hh);

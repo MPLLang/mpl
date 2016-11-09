@@ -353,7 +353,7 @@ Word32 HM_getHighestLevel(const void* levelList) {
 
 void HM_mergeLevelList(void** destinationLevelList,
                        void* levelList,
-                       const struct HM_HierarchicalHeap* hh) {
+                       struct HM_HierarchicalHeap * const hh) {
   void* newLevelList = NULL;
 
   /* construct newLevelList */

@@ -51,7 +51,7 @@ void Parallel_lockTake (Pointer arg) {
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "trying to lock %p to %u",
-      ((void*)(lock)),
+      ((volatile void*)(lock)),
       lockValue);
 
   do {
@@ -73,7 +73,7 @@ void Parallel_lockRelease (Pointer arg) {
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
       "releasing %p",
-      ((void*)(lock)));
+      ((volatile void*)(lock)));
 
   spinlock_unlock(lock);
 }
