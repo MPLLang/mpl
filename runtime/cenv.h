@@ -86,6 +86,14 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
  * This platform switch sets platform-specific includes for fenv.h, inttypes.h,
  * stdint.h, and more
  */
+#if (defined (__GNUC__))
+#if ((__GNUC__ >= 4) && (__GNUC_MINOR__ >= 8))
+#include "platform/atomics-gcc-gte48.h"
+#else
+#include "platform/atomics-gcc-lt48.h"
+#endif
+#endif
+
 #if (defined (_AIX))
 #include "platform/aix.h"
 #elif (defined (__CYGWIN__))

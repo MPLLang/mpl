@@ -36,6 +36,12 @@ static struct rusage ru_crit;
 #define Proc_BSP_COUNT_INITIALIZER 0
 #define Proc_BSP_COUNT_FIRST 1
 
+/********************/
+/* Static Functions */
+/********************/
+ATOMIC_STORE(BSPState, enum BSPState)
+ATOMIC_LOAD(BSPState, enum BSPState)
+
 /************************/
 /* Function definitions */
 /************************/
@@ -208,14 +214,8 @@ bool Proc_BSP(GC_state s,
       return FALSE;
     } else {
       assert(amInitiator);
-#pragma message "Need to wrap atomics portably"
-#if 0
-      __atomic_store_n(&Proc_bspState, WAITING, __ATOMIC_SEQ_CST);
-#else
-      __sync_synchronize();
-      Proc_bspState = WAITING;
-      __sync_synchronize();
-#endif
+
+      atomicStoreBSPState(&Proc_bspState, WAITING);
 
       if (needGCTime(s)) {
         /* first thread in this round, and need to keep track of sync time */
@@ -231,14 +231,7 @@ bool Proc_BSP(GC_state s,
       stopTiming (RUSAGE_SELF, &ru_sync, &s->cumulativeStatistics->ru_sync);
       startTiming (RUSAGE_SELF, &ru_bsp);
     }
-#pragma message "Need to wrap atomics portably"
-#if 0
-    __atomic_store_n(&Proc_bspState, IN_PROGRESS, __ATOMIC_SEQ_CST);
-#else
-      __sync_synchronize();
-      Proc_bspState = IN_PROGRESS;
-      __sync_synchronize();
-#endif
+    atomicStoreBSPState(&Proc_bspState, IN_PROGRESS);
     initiatorStart = TRUE;
   }
   pthread_mutex_unlock_safe(&Proc_bspCountLock);
@@ -307,28 +300,12 @@ bool Proc_BSP(GC_state s,
     /* stop timing */
     stopTiming (RUSAGE_SELF, &ru_bsp, &s->cumulativeStatistics->ru_bsp);
 
-#pragma message "Need to wrap atomics portably"
-#if 0
-    __atomic_store_n(&Proc_bspState, DONE, __ATOMIC_SEQ_CST);
-#else
-      __sync_synchronize();
-      Proc_bspState = DONE;
-      __sync_synchronize();
-#endif
+    atomicStoreBSPState(&Proc_bspState, DONE);
   }
 
   return TRUE;
 }
 
 enum BSPState Proc_BSPState(void) {
-#pragma message "Need to wrap atomics portably"
-#if 0
-  return __atomic_load_n(&Proc_bspState, __ATOMIC_SEQ_CST);
-#else
-  __sync_synchronize();
-  enum BSPState bspState = Proc_bspState;
-  __sync_synchronize();
-
-  return bspState;
-#endif
+  return atomicLoadBSPState(&Proc_bspState);
 }
