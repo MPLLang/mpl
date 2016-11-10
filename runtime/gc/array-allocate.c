@@ -150,25 +150,20 @@ pointer GC_arrayAllocate (GC_state s,
   } else {
     /* Allocate in Hierarchical Heap */
     size_t bytesRequested = arraySizeAligned + ensureBytesFree;
-    if ((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) <
-        bytesRequested) {
-      /* current chunk does not have enough space */
-      LOG(LM_ALLOCATION, LL_DEBUG,
-          "Current Chunk has %zu bytes, need %zu bytes. Ensuring.",
-          (((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))),
-          bytesRequested);
-      /* RAM_NOTE: This should be wrapped in a function */
-      /* used needs to be set because the mutator has changed s->stackTop. */
-      getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-      getThreadCurrent(s)->exnStack = s->exnStack;
-      getThreadCurrent(s)->bytesNeeded = bytesRequested;
-      HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
-    }
+    /* RAM_NOTE: This should be wrapped in a function */
+    /* used needs to be set because the mutator has changed s->stackTop. */
+    getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+    getThreadCurrent(s)->exnStack = s->exnStack;
+    getThreadCurrent(s)->bytesNeeded = bytesRequested;
+    HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
 
     assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=
            bytesRequested);
 
-    /* at this point, the current chunk has enough space */
+    /*
+     * at this point, the current chunk has enough space, and is at the right
+     * level
+     */
 
     frontier = s->frontier;
     result = arrayInitialize(s,

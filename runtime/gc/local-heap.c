@@ -145,6 +145,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     assert(info.level <= hh->level);
     if (info.level < hh->level) {
       /* need to extend */
+      LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+          "extending due to ensureCurrentLevel frontier level = %u hh level = "
+          "%u",
+          info.level,
+          hh->level);
       extend = TRUE;
     }
   }
