@@ -85,8 +85,11 @@ GC_thread newThread (GC_state s, size_t reserved) {
         s, FALSE, FALSE, FALSE,
         0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
   } else {
-    HM_ensureHierarchicalHeapAssurances(
-        s, FALSE, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+    HM_ensureHierarchicalHeapAssurances(s,
+                                        FALSE,
+                                        sizeofStackWithHeader (s, reserved) +
+                                        sizeofThread (s),
+                                        FALSE);
   }
   stack = newStack (s, reserved, FALSE);
   res = newObject (s, GC_THREAD_HEADER,

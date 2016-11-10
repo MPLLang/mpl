@@ -162,7 +162,7 @@ pointer GC_arrayAllocate (GC_state s,
       getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
       getThreadCurrent(s)->exnStack = s->exnStack;
       getThreadCurrent(s)->bytesNeeded = bytesRequested;
-      HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested);
+      HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
     }
 
     assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=

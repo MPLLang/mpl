@@ -491,7 +491,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
                                                     TRUE, TRUE,
                                                     0, 0);
   } else {
-    HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested);
+    HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
   }
 }
 

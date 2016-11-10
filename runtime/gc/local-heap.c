@@ -37,7 +37,8 @@ void HM_exitLocalHeap (GC_state s) {
 
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
-                                         size_t bytesRequested) {
+                                         size_t bytesRequested,
+                                         bool ensureCurrentLevel) {
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
@@ -126,8 +127,30 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     }
   }
 
+  bool extend = FALSE;
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
-    /* Not enough space, so add new chunk */
+    /* not enough space */
+    extend = TRUE;
+  }
+
+  if (ensureCurrentLevel) {
+    /* extend if current allocation chunk is not at the current level */
+    struct HM_ObjptrInfo info;
+    LOCAL_USED_FOR_ASSERT bool retrieved =
+        HM_getObjptrInfo(s,
+                         pointerToObjptr(s->frontier, s->heap->start),
+                         &info);
+    assert(retrieved);
+
+    assert(info.level <= hh->level);
+    if (info.level < hh->level) {
+      /* need to extend */
+      extend = TRUE;
+    }
+  }
+
+  if (extend) {
+    /* Need to extend */
     if (!HM_HH_extend(hh, bytesRequested)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }

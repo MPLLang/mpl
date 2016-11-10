@@ -37,10 +37,13 @@ void HM_exitLocalHeap (GC_state s);
  * @param s The GC_state to operate on
  * @param forceGC Whether or not to force a GC
  * @param bytesRequested The minimum number of bytes to leave free on return
+ * @param ensureCurrentLevel Ensures that all future allocations (before the
+ * next fork) occur on the current level.
  */
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
-                                         size_t bytesRequested);
+                                         size_t bytesRequested,
+                                         bool ensureCurrentLevel);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* LOCAL_HEAP_H_ */
