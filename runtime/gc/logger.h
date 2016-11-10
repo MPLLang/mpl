@@ -72,10 +72,10 @@ extern bool L_flushLog[NUM_LOG_MODULES];
   do {                                                                  \
       fflush(NULL);                                                     \
       L_log(TRUE,                                                       \
-              LL_ERROR,                                                 \
-              Proc_processorNumber(pthread_getspecific(gcstate_key)),   \
-              STRFY(__func__) " (" STRFY(__FILE__) ":" STRFY(__LINE__) ")", \
-              __VA_ARGS__);                                             \
+            LL_ERROR,                                                   \
+            Proc_processorNumber(pthread_getspecific(gcstate_key)),     \
+            __FILE__ ":" STRFY(__LINE__),                               \
+            __VA_ARGS__);                                               \
       exit(1);                                                          \
   } while(FALSE)
 

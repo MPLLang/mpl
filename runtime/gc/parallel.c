@@ -1,4 +1,3 @@
-
 #include <pthread.h>
 #include <time.h>
 #include "platform.h"
@@ -64,14 +63,14 @@ void Parallel_lockTake (Pointer arg) {
     }
   } while (!spinlock_trylock(lock, lockValue));
 
-  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+  LOG(LM_PARALLEL, LL_DEBUG,
       "locked");
 }
 
 void Parallel_lockRelease (Pointer arg) {
   spinlock_t* lock = ((spinlock_t*)(arg));
 
-  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+  LOG(LM_PARALLEL, LL_DEBUG,
       "releasing %p",
       ((volatile void*)(lock)));
 

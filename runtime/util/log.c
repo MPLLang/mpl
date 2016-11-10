@@ -58,7 +58,7 @@ void L_log(bool flush,
   va_end(substitutions);
 
   fprintf(logFile,
-          "%-*s [P%02zd/%s]: %s\n",
+          "%-*s [P%02zd|%s]: %s\n",
           LEVEL_FIELD_WIDTH,
           LogLevelToString[level],
           processor,
