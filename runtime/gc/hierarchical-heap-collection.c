@@ -23,7 +23,8 @@
  *
  * @param hh The hierarchical heap to operate on.
  * @param p The pointer to copy
- * @param size The number of bytes to copy
+ * @param objectSize The size of the object
+ * @param copySize The number of bytes to copy
  * @param level The level to copy into
  * @param fromChunkList The ChunkList that 'p' resides in.
  *
@@ -31,7 +32,8 @@
  */
 pointer copyObject(struct HM_HierarchicalHeap* hh,
                    pointer p,
-                   size_t size,
+                   size_t objectSize,
+                   size_t copySize,
                    Word32 level,
                    void* fromChunkList);
 
@@ -140,16 +142,8 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  forwardHHObjptrArgs.objectsCopied = 0;
-  /* RAM_NOTE: Should probably extend to forward all globals, just in case */
-  /* forward thread (and therefore stack) */
-  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "Copied %"PRIu64" objects from thread",
-      forwardHHObjptrArgs.objectsCopied);
-
-  forwardHHObjptrArgs.objectsCopied = 0;
   /* forward contents of stack */
+  forwardHHObjptrArgs.objectsCopied = 0;
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
                                         s->heap->start),
@@ -162,8 +156,15 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from stack",
       forwardHHObjptrArgs.objectsCopied);
 
+  /* forward thread (and therefore stack) */
   forwardHHObjptrArgs.objectsCopied = 0;
+  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from thread",
+      forwardHHObjptrArgs.objectsCopied);
+
   /* forward contents of deque */
+  forwardHHObjptrArgs.objectsCopied = 0;
   foreachObjptrInObject(s,
                         objptrToPointer(s->wsQueue,
                                         s->heap->start),
@@ -420,6 +421,7 @@ void forwardHHObjptr (GC_state s,
     /* Compute the space taken by the header and object body. */
     size_t headerBytes;
     size_t objectBytes;
+    size_t copyBytes;
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
 #pragma message "Implement when I can"
 #if 0
@@ -432,14 +434,16 @@ void forwardHHObjptr (GC_state s,
 #endif
       headerBytes = GC_NORMAL_HEADER_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+      copyBytes = objectBytes;
     } else if (ARRAY_TAG == tag) {
       headerBytes = GC_ARRAY_HEADER_SIZE;
-      objectBytes = sizeofArrayNoHeader (s, getArrayLength (p),
-                                         bytesNonObjptrs, numObjptrs);
+      objectBytes = sizeofArrayNoHeader(s,
+                                        getArrayLength (p),
+                                        bytesNonObjptrs,
+                                        numObjptrs);
+      copyBytes = objectBytes;
     } else {
       /* Stack. */
-#pragma message "Implement when I can"
-#if 0
       bool current;
       size_t reservedNew;
       GC_stack stack;
@@ -448,32 +452,25 @@ void forwardHHObjptr (GC_state s,
       headerBytes = GC_STACK_HEADER_SIZE;
       stack = (GC_stack)p;
 
-      /* Check if the pointer is the current stack of any processor. */
-      current = false;
-      for (int proc = 0; proc < s->numberOfProcs; proc++) {
-        current = current || (getStackCurrent(&s->procStates[proc]) == stack);
-      }
-      /* RAM_NOTE: used to have 'current &&= not isStackEmpty(stack)' here */
+#pragma message "This changes with non-local collection"
+      /* Check if the pointer is the current stack of my processor. */
+      current = getStackCurrent(s) == stack;
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {
-        if (DEBUG_STACKS or s->controls->messages)
-          fprintf (stderr,
-                   "[GC: Shrinking stack of size %s bytes to size %s bytes, using %s bytes.]\n",
-                   uintmaxToCommaString(stack->reserved),
-                   uintmaxToCommaString(reservedNew),
-                   uintmaxToCommaString(stack->used));
+        LOG(LM_HH_COLLECTION, LL_DEBUG,
+            "Shrinking stack of size %s bytes to size %s bytes, using %s bytes.",
+            uintmaxToCommaString(stack->reserved),
+            uintmaxToCommaString(reservedNew),
+            uintmaxToCommaString(stack->used));
         stack->reserved = reservedNew;
       }
-      objectBytes = sizeof (struct GC_stack) + stack->used;
-#else
-    die(__FILE__ ":%d: "
-        "forwardHHObjptr() does not support STACK_TAG objects!",
-        __LINE__);
-#endif
+      objectBytes = stack->reserved;
+      copyBytes = sizeof (struct GC_stack) + stack->used;
     }
 
-    size_t size = headerBytes + objectBytes;
+    objectBytes += headerBytes;
+    copyBytes += headerBytes;
     /* Copy the object. */
     if (opInfo.level > args->maxLevel) {
       assert(FALSE && "Entanglement Detected!");
@@ -482,11 +479,12 @@ void forwardHHObjptr (GC_state s,
 
     pointer copyPointer = copyObject(args->hh,
                                      p - headerBytes,
-                                     size,
+                                     objectBytes,
+                                     copyBytes,
                                      opInfo.level,
                                      opInfo.chunkList);
 
-    args->bytesCopied += size;
+    args->bytesCopied += copyBytes;
     args->objectsCopied++;
     LOG(LM_HH_COLLECTION, LL_DEBUG,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
@@ -539,19 +537,10 @@ void forwardHHObjptr (GC_state s,
 
 
   *opp = *((objptr*)(p));
-#pragma message "Redone as log message"
-#if 0
-  if (DEBUG_DETAILED) {
-    fprintf (stderr,
-             "forwardHHObjptr --> *opp = "FMTPTR"\n",
-             (uintptr_t)*opp);
-  }
-#else
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "opp "FMTPTR" set to "FMTOBJPTR,
       ((uintptr_t)(opp)),
       *opp);
-#endif
 
 #if ASSERT
   /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
@@ -564,14 +553,10 @@ void forwardHHObjptr (GC_state s,
 
 pointer copyObject(struct HM_HierarchicalHeap* hh,
                    pointer p,
-                   size_t size,
+                   size_t objectSize,
+                   size_t copySize,
                    Word32 level,
                    void* fromChunkList) {
-#pragma message "Remove when done"
-#if 1
-  static size_t maxSize = 0;
-#endif
-
   /* get the saved level head */
   void* chunkList = HM_getChunkListToChunkList(fromChunkList);
 #if ASSERT
@@ -599,7 +584,7 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
   if (NULL == chunkList) {
     /* Level does not exist, so create it */
     chunk = HM_allocateLevelHeadChunk(&(hh->newLevelList),
-                                      size,
+                                      objectSize,
                                       level,
                                       hh);
     if (NULL == chunk) {
@@ -614,23 +599,19 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
     void* frontier = HM_getChunkFrontier(chunk);
     void* limit = HM_getChunkLimit(chunk);
 
-    if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < size) {
+    if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
       /* need to allocate a new chunk */
-      chunk = HM_allocateChunk(chunkList, size);
+      chunk = HM_allocateChunk(chunkList, objectSize);
       if (NULL == chunk) {
         die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
       }
     }
   }
 
-  if (size > maxSize) {
-    maxSize = size;
-  }
-
   /* get frontier of chunk and do the copy */
   void* frontier = HM_getChunkFrontier(chunk);
-  GC_memcpy(p, frontier, size);
-  HM_updateChunkValues(chunk, ((void*)(((char*)(frontier)) + size)));
+  GC_memcpy(p, frontier, copySize);
+  HM_updateChunkValues(chunk, ((void*)(((char*)(frontier)) + objectSize)));
 
   return frontier;
 }

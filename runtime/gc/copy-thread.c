@@ -10,8 +10,9 @@
 GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
   GC_thread to;
 
-  if (DEBUG_THREADS or s->controls->messages)
-    fprintf (stderr, "copyThread ("FMTPTR")\n", (uintptr_t)from);
+  LOG(LM_THREAD, LL_DEBUG,
+      "called on "FMTPTR,
+      (uintptr_t)from);
   /* newThread may do a GC, which invalidates from.
    * Hence we need to stash from someplace that the GC can find it.
    */
@@ -38,8 +39,8 @@ void GC_copyCurrentThread (GC_state s) {
   GC_thread toThread;
   LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
-  if (DEBUG_THREADS or s->controls->messages)
-    fprintf (stderr, "GC_copyCurrentThread [%d]\n", Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "called");
 
   /* SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
      synchronize unless we don't have enough room to allocate a new thread and stack. */
@@ -60,9 +61,9 @@ void GC_copyCurrentThread (GC_state s) {
 
   /* SPOONHOWER_NOTE: Formerly: LEAVE1 (s, "toThread"); */
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, FMTPTR" = GC_copyCurrentThread [%d]\n",
-             (uintptr_t)toThread, Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "result is "FMTPTR,
+      (uintptr_t)toThread);
   assert (s->savedThread == BOGUS_OBJPTR);
   s->savedThread = pointerToObjptr((pointer)toThread - offsetofThread (s), s->heap->start);
 }
@@ -73,9 +74,9 @@ pointer GC_copyThread (GC_state s, pointer p) {
   GC_thread toThread;
   LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, "GC_copyThread ("FMTPTR") [%d]\n", (uintptr_t)p,
-             Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "called on "FMTPTR,
+      (uintptr_t)p);
 
   /*
    * SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
@@ -97,8 +98,9 @@ pointer GC_copyThread (GC_state s, pointer p) {
 
   /* SPOONHOWER_NOTE: Formerly: LEAVE2 (s, "toThread", "fromThread"); */
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, FMTPTR" = GC_copyThread ("FMTPTR") [%d]\n",
-             (uintptr_t)toThread, (uintptr_t)fromThread, Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "result is "FMTPTR" from "FMTPTR,
+      (uintptr_t)toThread,
+      (uintptr_t)fromThread);
   return ((pointer)toThread - offsetofThread (s));
 }

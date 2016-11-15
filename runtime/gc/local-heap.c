@@ -40,6 +40,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          size_t bytesRequested,
                                          bool ensureCurrentLevel) {
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
+  bool extend = FALSE;
+  bool growStack = FALSE;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
       "bytesRequested: %zu, hasHeapBytesFree: %zu\n",
@@ -57,14 +59,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         "Exiting Management Heap GC\n");
   }
 
-#pragma message "Needs to be revised with in-hh stacks"
   if (!invariantForMutatorStack(s)) {
-    /* go to global GC to get the stack invariant satisfied */
-    HM_enterGlobalHeap();
-    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, forceGC,
-                                                    FALSE, TRUE,
-                                                    0, 0);
-    HM_exitGlobalHeap();
+    /* need to grow stack */
+    bytesRequested +=
+        sizeofStackWithHeader(s,
+                              sizeofStackGrowReserved (s, getStackCurrent (s)));
+    growStack = TRUE;
   }
 
   /* fetch after management heap GC to make sure that I get the updated value */
@@ -127,7 +127,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     }
   }
 
-  bool extend = FALSE;
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
     /* not enough space */
     extend = TRUE;
@@ -163,6 +162,13 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  }
+
+  if (growStack) {
+    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+        "growing stack");
+    growStackCurrent (s, FALSE);
+    setGCStateCurrentThreadAndStack (s);
   }
 
   assert(invariantForMutatorFrontier (s));
