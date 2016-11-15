@@ -10,11 +10,9 @@ struct
   fun dbgmsg m =
       let
         val p = Word32.toInt (processorNumber ())
+        val msg = String.concat ["[", Int.toString p, "] ", m, "\n"]
       in
-        print (String.concat ["[",
-                              Int.toString p,
-                              "] ",
-                              m,
-                              "\n"])
+        (TextIO.output (TextIO.stdErr, msg);
+         TextIO.flushOut TextIO.stdErr)
       end
 end

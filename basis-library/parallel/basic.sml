@@ -60,11 +60,13 @@ struct
   fun useHH (hh : unit HH.t) : unit = (HM.enterGlobalHeap ();
                                        HH.set hh;
                                        HH.setUseHierarchicalHeap true;
-                                       HM.exitGlobalHeap ())
+                                       HM.exitGlobalHeap ();
+                                       dbgmsg "useHH")
 
   fun stopUseHH (() : unit) : unit = (HM.enterGlobalHeap ();
                                       HH.setUseHierarchicalHeap false;
-                                      HM.exitGlobalHeap ())
+                                      HM.exitGlobalHeap ();
+                                      dbgmsg "stopUseHH")
 
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =
