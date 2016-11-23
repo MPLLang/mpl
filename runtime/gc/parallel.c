@@ -11,17 +11,7 @@ void Parallel_init (void) {
   if (!Proc_isInitialized (s)) {
     Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
 
-    /* Set up call-back state in each worker thread */
-    /*
-     * SPOONHOWER_NOTE: hack copy the call-from-c-handler into the worker
-     * threads assumes this is called by the primary thread
-     */
-    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
-      s->procStates[proc].callFromCHandlerThread = pointerToObjptr(
-        GC_copyThread (s, objptrToPointer(s->callFromCHandlerThread,
-                                          s->heap->start)),
-        s->heap->start);
-
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
       Parallel_mutexes[proc] = -1;
     }
     /* Now wake them up! */

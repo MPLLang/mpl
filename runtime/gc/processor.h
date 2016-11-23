@@ -33,8 +33,6 @@ typedef bool (*bspFunction)(void* arg);
 /*************/
 /* Unique number for this thread */
 uint32_t Proc_processorNumber (GC_state s);
-/* Is the current processor the primary processor? */
-bool Proc_amPrimary (GC_state s);
 
 /* Used to make sure all threads are properly initialized */
 void Proc_waitForInitialization (GC_state s);

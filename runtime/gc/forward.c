@@ -89,13 +89,18 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
         current = current || (getStackCurrent(&s->procStates[proc]) == stack);
       }
-      /* RAM_NOTE: used to have 'current &&= not isStackEmpty(stack)' here */
+      /* If the primary thread invokes a GC before the secondary
+       * threads begin executing, then their initial stacks are empty
+       * and should be treated as inactive.
+       */
+      current = current && not isStackEmpty(stack);
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {
         if (DEBUG_STACKS or s->controls->messages)
           fprintf (stderr,
-                   "[GC: Shrinking stack of size %s bytes to size %s bytes, using %s bytes.]\n",
+                   "[GC: Shrinking stack at "FMTPTR" of size %s bytes to size %s bytes, using %s bytes.]\n",
+                   stack,
                    uintmaxToCommaString(stack->reserved),
                    uintmaxToCommaString(reservedNew),
                    uintmaxToCommaString(stack->used));

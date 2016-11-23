@@ -31,6 +31,7 @@ structure MLtonGC =
                   fn () => conv (prim ())
                val mkSize = mk C_Size.toLargeInt
                val mkUIntmax = mk C_UIntmax.toLargeInt
+               val mkMilliseconds = mk (Time.fromMilliseconds o C_UIntmax.toLargeInt)
             in
                val bytesAllocated = mkUIntmax getBytesAllocated
                val lastBytesLive = mkSize getLastBytesLive
@@ -38,6 +39,7 @@ structure MLtonGC =
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
                val numMarkCompactGCs = mkUIntmax getNumMarkCompactGCs
                val numMinorGCs = mkUIntmax getNumMinorGCs
+               val time = mkMilliseconds time
             end
          end
 

@@ -69,12 +69,12 @@ fun prepare (t: 'a t, v: 'a): Runnable.t =
 fun new f = T (ref (New f))
 
 local
-   val numProcessors = Word32.toInt MLtonParallelInternal.numberOfProcessors
-   val procNum = Word32.toInt o MLtonParallelInternal.processorNumber
+   val numProcs = Word32.toInt Primitive.MLton.Parallel.numberOfProcessors
+   val procNum = Word32.toInt o Primitive.MLton.Parallel.processorNumber
    local
       (* create one reference per processor *)
       val func: (unit -> unit) option Array.array =
-          Array.tabulate (numProcessors, fn _ => NONE)
+          Array.tabulate (numProcs, fn _ => NONE)
       val base: Prim.preThread =
          let
             val () = Prim.copyCurrent ()
@@ -104,7 +104,7 @@ local
             Prim.copy base
          end
    end
-   val switching = Array.tabulate (numProcessors, fn _ => false)
+   val switching = Array.tabulate (numProcs, fn _ => false)
 in
    fun 'a atomicSwitch (f: 'a t -> Runnable.t): 'a =
       let val proc = procNum () in
@@ -179,13 +179,13 @@ fun toPrimitive (t as T r : unit t): Prim.thread =
 val initPrimitive: unit t -> unit t = fromPrimitive o toPrimitive
 
 local
-  (* SPOONHOWER_NOTE: spoons global state in signal handlers (but that's not the
-      only problem...) *)
-   val signalHandler: Prim.thread option ref = ref NONE
+   val numProcs = Word32.toInt Primitive.MLton.Parallel.numberOfProcessors
+   val procNum = Word32.toInt o Primitive.MLton.Parallel.processorNumber
+   val signalHandlers: Prim.thread option array = Array.array (numProcs, NONE)
    datatype state = Normal | InHandler
-   val state: state ref = ref Normal
+   val state: state array = Array.array (numProcs, Normal)
 in
-   fun amInSignalHandler () = InHandler = !state
+   fun amInSignalHandler () = InHandler = Array.sub (state, procNum ())
 
    fun setSignalHandler (f: Runnable.t -> Runnable.t): unit =
       let
@@ -193,9 +193,10 @@ in
          fun loop (): unit =
             let
                (* Atomic 1 *)
-               val _ = state := InHandler
+               val proc = procNum ()
+               val _ = Array.update (state, proc, InHandler)
                val t = f (fromPrimitive (Prim.saved ()))
-               val _ = state := Normal
+               val _ = Array.update (state, proc, Normal)
                val _ = Prim.finishSignalHandler ()
                val _ =
                   atomicSwitch
@@ -211,12 +212,18 @@ in
             in
                loop ()
             end
-         val p =
-            toPrimitive
-            (new (fn () => loop () handle e => MLtonExn.topLevelHandler e))
-         val _ = signalHandler := SOME p
+         val handlerThreads =
+            Array.tabulate
+            (numProcs, fn i =>
+             let
+                val p =
+                   toPrimitive (new (fn () => loop () handle e => MLtonExn.topLevelHandler e))
+                val _ = Array.update (signalHandlers, i, SOME p)
+             in
+                p
+             end)
       in
-         Prim.setSignalHandler p
+         Prim.setSignalHandlers handlerThreads
       end
 
    fun switchToSignalHandler () =
@@ -227,7 +234,7 @@ in
          val () = Prim.startSignalHandler () (* implicit atomicBegin () *)
          (* Atomic 2 *)
       in
-         case !signalHandler of
+         case Array.sub (signalHandlers, procNum ()) of
             NONE => raise Fail "no signal handler installed"
           | SOME t => Prim.switchTo t (* implicit atomicEnd() *)
       end
@@ -235,14 +242,15 @@ end
 
 
 local
-
+   val numProcs = Word32.toInt Primitive.MLton.Parallel.numberOfProcessors
+   val procNum = Word32.toInt o Primitive.MLton.Parallel.processorNumber
 in
    val register: int * (MLtonPointer.t -> unit) -> unit =
       let
          val exports =
             Array.array (Int32.toInt (Primitive.MLton.FFI.numExports),
                          fn _ => raise Fail "undefined export")
-         val worker : (Prim.thread * Prim.thread option ref) option ref = ref NONE
+         val worker : (Prim.thread * Prim.thread option ref) option array = Array.array (numProcs, NONE)
          fun mkWorker (): Prim.thread * Prim.thread option ref =
             let
                val thisWorker : (Prim.thread * Prim.thread option ref) option ref = ref NONE
@@ -263,7 +271,8 @@ in
                      (* Atomic 0 *)
                      val _ = atomicBegin ()
                      (* Atomic 1 *)
-                     val _ = worker := !thisWorker
+                     val proc = procNum ()
+                     val _ = Array.update (worker, proc, !thisWorker)
                      val _ = Prim.setSaved (valOf (!savedRef))
                      val _ = savedRef := NONE
                      val _ = Prim.returnToC () (* implicit atomicEnd() *)
@@ -278,20 +287,21 @@ in
          fun handlerLoop (): unit =
             let
                (* Atomic 2 *)
+               val proc = procNum ()
                val saved = Prim.saved ()
                val (workerThread, savedRef) =
-                  case !worker of
+                  case Array.sub (worker, proc) of
                      NONE => mkWorker ()
                    | SOME (workerThread, savedRef) =>
-                        (worker := NONE
+                        (Array.update (worker, proc, NONE)
                          ; (workerThread, savedRef))
                val _ = savedRef := SOME saved
                val _ = Prim.switchTo (workerThread) (* implicit atomicEnd() *)
             in
                handlerLoop ()
             end
-         val handlerThread = toPrimitive (new handlerLoop)
-         val _ = Prim.setCallFromCHandler handlerThread
+         val handlerThreads = Array.tabulate (numProcs, fn _ => toPrimitive (new handlerLoop))
+         val _ = Prim.setCallFromCHandlers handlerThreads
       in
          fn (i, f) => Array.update (exports, i, f)
       end
