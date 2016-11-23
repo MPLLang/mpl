@@ -19,4 +19,4 @@ PRIVATE void GC_finishSignalHandler (void);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE void GC_handler (GC_state s, int signum);
+PRIVATE void GC_handler (int signum);
