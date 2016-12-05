@@ -1,13 +1,19 @@
 #include <pthread.h>
 
-int32_t Proc_processorNumber (GC_state s) {
-  return s->procNumber;
-}
-
 volatile bool Proc_beginInit = FALSE;
 volatile int32_t Proc_initialized = 0;
 volatile int32_t Proc_criticalCount;
 volatile int32_t Proc_criticalTicket;
+
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+bool Proc_threadInSection (void) {
+  return Proc_criticalCount > 0;
+}
+#endif /* MLTON_GC_INTERNAL_BASIS*/
+
+int32_t Proc_processorNumber (GC_state s) {
+  return s->procNumber;
+}
 
 void Proc_waitForInitialization (GC_state s) {
   while (!Proc_beginInit) { }
@@ -112,8 +118,4 @@ void Proc_endCriticalSection (GC_state s) {
   else {
     Proc_criticalCount = 0;
   }
-}
-
-bool Proc_threadInSection (void) {
-  return Proc_criticalCount > 0;
 }
