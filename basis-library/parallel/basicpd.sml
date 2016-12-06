@@ -55,10 +55,34 @@ structure S = MLtonSignal
 val pblocksig = _import "Parallel_block_sig" runtime private: S.t -> unit;
 val punblocksig = _import "Parallel_unblock_sig" runtime private: S.t -> unit;
 
+val isblocked =_import "Parallel_check_blocked" runtime private: S.t -> bool;
+(*
+fun isblocked s = S.Mask.isMember (S.Mask.getBlocked (), s)
+*)
+
 val refToInt = _import "refToInt" runtime private: int ref -> int;
 
 val prim_sig = MLtonItimer.signal MLtonItimer.Real
 val sec_sig = Posix.Signal.usr1
+
+val inCriticalSection = Array.array (numberOfProcessors, false)
+
+fun assertblocked s =
+    let val p = processorNumber ()
+    in
+        if Array.sub (inCriticalSection, p) then
+            ()
+        else
+            eprint ("Signal not blocked at " ^ s ^ " " ^ (Int.toString p) ^ "\n")
+    end
+(*
+    let val p = processorNumber ()
+        val ib = isblocked (if p = 0 then prim_sig else sec_sig)
+    in
+        if ib then ()
+        else eprint ("Signal not blocked at " ^ s ^ " " ^ (Int.toString p) ^ "\n")
+    end
+*)
 
 val delta =
     case
@@ -66,31 +90,31 @@ val delta =
              [] => NONE
            | us::_ => Int.fromString us)
      of
-        NONE => 50000 (* default in microseconds *)
+        NONE => 5000 (* default in microseconds *)
       | SOME us => us
 val delta2 = 200 (* microseconds *)
 
-val inCriticalSection = Array.array (numberOfProcessors, false)
+
 
 fun block_sigs p =
-    ((if p = 0 then
-          pblocksig prim_sig
-        (* S.Mask.block (S.Mask.some [prim_sig]) *)
+    ((*(if p = 0 then
+          (* pblocksig prim_sig *)
+          S.Mask.block (S.Mask.some [prim_sig])
         (* S.Mask.block S.Mask.all *)
     else
-        pblocksig sec_sig
-        (* S.Mask.block (S.Mask.some [sec_sig]) *)
-        (* S.Mask.block S.Mask.all *));
+        (* pblocksig sec_sig *)
+        S.Mask.block (S.Mask.some [sec_sig])
+        (* S.Mask.block S.Mask.all *)); *)
      Array.update (inCriticalSection, p, true))
 
 fun unblock_sigs p =
-    (Array.update (inCriticalSection, p, false);
+    (Array.update (inCriticalSection, p, false) (* ;
      if p = 0 then
-         punblocksig prim_sig
-         (*S.Mask.unblock (S.Mask.some [prim_sig]) *)
+         (* punblocksig prim_sig *)
+         S.Mask.unblock (S.Mask.some [prim_sig])
      else
-         punblocksig sec_sig)
-        (* S.Mask.unblock (S.Mask.some [sec_sig])) *)
+         (* punblocksig sec_sig) *)
+         S.Mask.unblock (S.Mask.some [sec_sig]) *))
 
 (*
 fun atomically f =
@@ -220,6 +244,7 @@ fun queuesWithWork lat =
 
 fun add (q as Queue {top, bottom, work, ... }) (tw as (t, w)) =
     let
+        val _ = assertblocked "add"
         val i = !top
         val () = if i = A.length (!work) then resize q else ()
         val i = !top (* in case of resize *)
@@ -228,11 +253,13 @@ fun add (q as Queue {top, bottom, work, ... }) (tw as (t, w)) =
         (A.update (!work, i, Work tw)
          (* handle e => (print "here 159\n"; raise e) *));
         qr := SOME q;
-        top := i + 1
+        top := i + 1;
+        if debug then ignore (fetchAndAdd (tasksAdded, 1)) else ()
     end
 
 fun popTop (q as Queue {top, bottom, work, ... }) =
-    let val i = !top
+    let val _ = assertblocked "popTop"
+        val i = !top
         val j = !bottom
         val w = !work
     in
@@ -258,13 +285,15 @@ fun topIsRThread (q as Queue {top, bottom, work, ... }) =
     end
 
 fun popBottom  (q as Queue {top, bottom, work, ... }) =
-    let val i = !top
+    let val _ = assertblocked "popBottom"
+        val i = !top
         val j = !bottom
         val w = !work
     in
         if i = j then raise WorkQueue (* empty *)
         else
             (top := i - 1;
+             (if debug then ignore (fetchAndAdd (tasksAdded, ~1)) else ());
              case A.sub (w, i - 1) of
                  Empty => raise WorkQueue
                | Work (t, w) => w)
@@ -274,7 +303,8 @@ fun popBottom  (q as Queue {top, bottom, work, ... }) =
 val lastDealtTo = Array.array (P, ~1)
 
 fun dealAttempt p =
-    let val (fq as Queue {top, bottom, work, ...}) = A.sub (fqueues, p)
+    let val _ = assertblocked "dealAttempt"
+        val (fq as Queue {top, bottom, work, ...}) = A.sub (fqueues, p)
         val fi = !top
         val fj = !bottom
         val fw = !work
@@ -318,9 +348,9 @@ fun dealAttempt p =
         else
             (case A.sub (taskcells, p) of
                 SOME _ => (* have an outstanding deal *)
-                ((* print ("Task hasn't been taken from " ^
+                (eprint ("Task hasn't been taken from " ^
                          (Int.toString p) ^ ": cell is " ^
-                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); *) false)
+                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); false)
               | NONE =>
                 if compareAndSwap (c, vv, p) then
                     let (* val _ = eprint ((Int.toString p') ^ "'s cell was " ^
@@ -335,7 +365,7 @@ fun dealAttempt p =
                             else (false, bq)
                     in
                         A.update (taskcells, p, SOME (isLat, popTop q));
-                        (* print ((Int.toString p) ^ " dealt a task to " ^ (Int.toString p') ^ "\n"); *)
+                        (* eprint ((Int.toString p) ^ " dealt a task to " ^ (Int.toString p') ^ "\n"); *)
                         A.update (lastDealtTo, p, p');
                         true
                     end
@@ -385,6 +415,7 @@ fun checkP ln p =
 fun addWorkLat (lat, p, tws) =
     (let (* val _ = block_sigs p *)
          (* val n = queuesWithWork lat *)
+        val _ = assertblocked "addWorkLat"
         val _ = checkP 271 p
         (* val _ = print ("Added " ^ (if lat then "lat " else "") ^ "work(" ^
                        (Int.toString (List.length tws)) ^ ") on " ^
@@ -393,7 +424,7 @@ fun addWorkLat (lat, p, tws) =
         val _ = ignore (List.map (add q) tws)
         (* val n' = queuesWithWork lat *)
     in
-        if debug then ignore (fetchAndAdd (tasksAdded, 1)) else ()
+        ()
         (* unblock_sigs p; *)
         (* if n' - n > 1 then
             eprint ("Added more work: n = " ^ (Int.toString n) ^ ", n' = "
@@ -405,7 +436,8 @@ fun addWorkLat (lat, p, tws) =
     ) (* handle e => (eprint "here 341\n"; raise e) *)
 
 fun addWork (p, tws) =
-    addWorkLat (Array.sub (workingOnLatency, p), p, tws)
+    (assertblocked "addWork";
+     addWorkLat (Array.sub (workingOnLatency, p), p, tws))
 
 fun maybeMove {top, bottom, work} =
     let val i = !top
@@ -418,11 +450,13 @@ fun maybeMove {top, bottom, work} =
             ()
     end
 
-fun resumeWork (lat, p, (t, w)) = addWorkLat (lat, p, [(t, w)])
+fun resumeWork (lat, p, (t, w)) =
+    (assertblocked "resumeWork";
+     addWorkLat (lat, p, [(t, w)]))
 
 fun removeWork (p, Token (ti, qr)) =
     (block_sigs p;
-     Array.update (inCriticalSection, p, true);
+     (* Array.update (inCriticalSection, p, true); *)
     (case !qr of
         SOME (Queue {top, bottom, work, ...}) =>
         let val tp = !top
@@ -451,7 +485,7 @@ fun removeWork (p, Token (ti, qr)) =
             (loop bot) (* handle e => (eprint "here 279\n"; raise e) *)
         end
       | NONE => raise WorkQueue)
-    before (Array.update (inCriticalSection, p, false); unblock_sigs p))
+    before ((* Array.update (inCriticalSection, p, false); *)unblock_sigs p))
 
 fun removeWorkLat (_, p, t) = removeWork (p, t)
 
@@ -478,6 +512,7 @@ val policyName = "Prompt private deques"
 
   fun resumeInt p (Suspend (lat, k), v) =
       let
+          val _ = assertblocked "resumeInt"
         val _ = if p = 0 then print "enter resume\n" else ()
         val t = T.prepend (k, fn () => v)
                 (* handle e => (eprint "here 117\n"; raise e) *)
@@ -488,6 +523,7 @@ val policyName = "Prompt private deques"
       end
     | resumeInt p (Capture (lat, k), v) =
       let
+          val _ = assertblocked "resumeInt"
         (* val _ = print "resuming\n" *)
       in
         addWorkLat (lat, p, [(newWork p, Thread (T.prepend (k, fn () => v)))])
@@ -511,7 +547,7 @@ val policyName = "Prompt private deques"
 
   fun addtoio ((t, f) : unit t * (unit -> bool)) =
       let val p = processorNumber ()
-          (* val _ = print ("addtoio at " ^ (Int.toString p) ^ "\n") *)
+          val _ = print ("addtoio at " ^ (Int.toString p) ^ "\n")
           val q = Array.sub (ioqueues, p)
       in
           Array.update (ioqueues, p, (t, f)::q)
@@ -520,7 +556,8 @@ val policyName = "Prompt private deques"
   val inpio = ref false
 
   fun procio p =
-      let val _ = checkP 387 p
+      let val _ = assertblocked "procio"
+          val _ = checkP 387 p
           (* val _ = if p = 1 then print "enter procio\n" else () *)
           val _ = if p = 0 then ((if !inpio then
                                      print "Entered procio twice!\n"
@@ -532,7 +569,7 @@ val policyName = "Prompt private deques"
               List.foldl
                   (fn ((t, f), (rsm, r)) =>
                       (* if latency t then *)
-                          if f () then ((* print ("resumed on " ^ (Int.toString p) ^ "\n");  *)resumeInt p ((* mkLat *) t, ()); (true, r))
+                          if f () then (print ("resumed on " ^ (Int.toString p) ^ "\n"); resumeInt p ((* mkLat *) t, ()); (true, r))
                                        (* handle e => (eprint "here 142\n"; raise e) *)
                           else (rsm, (t, f)::r)
                       (* else raise (Parallel "Invariant violated!\n") *)
@@ -656,7 +693,7 @@ fun getWorkLat lat p =
         if i = j then NONE
         else
             (checkP 525 p;
-             (* print ("got work on " ^ (Int.toString p) ^ "\n"); *)
+             print ("got work on " ^ (Int.toString p) ^ "\n");
              SOME (false, lat, popBottom q))
             (* handle e => (eprint "here 513\n"; raise e) *)
     end
@@ -688,7 +725,7 @@ fun waitForTask' p' =
          NONE => ((*print ("waitForTask on " ^ (Int.toString (processorNumber ())) ^ "\n"); *)
                   waitForTask' p')
        | SOME bw => bw
-                    before ((* print ("got a task from " ^ (Int.toString p') ^ "\n"); *)
+                    before ((* eprint ("got a task from " ^ (Int.toString p') ^ "\n"); *)
                             A.update (taskcells, p', NONE)))
     (* handle e => (eprint "here 384\n"; raise e) *)
 
@@ -713,6 +750,7 @@ fun makeRequest p =
 
 fun tryToUpdate p c v =
     let val ev = !c
+        val _ = assertblocked "tryToUpdate"
         (* val _ = print ((Int.toString p) ^ "'s cell is " ^ (Int.toString ev) ^ "\n") *)
         in
         if ev > notwaiting then
@@ -770,6 +808,7 @@ fun tryToUpdate p c v =
                        if p' > notwaiting then
                           let val (nlat, w) = waitForTask' p'
                           in
+                              assertblocked "scheduler793";
                               addWorkLat (nlat, p, [(newWork p, w)]);
                               c := notwaiting
                           end
@@ -789,6 +828,7 @@ fun tryToUpdate p c v =
                     | SOME t =>
                       if not lfw then
                           (print "pushing continuation\n";
+                           assertblocked "scheduler813";
                            addWorkLat (lat, p, [(newWork p, RThread (t, p))]))
                       else print "was looking for work\n"
           in
@@ -807,6 +847,7 @@ fun tryToUpdate p c v =
                             (Int.toString (!c)) ^ "\n"); *)
                     (* block_sigs p;*)
                     tryToUpdate p c notask;
+                    assertblocked "scheduler824";
                     unblock_sigs p;
                     if P > 1 andalso Time.> (Time.now (), nextReq) then
                         loop (countSuspends, NONE, p, makeRequest p)
@@ -833,7 +874,7 @@ fun tryToUpdate p c v =
                   val () = if countSuspends andalso nonlocal then incSuspends p else ()
                   (* val () = if not (!enabled) then (enabled := true; profileEnable ()) else (); *)
                   val () = startWork p
-                  val () = Array.update (inCriticalSection, p, false)
+                  (* val () = Array.update (inCriticalSection, p, false) *)
                   (* val _ = unblock_sigs p *)
                   val () = (case j
                              of JWork w => (print "starting JWork\n";
@@ -879,13 +920,15 @@ fun tryToUpdate p c v =
     in
         (* checkAndLoop (processorNumber ()) () *)
         (* block_sigs p;*)
-        Array.update (inCriticalSection, p, true);
+        (* Array.update (inCriticalSection, p, true); *)
         loop (countSuspends, k, p, Time.zeroTime)
         (* busyloop (processorNumber ()) 0 *)
     end
 
   fun capture' (p, tail) =
-      let val _ = print "capture'\n" in
+      let val _ = print "capture'\n"
+          val _ = assertblocked "capture'"
+      in
       T.switch
           (fn k =>
               (* Note that we cannot call addWork on the current thread!
@@ -915,7 +958,9 @@ fun tryToUpdate p c v =
                   val _ = Array.update (lookingForWork, p, true)
                   val _ = Array.update (workingOnLatency, p, false)
                 val t = T.new (schedule false NONE)
-                fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
+                fun add (lat, w) =
+                    (assertblocked "capture'-add";
+                     addWorkLat (lat, p, [(newWork p, JWork w)]))
               in
                 (* XX maybe this should move out (before suspend/finishWork) *)
                 (* add any delayed work *)
@@ -933,7 +978,7 @@ fun tryToUpdate p c v =
         val p = processorNumber ()
         (* Block signals so we don't preempt while we are suspending *)
         val () = block_sigs p
-        val _ = Array.update (inCriticalSection, p, true)
+        (* val _ = Array.update (inCriticalSection, p, true) *)
         val lat = Array.sub (workingOnLatency, p)
         val _ = print "suspend\n"
         (* val _ = print ("suspend at " ^ (Int.toString p) ^ "\n") *)
@@ -970,6 +1015,7 @@ fun tryToUpdate p c v =
       let
         val p = processorNumber ()
       in
+          (*
         if shouldYield p then
           capture' (p, fn (p, k) =>
                           let in
@@ -977,7 +1023,7 @@ fun tryToUpdate p c v =
                             incSuspends p;
                             finishWork p
                           end)
-        else
+        else *)
           ()
       end
 
@@ -1012,9 +1058,13 @@ fun tryToUpdate p c v =
       let
         val p = processorNumber ()
         val _ = block_sigs p
-        val _ = Array.update (inCriticalSection, p, true)
+        val _ = assertblocked ("addRightLat1044 " ^ (Int.toString p))
+        (* val _ = Array.update (inCriticalSection, p, true) *)
+        val _ = assertblocked "addRightLat1046"
         val t = newWork p
+        val _ = assertblocked "addRightLat1048"
         val sw = ref false
+        val _ = assertblocked "addRightLat1050"
         fun w' () = if !sw then raise Parallel "work run twice"
                     else (sw := true; w ())
 
@@ -1024,6 +1074,7 @@ fun tryToUpdate p c v =
           capture' (p, fn (p, k) =>
                          let in
                            (* Add the continuation first -- it is higher priority *)
+                             assertblocked "addRightLat-f";
                            addWorkLat (lat, p, [(newWork p, Thread (T.prepend (k, fn () => t))),
                                           (t, JWork w')])
                            (* handle e => (eprint "here 622\n"; raise e) *);
@@ -1032,26 +1083,32 @@ fun tryToUpdate p c v =
                          end)
         else
           let
-            fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
+              val _ = assertblocked "addRightLat1069"
+            fun add (lat, w) =
+                (assertblocked "addRightLat-add";
+                 addWorkLat (lat, p, [(newWork p, JWork w)]))
           in
             (* add any delayed work *)
             (* XXX maybe should run delayed work and queue the currrent thread too? *)
             app add (rev (Array.sub (delayed, p)));
             Array.update (delayed, p, nil);
+            assertblocked "addRightLat";
             addWorkLat (lat, p, [(t, JWork w')]);
-            Array.update (inCriticalSection, p, false);
+            (* Array.update (inCriticalSection, p, false); *)
             unblock_sigs p;
             t
           end
       end
 
-  fun addRight w =
+  fun addRight w = addRightLat (false, w)
+(*
       let
         val p = processorNumber ()
         val _ = block_sigs p
         val _ = Array.update (inCriticalSection, p, true)
         val t = newWork p
         val sw = ref false
+        val _ = assertblocked "addRight1088"
         fun w' () = if !sw then raise Parallel "work run twice"
                     else (sw := true; w ())
 
@@ -1061,6 +1118,7 @@ fun tryToUpdate p c v =
           capture' (p, fn (p, k) =>
                          let in
                            (* Add the continuation first -- it is higher priority *)
+                             assertblocked "addRight-f";
                            addWork (p, [(newWork p, Thread (T.prepend (k, fn () => t))),
                                           (t, JWork w')])
                            (* handle e => (eprint "here 622\n"; raise e) *);
@@ -1069,18 +1127,23 @@ fun tryToUpdate p c v =
                          end)
         else
           let
-            fun add (lat, w) = addWorkLat (lat, p, [(newWork p, JWork w)])
+              val _ = assertblocked "addRight1106"
+            fun add (lat, w) =
+                (assertblocked "addRight-add";
+                 addWorkLat (lat, p, [(newWork p, JWork w)]))
           in
             (* add any delayed work *)
             (* XXX maybe should run delayed work and queue the currrent thread too? *)
             app add (rev (Array.sub (delayed, p)));
             Array.update (delayed, p, nil);
+            assertblocked "addRight";
             addWork (p, [(t, JWork w')]);
             Array.update (inCriticalSection, p, false);
             unblock_sigs p;
             t
           end
       end
+*)
 
   (* smuller: XXX This adds the current thread to the lqueue and so is totally
      wrong. Fix it. *)
@@ -1088,7 +1151,7 @@ fun tryToUpdate p c v =
       let
         val p = processorNumber ()
         val t = newWork p
-        val _ = print "addLeftLat\n"
+        val _ = block_sigs p
       in
         if shouldYield p then
           capture' (p, fn (p, k) =>
@@ -1112,6 +1175,7 @@ fun tryToUpdate p c v =
                                     Array.update (delayed, p, nil);
                                     addWorkLat (lat, p, [(t, Thread (T.prepend (k, fn () => t)))])
                                     (* handle e => (print "here 670\n"; raise e) *);
+                                    unblock_sigs p;
                                     w ()
                                   end), ()))
       end
@@ -1120,6 +1184,7 @@ fun tryToUpdate p c v =
       let
         val p = processorNumber ()
         val t = newWork p
+        val _ = block_sigs p
         val _ = print "addLeft\n"
       in
         if shouldYield p then
@@ -1144,6 +1209,7 @@ fun tryToUpdate p c v =
                                     Array.update (delayed, p, nil);
                                     addWork (p, [(t, Thread (T.prepend (k, fn () => t)))])
                                     (* handle e => (print "here 670\n"; raise e) *);
+                                    unblock_sigs p;
                                     w ()
                                   end), ()))
       end
@@ -1201,7 +1267,7 @@ fun tryToUpdate p c v =
       if n = numberOfProcessors - 1 then ()
       else if n = p - 1 then signalOthers p sg (n + 1)
       else
-          ((* print ("signaling" ^ (Int.toString n) ^ "\n"); *)
+          (print ("signaling" ^ (Int.toString n) ^ "\n");
            ((signalThread (n, Posix.Signal.toWord sg);
              print "signaled\n")
            (* handle _ => print "signal failed\n" *));
@@ -1236,9 +1302,9 @@ fun tryToUpdate p c v =
 
   fun interruptFst t =
       let val p = processorNumber ()
-          val _ = MLtonItimer.set (MLtonItimer.Real,
+          (* val _ = MLtonItimer.set (MLtonItimer.Real,
                                    {interval = Time.zeroTime,
-                                    value = Time.zeroTime})
+                                    value = Time.zeroTime}) *)
           val _ = if !waitingForTask then print "interrupt while waiting!!!\n"
                   else ()
           (* val _ = block_sigs p *)
@@ -1247,12 +1313,14 @@ fun tryToUpdate p c v =
           (* val _ = communicate p *)
       in
        (
-         (if debug then
+         print ("interruptFst on " ^ (Int.toString p) ^ "\n");
+         signalOthers p sec_sig 0;
+         (if debug andalso (Array.all (fn x => not x) inCriticalSection) then
               let val _ =
                       if (queuesWithWork false) + (queuesWithWork true) = 0 then
                           eprint "There's no work left!\n"
                       else ()
-                  val shouldBe = !tasksAdded - !tasksRun
+                  val shouldBe = !tasksAdded (* - !tasksRun *)
                   val thereAre = (countWork true) + (countWork false)
               in
                   if shouldBe <> thereAre then
@@ -1263,15 +1331,15 @@ fun tryToUpdate p c v =
                       ()
               end
           else ());
-         (* print ("interruptFst on " ^ (Int.toString p) ^ "\n"); *)
-         signalOthers p sec_sig 0;
          MLtonItimer.set (MLtonItimer.Real,
-                          {interval = iv, value = iv});
+                          {interval = Time.zeroTime, value = iv});
          (* signal2Others p sec_sig; *)
          (* signalThread (0, Posix.Signal.toWord sec_sig); *)
          (* unblock_sigs p; *)
          (* print ("signaled others\n"); *)
-         T.prepare (T.new (schedule true (SOME t)), ()))
+         (if Array.sub (inCriticalSection, p) then t
+          else
+              T.prepare (T.new (schedule true (SOME t)), ())))
       (* T.prepare (T.new (checkAndLoop p), ())) *)
       end
 
@@ -1280,9 +1348,9 @@ fun tryToUpdate p c v =
           (* val _ = procio p *)
           (*val _ = communicate p *)
       in
-       ((* print ("interrupt on " ^ (Int.toString p) ^ "\n"); *)
-        (* if Array.sub (inCriticalSection, p) then t
-        else *)
+       (print ("interrupt on " ^ (Int.toString p) ^ "\n");
+        if Array.sub (inCriticalSection, p) then t
+        else
          (* signal2Others p sec_sig; *)
             ((* block_sigs p;*)
              T.prepare (T.new (schedule true (SOME t)), ())))
@@ -1317,16 +1385,24 @@ fun tryToUpdate p c v =
                            SOME s => s
                          | NONE => (eprint "Warning: RNG not seeded properly";
                                     0w0)); *)
+                 S.Mask.unblock (S.Mask.some [prim_sig]);
+                 S.Mask.block (S.Mask.some [sec_sig]);
+(*
                 punblocksig prim_sig;
                 pblocksig sec_sig;
+*)
                 Array.update (lookingForWork, p, false))
            else
-               (pblocksig prim_sig;
-                punblocksig sec_sig)
+               (S.Mask.block (S.Mask.some [prim_sig]);
+                S.Mask.unblock (S.Mask.some [sec_sig])
+(*
+                pblocksig prim_sig;
+                punblocksig sec_sig *)
+               )
           );
           (if pi = P - 1 then
                MLtonItimer.set (MLtonItimer.Real,
-                                 {interval = iv, value = iv})
+                                 {interval = Tm.zeroTime, value = iv})
            else
                ())
           (* print ("initialized " ^ (Int.toString p) ^ "\n") *)

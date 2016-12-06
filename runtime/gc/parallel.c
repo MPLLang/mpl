@@ -285,6 +285,13 @@ void Parallel_unblock_sig (int sig) {
   pthread_sigmask (SIG_UNBLOCK, &s, NULL);
 }
 
+Int32 Parallel_check_blocked (int sig) {
+  sigset_t s;
+  sigemptyset(&s);
+  pthread_sigmask (SIG_SETMASK, NULL, &s);
+  return sigismember(&s, sig);
+}
+
 int refToInt (int *p) {
   return ((int) p);
 }
