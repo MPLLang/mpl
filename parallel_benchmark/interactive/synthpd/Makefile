@@ -55,8 +55,7 @@ anagrams: anagrams.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map anagrams.mlb ../../../sml-lib/mlton/x/mlx.o
 
 fib_term-pd: fib_term.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
-	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -export-header fib_term-pd.h fib_term.mlb
-	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_term-pd fib_term.mlb
+	../../../build/bin/mlton -default-ann 'allowFFI true' -cc-opt -g -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_term-pd fib_term.mlb
 
 fib_net-pd: fib_net.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
 	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_net-pd fib_net.mlb
@@ -73,5 +72,5 @@ net_test: net_test.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
 pd: fib_term-pd fib_net-pd uts_term-pd uts_net-pd
 
 seq: seqfib.sml sequts.sml
-	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -output seqfib seqfib.mlb
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -debug-runtime true -output seqfib seqfib.mlb
 	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -output sequts sequts.mlb

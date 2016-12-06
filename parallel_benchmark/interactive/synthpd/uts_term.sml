@@ -94,7 +94,7 @@ fun explore d b rnd =
 (* handle Overflow => (print "here 140\n"; 1) *)
 
 fun top_explore () =
-    let val nodes = (explore 12 5.5 (DotMix.fromInt 827346237 (* 42 *)))
+    let val nodes = (explore 11 5.5 (DotMix.fromInt 827346237 (* 42 *)))
         (* handle e => (print "here 164\n"; raise e) *)
         val finish = Time.now ()
         val diff = Time.-(finish, start)
