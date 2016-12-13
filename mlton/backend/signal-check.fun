@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor SignalCheck (S: RSSA_TRANSFORM_STRUCTS): RSSA_TRANSFORM = 
+functor SignalCheck (S: RSSA_TRANSFORM_STRUCTS): RSSA_TRANSFORM =
 struct
 
 open S
@@ -66,16 +66,19 @@ fun insertInFunction (f: Function.t): Function.t =
              else
                 Transfer.foreachLabel
                 (transfer, fn to =>
-                 (ignore o Graph.addEdge) 
+                 (ignore o Graph.addEdge)
                  (g, {from = from, to = labelNode to}))
           end)
       val extra: Block.t list ref = ref []
       fun addSignalCheck (Block.T {args, kind, label, statements, transfer})
-         : unit = 
+         : unit =
          let
             val collect = Label.newNoname ()
+            val collectZero = Label.newNoname ()
             val collectReturn = Label.newNoname ()
-            val dontCollect = Label.newNoname ()
+            val tisCCall = Label.newNoname ()
+            val tisBranch = Label.newNoname ()
+            val continue = Label.newNoname ()
             val res = Var.newNoname ()
             val compare =
                Vector.new1
@@ -88,9 +91,28 @@ fun insertInFunction (f: Function.t): Function.t =
             val compareTransfer =
                Transfer.ifBool
                (Operand.Var {var = res, ty = Type.bool},
-                {falsee = dontCollect,
+                {falsee = tisCCall,
                  truee = collect})
-            val func = CFunction.gc {maySwitchThreads = true}
+            (*
+             * If I'm just using handlesSignals true for synchronization,
+             * maySwitchThreads true and related overhead may be unnecessary.
+             *)
+            val gcFunc = CFunction.gc {maySwitchThreads = true}
+
+            val tisFunc =
+                CFunction.T {args = Vector.new0 (),
+                             convention = CFunction.Convention.Cdecl,
+                             kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
+                                                            ensuresBytesFree = false,
+				                            mayGC = false,
+				                            maySwitchThreads = false,
+				                            modifiesFrontier = false,
+				                            readsStackTop = false,
+				                            writesStackTop = false},
+                             prototype = (Vector.new0 (), SOME CType.bool),
+                             return = Type.bool,
+                             symbolScope = CFunction.SymbolScope.Private,
+                             target = CFunction.Target.Direct "Proc_threadInSection"}
             val _ =
                extra :=
                Block.T {args = args,
@@ -108,19 +130,51 @@ fun insertInFunction (f: Function.t): Function.t =
                     {args = Vector.new3 (Operand.GCState,
                                          Operand.word (WordX.zero (WordSize.csize ())),
                                          Operand.bool false),
-                     func = func,
+                     func = gcFunc,
                      return = SOME collectReturn}})
+               :: (Block.T {args = Vector.new0 (),
+                            kind = Kind.Jump,
+                            label = collectZero,
+                            statements = Vector.new0 (),
+                            transfer = (Transfer.CCall
+                                            {args = Vector.new3 (Operand.GCState,
+                                                                 Operand.word
+                                                                     (WordX.zero (WordSize.csize ())),
+                                                                 Operand.bool false),
+                                             func = gcFunc,
+                                             return = SOME collectReturn})})
                :: (Block.T
                    {args = Vector.new0 (),
-                    kind = Kind.CReturn {func = func},
+                    kind = Kind.CReturn {func = gcFunc},
                     label = collectReturn,
                     statements = Vector.new0 (),
                     transfer =
-                    Transfer.Goto {dst = dontCollect,
+                    Transfer.Goto {dst = continue,
                                    args = Vector.new0 ()}})
+               :: (Block.T {args = Vector.new0 (),
+                            kind = Kind.Jump,
+                            label = tisCCall,
+                            statements = Vector.new0 (),
+                            transfer =
+                            Transfer.CCall {args = Vector.new0 (),
+                                            func = tisFunc,
+                                            return = SOME tisBranch}})
+               :: (let
+                    val res = Var.newNoname ()
+                  in
+                    Block.T {args = Vector.new1 (res, Type.bool),
+                             kind = Kind.CReturn {func = tisFunc},
+                             label = tisBranch,
+                             statements = Vector.new0 (),
+                             transfer =
+                             Transfer.ifBool
+                                 (Operand.Var {var = res, ty = Type.bool},
+                                  {falsee = continue,
+                                   truee = collectZero})}
+                  end)
                :: Block.T {args = Vector.new0 (),
                            kind = Kind.Jump,
-                           label = dontCollect,
+                           label = continue,
                            statements = statements,
                            transfer = transfer}
                :: !extra
