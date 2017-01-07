@@ -7,6 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
+#include "thread.h"
+
 /************************/
 /* Function definitions */
 /************************/
@@ -62,5 +64,14 @@ size_t sizeofThread (GC_state s) {
 
 size_t offsetofThread (GC_state s) {
   return (sizeofThread (s)) - (GC_NORMAL_HEADER_SIZE + sizeof (struct GC_thread));
+}
+
+static inline GC_thread threadObjptrToStruct(GC_state s, objptr threadObjptr) {
+  if (BOGUS_OBJPTR == threadObjptr) {
+    return NULL;
+  }
+
+  pointer threadPointer = objptrToPointer (threadObjptr, s->heap->start);
+  return ((GC_thread)(threadPointer + offsetofThread(s)));
 }
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

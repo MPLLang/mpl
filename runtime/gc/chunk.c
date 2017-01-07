@@ -208,6 +208,8 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 void HM_forwardHHObjptrsInLevelList(
     GC_state s,
     void** levelList,
+    ObjptrPredicateFunction predicate,
+    void* predicateArgs,
     struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
   Word32 savedMaxLevel = forwardHHObjptrArgs->maxLevel;
   forwardHHObjptrArgs->maxLevel = 0;
@@ -228,8 +230,8 @@ void HM_forwardHHObjptrsInLevelList(
         p = foreachObjptrInObject(s,
                                   p,
                                   FALSE,
-                                  trueObjptrPredicate,
-                                  NULL,
+                                  predicate,
+                                  predicateArgs,
                                   forwardHHObjptr,
                                   forwardHHObjptrArgs);
 

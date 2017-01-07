@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2015 Ram Raghunathan
+/* Copyright (C) 2014-2016 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -6,6 +6,9 @@
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
  */
+
+#ifndef THREAD_H_
+#define THREAD_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
@@ -80,4 +83,17 @@ static void displayThread (GC_state s, GC_thread thread, FILE *stream);
 static inline size_t sizeofThread (GC_state s);
 static inline size_t offsetofThread (GC_state s);
 
+/**
+ * This function converts a thread objptr to the GC_thread.
+ *
+ * @param s The GC_state to use
+ * @param threadObjptr the objptr to convert
+ *
+ * @return the contained GC_thread if threadObjptr is a valid objptr, NULL
+ * otherwise
+ */
+static inline GC_thread threadObjptrToStruct(GC_state s, objptr threadObjptr);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
+
+#endif /* THREAD_H_ */

@@ -125,6 +125,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       s->limitPlusSlop = HM_HH_getLimit(hh);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
+
+    setGCStateCurrentThreadAndStack (s);
   }
 
   if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {

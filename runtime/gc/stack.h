@@ -11,7 +11,7 @@
 
 /*
  * Stack objects have the following layout:
- * 
+ *
  * header ::
  * markTop (native-pointer) ::
  * markIndex (word32) ::
@@ -25,7 +25,7 @@
  * used by the stack.  The sequence of reserved bytes correspond to ML
  * stack frames, which will be discussed in more detail in "frame.h".
 */
-typedef struct GC_stack {       
+typedef struct GC_stack {
   /* markTop and markIndex are only used during marking.  They record
    * the current pointer in the stack that is being followed.  markTop
    * points to the top of the stack frame containing the pointer and
@@ -36,14 +36,14 @@ typedef struct GC_stack {
    */
   pointer markTop;
   uint32_t markIndex;
-  /* reserved is the number of bytes reserved for stack, 
+  /* reserved is the number of bytes reserved for stack,
    * i.e. its maximum size.
    */
   size_t reserved;
-  /* used is the number of bytes used by the stack.  
+  /* used is the number of bytes used by the stack.
    * Stacks with used == reserved are continuations.
    */
-  size_t used;      
+  size_t used;
   /* The next address is the bottom of the stack, and the following
    * reserved bytes hold space for the stack.
    */
@@ -57,8 +57,8 @@ typedef struct GC_stack {
 
 static void displayStack (GC_state s, GC_stack stack, FILE *stream);
 
-#if ASSERT
 static inline bool isStackEmpty (GC_stack stack);
+#if ASSERT
 static inline bool isStackReservedAligned (GC_state s, size_t reserved);
 #endif
 

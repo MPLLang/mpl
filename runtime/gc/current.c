@@ -11,8 +11,7 @@ objptr getThreadCurrentObjptr (GC_state s) {
 }
 
 GC_thread getThreadCurrent (GC_state s) {
-  pointer p = objptrToPointer(getThreadCurrentObjptr(s), s->heap->start);
-  return (GC_thread)(p + offsetofThread (s));
+  return threadObjptrToStruct(s, getThreadCurrentObjptr(s));
 }
 
 objptr getStackCurrentObjptr (GC_state s) {
@@ -36,7 +35,5 @@ struct HM_HierarchicalHeap* getHierarchicalHeapCurrent (GC_state s) {
     return NULL;
   }
 
-  pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
-  return ((struct HM_HierarchicalHeap*)(hhPointer +
-                                        HM_HH_offsetof(s)));
+  return HM_HH_objptrToStruct(s, hhObjptr);
 }

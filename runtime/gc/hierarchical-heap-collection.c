@@ -62,6 +62,21 @@ bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored);
  */
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes);
 
+/**
+ * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
+ * heap.
+ *
+ * @note This function takes as additional arguments the
+ * struct SSATOPredicateArgs
+ */
+struct SSATOPredicateArgs {
+  pointer expectedStackPointer;
+  pointer expectedThreadPointer;
+};
+bool skipStackAndThreadObjptrPredicate(GC_state s,
+                                       pointer p,
+                                       void* rawArgs);
+
 /************************/
 /* Function Definitions */
 /************************/
@@ -166,12 +181,40 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from stack",
       forwardHHObjptrArgs.objectsCopied);
 
-  /* forward thread (and therefore stack) */
+  /* forward contents of thread (hence including stack) */
   forwardHHObjptrArgs.objectsCopied = 0;
-  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  foreachObjptrInObject(s,
+                        objptrToPointer(getThreadCurrentObjptr(s),
+                                        s->heap->start),
+                        FALSE,
+                        trueObjptrPredicate,
+                        NULL,
+                        forwardHHObjptr,
+                        &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from thread",
       forwardHHObjptrArgs.objectsCopied);
+
+  /* forward thread itself */
+  forwardHHObjptrArgs.objectsCopied = 0;
+  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      (1 == forwardHHObjptrArgs.objectsCopied) ?
+      "Copied thread from GC_state" : "Did not copy thread from GC_state");
+
+
+#if ASSERT
+  /* forward thread from hh */
+  forwardHHObjptrArgs.objectsCopied = 0;
+  forwardHHObjptr(s, &(hh->thread), &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      (1 == forwardHHObjptrArgs.objectsCopied) ?
+      "Copied thread from HH" : "Did not copy thread from HH");
+  assert(hh->thread == s->currentThread);
+#else
+  /* update thread in hh */
+  hh->thread = s->currentThread;
+#endif
 
   /* forward contents of deque */
   forwardHHObjptrArgs.objectsCopied = 0;
@@ -187,6 +230,7 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied);
 
+#pragma message "Remove along with globalHeapObjptrPredicate when done"
 #if 0
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START foreach %ld MB",
@@ -224,7 +268,22 @@ void HM_HHC_collectLocal(void) {
 
   /* do copy-collection */
   forwardHHObjptrArgs.objectsCopied = 0;
-  HM_forwardHHObjptrsInLevelList(s, &(hh->newLevelList), &forwardHHObjptrArgs);
+  /*
+   * I skip the stack and thread since they are already forwarded as roots
+   * above
+   */
+  struct SSATOPredicateArgs ssatoPredicateArgs = {
+    .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
+                                            s->heap->start),
+    .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
+                                             s->heap->start)
+  };
+  HM_forwardHHObjptrsInLevelList(
+      s,
+      &(hh->newLevelList),
+      &skipStackAndThreadObjptrPredicate,
+      ((void*)(&ssatoPredicateArgs)),
+      &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied);
@@ -477,7 +536,7 @@ void forwardHHObjptr (GC_state s,
             uintmaxToCommaString(stack->used));
         stack->reserved = reservedNew;
       }
-      objectBytes = stack->reserved;
+      objectBytes = sizeof (struct GC_stack) + stack->reserved;
       copyBytes = sizeof (struct GC_stack) + stack->used;
     }
 
@@ -598,7 +657,7 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
     chunk = HM_allocateLevelHeadChunk(&(hh->newLevelList),
                                       objectSize,
                                       level,
-                                      hh);
+                                      COPY_OBJECT_HH_VALUE);
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
     }
@@ -691,4 +750,28 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
 
     spinlock_unlock(&(s->procStates[i].lock));
   }
+}
+
+bool skipStackAndThreadObjptrPredicate(GC_state s,
+                                       pointer p,
+                                       void* rawArgs) {
+  /* silence compliler */
+  ((void)(s));
+
+  /* extract expected stack */
+  LOCAL_USED_FOR_ASSERT const struct SSATOPredicateArgs* args =
+      ((struct SSATOPredicateArgs*)(rawArgs));
+
+  /* run through FALSE cases */
+  GC_header header;
+  header = getHeader(p);
+  if (header == GC_STACK_HEADER) {
+    assert(args->expectedStackPointer == p);
+    return FALSE;
+  } else if (header == GC_THREAD_HEADER) {
+    assert(args->expectedThreadPointer == p);
+    return FALSE;
+  }
+
+  return TRUE;
 }

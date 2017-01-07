@@ -351,7 +351,7 @@ pointer GC_getCurrentHierarchicalHeap (void) {
   } else {
     /* create a new hierarchical heap to return */
     retVal = HM_newHierarchicalHeap(s);
-    t->hierarchicalHeap = pointerToObjptr(retVal, s->heap->start);
+    GC_setCurrentHierarchicalHeap(retVal);
   }
 
   return retVal;
@@ -359,9 +359,12 @@ pointer GC_getCurrentHierarchicalHeap (void) {
 
 void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr threadObjptr = getThreadCurrentObjptr(s);
+  GC_thread thread = threadObjptrToStruct(s, threadObjptr);
 
-  getThreadCurrent(s)->hierarchicalHeap = pointerToObjptr (hhPointer,
-                                                           s->heap->start);
+  thread->hierarchicalHeap = hhObjptr;
+  HM_HH_setThread(HM_HH_objptrToStruct(s, hhObjptr), threadObjptr);
 }
 
 pointer GC_getSavedThread (void) {

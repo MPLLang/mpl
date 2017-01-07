@@ -89,7 +89,11 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
         current = current || (getStackCurrent(&s->procStates[proc]) == stack);
       }
-      /* RAM_NOTE: used to have 'current &&= not isStackEmpty(stack)' here */
+      /*
+       * empty current stacks cannot be resized correctly, so treat them as
+       * paused stacks.
+       */
+      current = current && (!isStackEmpty(stack));
 
       reservedNew = sizeofStackShrinkReserved (s, stack, current);
       if (reservedNew < stack->reserved) {

@@ -135,11 +135,15 @@ void* HM_allocateLevelHeadChunk(void** levelList,
  *
  * @param s The GC_state to use
  * @param levelList The level list to iterate over
+ * @param predicate The predicate function to apply to foreachObjptrInObject()
+ * @param the arguments to the predicate function.
  * @param forwardHHObjptrArgs the args to use for forwardHHObjptr()
  */
 void HM_forwardHHObjptrsInLevelList(
     GC_state s,
     void** levelList,
+    ObjptrPredicateFunction predicate,
+    void* predicateArgs,
     struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
 
 /**

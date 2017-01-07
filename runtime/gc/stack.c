@@ -17,12 +17,11 @@ void displayStack (__attribute__ ((unused)) GC_state s,
           (uintmax_t)stack->used);
 }
 
-
-#if ASSERT
 bool isStackEmpty (GC_stack stack) {
   return 0 == stack->used;
 }
 
+#if ASSERT
 bool isStackReservedAligned (GC_state s, size_t reserved) {
   return isAligned (GC_STACK_HEADER_SIZE + sizeof (struct GC_stack) + reserved,
                     s->alignment);
