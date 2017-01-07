@@ -36,9 +36,11 @@
  * chunkList (void*) ::
  * parentHH (objptr) ::
  * nextChildHH (objptr) ::
- * childHHList (objptr)
+ * childHHList (objptr) ::
+ * thread (objptr)
  *
- * There may be zero or more bytes of padding for alignment purposes.
+ * There may be zero or more bytes of padding for alignment purposes. Note that
+ * it only has objptrs to objects on the same heap (i.e. the global heap).
  */
 struct HM_HierarchicalHeap {
   void* lastAllocatedChunk; /**< The last allocated chunk */
@@ -66,12 +68,11 @@ struct HM_HierarchicalHeap {
   Word64 locallyCollectibleHeapSize; /** < The size in bytes of locally
                                       * collectible heap size, used for
                                       * collection decisions */
-  /*
-   * RAM_NOTE: I would rather this be an objptr, but not sure how safe that
-   * is...
-   */
+
+  /* RAM_NOTE: Should this be an objptr? */
   pointer retVal; /**< Pointer to the return value of the computation associated
                    * with this HM_HierarchicalHeap */
+
 
   objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
@@ -84,6 +85,8 @@ struct HM_HierarchicalHeap {
                        * heap. All heaps in this list have their 'parentHH' set
                        * to this object. In addition, it is in descending order
                        * of 'stealLevel' */
+
+  objptr thread; /**< The thread associated with this hierarchical heap */
 } __attribute__((packed));
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
@@ -98,6 +101,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(Word64) +
                     sizeof(Word64) +
                     sizeof(pointer) +
+                    sizeof(objptr) +
                     sizeof(objptr) +
                     sizeof(objptr) +
                     sizeof(objptr));
@@ -318,6 +322,18 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh);
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 
 /**
+ * This function converts a hierarchical heap objptr to the struct
+ * HM_HierarchicalHeap*.
+ *
+ * @param s The GC_state to use
+ * @param hhObjptr the objptr to convert
+ *
+ * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
+ * objptr, NULL otherwise
+ */
+struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr);
+
+/**
  * Returns offset into object to get at the struct HM_HierarchicalHeap
  *
  * @note
@@ -331,13 +347,12 @@ bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 size_t HM_HH_offsetof(GC_state s);
 
 /**
- * Updates the values in 'hh' to reflect mutator
+ * Sets the associated thread for the specified struct HM_HierarchicalHeap.
  *
- * @param hh The struct HM_HierarchicalHeap to update
- * @param frontier The new frontier
+ * @param hh The HH to set the thread for.
+ * @param threadObjptr The thread to set to.
  */
-void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
-                        void* frontier);
+void HM_HH_setThread(struct HM_HierarchicalHeap* hh, objptr threadObjptr);
 
 /**
  * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
@@ -357,6 +372,15 @@ size_t HM_HH_sizeof(GC_state s);
  * @param hhObjptr The objptr of the hierarchical heap to update
  */
 void HM_HH_updateLevelListPointers(objptr hhObjptr);
+
+/**
+ * Updates the values in 'hh' to reflect mutator
+ *
+ * @param hh The struct HM_HierarchicalHeap to update
+ * @param frontier The new frontier
+ */
+void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
+                        void* frontier);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

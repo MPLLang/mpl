@@ -142,6 +142,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   hh->parentHH = BOGUS_OBJPTR;
   hh->nextChildHH = BOGUS_OBJPTR;
   hh->childHHList = BOGUS_OBJPTR;
+  hh->thread = BOGUS_OBJPTR;
 
   if (DEBUG_HEAP_MANAGEMENT) {
     fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));

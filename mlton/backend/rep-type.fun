@@ -445,7 +445,7 @@ structure ObjectType =
                       val bytesStack =
                           Bits.toBytes (Type.width (Type.stack ()))
                       val bytesHierarchicalHeap =
-                          Bits.toBytes (Type.width (Type.stack ()))
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
 
                       val bytesObject =
                           let
@@ -521,6 +521,8 @@ structure ObjectType =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
                       val bytesChildHHList =
                           Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
+                      val bytesThread =
+                          Bits.toBytes (Type.width (Type.thread ()))
                       val bytesObject =
                           let
                               infix 6 +
@@ -539,7 +541,8 @@ structure ObjectType =
                               bytesRetVal +
 			      bytesParentHH +
 			      bytesNextChildHH +
-			      bytesChildHHList
+			      bytesChildHHList +
+                              bytesThread
                           end
 
                       val bytesTotal =
@@ -563,7 +566,8 @@ structure ObjectType =
                                                       Type.cpointer (),
                                                       Type.hierarchicalHeap (),
                                                       Type.hierarchicalHeap (),
-                                                      Type.hierarchicalHeap ()])}
+                                                      Type.hierarchicalHeap (),
+                                                      Type.thread ()])}
           end
 
       (* Order in the following vector matters.  The basic pointer tycons must
