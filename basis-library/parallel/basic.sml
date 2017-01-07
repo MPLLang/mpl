@@ -12,7 +12,7 @@ struct
   datatype job = Work of (unit -> void) * unit HH.t * int
                | Thread of unit T.t * unit HH.t
 
-  val dbgmsg = (* I.dbgmsg *) fn _ => ()
+  val dbgmsg = if false then I.dbgmsg else fn _ => ()
 
   val numberOfProcessors = Word32.toInt I.numberOfProcessors
 
@@ -98,6 +98,7 @@ struct
                     val childHH = HH.new ()
                     val () = HH.appendChild (parentHH, childHH, sharedLevel)
                 in
+                    dbgmsg "switching to new thread";
                     (* switch to childHH to allocate the thread there *)
                     T.switch (fn st : unit T.t =>
                                  (Array.update (schedThreads,
@@ -114,6 +115,7 @@ struct
                                                         unlocker ();
                                                         w ())),
                                              ())));
+                    dbgmsg "returned to scheduler from new thread";
                     stopUseHH ()
                 end
 
@@ -122,13 +124,16 @@ struct
                  * This doesn't have to be stolen as it
                  * could be a resume parent
                  *)
-                (dbgmsg "resumed thread";
+                (dbgmsg "switching to suspended thread";
                  T.switch (fn st =>
                               (Array.update (schedThreads,
                                              p,
                                              SOME (T.prepare (st, ())));
                                useHH hh;
-                               T.prepare (T.prepend (k, fn () => unlocker ()), ())));
+                               T.prepare (T.prepend (k, fn () => (useHH hh;
+                                                                  unlocker ())),
+                                          ())));
+                 dbgmsg "returned to scheduler from suspended thread";
                  stopUseHH ()))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
