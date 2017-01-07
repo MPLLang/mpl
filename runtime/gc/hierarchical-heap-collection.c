@@ -15,6 +15,15 @@
 
 #include "hierarchical-heap-collection.h"
 
+/**********/
+/* Macros */
+/**********/
+#if ASSERT
+#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(0xb000deadfee1dead))
+#else
+#define COPY_OBJECT_HH_VALUE (NULL)
+#endif
+
 /******************************/
 /* Static Function Prototypes */
 /******************************/
@@ -128,6 +137,7 @@ void HM_HHC_collectLocal(void) {
   lockHH(hh);
 
   assertInvariants(s, hh);
+  assert(hh->thread == s->currentThread);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
@@ -359,6 +369,8 @@ void forwardHHObjptr (GC_state s,
   struct HM_ObjptrInfo opInfo;
   bool gotObjptrInfo = HM_getObjptrInfo(s, op, &opInfo);
 
+  assert((COPY_OBJECT_HH_VALUE != opInfo.hh) && ("op is in the toHeap!"));
+
   if ((!gotObjptrInfo) || (opInfo.hh != args->hh)) {
     /*
      * Either did not successfully get the objptr info (which means I don't own
@@ -546,7 +558,7 @@ void forwardHHObjptr (GC_state s,
   /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
   gotObjptrInfo = HM_getObjptrInfo(s, *opp, &opInfo);
   assert(gotObjptrInfo);
-  assert(args->hh == opInfo.hh);
+  assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
 #endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */

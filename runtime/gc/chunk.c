@@ -49,9 +49,11 @@ static void appendChunkList(void* destinationChunkList, void* chunkList);
  * macro.
  *
  * @param chunk The chunk to assert invariants for.
+ * @param hh The hierarchical heap 'chunk' belongs to.
  * @param levelHeadChunk The head chunk of the level 'chunk' belongs to
  */
 static void HM_assertChunkInvariants(const void* chunk,
+                                     const struct HM_HierarchicalHeap* hh,
                                      const void* levelHeadChunk);
 #endif
 
@@ -63,8 +65,10 @@ static void HM_assertChunkInvariants(const void* chunk,
  * macro.
  *
  * @param chunkList The chunk list to assert invariants for.
+ * @param hh The hierarchical heap the chunks in 'chunkList' belong to.
  */
-static void HM_assertChunkListInvariants(const void* chunkList);
+static void HM_assertChunkListInvariants(const void* chunkList,
+                                         const struct HM_HierarchicalHeap* hh);
 
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
@@ -114,6 +118,13 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
     return NULL;
   }
 
+#if ASSERT
+  /* clear out memory to quickly catch some memory safety errors */
+  void* start = HM_getChunkStart(chunk);
+  size_t length = ((size_t)(chunk)) + totalSize - ((size_t)(start));
+  memset(start, 0xAE, length);
+#endif
+
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
 #if ASSERT
   chunkInfo->split.levelHead.nextHead = ((void*)(0xcafebabedeadbeef));
@@ -161,6 +172,13 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   if (NULL == chunk) {
     return NULL;
   }
+
+#if ASSERT
+  /* clear out memory to quickly catch some memory safety errors */
+  void* start = HM_getChunkStart(chunk);
+  size_t length = ((size_t)(chunk)) + totalSize - ((size_t)(start));
+  memset(start, 0xAE, length);
+#endif
 
   /* setup chunk info */
   struct HM_ChunkInfo* chunkInfo = getChunkInfo(chunk);
@@ -318,12 +336,19 @@ bool HM_getObjptrInfo(GC_state s,
                   (CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level);
       chunkList = getChunkInfo(chunkList)->split.normal.levelHead) { }
 
+#if ASSERT
+  if (NULL == chunkList) {
+    DIE("Couldn't get objptrinfo for %p",
+        ((void*)(object)));
+  }
+#else
   if (NULL == chunkList) {
     LOG(LM_CHUNK, LL_DEBUG,
         "Couldn't get objptrinfo for %p",
         ((void*)(object)));
     return FALSE;
-  }
+   }
+#endif
 
   /* now that I have the chunkList, path compress */
   void* parentChunk = NULL;
@@ -494,7 +519,7 @@ void HM_assertLevelListInvariants(const void* levelList,
 
     assert(hh == levelListHH);
 
-    HM_assertChunkListInvariants(chunkList);
+    HM_assertChunkListInvariants(chunkList, levelListHH);
   }
 }
 #else
@@ -557,11 +582,15 @@ void appendChunkList(void* destinationChunkList, void* chunkList) {
   getChunkInfo(chunkList)->level = CHUNK_INVALID_LEVEL;
   getChunkInfo(chunkList)->split.normal.levelHead = destinationChunkList;
 
-  HM_assertChunkListInvariants(destinationChunkList);
+  HM_assertChunkListInvariants(destinationChunkList,
+                               getChunkInfo(destinationChunkList)->
+                               split.levelHead.containingHH);
 }
 
 #if ASSERT
-void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {
+void HM_assertChunkInvariants(const void* chunk,
+                              const struct HM_HierarchicalHeap* hh,
+                              const void* levelHeadChunk) {
   const struct HM_ChunkInfo* chunkInfo = getChunkInfoConst(chunk);
 
   assert(ChunkPool_find(((char*)(chunkInfo->frontier)) - 1) == chunk);
@@ -569,7 +598,7 @@ void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */
     assert(CHUNK_INVALID_LEVEL != chunkInfo->level);
-    assert(NULL != chunkInfo->split.levelHead.containingHH);
+    assert(hh == chunkInfo->split.levelHead.containingHH);
   } else {
     /* this is a normal chunk */
     assert(CHUNK_INVALID_LEVEL == chunkInfo->level);
@@ -578,20 +607,23 @@ void HM_assertChunkInvariants(const void* chunk, const void* levelHeadChunk) {
   assert(levelHeadChunk == getLevelHeadChunk(chunk));
 }
 
-void HM_assertChunkListInvariants(const void* chunkList) {
+void HM_assertChunkListInvariants(const void* chunkList,
+                                  const struct HM_HierarchicalHeap* hh) {
   Word64 size = 0;
   for (const void* chunk = chunkList;
        NULL != chunk;
        chunk = getChunkInfoConst(chunk)->nextChunk) {
-    HM_assertChunkInvariants(chunk, chunkList);
+    HM_assertChunkInvariants(chunk, hh, chunkList);
     size += HM_getChunkSize(chunk);
   }
 
   assert(getChunkInfoConst(chunkList)->split.levelHead.size == size);
 }
 #else
-void HM_assertChunkListInvariants(const void* chunkList) {
+void HM_assertChunkListInvariants(const void* chunkList,
+                                  const struct HM_HierarchicalHeap* hh) {
   ((void)(chunkList));
+  ((void)(hh));
 }
 #endif /* ASSERT */
 
