@@ -44,19 +44,19 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   bool growStack = FALSE;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-      "bytesRequested: %zu, hasHeapBytesFree: %zu\n",
+      "bytesRequested: %zu, hasHeapBytesFree: %zu",
       bytesRequested,
       heapBytesFree);
 
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "Entering Management Heap GC\n");
+        "Entering Management Heap GC");
     HM_enterGlobalHeap();
     ENTER0(s);
     LEAVE0(s);
     HM_exitGlobalHeap();
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "Exiting Management Heap GC\n");
+        "Exiting Management Heap GC");
   }
 
   if (!invariantForMutatorStack(s)) {

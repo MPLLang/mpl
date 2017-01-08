@@ -41,5 +41,6 @@
 #include "util/endian.h"
 #include "util/log.h"
 #include "util/spinlock.h"
+#include "util/valgrind.h"
 
 #endif /* MLTON_UTIL_H_ */

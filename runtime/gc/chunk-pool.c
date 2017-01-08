@@ -1,5 +1,5 @@
 
-/* Copyright (C) 2015,2014 Ram Raghunathan.
+/* Copyright (C) 2014-2017 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -231,6 +231,13 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
                       ChunkPool_config.maxSize;
   ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
 
+  LOG(LM_CHUNK_POOL, LL_DEBUG,
+      "Created chunk pool of size %zu bytes at %p",
+      ChunkPool_config.maxSize,
+      ChunkPool_poolStart);
+  VALGRIND_CREATE_MEMPOOL(&ChunkPool_poolStart, 0, 0);
+  VALGRIND_MAKE_MEM_NOACCESS(ChunkPool_poolStart, ChunkPool_config.maxSize);
+
   /* setup metadatas variable */
   size_t numChunks = ChunkPool_config.maxSize / ChunkPool_MINIMUMCHUNKSIZE;
   ChunkPool_chunkMetadatas = malloc_safe (numChunks *
@@ -238,6 +245,12 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   ChunkPool_chunkMetadatasEnd = ChunkPool_chunkMetadatas + numChunks;
   ChunkPool_chunkMetadatas->spanInfo.numChunksInSpan = numChunks;
 
+  LOG(LM_CHUNK_POOL, LL_DEBUG,
+      "Created chunk pool metadata of size %zu bytes at %p",
+      numChunks * sizeof(*ChunkPool_chunkMetadatas),
+      ChunkPool_chunkMetadatas);
+
+  /* we are now initialized */
   ChunkPool_initialized = TRUE;
 
   /* Add the giant chunk into the free list */
@@ -328,6 +341,8 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         pthread_mutex_unlock_safe(&ChunkPool_lock);
         void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
         LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
+        VALGRIND_MEMPOOL_ALLOC(&ChunkPool_poolStart, chunk, *bytesRequested);
+
         return chunk;
       }
     }
@@ -562,6 +577,8 @@ bool ChunkPool_performFree(void* chunk) {
   }
 #endif
   ChunkPool_insertIntoFreeList(spanStart);
+
+  VALGRIND_MEMPOOL_FREE(&ChunkPool_poolStart, chunk);
 
   return TRUE;
 }
