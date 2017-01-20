@@ -134,7 +134,8 @@ fun atomically f =
 
 val WORK_ARRAY_SIZE = 1024
 (* private state *)
-datatype token = Token of int * queue option ref
+(* Token = (creating proc, proc-unique ID, queue) *)
+datatype token = Token of int * int * queue option ref
 and entry = Empty | Work of (token * job (* * int *))
 and queue = Queue of
             {
@@ -185,12 +186,13 @@ val taskcells = A.array (P, NONE)
 val nextdeal = A.array (P, Tm.zeroTime)
 val reqcells = V.tabulate (P, fn _ => ref ~1)
 
-val nextToken = ref 0
+val nextToken = A.array (P, 0)
 
-fun newWork p = Token (!nextToken, ref NONE)
-                before (nextToken := !nextToken + 1)
+fun newWork p = Token (p, A.sub (nextToken, p), ref NONE)
+                before A.update (nextToken, p, A.sub (nextToken, p) + 1)
 
-fun stringOfToken (Token (i, _)) = Int.toString i
+fun stringOfToken (Token (p, i, _)) = "(" ^ (Int.toString p) ^ ", "
+                                      ^ (Int.toString i) ^ ")"
 
 fun resize (Queue {top, bottom, work, ... }) =
     let
@@ -248,7 +250,7 @@ fun add (q as Queue {top, bottom, work, ... }) (tw as (t, w)) =
         val i = !top
         val () = if i = A.length (!work) then resize q else ()
         val i = !top (* in case of resize *)
-        val Token (_, qr) = t
+        val Token (_, _, qr) = t
     in
         (A.update (!work, i, Work tw)
          (* handle e => (print "here 159\n"; raise e) *));
@@ -348,9 +350,9 @@ fun dealAttempt p =
         else
             (case A.sub (taskcells, p) of
                 SOME _ => (* have an outstanding deal *)
-                (eprint ("Task hasn't been taken from " ^
+                ((* eprint ("Task hasn't been taken from " ^
                          (Int.toString p) ^ ": cell is " ^
-                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); false)
+                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); *) false)
               | NONE =>
                 if compareAndSwap (c, vv, p) then
                     let (* val _ = eprint ((Int.toString p') ^ "'s cell was " ^
@@ -454,7 +456,7 @@ fun resumeWork (lat, p, (t, w)) =
     (assertblocked "resumeWork";
      addWorkLat (lat, p, [(t, w)]))
 
-fun removeWork (p, Token (ti, qr)) =
+fun removeWork (p, Token (tpr, ti, qr)) =
     (block_sigs p;
      (* Array.update (inCriticalSection, p, true); *)
     (case !qr of
@@ -472,8 +474,8 @@ fun removeWork (p, Token (ti, qr)) =
                 else
                     case A.sub (w, i) of
                         Empty => raise WorkQueue
-                      | Work (Token (t, _), w) =>
-                        if t = ti then
+                      | Work (Token (tpr', ti', _), w) =>
+                        if ti' = ti andalso tpr' = tpr then
                             (unloop i;
                              (if debug then
                                   ignore (fetchAndAdd (tasksAdded, ~1))
