@@ -19,7 +19,7 @@ fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) op
             TextIO.StreamIO.input1 is
         else
             (* Performing the input would block *)
-            (print "calling suspend\n";
+            ((* print "calling suspend\n"; *)
              B.suspend (fn t => B.addtoio (t, f));
              input1 is)
     end
