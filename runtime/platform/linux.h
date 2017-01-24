@@ -14,8 +14,8 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <plpa.h>
 #include <poll.h>
+#include <pthread.h>
 #include <pwd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -106,12 +106,16 @@ static inline char* ctermid(char* x) {
 #define FE_UPWARD       _FPU_RC_UP
 #endif
 
-#define set_cpu_affinity(num) do {                                      \
-        plpa_cpu_set_t cpuset;                                          \
-                                                                        \
-        PLPA_CPU_ZERO (&cpuset);                                        \
-        PLPA_CPU_SET (num, &cpuset);                                    \
-        if (plpa_sched_setaffinity (0, sizeof(cpuset), &cpuset)) {      \
-                fprintf (stderr, "Warning: unable to set CPU affinity\n"); \
-        }                                                               \
-      } while (0)
+static inline void set_cpu_affinity(int cpu) {
+  cpu_set_t cpuset;
+  pthread_t thread;
+
+  thread = pthread_self();
+
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu, &cpuset);
+
+  if (pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset)) {
+    perror("Warning: unable to set CPU affinity");
+  }
+}

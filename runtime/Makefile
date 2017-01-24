@@ -160,11 +160,6 @@ ifeq ($(TARGET_OS), netbsd)
 XCFLAGS += -I/usr/pkg/include
 endif
 
-ifeq ($(TARGET_OS), linux)
-XCFLAGS += -Iplpa
-XLIBS   += libplpa_bundled.a libplpa_bundled-gdb.a libplpa_bundled-pic.a
-endif
-
 ifeq ($(TARGET_OS), openbsd)
 XCFLAGS += -I/usr/local/include
 endif
@@ -285,27 +280,6 @@ gdtoa/%.o:     gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
 libgdtoa.a:     $(GDTOA_OBJS)
 libgdtoa-gdb.a: $(GDTOA_DEBUG_OBJS)
 libgdtoa-pic.a: $(GDTOA_PIC_OBJS)
-
-### libplpa_bundled ###
-
-PLPA_BUNDLEDCFILES :=									\
-	plpa_api_probe.c plpa_dispatch.c
-PLPA_BUNDLEDCFILES := $(patsubst %,plpa/%,$(PLPA_BUNDLEDCFILES))
-
-PLPA_BUNDLED_OBJS       := $(patsubst %.c,%.o,$(PLPA_BUNDLEDCFILES))
-PLPA_BUNDLED_DEBUG_OBJS := $(patsubst %.c,%-gdb.o,$(PLPA_BUNDLEDCFILES))
-PLPA_BUNDLED_PIC_OBJS   := $(patsubst %.c,%-pic.o,$(PLPA_BUNDLEDCFILES))
-
-plpa/%-pic.o: plpa/%.c
-	$(CC) $(PICCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-plpa/%-gdb.o: plpa/%.c
-	$(CC) $(DEBUGCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-plpa/%.o:     plpa/%.c
-	$(CC) $(OPTCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-
-libplpa_bundled.a:     $(PLPA_BUNDLED_OBJS)
-libplpa_bundled-gdb.a: $(PLPA_BUNDLED_DEBUG_OBJS)
-libplpa_bundled-pic.a: $(PLPA_BUNDLED_PIC_OBJS)
 
 ### libmlton ###
 
