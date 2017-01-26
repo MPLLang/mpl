@@ -172,6 +172,14 @@ static bool ChunkPool_initialized = FALSE;
 
 static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* a lock for each free list, rather than one global lock - 
+ * will need to lock appropriate free lists whenever they become
+ * in use.
+ */
+
+static pthread_mutex_t 
+  ChunkPool_locks[ChunkPool_NUMFREELISTS] = {PTHREAD_MUTEX_INITIALIZER};
+
 static struct ChunkPool_config ChunkPool_config;
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
@@ -484,13 +492,20 @@ unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
   return (ChunkPool_NUMFREELISTS - 1);
 }
 
+//update - this function will now hold its own locks
 void ChunkPool_insertIntoFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
-  struct ChunkPool_chunkMetadata** list =
-      &(ChunkPool_freeLists[ChunkPool_findFreeListIndexForNumChunks (
-          chunkMetadata->spanInfo.numChunksInSpan)]);
+
+  int listIndex = 
+          ChunkPool_findFreeListIndexForNumChunks(
+             chunkMetadata->spanInfo.numChunksInSpan);
+
+  pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
+
+  
+  struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
 
   chunkMetadata->previous = NULL;
   chunkMetadata->next = *list;
@@ -498,6 +513,8 @@ void ChunkPool_insertIntoFreeList (
     (*list)->previous = chunkMetadata;
   }
   *list = chunkMetadata;
+  
+  pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
 
 bool ChunkPool_performFree(void* chunk) {
