@@ -388,7 +388,6 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 //get list from each chunk and hold onto the lock
 //this function could be very inefficient with multiple locks 
 //how often is it used
-//to make this safe we probably just need to make CHunkpool_performfree safe
 bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
   assert (ChunkPool_initialized);
 
@@ -428,7 +427,7 @@ bool ChunkPool_free (void* chunk) {
  * this, the containing chunk that was returned by <tt>ChunkPool_allocate</tt>
  * is found.
  */
-// why does this not need locks?
+// safe with multiple locks
 void* ChunkPool_find (void* object) {
   assert (ChunkPool_initialized);
 
@@ -517,8 +516,8 @@ void ChunkPool_insertIntoFreeList (
 
 
   int listIndex = 
-        ChunkPool_findFreeListIndexForNumChunks(
-        chunkMetadata->spanInfo.numChunksInSpan);
+          ChunkPool_findFreeListIndexForNumChunks(
+             chunkMetadata->spanInfo.numChunksInSpan);
 
   pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
 
@@ -534,7 +533,7 @@ void ChunkPool_insertIntoFreeList (
   
   pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
-// this is safe i believe, if insert into free list is safe - might need internal locks
+// this is safe i believe
 bool ChunkPool_performFree(void* chunk) {
   LOG(LM_CHUNK_POOL, LL_DEBUG, "Freeing chunk %p", chunk);
 
@@ -545,13 +544,10 @@ bool ChunkPool_performFree(void* chunk) {
   assert (ChunkPool_ALLOCATED == spanStart->previous);
   assert (ChunkPool_ALLOCATED == spanStart->next);
 
-  //need to protec this?
-  pthread_mutex_lock_safe(&ChunkPool_lock);
   ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
                               ChunkPool_MINIMUMCHUNKSIZE;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
-  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
 #pragma message "Resolve"
 #if 0
@@ -622,23 +618,17 @@ bool ChunkPool_performFree(void* chunk) {
 
   return TRUE;
 }
-//made safe for multiple lists
+//need to make safe
 void ChunkPool_removeFromFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->previous);
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
-  
-  //put a lock around this whole chunk
-  int listIndex = 
-        ChunkPool_findFreeListIndexForNumChunks(
-        chunkMetadata->spanInfo.numChunksInSpan);
 
-  pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
-
-  
-  struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
+  struct ChunkPool_chunkMetadata** list =
+      &(ChunkPool_freeLists[ChunkPool_findFreeListIndexForNumChunks (
+          chunkMetadata->spanInfo.numChunksInSpan)]);
 
 #if ASSERT
   {
@@ -682,7 +672,6 @@ void ChunkPool_removeFromFreeList (
     assert(!found);
   }
 #endif
-  pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
 
 void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
