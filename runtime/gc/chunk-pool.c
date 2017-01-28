@@ -172,13 +172,13 @@ static bool ChunkPool_initialized = FALSE;
 
 static pthread_mutex_t ChunkPool_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* a lock for each free list, rather than one global lock - 
+/* a lock for each free list, rather than one global lock -
  * will need to lock appropriate free lists whenever they become
  * in use.
  */
 
-static pthread_mutex_t 
-  ChunkPool_locks[ChunkPool_NUMFREELISTS] = {PTHREAD_MUTEX_INITIALIZER};
+static pthread_mutex_t
+  ChunkPool_locks[ChunkPool_NUMFREELISTS];
 
 static struct ChunkPool_config ChunkPool_config;
 static void* ChunkPool_poolStart = NULL;
@@ -240,6 +240,11 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   ChunkPool_poolEnd = ((uint8_t*)(ChunkPool_poolStart)) +
                       ChunkPool_config.maxSize;
   ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
+
+  /* initialize all the free list locks */
+  for(size_t i = 0; i < ChunkPool_NUMFREELISTS; i++) {
+    pthread_mutex_init(&ChunkPool_locks[i], NULL);
+  }
 
   LOG(LM_CHUNK_POOL, LL_DEBUG,
       "Created chunk pool of size %zu bytes at %p",
@@ -498,13 +503,13 @@ void ChunkPool_insertIntoFreeList (
   assert (ChunkPool_initialized);
 
 
-  int listIndex = 
+  int listIndex =
           ChunkPool_findFreeListIndexForNumChunks(
              chunkMetadata->spanInfo.numChunksInSpan);
 
   pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
 
-  
+
   struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
 
   chunkMetadata->previous = NULL;
@@ -513,7 +518,7 @@ void ChunkPool_insertIntoFreeList (
     (*list)->previous = chunkMetadata;
   }
   *list = chunkMetadata;
-  
+
   pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
 
