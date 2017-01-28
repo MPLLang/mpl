@@ -198,8 +198,6 @@ ChunkPool_freeLists[ChunkPool_NUMFREELISTS] = {NULL};
 /**
  * This function is not thread-safe.
  */
-//no issues with multiple locks
-//want to not map 60 pages at the beginning
 void ChunkPool_initialize (struct ChunkPool_config* config) {
   assert(!ChunkPool_initialized);
 
@@ -273,7 +271,6 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
  * Currently, this function fakes the resize by changing the reported pool
  * size. This call is *not* serialized.
  */
-
 void ChunkPool_maybeResize(void) {
   size_t oldPoolSize = ChunkPool_currentPoolSize;
 
@@ -303,7 +300,6 @@ void ChunkPool_maybeResize(void) {
 /**
  * This function is implemented and serializes against all other functions.
  */
-//need to update - hold locks for each loop
 void* ChunkPool_allocate (size_t* bytesRequested) {
   assert (ChunkPool_initialized);
 
@@ -378,9 +374,6 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
  * This function is implemented and serializes against all other functions in a
  * batch.
  */
-//get list from each chunk and hold onto the lock
-//this function could be very inefficient with multiple locks 
-//how often is it used
 bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
   assert (ChunkPool_initialized);
 
@@ -401,7 +394,6 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
 /**
  * This function is implemented and serializes against all other functions.
  */
-//probably dont need to change this, just change perform free
 bool ChunkPool_free (void* chunk) {
   assert (ChunkPool_initialized);
 
@@ -420,7 +412,6 @@ bool ChunkPool_free (void* chunk) {
  * this, the containing chunk that was returned by <tt>ChunkPool_allocate</tt>
  * is found.
  */
-// safe with multiple locks
 void* ChunkPool_find (void* object) {
   assert (ChunkPool_initialized);
 
@@ -451,11 +442,11 @@ void* ChunkPool_find (void* object) {
 
   return chunk;
 }
-//safe
+
 size_t ChunkPool_allocated(void) {
   return ChunkPool_bytesAllocated;
 }
-//safe 
+
 size_t ChunkPool_size(void) {
   #pragma message "Make correct when done"
   return ChunkPool_config.maxSize;
@@ -464,7 +455,6 @@ size_t ChunkPool_size(void) {
 /**
  * This function serializes against nothing
  */
-//safe
 size_t ChunkPool_chunkSize(void* chunk) {
   assert (chunk >= ChunkPool_poolStart);
   assert (chunk < ChunkPool_poolEnd);
@@ -479,14 +469,14 @@ size_t ChunkPool_chunkSize(void* chunk) {
 
   return (chunkMetadata->spanInfo.numChunksInSpan * ChunkPool_MINIMUMCHUNKSIZE);
 }
-//safe
+
 bool ChunkPool_pointerInChunkPool (void* candidate) {
   assert (ChunkPool_initialized);
 
   return ((candidate >= ChunkPool_poolStart) &&
           (candidate < ChunkPool_poolEnd));
 }
-//safe
+
 unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
   assert (ChunkPool_initialized);
 
@@ -502,7 +492,7 @@ unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
   return (ChunkPool_NUMFREELISTS - 1);
 }
 
-//updated for multiple locks
+//update - this function will now hold its own locks
 void ChunkPool_insertIntoFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
@@ -526,7 +516,7 @@ void ChunkPool_insertIntoFreeList (
   
   pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
-// this is safe i believe
+
 bool ChunkPool_performFree(void* chunk) {
   LOG(LM_CHUNK_POOL, LL_DEBUG, "Freeing chunk %p", chunk);
 
@@ -611,7 +601,7 @@ bool ChunkPool_performFree(void* chunk) {
 
   return TRUE;
 }
-//need to make safe
+
 void ChunkPool_removeFromFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
@@ -681,7 +671,7 @@ void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
     chunkMetadata->next = ChunkPool_NONFIRSTCHUNK;
   }
 }
-//safe
+
 void ChunkPool_maybeSplitSpan (
     struct ChunkPool_chunkMetadata** newSpanStart,
     struct ChunkPool_chunkMetadata* chunkMetadata,
@@ -703,7 +693,7 @@ void ChunkPool_maybeSplitSpan (
     chunkMetadata->spanInfo.numChunksInSpan = splitChunks;
   }
 }
-//safe
+
 void* ChunkPool_chunkMetadataToChunk (
     const volatile struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
@@ -722,7 +712,7 @@ void* ChunkPool_chunkMetadataToChunk (
 
   return chunk;
 }
-//safe
+
 struct ChunkPool_chunkMetadata* ChunkPool_chunkToChunkMetadata (
     const void* chunk) {
   assert (ChunkPool_initialized);
