@@ -273,7 +273,7 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
  * Currently, this function fakes the resize by changing the reported pool
  * size. This call is *not* serialized.
  */
-// good for extra locks
+
 void ChunkPool_maybeResize(void) {
   size_t oldPoolSize = ChunkPool_currentPoolSize;
 
@@ -303,8 +303,7 @@ void ChunkPool_maybeResize(void) {
 /**
  * This function is implemented and serializes against all other functions.
  */
-//updated for multiple locks - probably still need global lock for
-//bytes requetsed variable, for example
+//need to update - hold locks for each loop
 void* ChunkPool_allocate (size_t* bytesRequested) {
   assert (ChunkPool_initialized);
 
@@ -315,22 +314,17 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
                     ~ChunkPool_CHUNKADDRESSMASK;
   size_t chunksRequested = *bytesRequested / ChunkPool_MINIMUMCHUNKSIZE;
 
-  //probably need a global lock to protect the bytesAllocated variable
   pthread_mutex_lock_safe(&ChunkPool_lock);
 
   ChunkPool_bytesAllocated += *bytesRequested;
-
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
-  
-  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   /* Search for chunk to satisfy */
   for (size_t freeListIndex =
            ChunkPool_findFreeListIndexForNumChunks (chunksRequested);
        freeListIndex < ChunkPool_NUMFREELISTS;
        freeListIndex++) {
-    pthread_mutex_lock_safe(&ChunkPool_locks[freeListIndex]);
     for (struct ChunkPool_chunkMetadata* cursor =
              ChunkPool_freeLists[freeListIndex];
          NULL != cursor;
@@ -358,7 +352,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         cursor->next = ChunkPool_ALLOCATED;
 
         /* done with free list modifications at this point, so unlock */
-        pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
+        pthread_mutex_unlock_safe(&ChunkPool_lock);
         void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
         LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
         VALGRIND_MEMPOOL_ALLOC(&ChunkPool_poolStart, chunk, *bytesRequested);
@@ -366,8 +360,6 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         return chunk;
       }
     }
-    pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
-
   }
 
   /*
@@ -377,6 +369,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return NULL;
 }
