@@ -413,9 +413,9 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
 bool ChunkPool_free (void* chunk) {
   assert (ChunkPool_initialized);
 
-  //pthread_mutex_lock_safe(&ChunkPool_lock);
+  pthread_mutex_lock_safe(&ChunkPool_lock);
   bool result = ChunkPool_performFree(chunk);
-  //pthread_mutex_unlock_safe(&ChunkPool_lock);
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return result;
 }
