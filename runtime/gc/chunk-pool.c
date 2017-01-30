@@ -303,6 +303,7 @@ void ChunkPool_maybeResize(void) {
 }
 
 /**
+  printf("We got here boys lmao\n");
  * This function is implemented and serializes against all other functions.
  */
 void* ChunkPool_allocate (size_t* bytesRequested) {
@@ -401,7 +402,7 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
        NULL != chunk;
        chunk = f(fArgs)) {
     if (!ChunkPool_performFree(chunk)) {
-      pthread_mutex_unlock_safe(&ChunkPool_lock);
+      //pthread_mutex_unlock_safe(&ChunkPool_lock);
       return FALSE;
     }
   }
