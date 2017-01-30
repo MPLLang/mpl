@@ -321,11 +321,18 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
+  
+  
+  //put total used, and requested at error out
+
+
   /* Search for chunk to satisfy */
   for (size_t freeListIndex =
            ChunkPool_findFreeListIndexForNumChunks (chunksRequested);
        freeListIndex < ChunkPool_NUMFREELISTS;
        freeListIndex++) {
+    pthread_mutex_lock_safe(&ChunkPool_locks[freeListIndex]);
     for (struct ChunkPool_chunkMetadata* cursor =
              ChunkPool_freeLists[freeListIndex];
          NULL != cursor;
@@ -335,6 +342,9 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
          * split the span if possible and return the chunk
          */
         /* first remove the span from the list */
+              
+        //trying to unlock here
+        pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
         ChunkPool_removeFromFreeList (cursor);
 
         /* now split */
@@ -353,7 +363,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         cursor->next = ChunkPool_ALLOCATED;
 
         /* done with free list modifications at this point, so unlock */
-        pthread_mutex_unlock_safe(&ChunkPool_lock);
+        //pthread_mutex_unlock_safe(&ChunkPool_lock);
         void* chunk = ChunkPool_chunkMetadataToChunk (cursor);
         LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
         VALGRIND_MEMPOOL_ALLOC(&ChunkPool_poolStart, chunk, *bytesRequested);
@@ -361,16 +371,20 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         return chunk;
       }
     }
+    pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
+
   }
 
   /*
    * If execution reaches here, then I do not have a span to satisfy the request
    */
+
+  printf("Errored with - Bytes Allocated : %lu; Bytes Requested : %lu; MaxSize : %lu\n", 
+          ChunkPool_bytesAllocated, *bytesRequested, ChunkPool_config.maxSize);
   ChunkPool_bytesAllocated -= *bytesRequested;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
-
-  pthread_mutex_unlock_safe(&ChunkPool_lock);
+  //pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return NULL;
 }
@@ -382,7 +396,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
   assert (ChunkPool_initialized);
 
-  pthread_mutex_lock_safe(&ChunkPool_lock);
+  //pthread_mutex_lock_safe(&ChunkPool_lock);
   for (void* chunk = f(fArgs);
        NULL != chunk;
        chunk = f(fArgs)) {
@@ -391,7 +405,7 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
       return FALSE;
     }
   }
-  pthread_mutex_unlock_safe(&ChunkPool_lock);
+  //pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return TRUE;
 }
@@ -402,9 +416,9 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
 bool ChunkPool_free (void* chunk) {
   assert (ChunkPool_initialized);
 
-  pthread_mutex_lock_safe(&ChunkPool_lock);
+  //pthread_mutex_lock_safe(&ChunkPool_lock);
   bool result = ChunkPool_performFree(chunk);
-  pthread_mutex_unlock_safe(&ChunkPool_lock);
+  //pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return result;
 }
@@ -504,8 +518,8 @@ void ChunkPool_insertIntoFreeList (
 
 
   int listIndex =
-          ChunkPool_findFreeListIndexForNumChunks(
-             chunkMetadata->spanInfo.numChunksInSpan);
+        ChunkPool_findFreeListIndexForNumChunks(
+        chunkMetadata->spanInfo.numChunksInSpan);
 
   pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
 
@@ -532,10 +546,14 @@ bool ChunkPool_performFree(void* chunk) {
   assert (ChunkPool_ALLOCATED == spanStart->previous);
   assert (ChunkPool_ALLOCATED == spanStart->next);
 
+  pthread_mutex_lock_safe(&ChunkPool_lock);
+
   ChunkPool_bytesAllocated -= spanStart->spanInfo.numChunksInSpan *
                               ChunkPool_MINIMUMCHUNKSIZE;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
+  
+  pthread_mutex_unlock_safe(&ChunkPool_lock);
 
 #pragma message "Resolve"
 #if 0
@@ -613,10 +631,15 @@ void ChunkPool_removeFromFreeList (
 
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->previous);
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
+  
+  int listIndex =
+        ChunkPool_findFreeListIndexForNumChunks(
+        chunkMetadata->spanInfo.numChunksInSpan);
 
-  struct ChunkPool_chunkMetadata** list =
-      &(ChunkPool_freeLists[ChunkPool_findFreeListIndexForNumChunks (
-          chunkMetadata->spanInfo.numChunksInSpan)]);
+  pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
+
+
+  struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
 
 #if ASSERT
   {
@@ -660,6 +683,7 @@ void ChunkPool_removeFromFreeList (
     assert(!found);
   }
 #endif
+  pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
 
 void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
