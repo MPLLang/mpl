@@ -307,6 +307,7 @@ void ChunkPool_maybeResize(void) {
 }
 
 /**
+  printf("We got here boys lmao\n");
  * This function is implemented and serializes against all other functions.
  */
 void* ChunkPool_allocate (size_t* bytesRequested) {
@@ -349,6 +350,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 
         ChunkPool_removeFromFreeListUnlocked (cursor);
 
+        pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
         /* now split */
         struct ChunkPool_chunkMetadata* newSpanStart;
         ChunkPool_maybeSplitSpan (&newSpanStart, cursor, chunksRequested);
@@ -391,6 +393,19 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
 
   printf("Errored with - Bytes Allocated : %lu; Bytes Requested : %lu; MaxSize : %lu\n",
           ChunkPool_bytesAllocated, *bytesRequested, ChunkPool_config.maxSize);
+
+  printf("%lu chunks requested\n", chunksRequested);
+  for(int i = 0; i < ChunkPool_NUMFREELISTS;i++){
+    for (struct ChunkPool_chunkMetadata* cursor =
+             ChunkPool_freeLists[i];
+         NULL != cursor;
+         cursor = cursor->next) {
+      printf("%d ", cursor->spanInfo.numChunksInSpan);
+    }
+  }
+  printf("\n");
+
+  //running into an error here, like there is definately space, but
   ChunkPool_bytesAllocated -= *bytesRequested;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
@@ -410,6 +425,7 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
        NULL != chunk;
        chunk = f(fArgs)) {
     if (!ChunkPool_performFree(chunk)) {
+      //pthread_mutex_unlock_safe(&ChunkPool_lock);
       return FALSE;
     }
   }
@@ -709,6 +725,7 @@ void ChunkPool_removeFromFreeListUnlocked (
   }
 #endif
 }
+
 void ChunkPool_removeFromFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
@@ -720,7 +737,6 @@ void ChunkPool_removeFromFreeList (
         ChunkPool_findFreeListIndexForNumChunks(
         chunkMetadata->spanInfo.numChunksInSpan);
 
-  pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
 
   struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
 
@@ -766,7 +782,6 @@ void ChunkPool_removeFromFreeList (
     assert(!found);
   }
 #endif
-  pthread_mutex_unlock_safe(&ChunkPool_locks[listIndex]);
 }
 
 void ChunkPool_initializeSpan (struct ChunkPool_chunkMetadata* spanStart) {
