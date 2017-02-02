@@ -79,6 +79,8 @@ static unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks);
  *
  * @param chunkMetadata the object to insert
  */
+static void ChunkPool_insertIntoFreeListUnlocked (
+    struct ChunkPool_chunkMetadata* chunkMetadata);
 static void ChunkPool_insertIntoFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata);
 
@@ -99,6 +101,8 @@ bool ChunkPool_performFree(void* chunk);
  *
  * @param chunkMetadata the object to remove
  */
+static void ChunkPool_removeFromFreeListUnlocked (
+    struct ChunkPool_chunkMetadata* chunkMetadata);
 static void ChunkPool_removeFromFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata);
 
@@ -322,8 +326,8 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
   pthread_mutex_unlock_safe(&ChunkPool_lock);
-  
-  
+
+
   //put total used, and requested at error out
 
 
@@ -342,10 +346,8 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
          * split the span if possible and return the chunk
          */
         /* first remove the span from the list */
-              
-        //trying to unlock here
-        pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
-        ChunkPool_removeFromFreeList (cursor);
+
+        ChunkPool_removeFromFreeListUnlocked (cursor);
 
         /* now split */
         struct ChunkPool_chunkMetadata* newSpanStart;
@@ -353,8 +355,15 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         assert(cursor->spanInfo.numChunksInSpan >= chunksRequested);
 
         if (NULL != newSpanStart) {
-          /* insert residual back into freelist */
-          ChunkPool_insertIntoFreeList(newSpanStart);
+          /* insert residual back into freelist
+           * if the residual is in the same index, do not try taking the lock again */
+          size_t newFreeListIndex = ChunkPool_findFreeListIndexForNumChunks(newSpanStart->spanInfo.numChunksInSpan);
+          if(freeListIndex == newFreeListIndex){
+            ChunkPool_insertIntoFreeListUnlocked(newSpanStart);
+          }
+          else{
+            ChunkPool_insertIntoFreeList(newSpanStart);
+          }
         }
 
         /* initialize span and tidy up*/
@@ -368,6 +377,7 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
         VALGRIND_MEMPOOL_ALLOC(&ChunkPool_poolStart, chunk, *bytesRequested);
 
+        pthread_mutex_unlock_safe(&ChunkPool_locks[freeListIndex]);
         return chunk;
       }
     }
@@ -379,12 +389,11 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
    * If execution reaches here, then I do not have a span to satisfy the request
    */
 
-  printf("Errored with - Bytes Allocated : %lu; Bytes Requested : %lu; MaxSize : %lu\n", 
+  printf("Errored with - Bytes Allocated : %lu; Bytes Requested : %lu; MaxSize : %lu\n",
           ChunkPool_bytesAllocated, *bytesRequested, ChunkPool_config.maxSize);
   ChunkPool_bytesAllocated -= *bytesRequested;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
-  //pthread_mutex_unlock_safe(&ChunkPool_lock);
 
   return NULL;
 }
@@ -401,7 +410,6 @@ bool ChunkPool_iteratedFree (ChunkPool_BatchFreeFunction f, void* fArgs) {
        NULL != chunk;
        chunk = f(fArgs)) {
     if (!ChunkPool_performFree(chunk)) {
-      pthread_mutex_unlock_safe(&ChunkPool_lock);
       return FALSE;
     }
   }
@@ -511,7 +519,26 @@ unsigned int ChunkPool_findFreeListIndexForNumChunks (size_t numChunks) {
   return (ChunkPool_NUMFREELISTS - 1);
 }
 
-//update - this function will now hold its own locks
+void ChunkPool_insertIntoFreeListUnlocked (
+    struct ChunkPool_chunkMetadata* chunkMetadata) {
+  assert (ChunkPool_initialized);
+
+
+  int listIndex =
+        ChunkPool_findFreeListIndexForNumChunks(
+        chunkMetadata->spanInfo.numChunksInSpan);
+
+  struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
+
+  chunkMetadata->previous = NULL;
+  chunkMetadata->next = *list;
+  if (NULL != *list) {
+    (*list)->previous = chunkMetadata;
+  }
+  *list = chunkMetadata;
+
+}
+//this function will now hold its own locks
 void ChunkPool_insertIntoFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
@@ -552,7 +579,7 @@ bool ChunkPool_performFree(void* chunk) {
                               ChunkPool_MINIMUMCHUNKSIZE;
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
-  
+
   pthread_mutex_unlock_safe(&ChunkPool_lock);
 
 #pragma message "Resolve"
@@ -625,19 +652,75 @@ bool ChunkPool_performFree(void* chunk) {
   return TRUE;
 }
 
+void ChunkPool_removeFromFreeListUnlocked (
+    struct ChunkPool_chunkMetadata* chunkMetadata) {
+  assert (ChunkPool_initialized);
+
+  assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->previous);
+  assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
+
+  int listIndex =
+        ChunkPool_findFreeListIndexForNumChunks(
+        chunkMetadata->spanInfo.numChunksInSpan);
+
+
+  struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
+
+#if ASSERT
+  {
+    /* make sure chunkMetadata is in the free list! */
+    bool found = FALSE;
+    for (const struct ChunkPool_chunkMetadata* cursor = *list;
+         NULL != cursor;
+         cursor = cursor->next) {
+      if (chunkMetadata == cursor) {
+        found = TRUE;
+      }
+    }
+    assert(found);
+  }
+#endif
+
+  if (NULL != chunkMetadata->previous) {
+    chunkMetadata->previous->next = chunkMetadata->next;
+  }
+
+  if (NULL != chunkMetadata->next) {
+    chunkMetadata->next->previous = chunkMetadata->previous;
+  }
+
+  if (*list == chunkMetadata) {
+    assert (NULL == chunkMetadata->previous);
+    *list = chunkMetadata->next;
+  }
+
+#if ASSERT
+  {
+    /* make sure chunkMetadata is NOT in the free list! */
+    bool found = FALSE;
+    for (const struct ChunkPool_chunkMetadata* cursor = *list;
+         NULL != cursor;
+         cursor = cursor->next) {
+      if (chunkMetadata == cursor) {
+        found = TRUE;
+      }
+    }
+    assert(!found);
+  }
+#endif
+}
 void ChunkPool_removeFromFreeList (
     struct ChunkPool_chunkMetadata* chunkMetadata) {
   assert (ChunkPool_initialized);
 
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->previous);
   assert (ChunkPool_NONFIRSTCHUNK != chunkMetadata->next);
-  
+
   int listIndex =
         ChunkPool_findFreeListIndexForNumChunks(
         chunkMetadata->spanInfo.numChunksInSpan);
 
   pthread_mutex_lock_safe(&ChunkPool_locks[listIndex]);
-
 
   struct ChunkPool_chunkMetadata** list = &(ChunkPool_freeLists[listIndex]);
 
