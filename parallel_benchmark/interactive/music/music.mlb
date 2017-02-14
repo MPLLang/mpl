@@ -1,0 +1,8 @@
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/mlton.mlb
+../x/graphics.mlb
+$(SML_LIB)/basis/parallel/io.sig
+$(SML_LIB)/basis/parallel/io.sml
+
+sound.sml
+music.sml

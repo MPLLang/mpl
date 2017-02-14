@@ -1,0 +1,218 @@
+
+# GNU Makefile -- autodetects host type and sets appropriate variables
+
+# Written by ANOQ of the Sun <anoq@HardcoreProcessing.com>
+
+# There is no warranty of any kind and I will not be
+# held responsible for any problems it may cause.
+
+# Use at your own risk!
+
+# These variables will be honored if defined:
+#  TARGET -- the make target
+#  DEFS   -- special CFLAGS definitions
+#  HDRS   -- special include directories
+#  LIBS   -- special libraries to link with
+
+# Set this next variable to the SDL directory path
+ifeq ($(SDL), )
+SDL_DIR += ../SDL ../SDL-[0-9].[0-9] ../SDL-[0-9].[0-9].[0-9]
+SDL_DIR += ../../SDL ../../SDL-[0-9].[0-9] ../../SDL-[0-9].[0-9].[0-9]
+SDL_DIR += /usr/local
+SDL := $(firstword $(wildcard $(SDL_DIR)))
+endif
+
+# Figure out what system we are compiling for
+ifeq ($(target), )
+target := $(shell uname | tr '[A-Z]' '[a-z]')
+endif
+
+# Set some default initial values
+SDLINC := -I$(firstword $(wildcard $(SDL)/include/SDL $(SDL)/include))
+SDLLIB := -L$(SDL)/lib
+
+# Linux, the choice of a GNU generation. :-)
+ifeq ($(target), linux)
+glibc := $(shell ./GNUC.sh 2>/dev/null || ../GNUC.sh 2>/dev/null || echo true)
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O2 -funroll-loops -fomit-frame-pointer -ffast-math
+endif
+ifeq ($(static), true)
+ SDLLIB := $(SDLLIB) -lSDL -L/usr/X11R6/lib -lX11 -lXext -lXxf86dga -lXxf86vm
+else
+ SDLLIB := $(SDLLIB) -Wl,-rpath,$(shell cd $(SDL) && pwd)/lib -lSDL -ldl
+endif
+ MATHLIB = -lm
+ifeq ($(glibc), true)
+ DEFS += -D_REENTRANT
+ LIBS += -lpthread
+endif
+endif
+
+# Solaris 2.x (using gcc)
+ifeq ($(target), sunos)
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O2 -funroll-loops -fomit-frame-pointer -ffast-math
+endif
+ifeq ($(static), true)
+ SDLLIB := $(SDLLIB) -lSDL -L/usr/openwin/lib -lX11 -lXext
+else
+ SDLLIB := $(SDLLIB) -Wl,-R,$(shell cd $(SDL) && pwd)/lib -lSDL -ldl
+endif
+ MATHLIB = -lm
+ INETLIB = -lsocket -lnsl
+ DEFS += -D_REENTRANT
+ LIBS += -lpthread
+ RANLIB = :
+endif
+
+# IRIX 6.x (using gcc)
+ifeq ($(target), irix)
+# dynamic linking doesn't work with gcc on IRIX
+static = true
+ CC = gcc
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O2 -funroll-loops -fomit-frame-pointer -ffast-math
+endif
+ifeq ($(static), true)
+ SDLLIB := $(SDLLIB) -lSDL
+else
+ SDLLIB := $(SDLLIB) -lSDL -lX11 -lXext -lpthread -laudio
+endif
+ MATHLIB = -lm
+ INETLIB = 
+ RANLIB = :
+endif
+
+# OSF/1 3.2
+ifeq ($(target), osf1)
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O2
+endif
+ifeq ($(static), true)
+ SDLLIB := $(SDLLIB) -lSDL
+else
+ SDLLIB := $(SDLLIB) -lSDL
+endif
+ MATHLIB = -lm
+ INETLIB = 
+ RANLIB = ranlib
+endif
+
+# Win32 cross-compilation
+ifeq ($(target), cygwin32_95)
+target := win32
+endif
+ifeq ($(target), cygwin32_nt)
+target := win32
+endif
+ifeq ($(target), win32)
+ TARGET := $(TARGET:=.exe)
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O2 -funroll-loops -fomit-frame-pointer -ffast-math
+endif
+ SDLLIB := $(SDLLIB) -lmingw32 -lSDL -mwindows
+ INETLIB = -lwsock32
+endif
+
+# BeOS Metrowerks
+ifeq ($(target), beos)
+ CXX = mwcc
+ifeq ($(debug), true)
+ OPTIMIZE = -g
+else
+ OPTIMIZE = -O7
+endif
+ SDLLIB := $(SDLLIB) -lSDL
+endif
+
+# Finish setting the various compilation flags
+ifeq ($(static), true)
+DEFS += -D_SDL_STATIC_LIB
+endif
+CPPFLAGS = $(SDLINC) $(INCLUDE) $(HDRS) $(OPTIMIZE) $(DEFS)
+LDFLAGS = $(LIBS) $(SDLLIB)
+ifneq ($(USEMATH), )
+LDFLAGS += $(MATHLIB)
+endif
+ifneq ($(USEINET), )
+LDFLAGS += $(INETLIB)
+endif
+ifeq ($(RANLIB), )
+RANLIB = ranlib
+endif
+
+# If there is a library, build it first
+ifneq ($(LIB), )
+$(LIB): $(LIBOBJS)
+	$(AR) crv $@ $(LIBOBJS)
+	$(RANLIB) $@
+endif
+
+# The demos are the targets
+all: $(TARGET)
+
+# Make the targets
+$(TARGET): SDL_path_OK $(SDL)/lib/libSDL.a
+	$(CC) -o $@ $(filter %.o, $^) $(LDFLAGS)
+	@if [ "$(target)" = "win32" ]; then \
+		for lib in $(SDL)/lib/*.dll; \
+		do if [ -f $$lib ]; then \
+			echo "$$lib -> ."; \
+			cp $$lib .; \
+		   fi; \
+		done; \
+	 fi
+	@if [ ! -h "add-ons" ]; then \
+		ln -s $(SDL)/lib add-ons; \
+	 fi
+
+
+# Clean up object files
+clean:
+ifneq ($(SUBDIRS), )
+	for subdir in $(SUBDIRS); do \
+		$(MAKE) -C $$subdir $@; \
+	done
+endif
+	rm -f *.o *~ std???.txt DEADJOE core SDL_path_OK $(EXTRACLEAN)
+
+
+# Remove everything recoverable
+distclean: clean
+ifneq ($(SUBDIRS), )
+	for subdir in $(SUBDIRS); do \
+		$(MAKE) -C $$subdir $@; \
+	done
+endif
+	rm -f $(LIB) $(TARGET) $(TARGET:=.exe) *.LIB SDL-???.dll add-ons
+
+spotless: distclean
+
+
+# Force the SDL variable to be defined and valid
+ifeq ($(SDL), )
+SDL_path_OK:
+	@echo
+	@echo "-> You must set the SDL variable in the Makefile"
+	@echo
+	@exit 1
+else
+SDL_path_OK:
+	@if [ ! -d $(SDL)/include -o ! -d $(SDL)/lib ]; then \
+		echo "Couldn't find SDL in $(SDL)"; \
+		exit 1; \
+	 fi
+	@touch SDL_path_OK
+endif
+

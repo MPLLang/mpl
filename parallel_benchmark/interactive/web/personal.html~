@@ -1,0 +1,30 @@
+<!--#include virtual="header.html"-->
+<h1>Hobbies</h1>
+<p><b>Walking:</b> I like to walk, especially when I'm thinking about
+something. Pacing in my office while thinking about research gets
+boring, so sometimes my pacing will spill out into the hall, around
+CMU, or even into Schenley Park. So if you see me walking around
+muttering something, I'm not crazy. Or, at least, that's not why I'm
+walking and muttering. Feel free to say hi.</p>
+
+<p><b>Web Design:</b> Contrary to popular belief, the degree I'm
+pursuing has nothing to do with making websites. At the risk of
+confusing this point, however, I do design and build the occasional
+website. This one, for instance. No, I won't make you a website.</p>
+
+<p><b>Youth Rights:</b>
+</p>
+
+
+<h1>Favorite Programming Languages</h1>
+<p>
+<ul>
+<li><b>Functional:</b> OCaml (sorry CMU people)</li>
+<li><b>Dynamic/Scripting:</b> Python</li>
+<li><b>To use as a negative example:</b> C++</li>
+<li><b>Esoteric:</b> <a href="http://en.wikipedia.org/wiki/LOLCODE">
+    LOLCODE</a></li>
+</ul>
+</p>
+
+<!--#include virtual="footer.html"-->

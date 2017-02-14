@@ -1,0 +1,29 @@
+default: pd
+
+O = o
+JPEGLIBDIR = jpeg-6b/
+J = $(JPEGLIBDIR)
+SYSDEPMEM= jmemnobs.$(O)
+COMOBJECTS= $(J)jcomapi.$(O) $(J)jutils.$(O) $(J)jerror.$(O) $(J)jmemmgr.$(O) \
+			$(J)$(SYSDEPMEM)
+# compression library object files
+CLIBOBJECTS= $(J)jcapimin.$(O) $(J)jcapistd.$(O) $(J)jctrans.$(O) $(J)jcparam.$(O) \
+        $(J)jdatadst.$(O) $(J)jcinit.$(O) $(J)jcmaster.$(O) $(J)jcmarker.$(O) $(J)jcmainct.$(O) \
+        $(J)jcprepct.$(O) $(J)jccoefct.$(O) $(J)jccolor.$(O) $(J)jcsample.$(O) $(J)jchuff.$(O) \
+        $(J)jcphuff.$(O) $(J)jcdctmgr.$(O) $(J)jfdctfst.$(O) $(J)jfdctflt.$(O) \
+        $(J)jfdctint.$(O)
+# decompression library object files
+DLIBOBJECTS= $(J)jdapimin.$(O) $(J)jdapistd.$(O) $(J)jdtrans.$(O) $(J)jdatasrc.$(O) \
+        $(J)jdmaster.$(O) $(J)jdinput.$(O) $(J)jdmarker.$(O) $(J)jdhuff.$(O) $(J)jdphuff.$(O) \
+        $(J)jdmainct.$(O) $(J)jdcoefct.$(O) $(J)jdpostct.$(O) $(J)jddctmgr.$(O) \
+        $(J)jidctfst.$(O) $(J)jidctflt.$(O) $(J)jidctint.$(O) $(J)jidctred.$(O) \
+        $(J)jdsample.$(O) $(J)jdcolor.$(O) $(J)jquant1.$(O) $(J)jquant2.$(O) $(J)jdmerge.$(O)
+# These objectfiles are included in libjpeg.a
+LIBOBJECTS= $(CLIBOBJECTS) $(DLIBOBJECTS) $(COMOBJECTS)
+
+ws6:
+	../../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6-map -output raytracer-ws6 raytracer.mlb ../x/mlx.o
+
+pd:
+	gcc -c decode.c
+	../../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -link-opt -L/usr/lib/x86_64-linux-gnu -link-opt -ljpeg -link-opt -lSDL -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output viewer-pd viewer.mlb decode.o ../x/mlx.o MLSDL/srcC/MLTon/SDLFuncs/SDLFuncs.o

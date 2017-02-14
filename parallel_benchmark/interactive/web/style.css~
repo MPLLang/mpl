@@ -1,0 +1,68 @@
+body
+{
+    background-color: #b0b0b0;
+}
+
+p
+{
+    color: #101010;
+    font: 11pt helvetica;
+    position: relative;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+a
+{
+    color: #903030;
+}
+
+a:visited
+{
+    color: #903030;
+}
+
+a:hover
+{
+    color: #701010;
+}
+
+li
+{
+    color: #101010;
+    font: 11pt helvetica;
+    position: relative;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+h1
+{
+    color: #903030;
+    font-family: sans-serif;
+}
+
+h2
+{
+    color: #903030;
+    font-family: sans-serif;
+}
+
+hr
+{
+    border-top: solid 1px #903030;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    height: 1px;
+}
+
+#main
+{
+    background-color: #e0e0e0;
+    position: absolute;
+    top: 0px;
+    border-left: 1px solid black;
+    border-right: 1px solid black;
+    padding: 20px
+}

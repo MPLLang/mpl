@@ -1,0 +1,338 @@
+<!-- HTML/list.html -->
+<!-- COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies. -->
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 3.2//EN">
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>The List structure</title>
+<meta name="generator" content="ML-Doc::html-gen">
+</head>
+<body bgcolor="#FFFFFF"><a name="top"></a>
+<h1 align="CENTER">The Standard ML Basis Library</h1>
+<hr>
+
+
+<h2><a name="section:0"></a>The <code>List</code> structure</h2>
+<hr>
+<h4>Synopsis</h4>
+<blockquote>
+<code><b>signature</b>&nbsp;<a name="LIST:SIG:SPEC"></a><code>LIST</code><br>
+<b>structure</b>&nbsp;<a name="List:STR:SPEC"></a><code>List</code><b> :&gt; </b>LIST<br>
+</code>
+</blockquote>
+<p>
+The <code>List</code> structure provides a collection of utility 
+functions for manipulating polymorphic lists, traditionally an important
+ datatype in functional programming.
+</p><p>
+Following the concrete syntax provided by the list <code><b>::</b></code>
+ operator, the head of a list appears leftmost. Thus, a traversal of a 
+list from left to right starts with the head, then recurses on the tail.
+ In addition, as a sequence type, a list has an indexing of its 
+elements, with the head having index 0, the second element having index 
+1, etc. 
+</p><hr>
+<h4>Interface</h4>
+<blockquote>
+<code><b>datatype</b>&nbsp;<i>'a</i>&nbsp;<a name="SIG:LIST.list:TY:SPEC" href="#SIG:LIST.list:TY">list</a>&nbsp;=&nbsp;<a name="SIG:LIST.nil:TY:SPEC" href="#SIG:LIST.nil:TY">nil</a>&nbsp;|&nbsp;<a name="SIG:LIST.:::TY:SPEC" href="#SIG:LIST.:::TY">::</a>&nbsp;<b>of</b>&nbsp;<i>'a</i>&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>exception</b>&nbsp;<a name="SIG:LIST.Empty:EXN:SPEC" href="#SIG:LIST.Empty:EXN">Empty</a><br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.null:VAL:SPEC" href="#SIG:LIST.null:VAL">null</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.length:VAL:SPEC" href="#SIG:LIST.length:VAL">length</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;int<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.@:VAL:SPEC" href="#SIG:LIST.@:VAL">@</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.hd:VAL:SPEC" href="#SIG:LIST.hd:VAL">hd</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i><br>
+<b>val</b>&nbsp;<a name="SIG:LIST.tl:VAL:SPEC" href="#SIG:LIST.tl:VAL">tl</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.last:VAL:SPEC" href="#SIG:LIST.last:VAL">last</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i><br>
+<b>val</b>&nbsp;<a name="SIG:LIST.getItem:VAL:SPEC" href="#SIG:LIST.getItem:VAL">getItem</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;(<i>'a</i>&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list)&nbsp;option<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.nth:VAL:SPEC" href="#SIG:LIST.nth:VAL">nth</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i><br>
+<b>val</b>&nbsp;<a name="SIG:LIST.take:VAL:SPEC" href="#SIG:LIST.take:VAL">take</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.drop:VAL:SPEC" href="#SIG:LIST.drop:VAL">drop</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.rev:VAL:SPEC" href="#SIG:LIST.rev:VAL">rev</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.concat:VAL:SPEC" href="#SIG:LIST.concat:VAL">concat</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.revAppend:VAL:SPEC" href="#SIG:LIST.revAppend:VAL">revAppend</a>&nbsp;<b>:</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.app:VAL:SPEC" href="#SIG:LIST.app:VAL">app</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;unit)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;unit<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.map:VAL:SPEC" href="#SIG:LIST.map:VAL">map</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.mapPartial:VAL:SPEC" href="#SIG:LIST.mapPartial:VAL">mapPartial</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>&nbsp;option)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.find:VAL:SPEC" href="#SIG:LIST.find:VAL">find</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;option<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.filter:VAL:SPEC" href="#SIG:LIST.filter:VAL">filter</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.partition:VAL:SPEC" href="#SIG:LIST.partition:VAL">partition</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;bool)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.foldl:VAL:SPEC" href="#SIG:LIST.foldl:VAL">foldl</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>*</b>&nbsp;<i>'b</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>)&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i><br>
+<b>val</b>&nbsp;<a name="SIG:LIST.foldr:VAL:SPEC" href="#SIG:LIST.foldr:VAL">foldr</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>*</b>&nbsp;<i>'b</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>)&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i>&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;<i>'b</i><br>
+<b>val</b>&nbsp;<a name="SIG:LIST.exists:VAL:SPEC" href="#SIG:LIST.exists:VAL">exists</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.all:VAL:SPEC" href="#SIG:LIST.all:VAL">all</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.tabulate:VAL:SPEC" href="#SIG:LIST.tabulate:VAL">tabulate</a>&nbsp;<b>:</b>&nbsp;int&nbsp;<b>*</b>&nbsp;(int&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>)&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:LIST.collate:VAL:SPEC" href="#SIG:LIST.collate:VAL">collate</a>&nbsp;<b>:</b>&nbsp;(<i>'a</i>&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;<b>-&gt;</b>&nbsp;order)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>-&gt;</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>*</b>&nbsp;<i>'a</i>&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;order</code>
+</blockquote>
+<h4>Description</h4>
+<dl>
+<dt> <a name="SIG:LIST.Empty:EXN"></a><code><b>exception</b>&nbsp;Empty</code>
+</dt><dd>
+        This exception indicates that an empty list was given as an argument to a function requiring a non-empty list. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.null:VAL"></a>
+</dt><dt> <code>null <var>l</var> </code>
+</dt><dd>
+returns <code>true</code> if the list <var>l</var> is empty. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.length:VAL"></a>
+</dt><dt> <code>length <var>l</var> </code>
+</dt><dd>
+returns the number of elements in the list <var>l</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.@:VAL"></a>
+</dt><dt> <code><var>l1</var> @ <var>l2</var> </code>
+</dt><dd>
+returns the list that is the concatenation of <var>l1</var> and <var>l2</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.hd:VAL"></a>
+</dt><dt> <code>hd <var>l</var> </code>
+</dt><dd>
+returns the first element of <var>l</var>.   It raises <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.Empty:EXN:SPEC">Empty</a></code> if <var>l</var> is <code>nil</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.tl:VAL"></a>
+</dt><dt> <code>tl <var>l</var> </code>
+</dt><dd>
+returns all but the first element of <var>l</var>.   It raises <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.Empty:EXN:SPEC">Empty</a></code> if <var>l</var> is <code>nil</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.last:VAL"></a>
+</dt><dt> <code>last <var>l</var> </code>
+</dt><dd>
+returns the last element of <var>l</var>.   It raises <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.Empty:EXN:SPEC">Empty</a></code> if <var>l</var> is <code>nil</code>.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.getItem:VAL"></a>
+</dt><dt> <code>getItem <var>l</var> </code>
+</dt><dd>
+returns <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> if the list is empty, and <code><code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a></code>(hd <var>l</var>,tl <var>l</var>)</code> otherwise. This function is particularly useful for creating value readers from lists of characters. For example, <code>Int.scan StringCvt.DEC getItem</code> has the type 
+<pre>(int,char list) StringCvt.reader
+</pre>
+ and can be used to scan decimal integers from lists of characters. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.nth:VAL"></a>
+</dt><dt> <code>nth (<var>l</var>, <var>i</var>) </code>
+</dt><dd>
+returns the <var>i</var><sup>(th)</sup> element of the list <var>l</var>,  counting from 0. It raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code>  if <var>i</var> &lt; 0 or <var>i</var> &gt;= <code>length</code> <var>l</var>. We have <code>nth(<var>l</var>,0) = hd <var>l</var></code>, ignoring exceptions. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.take:VAL"></a>
+</dt><dt> <code>take (<var>l</var>, <var>i</var>) </code>
+</dt><dd>
+returns the first <var>i</var> elements of the list <var>l</var>. It raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code> if <var>i</var> &lt; 0 or <var>i</var> &gt; <code>length</code> <var>l</var>. We have <code><code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.take:VAL:SPEC">take</a></code>(<var>l</var>, <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.length:VAL:SPEC">length</a></code> <var>l</var>) = <var>l</var></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.drop:VAL"></a>
+</dt><dt> <code>drop (<var>l</var>, <var>i</var>) </code>
+</dt><dd>
+returns what is left after dropping the first <var>i</var> elements of the list <var>l</var>. It raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code> if <var>i</var> &lt; 0 or <var>i</var> &gt; <code>length</code> <var>l</var>. It holds that <code><code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.take:VAL:SPEC">take</a></code>(<var>l</var>, <var>i</var>) <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.@:VAL:SPEC">@</a></code> <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.drop:VAL:SPEC">drop</a></code>(<var>l</var>, <var>i</var>) = <var>l</var></code> when 0 &lt;= <var>i</var> &lt;= <code>length</code> <var>l</var>. We also have <code><code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.drop:VAL:SPEC">drop</a></code>(<var>l</var>, <code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.length:VAL:SPEC">length</a></code> <var>l</var>) = []</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.rev:VAL"></a>
+</dt><dt> <code>rev <var>l</var> </code>
+</dt><dd>
+returns a list consisting of <var>l</var>'s elements in reverse order. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.concat:VAL"></a>
+</dt><dt> <code>concat <var>l</var> </code>
+</dt><dd>
+returns the list that is the concatenation of all the   lists in <var>l</var> in order. 
+<pre>concat[<var>l1</var>,<var>l2</var>,...<var>ln</var>] = <var>l1</var> @ <var>l2</var> @ ... @ <var>ln</var>
+</pre>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.revAppend:VAL"></a>
+</dt><dt> <code>revAppend (<var>l1</var>, <var>l2</var>) </code>
+</dt><dd>
+returns <code>(rev l1) @ l2</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.app:VAL"></a>
+</dt><dt> <code>app <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to the elements of <var>l</var>, from left to right. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.map:VAL"></a>
+</dt><dt> <code>map <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element of <var>l</var> from left to right, returning the list of results.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.mapPartial:VAL"></a>
+</dt><dt> <code>mapPartial <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element of <var>l</var> from left to right, returning a list of results, with  <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a></code> stripped, where <var>f</var> was defined. <var>f</var> is not defined for an element of <var>l</var> if <var>f</var> applied to the element returns <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code>. The above expression is equivalent to: 
+<pre>((map valOf) o (filter isSome) o (map <var>f</var>)) <var>l</var>
+</pre>
+  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.find:VAL"></a>
+</dt><dt> <code>find <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element <var>x</var> of the list <var>l</var>, from left to right, until <code><var>f</var> <var>x</var></code> evaluates to <code>true</code>. It returns <code><code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a></code>(<var>x</var>)</code> if such an <var>x</var> exists; otherwise it returns <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.filter:VAL"></a>
+</dt><dt> <code>filter <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element <var>x</var> of <var>l</var>, from left to right, and returns the list of those <var>x</var> for which  <code><var>f</var> <var>x</var></code> evaluated to <code>true</code>, in the same order as they occurred in the argument list. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.partition:VAL"></a>
+</dt><dt> <code>partition <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element <var>x</var> of <var>l</var>, from left  to right, and returns a pair <code>(<var>pos</var>, <var>neg</var>)</code> where <var>pos</var> is the list of those <var>x</var> for which <code><var>f</var> <var>x</var></code> evaluated to <code>true</code>, and <var>neg</var> is the list of those for which <code><var>f</var> <var>x</var></code> evaluated to <code>false</code>. The elements of <var>pos</var> and <var>neg</var> retain the same relative order they possessed in <var>l</var>.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.foldl:VAL"></a>
+</dt><dt> <code>foldl <var>f</var> <var>init</var> [<var>x1</var>, <var>x2</var>, ..., <var>xn</var>] </code>
+</dt><dd>
+returns 
+<pre><var>f</var>(<var>xn</var>,...,<var>f</var>(<var>x2</var>, <var>f</var>(<var>x1</var>, <var>init</var>))...)
+</pre>
+ or <var>init</var> if the list is empty. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.foldr:VAL"></a>
+</dt><dt> <code>foldr <var>f</var> <var>init</var> [<var>x1</var>, <var>x2</var>, ..., <var>xn</var>] </code>
+</dt><dd>
+returns 
+<pre><var>f</var>(<var>x1</var>, <var>f</var>(<var>x2</var>, ..., <var>f</var>(<var>xn</var>, <var>init</var>)...))
+</pre>
+ or <var>init</var> if the list is empty.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.exists:VAL"></a>
+</dt><dt> <code>exists <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element <var>x</var> of the list <var>l</var>, from left to right, until <code><var>f</var> <var>x</var></code> evaluates to <code>true</code>; it returns <code>true</code> if such an <var>x</var> exists and <code>false</code> otherwise.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.all:VAL"></a>
+</dt><dt> <code>all <var>f</var> <var>l</var> </code>
+</dt><dd>
+applies <var>f</var> to each element <var>x</var> of the list <var>l</var>, from left to right, until <code><var>f</var> <var>x</var></code> evaluates to <code>false</code>; it returns <code>false</code> if such an <var>x</var> exists and <code>true</code> otherwise. It is equivalent to  <code><code><a href="http://sml-family.org/Basis/bool.html#SIG:BOOL.not:VAL:SPEC">not</a></code>(<code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.exists:VAL:SPEC">exists</a></code> (<code><a href="http://sml-family.org/Basis/bool.html#SIG:BOOL.not:VAL:SPEC">not</a></code> o <var>f</var>) <var>l</var>))</code>.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.tabulate:VAL"></a>
+</dt><dt> <code>tabulate (<var>n</var>, <var>f</var>) </code>
+</dt><dd>
+returns a list of length <var>n</var> equal to  <code>[<var>f</var>(0), <var>f</var>(1), ..., <var>f</var>(<var>n</var>-1)]</code>, created from left to right. It raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Size:EXN:SPEC">Size</a></code> if <var>n</var> &lt; 0.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:LIST.collate:VAL"></a>
+</dt><dt> <code>collate <var>f</var> (<var>l1</var>, <var>l2</var>) </code>
+</dt><dd>
+performs lexicographic comparison of the two lists using the given ordering <var>f</var> on the list elements.
+<br>
+<br>
+
+</dd></dl>
+<h4>See Also</h4>
+<blockquote>
+<code><a href="http://sml-family.org/Basis/general.html#General:STR:SPEC">General</a></code>, <code><a href="http://sml-family.org/Basis/list-pair.html#ListPair:STR:SPEC">ListPair</a></code>
+</blockquote>
+<h4>Discussion</h4>
+<p>
+The <code><a href="">list</a></code> type is considered primitive and is defined in the top-level environment. It is rebound here for consistency.
+</p><blockquote>
+<b>Rationale:</b><br>
+
+<p>
+Lists are usually supported with a large collection of library 
+functions. Here, we provide a somewhat smaller collection of operations 
+that reflect common usage. We feel the collection is moderately 
+complete, in that most programs will not need to define additional list 
+operations. We have tried to adopt names that reflect a consensus from 
+various existing libraries and texts. We have avoided functions relying 
+on equality types.
+</p><p>
+Different SML implementations may still desire to provide list utility library modules, though if the design of <code>List</code> is right, they should be small.
+</p></blockquote>
+
+
+<hr>
+<center>
+<b>[ <a href="#top">Top</a>
+   | <a href="http://sml-family.org/Basis/manpages.html">Parent</a>
+   | <a href="http://sml-family.org/Basis/toc.html">Contents</a>
+   | <a href="http://sml-family.org/Basis/index-all.html">Index</a>
+   | <a href="http://sml-family.org/Basis/index.html">Root</a>
+   ]</b>
+</center>
+<p>
+<i>Generated April 12, 2004</i><br>
+<i>Last Modified May 24, 2000</i><br>
+<i>Comments to <a href="http://www.cs.uchicago.edu/people/jhr">John Reppy.</a></i><br>
+
+</p><hr>
+<p>
+
+This document may be distributed freely over the internet as long as the
+copyright notice and license terms below are prominently displayed within
+every machine-readable copy.  
+
+</p><p>
+
+<table align="CENTER" width="80%" border="2" cellpadding="5">
+<tbody><tr>
+<td>
+<p>
+
+Copyright © 2004 AT&amp;T and Lucent Technologies.
+All rights reserved.
+
+</p><p>
+
+Permission is granted for internet users to make one paper copy for their
+own personal use.  Further hardcopy reproduction is strictly prohibited. 
+Permission to distribute the HTML document electronically on any medium
+other than the internet must be requested from the copyright holders by
+contacting the editors.
+Printed versions of the SML Basis Manual are available from Cambridge
+University Press.
+To order, please visit
+<a href="http://www.cup.org/">www.cup.org</a> (North America) or
+<a href="http://www.cup.cam.ac.uk/">www.cup.cam.ac.uk</a> (outside North America).<br>
+
+</p></td></tr></tbody></table>
+</p><p>
+
+</p><hr>
+
+</body></html>

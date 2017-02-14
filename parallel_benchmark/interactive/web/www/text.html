@@ -1,0 +1,119 @@
+<!-- HTML/text.html -->
+<!-- COPYRIGHT (c) 1998 Bell Labs, Lucent Technologies. -->
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 3.2//EN">
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>The TEXT signature</title>
+<meta name="generator" content="ML-Doc::html-gen">
+</head>
+<body bgcolor="#FFFFFF"><a name="top"></a>
+<h1 align="CENTER">The Standard ML Basis Library</h1>
+<hr>
+
+
+<h2><a name="section:0"></a>The <code>TEXT</code> signature</h2>
+<hr>
+<h4>Synopsis</h4>
+<blockquote>
+<code><b>signature</b>&nbsp;<a name="TEXT:SIG:SPEC"></a><code>TEXT</code><br>
+<b>structure</b>&nbsp;<a name="Text:STR:SPEC"></a><code>Text</code><b> :&gt; </b>TEXT<br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;Char.char&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">Char.char</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;String.string&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/string.html#SIG:STRING.string:TY:SPEC">String.string</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;Substring.substring&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/substring.html#SIG:SUBSTRING.substring:TY:SPEC">Substring.substring</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharVector.vector&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector.html#SIG:MONO_VECTOR.vector:TY:SPEC">CharVector.vector</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharArray.array&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-array.html#SIG:MONO_ARRAY.array:TY:SPEC">CharArray.array</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharVectorSlice.slice&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector-slice.html#SIG:MONO_VECTOR_SLICE.slice:TY:SPEC">CharVectorSlice.slice</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharArraySlice.slice&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-array-slice.html#SIG:MONO_ARRAY_SLICE.slice:TY:SPEC">CharArraySlice.slice</a><br>
+<b>structure</b>&nbsp;<a name="WideText:STR:SPEC"></a><code>WideText</code><b> :&gt; </b>TEXT&nbsp;&nbsp;<font color="#FF0000"><code><i>(* OPTIONAL *)</i></code></font><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;Char.char&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">WideChar.char</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;String.string&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/string.html#SIG:STRING.string:TY:SPEC">WideString.string</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;Substring.substring&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/substring.html#SIG:SUBSTRING.substring:TY:SPEC">WideSubstring.substring</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharVector.vector&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector.html#SIG:MONO_VECTOR.vector:TY:SPEC">WideCharVector.vector</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharArray.array&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-array.html#SIG:MONO_ARRAY.array:TY:SPEC">WideCharArray.array</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharVectorSlice.slice&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector-slice.html#SIG:MONO_VECTOR_SLICE.slice:TY:SPEC">WideCharVectorSlice.slice</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;CharArraySlice.slice&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-array-slice.html#SIG:MONO_ARRAY_SLICE.slice:TY:SPEC">WideCharArraySlice.slice</a><br>
+</code>
+</blockquote>
+<p>
+The <code>TEXT</code> signature collects together various text related structures based on the representation of the shared character type.
+</p><p>
+The <code><a href="http://sml-family.org/Basis/text.html#TEXT:SIG:SPEC">TEXT</a></code> signature is matched by two structures, the required <code><a href="http://sml-family.org/Basis/text.html#Text:STR:SPEC">Text</a></code> and the optional <code><a href="http://sml-family.org/Basis/text.html#WideText:STR:SPEC">WideText</a></code>.
+ The former implements strings based on the extended ASCII 8-bit 
+characters. The latter provides strings of characters of some size 
+greater than or equal to 8 bits. 
+</p><hr>
+<h4>Interface</h4>
+<blockquote>
+<code><b>structure</b>&nbsp;Char&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/char.html#CHAR:SIG:SPEC">CHAR</a><br>
+<b>structure</b>&nbsp;String&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/string.html#STRING:SIG:SPEC">STRING</a><br>
+<b>structure</b>&nbsp;Substring&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/substring.html#SUBSTRING:SIG:SPEC">SUBSTRING</a><br>
+<b>structure</b>&nbsp;CharVector&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/mono-vector.html#MONO_VECTOR:SIG:SPEC">MONO_VECTOR</a><br>
+<b>structure</b>&nbsp;CharArray&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/mono-array.html#MONO_ARRAY:SIG:SPEC">MONO_ARRAY</a><br>
+<b>structure</b>&nbsp;CharVectorSlice&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/mono-vector-slice.html#MONO_VECTOR_SLICE:SIG:SPEC">MONO_VECTOR_SLICE</a><br>
+<b>structure</b>&nbsp;CharArraySlice&nbsp;<b>:</b>&nbsp;<a href="http://sml-family.org/Basis/mono-array-slice.html#MONO_ARRAY_SLICE:SIG:SPEC">MONO_ARRAY_SLICE</a><br>
+<b>sharing</b>&nbsp;<b>type</b>&nbsp;Char.char&nbsp;=&nbsp;String.char&nbsp;=&nbsp;Substring.char<br>
+&nbsp;&nbsp;=&nbsp;CharVector.elem&nbsp;=&nbsp;CharArray.elem&nbsp;=&nbsp;CharVectorSlice.elem<br>
+&nbsp;&nbsp;=&nbsp;CharArraySlice.elem<br>
+<b>sharing</b>&nbsp;<b>type</b>&nbsp;Char.string&nbsp;=&nbsp;String.string&nbsp;=&nbsp;Substring.string<br>
+&nbsp;&nbsp;=&nbsp;CharVector.vector&nbsp;=&nbsp;CharArray.vector<br>
+&nbsp;&nbsp;=&nbsp;CharVectorSlice.vector&nbsp;=&nbsp;CharArraySlice.vector<br>
+<b>sharing</b>&nbsp;<b>type</b>&nbsp;CharArray.array&nbsp;=&nbsp;CharArraySlice.array<br>
+<b>sharing</b>&nbsp;<b>type</b>&nbsp;CharVectorSlice.slice<br>
+&nbsp;&nbsp;=&nbsp;CharArraySlice.vector_slice</code>
+</blockquote>
+<h4>See Also</h4>
+<blockquote>
+<code><a href="http://sml-family.org/Basis/char.html#CHAR:SIG:SPEC">CHAR</a></code>, <code><a href="http://sml-family.org/Basis/mono-array.html#MONO_ARRAY:SIG:SPEC">MONO_ARRAY</a></code>, <code><a href="http://sml-family.org/Basis/mono-vector.html#MONO_VECTOR:SIG:SPEC">MONO_VECTOR</a></code>, <code><a href="http://sml-family.org/Basis/string.html#STRING:SIG:SPEC">STRING</a></code>, <code><a href="http://sml-family.org/Basis/substring.html#SUBSTRING:SIG:SPEC">SUBSTRING</a></code>
+</blockquote>
+
+
+<hr>
+<center>
+<b>[ <a href="#top">Top</a>
+   | <a href="http://sml-family.org/Basis/manpages.html">Parent</a>
+   | <a href="http://sml-family.org/Basis/toc.html">Contents</a>
+   | <a href="http://sml-family.org/Basis/index-all.html">Index</a>
+   | <a href="http://sml-family.org/Basis/index.html">Root</a>
+   ]</b>
+</center>
+<p>
+<i>Generated April 12, 2004</i><br>
+<i>Last Modified July 21, 1998</i><br>
+<i>Comments to <a href="http://www.cs.uchicago.edu/people/jhr">John Reppy.</a></i><br>
+
+</p><hr>
+<p>
+
+This document may be distributed freely over the internet as long as the
+copyright notice and license terms below are prominently displayed within
+every machine-readable copy.  
+
+</p><p>
+
+<table align="CENTER" width="80%" border="2" cellpadding="5">
+<tbody><tr>
+<td>
+<p>
+
+Copyright © 2004 AT&amp;T and Lucent Technologies.
+All rights reserved.
+
+</p><p>
+
+Permission is granted for internet users to make one paper copy for their
+own personal use.  Further hardcopy reproduction is strictly prohibited. 
+Permission to distribute the HTML document electronically on any medium
+other than the internet must be requested from the copyright holders by
+contacting the editors.
+Printed versions of the SML Basis Manual are available from Cambridge
+University Press.
+To order, please visit
+<a href="http://www.cup.org/">www.cup.org</a> (North America) or
+<a href="http://www.cup.cam.ac.uk/">www.cup.cam.ac.uk</a> (outside North America).<br>
+
+</p></td></tr></tbody></table>
+</p><p>
+
+</p><hr>
+
+</body></html>

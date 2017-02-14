@@ -1,0 +1,374 @@
+<!-- HTML/string.html -->
+<!-- COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies. -->
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 3.2//EN">
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>The STRING signature</title>
+<meta name="generator" content="ML-Doc::html-gen">
+</head>
+<body bgcolor="#FFFFFF"><a name="top"></a>
+<h1 align="CENTER">The Standard ML Basis Library</h1>
+<hr>
+
+
+<h2><a name="section:0"></a>The <code>STRING</code> signature</h2>
+<hr>
+<h4>Synopsis</h4>
+<blockquote>
+<code><b>signature</b>&nbsp;<a name="STRING:SIG:SPEC"></a><code>STRING</code><br>
+<b>structure</b>&nbsp;<a name="String:STR:SPEC"></a><code>String</code><b> :&gt; </b>STRING<br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;string&nbsp;=&nbsp;string<br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;string&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector.html#SIG:MONO_VECTOR.vector:TY:SPEC">CharVector.vector</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;char&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">Char.char</a><br>
+<b>structure</b>&nbsp;<a name="WideString:STR:SPEC"></a><code>WideString</code><b> :&gt; </b>STRING&nbsp;&nbsp;<font color="#FF0000"><code><i>(* OPTIONAL *)</i></code></font><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;string&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/mono-vector.html#SIG:MONO_VECTOR.vector:TY:SPEC">WideCharVector.vector</a><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;char&nbsp;=&nbsp;<a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">WideChar.char</a><br>
+</code>
+</blockquote>
+<p>
+The <code>STRING</code> signature specifies the basic operations on a string type, which is a vector of the underlying character type <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">char</a></code> as defined in the structure.
+</p><p>
+The <code><a href="http://sml-family.org/Basis/string.html#STRING:SIG:SPEC">STRING</a></code> signature is matched by two structures, the required <code><a href="http://sml-family.org/Basis/string.html#String:STR:SPEC">String</a></code> and the optional <code><a href="http://sml-family.org/Basis/string.html#WideString:STR:SPEC">WideString</a></code>. The former implements strings based on the extended ASCII 8-bit characters, and is a companion structure to the <code><a href="http://sml-family.org/Basis/char.html#Char:STR:SPEC">Char</a></code>
+ structure. The latter provides strings of characters of some size 
+greater than or equal to 8 bits, and is related to the structure <code><a href="http://sml-family.org/Basis/char.html#WideChar:STR:SPEC">WideChar</a></code>. In particular, the type <code>String.char</code> is identical to the type <code>Char.char</code> and, when <code><a href="http://sml-family.org/Basis/string.html#WideString:STR:SPEC">WideString</a></code> is defined, the type <code>WideString.char</code> is identical to the type <code>WideChar.char</code>. These connections are made explicit in the <code><a href="http://sml-family.org/Basis/text.html#Text:STR:SPEC">Text</a></code> and <code><a href="http://sml-family.org/Basis/text.html#WideText:STR:SPEC">WideText</a></code> structures, which match the <code><a href="http://sml-family.org/Basis/text.html#TEXT:SIG:SPEC">TEXT</a></code> signature. 
+</p><hr>
+<h4>Interface</h4>
+<blockquote>
+<code><b>eqtype</b>&nbsp;<a name="SIG:STRING.string:TY:SPEC" href="#SIG:STRING.string:TY">string</a><br>
+<b>eqtype</b>&nbsp;<a name="SIG:STRING.char:TY:SPEC" href="#SIG:STRING.char:TY">char</a><br>
+<b>val</b>&nbsp;<a name="SIG:STRING.maxSize:VAL:SPEC" href="#SIG:STRING.maxSize:VAL">maxSize</a>&nbsp;<b>:</b>&nbsp;int<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.size:VAL:SPEC" href="#SIG:STRING.size:VAL">size</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;int<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.sub:VAL:SPEC" href="#SIG:STRING.sub:VAL">sub</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.extract:VAL:SPEC" href="#SIG:STRING.extract:VAL">extract</a>&nbsp;&nbsp;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;int&nbsp;<b>*</b>&nbsp;int&nbsp;option&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.substring:VAL:SPEC" href="#SIG:STRING.substring:VAL">substring</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;int&nbsp;<b>*</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.^:VAL:SPEC" href="#SIG:STRING.%5E:VAL">^</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.concat:VAL:SPEC" href="#SIG:STRING.concat:VAL">concat</a>&nbsp;<b>:</b>&nbsp;string&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.concatWith:VAL:SPEC" href="#SIG:STRING.concatWith:VAL">concatWith</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.str:VAL:SPEC" href="#SIG:STRING.str:VAL">str</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.implode:VAL:SPEC" href="#SIG:STRING.implode:VAL">implode</a>&nbsp;<b>:</b>&nbsp;char&nbsp;list&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.explode:VAL:SPEC" href="#SIG:STRING.explode:VAL">explode</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;char&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.map:VAL:SPEC" href="#SIG:STRING.map:VAL">map</a>&nbsp;<b>:</b>&nbsp;(char&nbsp;<b>-&gt;</b>&nbsp;char)&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.translate:VAL:SPEC" href="#SIG:STRING.translate:VAL">translate</a>&nbsp;<b>:</b>&nbsp;(char&nbsp;<b>-&gt;</b>&nbsp;string)&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.tokens:VAL:SPEC" href="#SIG:STRING.tokens:VAL">tokens</a>&nbsp;<b>:</b>&nbsp;(char&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.fields:VAL:SPEC" href="#SIG:STRING.fields:VAL">fields</a>&nbsp;<b>:</b>&nbsp;(char&nbsp;<b>-&gt;</b>&nbsp;bool)&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;list<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.isPrefix:VAL:SPEC" href="#SIG:STRING.isPrefix:VAL">isPrefix</a>&nbsp;&nbsp;&nbsp;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.isSubstring:VAL:SPEC" href="#SIG:STRING.isSubstring:VAL">isSubstring</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.isSuffix:VAL:SPEC" href="#SIG:STRING.isSuffix:VAL">isSuffix</a>&nbsp;&nbsp;&nbsp;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.compare:VAL:SPEC" href="#SIG:STRING.compare:VAL">compare</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;order<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.collate:VAL:SPEC" href="#SIG:STRING.collate:VAL">collate</a>&nbsp;<b>:</b>&nbsp;(char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;order)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;order<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.\|@LT\|:VAL:SPEC" href="#SIG:STRING.%5C%7C@LT%5C%7C:VAL">&lt;</a>&nbsp;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.\|@LTE\|:VAL:SPEC" href="#SIG:STRING.%5C%7C@LTE%5C%7C:VAL">&lt;=</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.\|@GT\|:VAL:SPEC" href="#SIG:STRING.%5C%7C@GT%5C%7C:VAL">&gt;</a>&nbsp;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.\|@GTE\|:VAL:SPEC" href="#SIG:STRING.%5C%7C@GTE%5C%7C:VAL">&gt;=</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.toString:VAL:SPEC" href="#SIG:STRING.toString:VAL">toString</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;String.string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.scan:VAL:SPEC" href="#SIG:STRING.scan:VAL">scan</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>:</b>&nbsp;(char,&nbsp;<i>'a</i>)&nbsp;StringCvt.reader<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>-&gt;</b>&nbsp;(string,&nbsp;<i>'a</i>)&nbsp;StringCvt.reader<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.fromString:VAL:SPEC" href="#SIG:STRING.fromString:VAL">fromString</a>&nbsp;<b>:</b>&nbsp;String.string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;option<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.toCString:VAL:SPEC" href="#SIG:STRING.toCString:VAL">toCString</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;String.string<br>
+<b>val</b>&nbsp;<a name="SIG:STRING.fromCString:VAL:SPEC" href="#SIG:STRING.fromCString:VAL">fromCString</a>&nbsp;<b>:</b>&nbsp;String.string&nbsp;<b>-&gt;</b>&nbsp;string&nbsp;option</code>
+</blockquote>
+<h4>Description</h4>
+<dl>
+<dt> <a name="SIG:STRING.maxSize:VAL"></a><code><b>val</b>&nbsp;maxSize&nbsp;<b>:</b>&nbsp;int</code>
+</dt><dd>
+          The longest allowed size of a string. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.size:VAL"></a>
+</dt><dt> <code>size <var>s</var> </code>
+</dt><dd>
+returns |<var>s</var>|, the number of characters in string <var>s</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.sub:VAL"></a>
+</dt><dt> <code>sub (<var>s</var>, <var>i</var>) </code>
+</dt><dd>
+returns the <var>i</var><sup>(th)</sup> character of <var>s</var>, counting from zero. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code> if <var>i</var> &lt; 0 or |<var>s</var>| &lt;= <var>i</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.extract:VAL"></a>
+</dt><dt> <code>extract (<var>s</var>, <var>i</var>, <a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a>) </code>
+</dt><dt> <code>          extract (<var>s</var>, <var>i</var>, <a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a> <var>j</var>) </code>
+</dt><dt> <code>          substring (<var>s</var>, <var>i</var>, <var>j</var>) </code>
+</dt><dd>
+These return substrings of <var>s</var>. The first returns the substring of <var>s</var> from the <var>i</var><sup>(th)</sup> character to the end of the string, <i>i.e.</i>, the string <var>s</var>[<var>i</var>..|<var>s</var>|-1]. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code> if <code><var>i</var> &lt; 0</code> or |<var>s</var>| &lt; <var>i</var>. The second form returns the substring of size <var>j</var> starting at index <var>i</var>, <i>i.e.</i>, the string <code><var>s</var>[<var>i</var>..<var>i</var>+<var>j</var>-1]</code>. It raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Subscript:EXN:SPEC">Subscript</a></code> if <var>i</var> &lt; 0 or <var>j</var> &lt; 0 or |<var>s</var>| &lt; <var>i</var> + <var>j</var>. Note that, if defined, <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.extract:VAL:SPEC">extract</a></code> returns the empty string when <var>i</var> = |<var>s</var>|. 
+<p>
+          The third form returns the substring <code><var>s</var>[<var>i</var>..<var>i</var>+<var>j</var>-1]</code>, <i>i.e.</i>, the substring of size <var>j</var> starting at index <var>i</var>. This is equivalent to <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.extract:VAL:SPEC">extract</a></code>(<var>s</var>, <var>i</var>, <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a></code> <var>j</var>)</code>. 
+</p><blockquote>
+<b>Implementation note:</b><br>
+
+<p>
+Implementations of these functions must perform bounds checking in such a way that the <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Overflow:EXN:SPEC">Overflow</a></code> exception is not raised. 
+</p></blockquote>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.^:VAL"></a>
+</dt><dt> <code><var>s</var> ^ <var>t</var> </code>
+</dt><dd>
+is the concatenation of the strings <var>s</var> and <var>t</var>. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Size:EXN:SPEC">Size</a></code> if |<var>s</var>| + |<var>t</var>| &gt; <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.maxSize:VAL:SPEC">maxSize</a></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.concat:VAL"></a>
+</dt><dt> <code>concat <var>l</var> </code>
+</dt><dd>
+is the concatenation of all the strings in <var>l</var>. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Size:EXN:SPEC">Size</a></code> if the sum of all the sizes is greater than <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.maxSize:VAL:SPEC">maxSize</a></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.concatWith:VAL"></a>
+</dt><dt> <code>concatWith <var>s</var> <var>l</var> </code>
+</dt><dd>
+returns the concatenation of the strings in the list <var>l</var> using  the string <var>s</var> as a separator. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Size:EXN:SPEC">Size</a></code> if the size of the resulting string would be greater than <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.maxSize:VAL:SPEC">maxSize</a></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.str:VAL"></a>
+</dt><dt> <code>str <var>c</var> </code>
+</dt><dd>
+is the string of size one containing the character <var>c</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.implode:VAL"></a>
+</dt><dt> <code>implode <var>l</var> </code>
+</dt><dd>
+generates the string containing the characters in the list <var>l</var>. This is equivalent to <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.concat:VAL:SPEC">concat</a></code> (<code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.map:VAL:SPEC">List.map</a></code> <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.str:VAL:SPEC">str</a></code> <var>l</var>)</code>. This raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Size:EXN:SPEC">Size</a></code> if the resulting string would have size greater than <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.maxSize:VAL:SPEC">maxSize</a></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.explode:VAL"></a>
+</dt><dt> <code>explode <var>s</var> </code>
+</dt><dd>
+is the list of characters in the string <var>s</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.map:VAL"></a>
+</dt><dt> <code>map <var>f</var> <var>s</var> </code>
+</dt><dd>
+applies <var>f</var> to each element of <var>s</var> from left to right, returning the resulting string. It is equivalent to <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.implode:VAL:SPEC">implode</a></code>(<code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.map:VAL:SPEC">List.map</a></code> <var>f</var> (<code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.explode:VAL:SPEC">explode</a></code> <var>s</var>))</code>.  
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.translate:VAL"></a>
+</dt><dt> <code>translate <var>f</var> <var>s</var> </code>
+</dt><dd>
+returns the string generated from <var>s</var> by mapping each character in <var>s</var> by <var>f</var>. It is equivalent to <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.concat:VAL:SPEC">concat</a></code>(<code><a href="http://sml-family.org/Basis/list.html#SIG:LIST.map:VAL:SPEC">List.map</a></code> <var>f</var> (<code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.explode:VAL:SPEC">explode</a></code> <var>s</var>))</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.tokens:VAL"></a>
+</dt><dt> <code>tokens <var>f</var> <var>s</var> </code>
+</dt><dt> <code>          fields <var>f</var> <var>s</var> </code>
+</dt><dd>
+These functions return a list of tokens or fields, respectively, derived from <var>s</var> from left to right. A token is a non-empty maximal substring of <var>s</var> not containing any delimiter. A field is a (possibly empty) maximal substring of <var>s</var> not containing any delimiter. In both cases, a delimiter is a character satisfying the predicate <var>f</var>. 
+<p>
+          Two tokens may be separated by more than one delimiter, 
+whereas two fields are separated by exactly one delimiter. For example, 
+if the only delimiter is the character <code>#"|"</code>, then the string <code>"|abc||def"</code> contains two tokens <code>"abc"</code> and <code>"def"</code>, whereas it contains the four fields <code>""</code>, <code>"abc"</code>, <code>""</code> and <code>"def"</code>. 
+<br>
+<br>
+
+</p></dd><dt> <a name="SIG:STRING.isPrefix:VAL"></a>
+</dt><dt> <code>isPrefix <var>s1</var> <var>s2</var> </code>
+</dt><dt> <code>            isSubstring <var>s1</var> <var>s2</var> </code>
+</dt><dt> <code>            isSuffix <var>s1</var> <var>s2</var> </code>
+</dt><dd>
+These functions return <code>true</code> if the string <var>s1</var> is a prefix, substring, or suffix (respectively) of the string <var>s2</var>.
+ Note that the empty string is a prefix, substring, and suffix of any 
+string, and that a string is a prefix, substring, and  suffix of itself.
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.compare:VAL"></a>
+</dt><dt> <code>compare (<var>s</var>, <var>t</var>) </code>
+</dt><dd>
+does a lexicographic comparison of the two strings using the ordering <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.compare:VAL:SPEC">Char.compare</a></code> on the characters. It returns <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">LESS</a></code>, <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">EQUAL</a></code>,  or <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">GREATER</a></code>, if <var>s</var> is less than, equal to, or greater than <var>t</var>, respectively. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.collate:VAL"></a>
+</dt><dt> <code>collate <var>f</var> (<var>s</var>, <var>t</var>) </code>
+</dt><dd>
+performs lexicographic comparison of the two strings using the given ordering <var>f</var> on characters. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.\|@LT\|:VAL"></a><code><b>val</b>&nbsp;&lt;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&lt;=&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&gt;&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&gt;=&nbsp;<b>:</b>&nbsp;string&nbsp;<b>*</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;bool</code>
+</dt><dd>
+          These functions compare two strings lexicographically, using the underlying ordering on the <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.char:TY:SPEC">char</a></code> type. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.toString:VAL"></a>
+</dt><dt> <code>toString <var>s</var> </code>
+</dt><dd>
+returns a string corresponding to <var>s</var>, with non-printable characters replaced by SML escape sequences. This is equivalent to 
+<p>
+          <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.translate:VAL:SPEC">translate</a></code> <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.toString:VAL:SPEC">Char.toString</a></code> <var>s</var></code> 
+<br>
+<br>
+
+</p></dd><dt> <a name="SIG:STRING.scan:VAL"></a>
+</dt><dt> <code>scan <var>getc</var> <var>strm</var> </code>
+</dt><dt> <code>          fromString <var>s</var> </code>
+</dt><dd>
+These functions scan their character source as a sequence of printable 
+characters, converting SML escape sequences into the appropriate 
+characters. They do not skip leading whitespace. They return as many 
+characters as can successfully be scanned, stopping when they reach the 
+end of the source or a non-printing character (<i>i.e.</i>, one not satisfying <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.isPrint:VAL:SPEC">isPrint</a></code>), or if they encounter an improper escape sequence. <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.fromString:VAL:SPEC">fromString</a></code> ignores the remaining characters, while <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.scan:VAL:SPEC">scan</a></code> returns the remaining characters as the rest of the stream. 
+<p>
+ The function <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.fromString:VAL:SPEC">fromString</a></code> is equivalent to the  <code><code><a href="http://sml-family.org/Basis/string-cvt.html#SIG:STRING_CVT.scanString:VAL:SPEC">StringCvt.scanString</a></code> scan</code>. 
+</p><p>
+          If no conversion is possible, <i>e.g.</i>, if the first character is non-printable or begins an illegal escape sequence, <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> is returned. Note, however, that <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.fromString:VAL:SPEC">fromString</a></code> ""</code> returns <code><code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">SOME</a></code>("")</code>. 
+</p><p>
+          For more information on the allowed escape sequences, see the entry for <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.fromString:VAL:SPEC">CHAR.fromString</a></code>.
+ SML source also allows escaped formatting sequences, which are ignored 
+during conversion. The rule is that if any prefix of the input is 
+successfully scanned, including an escaped formatting sequence, the 
+functions returns some string. They only return <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> in the case where the prefix of the input cannot be scanned at all. Here are some sample conversions: 
+</p><hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<th align="CENTER" valign="TOP">
+Input string <var>s</var>
+</th><th align="CENTER" valign="TOP">
+<code>fromString <var>s</var></code>
+</th></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\q"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"a\^D"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME "a"</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"a\\ \\\\q"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME "a"</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ \\"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME ""</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>""</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME ""</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ \\\^D"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME ""</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ a"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr></tbody></table>
+</center>
+<hr>
+ 
+<blockquote>
+<b>Implementation note:</b><br>
+
+<p>
+Because of the special cases, such as <code>fromString "" = SOME ""</code>, <code>fromString "\\ \\\^D" = SOME ""</code>, and <code>fromString "\^D" = NONE</code>, the functions cannot be implemented as a simple iterative application of <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.scan:VAL:SPEC">CHAR.scan</a></code>.
+</p></blockquote>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:STRING.toCString:VAL"></a>
+</dt><dt> <code>toCString <var>s</var> </code>
+</dt><dd>
+returns a string corresponding to <var>s</var>, with non-printable characters replaced by C escape sequences. This is equivalent to 
+<p>
+          <code><code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.translate:VAL:SPEC">translate</a></code> <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.toCString:VAL:SPEC">Char.toCString</a></code> <var>s</var></code> 
+<br>
+<br>
+
+</p></dd><dt> <a name="SIG:STRING.fromCString:VAL"></a>
+</dt><dt> <code>fromCString <var>s</var> </code>
+</dt><dd>
+scans the string <var>s</var> as a string in the C language, converting C escape sequences into the appropriate characters. The semantics are identical to <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.fromString:VAL:SPEC">fromString</a></code> above, except that C escape sequences are used (see ISO C standard ISO/IEC 9899:1990<b>[CITE]</b>). 
+<p>
+          For more information on the allowed escape sequences, see the entry for <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.fromCString:VAL:SPEC">CHAR.fromCString</a></code>. Note that <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.fromCString:VAL:SPEC">fromCString</a></code> accepts an unescaped single quote character, but does not accept an unescaped double quote character. 
+<br>
+<br>
+
+</p></dd></dl>
+<h4>See Also</h4>
+<blockquote>
+<code><a href="http://sml-family.org/Basis/char.html#CHAR:SIG:SPEC">CHAR</a></code>, <code><a href="http://sml-family.org/Basis/mono-array.html#CharArray:STR:SPEC">CharArray</a></code>, <code><a href="http://sml-family.org/Basis/mono-vector.html#CharVector:STR:SPEC">CharVector</a></code>, <code><a href="http://sml-family.org/Basis/string-cvt.html#StringCvt:STR:SPEC">StringCvt</a></code>, <code><a href="http://sml-family.org/Basis/substring.html#SUBSTRING:SIG:SPEC">SUBSTRING</a></code>, <code><a href="http://sml-family.org/Basis/text.html#TEXT:SIG:SPEC">TEXT</a></code>, <code><a href="http://sml-family.org/Basis/mono-vector.html#WideCharVector:STR:SPEC">WideCharVector</a></code>
+</blockquote>
+
+
+<hr>
+<center>
+<b>[ <a href="#top">Top</a>
+   | <a href="http://sml-family.org/Basis/manpages.html">Parent</a>
+   | <a href="http://sml-family.org/Basis/toc.html">Contents</a>
+   | <a href="http://sml-family.org/Basis/index-all.html">Index</a>
+   | <a href="http://sml-family.org/Basis/index.html">Root</a>
+   ]</b>
+</center>
+<p>
+<i>Generated April 12, 2004</i><br>
+<i>Last Modified October 17, 2000</i><br>
+<i>Comments to <a href="http://www.cs.uchicago.edu/people/jhr">John Reppy.</a></i><br>
+
+</p><hr>
+<p>
+
+This document may be distributed freely over the internet as long as the
+copyright notice and license terms below are prominently displayed within
+every machine-readable copy.  
+
+</p><p>
+
+<table align="CENTER" width="80%" border="2" cellpadding="5">
+<tbody><tr>
+<td>
+<p>
+
+Copyright © 2004 AT&amp;T and Lucent Technologies.
+All rights reserved.
+
+</p><p>
+
+Permission is granted for internet users to make one paper copy for their
+own personal use.  Further hardcopy reproduction is strictly prohibited. 
+Permission to distribute the HTML document electronically on any medium
+other than the internet must be requested from the copyright holders by
+contacting the editors.
+Printed versions of the SML Basis Manual are available from Cambridge
+University Press.
+To order, please visit
+<a href="http://www.cup.org/">www.cup.org</a> (North America) or
+<a href="http://www.cup.cam.ac.uk/">www.cup.cam.ac.uk</a> (outside North America).<br>
+
+</p></td></tr></tbody></table>
+</p><p>
+
+</p><hr>
+
+</body></html>

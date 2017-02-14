@@ -1,0 +1,795 @@
+<!-- HTML/char.html -->
+<!-- COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies. -->
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 3.2//EN">
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>The CHAR signature</title>
+<meta name="generator" content="ML-Doc::html-gen">
+</head>
+<body bgcolor="#FFFFFF"><a name="top"></a>
+<h1 align="CENTER">The Standard ML Basis Library</h1>
+<hr>
+
+
+<h2><a name="section:0"></a>The <code>CHAR</code> signature</h2>
+<hr>
+<h4>Synopsis</h4>
+<blockquote>
+<code><b>signature</b>&nbsp;<a name="CHAR:SIG:SPEC"></a><code>CHAR</code><br>
+<b>structure</b>&nbsp;<a name="Char:STR:SPEC"></a><code>Char</code><b> :&gt; </b>CHAR<br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;char&nbsp;=&nbsp;char<br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;string&nbsp;=&nbsp;String.string<br>
+<b>structure</b>&nbsp;<a name="WideChar:STR:SPEC"></a><code>WideChar</code><b> :&gt; </b>CHAR&nbsp;&nbsp;<font color="#FF0000"><code><i>(* OPTIONAL *)</i></code></font><br>
+&nbsp;&nbsp;<b>where</b>&nbsp;<b>type</b>&nbsp;string&nbsp;=&nbsp;WideString.string<br>
+</code>
+</blockquote>
+<p>
+ The <code>CHAR</code> signature defines a type <code>char</code> of 
+characters, and provides basic operations and predicates on values of 
+that type. There is a linear ordering defined on characters. In 
+addition, there is an encoding of characters into a contiguous range of 
+non-negative integers which preserves the linear ordering.
+</p><p>
+There are two structures matching the <code><a href="http://sml-family.org/Basis/char.html#CHAR:SIG:SPEC">CHAR</a></code> signature.  The <code>Char</code> structure provides the extended ASCII 8-bit character set and locale-independent operations on them. For this structure, <code>Char.maxOrd</code> = 255.
+</p><p>
+The optional <code>WideChar</code> structure defines wide characters, which are represented by a fixed number of 8-bit words (bytes). If the <code><a href="http://sml-family.org/Basis/char.html#WideChar:STR:SPEC">WideChar</a></code> structure is provided, it is distinct from the <code><a href="http://sml-family.org/Basis/char.html#Char:STR:SPEC">Char</a></code> structure.
+</p><hr>
+<h4>Interface</h4>
+<blockquote>
+<code><b>eqtype</b>&nbsp;<a name="SIG:CHAR.char:TY:SPEC" href="#SIG:CHAR.char:TY">char</a><br>
+<b>eqtype</b>&nbsp;<a name="SIG:CHAR.string:TY:SPEC" href="#SIG:CHAR.string:TY">string</a><br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.minChar:VAL:SPEC" href="#SIG:CHAR.minChar:VAL">minChar</a>&nbsp;<b>:</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.maxChar:VAL:SPEC" href="#SIG:CHAR.maxChar:VAL">maxChar</a>&nbsp;<b>:</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.maxOrd:VAL:SPEC" href="#SIG:CHAR.maxOrd:VAL">maxOrd</a>&nbsp;<b>:</b>&nbsp;int<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.ord:VAL:SPEC" href="#SIG:CHAR.ord:VAL">ord</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;int<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.chr:VAL:SPEC" href="#SIG:CHAR.chr:VAL">chr</a>&nbsp;<b>:</b>&nbsp;int&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.succ:VAL:SPEC" href="#SIG:CHAR.succ:VAL">succ</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.pred:VAL:SPEC" href="#SIG:CHAR.pred:VAL">pred</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.compare:VAL:SPEC" href="#SIG:CHAR.compare:VAL">compare</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;order<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.\|@LT\|:VAL:SPEC" href="#SIG:CHAR.%5C%7C@LT%5C%7C:VAL">&lt;</a>&nbsp;&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.\|@LTE\|:VAL:SPEC" href="#SIG:CHAR.%5C%7C@LTE%5C%7C:VAL">&lt;=</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.\|@GT\|:VAL:SPEC" href="#SIG:CHAR.%5C%7C@GT%5C%7C:VAL">&gt;</a>&nbsp;&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.\|@GTE\|:VAL:SPEC" href="#SIG:CHAR.%5C%7C@GTE%5C%7C:VAL">&gt;=</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.contains:VAL:SPEC" href="#SIG:CHAR.contains:VAL">contains</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.notContains:VAL:SPEC" href="#SIG:CHAR.notContains:VAL">notContains</a>&nbsp;<b>:</b>&nbsp;string&nbsp;<b>-&gt;</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isAscii:VAL:SPEC" href="#SIG:CHAR.isAscii:VAL">isAscii</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.toLower:VAL:SPEC" href="#SIG:CHAR.toLower:VAL">toLower</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.toUpper:VAL:SPEC" href="#SIG:CHAR.toUpper:VAL">toUpper</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;char<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isAlpha:VAL:SPEC" href="#SIG:CHAR.isAlpha:VAL">isAlpha</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isAlphaNum:VAL:SPEC" href="#SIG:CHAR.isAlphaNum:VAL">isAlphaNum</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isCntrl:VAL:SPEC" href="#SIG:CHAR.isCntrl:VAL">isCntrl</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isDigit:VAL:SPEC" href="#SIG:CHAR.isDigit:VAL">isDigit</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isGraph:VAL:SPEC" href="#SIG:CHAR.isGraph:VAL">isGraph</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isHexDigit:VAL:SPEC" href="#SIG:CHAR.isHexDigit:VAL">isHexDigit</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isLower:VAL:SPEC" href="#SIG:CHAR.isLower:VAL">isLower</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isPrint:VAL:SPEC" href="#SIG:CHAR.isPrint:VAL">isPrint</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isSpace:VAL:SPEC" href="#SIG:CHAR.isSpace:VAL">isSpace</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isPunct:VAL:SPEC" href="#SIG:CHAR.isPunct:VAL">isPunct</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.isUpper:VAL:SPEC" href="#SIG:CHAR.isUpper:VAL">isUpper</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.toString:VAL:SPEC" href="#SIG:CHAR.toString:VAL">toString</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;String.string<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.scan:VAL:SPEC" href="#SIG:CHAR.scan:VAL">scan</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>:</b>&nbsp;(Char.char,&nbsp;<i>'a</i>)&nbsp;StringCvt.reader<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>-&gt;</b>&nbsp;(char,&nbsp;<i>'a</i>)&nbsp;StringCvt.reader<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.fromString:VAL:SPEC" href="#SIG:CHAR.fromString:VAL">fromString</a>&nbsp;<b>:</b>&nbsp;String.string&nbsp;<b>-&gt;</b>&nbsp;char&nbsp;option<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.toCString:VAL:SPEC" href="#SIG:CHAR.toCString:VAL">toCString</a>&nbsp;<b>:</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;String.string<br>
+<b>val</b>&nbsp;<a name="SIG:CHAR.fromCString:VAL:SPEC" href="#SIG:CHAR.fromCString:VAL">fromCString</a>&nbsp;<b>:</b>&nbsp;String.string&nbsp;<b>-&gt;</b>&nbsp;char&nbsp;option</code>
+</blockquote>
+<h4>Description</h4>
+<dl>
+<dt> <a name="SIG:CHAR.minChar:VAL"></a><code><b>val</b>&nbsp;minChar&nbsp;<b>:</b>&nbsp;char</code>
+</dt><dd>
+          The least character in the ordering. It always equals <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.chr:VAL:SPEC">chr</a></code> 0</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.maxChar:VAL"></a><code><b>val</b>&nbsp;maxChar&nbsp;<b>:</b>&nbsp;char</code>
+</dt><dd>
+          The greatest character in the ordering; it equals <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.chr:VAL:SPEC">chr</a></code> <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.maxOrd:VAL:SPEC">maxOrd</a></code></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.maxOrd:VAL"></a><code><b>val</b>&nbsp;maxOrd&nbsp;<b>:</b>&nbsp;int</code>
+</dt><dd>
+          The greatest character code; it equals <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.ord:VAL:SPEC">ord</a></code> <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.maxChar:VAL:SPEC">maxChar</a></code></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.ord:VAL"></a>
+</dt><dt> <code>ord <var>c</var> </code>
+</dt><dd>
+returns the (non-negative) integer code of the character <var>c</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.chr:VAL"></a>
+</dt><dt> <code>chr <var>i</var> </code>
+</dt><dd>
+returns the character whose code is <var>i</var>; raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Chr:EXN:SPEC">Chr</a></code> if <var>i</var> &lt; 0 or <var>i</var> &gt; <code>maxOrd</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.succ:VAL"></a>
+</dt><dt> <code>succ <var>c</var> </code>
+</dt><dd>
+returns the character immediately following <var>c</var> in the ordering, or raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Chr:EXN:SPEC">Chr</a></code> if <var>c</var> = <code>maxChar</code>. When defined, <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.succ:VAL:SPEC">succ</a></code> <var>c</var></code> is equivalent to <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.chr:VAL:SPEC">chr</a></code>(<code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.ord:VAL:SPEC">ord</a></code> <var>c</var> + 1)</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.pred:VAL"></a>
+</dt><dt> <code>pred <var>c</var> </code>
+</dt><dd>
+returns the character immediately preceding <var>c</var>, or raises <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.Chr:EXN:SPEC">Chr</a></code> if  <var>c</var> = <code>minChar</code>. When defined, <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.pred:VAL:SPEC">pred</a></code> <var>c</var></code> is equivalent to <code><code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.chr:VAL:SPEC">chr</a></code>(<code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.ord:VAL:SPEC">ord</a></code> <var>c</var> - 1)</code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.compare:VAL"></a>
+</dt><dt> <code>compare (<var>c</var>, <var>d</var>) </code>
+</dt><dd>
+returns <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">LESS</a></code>,  <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">EQUAL</a></code>, or <code><a href="http://sml-family.org/Basis/general.html#SIG:GENERAL.order:TY:SPEC">GREATER</a></code>, depending on whether <var>c</var> precedes, equals, or follows <var>d</var> in the character ordering. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.\|@LT\|:VAL"></a><code><b>val</b>&nbsp;&lt;&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&lt;=&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&gt;&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool<br>
+<b>val</b>&nbsp;&gt;=&nbsp;<b>:</b>&nbsp;char&nbsp;<b>*</b>&nbsp;char&nbsp;<b>-&gt;</b>&nbsp;bool</code>
+</dt><dd>
+ These compare characters in the character ordering. Note that the functions <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.ord:VAL:SPEC">ord</a></code> and <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.chr:VAL:SPEC">chr</a></code> preserve orderings. For example, if we have <code><var>x</var> &lt; <var>y</var></code> for characters <var>x</var> and <var>y</var>, then it is also true that <code>ord <var>x</var> &lt; ord <var>y</var></code>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.contains:VAL"></a>
+</dt><dt> <code>contains <var>s</var> <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if character <var>c</var> occurs in the string <var>s</var>; otherwise it returns <code>false</code>. 
+<blockquote>
+<b>Implementation note:</b><br>
+
+<p>
+In some implementations, the partial application of <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.contains:VAL:SPEC">contains</a></code> to <var>s</var> may build a table, which is used by the resulting function to decide whether a given character is in the string or not.  Hence <code>val <var>p</var> = <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.contains:VAL:SPEC">contains</a></code> <var>s</var></code> may be expensive to compute, but <code>p <var>c</var></code> might be fast for any given character <var>c</var>. 
+</p></blockquote>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.notContains:VAL"></a>
+</dt><dt> <code>notContains <var>s</var> <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if character <var>c</var> does not occur in the string <var>s</var>; it returns <code>false</code> otherwise. It is equivalent to <code><code><a href="http://sml-family.org/Basis/bool.html#SIG:BOOL.not:VAL:SPEC">not</a></code>(<code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.contains:VAL:SPEC">contains</a></code> <var>s</var> <var>c</var></code>). 
+<blockquote>
+<b>Implementation note:</b><br>
+
+<p>
+As with <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.contains:VAL:SPEC">contains</a></code>, <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.notContains:VAL:SPEC">notContains</a></code> may be implemented via table lookup. 
+</p></blockquote>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isAscii:VAL"></a>
+</dt><dt> <code>isAscii <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a (seven-bit) ASCII character, <i>i.e.</i>, 0 &lt;= <code>ord</code> <var>c</var> &lt;= 127. Note that this function is independent of locale. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.toLower:VAL"></a>
+</dt><dt> <code>toLower <var>c</var> </code>
+</dt><dt> <code>          toUpper <var>c</var> </code>
+</dt><dd>
+These return the lowercase (respectively, uppercase) letter corresponding to <var>c</var> if <var>c</var> is a letter; otherwise it returns <var>c</var>. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isAlpha:VAL"></a>
+</dt><dt> <code>isAlpha <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a letter (lowercase or uppercase). 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isAlphaNum:VAL"></a>
+</dt><dt> <code>isAlphaNum <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is alphanumeric (a letter or a decimal digit). 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isCntrl:VAL"></a>
+</dt><dt> <code>isCntrl <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a control character. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isDigit:VAL"></a>
+</dt><dt> <code>isDigit <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a decimal digit  [<tt>0</tt>-<tt>9</tt>]. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isGraph:VAL"></a>
+</dt><dt> <code>isGraph <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a graphical character, that is, it is printable and not a whitespace character. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isHexDigit:VAL"></a>
+</dt><dt> <code>isHexDigit <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a hexadecimal digit [<tt>0</tt>-<tt>9</tt><tt>a</tt>-<tt>f</tt><tt>A</tt>-<tt>F</tt>]. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isLower:VAL"></a>
+</dt><dt> <code>isLower <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a lowercase letter. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isPrint:VAL"></a>
+</dt><dt> <code>isPrint <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a printable character (space or visible), <i>i.e.</i>, not a control character. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isSpace:VAL"></a>
+</dt><dt> <code>isSpace <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a whitespace character (space, newline, tab, carriage return, vertical tab, formfeed). 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isPunct:VAL"></a>
+</dt><dt> <code>isPunct <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is a punctuation character: graphical but not alphanumeric. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.isUpper:VAL"></a>
+</dt><dt> <code>isUpper <var>c</var> </code>
+</dt><dd>
+returns <code>true</code> if <var>c</var> is an uppercase letter. 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.toString:VAL"></a>
+</dt><dt> <code>toString <var>c</var>  </code>
+</dt><dd>
+returns a printable string representation of the character, using, if 
+necessary, SML escape sequences. Printable characters, except for <code>#"\\"</code> and <code>#"\""</code>, are left unchanged. Backslash <code>#"\\"</code> becomes <code>"\\\\"</code>; double quote <code>#"\""</code> becomes <code>"\\\""</code>. The common control characters are converted to two-character escape sequences: 
+<hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<td align="LEFT" valign="TOP">
+Alert (ASCII 0x07)
+</td><td align="LEFT" valign="TOP">
+<code>"\\a"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Backspace (ASCII 0x08)
+</td><td align="LEFT" valign="TOP">
+<code>"\\b"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Horizontal tab (ASCII 0x09)
+</td><td align="LEFT" valign="TOP">
+<code>"\\t"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Linefeed or newline (ASCII 0x0A)
+</td><td align="LEFT" valign="TOP">
+<code>"\\n"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Vertical tab (ASCII 0x0B)
+</td><td align="LEFT" valign="TOP">
+<code>"\\v"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Form feed (ASCII 0x0C)
+</td><td align="LEFT" valign="TOP">
+<code>"\\f"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Carriage return (ASCII 0x0D)
+</td><td align="LEFT" valign="TOP">
+<code>"\\r"</code>
+</td></tr></tbody></table>
+</center>
+<hr>
+<p>
+    The remaining characters whose codes are less than 32 are 
+represented by three-character strings in ``control character''  
+notation, <i>e.g.</i>, <code>#"\000"</code> maps to <code>"\\^@"</code>, <code>#"\001"</code> maps to <code>"\\^A"</code>, etc. For characters whose codes are greater than 999, the character is mapped to a six-character string of the form <code>"\\uxxxx"</code>, where <code>xxxx</code> are the four hexadecimal digits corresponding to a character's code. All other characters (<i>i.e.</i>, those whose codes are greater than 126 but less than 1000) are mapped to four-character strings of the form <code>"\\ddd"</code>, where <code>ddd</code> are the three decimal digits corresponding to a character's code. 
+</p><p>
+ To convert a character to a length-one string containing the  character, use the function <code><a href="http://sml-family.org/Basis/string.html#SIG:STRING.str:VAL:SPEC">String.str</a></code>. 
+<br>
+<br>
+
+</p></dd><dt> <a name="SIG:CHAR.scan:VAL"></a>
+</dt><dt> <code>scan <var>getc</var> <var>strm</var> </code>
+</dt><dt> <code> fromString <var>s</var> </code>
+</dt><dd>
+These scan a character (including possibly a space) or an SML escape 
+sequence representing a character from the prefix of a character stream 
+or a string of printable characters, as allowed in an SML program. After
+ a successful conversion, <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.scan:VAL:SPEC">scan</a></code> returns the remainder of the stream along with the character, whereas <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.fromString:VAL:SPEC">fromString</a></code> ignores any additional characters in <var>s</var> and just returns the character. If the first character is non-printable (<i>i.e.</i>, not in the ASCII range [0x20,0x7E]) or starts an illegal escape sequence (<i>e.g.</i>, <code>"\q"</code>), no conversion is possible and <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> is returned. The function <code>fromString</code> is equivalent to <code><code><a href="http://sml-family.org/Basis/string-cvt.html#SIG:STRING_CVT.scanString:VAL:SPEC">StringCvt.scanString</a></code> scan</code>. 
+<p>
+          The allowable escape sequences are: 
+</p><hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<td align="LEFT" valign="TOP">
+<code>\a</code>
+</td><td align="LEFT" valign="TOP">
+Alert (ASCII 0x07)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\b</code>
+</td><td align="LEFT" valign="TOP">
+Backspace (ASCII 0x08)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\t</code>
+</td><td align="LEFT" valign="TOP">
+Horizontal tab (ASCII 0x09)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\n</code>
+</td><td align="LEFT" valign="TOP">
+Linefeed or newline (ASCII 0x0A)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\v</code>
+</td><td align="LEFT" valign="TOP">
+Vertical tab (ASCII 0x0B)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\f</code>
+</td><td align="LEFT" valign="TOP">
+Form feed (ASCII 0x0C)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\r</code>
+</td><td align="LEFT" valign="TOP">
+Carriage return (ASCII 0x0D)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\\</code>
+</td><td align="LEFT" valign="TOP">
+Backslash
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\"</code>
+</td><td align="LEFT" valign="TOP">
+Double quote
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\^<var>c</var></code>
+</td><td align="LEFT" valign="TOP">
+A control character whose encoding is <code>ord <var>c</var> - 64</code>, with the
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+      
+</td><td align="LEFT" valign="TOP">
+character <var>c</var> having <code>ord <var>c</var></code> in the range [64,95]. For example, 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+      
+</td><td align="LEFT" valign="TOP">
+<code>\^H</code> (control-H) is the same as <code>\b</code> (backspace).
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\<var>ddd</var></code>
+</td><td align="LEFT" valign="TOP">
+The character whose encoding is the number <var>ddd</var>, three decimal
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+         
+</td><td align="LEFT" valign="TOP">
+ digits denoting an integer in the range [0,255].
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\u<var>xxxx</var></code>
+</td><td align="LEFT" valign="TOP">
+The character whose encoding is the number <var>xxxx</var>, four hexadecimal
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+           
+</td><td align="LEFT" valign="TOP">
+digits denoting an integer in the ordinal range of the alphabet. 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\<var>f...f</var>\</code>
+</td><td align="LEFT" valign="TOP">
+ This sequence is ignored, where <var>f...f</var> stands for a sequence of one
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+           
+</td><td align="LEFT" valign="TOP">
+or more formatting (space, newline, tab, etc.) characters.
+</td></tr></tbody></table>
+</center>
+<hr>
+<p>
+In the escape sequences involving decimal or hexadecimal digits, if the 
+resulting value cannot be represented in the character set,  <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> is returned. As the table indicates, escaped formatting sequences (<code>\f...f\</code>) are passed over during scanning. Such sequences are successfully scanned, so that the remaining stream returned by <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.scan:VAL:SPEC">scan</a></code> will never have a valid escaped formatting sequence as its prefix.
+</p><p>
+Here are some sample conversions: 
+</p><hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<th align="CENTER" valign="TOP">
+Input string <var>s</var>
+</th><th align="CENTER" valign="TOP">
+<code>fromString <var>s</var></code>
+</th></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\q"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"a\^D"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME #"a"</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"a\\ \\\q"</code>
+</td><td align="CENTER" valign="TOP">
+<code>SOME #"a"</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ \\"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>""</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ \\\^D"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr><tr>
+<td align="CENTER" valign="TOP">
+<code>"\\ a"</code>
+</td><td align="CENTER" valign="TOP">
+<code>NONE</code>
+</td></tr></tbody></table>
+</center>
+<hr>
+ 
+<br>
+<br>
+
+</dd><dt> <a name="SIG:CHAR.toCString:VAL"></a>
+</dt><dt> <code>toCString <var>c</var> </code>
+</dt><dd>
+returns a printable string corresponding to <var>c</var>, with non-printable characters replaced by C escape sequences. Specifically, printable characters, except for <code>#"\\"</code>, <code>#"\""</code>, <code>#"?"</code>, and <code>#"'"</code> are left unchanged. Backslash (<code>#"\\"</code>) becomes <code>"\\\\"</code>; double quote (<code>#"\""</code>) becomes <code>"\\\""</code>, question mark (<code>#"?"</code>) becomes <code>"\\?"</code>, and single quote (<code>#"'"</code>) becomes <code>"\\'"</code>. The common control characters are converted to two-character escape sequences: 
+<hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<td align="LEFT" valign="TOP">
+Alert (ASCII 0x07)
+</td><td align="LEFT" valign="TOP">
+<code>"\\a"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Backspace (ASCII 0x08)
+</td><td align="LEFT" valign="TOP">
+<code>"\\b"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Horizontal tab (ASCII 0x09)
+</td><td align="LEFT" valign="TOP">
+<code>"\\t"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Linefeed or newline (ASCII 0x0A)
+</td><td align="LEFT" valign="TOP">
+<code>"\\n"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Vertical tab (ASCII 0x0B)
+</td><td align="LEFT" valign="TOP">
+<code>"\\v"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Form feed (ASCII 0x0C)
+</td><td align="LEFT" valign="TOP">
+<code>"\\f"</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+Carriage return (ASCII 0x0D)
+</td><td align="LEFT" valign="TOP">
+<code>"\\r"</code>
+</td></tr></tbody></table>
+</center>
+<hr>
+<p>
+      All other characters are represented by three octal digits, corresponding to a character's code, preceded by a backslash. 
+<br>
+<br>
+
+</p></dd><dt> <a name="SIG:CHAR.fromCString:VAL"></a>
+</dt><dt> <code>fromCString <var>s</var> </code>
+</dt><dd>
+scans a character (including possibly a space) or a C escape sequence 
+representing a character from the prefix of a string. After a successful
+ conversion, <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.fromCString:VAL:SPEC">fromCString</a></code> ignores any additional characters in <var>s</var>. If no conversion is possible, <i>e.g.</i>, if the first character is non-printable (<i>i.e.</i>, not in the ASCII range [0x20-0x7E] or starts an illegal escape sequence, <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> is returned. 
+<p>
+          The allowable escape sequences are given below (<i>cf</i>. Section 6.1.3.4 of the ISO C standard ISO/IEC 9899:1990<b>[CITE]</b>). 
+</p><hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<td align="LEFT" valign="TOP">
+<code>\a</code>
+</td><td align="LEFT" valign="TOP">
+Alert (ASCII 0x07)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\b</code>
+</td><td align="LEFT" valign="TOP">
+Backspace (ASCII 0x08)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\t</code>
+</td><td align="LEFT" valign="TOP">
+Horizontal tab (ASCII 0x09)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\n</code>
+</td><td align="LEFT" valign="TOP">
+Linefeed or newline (ASCII 0x0A)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\v</code>
+</td><td align="LEFT" valign="TOP">
+Vertical tab (ASCII 0x0B)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\f</code>
+</td><td align="LEFT" valign="TOP">
+Form feed (ASCII 0x0C)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\r</code>
+</td><td align="LEFT" valign="TOP">
+Carriage return (ASCII 0x0D)
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\?</code>
+</td><td align="LEFT" valign="TOP">
+Question mark
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\\</code>
+</td><td align="LEFT" valign="TOP">
+Backslash
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\"</code>
+</td><td align="LEFT" valign="TOP">
+Double quote
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\'</code>
+</td><td align="LEFT" valign="TOP">
+Single quote
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\^<var>c</var></code>
+</td><td align="LEFT" valign="TOP">
+A control character whose encoding is <code>ord <var>c</var> - 64</code>, with the
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+      
+</td><td align="LEFT" valign="TOP">
+character <var>c</var> having <code>ord <var>c</var></code> in the range [64,95]. For example, 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+      
+</td><td align="LEFT" valign="TOP">
+<code>\^H</code> (control-H) is the same as <code>\b</code> (backspace).
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\<var>ooo</var></code>
+</td><td align="LEFT" valign="TOP">
+The character whose encoding is the number <var>ooo</var>, where
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+
+</td><td align="LEFT" valign="TOP">
+<var>ooo</var> consists of one to three octal digits
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<code>\x<var>hh</var></code>
+</td><td align="LEFT" valign="TOP">
+The character whose encoding is the number <var>hh</var>,
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+
+</td><td align="LEFT" valign="TOP">
+where <var>hh</var> is a sequence of hexadecimal digits.
+</td></tr></tbody></table>
+</center>
+<hr>
+ Note that <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.fromCString:VAL:SPEC">fromCString</a></code> accepts an unescaped single quote character, but does not accept an unescaped double quote character.
+<p>
+In the escape sequences involving octal or hexadecimal digits, the 
+sequence of digits is taken to be the longest sequence of such 
+characters. If the resulting value cannot be represented in the 
+character set,  <code><a href="http://sml-family.org/Basis/option.html#SIG:OPTION.option:TY:SPEC">NONE</a></code> is returned. 
+<br>
+<br>
+
+</p></dd></dl>
+<h4>See Also</h4>
+<blockquote>
+<code><a href="http://sml-family.org/Basis/string.html#STRING:SIG:SPEC">STRING</a></code>, <code><a href="http://sml-family.org/Basis/text.html#TEXT:SIG:SPEC">TEXT</a></code>
+</blockquote>
+<h4>Discussion</h4>
+<p>
+In <code><a href="http://sml-family.org/Basis/char.html#WideChar:STR:SPEC">WideChar</a></code>, the functions <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.toLower:VAL:SPEC">toLower</a></code>, <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.toLower:VAL:SPEC">toLower</a></code>, <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.isAlpha:VAL:SPEC">isAlpha</a></code>,..., <code><a href="http://sml-family.org/Basis/char.html#SIG:CHAR.isUpper:VAL:SPEC">isUpper</a></code> and, in general, the definition of a ``letter'' are locale-dependent. In <code><a href="http://sml-family.org/Basis/char.html#Char:STR:SPEC">Char</a></code>, these functions are locale-independent, with the following semantics: 
+</p><hr>
+<center>
+<table align="CENTER">
+<tbody><tr>
+<td align="LEFT" valign="TOP">
+<tt>isUpper</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>#"A" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"Z"</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isLower</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>#"a" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"z"</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isDigit</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>#"0" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"9"</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isAlpha</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isUpper <var>c</var> <code><b>orelse</b></code> isLower <var>c</var></code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isAlphaNum</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isAlpha <var>c</var> <code><b>orelse</b></code> isDigit <var>c</var></code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isHexDigit</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isDigit <var>c</var></code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+  
+</td><td align="LEFT" valign="TOP">
+<code><code><b>orelse</b></code> (#"a" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"f")</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+  
+</td><td align="LEFT" valign="TOP">
+<code><code><b>orelse</b></code> (#"A" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"F")</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isGraph</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>#"!" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"~"</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isPrint</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isGraph <var>c</var> <code><b>orelse</b></code> <var>c</var> = #" "</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isPunct</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isGraph <var>c</var> <code><b>andalso</b></code> not (isAlphaNum <var>c</var>)</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isCntrl</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>isAscii <var>c</var> <code><b>andalso</b></code> not (isPrint <var>c</var>)</code>
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isSpace</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>(#"\t" &lt;= <var>c</var> <code><b>andalso</b></code> <var>c</var> &lt;= #"\r")</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+  
+</td><td align="LEFT" valign="TOP">
+<code><code><b>orelse</b></code> <var>c</var> = #" "</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>isAscii</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code>0 &lt;= ord <var>c</var> <code><b>andalso</b></code> ord <var>c</var> &lt;= 127</code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>toLower</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code><code><b>if</b></code> isUpper <var>c</var> <code><b>then</b></code> chr (ord <var>c</var> + 32) <code><b>else</b></code> <var>c</var></code> 
+</td></tr><tr>
+<td align="LEFT" valign="TOP">
+<tt>toUpper</tt> <var>c</var>
+</td><td align="LEFT" valign="TOP">
+<code><code><b>if</b></code> isLower <var>c</var> <code><b>then</b></code> chr (ord <var>c</var> - 32) <code><b>else</b></code> <var>c</var></code> 
+</td></tr></tbody></table>
+</center>
+<hr>
+
+
+<hr>
+<center>
+<b>[ <a href="#top">Top</a>
+   | <a href="http://sml-family.org/Basis/manpages.html">Parent</a>
+   | <a href="http://sml-family.org/Basis/toc.html">Contents</a>
+   | <a href="http://sml-family.org/Basis/index-all.html">Index</a>
+   | <a href="http://sml-family.org/Basis/index.html">Root</a>
+   ]</b>
+</center>
+<p>
+<i>Generated April 12, 2004</i><br>
+<i>Last Modified May 27, 2000</i><br>
+<i>Comments to <a href="http://www.cs.uchicago.edu/people/jhr">John Reppy.</a></i><br>
+
+</p><hr>
+<p>
+
+This document may be distributed freely over the internet as long as the
+copyright notice and license terms below are prominently displayed within
+every machine-readable copy.  
+
+</p><p>
+
+<table align="CENTER" width="80%" border="2" cellpadding="5">
+<tbody><tr>
+<td>
+<p>
+
+Copyright © 2004 AT&amp;T and Lucent Technologies.
+All rights reserved.
+
+</p><p>
+
+Permission is granted for internet users to make one paper copy for their
+own personal use.  Further hardcopy reproduction is strictly prohibited. 
+Permission to distribute the HTML document electronically on any medium
+other than the internet must be requested from the copyright holders by
+contacting the editors.
+Printed versions of the SML Basis Manual are available from Cambridge
+University Press.
+To order, please visit
+<a href="http://www.cup.org/">www.cup.org</a> (North America) or
+<a href="http://www.cup.cam.ac.uk/">www.cup.cam.ac.uk</a> (outside North America).<br>
+
+</p></td></tr></tbody></table>
+</p><p>
+
+</p><hr>
+
+</body></html>

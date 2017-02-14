@@ -1,0 +1,35 @@
+<!--#include virtual="header.html"-->
+<script type="text/javascript">
+function year() {
+  var d = new Date();
+  var yearIStarted = 2012;
+  var n;
+  if (d.getMonth() < 8) {
+    // It's August or earlier. Subtract the year I got here.
+    n = d.getFullYear() - yearIStarted;
+  }
+  else {
+    // It's the new academic year. Add a year.
+    n = d.getFullYear() - yearIStarted + 1;
+  }
+  if (n == 1) return "1st";
+  else if (n == 2) return "2nd";
+  else if (n == 3) return "3rd";
+  else return n.toString() + "th";
+}
+</script>
+<p>I'm a <script type="text/javascript">document.write(year())</script>
+year grad student working
+with <a href="http://www.umut-acar.org/">Umut Acar</a> in the Computer
+Science Department at Carnegie Mellon University. My research is
+primarily in the semantics and efficient implementation of
+interactive(/reactive) programs, though my broad interests span
+programming language and computer science more generally. </p>
+
+<p>Prior to this, in spring 2012, I graduated from Harvard University with
+an AB in computer science and a secondary field in physics (translation:
+BA and minor, respectively). My senior thesis
+on information flow control was supervised by
+<a href="http://people.seas.harvard.edu/~chong/index.html">Stephen Chong</a>.
+</p>
+<!--#include virtual="footer.html"-->

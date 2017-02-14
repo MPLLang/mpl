@@ -1,0 +1,8 @@
+default: pd
+
+ws6:
+	../../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/lib -link-opt -I+sfml -link-opt -lsfml-system -link-opt -lsfml-audio -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6-map -output music-ws6 music.mlb soundlib.o
+
+pd:
+	g++ -c -g soundlib.cpp
+	../../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/lib -link-opt -I+sfml -link-opt -lsfml-system -link-opt -lsfml-audio -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -debug true -debug-runtime true -output music-pd music.mlb soundlib.o

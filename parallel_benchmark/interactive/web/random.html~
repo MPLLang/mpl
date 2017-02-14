@@ -1,0 +1,18 @@
+<html>
+<head>
+</head>
+<body>
+<script type="text/javascript">
+function printrand(var max) {
+  var r = Math.floor((Math.random()*max)+1);
+  getElementById('random').innerHTML = r;
+}
+</script>
+<div id="random"></div>
+<ol>
+<li>At a 4-way intersection with a green light, cross the street.</li>
+<li>At a 4-way intersection with a red light, stay on the same side of
+the street and turn with probability 2/3, cross in the direction of the
+light with probability 1/3. <a href="javascript: printrand(3);">Go</a></li>
+<li>At a 3-way intersection with a traffic light, go straight if possible,
+otherwise 

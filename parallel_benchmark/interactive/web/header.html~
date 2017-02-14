@@ -1,0 +1,43 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<link rel="stylesheet" type="text/css" href="style.css" />
+<title>Stefan Muller</title>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />
+<meta name="keywords" content="Stefan Muller" /> 
+<meta name="description" content="Stefan Muller is a graduate student in Computer Science at Carnegie Mellon University." /> 
+</head>
+<body>
+<table border="0" width="100%">
+<tr>
+<td width="20%">
+&nbsp;
+</td>
+<td width="60%" id="main">
+<table border="0" width="100%">
+<tr>
+<td valign="top">
+<h1>Stefan Muller</h1>
+<p>6004 Gates-Hillman Center<br />
+Computer Science Department<br />
+Carnegie Mellon University<br /><br />
+(first initial) (last name) (at) cs (dot) cmu (dot) edu
+</p>
+</td>
+<td align="right">
+<img src="skmcsd2.jpg" width="100" alt="Stefan Muller" />
+</td>
+</tr>
+</table>
+<hr />
+<div style="text-align: center;">
+<p style="padding: 0px;">
+<a href="research.html">Research and Teaching</a>&nbsp;&nbsp;|&nbsp;&nbsp;
+<a href="personal.html">Personal</a>&nbsp;&nbsp;|&nbsp;&nbsp;
+<a href="index.html">Home</a>
+</p>
+</div>
+<hr />
+
+
