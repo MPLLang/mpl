@@ -113,7 +113,7 @@ in
 
 MLton.Parallel.ForkJoin.fork ((fn () => MLton.Parallel.FutureFGBG.fg
                                             (fn () => acceptloop sock)),
-                                      (fn () => fibdo 43)
+                                      (fn () => fibdo 45)
                                       )
 
 (*

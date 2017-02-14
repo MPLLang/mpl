@@ -25,4 +25,4 @@ fun fibdo n =
         OS.Process.exit OS.Process.success
     end
 
-val _ = fibdo 43
+val _ = fibdo 45

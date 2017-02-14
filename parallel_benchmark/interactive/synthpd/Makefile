@@ -72,5 +72,5 @@ net_test: net_test.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
 pd: fib_term-pd fib_net-pd uts_term-pd uts_net-pd
 
 seq: seqfib.sml sequts.sml
-	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -debug-runtime true -output seqfib seqfib.mlb
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -output seqfib seqfib.mlb
 	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -output sequts sequts.mlb

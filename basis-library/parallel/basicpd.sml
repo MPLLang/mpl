@@ -134,7 +134,6 @@ fun atomically f =
 
 val WORK_ARRAY_SIZE = 1024
 (* private state *)
-(* Token = (creating proc, proc-unique ID, queue) *)
 datatype token = Token of int * int * queue option ref
 and entry = Empty | Work of (token * job (* * int *))
 and queue = Queue of
@@ -188,11 +187,15 @@ val reqcells = V.tabulate (P, fn _ => ref ~1)
 
 val nextToken = A.array (P, 0)
 
-fun newWork p = Token (p, A.sub (nextToken, p), ref NONE)
-                before A.update (nextToken, p, A.sub (nextToken, p) + 1)
+fun newWork p =
+    let val i = A.sub (nextToken, p)
+    in
+      Token (p, i, ref NONE)
+      before A.update (nextToken, p, i + 1)
+    end
 
-fun stringOfToken (Token (p, i, _)) = "(" ^ (Int.toString p) ^ ", "
-                                      ^ (Int.toString i) ^ ")"
+fun stringOfToken (Token (p, i, _)) = "(" ^ (Int.toString p) ^ ", " ^
+    (Int.toString i) ^ ")"
 
 fun resize (Queue {top, bottom, work, ... }) =
     let
@@ -350,9 +353,9 @@ fun dealAttempt p =
         else
             (case A.sub (taskcells, p) of
                 SOME _ => (* have an outstanding deal *)
-                ((* eprint ("Task hasn't been taken from " ^
+                (eprint ("Task hasn't been taken from " ^
                          (Int.toString p) ^ ": cell is " ^
-                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); *) false)
+                         (Int.toString (!(V.sub (commcells, A.sub (lastDealtTo, p))))) ^ "\n"); false)
               | NONE =>
                 if compareAndSwap (c, vv, p) then
                     let (* val _ = eprint ((Int.toString p') ^ "'s cell was " ^
@@ -475,7 +478,7 @@ fun removeWork (p, Token (tpr, ti, qr)) =
                     case A.sub (w, i) of
                         Empty => raise WorkQueue
                       | Work (Token (tpr', ti', _), w) =>
-                        if ti' = ti andalso tpr' = tpr then
+                        if tpr = tpr' andalso ti = ti' then
                             (unloop i;
                              (if debug then
                                   ignore (fetchAndAdd (tasksAdded, ~1))
