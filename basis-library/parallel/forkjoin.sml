@@ -14,10 +14,10 @@ struct
 
   val dbgmsg = (* I.dbgmsg *) fn _ => ()
 
-  val numTasks = Array.array (Word32.toInt I.numberOfProcessors, 0)
+  val numTasks = Array.array (I.numberOfProcessors, 0)
   fun incrTask n =
       let
-        val p = Word32.toInt (I.processorNumber ())
+        val p = I.processorNumber ()
       in
         Array.update (numTasks, p, Array.sub (numTasks, p) + n)
       end

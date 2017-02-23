@@ -138,6 +138,7 @@ structure GC =
       val setRusageMeasureGC =
          _import "GC_setControlsRusageMeasureGC" runtime private: bool -> unit;
       val setSummary = _import "GC_setControlsSummary" runtime private: bool -> unit;
+      val time = _import "GC_getCumulativeStatisticsGCTime" runtime private: unit -> C_UIntmax.t;
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
    end
 
@@ -212,6 +213,16 @@ structure HM =
             _import "HM_HHC_registerQueueLock" runtime private:
             Word32.word * Word32.word ref -> unit;
     end
+
+structure Parallel =
+   struct
+      val numberOfProcessors =
+         _import "Parallel_numberOfProcessors" impure private: unit -> Int32.int;
+      val numberOfProcessors = numberOfProcessors ()
+
+      val processorNumber =
+         _import "Parallel_processorNumber" impure private: unit -> Int32.int;
+   end
 
 structure Platform =
    struct
@@ -413,10 +424,10 @@ structure Thread =
       val returnToC = _prim "Thread_returnToC": unit -> unit;
       val saved = _import "GC_getSavedThread" runtime private: unit -> thread;
       val savedPre = _import "GC_getSavedThread" runtime private: unit -> preThread;
-      val setCallFromCHandler =
-         _import "GC_setCallFromCHandlerThread" runtime private: thread -> unit;
-      val setSignalHandler =
-         _import "GC_setSignalHandlerThread" runtime private: thread -> unit;
+      val setCallFromCHandlers =
+         _import "GC_setCallFromCHandlerThreads" runtime private: thread array -> unit;
+      val setSignalHandlers =
+         _import "GC_setSignalHandlerThreads" runtime private: thread array -> unit;
       val setSaved = _import "GC_setSavedThread" runtime private: thread -> unit;
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: unit -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;

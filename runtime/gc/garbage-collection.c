@@ -201,7 +201,7 @@ void performGC (GC_state s,
              100.0 * ((double)(nurserySize) / (double)(s->heap->size)));
   }
   /* Send a GC signal. */
-  if (s->signalsInfo.gcSignalHandled
+  if (s->procStates[0].signalsInfo.gcSignalHandled
       and s->signalHandlerThread != BOGUS_OBJPTR) {
     if (DEBUG_SIGNALS)
       fprintf (stderr, "GC Signal pending.\n");
@@ -419,8 +419,6 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
 
     ENTER0 (s);
-    /* SPOONHOWER_NOTE: should this go here? */
-    switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
     /* Recheck invariants now that we hold the lock */
     if ((ensureStack and not invariantForMutatorStack (s))
@@ -461,6 +459,11 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   /* SPOONHOWER_NOTE: Used to be enter() here */
+  /* XXX copied from enter() */
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
 
   bool inGlobalHeap = !getThreadCurrent(s)->useHierarchicalHeap ||
                       HM_inGlobalHeap(s);
@@ -480,11 +483,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
     bytesRequested = s->controls->allocChunkSize;
   }
 
-  /* SPOONHOWER_NOTE: copied from enter() */
-  /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
   if (inGlobalHeap) {
     ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
@@ -493,6 +493,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   } else {
     HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
   }
+
+  endAtomic (s);
 }
 
 pointer FFI_getArgs (GC_state s) {

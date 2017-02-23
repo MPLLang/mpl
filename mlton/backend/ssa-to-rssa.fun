@@ -796,12 +796,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          case Type.deReal t of
             NONE => Operand.cast (Operand.word (Type.bogusWord t), t)
           | SOME s => Operand.Const (Const.real (RealX.zero s))
-      val handlesSignals =
-         S.Program.hasPrim
-         (program, fn p =>
-          case Prim.name p of
-             Prim.Name.MLton_installSignalHandler => true
-           | _ => false)
+      (*
+       * in a multi-threaded context, the requirements of synchronization are a
+       * subset of the requirements for signal handling
+       *)
+      val handlesSignals = true
       fun translateFormals v =
          Vector.keepAllMap (v, fn (x, t) =>
                             Option.map (toRtype t, fn t => (x, t)))

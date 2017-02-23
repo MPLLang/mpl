@@ -14,7 +14,7 @@ struct
 
   val dbgmsg = if false then I.dbgmsg else fn _ => ()
 
-  val numberOfProcessors = Word32.toInt I.numberOfProcessors
+  val numberOfProcessors = I.numberOfProcessors
 
   structure Q = WorkQueue (struct
                              type work = job
@@ -26,7 +26,7 @@ struct
 
   datatype t = Capture of token * job
 
-  val processorNumber = Word32.toInt o I.processorNumber
+  val processorNumber = I.processorNumber
   val profileDisable = _import "GC_profileDisable" runtime private: unit -> unit;
   val profileEnable = _import "GC_profileEnable" runtime private: unit -> unit;
 

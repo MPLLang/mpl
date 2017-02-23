@@ -67,6 +67,7 @@ struct GC_state {
   GC_objectHashTable objectHashTable;
   GC_objectType objectTypes; /* Array of object types. */
   uint32_t objectTypesLength; /* Cardinality of objectTypes array. */
+  int32_t procNumber;
   /* States for each processor */
   GC_state procStates;
   struct GC_profiling profiling;
@@ -123,11 +124,12 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
-PRIVATE void GC_setCallFromCHandlerThread (pointer p);
+PRIVATE void GC_setCallFromCHandlerThreads (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);
 PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (void);
 /**
@@ -143,7 +145,7 @@ PRIVATE pointer GC_getCurrentHierarchicalHeap (void);
 PRIVATE void GC_setCurrentHierarchicalHeap (pointer hhPointer);
 PRIVATE pointer GC_getSavedThread (void);
 PRIVATE void GC_setSavedThread (pointer p);
-PRIVATE void GC_setSignalHandlerThread (pointer p);
+PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
