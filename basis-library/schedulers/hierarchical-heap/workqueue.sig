@@ -40,9 +40,6 @@ sig
   (* is there higher priority work for the given processor? *)
   val shouldYield : proc -> bool
 
-  (* name of the current policy *)
-  val policyName : string
-
   val reportSuccessfulSteals : unit -> int
   val reportFailedSteals : unit -> int
   val resetSteals : unit -> unit

@@ -6,20 +6,13 @@ local
    workqueue.sig
    basic.sig
    syncvar.sig
-   (* RAM_NOTE: Disabled until reintegrated *)
-   (* future.sig *)
    forkjoin.sig
    array.sig
-   parallel.sig
    wsworkqueue.sml
-   $(WORK_QUEUE).sml
    basic.sml
    syncvar.sml
-   (* RAM_NOTE: Disabled until reintegrated *)
-   (* future.sml *)
    forkjoin.sml
    array.sml
-   parallel.sml
    init.sml
 in
    structure ForkJoin = MLtonParallelForkJoin

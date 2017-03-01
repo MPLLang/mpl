@@ -1,24 +1,8 @@
-signature POLICY =
-sig
-  val suspendEntireQueues : bool
-  (* If we just suspended and there is work on our queue, should we take from
-    the oldest end instead of the youngest end?  (This only makes sense if we
-    are not suspendEntireQueues.) *)
-  val stealOldestFromSelf : bool
-  (* When resuming work, should it be added to our local queue? *)
-  val resumeWorkLocally : bool
-  (* When stealing should we consider queues whose top is suspended?  (This
-    only matters if we suspendEntireQueues.) *)
-  val stealFromSuspendedQueues : bool
-  (* If a queue is not suspended and not running on any processor, can we just
-   steal the whole thing? (This only matters if we suspendEntireQueues.) *)
-  val stealEntireQueues : bool
-
-  val policyName : string
-end
-
-functor WorkStealing (structure W : sig type work val numberOfProcessors : unit -> int end
-                      structure P : POLICY) =
+functor WorkStealing (structure W :
+                                sig
+                                  type work
+                                  val numberOfProcessors: unit -> int
+                                end) =
 struct
 
   type proc = int
@@ -324,8 +308,6 @@ struct
       end
 
   fun shouldYield _ = false
-
-  val policyName = P.policyName
 
   fun reportSuccessfulSteals () = !successfulSteals
   fun reportFailedSteals () = !failedSteals

@@ -16,10 +16,12 @@ struct
 
   val numberOfProcessors = I.numberOfProcessors
 
-  structure Q = WorkQueue (struct
-                             type work = job
-                             val numberOfProcessors = fn () => numberOfProcessors
-                           end)
+  structure Q = WorkStealing (structure W =
+                              struct
+                                type work = job
+                                val numberOfProcessors =
+                                 fn () => numberOfProcessors
+                              end)
     :> PARALLEL_WORKQUEUE where type work = job
 
   type token = Q.token
@@ -229,7 +231,6 @@ struct
   val () = MLton.Parallel.registerProcessorFunction schedule
   (* init MUST come after schedulerLoop has been exported *)
 
-  val policyName = Q.policyName
   val successfulSteals = evaluateInGlobalHeap Q.reportSuccessfulSteals
   val failedSteals = evaluateInGlobalHeap Q.reportFailedSteals
   val suspends = evaluateInGlobalHeap (fn () => Array.foldl op+ 0 suspends)

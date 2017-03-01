@@ -39,7 +39,6 @@ sig
   exception Parallel of string
 
   (* informational *)
-  val policyName : string
   val numberOfProcessors : int
   val successfulSteals : unit -> int
   val failedSteals : unit -> int
