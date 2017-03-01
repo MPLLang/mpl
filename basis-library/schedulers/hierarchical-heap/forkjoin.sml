@@ -2,7 +2,7 @@ structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN =
 struct
 
   structure B = MLtonParallelBasic
-  structure HM = MLtonHM
+  structure HM = MLton.HM
   structure HH = HM.HierarchicalHeap
   structure I = MLtonParallelInternal
   structure V = MLtonParallelSyncVar

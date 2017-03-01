@@ -1,7 +1,7 @@
 structure MLtonParallelInternal =
 struct
-   val numberOfProcessors = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
-   val processorNumber = Int32.toInt o Primitive.MLton.Parallel.processorNumber
+   val numberOfProcessors = MLton.Parallel.numberOfProcessors
+   val processorNumber = MLton.Parallel.processorNumber
 
   fun dbgmsg m =
       let

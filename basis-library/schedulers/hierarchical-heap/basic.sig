@@ -41,11 +41,7 @@ sig
   (* informational *)
   val policyName : string
   val numberOfProcessors : int
-  val maxBytesLive : unit -> Word64.word
-  val gcTime : unit -> Word64.word
   val successfulSteals : unit -> int
   val failedSteals : unit -> int
   val suspends : unit -> int
-  val resetStatistics : unit -> unit
-
 end
