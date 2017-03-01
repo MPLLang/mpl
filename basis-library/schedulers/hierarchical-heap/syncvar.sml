@@ -1,23 +1,30 @@
 structure MLtonParallelSyncVar :> MLTON_PARALLEL_SYNCVAR =
 struct
   structure B = MLtonParallelBasic
-  structure HM = MLtonHM
+  structure HM = MLton.HM
 
   datatype 'a state =
       Waiting of B.t list
     | Done of 'a
 
-  type 'a t = int ref * 'a state ref
+  type 'a t = Word32.word ref * 'a state ref
 
-  val lock = _import "Parallel_lockTake" runtime private: int ref -> unit;
-  val unlock = _import "Parallel_lockRelease" runtime private: int ref -> unit;
+  val lockInit = MLton.Parallel.Deprecated.lockInit
+  val lock = MLton.Parallel.Deprecated.takeLock
+  val unlock = MLton.Parallel.Deprecated.releaseLock
 
-  fun empty () = (ref ~1, ref (Waiting nil))
+  fun empty () =
+      let
+        val r = ref (Word32.fromInt 0)
+        val () = lockInit r
+      in
+        (r, ref (Waiting nil))
+      end
 
   fun die message =
       (TextIO.output (TextIO.stdErr, message);
        TextIO.flushOut TextIO.stdErr;
-       MLtonProcess.exit MLtonProcess.Status.failure)
+       OS.Process.exit OS.Process.failure)
 
   fun checkZeroReader list =
       case list

@@ -4,10 +4,10 @@ struct
   type void = unit
   type work = unit -> void
 
-  structure HM = MLtonHM
+  structure HM = MLton.HM
   structure HH = HM.HierarchicalHeap
   structure I = MLtonParallelInternal
-  structure T = MLtonThread
+  structure T = MLton.Thread
 
   datatype job = Work of (unit -> void) * unit HH.t * int
                | Thread of unit T.t * unit HH.t
@@ -27,8 +27,6 @@ struct
   datatype t = Capture of token * job
 
   val processorNumber = I.processorNumber
-  val profileDisable = _import "GC_profileDisable" runtime private: unit -> unit;
-  val profileEnable = _import "GC_profileEnable" runtime private: unit -> unit;
 
   exception Parallel of string
 
@@ -55,7 +53,7 @@ struct
   fun die message =
       (TextIO.output (TextIO.stdErr, message);
        TextIO.flushOut TextIO.stdErr;
-       MLtonProcess.exit MLtonProcess.Status.failure)
+       OS.Process.exit OS.Process.failure)
 
   fun useHH (hh : unit HH.t) : unit = (HM.enterGlobalHeap ();
                                        HH.set hh;
@@ -158,7 +156,7 @@ struct
               then ()
               else Array.update (schedThreads,
                                  i,
-                                 SOME (T.initPrimitive (T.new schedule)))
+                                 SOME (MLton.Parallel.Unsafe.initPrimitiveThread (T.new schedule)))
       in
           loop 0 numberOfProcessors
       end
@@ -228,33 +226,11 @@ struct
                        end)
       end
 
-  val () = (_export "Parallel_run": (unit -> void) -> unit;) schedule
+  val () = MLton.Parallel.registerThreadFunction schedule
   (* init MUST come after schedulerLoop has been exported *)
 
-  val () = print ("**************************\n" ^
-                  "Parallel_init happens after WSQ array init. Should happen first!\n" ^
-                  "**************************\n")
-
-  val () = (_import "Parallel_init" runtime private: unit -> unit;) ()
-
   val policyName = Q.policyName
-  val maxBytesLive =
-      evaluateInGlobalHeap (_import "Parallel_maxBytesLive" runtime private: unit -> Word64.word;)
-  val gcTime =
-      evaluateInGlobalHeap (_import "Parallel_getTimeInGC" runtime private: unit -> Word64.word;)
   val successfulSteals = evaluateInGlobalHeap Q.reportSuccessfulSteals
   val failedSteals = evaluateInGlobalHeap Q.reportFailedSteals
-  val resetStatistics =
-      evaluateInGlobalHeap
-          (fn () =>
-              let
-                  val resetBytesLive = _import "Parallel_resetBytesLive" runtime private: unit -> unit;
-              in
-                  Q.resetSteals ();
-                  Array.modify (fn _ => 0) suspends;
-                  resetBytesLive ()
-              end)
   val suspends = evaluateInGlobalHeap (fn () => Array.foldl op+ 0 suspends)
-
-
 end

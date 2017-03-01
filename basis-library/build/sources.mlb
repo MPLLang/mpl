@@ -363,6 +363,12 @@ in
       ../mlton/ffi.sml
    end
    ../mlton/int-inf.sig
+   ann
+      "allowFFI true"
+   in
+      ../mlton/parallel.sig
+      ../mlton/parallel.sml
+   end
    ../mlton/proc-env.sig
    ../mlton/proc-env.sml
    ../mlton/profile.sig
@@ -384,27 +390,6 @@ in
    ../mlton/world.sml
    ../mlton/mono-array.sig
    ../mlton/mono-vector.sig
-
-   ../parallel/internal.sml
-   ../parallel/workqueue.sig
-   ../parallel/basic.sig
-   ../parallel/syncvar.sig
-   (* RAM_NOTE: Disabled until reintegrated *)
-   (* ../parallel/future.sig *)
-   ../parallel/forkjoin.sig
-   ../parallel/array.sig
-   ../parallel/parallel.sig
-   ann "allowFFI true" in
-      ../parallel/wsworkqueue.sml
-      ../parallel/$(WORK_QUEUE).sml
-      ../parallel/basic.sml
-      ../parallel/syncvar.sml
-      (* RAM_NOTE: Disabled until reintegrated *)
-      (* ../parallel/future.sml *)
-      ../parallel/forkjoin.sml
-   end
-   ../parallel/array.sml
-   ../parallel/parallel.sml
 
    ../mlton/mlton.sig
    ../mlton/mlton.sml

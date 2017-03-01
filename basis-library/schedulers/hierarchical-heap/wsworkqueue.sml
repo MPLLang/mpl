@@ -31,11 +31,11 @@ struct
   val failedSteals = ref 0
   fun incr r = r := !r + 1
 
-  val yield = _import "Parallel_yield" runtime private: unit -> unit;
+  val yield = MLton.Parallel.Deprecated.yield
 
-  val lockInit = _import "Parallel_lockInit" runtime private: Word32.word ref -> unit;
-  val takeLock = _import "Parallel_lockTake" runtime private: Word32.word ref -> unit;
-  val releaseLock = _import "Parallel_lockRelease" runtime private: Word32.word ref -> unit;
+  val lockInit = MLton.Parallel.Deprecated.lockInit
+  val takeLock = MLton.Parallel.Deprecated.takeLock
+  val releaseLock = MLton.Parallel.Deprecated.releaseLock
 
   local
     exception Impossible
@@ -83,7 +83,7 @@ struct
                       lockInit thiefLock)
                   locks
   val () = A.appi (fn (p, Lock {thiefLock, ...}) =>
-                      MLtonHM.registerQueueLock (Word32.fromInt p, thiefLock))
+                      MLton.HM.registerQueueLock (Word32.fromInt p, thiefLock))
                   locks
 
   val QUEUE_ARRAY_SIZE = 8192
@@ -93,7 +93,7 @@ struct
                                    else NONE)
   val () = A.appi (fn (p, q) => case q
                                  of SOME (Queue {work = ref q, ...}) =>
-                                    MLtonHM.registerQueue (Word32.fromInt p, q)
+                                    MLton.HM.registerQueue (Word32.fromInt p, q)
                                   | _ => ())
                   queues
 
@@ -149,7 +149,7 @@ struct
             work := w;
             top := i - j;
             bottom := 0;
-            MLtonHM.registerQueue (Word32.fromInt p, w)
+            MLton.HM.registerQueue (Word32.fromInt p, w)
           end
       end
 
@@ -178,7 +178,7 @@ struct
     end
 
   local
-    fun victim p = Word.toIntX (MLtonRandom.rand ()) mod numberOfProcessors
+    fun victim p = Word.toIntX (MLton.Random.rand ()) mod numberOfProcessors
   in
   fun getWork p =
     let

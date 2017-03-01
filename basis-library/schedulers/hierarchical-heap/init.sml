@@ -1,0 +1,1 @@
+val () = MLton.Parallel.initThreads ()
