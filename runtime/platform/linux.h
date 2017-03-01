@@ -11,10 +11,10 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <hwloc.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <plpa.h>
 #include <poll.h>
 #include <pwd.h>
 #include <sys/ioctl.h>
@@ -106,12 +106,38 @@ static inline char* ctermid(char* x) {
 #define FE_UPWARD       _FPU_RC_UP
 #endif
 
-#define set_cpu_affinity(num) do {                                      \
-        plpa_cpu_set_t cpuset;                                          \
-                                                                        \
-        PLPA_CPU_ZERO (&cpuset);                                        \
-        PLPA_CPU_SET (num, &cpuset);                                    \
-        if (plpa_sched_setaffinity (0, sizeof(cpuset), &cpuset)) {      \
-                fprintf (stderr, "Warning: unable to set CPU affinity\n"); \
-        }                                                               \
-      } while (0)
+static inline void set_cpu_affinity(int cpu) {
+  hwloc_topology_t topology;
+  hwloc_bitmap_t set;
+  int err;
+
+  err = hwloc_topology_init(&topology);
+  if (err < 0) {
+    fprintf(stderr, "failed to initialize the topology\n");
+    return;
+  }
+
+  err = hwloc_topology_load(topology);
+  if (err < 0) {
+    fprintf(stderr, "failed to load the topology\n");
+    goto free_topo;
+  }
+
+  set = hwloc_bitmap_alloc();
+  if (!set) {
+    fprintf(stderr, "failed to allocate a bitmap\n");
+    goto free_topo;
+  }
+
+  hwloc_bitmap_only(set, cpu);
+  err = hwloc_set_cpubind(topology, set, HWLOC_CPUBIND_THREAD);
+  if (err < 0) {
+    fprintf(stderr, "failed to bind to cpu %d\n", cpu);
+    goto free_bitmap;
+  }
+
+free_bitmap:
+  hwloc_bitmap_free(set);
+free_topo:
+  hwloc_topology_destroy(topology);
+}
