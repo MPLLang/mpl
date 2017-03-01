@@ -205,7 +205,6 @@ runtime:
 	$(CP) runtime/gen/basis-ffi.sml \
 		basis-library/primitive/basis-ffi.sml
 	$(CP) runtime/*.h "$(INC)/"
-	$(CP) runtime/plpa/*.h "$(INC)/"
 	mv "$(INC)/c-types.h" "$(LIB)/targets/$(TARGET)/include"
 	for d in basis basis/Real basis/Word gc platform util; do	\
 		mkdir -p "$(INC)/$$d";					\
