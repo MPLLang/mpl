@@ -58,13 +58,13 @@ structure MLtonParallel:> MLTON_PARALLEL =
     val processorNumber: unit -> int = Int32.toInt o Prim.processorNumber
 
     (* This should really be a non-returning function, so wrap it in a raise *)
-    fun registerThreadFunction (f: unit -> unit): unit =
+    fun registerProcessorFunction (f: unit -> unit): unit =
         let
           val f' = fn () => (f (); raise Return)
         in
           (_export "Parallel_run": (unit -> unit) -> unit;) f'
         end
 
-    val initThreads: unit -> unit =
+    val initializeProcessors: unit -> unit =
         _import "Parallel_init" runtime private: unit -> unit;
   end

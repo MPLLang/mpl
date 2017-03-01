@@ -226,7 +226,7 @@ struct
                        end)
       end
 
-  val () = MLton.Parallel.registerThreadFunction schedule
+  val () = MLton.Parallel.registerProcessorFunction schedule
   (* init MUST come after schedulerLoop has been exported *)
 
   val policyName = Q.policyName

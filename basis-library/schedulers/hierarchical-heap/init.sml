@@ -1,1 +1,1 @@
-val () = MLton.Parallel.initThreads ()
+val () = MLton.Parallel.initializeProcessors ()
