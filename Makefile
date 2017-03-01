@@ -167,8 +167,7 @@ libraries:
 mlbpathmap:
 	touch "$(MLBPATHMAP)"
 	( echo 'MLTON_ROOT $$(LIB_MLTON_DIR)/sml';	\
-	  echo 'SML_LIB $$(LIB_MLTON_DIR)/sml';		\
-	  echo 'WORK_QUEUE wspolicy6'; ) 		\
+	  echo 'SML_LIB $$(LIB_MLTON_DIR)/sml';	)	\
 		>>"$(MLBPATHMAP).tmp"
 	mv "$(MLBPATHMAP).tmp" "$(MLBPATHMAP)"
 
