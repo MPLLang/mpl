@@ -1,0 +1,35 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+  end
+
+  internal.sml
+  workqueue.sig
+  basic.sig
+  syncvar.sig
+  forkjoin.sig
+  future.sig
+  array.sig
+
+  wsworkqueue.sml
+  wspolicy6.sml
+  basic.sml
+  syncvar.sml
+  forkjoin.sml
+  future.sml
+  array.sml
+in
+  structure ForkJoin = MLtonParallelForkJoin
+  structure ParallelArray = MLtonParallelArray
+  structure FutureSuspend = MLtonParallelFutureSuspend
+  structure FutureSuspendDelay = MLtonParallelFutureSuspendDelay
+  structure FutureSuspendMaybeDelay = MLtonParallelFutureSuspendMaybeDelay
+end
