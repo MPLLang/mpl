@@ -75,4 +75,8 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     val initializeProcessors: unit -> unit =
         _import "Parallel_init" runtime private: unit -> unit;
+
+    (* shwestrick: needed these for private-deqs scheduler *)
+    val compareAndSwap = _import "Parallel_compareAndSwap" impure private: Int32.int ref * Int32.int * Int32.int -> bool;
+    val fetchAndAdd = _import "Parallel_fetchAndAdd" impure private: Int32.int ref * Int32.int -> Int32.int;
   end

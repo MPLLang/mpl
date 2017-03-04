@@ -1,0 +1,25 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    structure ArrayExtra = Array
+  end
+
+  ATOMIC.sig
+  SCHEDULER.sig
+  FORKJOIN.sig
+  QUEUE.sig
+
+  Atomic.sml
+  Random.sml
+  MkRingBuffer.sml
+  SimpleQueue.sml
+  Scheduler.sml
+  ForkJoin.sml
+in
+  structure ForkJoin
+end

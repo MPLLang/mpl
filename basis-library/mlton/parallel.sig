@@ -89,4 +89,8 @@ signature MLTON_PARALLEL =
      * registerProcessorFunction before calling this function!
      *)
     val initializeProcessors: unit -> unit;
+ 
+    (* shwestrick: needed these for private-deqs scheduler *)
+    val compareAndSwap : Int32.int ref * Int32.int * Int32.int -> bool
+    val fetchAndAdd : Int32.int ref * Int32.int -> Int32.int
   end
