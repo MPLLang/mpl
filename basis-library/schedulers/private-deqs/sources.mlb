@@ -12,12 +12,11 @@ local
   ATOMIC.sig
   SCHEDULER.sig
   FORKJOIN.sig
-  QUEUE.sig
+  queue/QUEUE.sig
 
   Atomic.sml
   Random.sml
-  MkRingBuffer.sml
-  SimpleQueue.sml
+  queue/SimpleQueue.sml
   Scheduler.sml
   ForkJoin.sml
 in

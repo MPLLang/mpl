@@ -31,6 +31,14 @@ struct
     if not DEBUG orelse (invariantfn ()) then ()
     else die (fn _ => String.concatWith " " ("VIOLATED" :: (strsfn ())) ^ "\n")
 
+  (* ----- janky command-line arguments ----- *)
+
+  fun getBusyWorkArg ("-busy" :: str :: _) = Option.valOf (Int.fromString str)
+    | getBusyWorkArg (_ :: l) = getBusyWorkArg l
+    | getBusyWorkArg nil = 1000
+
+  val BUSY_WORK = getBusyWorkArg (CommandLine.arguments ())
+
   (* ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *)
@@ -38,9 +46,13 @@ struct
   structure Thread = MLton.Thread
   val cas = MLton.Parallel.compareAndSwap
 
-  (* TODO: Implement a good queue. Ring buffer is slow for some reason. *)
-  (*structure Queue = MkRingBuffer (val initialCapacity = 2048)*)
+  (* TODO: Implement a faster queue? Is this necessary? As long as only "big"
+   * tasks are migrated, the cost of linear scanning to find the end of the
+   * queue is amortized nicely. *)
   structure Queue = SimpleQueue
+  (*structure Queue = MkRingBuffer (val initialCapacity = 2048)*)
+  (*structure Queue = DoublyLinkedList*)
+  (*structure Queue = MkChunkedDoublyLinkedList (val chunkSize = 64)*)
 
   datatype 'a result =
     Waiting
@@ -199,7 +211,7 @@ struct
       and receiveFrom victimId : thunk =
         case getMailbox myId of
           Empty =>
-            ( busyWork 1000
+            ( busyWork BUSY_WORK
             ; verifyStatus ()
             ; receiveFrom victimId
             )
@@ -261,10 +273,6 @@ struct
 
   val _ = MLton.Parallel.registerProcessorFunction beginSched
   val _ = MLton.Parallel.initializeProcessors ()
-  (*val () = (_export "Parallel_run": (unit -> unit) -> unit;) beginSched*)
-  (* init MUST come after scheduler loop has been exported *)
-  (*val init = (_import "Parallel_init" runtime private: unit -> unit;)*)
-  (*val () = init ()*)
 
   val _ = Thread.switch (fn main =>
     ( mainCont := main
