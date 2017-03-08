@@ -9,6 +9,11 @@ struct
 
   fun pushBot (x, q) = q := (x :: !q)
 
+  fun popBot (q as ref xs) =
+    case xs of
+      [] => NONE
+    | x :: xs' => (q := xs'; SOME x)
+
   fun popBotDiscard (q as ref xs) =
     case xs of
       [] => false

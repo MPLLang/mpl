@@ -11,7 +11,8 @@ local
 
   ATOMIC.sig
   SCHEDULER.sig
-  FORKJOIN.sig
+  FORK_JOIN.sig
+  ASYNC_FINISH.sig
   queue/QUEUE.sig
 
   Atomic.sml
@@ -19,6 +20,8 @@ local
   queue/SimpleQueue.sml
   Scheduler.sml
   ForkJoin.sml
+  AsyncFinish.sml
 in
   structure ForkJoin
+  structure AsyncFinish
 end

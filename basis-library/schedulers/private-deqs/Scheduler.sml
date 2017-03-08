@@ -1,5 +1,8 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
+(* TODO: fork-join still seems to be buggy. Sometimes it crashes, sometimes it
+ * hits a MLton.Thread exception, sometimes a Subscript exception. What is
+ * going on? *)
 structure Scheduler :> SCHEDULER =
 struct
 
@@ -63,8 +66,11 @@ struct
 
   type thunk = unit -> unit
 
-  fun decrement (x : int ref) : bool =
+  fun decrementHitsZero (x : int ref) : bool =
     MLton.Parallel.fetchAndAdd (x, ~1) = 1
+
+  fun increment (x : int ref) : unit =
+    ignore (MLton.Parallel.fetchAndAdd (x, 1))
 
   (*fun arraySub x = Array.unsafeSub x
   fun arrayUpdate x = Array.unsafeUpdate x*)
@@ -99,12 +105,18 @@ struct
   val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
+  val executeQueueFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy executeQueue func"))
 
   fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
 
   fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
-  fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x
+  fun pop () = arraySub "popFuncs" (popFuncs, myWorkerId ()) ()
+
+  fun executeQueue () =
+    arraySub "executeQueueFuncs" (executeQueueFuncs, myWorkerId ()) ()
+
+  fun dummyThunk () = die (fn _ => "Error: dummy thunk")
 
   fun push (run : unit -> 'a) : 'a t =
     let
@@ -115,7 +127,7 @@ struct
         ; returnToSched (counter, current)
         )
     in
-      ( arraySub "pushFuncs" (pushFuncs, myWorkerId ()) run'
+      ( arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (dummyThunk, run')
       ; (counter, result)
       )
     end
@@ -128,16 +140,50 @@ struct
       | Waiting => raise Parallel "Result not written after sync!"
     )
 
+  type async = thunk -> unit
+
+  fun async counter thunk =
+    let
+      (* when `current` is passed, the thunk activates, incrementing the
+       * appropriate synchronization counter and returning a new thunk
+       * which returns to the scheduler upon completing. *)
+      (* TODO: passing `current` at activation is incorrect (actually passing
+       * current at creation is incorrect too). We need the continuation
+       * associated with the person who called `finish`, not the current
+       * processor. So we will need to associate continuations with counters :(
+       *)
+      fun thunk' current =
+        ( increment counter
+        ; fn () => ( thunk ()
+                   ; executeQueue ()
+                   ; returnToSched (counter, current)
+                   )
+        )
+    in
+      arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (thunk, thunk')
+    end
+
+  fun finish (body : async -> 'a) : 'a =
+    let
+      val counter = ref 1
+      val result = body (async counter)
+    in
+      ( executeQueue ()
+      ; arraySub "syncFuncs" (syncFuncs, myWorkerId ()) counter
+      ; result
+      )
+    end
+
   (* ----------------------------------------------------------------------- *
    * ------------------------- MAIN SCHEDULER LOOP ------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  val dummyThread = Thread.new (fn _ => die (fn _ => "dummy thread"))
+  val dummyThread = Thread.new (fn _ => die (fn _ => "Error: dummy thread"))
   val mainCont = ref dummyThread
 
   fun schedule myId =
     let
-      val myQueue = Queue.new ()
+      val myQueue = Queue.new () : (thunk * (unit Thread.t ref -> thunk)) Queue.t
       val myRand = Random.rand myId
       val myCurrent = ref (ref dummyThread)
 
@@ -155,7 +201,11 @@ struct
         let val friend = !(requestCell myId)
         in if friend = NO_REQUEST then ()
            else ( requestCell myId := NO_REQUEST
-                ; setMailbox (friend, Receiving (Queue.popTop myQueue))
+                ; let val mail = case Queue.popTop myQueue of
+                                   NONE => NONE
+                                 | SOME (_, thunk) => SOME (thunk (!myCurrent)) (* activate the thunk *)
+                  in setMailbox (friend, Receiving mail)
+                  end
                 )
         end
 
@@ -181,11 +231,16 @@ struct
             )
         end
 
-      fun push (run : unit Thread.t ref -> thunk) =
-        Queue.pushBot (run (!myCurrent), myQueue)
+      fun push (run : thunk, run' : unit Thread.t ref -> thunk) =
+        Queue.pushBot ((run, run'), myQueue)
 
       fun pop () =
         if Queue.popBotDiscard myQueue then (communicate (); true) else false
+
+      fun executeQueue () =
+        case Queue.popBot myQueue of
+          NONE => ()
+        | SOME (thunk, _) => (thunk (); communicate (); executeQueue ())
 
       (* -------------------- request and receive loops -------------------- *)
 
@@ -247,12 +302,12 @@ struct
         )
 
       fun return (counter, cont) =
-        if decrement counter then continueWork cont else acquireWork ()
+        if decrementHitsZero counter then continueWork cont else acquireWork ()
 
       fun sync (counter : int ref) : unit =
         Thread.switch (fn k =>
           ( !myCurrent := k (* this must happen before decrementing the counter! *)
-          ; if decrement counter then runnable k
+          ; if decrementHitsZero counter then runnable k
             else runnable (Thread.new acquireWork)
           ))
 
@@ -261,6 +316,7 @@ struct
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
       ; arrayUpdate "pushFuncs" (pushFuncs, myId, push)
       ; arrayUpdate "popFuncs" (popFuncs, myId, pop)
+      ; arrayUpdate "executeQueueFuncs" (executeQueueFuncs, myId, executeQueue)
       ; if myId = 0 then continueWork mainCont else acquireWork ()
       )
     end (* schedule *)
