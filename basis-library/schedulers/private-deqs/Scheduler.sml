@@ -75,10 +75,13 @@ struct
   (*fun arraySub x = Array.unsafeSub x
   fun arrayUpdate x = Array.unsafeUpdate x*)
 
-  fun arraySub str (a, i) =
-    Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  fun arrayUpdate str (a, i, x) =
-    Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
+  fun arraySub str (a, i) = Array.sub (a, i)
+    (*Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)*)
+  fun arrayUpdate str (a, i, x) = Array.update (a, i, x)
+    (*Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)*)
+
+  fun vectorSub str (v, i) = Vector.sub (v, i)
+    (*Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)*)
 
   (* A request is either NO_REQUEST, REQUEST_BLOCKED, or a processor id.
    * Workers request work by writing their own id into another worker's
@@ -87,16 +90,19 @@ struct
   val NO_REQUEST = ~1
   val REQUEST_BLOCKED = ~2
   val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
-  fun requestCell p = Vector.sub (requestCells, p)
+  fun requestCell p = vectorSub "requestCells" (requestCells, p)
 
+  (* Space out the statuses for cache performance (don't want unnecessary
+   * invalidations for status updates). I wish there was a better way to do
+   * this. TODO: does this actually make performance better? *)
   val statuses = Array.array (P*64, false)
   fun getStatus p = arraySub "statuses" (statuses, p*64)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*64, s)
 
   datatype mailbox = Empty | Receiving of thunk option
   val mailboxes = Vector.tabulate (P, fn _ => Atomic.new Empty)
-  fun getMailbox p = Atomic.read (Vector.sub (mailboxes, p))
-  fun setMailbox (p, s) = Atomic.write (Vector.sub (mailboxes, p), s)
+  fun getMailbox p = Atomic.read (vectorSub "mailboxes" (mailboxes, p))
+  fun setMailbox (p, s) = Atomic.write (vectorSub "mailboxes" (mailboxes, p), s)
   (*val mailboxes = Array.array (P, Empty)
   fun getMailbox p = arraySub "mailboxes" (mailboxes, p)
   fun setMailbox (p, s) = arrayUpdate "mailboxes" (mailboxes, p, s)*)
@@ -105,7 +111,7 @@ struct
   val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
-  val executeQueueFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy executeQueue func"))
+  (*val executeQueueFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy executeQueue func"))*)
 
   fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
@@ -113,10 +119,10 @@ struct
   fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
   fun pop () = arraySub "popFuncs" (popFuncs, myWorkerId ()) ()
 
-  fun executeQueue () =
-    arraySub "executeQueueFuncs" (executeQueueFuncs, myWorkerId ()) ()
+  (*fun executeQueue () =
+    arraySub "executeQueueFuncs" (executeQueueFuncs, myWorkerId ()) ()*)
 
-  fun dummyThunk () = die (fn _ => "Error: dummy thunk")
+  (*fun dummyThunk () = die (fn _ => "Error: dummy thunk")*)
 
   fun push (run : unit -> 'a) : 'a t =
     let
@@ -127,7 +133,7 @@ struct
         ; returnToSched (counter, current)
         )
     in
-      ( arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (dummyThunk, run')
+      ( arraySub "pushFuncs" (pushFuncs, myWorkerId ()) run'
       ; (counter, result)
       )
     end
@@ -140,8 +146,11 @@ struct
       | Waiting => raise Parallel "Result not written after sync!"
     )
 
-  type async = thunk -> unit
+  (*type async = thunk -> unit
 
+  (* TODO: correct way is
+   * fun async (counter, cont) thunk = ...
+   * where `cont` is determined to be the current of where `finish` was called. *)
   fun async counter thunk =
     let
       (* when `current` is passed, the thunk activates, incrementing the
@@ -172,18 +181,18 @@ struct
       ; arraySub "syncFuncs" (syncFuncs, myWorkerId ()) counter
       ; result
       )
-    end
+    end*)
 
   (* ----------------------------------------------------------------------- *
    * ------------------------- MAIN SCHEDULER LOOP ------------------------- *
    * ----------------------------------------------------------------------- *)
 
   val dummyThread = Thread.new (fn _ => die (fn _ => "Error: dummy thread"))
-  val mainCont = ref dummyThread
+  (*val mainCont = ref dummyThread*)
 
-  fun schedule myId =
+  fun schedule (mainThread, myId) =
     let
-      val myQueue = Queue.new () : (thunk * (unit Thread.t ref -> thunk)) Queue.t
+      val myQueue = Queue.new () : thunk Queue.t
       val myRand = Random.rand myId
       val myCurrent = ref (ref dummyThread)
 
@@ -201,9 +210,10 @@ struct
         let val friend = !(requestCell myId)
         in if friend = NO_REQUEST then ()
            else ( requestCell myId := NO_REQUEST
-                ; let val mail = case Queue.popTop myQueue of
-                                   NONE => NONE
-                                 | SOME (_, thunk) => SOME (thunk (!myCurrent)) (* activate the thunk *)
+                ; let val mail = Queue.popTop myQueue
+                        (*case Queue.popTop myQueue of
+                          NONE => NONE
+                        | SOME (_, thunk) => SOME (thunk (!myCurrent)) (* activate the thunk *)*)
                   in setMailbox (friend, Receiving mail)
                   end
                 )
@@ -231,16 +241,16 @@ struct
             )
         end
 
-      fun push (run : thunk, run' : unit Thread.t ref -> thunk) =
-        Queue.pushBot ((run, run'), myQueue)
+      fun push (run' : unit Thread.t ref -> thunk) =
+        Queue.pushBot (run' (!myCurrent), myQueue)
 
       fun pop () =
         if Queue.popBotDiscard myQueue then (communicate (); true) else false
 
-      fun executeQueue () =
+      (*fun executeQueue () =
         case Queue.popBot myQueue of
           NONE => ()
-        | SOME (thunk, _) => (thunk (); communicate (); executeQueue ())
+        | SOME (thunk, _) => (thunk (); communicate (); executeQueue ())*)
 
       (* -------------------- request and receive loops -------------------- *)
 
@@ -304,20 +314,32 @@ struct
       fun return (counter, cont) =
         if decrementHitsZero counter then continueWork cont else acquireWork ()
 
+      (* NOTE: it might be tempting to just write this function like so:
+       *   fun sync counter =
+       *     Thread.switch (fn k =>
+       *       ( !myCurrent := k
+       *       ; if decrementHitsZero counter then runnable k
+       *         else runnable (Thread.new acquireWork)
+       *       )
+       * However, this is incorrect. Thread.switch requires that the switch
+       * complete before the argument (k, in this case) is switched to. Since
+       * we have multiple workers running concurrently, this could happen! *)
       fun sync (counter : int ref) : unit =
-        Thread.switch (fn k =>
-          ( !myCurrent := k (* this must happen before decrementing the counter! *)
-          ; if decrementHitsZero counter then runnable k
-            else runnable (Thread.new acquireWork)
-          ))
+        let val cont = !myCurrent
+        in Thread.switch (fn k =>
+             ( cont := k (* this must happen before decrementing the counter! *)
+             ; runnable (Thread.new (fn _ => return (counter, cont)))
+             ))
+        end
+
 
     in
       ( arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
       ; arrayUpdate "pushFuncs" (pushFuncs, myId, push)
       ; arrayUpdate "popFuncs" (popFuncs, myId, pop)
-      ; arrayUpdate "executeQueueFuncs" (executeQueueFuncs, myId, executeQueue)
-      ; if myId = 0 then continueWork mainCont else acquireWork ()
+      (*; arrayUpdate "executeQueueFuncs" (executeQueueFuncs, myId, executeQueue)*)
+      ; if myId = 0 then continueWork (ref mainThread) else acquireWork ()
       )
     end (* schedule *)
 
@@ -325,14 +347,11 @@ struct
    * -------- FINAL SETUP: INITIALIZING OTHER PROCS AND MAIN VERTEX -------- *
    * ----------------------------------------------------------------------- *)
 
-  fun beginSched () = schedule (myWorkerId ())
+  fun beginSched mainThread () = schedule (mainThread, myWorkerId ())
 
-  val _ = MLton.Parallel.registerProcessorFunction beginSched
+  val _ = MLton.Parallel.registerProcessorFunction (beginSched dummyThread)
   val _ = MLton.Parallel.initializeProcessors ()
 
-  val _ = Thread.switch (fn main =>
-    ( mainCont := main
-    ; runnable (Thread.new beginSched)
-    ))
+  val _ = Thread.switch (fn main => runnable (Thread.new (beginSched main)))
 
 end

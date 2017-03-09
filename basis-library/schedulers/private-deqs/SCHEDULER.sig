@@ -16,12 +16,24 @@ sig
   (* wait for a stolen piece of work to complete *)
   val sync : 'a t -> 'a
 
-
   (* async-finish *)
-  type async = (unit -> unit) -> unit
-  val finish : (async -> 'a) -> 'a
+  (*type async = (unit -> unit) -> unit
+  val finish : (async -> 'a) -> 'a*)
 
 end
+
+(*signature SCHEDULER =
+sig
+  type t
+
+  (* create a new synchronization point *)
+  val new : unit -> t
+
+  (* expose a piece of work for parallelism *)
+  val register : t * (unit -> unit) -> unit
+
+  val sync : t -> unit
+end*)
 
 (*fun parallelFor granularity (lo, hi) f =
   let

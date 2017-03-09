@@ -8,9 +8,10 @@ struct
   val print = fn f => (takeLock printLock; print (f ()); releaseLock printLock)
 
   type 'a t = Word32.word ref * 'a ref
-  fun new x = (let val x = ref 0w0 in (lockInit x; x) end, ref x)
+  fun new x = (let val lock = ref 0w0 in (lockInit lock; lock) end, ref x)
   fun write ((lock, r), x) = (takeLock lock; r := x; releaseLock lock)
-  fun read (lock, r) = (takeLock lock; !r before releaseLock lock)
+  fun read (lock, r) =
+    (takeLock lock; let val x = !r in (releaseLock lock; x) end)
 
 (*
   type 'a t = 'a ref

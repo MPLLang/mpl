@@ -1,5 +1,6 @@
 structure AsyncFinish :> ASYNC_FINISH =
 struct
+  exception AsyncFinish
   type async = (unit -> unit) -> unit
-  val finish = Scheduler.finish
+  fun finish _ = (*Scheduler.finish*) raise AsyncFinish
 end
