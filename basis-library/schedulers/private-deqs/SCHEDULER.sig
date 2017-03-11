@@ -1,50 +1,26 @@
+(* TODO: what exactly are the semantics of `sync`? What happens if we create
+ * a new t, pass it to a different processor, and sync it there? This is
+ * definitely bad... is it broken? *)
 signature SCHEDULER =
 sig
-  (* general errors related to parallelism *)
-  exception Parallel of string
 
-  (* a handle on an exposed thunk *)
-  type 'a t
-
-  (* push a thunk onto the work stack *)
-  val push : (unit -> 'a) -> 'a t
-
-  (* attempt to pop a thunk off the work stack; if it fails, then
-   * the desired piece of work must have been stolen. *)
-  val pop : unit -> bool
-
-  (* wait for a stolen piece of work to complete *)
-  val sync : 'a t -> 'a
-
-  (* async-finish *)
-  (*type async = (unit -> unit) -> unit
-  val finish : (async -> 'a) -> 'a*)
-
-end
-
-(*signature SCHEDULER =
-sig
   type t
+  type work = unit -> unit
 
-  (* create a new synchronization point *)
+  (* Create a new join point. *)
   val new : unit -> t
 
-  (* expose a piece of work for parallelism *)
-  val register : t * (unit -> unit) -> unit
+  (* Register a piece of work with a join point, and push the work onto the
+   * work stack. *)
+  val push : t * work -> unit
 
+  (* Attempt to pop a thunk off the work stack. If it fails (because the work
+   * stack is empty) then the desired piece of work must have been stolen.
+   * `popDiscard` throws away the piece of work, and only returns success. *)
+  val pop : unit -> work option
+  val popDiscard : unit -> bool
+
+  (* Wait for all registered work to complete. *)
   val sync : t -> unit
-end*)
 
-(*fun parallelFor granularity (lo, hi) f =
-  let
-    fun serial (lo, hi) = if lo = hi then () else (f lo; serial (lo+1, hi))
-    fun parallel (lo, hi) async =
-      if hi - lo <= granularity then serial (lo, hi)
-      else let val mid = lo + (hi - lo) div 2
-           in ( async (fn () => parallel (lo, mid) async)
-              ; async (fn () => parallel (mid, hi) async)
-              )
-           end
-  in
-    Scheduler.finish (parallel (lo, hi))
-  end*)
+end

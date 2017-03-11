@@ -18,6 +18,7 @@ local
   Atomic.sml
   Random.sml
   queue/SimpleQueue.sml
+  queue/DoublyLinkedList.sml
   Scheduler.sml
   ForkJoin.sml
   AsyncFinish.sml

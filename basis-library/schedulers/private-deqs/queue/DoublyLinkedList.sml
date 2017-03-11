@@ -30,6 +30,17 @@ struct
       )
     end
 
+  fun popBot (dll as (bot, _)) =
+    case !bot of
+      Node (_, x, r) =>
+          let val n = !r
+          in ( prev (dll, n) := Leaf
+             ; bot := n
+             ; SOME x
+             )
+          end
+    | Leaf => NONE
+
   fun popBotDiscard (dll as (bot, _)) =
     case !bot of
       Node (_, _, r) =>
