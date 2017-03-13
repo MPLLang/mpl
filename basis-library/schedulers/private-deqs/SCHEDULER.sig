@@ -5,22 +5,21 @@ signature SCHEDULER =
 sig
 
   type t
-  type work = unit -> unit
+  type task = unit -> unit
 
   (* Create a new join point. *)
   val new : unit -> t
 
-  (* Register a piece of work with a join point, and push the work onto the
-   * work stack. *)
-  val push : t * work -> unit
+  (* Register a task with a join point, and push it onto the task stack. *)
+  val push : t -> task -> unit
 
-  (* Attempt to pop a thunk off the work stack. If it fails (because the work
-   * stack is empty) then the desired piece of work must have been stolen.
-   * `popDiscard` throws away the piece of work, and only returns success. *)
-  val pop : unit -> work option
+  (* Attempt to pop a task off the task stack. If it fails (because the task
+   * stack is empty) then the desired task must have been stolen.
+   * `popDiscard` throws away the task, and only returns success. *)
+  val pop : unit -> task option
   val popDiscard : unit -> bool
 
-  (* Wait for all registered work to complete. *)
+  (* Wait for all registered tasks to complete. *)
   val sync : t -> unit
 
 end

@@ -55,7 +55,7 @@ struct
   (*structure Queue = MkChunkedDoublyLinkedList (val chunkSize = 64)*)
 
   type t = int ref * unit Thread.t ref
-  type work = unit -> unit
+  type task = unit -> unit
 
   fun decrementHitsZero (x : int ref) : bool =
     MLton.Parallel.fetchAndAdd (x, ~1) = 1
@@ -98,14 +98,14 @@ struct
   fun getStatus p = arraySub "statuses" (statuses, p*64)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*64, s)
 
-  datatype mailbox = Empty | Receiving of (t * work) option
+  datatype mailbox = Empty | Receiving of (t * task) option
   val mailboxes = Vector.tabulate (P, fn _ => Atomic.new Empty)
   fun getMailbox p = Atomic.read (vectorSub "mailboxes" (mailboxes, p))
   fun setMailbox (p, s) = Atomic.write (vectorSub "mailboxes" (mailboxes, p), s)
 
   val dummyThread = Thread.new (fn _ => die (fn _ => "Error: dummy thread"))
 
-  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push func"))
+  val pushFuncs = Array.array (P, fn _ => fn _ => die (fn _ => "Error: dummy push func"))
   val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
@@ -114,7 +114,7 @@ struct
   fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
   fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x
   fun popDiscard x = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) x
-  fun push x = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) x
+  fun push j t = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) j t
   fun sync x = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) x
 
   fun new () = (ref 1, ref dummyThread)
@@ -177,7 +177,7 @@ struct
             )
         end
 
-      fun push x = Queue.pushBot (x, myQueue)
+      fun push join task = Queue.pushBot ((join, task), myQueue)
 
       fun pop () =
         case Queue.popBot myQueue of

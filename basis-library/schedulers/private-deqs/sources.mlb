@@ -22,7 +22,9 @@ local
   Scheduler.sml
   ForkJoin.sml
   AsyncFinish.sml
+  LazySplit.sml
 in
   structure ForkJoin
   structure AsyncFinish
+  structure LazySplit
 end

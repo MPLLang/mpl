@@ -1,17 +1,18 @@
 structure AsyncFinish :> ASYNC_FINISH =
 struct
+
   exception AsyncFinish
 
-  type work = unit -> unit
-  type async = work -> unit
+  type task = unit -> unit
+  type async = task -> unit
 
   fun finish body =
     let
       val join = Scheduler.new ()
-      fun async work = Scheduler.push (join, work)
-      val result = body async
+      val result = body (Scheduler.push join)
     in ( Scheduler.sync join
        ; result
        )
     end
+
 end
