@@ -51,10 +51,14 @@ static void MLton_callFromC (void* ffiArgs) {                           \
 void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
-  uint32_t num = Proc_processorNumber (s)                               \
-      * s->controls->affinityStride                                     \
-      + s->controls->affinityBase;                                      \
-  set_cpu_affinity(num);                                                \
+                                                                        \
+  /* Do not set CPU affinity when running on a single processor  */     \
+  if (s->numberOfProcs > 1) {                                           \
+      uint32_t num = Proc_processorNumber (s)                           \
+          * s->controls->affinityStride                                 \
+          + s->controls->affinityBase;                                  \
+      set_cpu_affinity(num);                                            \
+  }                                                                     \
                                                                         \
   /* Save our state locally */                                          \
   pthread_setspecific (gcstate_key, s);                                 \
