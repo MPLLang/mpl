@@ -1453,12 +1453,10 @@ fun commandLine (args: string list): unit =
                                 (commands :: allCommands, output :: allOutputs)
                              end))
                            ()
-                        fun doCommands commands =
-                          List.foreach (commands, System.system)
-                        fun doAllCommandsPar allCommands =
-                          List.foreach (allCommands, doCommands);
+
+                        fun doIt l = List.foreach (l, System.system)
                      in
-                        doAllCommandsPar (rev allCommands);
+                        Process.foreachPar (Process.numberOfMLtonJobs (), rev allCommands, doIt);
                         case stop of
                            Place.O => ()
                          | _ => compileO (rev oFiles)

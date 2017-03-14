@@ -435,6 +435,40 @@ fun time (f: unit -> unit) =
       {system = Time.- (s', s), user = Time.- (u', u)}
    end
 
+fun readIntegerEnvironmentVariable (varName, default) =
+  case getEnv varName of
+      NONE => default
+    | SOME s =>
+      case Int.fromString s of
+          NONE => default
+        | SOME i => i
+
+fun numberOfMLtonJobs () =
+  readIntegerEnvironmentVariable ("MLTON_JOBS", 1)
+
+fun foreachPar (numProcs, l, f) =
+  let
+     val arr = Array.fromVector (Vector.fromList l)
+     val len = Array.length arr
+     val itemsPerProc = Int.max (1, Int.div (len, numProcs))
+
+     fun doFork start =
+       let
+          fun doIt i = f (Array.sub (arr, i))
+          val range = Int.min (itemsPerProc, len - start)
+       in
+          fork (fn () => Int.for (start, start + range, doIt))
+       end
+
+     fun loop (pids, start) =
+       if start >= len
+       then pids
+       else loop (doFork start :: pids, start + itemsPerProc)
+  in
+     if numProcs > 1 then Array.shuffle arr else ();
+     waits (loop ([], 0))
+  end
+
 val setEnv = MLton.ProcEnv.setenv
 
 val exec = fn (c, a) => exec (c, a, In.standard, Out.standard)
