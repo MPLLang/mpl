@@ -180,10 +180,12 @@ bool stringToLogLevel(enum LogLevel* level, const char* levelString) {
     enum LogLevel level;
   };
 
-  struct Conversion conversions[] = {{.string = "error", .level = LL_ERROR},
-                                     {.string = "warning", .level = LL_WARNING},
-                                     {.string = "info", .level = LL_INFO},
-                                     {.string = "debug", .level = LL_DEBUG}};
+  struct Conversion conversions[] =
+      {{.string = "error", .level = LL_ERROR},
+       {.string = "warning", .level = LL_WARNING},
+       {.string = "info", .level = LL_INFO},
+       {.string = "debug", .level = LL_DEBUG},
+       {.string = "debugmore", .level = LL_DEBUGMORE}};
   size_t numConversions = sizeof(conversions) / sizeof(*conversions);
 
   for (size_t i = 0; i < numConversions; i++) {
@@ -210,6 +212,7 @@ bool stringToLogModule(enum LogModule* module, const char* moduleString) {
        {.string = "foreach", .module = LM_FOREACH},
        {.string = "garbage-collection", .module = LM_GARBAGE_COLLECTION},
        {.string = "global-local-heap", .module = LM_GLOBAL_LOCAL_HEAP},
+       {.string = "gc-state", .module = LM_GC_STATE},
        {.string = "hierarchical-heap", .module = LM_HIERARCHICAL_HEAP},
        {.string = "hh-collection", .module = LM_HH_COLLECTION},
        {.string = "parallel", .module = LM_PARALLEL},

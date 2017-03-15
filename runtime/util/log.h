@@ -19,10 +19,12 @@
 
 enum LogLevel {
   LL_FORCE = 0,
-  LL_ERROR = 1,
-  LL_WARNING = 2,
-  LL_INFO = 3,
-  LL_DEBUG = 4
+  LL_ASSERT = 1,
+  LL_ERROR = 2,
+  LL_WARNING = 3,
+  LL_INFO = 4,
+  LL_DEBUG = 5,
+  LL_DEBUGMORE = 6
 };
 
 #define L_MAX_LOG_LEVEL_LENGTH 128

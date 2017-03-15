@@ -21,13 +21,15 @@
 /********************/
 static const char* LogLevelToString[] = {
   "FORCE",
+  "ASSERT",
   "ERROR",
   "WARN",
   "INFO",
-  "DEBUG"
+  "DEBUG",
+  "DEBUGM"
 };
 
-static const int LEVEL_FIELD_WIDTH = sizeof("ERROR") - 1;
+static const int LEVEL_FIELD_WIDTH = sizeof("ASSERT") - 1;
 
 /********************/
 /* Global Variables */

@@ -24,6 +24,7 @@ enum LogModule {
   LM_FOREACH,
   LM_GARBAGE_COLLECTION,
   LM_GLOBAL_LOCAL_HEAP,
+  LM_GC_STATE,
   LM_HIERARCHICAL_HEAP,
   LM_HH_COLLECTION,
   LM_PARALLEL,
@@ -78,6 +79,31 @@ extern bool L_flushLog[NUM_LOG_MODULES];
             __VA_ARGS__);                                               \
       exit(1);                                                          \
   } while(FALSE)
+
+/**
+ * This is a convenience function for a logging a message before faulting on an
+ * assert.
+ *
+ * @param test The condition to test
+ * @param ... Both the format and the arguments for the message.
+ */
+#if ASSERT
+#define ASSERTPRINT(test, ...)                                          \
+  do {                                                                  \
+    const bool result = (test);                                         \
+    if (!result) {                                                      \
+      fflush(NULL);                                                     \
+      L_log(TRUE,                                                       \
+            LL_ASSERT,                                                  \
+            Proc_processorNumber(pthread_getspecific(gcstate_key)),     \
+            __FILE__ ":" STRFY(__LINE__) " (" #test ")",                \
+            __VA_ARGS__);                                               \
+      abort();                                                          \
+    }                                                                   \
+  } while(FALSE)
+#else
+#define ASSERTPRINT(test, ...) do { } while(FALSE)
+#endif
 
 /**
  * This function initializes the log levels according to the argument string
