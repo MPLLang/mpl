@@ -490,12 +490,12 @@ void assertInvariants(GC_state s,
   ASSERTPRINT(((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
                (hh->level > hh->stealLevel)),
               "HH %p has invalid level values! level %u stealLevel %u",
-              ((void*)(hh)),
+              ((const void*)(hh)),
               hh->level,
               hh->stealLevel);
   ASSERTPRINT(state == hh->state,
               "HH %p is not %s",
-              ((void*)(hh)),
+              ((const void*)(hh)),
               (LIVE == state) ? ("live") : ("dead"));
 
   if (BOGUS_OBJPTR != hh->thread) {
