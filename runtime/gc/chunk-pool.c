@@ -231,7 +231,7 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
                       ChunkPool_config.maxSize;
   ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
 
-  LOG(LM_CHUNK_POOL, LL_DEBUG,
+  LOG(LM_CHUNK_POOL, LL_INFO,
       "Created chunk pool of size %zu bytes at %p",
       ChunkPool_config.maxSize,
       ChunkPool_poolStart);
@@ -245,10 +245,10 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   ChunkPool_chunkMetadatasEnd = ChunkPool_chunkMetadatas + numChunks;
   ChunkPool_chunkMetadatas->spanInfo.numChunksInSpan = numChunks;
 
-  LOG(LM_CHUNK_POOL, LL_DEBUG,
+  LOG(LM_CHUNK_POOL, LL_INFO,
       "Created chunk pool metadata of size %zu bytes at %p",
       numChunks * sizeof(*ChunkPool_chunkMetadatas),
-      ChunkPool_chunkMetadatas);
+      ((void*)(ChunkPool_chunkMetadatas)));
 
   /* we are now initialized */
   ChunkPool_initialized = TRUE;
@@ -277,7 +277,7 @@ void ChunkPool_maybeResize(void) {
   }
 
   if (oldPoolSize != ChunkPool_currentPoolSize) {
-    LOG(LM_CHUNK_POOL, LL_INFO,
+    LOG(LM_CHUNK_POOL, LL_DEBUG,
         "Live Ratio %.2f < %.2f, so resized Chunk Pool from %zu bytes to %zu "
         "bytes",
         ratio,
@@ -428,7 +428,7 @@ void* ChunkPool_find (void* object) {
   assert(ChunkPool_ALLOCATED == chunkMetadata->next);
 #endif
 
-  LOG(LM_CHUNK_POOL, LL_DEBUG, "pointer %p in chunk %p", object, chunk);
+  LOG(LM_CHUNK_POOL, LL_DEBUGMORE, "pointer %p in chunk %p", object, chunk);
 
   return chunk;
 }

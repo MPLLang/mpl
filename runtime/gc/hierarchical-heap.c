@@ -99,7 +99,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
     }
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
         "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
         ((void*)(parentHH)),
         parentHH->locallyCollectibleSize,
@@ -173,7 +173,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   }
   sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
@@ -184,13 +184,17 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH);
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
       hh->locallyCollectibleSize,
       parentHH->locallyCollectibleSize + hh->locallyCollectibleSize);
   parentHH->locallyCollectibleSize += hh->locallyCollectibleSize;
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+      "merged hh %p into hh %p",
+      ((void*)(hh)),
+      ((void*)(parentHH)));
 
   assertInvariants(s, parentHH);
   /* don't assert hh here as it should be thrown away! */
@@ -411,6 +415,11 @@ size_t HM_HH_offsetof(GC_state s) {
 
 void HM_HH_setThread(struct HM_HierarchicalHeap* hh, objptr threadObjptr) {
   hh->thread = threadObjptr;
+
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Set thread of HH %p to %p",
+      ((void*)(hh)),
+      ((void*)(threadObjptr)));
 }
 
 /* RAM_NOTE: Should be able to compute once and save result */
@@ -471,6 +480,11 @@ void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
            hh);
   }
 
+  if ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)) {
+    HM_assertChunkInLevelList(hh->levelList, hh->lastAllocatedChunk);
+  } else {
+    assert((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk));
+  }
   HM_assertLevelListInvariants(hh->levelList, hh, hh->stealLevel);
   assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
          ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
