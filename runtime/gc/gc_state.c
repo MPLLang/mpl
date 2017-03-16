@@ -378,6 +378,11 @@ void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
 
   thread->hierarchicalHeap = hhObjptr;
   HM_HH_setThread(HM_HH_objptrToStruct(s, hhObjptr), threadObjptr);
+
+  LOG(LM_GC_STATE, LL_DEBUG,
+      "Set HH of thread %p to %p",
+      ((void*)(thread)),
+      ((void*)(hhObjptr)));
 }
 
 pointer GC_getSavedThread (void) {

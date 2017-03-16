@@ -12,7 +12,10 @@ struct
   datatype 'a result = Finished of 'a ref HH.t
                      | Raised of exn ref HH.t
 
-  val dbgmsg = (* I.dbgmsg *) fn _ => ()
+  val dbgmsg =
+      if false
+      then fn msg => I.dbgmsg ("forkjoin: " ^ msg)
+      else fn _ => ()
 
   val numTasks = Array.array (I.numberOfProcessors, 0)
   fun incrTask n =
@@ -64,7 +67,7 @@ struct
                  * explicitly putting it in one?
                  *)
                 val hh = HH.get ()
-                val r =
+                val result =
                     let
                       val r = ref (g ())
                     in
@@ -77,7 +80,7 @@ struct
                              Raised (HH.setReturnValue (hh, e))
                            end
               in
-                V.write (var, r);
+                V.write (var, result);
                 B.return ()
               end
               handle B.Parallel msg =>
@@ -115,7 +118,9 @@ struct
                  case V.read var
                   of (_, Finished (childHH)) =>
                      let
+                       val () = dbgmsg ("(" ^ (Int.toString level) ^ "): merging result")
                        val b = HH.mergeIntoParentAndGetReturnValue childHH
+                       val () = dbgmsg ("(" ^ (Int.toString level) ^ "): done merging result")
                      in
                        case b
                         of NONE => raise ShouldNotHappen

@@ -133,6 +133,12 @@ structure MLtonHM:> MLTON_HM =
                                     PrimHH.promoteChunks
                                     hh
 
+                val setDead: 'a t -> unit =
+                 fn hh => applyToHH "MLton.HM.HierarchicalHeap.setDead"
+                                    "Tried to set dead on Invalid HH"
+                                    PrimHH.setDead
+                                    hh
+
                 val setUseHierarchicalHeap: bool -> unit =
                     PrimHH.setCurrentThreadUseHierarchicalHeap
             end

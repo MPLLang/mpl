@@ -495,6 +495,8 @@ structure ObjectType =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesLock =
                           Bits.toBytes (Type.width Type.word32)
+                      val bytesState =
+                          Bits.toBytes (Type.width Type.word32)
                       val bytesLevel =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesLastSharedLevel =
@@ -531,6 +533,7 @@ structure ObjectType =
                               bytesHeader +
                               bytesLastAllocatedChunk +
                               bytesLock +
+                              bytesState +
                               bytesLevel +
                               bytesLastSharedLevel +
                               bytesID +
@@ -555,6 +558,7 @@ structure ObjectType =
               Normal {hasIdentity = true,
                       ty = Type.seq (Vector.fromList [padding,
                                                       Type.cpointer (),
+                                                      Type.word32,
                                                       Type.word32,
                                                       Type.word32,
                                                       Type.word32,

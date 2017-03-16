@@ -100,7 +100,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
         if (DEBUG_STACKS or s->controls->messages)
           fprintf (stderr,
                    "[GC: Shrinking stack at "FMTPTR" of size %s bytes to size %s bytes, using %s bytes.]\n",
-                   stack,
+                   ((uintptr_t)(stack)),
                    uintmaxToCommaString(stack->reserved),
                    uintmaxToCommaString(reservedNew),
                    uintmaxToCommaString(stack->used));

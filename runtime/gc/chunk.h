@@ -293,6 +293,18 @@ void HM_mergeLevelList(void** destinationLevelList,
 void HM_promoteChunks(void** levelList, size_t level);
 
 /**
+ * This function asserts that a chunk resides in a level list
+ *
+ * @attention
+ * If an assertion fails, this function aborts the program, as per the assert()
+ * macro.
+ *
+ * @param levelList the levelList to check residency within.
+ * @param chunk the chunk to search for.
+ */
+void HM_assertChunkInLevelList(const void* levelList, const void* chunk);
+
+/**
  * This function asserts the level list invariants
  *
  * @attention

@@ -151,7 +151,7 @@ void HM_HHC_collectLocal(void) {
   Parallel_lockTake(wsQueueLock);
   lockHH(hh);
 
-  assertInvariants(s, hh);
+  assertInvariants(s, hh, LIVE);
   assert(hh->thread == s->currentThread);
 
   /* copy roots */
@@ -288,7 +288,7 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied);
 
-  assertInvariants(s, hh);
+  assertInvariants(s, hh, LIVE);
 
   /*
    * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
@@ -360,7 +360,7 @@ void HM_HHC_collectLocal(void) {
     hh->lastAllocatedChunk = lastChunk;
   }
 
-  assertInvariants(s, hh);
+  assertInvariants(s, hh, LIVE);
 
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */

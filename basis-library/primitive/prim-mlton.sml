@@ -182,6 +182,10 @@ structure HM =
                     _import "GC_setCurrentHierarchicalHeap" runtime private:
                     'a t -> unit;
 
+                val setDead: 'a t -> unit =
+                    _import "HM_HH_setDead" runtime private:
+                    'a t -> unit;
+
                 val setLevel: 'a t * Word32.word -> unit =
                     _import "HM_HH_setLevel" runtime private:
                     'a t * Word32.word -> unit;
