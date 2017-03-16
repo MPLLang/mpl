@@ -18,6 +18,11 @@
 #define HIERARCHICAL_HEAP_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+enum HM_HHState {
+  LIVE,
+  DEAD
+};
+
 /* RAM_NOTE: May need to be rearranged for cache efficiency */
 /* RAM_NOTE: Needs to be renamed to HM_HH_HierarchicalHeap */
 /**
@@ -30,6 +35,7 @@
  * header ::
  * padding ::
  * lock (Int32) ::
+ * state (enum HM_HHState/Int32) ::
  * level (Word32) ::
  * stealLevel (Word32) ::
  * id (Word32) ::
@@ -46,6 +52,8 @@ struct HM_HierarchicalHeap {
   void* lastAllocatedChunk; /**< The last allocated chunk */
 
   Int32 lock; /**< The spinlock for exclusive access to the childHHList */
+
+  volatile enum HM_HHState state; /**< The state of this hierarchical heap */
 
   Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
@@ -92,6 +100,7 @@ struct HM_HierarchicalHeap {
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(struct HM_HierarchicalHeap) ==
                     sizeof(void*) +
+                    sizeof(Int32) +
                     sizeof(Int32) +
                     sizeof(Word32) +
                     sizeof(Word32) +
@@ -196,6 +205,14 @@ PRIVATE pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer);
  * @param hhPointer The HM_HierarchicalHeap to modify
  */
 PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
+
+/**
+ * Sets the specified hierarchical heap to dead.
+ *
+ * @param hhPointer The pointer to the struct HM_HierarchicalHeap to set to
+ * dead.
+ */
+PRIVATE void HM_HH_setDead(pointer hhPointer);
 
 /**
  * Sets the current level in a struct HM_HierarchicalHeap

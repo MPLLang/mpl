@@ -27,8 +27,11 @@
  *
  * @param s The GC_state to use
  * @param hh The struct HM_HierarchicalHeap to assert invariants for
+ * @param state The expected state of the hh
  */
-static void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh);
+static void assertInvariants(GC_state s,
+                             const struct HM_HierarchicalHeap* hh,
+                             enum HM_HHState state);
 
 /**
  * Gets the lock on 'hh'
@@ -63,7 +66,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
   lockHH(parentHH);
   lockHH(childHH);
 
-  assertInvariants(s, parentHH);
+  assertInvariants(s, parentHH, LIVE);
   Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
 
   /* childHH should be a orphan! */
@@ -109,8 +112,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   }
 
   /* cannot assert parentHH as it is still running! */
-  assertInvariants(s, parentHH);
-  assertInvariants(s, childHH);
+  assertInvariants(s, parentHH, LIVE);
+  assertInvariants(s, childHH, LIVE);
 
   unlockHH(childHH);
   unlockHH(parentHH);
@@ -131,6 +134,9 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
+  /* wait until hh is dead */
+  while (DEAD != hh->state) { }
+
   assert (BOGUS_OBJPTR != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s, hh->parentHH);
 
@@ -140,8 +146,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   lockHH(hh);
   lockHH(parentHH);
 
-  assertInvariants(s, parentHH);
-  assertInvariants(s, hh);
+  assertInvariants(s, parentHH, LIVE);
+  assertInvariants(s, hh, DEAD);
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
@@ -196,7 +202,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       ((void*)(hh)),
       ((void*)(parentHH)));
 
-  assertInvariants(s, parentHH);
+  assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
 
   unlockHH(parentHH);
@@ -233,9 +239,18 @@ void HM_HH_promoteChunks(pointer hhPointer) {
   assert(HM_getHighestLevel(hh->levelList) <= hh->level);
   HM_promoteChunks(&(hh->levelList), hh->level);
 
-  assertInvariants(s, hh);
+  assertInvariants(s, hh, LIVE);
 
   unlockHH(hh);
+}
+
+void HM_HH_setDead(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
+
+  hh->state = DEAD;
 }
 
 void HM_HH_setLevel(pointer hhPointer, size_t level) {
@@ -469,9 +484,19 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
-void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
-  assert((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
-         (hh->level > hh->stealLevel));
+void assertInvariants(GC_state s,
+                      const struct HM_HierarchicalHeap* hh,
+                      enum HM_HHState state) {
+  ASSERTPRINT(((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
+               (hh->level > hh->stealLevel)),
+              "HH %p has invalid level values! level %u stealLevel %u",
+              ((void*)(hh)),
+              hh->level,
+              hh->stealLevel);
+  ASSERTPRINT(state == hh->state,
+              "HH %p is not %s",
+              ((void*)(hh)),
+              (LIVE == state) ? ("live") : ("dead"));
 
   if (BOGUS_OBJPTR != hh->thread) {
     assert(HM_HH_objptrToStruct(s,
@@ -528,9 +553,12 @@ void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
   }
 }
 #else
-void assertInvariants(GC_state s, const struct HM_HierarchicalHeap* hh) {
+void assertInvariants(GC_state s,
+                      const struct HM_HierarchicalHeap* hh,
+                      enum HM_HHState state) {
   ((void)(s));
   ((void)(hh));
+  ((void)(state));
 }
 #endif /* ASSERT */
 

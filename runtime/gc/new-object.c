@@ -131,6 +131,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
 
   hh->lastAllocatedChunk = NULL;
   hh->lock = HM_HH_LOCK_INITIALIZER;
+  hh->state = LIVE;
   hh->level = 0;
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;

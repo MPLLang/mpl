@@ -12,7 +12,10 @@ struct
   datatype job = Work of (unit -> void) * unit HH.t * int
                | Thread of unit T.t * unit HH.t
 
-  val dbgmsg = if false then I.dbgmsg else fn _ => ()
+  val dbgmsg =
+      if false
+      then fn msg => I.dbgmsg ("basic: " ^ msg)
+      else fn _ => ()
 
   val numberOfProcessors = I.numberOfProcessors
 
@@ -36,6 +39,7 @@ struct
   fun incSuspends p = Array.update (suspends, p, Array.sub (suspends, p) + 1)
 
   val schedThreads = Array.array (numberOfProcessors, NONE)
+  val hhToSetDead = Array.array (numberOfProcessors, NONE)
 
   (* RAM_NOTE: Restore futures are reintegrated *)
   (* val delayed = Array.array (numberOfProcessors, nil) *)
@@ -67,6 +71,12 @@ struct
                                       HH.setUseHierarchicalHeap false;
                                       HM.exitGlobalHeap ();
                                       dbgmsg "stopUseHH")
+
+  fun maybeSetHHDead (p: int): unit =
+      case Array.sub (hhToSetDead, p)
+       of NONE => ()
+        | SOME hh => (HH.setDead hh;
+                      Array.update(hhToSetDead, p, NONE))
 
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =
@@ -116,7 +126,8 @@ struct
                                                         w ())),
                                              ())));
                     dbgmsg "returned to scheduler from new thread";
-                    stopUseHH ()
+                    stopUseHH ();
+                    maybeSetHHDead p
                 end
 
               | Thread (k, hh) =>
@@ -134,7 +145,8 @@ struct
                                                                   unlocker ())),
                                           ())));
                  dbgmsg "returned to scheduler from suspended thread";
-                 stopUseHH ()))
+                 stopUseHH ();
+                 maybeSetHHDead p))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
            handle e => (HM.enterGlobalHeap ();
@@ -218,7 +230,9 @@ struct
   fun return (() : unit) : void =
       let
           val p = processorNumber ()
+          val hh = HH.get ()
       in
+          Array.update(hhToSetDead, p, SOME hh);
           T.switch (fn _ =>
                        let
                            val () = HM.enterGlobalHeap ()
