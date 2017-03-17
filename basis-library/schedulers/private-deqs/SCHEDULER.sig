@@ -4,14 +4,14 @@
 signature SCHEDULER =
 sig
 
-  type t
+  type vertex
   type task = unit -> unit
 
-  (* Create a new join point. *)
-  val new : unit -> t
+  val new : unit -> vertex
 
-  (* Register a task with a join point, and push it onto the task stack. *)
-  val push : t -> task -> unit
+  (* `push v t` registers v as an outgoing dependency of t and pushes t onto
+   * the work stack *)
+  val push : vertex -> task -> unit
 
   (* Attempt to pop a task off the task stack. If it fails (because the task
    * stack is empty) then the desired task must have been stolen.
@@ -19,7 +19,8 @@ sig
   val pop : unit -> task option
   val popDiscard : unit -> bool
 
-  (* Wait for all registered tasks to complete. *)
-  val sync : t -> unit
+  (* `sync v` assigns the current continuation to v, waits until all incoming
+   * dependences for v have completed, and then executes v. *)
+  val sync : vertex -> unit
 
 end

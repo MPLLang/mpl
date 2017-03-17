@@ -54,7 +54,7 @@ struct
   (*structure Queue = MkRingBuffer (val initialCapacity = 2048)*)
   (*structure Queue = MkChunkedDoublyLinkedList (val chunkSize = 64)*)
 
-  type t = int ref * unit Thread.t ref
+  type vertex = int ref * unit Thread.t ref
   type task = unit -> unit
 
   fun decrementHitsZero (x : int ref) : bool =
@@ -97,8 +97,9 @@ struct
   val statuses = Array.array (P*64, false)
   fun getStatus p = arraySub "statuses" (statuses, p*64)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*64, s)
+  val _ = setStatus (0, true)
 
-  datatype mailbox = Empty | Receiving of (t * task) option
+  datatype mailbox = Empty | Receiving of (task * vertex) option
   val mailboxes = Vector.tabulate (P, fn _ => Atomic.new Empty)
   fun getMailbox p = Atomic.read (vectorSub "mailboxes" (mailboxes, p))
   fun setMailbox (p, s) = Atomic.write (vectorSub "mailboxes" (mailboxes, p), s)
@@ -148,7 +149,7 @@ struct
            else ( requestCell myId := NO_REQUEST
                 ; let val mail =
                         case Queue.popTop myQueue of
-                          SOME (x as ((c, _), _)) => (increment c; SOME x)
+                          SOME (x as (_, (c, _))) => (increment c; SOME x)
                         | NONE => NONE
                   in setMailbox (friend, Receiving mail)
                   end
@@ -177,11 +178,11 @@ struct
             )
         end
 
-      fun push join task = Queue.pushBot ((join, task), myQueue)
+      fun push v t = Queue.pushBot ((t, v), myQueue)
 
       fun pop () =
         case Queue.popBot myQueue of
-          SOME (_, work) => (communicate (); SOME work)
+          SOME (t, _) => (communicate (); SOME t)
         | NONE => NONE
 
       fun popDiscard () =
@@ -229,9 +230,9 @@ struct
       (* -------------------------- working loop -------------------------- *)
 
       (* (counter, cont) is the outgoing dependency of the given work *)
-      fun doWork ((counter, cont), work) =
+      fun doWork (task, (counter, cont)) =
         ( communicate ()
-        ; work ()
+        ; task ()
         (* When work returns, we may have moved to a different worker.
          * returnToSched handles this by looking up the appropriate `return`
          * function and calling it. *)
@@ -245,11 +246,11 @@ struct
         )
 
       fun return (t as (counter, cont)) =
-        case Queue.popBot myQueue of
+        (*case Queue.popBot myQueue of
           SOME (_, work) => (communicate (); work (); return t)
-        | NONE => if decrementHitsZero counter
-                  then (communicate (); jumpTo (!cont))
-                  else acquireWork ()
+        | NONE =>*) if decrementHitsZero counter
+                    then (communicate (); jumpTo (!cont))
+                    else acquireWork ()
 
       (* NOTE: it might be tempting to write the switch like so:
        *   Thread.switch (fn k =>

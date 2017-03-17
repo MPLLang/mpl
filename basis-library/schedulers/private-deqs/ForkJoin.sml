@@ -1,4 +1,4 @@
-structure ForkJoin :> FORKJOIN =
+structure ForkJoin :> FORK_JOIN =
 struct
 
   exception ForkJoin
