@@ -6,10 +6,10 @@ struct
   datatype 'a result =
     Waiting
   | Finished of 'a
-  (*| Raised of exn*)
+  | Raised of exn
 
   fun writeResult fr f () =
-    fr := (Finished (f ()) (*handle e => Raised e*))
+    fr := (Finished (f ()) handle e => Raised e)
 
   fun fork (f : unit -> 'a, g : unit -> 'b) =
     let
@@ -22,7 +22,7 @@ struct
       else ( Scheduler.sync join
            ; case !gr of
                Finished b => (a, b)
-             (*| Raised e => raise e*)
+             | Raised e => raise e
              | Waiting => raise ForkJoin
            )
     end

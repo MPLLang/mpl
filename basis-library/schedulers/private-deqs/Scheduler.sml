@@ -40,24 +40,15 @@ struct
   fun increment (x : int ref) : unit =
     ignore (MLton.Parallel.fetchAndAdd (x, 1))
 
+  (*
+  fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
+  fun arrayUpdate str (a, i, x) = Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
+  fun vectorSub str (v, i) = Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
+  *)
+
   fun arraySub str (a, i) = Array.sub (a, i)
   fun arrayUpdate str (a, i, x) = Array.update (a, i, x)
   fun vectorSub str (v, i) = Vector.sub (v, i)
-
-  (*
-  fun arraySub str (a, i) =
-    Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  fun arrayUpdate str (a, i, x) =
-    Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
-  fun vectorSub str (v, i) =
-    Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  *)
-
-  (*
-  fun arraySub x = Array.unsafeSub x
-  fun arrayUpdate x = Array.unsafeUpdate x
-  fun vectorSub x = Vector.unsafeSub x
-  *)
 
   (* A request is either NO_REQUEST, REQUEST_BLOCKED, or a processor id.
    * Workers request work by writing their own id into another worker's
@@ -68,14 +59,16 @@ struct
   val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
   fun requestCell p = vectorSub "requestCells" (requestCells, p)
 
-  (* Space out the statuses for cache performance (don't want unnecessary
-   * invalidations for status updates). I wish there was a better way to do
-   * this. TODO: does this actually make performance better? *)
+  (* Statuses are updated locally to indicate whether or not work is available
+   * to be stolen. This allows idle workers to only request work from victims
+   * who are unlikely to reject. *)
   val statuses = Array.array (P*16, false)
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
-  val _ = setStatus (0, true)
 
+  (* When a worker requests work, they wait for a response to be written into
+   * their own mailbox. The victim indicates they have finished writing a
+   * response by flipping the flag. *)
   val MAIL_WAITING = 0
   val MAIL_RECEIVING = 1
   type mailbox = {flag : int ref, mail : (task * vertex) option ref}
@@ -119,36 +112,35 @@ struct
     let
       val myQueue = Queue.new ()
       val myRand = SimpleRandom.rand myId
+      val myRequestCell = requestCell myId
 
       fun communicate () =
-        ( let val friend = !(requestCell myId)
-          in if friend = NO_REQUEST then ()
-             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
-             else ( requestCell myId := NO_REQUEST
-                  ; let val mail =
-                          case Queue.popTop myQueue of
-                            SOME (x as (_, (c, _))) => (increment c; SOME x)
-                          | NONE => NONE
-                    in sendMail (friend, mail)
-                    end
-                  )
+        ( let
+            val friend = !myRequestCell
+          in
+            if friend = NO_REQUEST then ()
+            else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
+            else ( myRequestCell := NO_REQUEST
+                 ; let val mail =
+                         case Queue.popTop myQueue of
+                           SOME (x as (_, (c, _))) => (increment c; SOME x)
+                         | NONE => NONE
+                   in sendMail (friend, mail)
+                   end
+                 )
           end
-        ; let val haveWork = not (Queue.empty myQueue)
-          in if getStatus myId = haveWork then ()
-             else setStatus (myId, haveWork)
-          end
+        ; setStatus (myId, not (Queue.empty myQueue))
         )
 
       fun reject () =
         let
-          val myCell = requestCell myId
-          val friend = !myCell
+          val friend = !myRequestCell
         in
           if friend = NO_REQUEST then
-            if cas (myCell, NO_REQUEST, REQUEST_BLOCKED) then ()
+            if cas (myRequestCell, NO_REQUEST, REQUEST_BLOCKED) then ()
             else reject () (* recurs at most once *)
           else
-            ( myCell := REQUEST_BLOCKED
+            ( myRequestCell := REQUEST_BLOCKED
             ; sendMail (friend, NONE)
             )
         end
@@ -162,7 +154,8 @@ struct
         before communicate ()
 
       fun popDiscard () =
-        Queue.popBotDiscard myQueue before communicate ()
+        Queue.popBotDiscard myQueue
+        before communicate ()
 
       (* -------------------- request and receive loops -------------------- *)
 
@@ -178,9 +171,9 @@ struct
       fun request () =
         let
           val victimId = randomOtherId ()
+          val victimHasWork = getStatus victimId
         in
-          if getStatus victimId andalso
-            cas (requestCell victimId, NO_REQUEST, myId)
+          if victimHasWork andalso cas (requestCell victimId, NO_REQUEST, myId)
           then receiveFrom victimId
           else (verifyStatus (); request ())
         end
@@ -188,15 +181,15 @@ struct
       and receiveFrom victimId =
         case getMail myId of
           NONE => (verifyStatus (); request ())
-        | SOME x => (requestCell myId := NO_REQUEST; x)
+        | SOME x => (myRequestCell := NO_REQUEST; x)
 
       (* -------------------------- working loop -------------------------- *)
 
-      (* (counter, cont) is the outgoing dependency of the given work *)
+      (* (counter, cont) is the outgoing dependency of the given task *)
       fun doWork (task, (counter, cont)) =
         ( communicate ()
         ; task ()
-        (* When work returns, we may have moved to a different worker.
+        (* When the task returns, we may have moved to a different worker.
          * returnToSched handles this by looking up the appropriate `return`
          * function and calling it. *)
         ; returnToSched (counter, cont)
