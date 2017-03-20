@@ -3,8 +3,6 @@
 structure Scheduler :> SCHEDULER =
 struct
 
-  val _ = print ("Using private-deqs scheduler. Note that this might still be buggy.\n")
-
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
 
