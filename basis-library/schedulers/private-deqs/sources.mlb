@@ -2,29 +2,14 @@ local
   $(SML_LIB)/basis/basis.mlb
   $(SML_LIB)/basis/mlton.mlb
 
-  local
-    $(SML_LIB)/basis/build/sources.mlb
-  in
-    signature ARRAY_EXTRA
-    structure ArrayExtra = Array
-  end
-
-  ATOMIC.sig
   SCHEDULER.sig
   FORK_JOIN.sig
-  ASYNC_FINISH.sig
   queue/QUEUE.sig
 
-  Atomic.sml
-  Random.sml
-  queue/SimpleQueue.sml
+  SimpleRandom.sml
   queue/DoublyLinkedList.sml
   Scheduler.sml
   ForkJoin.sml
-  AsyncFinish.sml
-  LazySplit.sml
 in
   structure ForkJoin
-  structure AsyncFinish
-  structure LazySplit
 end

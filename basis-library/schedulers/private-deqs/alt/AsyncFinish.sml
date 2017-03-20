@@ -19,7 +19,8 @@ struct
     if lo = hi then () else (f lo; serialFor (lo+1, hi) f)
 
   fun parallelFor gran (lo, hi) f =
-    let
+    raise AsyncFinish
+    (*let
       val _ = print "Warning: running AsyncFinish.parallelFor, which is buggy\n"
       val join = Scheduler.new ()
 
@@ -35,6 +36,6 @@ struct
              end
     in
       doRange true (lo, hi) ()
-    end
+    end*)
 
 end
