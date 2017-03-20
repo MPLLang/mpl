@@ -61,7 +61,8 @@ struct
 
   (* Statuses are updated locally to indicate whether or not work is available
    * to be stolen. This allows idle workers to only request work from victims
-   * who are unlikely to reject. *)
+   * who are unlikely to reject.
+   * TODO: does padding statuses actually improve performance? *)
   val statuses = Array.array (P*16, false)
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
@@ -105,10 +106,10 @@ struct
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
 
   (* ----------------------------------------------------------------------- *
-   * ------------------------- MAIN SCHEDULER LOOP ------------------------- *
+   * ------------------------- WORKER-LOCAL SETUP -------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  fun schedule (mainThread, myId) =
+  fun init myId =
     let
       val myQueue = Queue.new ()
       val myRand = SimpleRandom.rand myId
@@ -132,19 +133,6 @@ struct
         ; setStatus (myId, not (Queue.empty myQueue))
         )
 
-      fun reject () =
-        let
-          val friend = !myRequestCell
-        in
-          if friend = NO_REQUEST then
-            if cas (myRequestCell, NO_REQUEST, REQUEST_BLOCKED) then ()
-            else reject () (* recurs at most once *)
-          else
-            ( myRequestCell := REQUEST_BLOCKED
-            ; sendMail (friend, NONE)
-            )
-        end
-
       fun push v t =
         Queue.pushBot ((t, v), myQueue)
         before communicate ()
@@ -157,7 +145,7 @@ struct
         Queue.popBotDiscard myQueue
         before communicate ()
 
-      (* -------------------- request and receive loops -------------------- *)
+      (* ------------------------------------------------------------------- *)
 
       fun verifyStatus () =
         if getStatus myId = false then ()
@@ -166,6 +154,20 @@ struct
       fun randomOtherId () =
         let val other = SimpleRandom.boundedInt (0, P-1) myRand
         in if other < myId then other else other+1
+        end
+
+      fun blockRequests () =
+        let
+          val friend = !myRequestCell
+        in
+          if friend = NO_REQUEST then
+            if cas (myRequestCell, NO_REQUEST, REQUEST_BLOCKED) then ()
+            else blockRequests () (* recurs at most once *)
+          else if friend = REQUEST_BLOCKED then die (fn _ => "Error: block while blocked")
+          else
+            ( myRequestCell := REQUEST_BLOCKED
+            ; sendMail (friend, NONE)
+            )
         end
 
       fun request () =
@@ -183,7 +185,7 @@ struct
           NONE => (verifyStatus (); request ())
         | SOME x => (myRequestCell := NO_REQUEST; x)
 
-      (* -------------------------- working loop -------------------------- *)
+      (* ------------------------------------------------------------------- *)
 
       (* (counter, cont) is the outgoing dependency of the given task *)
       fun doWork (task, (counter, cont)) =
@@ -197,7 +199,7 @@ struct
 
       fun acquireWork () =
         ( setStatus (myId, false)
-        ; reject ()
+        ; blockRequests ()
         ; doWork (request ())
         )
 
@@ -228,22 +230,18 @@ struct
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
       ; arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
-      ; case mainThread of
-          NONE => acquireWork ()
-        | SOME main => jumpTo main
+      ; acquireWork
       )
-    end (* schedule *)
+    end (* init *)
 
   (* ----------------------------------------------------------------------- *
    * -------- FINAL SETUP: INITIALIZING OTHER PROCS AND MAIN VERTEX -------- *
    * ----------------------------------------------------------------------- *)
 
-  fun beginSched mainThread () = schedule (mainThread, myWorkerId ())
+  fun sched () = init (myWorkerId ()) ()
 
-  val _ = MLton.Parallel.registerProcessorFunction (beginSched NONE)
+  val _ = MLton.Parallel.registerProcessorFunction sched
   val _ = MLton.Parallel.initializeProcessors ()
-
-  val _ = Thread.switch (fn main =>
-    runnable (Thread.new (beginSched (SOME main))))
+  val _ = init (myWorkerId ())
 
 end
