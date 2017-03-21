@@ -88,13 +88,13 @@ struct
        )
     end
 
-  val pushFuncs = Array.array (P, fn _ => fn _ => die (fn _ => "Error: dummy push func"))
+  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push func"))
   val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
 
-  fun push j t = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) j t
+  fun push (t, v) = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (t, v)
   fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x
   fun popDiscard x = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) x
   fun sync x = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) x
@@ -133,7 +133,7 @@ struct
         ; setStatus (myId, not (Queue.empty myQueue))
         )
 
-      fun push v t =
+      fun push (t, v) =
         Queue.pushBot ((t, v), myQueue)
         before communicate ()
 
@@ -173,17 +173,14 @@ struct
       fun request () =
         let
           val victimId = randomOtherId ()
-          val victimHasWork = getStatus victimId
+          val hasWork = getStatus victimId
         in
-          if victimHasWork andalso cas (requestCell victimId, NO_REQUEST, myId)
-          then receiveFrom victimId
-          else (verifyStatus (); request ())
+          if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
+          then (verifyStatus (); request ())
+          else case getMail myId of
+                 NONE => (verifyStatus (); request ())
+               | SOME x => (myRequestCell := NO_REQUEST; x)
         end
-
-      and receiveFrom victimId =
-        case getMail myId of
-          NONE => (verifyStatus (); request ())
-        | SOME x => (myRequestCell := NO_REQUEST; x)
 
       (* ------------------------------------------------------------------- *)
 
@@ -203,7 +200,7 @@ struct
         ; doWork (request ())
         )
 
-      fun return (t as (counter, cont)) =
+      fun return (counter, cont) =
         if decrementHitsZero counter
         then (communicate (); jumpTo (!cont))
         else acquireWork ()
@@ -235,7 +232,7 @@ struct
     end (* init *)
 
   (* ----------------------------------------------------------------------- *
-   * -------- FINAL SETUP: INITIALIZING OTHER PROCS AND MAIN VERTEX -------- *
+   * --------------------------- INITIALIZATION ---------------------------- *
    * ----------------------------------------------------------------------- *)
 
   fun sched () = init (myWorkerId ()) ()

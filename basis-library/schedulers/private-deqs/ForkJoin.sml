@@ -15,7 +15,7 @@ struct
     let
       val gr = ref Waiting
       val join = Scheduler.new ()
-      val _ = Scheduler.push join (writeResult gr g)
+      val _ = Scheduler.push (writeResult gr g, join)
       val a = f ()
     in
       if Scheduler.popDiscard () then (a, g ())
