@@ -3,10 +3,6 @@
 structure Scheduler :> SCHEDULER =
 struct
 
-  val _ = print ("Using private-deqs scheduler. Note that this might still be buggy.\n")
-
-  exception Parallel of string
-
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
 
@@ -15,29 +11,10 @@ struct
    * ----------------------------------------------------------------------- *)
 
   fun die strfn =
-    ( Atomic.print (fn _ => Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
+    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
     ; OS.Process.exit OS.Process.failure
     ; ()
     )
-
-  val DEBUG = false
-  val PRINT = false
-
-  fun dbgPrint strsfn =
-    if not PRINT then () else
-    Atomic.print (fn _ => String.concatWith " " ((Int.toString (myWorkerId ()) ^ ":") :: (strsfn ())) ^ "\n")
-
-  fun dbgCheck strsfn invariantfn =
-    if not DEBUG orelse (invariantfn ()) then ()
-    else die (fn _ => String.concatWith " " ("VIOLATED" :: (strsfn ())) ^ "\n")
-
-  (* ----- janky command-line arguments ----- *)
-
-  fun getBusyWorkArg ("-busy" :: str :: _) = Option.valOf (Int.fromString str)
-    | getBusyWorkArg (_ :: l) = getBusyWorkArg l
-    | getBusyWorkArg nil = 1000
-
-  val BUSY_WORK = getBusyWorkArg (CommandLine.arguments ())
 
   (* ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *
@@ -46,16 +23,16 @@ struct
   structure Thread = MLton.Thread
   val cas = MLton.Parallel.compareAndSwap
 
-  (* TODO: Implement a faster queue? Is this necessary? As long as only "big"
-   * tasks are migrated, the cost of linear scanning to find the end of the
-   * queue is amortized nicely. *)
-  structure Queue = SimpleQueue
-  (*structure Queue = DoublyLinkedList*)
-  (*structure Queue = MkRingBuffer (val initialCapacity = 2048)*)
-  (*structure Queue = MkChunkedDoublyLinkedList (val chunkSize = 64)*)
+  (* TODO: Implement a faster queue? Is this necessary? *)
+  (*structure Queue = SimpleQueue*)
+  structure Queue = DoublyLinkedList
 
-  type t = int ref * unit Thread.t ref
+  type vertex = int ref * unit Thread.t ref
   type task = unit -> unit
+
+  fun dummyTask () = die (fn _ => "Error: dummy task")
+  val dummyThread = Thread.new dummyTask
+  val dummyVert = (ref 1, ref dummyThread)
 
   fun decrementHitsZero (x : int ref) : bool =
     MLton.Parallel.fetchAndAdd (x, ~1) = 1
@@ -63,24 +40,15 @@ struct
   fun increment (x : int ref) : unit =
     ignore (MLton.Parallel.fetchAndAdd (x, 1))
 
+  (*
+  fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
+  fun arrayUpdate str (a, i, x) = Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
+  fun vectorSub str (v, i) = Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
+  *)
+
   fun arraySub str (a, i) = Array.sub (a, i)
   fun arrayUpdate str (a, i, x) = Array.update (a, i, x)
   fun vectorSub str (v, i) = Vector.sub (v, i)
-
-  (*
-  fun arraySub str (a, i) =
-    Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  fun arrayUpdate str (a, i, x) =
-    Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
-  fun vectorSub str (v, i) =
-    Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  *)
-
-  (*
-  fun arraySub x = Array.unsafeSub x
-  fun arrayUpdate x = Array.unsafeUpdate x
-  fun vectorSub x = Vector.unsafeSub x
-  *)
 
   (* A request is either NO_REQUEST, REQUEST_BLOCKED, or a processor id.
    * Workers request work by writing their own id into another worker's
@@ -91,31 +59,46 @@ struct
   val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
   fun requestCell p = vectorSub "requestCells" (requestCells, p)
 
-  (* Space out the statuses for cache performance (don't want unnecessary
-   * invalidations for status updates). I wish there was a better way to do
-   * this. TODO: does this actually make performance better? *)
-  val statuses = Array.array (P*64, false)
-  fun getStatus p = arraySub "statuses" (statuses, p*64)
-  fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*64, s)
+  (* Statuses are updated locally to indicate whether or not work is available
+   * to be stolen. This allows idle workers to only request work from victims
+   * who are unlikely to reject.
+   * TODO: does padding statuses actually improve performance? *)
+  val statuses = Array.array (P*16, false)
+  fun getStatus p = arraySub "statuses" (statuses, p*16)
+  fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
 
-  datatype mailbox = Empty | Receiving of (t * task) option
-  val mailboxes = Vector.tabulate (P, fn _ => Atomic.new Empty)
-  fun getMailbox p = Atomic.read (vectorSub "mailboxes" (mailboxes, p))
-  fun setMailbox (p, s) = Atomic.write (vectorSub "mailboxes" (mailboxes, p), s)
+  (* When a worker requests work, they wait for a response to be written into
+   * their own mailbox. The victim indicates they have finished writing a
+   * response by flipping the flag. *)
+  val MAIL_WAITING = 0
+  val MAIL_RECEIVING = 1
+  type mailbox = {flag : int ref, mail : (task * vertex) option ref}
+  val mailboxes = Vector.tabulate (P, fn _ => {flag = ref MAIL_WAITING, mail = ref NONE})
+  fun getMail p =
+    let val {flag, mail} = vectorSub "getMail" (mailboxes, p)
+    in if !flag = MAIL_RECEIVING
+       then (flag := MAIL_WAITING; !mail)
+       else getMail p
+    end
+  fun sendMail (p, m) =
+    let val {flag, mail} = vectorSub "sendMail" (mailboxes, p)
+    in ( mail := m
+       ; if cas (flag, MAIL_WAITING, MAIL_RECEIVING) then ()
+         else die (fn _ => "Error: send mail")
+       )
+    end
 
-  val dummyThread = Thread.new (fn _ => die (fn _ => "Error: dummy thread"))
-
-  val pushFuncs = Array.array (P, fn _ => fn _ => die (fn _ => "Error: dummy push func"))
+  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push func"))
   val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
 
-  fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
+  fun push (t, v) = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (t, v)
   fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x
   fun popDiscard x = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) x
-  fun push j t = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) j t
   fun sync x = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) x
+  fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
 
   fun new () = (ref 1, ref dummyThread)
 
@@ -123,116 +106,89 @@ struct
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
 
   (* ----------------------------------------------------------------------- *
-   * ------------------------- MAIN SCHEDULER LOOP ------------------------- *
+   * ------------------------- WORKER-LOCAL SETUP -------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  fun schedule (mainThread, myId) =
+  fun init myId =
     let
       val myQueue = Queue.new ()
-      val myRand = Random.rand myId
-
-      local val r = ref (0w0 : Word32.word) in
-      fun busyWork n =
-        if n = 0 then ()
-        else ( let val x = !r
-               in r := (x+0w2)*(x+0w3) div 0w3
-               end
-             ; busyWork (n-1)
-             )
-      end
-
-      fun serve () =
-        let val friend = !(requestCell myId)
-        in if friend = NO_REQUEST then ()
-           else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
-           else ( requestCell myId := NO_REQUEST
-                ; let val mail =
-                        case Queue.popTop myQueue of
-                          SOME (x as ((c, _), _)) => (increment c; SOME x)
-                        | NONE => NONE
-                  in setMailbox (friend, Receiving mail)
-                  end
-                )
-        end
+      val myRand = SimpleRandom.rand myId
+      val myRequestCell = requestCell myId
 
       fun communicate () =
-        ( serve ()
-        ; let val haveWork = not (Queue.empty myQueue)
-          in if getStatus myId = haveWork then ()
-             else setStatus (myId, haveWork)
+        ( let
+            val friend = !myRequestCell
+          in
+            if friend = NO_REQUEST then ()
+            else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
+            else ( myRequestCell := NO_REQUEST
+                 ; let val mail =
+                         case Queue.popTop myQueue of
+                           SOME (x as (_, (c, _))) => (increment c; SOME x)
+                         | NONE => NONE
+                   in sendMail (friend, mail)
+                   end
+                 )
           end
+        ; setStatus (myId, not (Queue.empty myQueue))
         )
 
-      fun reject () =
-        let
-          val myCell = requestCell myId
-          val friend = !myCell
-        in
-          if friend = NO_REQUEST then
-            if cas (myCell, NO_REQUEST, REQUEST_BLOCKED) then ()
-            else reject () (* recurs at most once *)
-          else
-            ( myCell := REQUEST_BLOCKED
-            ; setMailbox (friend, Receiving NONE)
-            )
-        end
-
-      fun push join task = Queue.pushBot ((join, task), myQueue)
+      fun push (t, v) =
+        Queue.pushBot ((t, v), myQueue)
+        before communicate ()
 
       fun pop () =
-        case Queue.popBot myQueue of
-          SOME (_, work) => (communicate (); SOME work)
-        | NONE => NONE
+        Option.map (fn (t, _) => t) (Queue.popBot myQueue)
+        before communicate ()
 
       fun popDiscard () =
-        if Queue.popBotDiscard myQueue then (communicate (); true) else false
+        Queue.popBotDiscard myQueue
+        before communicate ()
 
-      (* -------------------- request and receive loops -------------------- *)
+      (* ------------------------------------------------------------------- *)
 
       fun verifyStatus () =
         if getStatus myId = false then ()
         else die (fn _ => "Error: status not set correctly\n")
 
       fun randomOtherId () =
-        let val other = Random.boundedInt (0, P-1) myRand
+        let val other = SimpleRandom.boundedInt (0, P-1) myRand
         in if other < myId then other else other+1
+        end
+
+      fun blockRequests () =
+        let
+          val friend = !myRequestCell
+        in
+          if friend = NO_REQUEST then
+            if cas (myRequestCell, NO_REQUEST, REQUEST_BLOCKED) then ()
+            else blockRequests () (* recurs at most once *)
+          else if friend = REQUEST_BLOCKED then die (fn _ => "Error: block while blocked")
+          else
+            ( myRequestCell := REQUEST_BLOCKED
+            ; sendMail (friend, NONE)
+            )
         end
 
       fun request () =
         let
           val victimId = randomOtherId ()
+          val hasWork = getStatus victimId
         in
-          if getStatus victimId andalso
-            cas (requestCell victimId, NO_REQUEST, myId)
-          then receiveFrom victimId
-          else (verifyStatus (); request ())
+          if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
+          then (verifyStatus (); request ())
+          else case getMail myId of
+                 NONE => (verifyStatus (); request ())
+               | SOME x => (myRequestCell := NO_REQUEST; x)
         end
 
-      and receiveFrom victimId =
-        case getMailbox myId of
-          Empty =>
-            ( busyWork BUSY_WORK
-            ; verifyStatus ()
-            ; receiveFrom victimId
-            )
-        | Receiving NONE =>
-            ( setMailbox (myId, Empty)
-            ; verifyStatus ()
-            ; request ()
-            )
-        | Receiving (SOME x) =>
-            ( requestCell myId := NO_REQUEST
-            ; setMailbox (myId, Empty)
-            ; x
-            )
+      (* ------------------------------------------------------------------- *)
 
-      (* -------------------------- working loop -------------------------- *)
-
-      (* (counter, cont) is the outgoing dependency of the given work *)
-      fun doWork ((counter, cont), work) =
+      (* (counter, cont) is the outgoing dependency of the given task *)
+      fun doWork (task, (counter, cont)) =
         ( communicate ()
-        ; work ()
-        (* When work returns, we may have moved to a different worker.
+        ; task ()
+        (* When the task returns, we may have moved to a different worker.
          * returnToSched handles this by looking up the appropriate `return`
          * function and calling it. *)
         ; returnToSched (counter, cont)
@@ -240,16 +196,14 @@ struct
 
       fun acquireWork () =
         ( setStatus (myId, false)
-        ; reject ()
+        ; blockRequests ()
         ; doWork (request ())
         )
 
-      fun return (t as (counter, cont)) =
-        case Queue.popBot myQueue of
-          SOME (_, work) => (communicate (); work (); return t)
-        | NONE => if decrementHitsZero counter
-                  then (communicate (); jumpTo (!cont))
-                  else acquireWork ()
+      fun return (counter, cont) =
+        if decrementHitsZero counter
+        then (communicate (); jumpTo (!cont))
+        else acquireWork ()
 
       (* NOTE: it might be tempting to write the switch like so:
        *   Thread.switch (fn k =>
@@ -260,6 +214,7 @@ struct
        * However, this is incorrect. Thread.switch requires that the switch
        * complete before the argument (k, in this case) is switched to. Since
        * we have multiple workers running concurrently, this could happen! *)
+      (* TODO: Can we prevent making a new thread here? *)
       fun sync (counter, cont) : unit =
         Thread.switch (fn k =>
           ( cont := k (* this must happen before decrementing the counter! *)
@@ -267,24 +222,23 @@ struct
           ))
 
     in
-      ( arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
-      ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
-      ; arrayUpdate "pushFuncs" (pushFuncs, myId, push)
+      ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
       ; arrayUpdate "popFuncs" (popFuncs, myId, pop)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
-      ; if myId = 0 then jumpTo mainThread else acquireWork ()
+      ; arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
+      ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
+      ; acquireWork
       )
-    end (* schedule *)
+    end (* init *)
 
   (* ----------------------------------------------------------------------- *
-   * -------- FINAL SETUP: INITIALIZING OTHER PROCS AND MAIN VERTEX -------- *
+   * --------------------------- INITIALIZATION ---------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  fun beginSched mainThread () = schedule (mainThread, myWorkerId ())
+  fun sched () = init (myWorkerId ()) ()
 
-  val _ = MLton.Parallel.registerProcessorFunction (beginSched dummyThread)
+  val _ = MLton.Parallel.registerProcessorFunction sched
   val _ = MLton.Parallel.initializeProcessors ()
-
-  val _ = Thread.switch (fn main => runnable (Thread.new (beginSched main)))
+  val _ = init (myWorkerId ())
 
 end

@@ -1,4 +1,4 @@
-structure Random :>
+structure SimpleRandom :>
 sig
   type t
 

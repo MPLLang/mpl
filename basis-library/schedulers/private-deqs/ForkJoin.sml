@@ -1,4 +1,4 @@
-structure ForkJoin :> FORKJOIN =
+structure ForkJoin :> FORK_JOIN =
 struct
 
   exception ForkJoin
@@ -14,12 +14,12 @@ struct
   fun fork (f : unit -> 'a, g : unit -> 'b) =
     let
       val gr = ref Waiting
-      val t = Scheduler.new ()
-      val _ = Scheduler.push t (writeResult gr g)
+      val join = Scheduler.new ()
+      val _ = Scheduler.push (writeResult gr g, join)
       val a = f ()
     in
       if Scheduler.popDiscard () then (a, g ())
-      else ( Scheduler.sync t
+      else ( Scheduler.sync join
            ; case !gr of
                Finished b => (a, b)
              | Raised e => raise e
