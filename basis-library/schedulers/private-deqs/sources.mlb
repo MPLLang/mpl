@@ -3,12 +3,14 @@ local
   $(SML_LIB)/basis/mlton.mlb
   $(SML_LIB)/basis/unsafe.mlb
 
-  SCHEDULER.sig
   FORK_JOIN.sig
+  SCHEDULER.sig
   queue/QUEUE.sig
+  mailboxes/MAILBOXES.sig
 
   SimpleRandom.sml
   queue/DoublyLinkedList.sml
+  mailboxes/Mailboxes.sml
   Scheduler.sml
   ForkJoin.sml
 in

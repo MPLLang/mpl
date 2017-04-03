@@ -1,5 +1,5 @@
-structure ForkJoin :> FORK_JOIN =
-struct
+structure ForkJoin :> FORK_JOIN = Scheduler.ForkJoin
+(*struct
 
   exception ForkJoin
 
@@ -27,4 +27,4 @@ struct
            )
     end
 
-end
+end*)

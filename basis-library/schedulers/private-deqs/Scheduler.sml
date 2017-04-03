@@ -67,35 +67,16 @@ struct
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
 
-  (* When a worker requests work, they wait for a response to be written into
-   * their own mailbox. The victim indicates they have finished writing a
-   * response by flipping the flag. *)
-  val MAIL_WAITING = 0
-  val MAIL_RECEIVING = 1
-  type mailbox = {flag : int ref, mail : (task * vertex) option ref}
-  val mailboxes = Vector.tabulate (P, fn _ => {flag = ref MAIL_WAITING, mail = ref NONE})
-  fun getMail p =
-    let val {flag, mail} = vectorSub "getMail" (mailboxes, p)
-    in if !flag = MAIL_RECEIVING
-       then (flag := MAIL_WAITING; !mail)
-       else getMail p
-    end
-  fun sendMail (p, m) =
-    let val {flag, mail} = vectorSub "sendMail" (mailboxes, p)
-    in ( mail := m
-       ; if cas (flag, MAIL_WAITING, MAIL_RECEIVING) then ()
-         else die (fn _ => "Error: send mail")
-       )
-    end
+  val mailboxes : (task * vertex) option Mailboxes.t = Mailboxes.new NONE
 
   val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push func"))
-  val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))
+  (*val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))*)
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard func"); false))
   val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
 
   fun push (t, v) = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (t, v)
-  fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x
+  (*fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x*)
   fun popDiscard x = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) x
   fun sync x = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) x
   fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
@@ -104,6 +85,41 @@ struct
 
   fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
+
+  (* ----------------------------------------------------------------------- *
+   * ------------------------------ FORK-JOIN ------------------------------ *
+   * ------------------------------------------------------------------------*)
+
+  structure ForkJoin :> FORK_JOIN =
+  struct
+
+    exception ForkJoin
+
+    datatype 'a result =
+      Waiting
+    | Finished of 'a
+    | Raised of exn
+
+    fun writeResult fr f () =
+      fr := (Finished (f ()) handle e => Raised e)
+
+    fun fork (f : unit -> 'a, g : unit -> 'b) =
+      let
+        val gr = ref Waiting
+        val join = new ()
+        val _ = push (writeResult gr g, join)
+        val a = f ()
+      in
+        if popDiscard () then (a, g ())
+        else ( sync join
+             ; case !gr of
+                 Finished b => (a, b)
+               | Raised e => raise e
+               | Waiting => raise ForkJoin
+             )
+      end
+
+  end
 
   (* ----------------------------------------------------------------------- *
    * ------------------------- WORKER-LOCAL SETUP -------------------------- *
@@ -126,7 +142,7 @@ struct
                          case Queue.popTop myQueue of
                            SOME (x as (_, (c, _))) => (increment c; SOME x)
                          | NONE => NONE
-                   in sendMail (friend, mail)
+                   in Mailboxes.sendMail mailboxes (friend, mail)
                    end
                  )
           end
@@ -137,9 +153,9 @@ struct
         Queue.pushBot ((t, v), myQueue)
         before communicate ()
 
-      fun pop () =
+      (*fun pop () =
         Option.map (fn (t, _) => t) (Queue.popBot myQueue)
-        before communicate ()
+        before communicate ()*)
 
       fun popDiscard () =
         Queue.popBotDiscard myQueue
@@ -166,7 +182,7 @@ struct
           else if friend = REQUEST_BLOCKED then die (fn _ => "Error: block while blocked")
           else
             ( myRequestCell := REQUEST_BLOCKED
-            ; sendMail (friend, NONE)
+            ; Mailboxes.sendMail mailboxes (friend, NONE)
             )
         end
 
@@ -177,7 +193,7 @@ struct
         in
           if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
           then (verifyStatus (); request ())
-          else case getMail myId of
+          else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
                | SOME x => (myRequestCell := NO_REQUEST; x)
         end
@@ -223,7 +239,7 @@ struct
 
     in
       ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
-      ; arrayUpdate "popFuncs" (popFuncs, myId, pop)
+      (*; arrayUpdate "popFuncs" (popFuncs, myId, pop)*)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
       ; arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)

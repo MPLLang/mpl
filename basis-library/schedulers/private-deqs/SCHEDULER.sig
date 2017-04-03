@@ -1,5 +1,10 @@
 signature SCHEDULER =
 sig
+  structure ForkJoin : FORK_JOIN
+end
+
+(*signature SCHEDULER =
+sig
 
   type vertex
   type task = unit -> unit
@@ -16,7 +21,7 @@ sig
   (* Attempt to pop a task off the task stack. If it fails (because the task
    * stack is empty) then the desired task must have been stolen.
    * `popDiscard` throws away the task, and only returns success. *)
-  val pop : unit -> task option
+  (*val pop : unit -> task option*)
   val popDiscard : unit -> bool
 
   (* `sync v` assigns the current continuation to v, waits until all stolen
@@ -25,7 +30,7 @@ sig
    * empty. *)
   val sync : vertex -> unit
 
-end
+end*)
 
 (* NOTE: The semantics of these functions would be easier to describe if each
  * vertex had its own task stack. Then `sync v` would execute all dependencies
