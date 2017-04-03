@@ -67,20 +67,37 @@ struct
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
 
-  val mailboxes : (task * vertex) option Mailboxes.t = Mailboxes.new NONE
+  val mailboxes : task option Mailboxes.t = Mailboxes.new NONE
 
-  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push func"))
-  (*val popFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy pop func"); NONE))*)
-  val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard func"); false))
-  val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield func"))
-  val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return func"))
-
+  (* val push : task * vertex -> unit
+   * `push (t,v)` registers t as a dependency for v, and pushes t onto the task
+   * stack. v should be thought of as a join vertex which has not yet been
+   * assigned some computation. *)
+  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push"))
   fun push (t, v) = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (t, v)
-  (*fun pop x = arraySub "popFuncs" (popFuncs, myWorkerId ()) x*)
-  fun popDiscard x = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) x
-  fun sync x = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) x
-  fun returnToSched x = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) x
 
+  (* val popDiscard : unit -> bool
+   * Attempts to pop a task off the task stack. If it fails (because the stack
+   * is empty) then the desired task must have been served to another worker. *)
+  val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
+  fun popDiscard () = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) ()
+
+  (* val sync : vertex -> unit
+   * `sync v` assigns the current continuation to v, waits until all served
+   * dependencies for v have completed, and then executes v. Note that it really
+   * only makes sense to call sync when the task stack is empty... *)
+  val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield"))
+  fun sync v = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) v
+
+  (* val returnToSched : vertex -> unit
+   * `returnToSched v` is the same as `sync v`, except it doesn't assign the
+   * current continuation to v. Typically for a single v, there is one call to
+   * `sync v` and one or more calls to `returnToSched v`. Whoever gets there
+   * last will be the one who executes v. *)
+  val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return"))
+  fun returnToSched v = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) v
+
+  (* Create a new vertex (for join points) *)
   fun new () = (ref 1, ref dummyThread)
 
   fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
@@ -140,8 +157,11 @@ struct
             else ( myRequestCell := NO_REQUEST
                  ; let val mail =
                          case Queue.popTop myQueue of
-                           SOME (x as (_, (c, _))) => (increment c; SOME x)
-                         | NONE => NONE
+                           NONE => NONE
+                         | SOME (task, v as (c, _)) =>
+                             ( increment c
+                             ; SOME (fn () => (task (); returnToSched v))
+                             )
                    in Mailboxes.sendMail mailboxes (friend, mail)
                    end
                  )
@@ -152,10 +172,6 @@ struct
       fun push (t, v) =
         Queue.pushBot ((t, v), myQueue)
         before communicate ()
-
-      (*fun pop () =
-        Option.map (fn (t, _) => t) (Queue.popBot myQueue)
-        before communicate ()*)
 
       fun popDiscard () =
         Queue.popBotDiscard myQueue
@@ -195,25 +211,15 @@ struct
           then (verifyStatus (); request ())
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
-               | SOME x => (myRequestCell := NO_REQUEST; x)
+               | SOME task => (myRequestCell := NO_REQUEST; task)
         end
 
       (* ------------------------------------------------------------------- *)
 
-      (* (counter, cont) is the outgoing dependency of the given task *)
-      fun doWork (task, (counter, cont)) =
-        ( communicate ()
-        ; task ()
-        (* When the task returns, we may have moved to a different worker.
-         * returnToSched handles this by looking up the appropriate `return`
-         * function and calling it. *)
-        ; returnToSched (counter, cont)
-        )
-
       fun acquireWork () =
         ( setStatus (myId, false)
         ; blockRequests ()
-        ; doWork (request ())
+        ; let val task = request () in task () end
         )
 
       fun return (counter, cont) =
@@ -239,7 +245,6 @@ struct
 
     in
       ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
-      (*; arrayUpdate "popFuncs" (popFuncs, myId, pop)*)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
       ; arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
@@ -255,6 +260,11 @@ struct
 
   val _ = MLton.Parallel.registerProcessorFunction sched
   val _ = MLton.Parallel.initializeProcessors ()
+
+  (* init sets up worker-local data and returns the acquireWork function. This
+   * allows us to set up the acquire loop for the other workers. Since the
+   * current worker is the "master" worker, we ignore the returned value (we
+   * only need to make sure it executes its setup code *)
   val _ = init (myWorkerId ())
 
 end
