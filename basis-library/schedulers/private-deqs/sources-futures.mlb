@@ -1,0 +1,21 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+
+  FORK_JOIN.sig
+  FUTURE.sig
+  FUTURE_SCHEDULER.sig
+  queue/QUEUE.sig
+  mailboxes/MAILBOXES.sig
+
+  SimpleRandom.sml
+  queue/DoublyLinkedList.sml
+  mailboxes/Mailboxes.sml
+  FutureScheduler.sml
+  ForkJoin.sml
+  Future.sml
+in
+  structure ForkJoin
+  structure Future
+end
