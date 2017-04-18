@@ -104,6 +104,7 @@ void Duplicate (GC_state d, GC_state s) {
   d->sourceMaps.sourcesLength = s->sourceMaps.sourcesLength;
   d->profiling.kind = s->profiling.kind;
   d->profiling.stack = s->profiling.stack;
+  d->profiling.isOn = s->profiling.isOn;
   d->globalObjptrNonRoot = s->globalObjptrNonRoot;
   GC_duplicate (d, s);
 }
