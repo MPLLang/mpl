@@ -491,6 +491,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
   s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
   s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;
   s->controls->summaryFile = stderr;
