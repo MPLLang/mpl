@@ -32,6 +32,7 @@ struct
   fun insert ((lock, xs), x) =
     takeLock (lock, LOCKED)
     andalso ( xs := (x :: !xs)
+            (*; print ("Inserted elem\n")*)
             ; releaseLock lock
             ; true
             )

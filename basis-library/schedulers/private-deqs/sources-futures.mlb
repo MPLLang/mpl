@@ -7,14 +7,15 @@ local
   FUTURE.sig
   FUTURE_SCHEDULER.sig
   queue/QUEUE.sig
+  bag/BAG.sig
   mailboxes/MAILBOXES.sig
 
   SimpleRandom.sml
   queue/DoublyLinkedList.sml
+  bag/ListBag.sml
   mailboxes/Mailboxes.sml
   FutureScheduler.sml
-  ForkJoin.sml
-  Future.sml
+  FutureForkJoin.sml
 in
   structure ForkJoin
   structure Future
