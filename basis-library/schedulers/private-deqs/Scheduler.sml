@@ -33,11 +33,14 @@ struct
   fun dummyTask () = die (fn _ => "Error: dummy task")
   val dummyThread = Thread.new dummyTask
 
+  fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
+  fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
+
   fun decrementHitsZero (x : int ref) : bool =
     MLton.Parallel.fetchAndAdd (x, ~1) = 1
 
-  fun increment (x : int ref) : unit =
-    ignore (MLton.Parallel.fetchAndAdd (x, 1))
+  (*fun increment (x : int ref) : unit =
+    ignore (MLton.Parallel.fetchAndAdd (x, 1))*)
 
   (*
   fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
@@ -81,13 +84,6 @@ struct
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
   fun popDiscard () = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) ()
 
-  (* val sync : vertex -> unit
-   * `sync v` assigns the current continuation to v, waits until all served
-   * dependencies for v have completed, and then executes v. Note that it really
-   * only makes sense to call sync when the task stack is empty... *)
-  val syncFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy yield"))
-  fun sync v = arraySub "syncFuncs" (syncFuncs, myWorkerId ()) v
-
   (* val returnToSched : vertex -> unit
    * `returnToSched v` is the same as `sync v`, except it doesn't assign the
    * current continuation to v. Typically for a single v, there is one call to
@@ -96,11 +92,21 @@ struct
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return"))
   fun returnToSched v = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) v
 
-  (* Create a new vertex (for join points) *)
-  fun new () = (ref 1, ref dummyThread)
+  (* val sync : vertex -> unit
+   * `sync v` assigns the current continuation to v, decrements its counter,
+   * and executes v if the counter hits zero. *)
+  (* TODO: Can we prevent making a new thread here? *)
+  (* NOTE: It is crucial that the continuation be assigned before the counter
+   * is decremented; otherwise, this continuation could be switched *to* by
+   * another worker before this switch completes. *)
+  fun sync (counter, cont) =
+    Thread.switch (fn k =>
+      ( cont := k (* this must happen before decrementing the counter! *)
+      ; runnable (Thread.new (fn _ => returnToSched (counter, cont)))
+      ))
 
-  fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
-  fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
+  (* Create a new vertex (for join points) *)
+  fun new () = (ref 2, ref dummyThread)
 
   (* ----------------------------------------------------------------------- *
    * ------------------------------ FORK-JOIN ------------------------------ *
@@ -157,10 +163,10 @@ struct
                  ; let val mail =
                          case Queue.popTop myQueue of
                            NONE => NONE
-                         | SOME (task, v as (c, _)) =>
-                             ( increment c
-                             ; SOME (fn () => (task (); returnToSched v))
-                             )
+                         | SOME (task, v) =>
+                             (* New counters start at 2 now, so we don't need to
+                              * increment the counter at a steal. *)
+                             SOME (fn () => (task (); returnToSched v))
                    in Mailboxes.sendMail mailboxes (friend, mail)
                    end
                  )
@@ -226,26 +232,9 @@ struct
         then (communicate (); jumpTo (!cont))
         else acquireWork ()
 
-      (* NOTE: it might be tempting to write the switch like so:
-       *   Thread.switch (fn k =>
-       *     ( cont := k
-       *     ; if decrementHitsZero counter then runnable k
-       *       else runnable (Thread.new acquireWork)
-       *     )
-       * However, this is incorrect. Thread.switch requires that the switch
-       * complete before the argument (k, in this case) is switched to. Since
-       * we have multiple workers running concurrently, this could happen! *)
-      (* TODO: Can we prevent making a new thread here? *)
-      fun sync (counter, cont) : unit =
-        Thread.switch (fn k =>
-          ( cont := k (* this must happen before decrementing the counter! *)
-          ; runnable (Thread.new (fn _ => return (counter, cont)))
-          ))
-
     in
       ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
-      ; arrayUpdate "syncFuncs" (syncFuncs, myId, sync)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
       ; acquireWork
       )
