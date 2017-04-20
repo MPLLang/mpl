@@ -1,6 +1,10 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-structure FutureScheduler :> FUTURE_SCHEDULER =
+(* FutureScheduler implements two structures.
+ *   ForkJoin : FORK_JOIN
+ *   Future : FUTURE
+ * These are pulled out of FutureScheduler at the bottom of this file. *)
+structure FutureScheduler =
 struct
 
   val P = MLton.Parallel.numberOfProcessors
@@ -335,9 +339,7 @@ struct
         then (communicate (); jumpTo (!cont))
         else suspend () (* seems like it's possible to reuse this *)
 
-      (* TODO: why shouldn't we put the contents of the bag at the top of our
-       * stack? These threads have already incurred overhead due to suspension.
-       * Might as well let them be executed elsewhere. *)
+
       fun returnFuture bag =
         case Bag.dump bag of
           NONE => die (fn _ => "Error: returned from future but someone else dumped the bag.")
@@ -382,3 +384,6 @@ struct
   val _ = init (myWorkerId ())
 
 end
+
+structure ForkJoin :> FORK_JOIN = FutureScheduler.ForkJoin
+structure Future :> FUTURE = FutureScheduler.Future

@@ -1,6 +1,9 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-structure Scheduler :> SCHEDULER =
+(* Scheduler implements a single structure.
+ *   ForkJoin : FORK_JOIN
+ * It is pulled out of Scheduler at the bottom of this file. *)
+structure Scheduler =
 struct
 
   val P = MLton.Parallel.numberOfProcessors
@@ -95,10 +98,9 @@ struct
   (* val sync : vertex -> unit
    * `sync v` assigns the current continuation to v, decrements its counter,
    * and executes v if the counter hits zero. *)
-  (* TODO: Can we prevent making a new thread here? *)
-  (* NOTE: It is crucial that the continuation be assigned before the counter
-   * is decremented; otherwise, this continuation could be switched *to* by
-   * another worker before this switch completes. *)
+  (* TODO: the Thread.switch bug has been fixed, so it should be possible to
+   * not create a new thread in the case that our decrement hits zero. So, some
+   * of the code from `return` should be blended here. *)
   fun sync (counter, cont) =
     Thread.switch (fn k =>
       ( cont := k (* this must happen before decrementing the counter! *)
@@ -207,6 +209,8 @@ struct
             )
         end
 
+      fun unblockRequests () = myRequestCell := NO_REQUEST
+
       fun request () =
         let
           val victimId = randomOtherId ()
@@ -216,7 +220,7 @@ struct
           then (verifyStatus (); request ())
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
-               | SOME task => (myRequestCell := NO_REQUEST; task)
+               | SOME task => task
         end
 
       (* ------------------------------------------------------------------- *)
@@ -224,7 +228,11 @@ struct
       fun acquireWork () =
         ( setStatus (myId, false)
         ; blockRequests ()
-        ; let val task = request () in task () end
+        ; let val task = request ()
+          in ( unblockRequests ()
+             ; task ()
+             )
+          end
         )
 
       fun return (counter, cont) =
@@ -256,3 +264,5 @@ struct
   val _ = init (myWorkerId ())
 
 end
+
+structure ForkJoin :> FORK_JOIN = Scheduler.ForkJoin

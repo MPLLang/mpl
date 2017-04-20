@@ -4,7 +4,6 @@ local
   $(SML_LIB)/basis/unsafe.mlb
 
   FORK_JOIN.sig
-  SCHEDULER.sig
   queue/QUEUE.sig
   mailboxes/MAILBOXES.sig
 
@@ -12,7 +11,6 @@ local
   queue/DoublyLinkedList.sml
   mailboxes/Mailboxes.sml
   Scheduler.sml
-  ForkJoin.sml
 in
   structure ForkJoin
 end

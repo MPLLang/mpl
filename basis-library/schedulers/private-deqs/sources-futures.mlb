@@ -5,7 +5,6 @@ local
 
   FORK_JOIN.sig
   FUTURE.sig
-  FUTURE_SCHEDULER.sig
   queue/QUEUE.sig
   bag/BAG.sig
   mailboxes/MAILBOXES.sig
@@ -15,7 +14,6 @@ local
   bag/ListBag.sml
   mailboxes/Mailboxes.sml
   FutureScheduler.sml
-  FutureForkJoin.sml
 in
   structure ForkJoin
   structure Future
