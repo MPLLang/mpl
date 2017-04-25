@@ -87,6 +87,8 @@ struct GC_state {
   struct GC_sourceMaps sourceMaps;
   pointer stackBottom; /* Bottom of stack in current thread. */
   pointer start; /* Like heap.nursery but per processor.  nursery <= start <= frontier */
+  pthread_t self; /* thread owning the GC_state */
+  atomic_uint32_t terminationLeader;
   int32_t syncReason;
   struct GC_sysvals sysvals;
   struct GC_translateState translateState;

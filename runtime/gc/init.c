@@ -528,6 +528,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&s->signalsInfo.signalsHandled);
   sigemptyset (&s->signalsInfo.signalsPending);
+  s->self = pthread_self();
+  s->terminationLeader = INVALID_PROCESSOR_NUMBER;
   s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
@@ -642,6 +644,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&d->signalsInfo.signalsHandled);
   sigemptyset (&d->signalsInfo.signalsPending);
+  d->self = s->self;
+  d->terminationLeader = INVALID_PROCESSOR_NUMBER;
   d->syncReason = SYNC_NONE;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;

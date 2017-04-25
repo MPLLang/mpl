@@ -458,6 +458,10 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
+  /* Exit as soon as termination is requested. */
+  if (GC_CheckForTerminationRequest(s))
+    pthread_exit(NULL);
+
   /* SPOONHOWER_NOTE: Used to be enter() here */
   /* XXX copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */

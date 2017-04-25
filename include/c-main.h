@@ -106,7 +106,6 @@ void MLton_threadFunc (void* arg) {                                     \
       /* Initialize with a generic state to read in @MLtons, etc */     \
       Initialize (s, al, mg, mfs, mmc, pk, ps, gnr);                    \
                                                                         \
-      threads = (pthread_t *) malloc ((s.numberOfProcs - 1) * sizeof (pthread_t)); \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
       if (pthread_key_create(&gcstate_key, NULL)) {                     \
@@ -127,7 +126,7 @@ void MLton_threadFunc (void* arg) {                                     \
     }                                                                   \
     /* Now create the threads */                                        \
     for (procNo = 1; procNo < gcState[0].numberOfProcs; procNo++) {     \
-      if (pthread_create (&threads[procNo - 1], NULL, &MLton_threadFunc, (void *)&gcState[procNo])) { \
+      if (pthread_create (&gcState[procNo].self, NULL, &MLton_threadFunc, (void *)&gcState[procNo])) { \
         fprintf (stderr, "pthread_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \
