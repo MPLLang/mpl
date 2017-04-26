@@ -458,11 +458,11 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
-  Trace(EVENT_GC_ENTER, 0, 0, 0);
+  Trace0(EVENT_GC_ENTER);
 
   /* Exit as soon as termination is requested. */
   if (GC_CheckForTerminationRequest(s)) {
-    Trace(EVENT_GC_LEAVE, 0, 0, 0);
+    Trace0(EVENT_GC_LEAVE);
     pthread_exit(NULL);
   }
 
@@ -504,7 +504,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   endAtomic (s);
 
-  Trace(EVENT_GC_LEAVE, 0, 0, 0);
+  Trace0(EVENT_GC_LEAVE);
 }
 
 pointer FFI_getArgs (GC_state s) {

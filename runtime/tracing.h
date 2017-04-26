@@ -47,4 +47,9 @@ void Trace_(struct TracingContext *ctx, int kind,
 #define Trace(...) ((void)0)
 #endif
 
+#define Trace0(k)               Trace(k,  0,  0,  0)
+#define Trace1(k, a0)           Trace(k, a0,  0,  0)
+#define Trace2(k, a0, a1)       Trace(k, a0, a1,  0)
+#define Trace3(k, a0, a1, a2)   Trace(k, a0, a1, a2)
+
 #endif  /* TRACING_H */
