@@ -23,8 +23,8 @@ static const char* mlTypesHPrefix[] = {
   "/* We need these because in header files for exported SML functions, ",
   " * types.h is included without cenv.h.",
   " */",
-  "#ifndef _ISOC99_SOURCE",
-  "#define _ISOC99_SOURCE",
+  "#ifndef _ISOC11_SOURCE",
+  "#define _ISOC11_SOURCE",
   "#endif",
   "#if (defined (_AIX) || defined (__hpux__) || defined (__OpenBSD__))",
   "#include <inttypes.h>",
@@ -350,8 +350,8 @@ int main (__attribute__ ((unused)) int argc,
   aliastype("Int", "Int", "Sock");
 
   writeNewline (cTypesHFd);writeNewline (cTypesSMLFd);
-  writeStringWithNewline (cTypesHFd, "/* C99 */");
-  writeStringWithNewline (cTypesSMLFd, "(* C99 *)");
+  writeStringWithNewline (cTypesHFd, "/* C11 */");
+  writeStringWithNewline (cTypesSMLFd, "(* C11 *)");
   chksystype(ptrdiff_t, "Ptrdiff");
   chksystype(intmax_t, "Intmax");
   chksystype(uintmax_t, "UIntmax");

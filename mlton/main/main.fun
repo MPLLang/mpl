@@ -1363,7 +1363,7 @@ fun commandLine (args: string list): unit =
                           [
                             (gcc,
                              List.concat
-                                [[ "-std=gnu99", "-c" ],
+                                [[ "-std=gnu11", "-c" ],
                                  if !format = Executable
                                  then [] else [ "-DLIBNAME=" ^ !libname ],
                                  if positionIndependent

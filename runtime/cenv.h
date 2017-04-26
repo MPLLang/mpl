@@ -13,8 +13,8 @@
 /********************************/
 /* GNU C Library Feature Macros */
 /********************************/
-/* C99 Features */
-#define _ISOC99_SOURCE
+/* C11 Features */
+#define _ISOC11_SOURCE
 
 /* POSIX 2008 Features */
 /*

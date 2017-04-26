@@ -1,6 +1,6 @@
 PATH := ../bin:$(shell echo $$PATH)
 
-CC := gcc -std=gnu99
+CC := gcc -std=gnu11
 CFLAGS := -Wall
 
 EXE :=
