@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -e
+
+usage() {
+    cat <<EOF
+Usage: $0 VERB OPTIONS
+Verbs:
+  help                  display this message
+  record COMMAND        run and record traces for COMMAND
+  cat [FILE.csv.gz]     display the content of latest trace or FILE
+EOF
+}
+
+if [ $# -le 0 ]; then
+    usage
+    exit 1
+fi
+
+TOOL=`dirname $0`/tracetr
+
+verb=$1
+shift
+case "$verb" in
+    record)
+        DIR=`mktemp -d`
+        MLTON_TRACE_DIR=$DIR $*
+        OUT=${1##*/}.$$.csv.gz
+
+        echo "*** Collecting traces" >&2
+        $TOOL $DIR/*.trace | gzip -c > $OUT
+        echo "*** Traces written to $OUT" >&2
+
+        rm -rf $DIR
+        ;;
+
+    cat)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.csv.gz | head -n 1`
+        fi
+        zcat $FILE
+        ;;
+
+    help)
+        usage
+        exit 0
+        ;;
+
+    *)
+        usage
+        exit 1
+esac
