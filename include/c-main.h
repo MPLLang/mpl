@@ -57,6 +57,8 @@ void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
                                                                         \
+  Trace(EVENT_THREAD_CREATED, s, 0, 0);                                 \
+                                                                        \
   /* Do not set CPU affinity when running on a single processor  */     \
   if (s->numberOfProcs > 1) {                                           \
       uint32_t num = Proc_processorNumber (s)                           \

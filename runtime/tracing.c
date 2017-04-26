@@ -44,6 +44,9 @@ void TracingCloseAndFreeContext(struct TracingContext **ctx) {
   if (*ctx == NULL)
     return;
 
+  /* Mark termination in the log file. */
+  Trace_(*ctx, EVENT_HALT_EXIT, 0, 0, 0);
+
   TracingFlushBuffer(*ctx);
 
   fclose((*ctx)->file);

@@ -25,6 +25,8 @@ bool GC_CheckForTerminationRequest(GC_state s) {
 }
 
 bool GC_TryToTerminate(GC_state s) {
+  Trace(EVENT_HALT_REQ, 0, 0, 0);
+
   /* We can always terminate immediately when there is a single processor. */
   if (s->procStates == NULL)
     return true;
@@ -40,6 +42,8 @@ bool GC_TryToTerminate(GC_state s) {
   /* Force all processors to acknowledge termination. */
   for (uint32_t p = 0; p < s->numberOfProcs; p++)
     s->procStates[p].limit = 0;
+
+  Trace(EVENT_HALT_WAIT, 0, 0, 0);
 
   /* Wait for the other processors to terminate. */
   for (uint32_t p = 0; p < s->numberOfProcs; p++)

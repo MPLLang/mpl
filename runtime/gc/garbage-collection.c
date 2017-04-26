@@ -458,9 +458,13 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
+  Trace(EVENT_GC_ENTER, 0, 0, 0);
+
   /* Exit as soon as termination is requested. */
-  if (GC_CheckForTerminationRequest(s))
+  if (GC_CheckForTerminationRequest(s)) {
+    Trace(EVENT_GC_LEAVE, 0, 0, 0);
     pthread_exit(NULL);
+  }
 
   /* SPOONHOWER_NOTE: Used to be enter() here */
   /* XXX copied from enter() */
@@ -499,6 +503,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   }
 
   endAtomic (s);
+
+  Trace(EVENT_GC_LEAVE, 0, 0, 0);
 }
 
 pointer FFI_getArgs (GC_state s) {
