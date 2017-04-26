@@ -97,6 +97,7 @@ struct GC_state {
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
   spinlock_t lock;
+  struct TracingContext *trace;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */

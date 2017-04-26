@@ -16,6 +16,11 @@ static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
   return (GC_frameIndex)ra;
 }
 
+static void MLtonGCCleanup(void *arg) {
+    GC_state s = (GC_state)arg;
+    GC_traceFinish(s);
+}
+
 #define MLtonCallFromC                                                  \
 static void MLton_callFromC (void* ffiArgs) {                           \
   struct cont cont;                                                     \
@@ -108,7 +113,7 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
-      if (pthread_key_create(&gcstate_key, NULL)) {                     \
+      if (pthread_key_create(&gcstate_key, MLtonGCCleanup)) {                     \
         fprintf (stderr, "pthread_key_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \
@@ -124,6 +129,9 @@ void MLton_threadFunc (void* arg) {                                     \
       gcState[procNo].procStates = gcState;                             \
       gcState[procNo].procNumber = procNo;                              \
     }                                                                   \
+    /* Set up tracing infrastructure */                                 \
+    for (procNo = 0; procNo < gcState[0].numberOfProcs; procNo++)       \
+        GC_traceInit(&gcState[procNo]);                                 \
     /* Now create the threads */                                        \
     for (procNo = 1; procNo < gcState[0].numberOfProcs; procNo++) {     \
       if (pthread_create (&gcState[procNo].self, NULL, &MLton_threadFunc, (void *)&gcState[procNo])) { \

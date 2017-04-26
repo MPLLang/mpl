@@ -1,0 +1,117 @@
+/* Copyright (C) 2017 Adrien Guatto.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ */
+
+#include <sys/time.h>
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include "tracing.h"
+
+struct TracingContext *TracingNewContext(const char *filename,
+                                         size_t buffer_capacity) {
+  struct TracingContext *ctx;
+
+  if ((ctx = malloc(sizeof *ctx)) == NULL) {
+    fprintf(stderr, "Tracing: could not allocate context\n");
+    exit(1);
+  }
+
+  if ((ctx->buffer = calloc(buffer_capacity, sizeof *ctx->buffer)) == NULL) {
+    fprintf(stderr, "Tracing: could not allocate buffer\n");
+    exit(1);
+  }
+
+  if ((ctx->file = fopen(filename, "wb")) == NULL) {
+    fprintf(stderr, "Tracing: could not open file %s\n", filename);
+    exit(1);
+  }
+
+  ctx->capacity = buffer_capacity;
+  ctx->index = 0;
+
+  TracingWriteHeader(ctx);
+
+  return ctx;
+}
+
+void TracingCloseAndFreeContext(struct TracingContext **ctx) {
+  if (*ctx == NULL)
+    return;
+
+  TracingFlushBuffer(*ctx);
+
+  fclose((*ctx)->file);
+  free((*ctx)->buffer);
+  free(*ctx);
+  *ctx = NULL;
+}
+
+void TracingWriteHeader(struct TracingContext *ctx) {
+  assert(ctx);
+  assert(ctx->file);
+
+  struct TraceFileHeader header;
+
+  header.version = TraceCurrentVersion;
+
+  if (fwrite(&header, sizeof header, 1, ctx->file) != 1) {
+    fprintf(stderr, "Tracing: could not write header\n");
+    exit(1);
+  }
+}
+
+void TracingFlushBuffer(struct TracingContext *ctx) {
+  assert(ctx);
+  assert(ctx->file);
+  assert(ctx->index <= ctx->capacity);
+
+  size_t nitems = ctx->index;
+
+  if (fwrite(ctx->buffer, sizeof *ctx->buffer, nitems, ctx->file) < nitems) {
+    fprintf(stderr, "Tracing: could not write to file\n");
+    exit(1);
+  }
+
+  ctx->index = 0;
+}
+
+static inline void
+TracingGetTimespec(struct timespec *ts)
+{
+#if defined(__APPLE__)
+  struct timeval tv;
+
+  gettimeofday(&tv, NULL);
+  ts->tv_sec = tv.tv_sec;
+  ts->tv_nsec = 1000 * tv.tv_usec;
+#elif defined(CLOCK_MONOTONIC_RAW)
+  clock_gettime(CLOCK_MONOTONIC_RAW, ts);
+#else
+  clock_gettime(CLOCK_MONOTONIC, ts);
+#endif
+}
+
+void Trace_(struct TracingContext *ctx, int kind,
+            void *argptr, EventInt arg1, EventInt arg2) {
+  if (!ctx)
+    return;
+
+  assert(ctx->index < ctx->capacity);
+
+  struct Event ev;
+  ev.kind = kind;
+  TracingGetTimespec(&ev.ts);
+  ev.argptr = (uintptr_t)argptr;
+  ev.arg1 = arg1;
+  ev.arg2 = arg2;
+
+  ctx->buffer[ctx->index++] = ev;
+  if (ctx->index == ctx->capacity)
+    TracingFlushBuffer(ctx);
+}

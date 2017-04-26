@@ -11,6 +11,7 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
+#include <stdlib.h>
 #include <strings.h>
 
 static bool stringToBool (char *s) {
@@ -535,6 +536,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
   s->saveWorldStatus = true;
+  s->trace = NULL;
 
   /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
@@ -651,6 +653,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
+  d->trace = NULL;
 
   // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
@@ -665,4 +668,27 @@ void GC_duplicate (GC_state d, GC_state s) {
   duplicateWorld (d, s);
   d->lock = s->lock;
   s->amInGC = FALSE;
+}
+
+#define TRACING_BUFFER_SIZE 10000
+
+// AG_NOTE: is this the proper place for this function?
+void GC_traceInit(GC_state s) {
+#ifdef ENABLE_TRACING
+  char filename[256];
+  const char *dir;
+
+  dir = getenv("MLTON_TRACE_DIR");
+  if (dir == NULL)
+    return;
+
+  snprintf(filename, 256, "%s/%d.%d.trace", dir, getpid(), s->procNumber);
+  s->trace = TracingNewContext(filename, TRACING_BUFFER_SIZE);
+#endif
+}
+
+void GC_traceFinish(GC_state s) {
+#ifdef ENABLE_TRACING
+  TracingCloseAndFreeContext(&s->trace);
+#endif
 }
