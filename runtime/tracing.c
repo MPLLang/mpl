@@ -37,6 +37,8 @@ struct TracingContext *TracingNewContext(const char *filename,
 
   TracingWriteHeader(ctx);
 
+  Trace_(ctx, EVENT_INIT, 0, 0, 0);
+
   return ctx;
 }
 
@@ -45,7 +47,7 @@ void TracingCloseAndFreeContext(struct TracingContext **ctx) {
     return;
 
   /* Mark termination in the log file. */
-  Trace_(*ctx, EVENT_HALT_EXIT, 0, 0, 0);
+  Trace_(*ctx, EVENT_FINISH, 0, 0, 0);
 
   TracingFlushBuffer(*ctx);
 

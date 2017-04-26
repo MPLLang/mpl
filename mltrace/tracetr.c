@@ -8,12 +8,14 @@
 
 static const char *EventKindStrings[] = {
   [EVENT_NIL]                   = "NIL",
-  [EVENT_THREAD_CREATED]        = "THREAD_CREATED",
+  [EVENT_INIT]                  = "INIT",
+  [EVENT_FINISH]                = "FINISH",
+
   [EVENT_GC_ENTER]              = "GC_ENTER",
   [EVENT_GC_LEAVE]              = "GC_LEAVE",
+
   [EVENT_HALT_REQ]              = "HALT_REQ",
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
-  [EVENT_HALT_EXIT]             = "HALT_EXIT",
 };
 
 void displayFiles(size_t filecount, char * const *filenames, FILE **files);

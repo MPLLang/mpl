@@ -14,14 +14,14 @@ typedef unsigned long long EventInt;
 
 enum EventKind {
   EVENT_NIL                   = 0,
-  EVENT_THREAD_CREATED        = 1,
+  EVENT_INIT                  = 1,
+  EVENT_FINISH                = 6,
 
   EVENT_GC_ENTER              = 2,
   EVENT_GC_LEAVE              = 3,
 
   EVENT_HALT_REQ              = 4,
   EVENT_HALT_WAIT             = 5,
-  EVENT_HALT_EXIT             = 6,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)
