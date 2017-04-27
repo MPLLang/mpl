@@ -14,7 +14,8 @@
 #include "tracing.h"
 
 struct TracingContext *TracingNewContext(const char *filename,
-                                         size_t buffer_capacity) {
+                                         size_t bufferCapacity,
+                                         uint32_t procNumber) {
   struct TracingContext *ctx;
 
   if ((ctx = malloc(sizeof *ctx)) == NULL) {
@@ -22,7 +23,7 @@ struct TracingContext *TracingNewContext(const char *filename,
     exit(1);
   }
 
-  if ((ctx->buffer = calloc(buffer_capacity, sizeof *ctx->buffer)) == NULL) {
+  if ((ctx->buffer = calloc(bufferCapacity, sizeof *ctx->buffer)) == NULL) {
     fprintf(stderr, "Tracing: could not allocate buffer\n");
     exit(1);
   }
@@ -32,12 +33,10 @@ struct TracingContext *TracingNewContext(const char *filename,
     exit(1);
   }
 
-  ctx->capacity = buffer_capacity;
+  ctx->capacity = bufferCapacity;
   ctx->index = 0;
 
-  TracingWriteHeader(ctx);
-
-  Trace_(ctx, EVENT_INIT, 0, 0, 0);
+  Trace_(ctx, EVENT_INIT, procNumber, 0, 0);
 
   return ctx;
 }
@@ -55,20 +54,6 @@ void TracingCloseAndFreeContext(struct TracingContext **ctx) {
   free((*ctx)->buffer);
   free(*ctx);
   *ctx = NULL;
-}
-
-void TracingWriteHeader(struct TracingContext *ctx) {
-  assert(ctx);
-  assert(ctx->file);
-
-  struct TraceFileHeader header;
-
-  header.version = TraceCurrentVersion;
-
-  if (fwrite(&header, sizeof header, 1, ctx->file) != 1) {
-    fprintf(stderr, "Tracing: could not write header\n");
-    exit(1);
-  }
 }
 
 void TracingFlushBuffer(struct TracingContext *ctx) {

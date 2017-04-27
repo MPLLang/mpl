@@ -23,14 +23,12 @@ struct TracingContext {
 
 /* Allocates a new tracing context and open its backing file. */
 struct TracingContext *TracingNewContext(const char *filename,
-                                         size_t buffer_capacity);
+                                         size_t bufferCapacity,
+                                         uint32_t procNumber);
 
 /* Close a trace file and free the corresponding context. The buffer is
  * flushed. */
 void TracingCloseAndFreeContext(struct TracingContext **ctx);
-
-/* Write the trace file header. Automatically called by TracingNewContext(). */
-void TracingWriteHeader(struct TracingContext *ctx);
 
 /* Flush recent events to the backing file. This function is automatically
  * called by Trace() when the trace buffer is full, so there should be no need

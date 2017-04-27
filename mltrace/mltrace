@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 
-set -e
-
 usage() {
     cat <<EOF
 Usage: $0 VERB OPTIONS
 Verbs:
   help                  display this message
   record COMMAND        run and record traces for COMMAND
-  cat [FILE.csv.gz]     display the content of latest trace or FILE
+  logcat [FILE.csv.gz]  display the content of latest trace or FILE
+  corelog [BIN CORE]    flush the buffers of core dump to disk
+EOF
+}
+
+gdbscript() {
+    cat <<EOF
+set \$i = 0
+while \$i < gcState->numberOfProcs
+  append value $1 *gcState->procStates[\$i].trace->buffer@gcState->procStates[\$i].trace->index
+  set \$i = \$i + 1
+end
 EOF
 }
 
@@ -23,26 +32,53 @@ verb=$1
 shift
 case "$verb" in
     record)
+        if [ $# -le 1 ]; then
+            echo "Missing argument for verb \"record\""
+            usage
+            exit 1
+        fi
+
         DIR=`mktemp -d`
         MLTON_TRACE_DIR=$DIR $*
-        OUT=${1##*/}.$$.csv.gz
+        EX=$?
 
+        if [ $EX -ne 0 ]; then
+            echo "*** $* failed with exit code $EX" >&2
+            exit 1
+        fi
+
+        OUT=${1##*/}.$$.trace.gz
         echo "*** Collecting traces" >&2
-        $TOOL $DIR/*.trace | gzip -c > $OUT
+        cat $DIR/*.trace | gzip -c > $OUT
         echo "*** Traces written to $OUT" >&2
 
         rm -rf $DIR
         ;;
 
-    cat)
+    logcat)
         if [ $# -ge 1 ]; then
             FILE=$1
         else
-            FILE=`ls -t *.csv.gz | head -n 1`
+            FILE=`ls -t *.trace.gz | head -n 1`
         fi
-        zcat $FILE
+        set -x
+        gunzip -c $FILE | $TOOL -d
         ;;
 
+    corelog)
+        if [ $# -ge 2 ]; then
+            OUT="$2.trace"
+            echo "*** Dumping traces from core $2" >&2
+            gdbscript $OUT | gdb $1 $2
+        else
+            OUT=`mktemp XXXXXXXX.trace`
+            echo "*** Dumping traces from latest core" >&2
+            gdbscript $OUT | coredumpctl gdb
+        fi
+
+        gzip -f $OUT
+        echo "*** Dumped traces in $OUT.gz" >&2
+        ;;
     help)
         usage
         exit 0

@@ -683,7 +683,7 @@ void GC_traceInit(GC_state s) {
     return;
 
   snprintf(filename, 256, "%s/%d.%d.trace", dir, getpid(), s->procNumber);
-  s->trace = TracingNewContext(filename, TRACING_BUFFER_SIZE);
+  s->trace = TracingNewContext(filename, TRACING_BUFFER_SIZE, s->procNumber);
 #endif
 }
 

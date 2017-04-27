@@ -1,5 +1,5 @@
-#include <stdbool.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,21 +18,21 @@ static const char *EventKindStrings[] = {
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
 };
 
-void displayFiles(size_t filecount, char * const *filenames, FILE **files);
+void displayFiles(size_t filecount, FILE **files);
 
 void usage() {
   fprintf(stderr,
-          "usage: trace [options] FILE1.trace ... FILEn.trace\n"
+          "usage: trace [options] [input files]\n"
           "options:\n"
           "  -d                 display file contents on standard output\n"
           "  -h                 display this message\n"
     );
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
   int opt;
   size_t fcount;
-  bool display = true;
+  bool display = false, read_stdin = false;
   FILE **files;
 
   /* Parse command line arguments. */
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
       usage();
       return 0;
     default:
-      fprintf(stderr, "invalid option %s\n", optarg);
+      fprintf(stderr, "invalid option '%c' (%d)\n", opt, opt);
       usage();
       return 1;
     }
@@ -54,43 +54,41 @@ int main(int argc, char **argv) {
 
   fcount = argc - optind;
 
-  /* Open the files and check headers. */
+  /* Open the files, if any. */
+
+  if (fcount == 0) {
+    read_stdin = true;
+    fcount = 1;
+  }
 
   if ((files = calloc(fcount, sizeof *files)) == NULL) {
     fprintf(stderr, "Could not allocate memory\n");
     return 1;
   }
 
-  for (int i = 0; i < fcount; ++i) {
-    const char *fn = argv[optind + i];
+  if (read_stdin)
+    files[0] = stdin;
+  else
+    for (int i = 0; i < fcount; ++i) {
+      const char *fn = argv[optind + i];
 
-    if ((files[i] = fopen(fn, "rb")) == NULL) {
-      fprintf(stderr, "%s: could not open file\n", fn);
-      return 1;
+      if ((files[i] = fopen(fn, "rb")) == NULL) {
+        fprintf(stderr, "%s: could not open file\n", fn);
+        return 1;
+      }
     }
 
-    struct TraceFileHeader header;
-    if (fread(&header, sizeof header, 1, files[i]) != 1) {
-      fprintf(stderr, "%s: could not read header\n", fn);
-      return 1;
-    }
-
-    if (header.version != TraceCurrentVersion) {
-      fprintf(stderr, "%s: incorrect header version (got %llx, expected %llx\n",
-              fn, header.version, TraceCurrentVersion);
-      return 1;
-    }
-  }
-
-  /* Perform the requested actions on the files. */
+  /* Perform the requested actions. */
 
   if (display)
-    displayFiles(fcount, argv + optind, files);
+    displayFiles(fcount, files);
 
   /* Close and free files. */
 
-  for (int i = 0; i < fcount; i++)
-    fclose(files[i]);
+  if (!read_stdin)
+    for (int i = 0; i < fcount; i++)
+      fclose(files[i]);
+
   free(files);
 
   return 0;
@@ -121,13 +119,13 @@ void printEventCSV(struct Event *event) {
 
 #define BUFFER_SIZE 10000
 
-void displayFiles(size_t filecount, char * const *filenames, FILE **files) {
+void displayFiles(size_t filecount, FILE **files) {
   struct Event events[BUFFER_SIZE];
 
-  for (int i = 0; i < filecount; ++i) {
+  for (size_t i = 0; i < filecount; ++i) {
     size_t evcount = 0, evbatchsize;
 
-    printf("# events for %s\n", filenames[i]);
+    printf("# events for file %zu\n", i);
 
     do {
       evbatchsize = fread(events, sizeof *events, BUFFER_SIZE,
@@ -139,7 +137,7 @@ void displayFiles(size_t filecount, char * const *filenames, FILE **files) {
 
     } while (evbatchsize == BUFFER_SIZE);
 
-      printf("# %s finished, read %zd events\n", filenames[i], evcount);
+      printf("# file %zu finished, read %zd events\n", i, evcount);
   }
 }
 

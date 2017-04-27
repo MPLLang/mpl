@@ -1,5 +1,5 @@
 INCLUDE:=../runtime
-CFLAGS=-Wall -I$(INCLUDE) -O2 -g
+CFLAGS=-Wall -I$(INCLUDE) -O0 -g
 OBJS:=tracetr.o
 
 .PHONY: all clean
