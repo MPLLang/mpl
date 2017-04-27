@@ -28,13 +28,12 @@ fun print s = MLton.Thread.atomically (fn () => TextIO.print s)
 
 fun yield () =
     let val ready = ref false
-        fun f () = true
-(*            let val r = !ready
+        fun f () =
+            let val r = !ready
                 val _ = ready := true
             in
                 r
             end
-*)
     in
         B.suspend (fn t => B.addtoio (t, f))
     end
