@@ -44,7 +44,9 @@ case "$verb" in
 
         if [ $EX -ne 0 ]; then
             echo "*** $* failed with exit code $EX" >&2
-            exit 1
+            CORETRACE=`mktemp $DIR/XXXXXX.trace`
+            echo "*** Trying to flush the latest core of $1 into $CORETRACE" >&2
+            gdbscript $CORETRACE | coredumpctl gdb `basename $1`
         fi
 
         OUT=${1##*/}.$$.trace.gz
@@ -61,7 +63,6 @@ case "$verb" in
         else
             FILE=`ls -t *.trace.gz | head -n 1`
         fi
-        set -x
         gunzip -c $FILE | $TOOL -d
         ;;
 
