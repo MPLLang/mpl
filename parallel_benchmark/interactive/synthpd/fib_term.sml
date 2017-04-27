@@ -53,7 +53,7 @@ fun fib n =
         end
 
 fun fibdo n =
-    let val _ = print "starting fib\n"
+    let (* val _ = print "starting fib\n" *)
         val f = fib n
         val _ = print ("fib(" ^ (Int.toString n) ^ ") = " ^ (Int.toString f) ^ "\n")
         val finish = Time.now ()
@@ -65,7 +65,7 @@ fun fibdo n =
     end
 
 fun inploop () =
-    (print "starting inploop\n";
+    ((* print "starting inploop\n"; *)
     case inputLine () of
         NONE => OS.Process.exit OS.Process.success
       | SOME l =>
@@ -73,7 +73,7 @@ fun inploop () =
          inploop ()))
 
 (*val _ = fibdo 36 *)
-val _ = print "Starting fib_term\n"
+(* val _ = print "Starting fib_term\n" *)
 val _ = MLton.Parallel.ForkJoin.fork ((fn () => MLton.Parallel.FutureFGBG.fg inploop),
                                       (fn () => fibdo 45)
                                       )

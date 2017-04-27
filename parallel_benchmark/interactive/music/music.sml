@@ -20,7 +20,7 @@ fun serve_thread sock =
                  val stat = Posix.FileSys.stat req
                  val size = Posix.FileSys.ST.size stat
                  val _ = sendString (sock, Int64.toString size)
-                 (* val _ = print ("sent size: " ^ (Int64.toString size) ^ "\n") *)
+                 val _ = print ("sent size: " ^ (Int64.toString size) ^ "\n")
                  val _ = recvString (sock, 3)
                  fun serve_loop () =
                      let val arr = Array.array (1024 * 256, Word8.fromInt 0)
@@ -29,7 +29,7 @@ fun serve_thread sock =
                              if ArraySlice.length slice = 0 then ()
                              else
                                  let val sent = sendArr (sock, slice) in
-                                     (* print ("sent " ^ (Int.toString sent) ^ " bytes\n"); *)
+                                     print ("sent " ^ (Int.toString sent) ^ " bytes\n");
                                      send_loop (ArraySlice.subslice
                                                     (slice, sent, NONE))
                                  end

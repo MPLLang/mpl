@@ -1,6 +1,8 @@
 open IO
 open Network
 
+fun print _ = ()
+
 type stat = {page : string,
              views : int}
 
@@ -68,20 +70,33 @@ fun parse_request s =
           | _ => NONE
     end
 
+(*
 fun build_success s =
-    "HTTP/1.0 200 OK\n" ^
+    "HTTP/1.0 200 OK\r\n" ^
     "Date: " ^
     (Date.fmt "%a, %d %b %Y %H:%M:%S %Z"
-              (Date.fromTimeLocal (Time.now ()))) ^ "\n" ^
-    "Content-Type: text/html\n" ^
-    "Content-Length: " ^ (Int.toString (String.size s)) ^ "\n\n" ^
+              (Date.fromTimeLocal (Time.now ()))) ^ "\r\n" ^
+    "Content-Type: text/html\r\n" ^
+    "Content-Length: " ^ (Int.toString (String.size s)) ^ "\r\n\r\n" ^
     s
+*)
+
+fun build_success s =
+    ["HTTP/1.0 200 OK",
+     "Date: " ^
+     (Date.fmt "%a, %d %b %Y %H:%M:%S %Z"
+               (Date.fromTimeLocal (Time.now ()))),
+     "Content-Type: text/html",
+     "Content-Length: " ^ (Int.toString (String.size s)),
+     "",
+     s]
+
 
 fun build_inv_req () =
-    "HTTP/1.0 400 Bad Request"
+    ["HTTP/1.0 400 Bad Request"]
 
 fun build_404 () =
-    "HTTP/1.0 404 Not Found"
+    ["HTTP/1.0 404 Not Found"]
 
 val dummy_page =
     "<html><head><title>Dummy page</title></head><body>Hi!</body></html>"
@@ -113,11 +128,15 @@ fun readfile f =
     end)
     handle _ => NONE
 
+fun sendLine sock ln =
+    (sendString (sock, ln);
+     ignore (sendString (sock, "\r\n")))
+
 fun inploop sock =
     let val _ = print "receiving\n"
         val req = (recvString (sock, 1024))
         val _ = print "received\n"
-        (* val _ = print (req ^ "\n") *)
+        val _ = print (req ^ "\n")
      in
          if String.size req = 0 then
              (Socket.close sock; ())
@@ -137,9 +156,10 @@ fun inploop sock =
              in
                  print "sending\n";
                  (* print (response ^ "\n"); *)
-                 sendString (sock, response);
+                 List.app (sendLine sock) response;
                  print "sent\n";
-                 inploop sock
+                 Socket.close sock
+                 (* inploop sock *)
              end
      end
 

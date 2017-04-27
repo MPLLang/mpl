@@ -150,6 +150,6 @@ fun loop s1pos s2pos vel =
         loop (x1, y1, z') (x2, y2, z') vel'
     end
 
-val _ = MLton.Parallel.ForkJoin.forkLat true
-            ((fn _ => loop (1.0, 1.0, ~1.0) (~1.0, ~1.0, ~1.0) 0.0),
-             inploop)
+val _ = MLton.Parallel.ForkJoin.forkLat false
+            (inploop,
+             (fn _ => loop (1.0, 1.0, ~1.0) (~1.0, ~1.0, ~1.0) 0.0))

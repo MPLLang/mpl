@@ -12,7 +12,7 @@ fun print s =
 fun main () =
 let
 val localhost =
-    case NetHostDB.getByName (NetHostDB.getHostName ()) of
+    case NetHostDB.getByName "localhost" of
         NONE => (print "no host name?\n"; OS.Process.exit OS.Process.failure)
       | SOME addr => NetHostDB.addr addr
 val sock = INetSock.TCP.socket ()
