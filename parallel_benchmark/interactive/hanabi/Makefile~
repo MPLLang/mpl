@@ -1,0 +1,2 @@
+hanabi: card.sml move.sml game-state.sml game.sml
+	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map hanabi.mlb

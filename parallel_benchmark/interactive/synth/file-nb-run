@@ -1,0 +1,10 @@
+#!/bin/bash
+#Usage: ./file-nb-run -files N -delay N -algo {LMWS, WS} -proc N
+
+lmws='LMWS'
+if [[ $6 == $lmws ]]
+then
+    ./file-nb-bws @MLton number-processors $8 affinity-base 32 -- -files $2 -delay $4
+else
+    ./file-o @MLton number-processors $8 affinity-base 32 -- -files $2 -delay $4
+fi

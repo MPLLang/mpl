@@ -1,0 +1,2 @@
+all:
+	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output runpar runpar.mlb

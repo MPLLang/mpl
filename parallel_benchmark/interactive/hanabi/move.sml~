@@ -1,0 +1,13 @@
+open Card
+
+structure Move =
+struct
+
+type info = Color of color * int list
+          | Number of int * int list
+
+type move = Discard of int
+          | Play of int
+          | Info of int * info (* player, info *)
+
+end

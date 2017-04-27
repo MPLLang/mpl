@@ -1,0 +1,29 @@
+signature COMPILE_DL =
+sig
+    val compile : string -> string option
+end
+
+structure CompileDL =
+struct
+
+exception UnsupportedOS
+
+fun compile (filename: string) =
+    (let open MLton.Platform.OS
+        val root::_ = String.tokens (= #".") filename
+        val out =
+            case host of
+                Linux => (root ^ ".so")
+              | _ => raise UnsupportedOS
+        val cmd =
+            case host of
+                Linux => ("mlton -output " ^ out ^
+                          " -format library " ^ filename)
+              | _ => raise UnsupportedOS
+    in
+        (case OS.Process.system cmd of
+             OS.Process.success => SOME out
+           | _ => NONE)
+        handle SysErr _ => NONE
+    end)
+    handle UnsupportedOS => NONE

@@ -1,0 +1,10 @@
+#!/bin/bash
+#Usage: ./mfib-run -files N -algo {LMWS, WS} -proc N
+
+lmws='LMWS'
+if [[ $4 == $lmws ]]
+then
+    ./mfib-bws @MLton number-processors $6 affinity-base 32 -- -files $2
+else
+    ./mfib-o @MLton number-processors $6 affinity-base 32 -- -files $2
+fi

@@ -1,0 +1,10 @@
+#!/bin/bash
+#Usage: ./file-run -algo {LMWS, WS} -proc N
+
+lmws='LMWS'
+if [[ $2 == $lmws ]]
+then
+    ./fib-bws @MLton number-processors $4 affinity-base 32 --
+else
+    ./fib-o @MLton number-processors $4 affinity-base 32 --
+fi

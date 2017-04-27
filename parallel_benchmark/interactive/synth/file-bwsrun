@@ -1,0 +1,3 @@
+#!/bin/sh
+
+./file-bws @MLton number-processors $6 affinity-base 32 -- -files $2 -delay $4

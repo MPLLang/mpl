@@ -1,0 +1,9 @@
+fun loop () =
+    case TextIO.inputLine TextIO.stdIn of
+        NONE => ()
+      | SOME line =>
+        let val filename = String.extract (line, 1, NONE)
+        in
+            case CompileDL.compile filename of
+                SOME so
+              | NONE => loop ()

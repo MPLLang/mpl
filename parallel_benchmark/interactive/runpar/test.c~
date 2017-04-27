@@ -1,0 +1,18 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <dlfcn.h>
+
+int main() {
+  void *handle = dlopen("test.so", RTLD_LAZY);
+  if (!handle) {
+    fprintf(stderr, "%s\n", dlerror());
+    exit(EXIT_FAILURE);
+  }
+
+  dlerror();
+
+  *(void **) (&fib) = dlsym(handle, "fib");
+
+  printf("fib(40) = %d\n", (*fib)(40));
+  dlclose(handle);
+}
