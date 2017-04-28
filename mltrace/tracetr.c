@@ -120,8 +120,6 @@ void processFiles(size_t filecount, FILE **files,
   for (size_t i = 0; i < filecount; ++i) {
     size_t evcount = 0, evbatchsize;
 
-    printf("# Events for file %zu\n", i);
-
     do {
       evbatchsize = fread(events, sizeof *events, BUFFER_SIZE,
                           files[i]);
@@ -131,8 +129,6 @@ void processFiles(size_t filecount, FILE **files,
         func(&events[j]);
 
     } while (evbatchsize == BUFFER_SIZE);
-
-      printf("# File %zu finished, read %zd events\n", i, evcount);
   }
 }
 

@@ -4,10 +4,28 @@ usage() {
     cat <<EOF
 Usage: $0 VERB OPTIONS
 Verbs:
-  help                  display this message
-  record COMMAND        run and record traces for COMMAND
-  logcat [FILE.csv.gz]  display the content of latest trace or FILE
-  corelog [BIN CORE]    flush the buffers of core dump to disk
+  help                   display this message
+  record COMMAND         run and record traces for COMMAND
+  logcat [FILE.trace.gz] display latest trace or FILE
+  corelog [BIN CORE]     flush the buffers of core dump to disk
+  sqlite [FILE.trace.gz] export latest trace or FILE to sqlite3
+EOF
+}
+
+export_sqlite3()
+{
+	sqlite3 "$1" <<EOF
+CREATE TABLE events(
+  kind INTEGER,
+  argptr INTEGER,
+  time REAL,
+  arg1 INTEGER,
+  arg2 INTEGER,
+  arg3 INTEGER,
+  PRIMARY KEY(argptr, time)
+);
+.separator ","
+.import $2 events
 EOF
 }
 
@@ -80,6 +98,28 @@ case "$verb" in
         gzip -f $OUT
         echo "*** Dumped traces in $OUT.gz" >&2
         ;;
+
+    sqlite)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.trace.gz | head -n 1`
+        fi
+        TMP=`mktemp`
+        DB=`basename $FILE .trace.gz`.sqlite
+
+        if [ -f $DB ]; then
+            echo "*** File $DB already exists, aborting"
+            exit 1
+        fi
+
+        echo "*** Exporting $FILE to SQLite 3" >&2
+        gunzip -c $FILE | $TOOL -c > $TMP
+        export_sqlite3 $DB $TMP
+        rm -f $TMP
+        echo "*** Wrote $DB" >&2
+        ;;
+
     help)
         usage
         exit 0
