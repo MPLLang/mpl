@@ -1,3 +1,9 @@
+/* Copyright (C) 2017 Adrien Guatto.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ */
+
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -18,13 +24,17 @@ static const char *EventKindStrings[] = {
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
 };
 
-void displayFiles(size_t filecount, FILE **files);
+void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
+
+void printEventText(struct Event *);
+void printEventCSV(struct Event *);
 
 void usage() {
   fprintf(stderr,
           "usage: trace [options] [input files]\n"
           "options:\n"
-          "  -d                 display file contents on standard output\n"
+          "  -d                 display contents in human-readable format\n"
+          "  -c                 display contents in CSV format\n"
           "  -h                 display this message\n"
     );
 }
@@ -32,15 +42,19 @@ void usage() {
 int main(int argc, char *argv[]) {
   int opt;
   size_t fcount;
-  bool display = false, read_stdin = false;
+  bool display = false, csv = false;
+  bool read_stdin = false;
   FILE **files;
 
   /* Parse command line arguments. */
 
-  while ((opt = getopt(argc, argv, "dh")) != -1) {
+  while ((opt = getopt(argc, argv, "dhc")) != -1) {
     switch (opt) {
     case 'd':
       display = true;
+      break;
+    case 'c':
+      csv = true;
       break;
     case 'h':
       usage();
@@ -81,7 +95,10 @@ int main(int argc, char *argv[]) {
   /* Perform the requested actions. */
 
   if (display)
-    displayFiles(fcount, files);
+    processFiles(fcount, files, printEventText);
+
+  if (csv)
+    processFiles(fcount, files, printEventCSV);
 
   /* Close and free files. */
 
@@ -92,6 +109,31 @@ int main(int argc, char *argv[]) {
   free(files);
 
   return 0;
+}
+
+#define BUFFER_SIZE 10000
+
+void processFiles(size_t filecount, FILE **files,
+                  void (*func)(struct Event *)) {
+  struct Event events[BUFFER_SIZE];
+
+  for (size_t i = 0; i < filecount; ++i) {
+    size_t evcount = 0, evbatchsize;
+
+    printf("# Events for file %zu\n", i);
+
+    do {
+      evbatchsize = fread(events, sizeof *events, BUFFER_SIZE,
+                          files[i]);
+      evcount += evbatchsize;
+
+      for (int j = 0; j < evbatchsize; j++)
+        func(&events[j]);
+
+    } while (evbatchsize == BUFFER_SIZE);
+
+      printf("# File %zu finished, read %zd events\n", i, evcount);
+  }
 }
 
 void printEventKind(int kind) {
@@ -110,34 +152,34 @@ void printEventTime(struct Event *event) {
 }
 
 void printEventCSV(struct Event *event) {
-  printEventKind(event->kind);
-  printf(",");
   printEventTime(event);
-  printf(",%" PRIxPTR ",%llx,%llx\n",
-         event->argptr, event->arg1, event->arg2);
+  printf(",%d,%" PRIxPTR ",%llx,%llx\n",
+         event->kind, event->argptr, event->arg1, event->arg2);
 }
 
-#define BUFFER_SIZE 10000
+void printEventText(struct Event *event) {
+  printEventTime(event);
+  printf(" ");
+  printf("%" PRIxPTR, event->argptr);
+  printf(" ");
+  printEventKind(event->kind);
+  printf("(");
 
-void displayFiles(size_t filecount, FILE **files) {
-  struct Event events[BUFFER_SIZE];
+  switch(event->kind) {
+  case EVENT_INIT:
+    printf("%llx", event->arg1);
+    break;
 
-  for (size_t i = 0; i < filecount; ++i) {
-    size_t evcount = 0, evbatchsize;
+  case EVENT_FINISH:
+  case EVENT_GC_ENTER:
+  case EVENT_GC_LEAVE:
+  case EVENT_HALT_REQ:
+  case EVENT_HALT_WAIT:
+    break;
 
-    printf("# events for file %zu\n", i);
-
-    do {
-      evbatchsize = fread(events, sizeof *events, BUFFER_SIZE,
-                          files[i]);
-      evcount += evbatchsize;
-
-      for (int j = 0; j < evbatchsize; j++)
-        printEventCSV(&events[j]);
-
-    } while (evbatchsize == BUFFER_SIZE);
-
-      printf("# file %zu finished, read %zd events\n", i, evcount);
+  default:
+    printf("%llx,%llx", event->arg1, event->arg2);
   }
-}
 
+  printf(")\n");
+}
