@@ -36,7 +36,7 @@ struct TracingContext *TracingNewContext(const char *filename,
   ctx->capacity = bufferCapacity;
   ctx->index = 0;
 
-  Trace_(ctx, EVENT_INIT, procNumber, 0, 0);
+  Trace_(ctx, EVENT_INIT, 0, 0);
 
   return ctx;
 }
@@ -46,7 +46,7 @@ void TracingCloseAndFreeContext(struct TracingContext **ctx) {
     return;
 
   /* Mark termination in the log file. */
-  Trace_(*ctx, EVENT_FINISH, 0, 0, 0);
+  Trace_(*ctx, EVENT_FINISH, 0, 0);
 
   TracingFlushBuffer(*ctx);
 
@@ -88,7 +88,7 @@ TracingGetTimespec(struct timespec *ts)
 }
 
 void Trace_(struct TracingContext *ctx, int kind,
-            void *argptr, EventInt arg1, EventInt arg2) {
+            EventInt arg1, EventInt arg2) {
   if (!ctx)
     return;
 
@@ -97,7 +97,7 @@ void Trace_(struct TracingContext *ctx, int kind,
   struct Event ev;
   ev.kind = kind;
   TracingGetTimespec(&ev.ts);
-  ev.argptr = (uintptr_t)argptr;
+  ev.argptr = (uintptr_t)ctx;
   ev.arg1 = arg1;
   ev.arg2 = arg2;
 
