@@ -30,15 +30,17 @@ enum EventKind {
 struct Event {
   /* The kind of event. */
   int kind;
+  /* The address of the structure the event is relative to. */
+  uintptr_t argptr;
   /* The time at which the event occurred; serialized as a pair of
    * integers. */
   struct timespec ts;
-  /* The address of the structure the event is relative to. */
-  uintptr_t argptr;
   /* First argument, used in some events and not in others. */
   EventInt arg1;
   /* Second argument, used in some events and not in others. */
   EventInt arg2;
+  /* Third argument, used in some events and not in others. */
+  EventInt arg3;
 };
 
 struct TraceFileHeader {

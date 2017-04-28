@@ -36,7 +36,8 @@ void TracingCloseAndFreeContext(struct TracingContext **ctx);
 void TracingFlushBuffer(struct TracingContext *ctx);
 
 /* Add a new log event to the tracing context. */
-void Trace_(struct TracingContext *ctx, int kind, EventInt arg1, EventInt arg2);
+void Trace_(struct TracingContext *ctx, int kind,
+            EventInt arg1, EventInt arg2, EventInt arg3);
 
 #ifdef ENABLE_TRACING
 #define Trace(...) Trace_((s)->trace, __VA_ARGS__)
@@ -44,8 +45,9 @@ void Trace_(struct TracingContext *ctx, int kind, EventInt arg1, EventInt arg2);
 #define Trace(...) ((void)0)
 #endif
 
-#define Trace0(k)               Trace(k,  0,  0)
-#define Trace1(k, a0)           Trace(k, a0,  0)
-#define Trace2(k, a0, a1)       Trace(k, a0, a1)
+#define Trace0(k)               Trace(k,  0,  0,  0)
+#define Trace1(k, a0)           Trace(k, a0,  0,  0)
+#define Trace2(k, a0, a1)       Trace(k, a0, a1,  0)
+#define Trace3(k, a0, a1, a2)   Trace(k, a0, a1, a2)
 
 #endif  /* TRACING_H */

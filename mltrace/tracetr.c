@@ -152,9 +152,9 @@ void printEventTime(struct Event *event) {
 }
 
 void printEventCSV(struct Event *event) {
+  printf("%d,%" PRIxPTR ",", event->kind, event->argptr);
   printEventTime(event);
-  printf(",%d,%" PRIxPTR ",%llx,%llx\n",
-         event->kind, event->argptr, event->arg1, event->arg2);
+  printf(",%llx,%llx,%llx\n", event->arg1, event->arg2, event->arg3);
 }
 
 void printEventText(struct Event *event) {
@@ -178,7 +178,7 @@ void printEventText(struct Event *event) {
     break;
 
   default:
-    printf("%llx,%llx", event->arg1, event->arg2);
+    printf("%llx,%llx,%llx", event->arg1, event->arg2, event->arg3);
   }
 
   printf(")\n");
