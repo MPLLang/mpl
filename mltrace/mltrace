@@ -14,9 +14,9 @@ EOF
 
 export_sqlite3()
 {
-	sqlite3 "$1" <<EOF
+    sqlite3 "$1" <<EOF
 CREATE TABLE events(
-  kind INTEGER,
+  kind TEXT,
   argptr INTEGER,
   time REAL,
   arg1 INTEGER,
