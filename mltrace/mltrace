@@ -9,6 +9,7 @@ Verbs:
   logcat [FILE.trace.gz] display latest trace or FILE
   corelog [BIN CORE]     flush the buffers of core dump to disk
   sqlite [FILE.trace.gz] export latest trace or FILE to sqlite3
+  visu [FILE.sqlite]     visualize FILE using the veezuh tool
 EOF
 }
 
@@ -118,6 +119,15 @@ case "$verb" in
         export_sqlite3 $DB $TMP
         rm -f $TMP
         echo "*** Wrote $DB" >&2
+        ;;
+
+    visu)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.sqlite | head -n 1`
+        fi
+        veezuh $FILE
         ;;
 
     help)
