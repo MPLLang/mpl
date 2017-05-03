@@ -49,6 +49,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       bytesRequested,
       heapBytesFree);
 
+  /* trace pre-collection occupancy before doing anything */
+  Trace2(EVENT_HEAP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "Entering Management Heap GC");
@@ -101,6 +104,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         "%zu/%zu bytes allocated in Chunk Pool after collection",
         ChunkPool_allocated(),
         ChunkPool_size());
+
+    /* trace post-collection occupancy */
+    Trace2(EVENT_HEAP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     HM_HH_maybeResizeLCHS(s, hh);
 

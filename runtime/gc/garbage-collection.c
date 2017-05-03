@@ -106,6 +106,11 @@ void performGC (GC_state s,
   size_t totalBytesRequested;
 
   enterGC (s);
+
+  /* trace pre-collection occupancy */
+  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+         s->heap->frontier - s->heap->start);
+
   s->cumulativeStatistics->numGCs++;
   if (DEBUG or s->controls->messages) {
     size_t nurserySize = s->heap->size - ((size_t)(s->heap->nursery - s->heap->start));
@@ -134,10 +139,12 @@ void performGC (GC_state s,
              100.0 * ((double)(nurseryUsed) / (double)(s->heap->size)),
              100.0 * ((double)(nurseryUsed) / (double)(nurserySize)));
   }
+
   assert (invariantForGC (s));
   if (needGCTime (s))
     startTiming (RUSAGE_THREAD, &ru_start);
   minorGC (s);
+
   stackTopOk = invariantForMutatorStack (s);
   stackBytesRequested =
     stackTopOk
@@ -213,6 +220,11 @@ void performGC (GC_state s,
     displayGCState (s, stderr);
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
   assert (invariantForGC (s));
+
+  /* trace post-collection occupancy */
+  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+         s->heap->frontier - s->heap->start);
+
   leaveGC (s);
 }
 

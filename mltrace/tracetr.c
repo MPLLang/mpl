@@ -24,6 +24,8 @@ static const char *EventKindStrings[] = {
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
 
   [EVENT_THREAD_COPY]           = "THREAD_COPY",
+
+  [EVENT_HEAP_OCCUPANCY]        = "HEAP_OCCUPANCY",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -178,6 +180,10 @@ void printEventText(struct Event *event) {
 
   case EVENT_THREAD_COPY:
     printf("from = %llx, to = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_HEAP_OCCUPANCY:
+    printf("size = %llx, allocated = %llx", event->arg1, event->arg2);
     break;
 
   default:
