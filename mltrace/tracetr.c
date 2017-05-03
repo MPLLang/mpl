@@ -164,7 +164,7 @@ void printEventText(struct Event *event) {
 
   switch(event->kind) {
   case EVENT_INIT:
-    printf("%llx", event->arg1);
+    printf("id = %llx", event->arg1);
     break;
 
   case EVENT_FINISH:
@@ -175,7 +175,8 @@ void printEventText(struct Event *event) {
     break;
 
   default:
-    printf("%llx,%llx,%llx", event->arg1, event->arg2, event->arg3);
+    printf("?1 = %llx, ?2 = %llx, ?3 = %llx",
+           event->arg1, event->arg2, event->arg3);
   }
 
   printf(")\n");
