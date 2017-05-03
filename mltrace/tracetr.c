@@ -23,7 +23,7 @@ static const char *EventKindStrings[] = {
   [EVENT_HALT_REQ]              = "HALT_REQ",
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
 
-  [EVENT_THREAD_COPY]           = "EVENT_THREAD_COPY",
+  [EVENT_THREAD_COPY]           = "THREAD_COPY",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
