@@ -64,8 +64,9 @@ case "$verb" in
         if [ $EX -ne 0 ]; then
             echo "*** $* failed with exit code $EX" >&2
             CORETRACE=`mktemp $DIR/XXXXXX.trace`
-            echo "*** Trying to flush the latest core of $1 into $CORETRACE" >&2
-            gdbscript $CORETRACE | coredumpctl gdb `basename $1`
+            F=`echo $1 | cut -d' ' -f1`
+            echo "*** Trying to flush the latest core of $F into $CORETRACE" >&2
+            gdbscript $CORETRACE | coredumpctl gdb `readlink -f $F`
         fi
 
         OUT=${1##*/}.$$.trace.gz
