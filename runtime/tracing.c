@@ -100,7 +100,7 @@ void Trace_(struct TracingContext *ctx, int kind,
   TracingGetTimespec(&ev.ts);
   ev.arg1 = arg1;
   ev.arg2 = arg2;
-  ev.arg2 = arg3;
+  ev.arg3 = arg3;
 
   ctx->buffer[ctx->index++] = ev;
   if (ctx->index == ctx->capacity)
