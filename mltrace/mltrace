@@ -23,7 +23,7 @@ CREATE TABLE events(
   arg1 INTEGER,
   arg2 INTEGER,
   arg3 INTEGER,
-  PRIMARY KEY(argptr, time)
+  PRIMARY KEY(kind, argptr, time)
 );
 .separator ","
 .import $2 events
