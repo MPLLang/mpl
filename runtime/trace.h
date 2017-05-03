@@ -22,13 +22,14 @@ enum EventKind {
 
   EVENT_GC_ENTER              = 2,
   EVENT_GC_LEAVE              = 3,
+  EVENT_GC_ABORT              = 11,
 
-  EVENT_HALT_REQ              = 4,
-  EVENT_HALT_WAIT             = 5,
+  EVENT_HEAP_OCCUPANCY        = 8,
 
   EVENT_THREAD_COPY           = 7,
 
-  EVENT_HEAP_OCCUPANCY        = 8,
+  EVENT_HALT_REQ              = 4,
+  EVENT_HALT_WAIT             = 5,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)
