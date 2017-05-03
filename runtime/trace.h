@@ -22,6 +22,8 @@ enum EventKind {
 
   EVENT_HALT_REQ              = 4,
   EVENT_HALT_WAIT             = 5,
+
+  EVENT_THREAD_COPY           = 7,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)

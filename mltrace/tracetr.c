@@ -22,6 +22,8 @@ static const char *EventKindStrings[] = {
 
   [EVENT_HALT_REQ]              = "HALT_REQ",
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
+
+  [EVENT_THREAD_COPY]           = "EVENT_THREAD_COPY",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -172,6 +174,10 @@ void printEventText(struct Event *event) {
   case EVENT_GC_LEAVE:
   case EVENT_HALT_REQ:
   case EVENT_HALT_WAIT:
+    break;
+
+  case EVENT_THREAD_COPY:
+    printf("from = %llx, to = %llx", event->arg1, event->arg2);
     break;
 
   default:
