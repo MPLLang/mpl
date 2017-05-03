@@ -17,6 +17,9 @@ enum EventKind {
   EVENT_INIT                  = 1,
   EVENT_FINISH                = 6,
 
+  EVENT_RUNTIME_ENTER         = 9,
+  EVENT_RUNTIME_LEAVE         = 10,
+
   EVENT_GC_ENTER              = 2,
   EVENT_GC_LEAVE              = 3,
 

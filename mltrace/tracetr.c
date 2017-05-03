@@ -20,6 +20,9 @@ static const char *EventKindStrings[] = {
   [EVENT_GC_ENTER]              = "GC_ENTER",
   [EVENT_GC_LEAVE]              = "GC_LEAVE",
 
+  [EVENT_RUNTIME_ENTER]         = "RUNTIME_ENTER",
+  [EVENT_RUNTIME_LEAVE]         = "RUNTIME_LEAVE",
+
   [EVENT_HALT_REQ]              = "HALT_REQ",
   [EVENT_HALT_WAIT]             = "HALT_WAIT",
 
@@ -174,6 +177,8 @@ void printEventText(struct Event *event) {
   case EVENT_FINISH:
   case EVENT_GC_ENTER:
   case EVENT_GC_LEAVE:
+  case EVENT_RUNTIME_ENTER:
+  case EVENT_RUNTIME_LEAVE:
   case EVENT_HALT_REQ:
   case EVENT_HALT_WAIT:
     break;

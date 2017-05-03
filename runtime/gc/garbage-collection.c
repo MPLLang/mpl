@@ -111,6 +111,8 @@ void performGC (GC_state s,
   Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
          s->heap->frontier - s->heap->start);
 
+  Trace0(EVENT_GC_ENTER);
+
   s->cumulativeStatistics->numGCs++;
   if (DEBUG or s->controls->messages) {
     size_t nurserySize = s->heap->size - ((size_t)(s->heap->nursery - s->heap->start));
@@ -220,6 +222,8 @@ void performGC (GC_state s,
     displayGCState (s, stderr);
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
   assert (invariantForGC (s));
+
+  Trace0(EVENT_GC_LEAVE);
 
   /* trace post-collection occupancy */
   Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
@@ -470,11 +474,11 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
-  Trace0(EVENT_GC_ENTER);
+  Trace0(EVENT_RUNTIME_ENTER);
 
   /* Exit as soon as termination is requested. */
   if (GC_CheckForTerminationRequest(s)) {
-    Trace0(EVENT_GC_LEAVE);
+    Trace0(EVENT_RUNTIME_LEAVE);
     pthread_exit(NULL);
   }
 
@@ -516,7 +520,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   endAtomic (s);
 
-  Trace0(EVENT_GC_LEAVE);
+  Trace0(EVENT_RUNTIME_LEAVE);
 }
 
 pointer FFI_getArgs (GC_state s) {
