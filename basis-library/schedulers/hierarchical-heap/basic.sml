@@ -78,6 +78,14 @@ struct
         | SOME hh => (HH.setDead hh;
                       Array.update(hhToSetDead, p, NONE))
 
+  val numSteals = Array.array (I.numberOfProcessors, 0)
+  fun incrSteals n =
+      let
+        val p = I.processorNumber ()
+      in
+        Array.update (numSteals, p, Array.sub (numSteals, p) + n)
+      end
+
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =
    * FALSE
@@ -105,6 +113,7 @@ struct
                              else die ("MLton.Parallel.Basic.schedule: " ^
                                        "ERROR: work exists on queue?!")
 
+                    val () = incrSteals 1
                     val childHH = HH.new ()
                     val () = HH.appendChild (parentHH, childHH, sharedLevel)
                 in
@@ -182,6 +191,8 @@ struct
                 (fn k =>
                     let
                       (* Save the full work object here *)
+  fun getNumSteals () = Array.foldl (op+) 0 numSteals
+
                       val () = tail (p, (Q.newWork (), Thread (k, HH.get ())))
 
                       val () = HM.enterGlobalHeap ()

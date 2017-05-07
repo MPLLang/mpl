@@ -16,4 +16,5 @@ local
    init.sml
 in
    structure ForkJoin = MLtonParallelForkJoin
+   structure SchedBasic = MLtonParallelBasic
 end

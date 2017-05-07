@@ -43,4 +43,5 @@ sig
   val successfulSteals : unit -> int
   val failedSteals : unit -> int
   val suspends : unit -> int
+  val getNumSteals: unit -> int
 end
