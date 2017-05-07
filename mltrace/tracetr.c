@@ -172,9 +172,6 @@ void printEventText(struct Event *event) {
 
   switch(event->kind) {
   case EVENT_INIT:
-    printf("id = %llx", event->arg1);
-    break;
-
   case EVENT_FINISH:
   case EVENT_GC_ENTER:
   case EVENT_GC_LEAVE:
