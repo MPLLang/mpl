@@ -8,7 +8,8 @@ Verbs:
   record COMMAND         run and record traces for COMMAND
   logcat [FILE.trace.gz] display latest trace or FILE
   corelog [BIN CORE]     flush the buffers of core dump to disk
-  sqlite [FILE.trace.gz] export latest trace or FILE to sqlite3
+  export [FILE.trace.gz] export latest trace or FILE to sqlite3
+  sqlite [FILE.sqlite]   open latest db or FILE in sqlite3
   visu [FILE.sqlite]     visualize FILE using the veezuh tool
 EOF
 }
@@ -102,7 +103,7 @@ case "$verb" in
         echo "*** Dumped traces in $OUT.gz" >&2
         ;;
 
-    sqlite)
+    export)
         if [ $# -ge 1 ]; then
             FILE=$1
         else
@@ -121,6 +122,17 @@ case "$verb" in
         export_sqlite3 $DB $TMP
         rm -f $TMP
         echo "*** Wrote $DB" >&2
+        ;;
+
+    sqlite)
+        if [ $# -ge 1 ]; then
+            DB=$1
+        else
+            DB=`ls -t *.sqlite | head -n 1`
+        fi
+
+        echo "*** Opening $DB with SQLite 3" >&2
+        sqlite3 $DB
         ;;
 
     visu)
