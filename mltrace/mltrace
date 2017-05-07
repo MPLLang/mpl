@@ -53,7 +53,7 @@ verb=$1
 shift
 case "$verb" in
     record)
-        if [ $# -le 1 ]; then
+        if [ $# -lt 1 ]; then
             echo "Missing argument for verb \"record\""
             usage
             exit 1
