@@ -160,12 +160,25 @@ void HM_HHC_collectLocal(void) {
     .minLevel = HM_HH_getHighestStolenLevel(s, hh) + 1,
     .maxLevel = hh->level,
     .bytesCopied = 0,
-    .objectsCopied = 0
+    .objectsCopied = 0,
+    .stacksCopied = 0
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
+
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "collecting hh %p (%u/%u):\n"
+      "  local scope is %u -> %u\n"
+      "  lchs %llu lcs %llu",
+      ((void*)(hh)),
+      hh->stealLevel,
+      hh->level,
+      forwardHHObjptrArgs.minLevel,
+      forwardHHObjptrArgs.maxLevel,
+      hh->locallyCollectibleHeapSize,
+      hh->locallyCollectibleSize);
 
   /* forward contents of stack */
   forwardHHObjptrArgs.objectsCopied = 0;
@@ -287,6 +300,9 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied);
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" stacks in copy-collection",
+      forwardHHObjptrArgs.stacksCopied);
 
   assertInvariants(s, hh, LIVE);
 
@@ -409,7 +425,7 @@ void forwardHHObjptr (GC_state s,
              (uintptr_t)p);
   }
 
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
+  LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR,
       (uintptr_t)opp,
       op,
@@ -417,7 +433,7 @@ void forwardHHObjptr (GC_state s,
 
   if (!HM_HH_objptrInHierarchicalHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
+    LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",
         (uintptr_t)opp,
         op,
@@ -436,7 +452,7 @@ void forwardHHObjptr (GC_state s,
      * it) or opp does not point to an HH objptr in my HH, so just return.
      */
     if (!gotObjptrInfo) {
-      LOG(LM_HH_COLLECTION, LL_DEBUG,
+      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": could not get objptrInfo.",
           (uintptr_t)opp,
           op,
@@ -444,7 +460,7 @@ void forwardHHObjptr (GC_state s,
     }
 
     if (opInfo.hh != args->hh) {
-      LOG(LM_HH_COLLECTION, LL_DEBUG,
+      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": opInfo.hh (%p) != args->hh (%p).",
           (uintptr_t)opp,
           op,
@@ -474,7 +490,7 @@ void forwardHHObjptr (GC_state s,
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
         (opInfo.level < args->minLevel)) {
-      LOG(LM_HH_COLLECTION, LL_DEBUG,
+      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": level %d < minLevel %d.",
           (uintptr_t)opp,
           op,
@@ -538,6 +554,7 @@ void forwardHHObjptr (GC_state s,
       }
       objectBytes = sizeof (struct GC_stack) + stack->reserved;
       copyBytes = sizeof (struct GC_stack) + stack->used;
+      args->stacksCopied++;
     }
 
     objectBytes += headerBytes;
@@ -557,7 +574,7 @@ void forwardHHObjptr (GC_state s,
 
     args->bytesCopied += copyBytes;
     args->objectsCopied++;
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
+    LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
@@ -608,7 +625,7 @@ void forwardHHObjptr (GC_state s,
 
 
   *opp = *((objptr*)(p));
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
+  LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "opp "FMTPTR" set to "FMTOBJPTR,
       ((uintptr_t)(opp)),
       *opp);
