@@ -32,6 +32,7 @@ EOF
 
 gdbscript() {
     cat <<EOF
+set max-value-size unlimited
 set \$i = 0
 while \$i < gcState->numberOfProcs
   append value $1 *gcState->procStates[\$i].trace->buffer@gcState->procStates[\$i].trace->index
