@@ -502,7 +502,7 @@ structure ObjectType =
                       val bytesLastSharedLevel =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesID =
-                          Bits.toBytes (Type.width Type.word32)
+                          Bits.toBytes (Type.width Type.word64)
                       (*
                        * RAM_NOTE: Not sure if I can use cpointer for both
                        * pointer and void*
@@ -562,7 +562,7 @@ structure ObjectType =
                                                       Type.word32,
                                                       Type.word32,
                                                       Type.word32,
-                                                      Type.word32,
+                                                      Type.word64,
                                                       Type.cpointer (),
                                                       Type.cpointer (),
                                                       Type.word64,

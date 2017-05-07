@@ -19,8 +19,13 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 enum HM_HHState {
-  LIVE,
-  DEAD
+  LIVE = 0,
+  DEAD = 1
+};
+
+static const char* HM_HHStateToString[] = {
+  "LIVE",
+  "DEAD"
 };
 
 /* RAM_NOTE: May need to be rearranged for cache efficiency */
@@ -38,7 +43,7 @@ enum HM_HHState {
  * state (enum HM_HHState/Int32) ::
  * level (Word32) ::
  * stealLevel (Word32) ::
- * id (Word32) ::
+ * id (Word64) ::
  * chunkList (void*) ::
  * parentHH (objptr) ::
  * nextChildHH (objptr) ::
@@ -60,7 +65,7 @@ struct HM_HierarchicalHeap {
 
   Word32 stealLevel; /**< The parent's level that I stole from */
 
-  Word32 id; /**< the ID of this HierarchicalHeap object, for visualization
+  Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
 
   void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
@@ -104,7 +109,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
                     sizeof(Int32) +
                     sizeof(Word32) +
                     sizeof(Word32) +
-                    sizeof(Word32) +
+                    sizeof(Word64) +
                     sizeof(void*) +
                     sizeof(void*) +
                     sizeof(Word64) +
