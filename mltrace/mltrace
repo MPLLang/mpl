@@ -142,6 +142,7 @@ case "$verb" in
         else
             FILE=`ls -t *.sqlite | head -n 1`
         fi
+        echo "*** Visualizing $FILE" >&2
         veezuh $FILE
         ;;
 
@@ -151,6 +152,7 @@ case "$verb" in
         if [ "$ANS" = "y" ]; then
             rm -f -- *.{trace{,.gz},sqlite} 2>/dev/null
         fi
+        echo "*** Files erased" >&2
 
         ;;
 
