@@ -30,6 +30,7 @@ static const char *EventKindStrings[] = {
   [EVENT_THREAD_COPY]           = "THREAD_COPY",
 
   [EVENT_HEAP_OCCUPANCY]        = "HEAP_OCCUPANCY",
+  [EVENT_HEAP_RATIO]            = "HEAP_RATIO",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -187,6 +188,10 @@ void printEventText(struct Event *event) {
     break;
 
   case EVENT_HEAP_OCCUPANCY:
+    printf("size = %llx, allocated = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_HEAP_RATIO:
     printf("size = %llx, allocated = %llx", event->arg1, event->arg2);
     break;
 

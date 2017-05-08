@@ -25,6 +25,7 @@ enum EventKind {
   EVENT_GC_ABORT              = 11,
 
   EVENT_HEAP_OCCUPANCY        = 8,
+  EVENT_HEAP_RATIO            = 12,
 
   EVENT_THREAD_COPY           = 7,
 
