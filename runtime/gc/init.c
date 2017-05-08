@@ -429,6 +429,12 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "trace-buffer-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton trace-buffer-size missing argument.");
+          }
+          s->controls->traceBufferSize = stringToInt(argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -497,6 +503,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->summaryFormat = HUMAN;
   s->controls->summaryFile = stderr;
   s->controls->hhCollectionLevel = ALL;
+  s->controls->traceBufferSize = 10000;
 
   s->cumulativeStatistics = newCumulativeStatistics();
 
@@ -670,8 +677,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   s->amInGC = FALSE;
 }
 
-#define TRACING_BUFFER_SIZE 10000
-
 // AG_NOTE: is this the proper place for this function?
 void GC_traceInit(GC_state s) {
 #ifdef ENABLE_TRACING
@@ -683,7 +688,8 @@ void GC_traceInit(GC_state s) {
     return;
 
   snprintf(filename, 256, "%s/%d.%d.trace", dir, getpid(), s->procNumber);
-  s->trace = TracingNewContext(filename, TRACING_BUFFER_SIZE, s->procNumber);
+  s->trace = TracingNewContext(filename, s->controls->traceBufferSize,
+                               s->procNumber);
 #endif
 }
 
