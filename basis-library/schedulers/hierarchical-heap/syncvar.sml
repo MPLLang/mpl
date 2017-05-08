@@ -42,7 +42,6 @@ struct
         | [_] => ()
         | _ => die "syncvar.sml: more than one reader waiting?!\n"
 
-  (* Umut: Don't forget to fix the race on the read of v here. *)
   fun write ((r, v), a) =
       (lock r;
        (case !v of
