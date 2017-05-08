@@ -11,6 +11,7 @@ Verbs:
   export [FILE.trace.gz] export latest trace or FILE to sqlite3
   sqlite [FILE.sqlite]   open latest db or FILE in sqlite3
   visu [FILE.sqlite]     visualize FILE using the veezuh tool
+  clean                  erase trace files in the current directory
 EOF
 }
 
@@ -142,6 +143,15 @@ case "$verb" in
             FILE=`ls -t *.sqlite | head -n 1`
         fi
         veezuh $FILE
+        ;;
+
+    clean)
+        echo -n 'Erase *.{trace{,.gz},sqlite} in the current directory? [N/y] '
+        read ANS
+        if [ "$ANS" = "y" ]; then
+            rm -f -- *.{trace{,.gz},sqlite} 2>/dev/null
+        fi
+
         ;;
 
     help)
