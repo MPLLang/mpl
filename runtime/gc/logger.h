@@ -71,7 +71,7 @@ extern bool L_flushLog[NUM_LOG_MODULES];
  * to.
  * @param level The log level from enum LogLevel that this message belongs to.
  */
-#define LOG_EMABLED(module, level) (L_levelEnabled(level, L_logLevels[module]))
+#define LOG_ENABLED(module, level) (L_levelEnabled(level, L_logLevels[module]))
 
 /**
  * This is a convenience function for a dying message which automatically

@@ -158,7 +158,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (extend) {
     /* Need to extend */
     if (!HM_HH_extend(hh, bytesRequested)) {
-      if (LOG_EMABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
+      if (LOG_ENABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "Ran out of space for HH %p:",
             ((void*)(hh)));
