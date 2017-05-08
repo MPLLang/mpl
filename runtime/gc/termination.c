@@ -11,6 +11,7 @@
  * termination has been requested.
  */
 
+atomic_uint32_t *pleader(GC_state s);
 atomic_uint32_t *pleader(GC_state s) {
   return &s->procStates[0].terminationLeader;
 }
