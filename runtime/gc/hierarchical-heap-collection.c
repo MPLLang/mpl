@@ -110,6 +110,7 @@ void HM_HHC_collectLocal(void) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
   Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, s->heap->start);
+  bool queueLockHeld = FALSE;
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
@@ -119,8 +120,8 @@ void HM_HHC_collectLocal(void) {
   if (Parallel_alreadyLockedByMe(wsQueueLock)) {
     /* in a scheduler critical section, so cannot collect */
     LOG(LM_HH_COLLECTION, LL_DEBUG,
-        "Queue locked by mutator/scheduler so cannot collect");
-    return;
+        "Queue locked by mutator/scheduler");
+    queueLockHeld = TRUE;
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -148,7 +149,9 @@ void HM_HHC_collectLocal(void) {
   hh->newLevelList = NULL;
 
   /* lock queue to prevent steals */
-  Parallel_lockTake(wsQueueLock);
+  if (!queueLockHeld) {
+    Parallel_lockTake(wsQueueLock);
+  }
   lockHH(hh);
 
   assertInvariants(s, hh, LIVE);
@@ -381,7 +384,9 @@ void HM_HHC_collectLocal(void) {
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */
   unlockHH(hh);
-  Parallel_lockRelease(objptrToPointer(s->wsQueueLock, s->heap->start));
+  if (!queueLockHeld) {
+    Parallel_lockRelease(wsQueueLock);
+  }
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "
