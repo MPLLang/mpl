@@ -196,7 +196,8 @@ void printEventText(struct Event *event) {
     break;
 
   case EVENT_HEAP_RATIO:
-    printf("LCHsize = %llx, LCsize = %llx", event->arg1, event->arg2);
+    printf("LCHsize = %llx, LCsize = %llx, ratio = %lld",
+           event->arg1, event->arg2, event->arg3);
     break;
 
   case EVENT_LOCK_TAKE_ENTER:

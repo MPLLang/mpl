@@ -85,16 +85,20 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   double allocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                           ((double)(hh->locallyCollectibleSize));
-  Trace2(EVENT_HEAP_RATIO,
-         hh->locallyCollectibleHeapSize, hh->locallyCollectibleSize);
+  Trace3(EVENT_HEAP_RATIO,
+         hh->locallyCollectibleHeapSize,
+         hh->locallyCollectibleSize,
+         s->controls->hhConfig.allocatedRatio);
   if (forceGC || (allocatedRatio < s->controls->hhConfig.allocatedRatio)) {
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal();
 
     double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                                ((double)(hh->locallyCollectibleSize));
-    Trace2(EVENT_HEAP_RATIO,
-           hh->locallyCollectibleHeapSize, hh->locallyCollectibleSize);
+    Trace3(EVENT_HEAP_RATIO,
+           hh->locallyCollectibleHeapSize,
+           hh->locallyCollectibleSize,
+           s->controls->hhConfig.allocatedRatio);
 
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
         "Live Ratio %.2f < %.2f, performed local collection to increase "
