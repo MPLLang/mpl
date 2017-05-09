@@ -31,6 +31,10 @@ static const char *EventKindStrings[] = {
 
   [EVENT_HEAP_OCCUPANCY]        = "HEAP_OCCUPANCY",
   [EVENT_HEAP_RATIO]            = "HEAP_RATIO",
+
+  [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
+  [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
+  [EVENT_LOCK_RELEASE]          = "LOCK_RELEASE",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -192,7 +196,13 @@ void printEventText(struct Event *event) {
     break;
 
   case EVENT_HEAP_RATIO:
-    printf("size = %llx, allocated = %llx", event->arg1, event->arg2);
+    printf("LCHsize = %llx, LCsize = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_LOCK_TAKE_ENTER:
+  case EVENT_LOCK_TAKE_LEAVE:
+  case EVENT_LOCK_RELEASE:
+    printf("lock = %llx", event->arg1);
     break;
 
   default:

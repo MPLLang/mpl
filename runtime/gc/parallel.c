@@ -42,6 +42,7 @@ void Parallel_lockTake (Pointer arg) {
       "trying to lock %p to %u",
       ((volatile void*)(lock)),
       lockValue);
+  WITH_GCSTATE(Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock));
 
   do {
     if (Proc_threadInSection ()) {
@@ -55,6 +56,7 @@ void Parallel_lockTake (Pointer arg) {
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "locked");
+  WITH_GCSTATE(Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock));
 }
 
 void Parallel_lockRelease (Pointer arg) {
@@ -63,6 +65,7 @@ void Parallel_lockRelease (Pointer arg) {
   LOG(LM_PARALLEL, LL_DEBUG,
       "releasing %p",
       ((volatile void*)(lock)));
+  WITH_GCSTATE(Trace1(EVENT_LOCK_RELEASE, (EventInt)lock));
 
   spinlock_unlock(lock);
 }

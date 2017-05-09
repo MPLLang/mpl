@@ -31,6 +31,10 @@ enum EventKind {
 
   EVENT_HALT_REQ              = 4,
   EVENT_HALT_WAIT             = 5,
+
+  EVENT_LOCK_TAKE_ENTER       = 13,
+  EVENT_LOCK_TAKE_LEAVE       = 14,
+  EVENT_LOCK_RELEASE          = 15,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)

@@ -41,8 +41,14 @@ void Trace_(struct TracingContext *ctx, int kind,
 
 #ifdef ENABLE_TRACING
 #define Trace(...) Trace_((s)->trace, __VA_ARGS__)
+#define WITH_GCSTATE(code)                              \
+  do {                                                  \
+    GC_state s = pthread_getspecific(gcstate_key);      \
+    code;                                               \
+  } while (0);
 #else
 #define Trace(...) ((void)0)
+#define WITH_GCSTATE(code) ((void)0)
 #endif
 
 #define Trace0(k)               Trace(k,  0,  0,  0)
