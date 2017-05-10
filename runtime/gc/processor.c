@@ -83,6 +83,8 @@ void Proc_beginCriticalSection (GC_state s) {
   static pthread_mutex_t Proc_syncCountLock = PTHREAD_MUTEX_INITIALIZER;
   static struct rusage ru_sync;
 
+  Trace0(EVENT_GSECTION_BEGIN_ENTER);
+
   if (Proc_isInitialized (s)) {
     uint32_t myTicket = Proc_processorNumber (s);
 
@@ -116,9 +118,12 @@ void Proc_beginCriticalSection (GC_state s) {
   else {
     Proc_syncCount = 1;
   }
+
+  Trace0(EVENT_GSECTION_BEGIN_LEAVE);
 }
 
 void Proc_endCriticalSection (GC_state s) {
+  Trace0(EVENT_GSECTION_END_ENTER);
   if (Proc_isInitialized (s)) {
     uint32_t myTicket = __sync_add_and_fetch (&Proc_criticalTicket, 1);
     if (myTicket == s->numberOfProcs) {
@@ -142,6 +147,7 @@ void Proc_endCriticalSection (GC_state s) {
   else {
     Proc_syncCount = 0;
   }
+  Trace0(EVENT_GSECTION_END_LEAVE);
 }
 
 bool Proc_threadInSection (void) {

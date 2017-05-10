@@ -35,6 +35,11 @@ static const char *EventKindStrings[] = {
   [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
   [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
   [EVENT_LOCK_RELEASE]          = "LOCK_RELEASE",
+
+  [EVENT_GSECTION_BEGIN_ENTER]  = "GSECTION_BEGIN_ENTER",
+  [EVENT_GSECTION_BEGIN_LEAVE]  = "GSECTION_BEGIN_LEAVE",
+  [EVENT_GSECTION_END_ENTER]  = "GSECTION_END_ENTER",
+  [EVENT_GSECTION_END_LEAVE]  = "GSECTION_END_LEAVE",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -185,6 +190,10 @@ void printEventText(struct Event *event) {
   case EVENT_RUNTIME_LEAVE:
   case EVENT_HALT_REQ:
   case EVENT_HALT_WAIT:
+  case EVENT_GSECTION_BEGIN_ENTER:
+  case EVENT_GSECTION_BEGIN_LEAVE:
+  case EVENT_GSECTION_END_ENTER:
+  case EVENT_GSECTION_END_LEAVE:
     break;
 
   case EVENT_THREAD_COPY:

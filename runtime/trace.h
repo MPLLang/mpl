@@ -35,6 +35,11 @@ enum EventKind {
   EVENT_LOCK_TAKE_ENTER       = 13,
   EVENT_LOCK_TAKE_LEAVE       = 14,
   EVENT_LOCK_RELEASE          = 15,
+
+  EVENT_GSECTION_BEGIN_ENTER  = 16,
+  EVENT_GSECTION_BEGIN_LEAVE  = 17,
+  EVENT_GSECTION_END_ENTER   = 18,
+  EVENT_GSECTION_END_LEAVE   = 19,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)
