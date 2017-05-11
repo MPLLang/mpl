@@ -32,7 +32,7 @@ GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
   to->bytesNeeded = from->bytesNeeded;
   to->exnStack = from->exnStack;
 
-  Trace2(EVENT_THREAD_COPY, from, to);
+  Trace2(EVENT_THREAD_COPY, (EventInt)from, (EventInt)to);
 
   return to;
 }
