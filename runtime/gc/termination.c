@@ -25,6 +25,15 @@ bool GC_CheckForTerminationRequest(GC_state s) {
   return leader != INVALID_PROCESSOR_NUMBER;
 }
 
+bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter) {
+  (*pcounter)++;
+  if (*pcounter < 10000)
+    return false;
+
+  *pcounter = 0;
+  return GC_CheckForTerminationRequest(s);
+}
+
 bool GC_TryToTerminate(GC_state s) {
   Trace0(EVENT_HALT_REQ);
 

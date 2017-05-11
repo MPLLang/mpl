@@ -56,11 +56,20 @@ int32_t Proc_processorNumber (GC_state s) {
 }
 
 void Proc_waitForInitialization (GC_state s) {
-  while (!Proc_beginInit) { }
+  size_t pcounter = 0;
+  while (!Proc_beginInit) {
+    if (GC_MightCheckForTerminationRequest(s, &pcounter)) {
+      pthread_exit(NULL);
+    }
+  }
 
   __sync_add_and_fetch (&Proc_initializedCount, 1);
 
-  while (!Proc_isInitialized (s)) { }
+  while (!Proc_isInitialized (s)) {
+    if (GC_MightCheckForTerminationRequest(s, &pcounter)) {
+      pthread_exit(NULL);
+    }
+  }
 }
 
 void Proc_signalInitialization (GC_state s) {

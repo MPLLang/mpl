@@ -15,6 +15,12 @@ typedef _Atomic(uint32_t) atomic_uint32_t;
  */
 PRIVATE bool GC_CheckForTerminationRequest(GC_state s);
 
+/* This convenience function checks for a termination request only from time to
+ * time, when its second reaches some treshold. It should be called in busy
+ * waiting loops in order to prevent deadlocks. You do not need to increment the
+ * counter yourself. */
+PRIVATE bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter);
+
 /* This function tries to terminate the whole program by signaling other
  * threads. Fails if another processor beat us to it. Only returns true after
  * all all other processors have exited cleanly.
