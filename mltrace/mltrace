@@ -27,8 +27,6 @@ CREATE TABLE events(
   arg3 INTEGER,
   PRIMARY KEY(kind, argptr, time)
 ) WITHOUT ROWID;
-CREATE INDEX timed_events ON events(time);
-CREATE INDEX timed_proc_events ON events(argptr, time);
 .separator ","
 .import $2 events
 EOF
