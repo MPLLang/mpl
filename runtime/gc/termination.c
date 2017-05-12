@@ -21,8 +21,12 @@ bool GC_CheckForTerminationRequest(GC_state s) {
     return false;
 
   uint32_t leader = atomic_load_explicit(pleader(s), memory_order_acquire);
+  bool in_progress = leader != INVALID_PROCESSOR_NUMBER;
 
-  return leader != INVALID_PROCESSOR_NUMBER;
+  if (in_progress)
+    Trace0(EVENT_HALT_ACK);
+
+  return in_progress;
 }
 
 bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter) {
