@@ -43,7 +43,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   bool extend = FALSE;
   bool growStack = FALSE;
 
-  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
       "bytesRequested: %zu, hasHeapBytesFree: %zu",
       bytesRequested,
       heapBytesFree);
@@ -158,6 +158,36 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (extend) {
     /* Need to extend */
     if (!HM_HH_extend(hh, bytesRequested)) {
+      if (LOG_ENABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
+        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+            "Ran out of space for HH %p:",
+            ((void*)(hh)));
+
+        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+            "  Level List:");
+        for (void* levelHead = hh->levelList;
+             NULL != levelHead;
+             levelHead = getChunkInfo(levelHead)->split.levelHead.nextHead) {
+          LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+              "    level %u size %llu",
+              getChunkInfo(levelHead)->level,
+              getChunkInfo(levelHead)->split.levelHead.size);
+        }
+
+        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+            "  Child HH List:");
+        for (struct HM_HierarchicalHeap* hhCursor = HM_HH_objptrToStruct(s, hh->childHHList);
+             NULL != hhCursor;
+             hhCursor = HM_HH_objptrToStruct(s, hhCursor->nextChildHH)) {
+          LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+              "    %p state %s level %u stealLevel %u LCS %llu",
+              ((void*)(hhCursor)),
+              HM_HHStateToString[hhCursor->state],
+              hhCursor->level,
+              hhCursor->stealLevel,
+              hhCursor->locallyCollectibleSize);
+        }
+      }
       DIE("Ran out of space for Hierarchical Heap!");
     }
 

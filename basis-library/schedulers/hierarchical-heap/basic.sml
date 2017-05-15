@@ -78,6 +78,14 @@ struct
         | SOME hh => (HH.setDead hh;
                       Array.update(hhToSetDead, p, NONE))
 
+  val numSteals = Array.array (I.numberOfProcessors, 0)
+  fun incrSteals n =
+      let
+        val p = I.processorNumber ()
+      in
+        Array.update (numSteals, p, Array.sub (numSteals, p) + n)
+      end
+
   (*
    * RAM_NOTE: MUST be called by a thread that has inGlobalHeap = 0 and useHH =
    * FALSE
@@ -105,6 +113,7 @@ struct
                              else die ("MLton.Parallel.Basic.schedule: " ^
                                        "ERROR: work exists on queue?!")
 
+                    val () = incrSteals 1
                     val childHH = HH.new ()
                     val () = HH.appendChild (parentHH, childHH, sharedLevel)
                 in
@@ -126,7 +135,6 @@ struct
                                                         w ())),
                                              ())));
                     dbgmsg "returned to scheduler from new thread";
-                    stopUseHH ();
                     maybeSetHHDead p
                 end
 
@@ -145,7 +153,6 @@ struct
                                                                   unlocker ())),
                                           ())));
                  dbgmsg "returned to scheduler from suspended thread";
-                 stopUseHH ();
                  maybeSetHHDead p))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
@@ -175,21 +182,28 @@ struct
           loop 0 numberOfProcessors
       end
 
+  fun getNumSteals () = Array.foldl (op+) 0 numSteals
+
   fun capture' (p, tail) =
       let
-        val r =
-            T.switch
-                (fn k =>
-                    let
-                      (* Save the full work object here *)
-                      val () = tail (p, (Q.newWork (), Thread (k, HH.get ())))
+          val () = dbgmsg "capture': switching to scheduler"
+          val hh = HH.get ()
+          val r =
+              T.switch
+                  (fn k =>
+                      let
+                          (* Save the full work object here, but in HH *)
+                          val () = (useHH hh;
+                                    tail (p, (Q.newWork (),
+                                              Thread (k, HH.get ())));
+                                    stopUseHH ())
 
-                      val () = HM.enterGlobalHeap ()
-                      val t = valOf (Array.sub (schedThreads, p))
-                    in
-                      t
-                    end)
-          val () = HM.exitGlobalHeap ()
+                          val t = valOf (Array.sub (schedThreads, p))
+                      in
+                          t
+                      end)
+          val () = dbgmsg "capture': switched back";
+          val () = dbgmsg "capture': switched back2";
       in
           r
       end
@@ -233,9 +247,9 @@ struct
           val hh = HH.get ()
       in
           Array.update(hhToSetDead, p, SOME hh);
+          dbgmsg "return: Switching to scheduler";
           T.switch (fn _ =>
                        let
-                           val () = HM.enterGlobalHeap ()
                            val t = valOf (Array.sub (schedThreads, p))
                        in
                            t

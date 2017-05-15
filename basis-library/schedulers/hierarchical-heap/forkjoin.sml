@@ -49,8 +49,8 @@ struct
                     ignore (HH.get ());
                     HM.exitGlobalHeap ())
 
-          (* increment task by two *)
-          val () = incrTask 2
+          (* increment task by one as I only create right-side task *)
+          val () = incrTask 1
 
           (* make sure a hh is set *)
           val hh = HH.get ()
