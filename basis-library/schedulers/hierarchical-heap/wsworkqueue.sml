@@ -47,7 +47,7 @@ struct
                         bottom : int ref,
                         index : int ref,
                         work : entry A.array ref}
-  and token = Token of queue option ref
+  and token = Token of int * int
   type susp = queue option
 
   fun newQueue index =
@@ -70,36 +70,22 @@ struct
                       MLton.HM.registerQueueLock (Word32.fromInt p, thiefLock))
                   locks
 
-  val QUEUE_ARRAY_SIZE = 8192
-  val queues = A.tabulate (QUEUE_ARRAY_SIZE,
-                           fn i => if i < numberOfProcessors then
-                                     SOME (newQueue i)
-                                   else NONE)
-  val () = A.appi (fn (p, q) => case q
-                                 of SOME (Queue {work = ref q, ...}) =>
-                                    MLton.HM.registerQueue (Word32.fromInt p, q)
-                                  | _ => ())
+  val queues = A.tabulate (numberOfProcessors, fn i => newQueue i)
+  val () = A.appi (fn (p, q) =>
+                      let
+                          val Queue {work = ref q, ...} = q
+                      in
+                          MLton.HM.registerQueue (Word32.fromInt p, q)
+                      end)
                   queues
 
-  fun assertToken location (Token t) p =
+  val tokens = A.tabulate (numberOfProcessors, fn _ => 0)
+  fun newToken p =
       let
-          val pString = Int.toString p
+          val t = A.sub (tokens, p)
       in
-          case A.sub (queues, p)
-           of NONE => die ("assertToken(" ^ location ^"): Processor " ^
-                           pString ^ " does not have queue!")
-           | SOME pq => case !t
-                         of NONE => die ("assertToken(" ^ location ^
-                                         "): t is NONE!")
-                          | SOME tq => if tq <> pq
-                                       then die ("assertToken(" ^ location ^
-                                                 "): Token's queue does not" ^
-                                                 "match Processor " ^ pString ^
-                                                 " queue!")
-                                       else ()
+          Token (p, t) before A.update (tokens, p, t + 1)
       end
-
-  fun newWork () = Token (ref NONE)
 
   (* must already hold the lock! *)
   fun resize p (Queue { top, bottom, work, ... }) =
@@ -137,28 +123,26 @@ struct
           end
       end
 
-  fun addWork (p, tws) =
+  fun addWork (p, w) =
     let
       val Lock { thiefLock, ... } = A.sub (locks, p)
       val () = dbgmsg "tyring lock 1\n"
       val () = takeLock thiefLock; (* XTRA *)
       val () = dbgmsg "got lock 1\n"
-      val q as Queue { top, work, ... } = case A.sub (queues, p)
-                                      of SOME q => q | NONE => (dbgmsg "add\n"; raise WorkQueue)
-      fun add (tw as (t as Token r, w)) =
+      val q as Queue { top, work, ... } = A.sub (queues, p)
+      fun add w =
           let
             val i = !top
             val () = if i = A.length (!work) then resize p q else ()
             val i = !top (* in case of resize *)
+            val t = newToken p
           in
-            r := SOME q;
             A.update (!work, i, Work (t, w));
             top := i + 1;
-            assertToken "add" t p
+            t
           end
     in
-      app add tws;
-      releaseLock thiefLock (* XTRA *)
+      add w before releaseLock thiefLock (* XTRA *)
     end
 
   local
@@ -189,8 +173,7 @@ struct
                 end
           in
             case A.sub (queues, p')
-             of NONE => (incr failedSteals; unsync (); yield (); NONE)
-              | SOME (q as Queue { bottom, top, work, index, ... }) =>
+             of Queue { bottom, top, work, index, ... } =>
                 let
                   val j = !bottom
                   val i = !top
@@ -207,8 +190,7 @@ struct
                         | Marker => (unsync ();
                                      NONE)
                         | Work tw =>
-                          (assertToken "steal" (#1 tw) p';
-                           incr successfulSteals;
+                          (incr successfulSteals;
                            SOME (true, unsync, #2 tw))
                     end
                   else (* empty queue *)
@@ -219,8 +201,7 @@ struct
           end
     in
       case A.sub (queues, p)
-           of NONE => steal ()
-            | SOME (Queue { top, bottom, work, ... }) =>
+           of Queue { top, bottom, work, ... } =>
               let
                 val i = !top
                 val j = !bottom
@@ -230,31 +211,22 @@ struct
                    (* release lock in steal *)
                    steal ())
                 else (top := i - 1;
-                      case A.sub (!work, i - 1)
-                       of Empty => raise WorkQueue
-                        | Marker => (A.update (!work, i - 1, Empty);
-                                     releaseLock thiefLock;
-                                     case getWork p
+                      (case A.sub (!work, i - 1)
+                        of Empty => raise WorkQueue
+                         | Marker => (A.update (!work, i - 1, Empty);
+                                      releaseLock thiefLock;
+                                      case getWork p
                                       of NONE => NONE
                                        | SOME (_, unlocker, w) => SOME (true, unlocker, w))
-                        | Work tw =>
-                          let
-                            val () = assertToken "normal" (#1 tw) p
-                          in
-                            SOME (false, fn () => releaseLock thiefLock, #2 tw)
-                          end
+                         | Work tw => SOME (false, fn () => releaseLock thiefLock, #2 tw))
                           before (A.update (!work, i - 1, Empty)))
               end
     end
   end
 
-(* what if a job J is added, then that queue is suspended, then resumed by a
-  different processor.  then the token (the proc number at the time J was
-  added) doesn't reflect which lock should be take nor which queue *)
-  fun removeWork (p', Token r) =
+  fun removeWork (p', Token t) =
       let
-        val Queue { index, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove\n"; raise WorkQueue)
-(* SPOONHOWER_NOTE: this is a litte SUSP -- what if the queue is moved while we are trying to lock it? *)
+        val Queue {top, bottom, index, work, ...} = A.sub (queues, p')
         val p = !index
         val unsync =
             if p < numberOfProcessors then
@@ -275,7 +247,6 @@ struct
             else
                 die "Tried to resume work from unowned queue"
 
-        val Queue { top, bottom, work, ... } = case !r of SOME q => q | NONE => (dbgmsg "remove2\n"; raise WorkQueue)
         val last = !top - 1
         val j = !bottom
 
@@ -294,9 +265,9 @@ struct
                 | Marker => loop (i - 1)
                 | Work w =>
                   let
-                    val Token r' = #1 w
+                    val Token t' = #1 w
                   in
-                    if r = r' then (A.update (!work, i, Empty);
+                    if t = t' then (A.update (!work, i, Empty);
                                     unloop i)
                     else loop (i - 1)
                   end
@@ -307,17 +278,8 @@ struct
         before unsync ()
       end
 
-  fun shouldYield _ = false
-
   fun reportSuccessfulSteals () = !successfulSteals
   fun reportFailedSteals () = !failedSteals
   fun resetSteals () = (successfulSteals := 0;
                         failedSteals := 0)
-
-  (* Unused function *)
-  val startWork : proc -> unit = fn _ => die "startWork called"
-  val finishWork : proc -> unit = fn _ => die "finishWork called"
-  val suspendWork : proc -> susp = fn _ => die "suspendWork called"
-  val resumeWork : proc * susp * (token * work) -> unit =
-   fn _ => die "resumeWork called"
 end
