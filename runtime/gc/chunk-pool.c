@@ -231,13 +231,11 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
                       ChunkPool_config.maxSize;
   ChunkPool_currentPoolSize = ChunkPool_config.initialSize;
 
-#pragma message "Fix!"
-#if 0
   LOG(LM_CHUNK_POOL, LL_INFO,
       "Created chunk pool of size %zu bytes at %p",
       ChunkPool_config.maxSize,
       ChunkPool_poolStart);
-#endif
+
   VALGRIND_CREATE_MEMPOOL(&ChunkPool_poolStart, 0, 0);
   VALGRIND_MAKE_MEM_NOACCESS(ChunkPool_poolStart, ChunkPool_config.maxSize);
 
@@ -248,13 +246,10 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   ChunkPool_chunkMetadatasEnd = ChunkPool_chunkMetadatas + numChunks;
   ChunkPool_chunkMetadatas->spanInfo.numChunksInSpan = numChunks;
 
-#pragma message "Fix!"
-#if 0
   LOG(LM_CHUNK_POOL, LL_INFO,
       "Created chunk pool metadata of size %zu bytes at %p",
       numChunks * sizeof(*ChunkPool_chunkMetadatas),
       ((void*)(ChunkPool_chunkMetadatas)));
-#endif
 
   /* we are now initialized */
   ChunkPool_initialized = TRUE;

@@ -50,7 +50,7 @@ pointer GC_arrayAllocate (GC_state s,
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
 
   LOG(LM_ALLOCATION, LL_INFO,
-      "GC_arrayAllocate (%"PRIuMAX", "FMTARRLEN", "FMTHDR") [%d]\n",
+      "GC_arrayAllocate (%"PRIuMAX", "FMTARRLEN", "FMTHDR") [%d]",
       (uintmax_t)ensureBytesFree,
       numElements, header,
       Proc_processorNumber (s));
@@ -84,7 +84,7 @@ pointer GC_arrayAllocate (GC_state s,
 
   LOG(LM_ALLOCATION, LL_DEBUG,
       "Array with "FMTARRLEN" elts of size %"PRIuMAX" and total size %s and "
-      "total aligned size %s. Ensure %s bytes free.\n",
+      "total aligned size %s. Ensure %s bytes free.",
       numElements,
       (uintmax_t)bytesPerElement,
       uintmaxToCommaString(arraySize),
@@ -182,7 +182,7 @@ pointer GC_arrayAllocate (GC_state s,
   GC_profileAllocInc (s, arraySizeAligned);
 
   LOG(LM_ALLOCATION, LL_DEBUG,
-      "GC_arrayAllocate done.  result = "FMTPTR"  frontier = "FMTPTR" [%d]\n",
+      "GC_arrayAllocate done.  result = "FMTPTR"  frontier = "FMTPTR" [%d]",
       (uintptr_t)result,
       (uintptr_t)s->frontier,
       Proc_processorNumber (s));
