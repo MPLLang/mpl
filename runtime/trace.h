@@ -24,6 +24,8 @@ enum EventKind {
   EVENT_GC_LEAVE              = 3,
   EVENT_GC_ABORT              = 11,
 
+  EVENT_HEAP_OCCUPANCY        = 21,
+
   EVENT_CHUNKP_OCCUPANCY      = 8,
   EVENT_CHUNKP_RATIO          = 12,
 
