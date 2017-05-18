@@ -50,7 +50,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       heapBytesFree);
 
   /* trace pre-collection occupancy before doing anything */
-  Trace2(EVENT_HEAP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+  Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
@@ -85,7 +85,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   double allocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                           ((double)(hh->locallyCollectibleSize));
-  Trace3(EVENT_HEAP_RATIO,
+  Trace3(EVENT_CHUNKP_RATIO,
          hh->locallyCollectibleHeapSize,
          hh->locallyCollectibleSize,
          s->controls->hhConfig.allocatedRatio);
@@ -95,7 +95,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
     double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                                ((double)(hh->locallyCollectibleSize));
-    Trace3(EVENT_HEAP_RATIO,
+    Trace3(EVENT_CHUNKP_RATIO,
            hh->locallyCollectibleHeapSize,
            hh->locallyCollectibleSize,
            s->controls->hhConfig.allocatedRatio);
@@ -114,7 +114,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ChunkPool_size());
 
     /* trace post-collection occupancy */
-    Trace2(EVENT_HEAP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+    Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     HM_HH_maybeResizeLCHS(s, hh);
 

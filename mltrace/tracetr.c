@@ -30,8 +30,8 @@ static const char *EventKindStrings[] = {
 
   [EVENT_THREAD_COPY]           = "THREAD_COPY",
 
-  [EVENT_HEAP_OCCUPANCY]        = "HEAP_OCCUPANCY",
-  [EVENT_HEAP_RATIO]            = "HEAP_RATIO",
+  [EVENT_CHUNKP_OCCUPANCY]      = "CHUNKP_OCCUPANCY",
+  [EVENT_CHUNKP_RATIO]          = "CHUNKP_RATIO",
 
   [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
   [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
@@ -202,11 +202,11 @@ void printEventText(struct Event *event) {
     printf("from = %llx, to = %llx", event->arg1, event->arg2);
     break;
 
-  case EVENT_HEAP_OCCUPANCY:
+  case EVENT_CHUNKP_OCCUPANCY:
     printf("size = %llx, allocated = %llx", event->arg1, event->arg2);
     break;
 
-  case EVENT_HEAP_RATIO:
+  case EVENT_CHUNKP_RATIO:
     printf("LCHsize = %llx, LCsize = %llx, ratio = %lld",
            event->arg1, event->arg2, event->arg3);
     break;

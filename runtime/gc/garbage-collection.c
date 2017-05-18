@@ -108,7 +108,7 @@ void performGC (GC_state s,
   enterGC (s);
 
   /* trace pre-collection occupancy */
-  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+  Trace2(EVENT_CHUNKP_OCCUPANCY, s->heap->size,
          s->heap->frontier - s->heap->start);
 
   Trace0(EVENT_GC_ENTER);
@@ -226,7 +226,7 @@ void performGC (GC_state s,
   Trace0(EVENT_GC_LEAVE);
 
   /* trace post-collection occupancy */
-  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+  Trace2(EVENT_CHUNKP_OCCUPANCY, s->heap->size,
          s->heap->frontier - s->heap->start);
 
   leaveGC (s);
