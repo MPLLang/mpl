@@ -33,6 +33,7 @@ struct TracingContext *TracingNewContext(const char *filename,
     exit(1);
   }
 
+  ctx->id = procNumber;
   ctx->capacity = bufferCapacity;
   ctx->index = 0;
 
@@ -96,7 +97,7 @@ void Trace_(struct TracingContext *ctx, int kind,
 
   struct Event ev;
   ev.kind = kind;
-  ev.argptr = (uintptr_t)ctx;
+  ev.argptr = ctx->id;
   TracingGetTimespec(&ev.ts);
   ev.arg1 = arg1;
   ev.arg2 = arg2;

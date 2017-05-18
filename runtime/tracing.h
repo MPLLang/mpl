@@ -16,6 +16,7 @@
  * when the buffer is full. */
 struct TracingContext {
   struct Event *buffer;
+  size_t id;
   size_t index;
   size_t capacity;
   FILE *file;
