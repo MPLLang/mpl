@@ -15,6 +15,7 @@ typedef unsigned long long EventInt;
 enum EventKind {
   EVENT_NIL                   = 0,
   EVENT_INIT                  = 1,
+  EVENT_LAUNCH                = 22,
   EVENT_FINISH                = 6,
 
   EVENT_RUNTIME_ENTER         = 9,

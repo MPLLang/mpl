@@ -15,6 +15,7 @@
 static const char *EventKindStrings[] = {
   [EVENT_NIL]                   = "NIL",
   [EVENT_INIT]                  = "INIT",
+  [EVENT_LAUNCH]                = "LAUNCH",
   [EVENT_FINISH]                = "FINISH",
 
   [EVENT_GC_ENTER]              = "GC_ENTER",
@@ -185,6 +186,7 @@ void printEventText(struct Event *event) {
 
   switch(event->kind) {
   case EVENT_INIT:
+  case EVENT_LAUNCH:
   case EVENT_FINISH:
   case EVENT_GC_ENTER:
   case EVENT_GC_LEAVE:

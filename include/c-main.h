@@ -78,6 +78,7 @@ void MLton_threadFunc (void* arg) {                                     \
   }                                                                     \
   /* Check to see whether or not we are the first thread */             \
   if (Proc_processorNumber (s) == 0) {                                  \
+    Trace0(EVENT_LAUNCH);                                               \
     /* Trampoline */                                                    \
     while (1) {                                                         \
       cont=(*(struct cont(*)(uintptr_t))cont.nextChunk)(cont.nextFun);  \
@@ -92,6 +93,7 @@ void MLton_threadFunc (void* arg) {                                     \
   }                                                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \
+    Trace0(EVENT_LAUNCH);                                               \
     Parallel_run ();                                                    \
   }                                                                     \
 }
