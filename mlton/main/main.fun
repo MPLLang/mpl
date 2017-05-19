@@ -1365,7 +1365,7 @@ fun commandLine (args: string list): unit =
                   fun compileC (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val debugSwitches = gccDebug @ ["-DASSERT=1"]
-                        val tracingSwitches = ["-DENABLE_TRACING=1"]
+                        val tracingSwitches = gccDebug @ ["-DENABLE_TRACING=1"]
                         val output = mkOutputO (c, input)
                      in
                         (
