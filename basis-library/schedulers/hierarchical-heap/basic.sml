@@ -29,7 +29,7 @@ struct
 
   type token = Q.token
 
-  datatype t = Capture of token * job
+  datatype t = Capture of job
 
   val processorNumber = I.processorNumber
 
@@ -194,8 +194,7 @@ struct
                       let
                           (* Save the full work object here, but in HH *)
                           val () = (useHH hh;
-                                    tail (p, (Q.newWork (),
-                                              Thread (k, HH.get ())));
+                                    tail (p, (Thread (k, HH.get ())));
                                     stopUseHH ())
 
                           val t = valOf (Array.sub (schedThreads, p))
@@ -226,17 +225,15 @@ struct
       let
         val p = processorNumber ()
       in
-        Q.addWork (p, [w])
+        ignore (Q.addWork (p, w))
       end
 
   fun addRight (w, level) =
           let
               val p = processorNumber ()
-              val t = Q.newWork ()
               val currentHH = HH.get ()
           in
-            Q.addWork (p, [(t, Work (w, currentHH, level))]);
-            t
+            Q.addWork (p, Work (w, currentHH, level))
           end
 
   fun remove t = Q.removeWork (processorNumber (), t)

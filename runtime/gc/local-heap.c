@@ -40,6 +40,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          size_t bytesRequested,
                                          bool ensureCurrentLevel) {
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
+  bool emptyHH = FALSE;
   bool extend = FALSE;
   bool growStack = FALSE;
 
@@ -117,9 +118,10 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
     if (NULL == hh->lastAllocatedChunk) {
       /* collected everything! */
-      s->frontier = ((pointer)(GC_HEAP_LIMIT_SLOP));
-      s->limitPlusSlop = ((pointer)(GC_HEAP_LIMIT_SLOP));
-      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+      s->frontier = NULL;
+      s->limitPlusSlop = NULL;
+      s->limit = NULL;
+      emptyHH = TRUE;
     } else {
       s->frontier = HM_HH_getFrontier(hh);
       s->limitPlusSlop = HM_HH_getLimit(hh);
@@ -129,13 +131,15 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     setGCStateCurrentThreadAndStack (s);
   }
 
-  if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
-    /* not enough space */
+  /* determine if I need to extend based on space or ensureCurrentLevel */
+  if (emptyHH) {
+    /* HH is empty, so definitely need to extend */
     extend = TRUE;
-  }
-
-  if (ensureCurrentLevel) {
-    /* extend if current allocation chunk is not at the current level */
+  } else if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
+      /* not enough space */
+      extend = TRUE;
+  } else if (ensureCurrentLevel) {
+    /* check if current allocation chunk at the current level */
     struct HM_ObjptrInfo info;
     LOCAL_USED_FOR_ASSERT bool retrieved =
         HM_getObjptrInfo(s,
@@ -145,7 +149,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
     assert(info.level <= hh->level);
     if (info.level < hh->level) {
-      /* need to extend */
+      /* need to extend to force current level */
       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
           "extending due to ensureCurrentLevel frontier level = %u hh level = "
           "%u",
