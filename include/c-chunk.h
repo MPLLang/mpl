@@ -338,9 +338,9 @@ MLTON_CODEGEN_MEMCPY(void * memcpy(void *, const void*, size_t);)
 /*                       Processor                   */
 /* ------------------------------------------------- */
 
-extern volatile int32_t Proc_criticalCount;
+extern volatile int32_t Proc_syncCount;
 static inline Int32 Proc_threadInSection (void) {
-  return Proc_criticalCount > 0;
+  return Proc_syncCount > 0;
 }
 
 #endif /* #ifndef _C_CHUNK_H_ */

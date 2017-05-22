@@ -15,7 +15,10 @@ static volatile bool Proc_beginInit = FALSE;
 static volatile uint32_t Proc_initializedCount = 0;
 
 /* variables used in Proc_{begin,end}CriticalSection() */
-static volatile uint32_t Proc_syncCount;
+volatile uint32_t Proc_syncCount; /*
+                                   * not static -- exposed for inlining
+                                   * Proc_threadInSection()
+                                   */
 static volatile bool Proc_criticalTicketActive;
 static volatile uint32_t Proc_criticalTicket;
 
