@@ -84,7 +84,7 @@ XCFLAGS := -fno-common $(WARNXCFLAGS)
 OPTXCFLAGS := -Wdisabled-optimization -O2 -fomit-frame-pointer -g
 DEBUGXCFLAGS := -DASSERT=1 -Wno-uninitialized -O0 -g
 PICXCFLAGS :=
-TRACEXCFLAGS := -DENABLE_TRACING -g
+TRACEXCFLAGS := -DENABLE_TRACING $(OPTXCFLAGS)
 
 # Win32&64 don't use PIC code, all other platforms do
 ifeq ($(findstring $(TARGET_OS), mingw cygwin),)
