@@ -9,9 +9,9 @@
 #include <unistd.h>
 
 #include <dirent.h>
+#include <error.h>
 #include <fcntl.h>
 #include <grp.h>
-#include <hwloc.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -107,37 +107,14 @@ static inline char* ctermid(char* x) {
 #endif
 
 static inline void set_cpu_affinity(int cpu) {
-  hwloc_topology_t topology;
-  hwloc_bitmap_t set;
-  int err;
+  cpu_set_t cpuset;
+  pthread_t thread;
 
-  err = hwloc_topology_init(&topology);
-  if (err < 0) {
-    fprintf(stderr, "failed to initialize the topology\n");
-    return;
-  }
+  thread = pthread_self();
 
-  err = hwloc_topology_load(topology);
-  if (err < 0) {
-    fprintf(stderr, "failed to load the topology\n");
-    goto free_topo;
-  }
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu, &cpuset);
 
-  set = hwloc_bitmap_alloc();
-  if (!set) {
-    fprintf(stderr, "failed to allocate a bitmap\n");
-    goto free_topo;
-  }
-
-  hwloc_bitmap_only(set, cpu);
-  err = hwloc_set_cpubind(topology, set, HWLOC_CPUBIND_THREAD);
-  if (err < 0) {
-    fprintf(stderr, "failed to bind to cpu %d\n", cpu);
-    goto free_bitmap;
-  }
-
-free_bitmap:
-  hwloc_bitmap_free(set);
-free_topo:
-  hwloc_topology_destroy(topology);
+  if ((errno = pthread_setaffinity_np(thread, sizeof cpuset, &cpuset)) != 0)
+    perror("Could not set affinity");
 }
