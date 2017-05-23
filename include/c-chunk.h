@@ -334,4 +334,13 @@ MLTON_CODEGEN_MEMCPY(void * memcpy(void *, const void*, size_t);)
 #define WordU32_mulCheck(dst, x, y, l) WordU_mulCheck(32, dst, x, y, l)
 #define WordU64_mulCheck(dst, x, y, l) WordU_mulCheck(64, dst, x, y, l)
 
+/* ------------------------------------------------- */
+/*                       Processor                   */
+/* ------------------------------------------------- */
+
+extern volatile int32_t Proc_syncCount;
+static inline Int32 Proc_threadInSection (void) {
+  return Proc_syncCount > 0;
+}
+
 #endif /* #ifndef _C_CHUNK_H_ */
