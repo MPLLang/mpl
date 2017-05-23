@@ -55,6 +55,11 @@ pointer GC_arrayAllocate (GC_state s,
       numElements, header,
       Proc_processorNumber (s));
 
+  Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
+         (EventInt)ensureBytesFree,
+         (EventInt)numElements,
+         (EventInt)header);
+
   /* Check for overflow when computing arraySize.
    * Note: bytesPerElement > 0
    */
@@ -200,6 +205,8 @@ pointer GC_arrayAllocate (GC_state s,
   if (holdLock) {
     LEAVE1 (s, result);
   }
+
+  Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 
   return result;
 

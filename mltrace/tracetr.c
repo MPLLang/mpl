@@ -44,6 +44,9 @@ static const char *EventKindStrings[] = {
   [EVENT_GSECTION_BEGIN_LEAVE]  = "GSECTION_BEGIN_LEAVE",
   [EVENT_GSECTION_END_ENTER]    = "GSECTION_END_ENTER",
   [EVENT_GSECTION_END_LEAVE]    = "GSECTION_END_LEAVE",
+
+  [EVENT_ARRAY_ALLOCATE_ENTER]  = "ARRAY_ALLOCATE_ENTER",
+  [EVENT_ARRAY_ALLOCATE_LEAVE]  = "ARRAY_ALLOCATE_LEAVE",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -200,6 +203,7 @@ void printEventText(struct Event *event) {
   case EVENT_GSECTION_BEGIN_LEAVE:
   case EVENT_GSECTION_END_ENTER:
   case EVENT_GSECTION_END_LEAVE:
+  case EVENT_ARRAY_ALLOCATE_LEAVE:
     break;
 
   case EVENT_THREAD_COPY:
@@ -223,6 +227,11 @@ void printEventText(struct Event *event) {
   case EVENT_LOCK_TAKE_LEAVE:
   case EVENT_LOCK_RELEASE:
     printf("lock = %llx", event->arg1);
+    break;
+
+  case EVENT_ARRAY_ALLOCATE_ENTER:
+    printf("ensureBytesFree = %llx, numElements = %lld, header = %llx",
+           event->arg1, event->arg2, event->arg3);
     break;
 
   default:
