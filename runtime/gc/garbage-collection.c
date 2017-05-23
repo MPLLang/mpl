@@ -107,10 +107,6 @@ void performGC (GC_state s,
 
   enterGC (s);
 
-  /* trace pre-collection occupancy */
-  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
-         s->heap->frontier - s->heap->start);
-
   Trace0(EVENT_GC_ENTER);
 
   s->cumulativeStatistics->numGCs++;
@@ -224,10 +220,6 @@ void performGC (GC_state s,
   assert (invariantForGC (s));
 
   Trace0(EVENT_GC_LEAVE);
-
-  /* trace post-collection occupancy */
-  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
-         s->heap->frontier - s->heap->start);
 
   leaveGC (s);
 }
@@ -418,6 +410,10 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
              Proc_processorNumber (s));
   }
 
+  /* trace pre-collection occupancy */
+  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+         s->heap->frontier - s->heap->start);
+
   if (/* check the stack of the current thread */
       ((ensureStack and not invariantForMutatorStack (s))
           and (s->syncReason = SYNC_STACK))
@@ -448,6 +444,10 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
                  Proc_processorNumber (s));
 
     LEAVE0 (s);
+
+    /* trace post-collection occupancy */
+    Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+           s->heap->frontier - s->heap->start);
   }
   else {
     if (DEBUG or s->controls->messages)
