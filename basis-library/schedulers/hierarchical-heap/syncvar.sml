@@ -3,9 +3,9 @@ struct
   structure B = MLtonParallelBasic
   structure HM = MLton.HM
 
-  val dbgmsg =
+  val dbgmsg: (unit -> string) -> unit =
       if false
-      then fn m => MLtonParallelInternal.dbgmsg ("syncvar: " ^ m)
+      then fn m => MLtonParallelInternal.dbgmsg ("syncvar: " ^ (m ()))
       else fn _ => ()
 
   datatype 'a state =
@@ -49,7 +49,7 @@ struct
           | Waiting readers =>
             let
               val () = v := Done a
-              val () = dbgmsg "Wrote to syncvar"
+              val () = dbgmsg (fn () => "Wrote to syncvar")
               val () = unlock r
               val () = checkMaxOneReader readers
             in
@@ -62,10 +62,10 @@ struct
             Done a => (unlock r; (false, a)) (* Do the easy case first *)
           | Waiting readers =>
             (checkZeroReader readers;
-             dbgmsg "suspending waiting for syncvar";
+             dbgmsg (fn () => "suspending waiting for syncvar");
              B.capture (fn k => (v := Waiting (k::readers);
                                  unlock r));
-             dbgmsg "resuming before reading syncvar";
+             dbgmsg (fn () => "resuming before reading syncvar");
              lock r;
              (case !v
                of Done a => (unlock r; (true, a))

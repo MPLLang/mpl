@@ -12,9 +12,9 @@ struct
   datatype job = Work of (unit -> void) * unit HH.t * int
                | Thread of unit T.t * unit HH.t
 
-  val dbgmsg =
+  val dbgmsg: (unit -> string) -> unit =
       if false
-      then fn msg => I.dbgmsg ("basic: " ^ msg)
+      then fn m => I.dbgmsg ("basic: " ^ (m ()))
       else fn _ => ()
 
   val numberOfProcessors = I.numberOfProcessors
@@ -65,12 +65,12 @@ struct
                                        HH.set hh;
                                        HH.setUseHierarchicalHeap true;
                                        HM.exitGlobalHeap ();
-                                       dbgmsg "useHH")
+                                       dbgmsg (fn () => "useHH"))
 
   fun stopUseHH (() : unit) : unit = (HM.enterGlobalHeap ();
                                       HH.setUseHierarchicalHeap false;
                                       HM.exitGlobalHeap ();
-                                      dbgmsg "stopUseHH")
+                                      dbgmsg (fn () => "stopUseHH"))
 
   fun maybeSetHHDead (p: int): unit =
       case Array.sub (hhToSetDead, p)
@@ -96,7 +96,7 @@ struct
           schedule' p countSuspends
 
         | SOME (nonlocal, unlocker, j) =>
-          (dbgmsg "stole work";
+          (dbgmsg (fn () => "stole work");
 
            if countSuspends andalso nonlocal
            then incSuspends p
@@ -117,7 +117,7 @@ struct
                     val childHH = HH.new ()
                     val () = HH.appendChild (parentHH, childHH, sharedLevel)
                 in
-                    dbgmsg "switching to new thread";
+                    dbgmsg (fn () => "switching to new thread");
                     (* switch to childHH to allocate the thread there *)
                     T.switch (fn st : unit T.t =>
                                  (Array.update (schedThreads,
@@ -134,7 +134,7 @@ struct
                                                         unlocker ();
                                                         w ())),
                                              ())));
-                    dbgmsg "returned to scheduler from new thread";
+                    dbgmsg (fn () => "returned to scheduler from new thread");
                     maybeSetHHDead p
                 end
 
@@ -143,7 +143,7 @@ struct
                  * This doesn't have to be stolen as it
                  * could be a resume parent
                  *)
-                (dbgmsg "switching to suspended thread";
+                (dbgmsg (fn () => "switching to suspended thread");
                  T.switch (fn st =>
                               (Array.update (schedThreads,
                                              p,
@@ -152,7 +152,7 @@ struct
                                T.prepare (T.prepend (k, fn () => (useHH hh;
                                                                   unlocker ())),
                                           ())));
-                 dbgmsg "returned to scheduler from suspended thread";
+                 dbgmsg (fn () => "returned to scheduler from suspended thread");
                  maybeSetHHDead p))
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
@@ -186,7 +186,7 @@ struct
 
   fun capture' (p, tail) =
       let
-          val () = dbgmsg "capture': switching to scheduler"
+          val () = dbgmsg (fn () => "capture': switching to scheduler")
           val hh = HH.get ()
           val r =
               T.switch
@@ -201,8 +201,8 @@ struct
                       in
                           t
                       end)
-          val () = dbgmsg "capture': switched back";
-          val () = dbgmsg "capture': switched back2";
+          val () = dbgmsg (fn () => "capture': switched back")
+          val () = dbgmsg (fn () => "capture': switched back2")
       in
           r
       end
@@ -244,7 +244,7 @@ struct
           val hh = HH.get ()
       in
           Array.update(hhToSetDead, p, SOME hh);
-          dbgmsg "return: Switching to scheduler";
+          dbgmsg (fn () => "return: Switching to scheduler");
           T.switch (fn _ =>
                        let
                            val t = valOf (Array.sub (schedThreads, p))
