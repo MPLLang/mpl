@@ -228,7 +228,7 @@ void HM_forwardHHObjptrsInLevelList(
     for (void* chunk = levelHead;
          NULL != chunk;
          chunk = getChunkInfo(chunk)->nextChunk) {
-#pragma message "Use foreachObjptrInRange?"
+      /* Can I use foreachObjptrInRange() for this? */
       for (pointer p = HM_getChunkStart(chunk);
            p != getChunkInfo(chunk)->frontier;) {
         LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;

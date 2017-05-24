@@ -495,7 +495,7 @@ void forwardHHObjptr (GC_state s,
   }
 
   if (GC_FORWARDED != header) {
-#pragma message "More nuanced with non-local collection"
+    /* RAM_NOTE: This is more nuanced with non-local collection */
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
         (opInfo.level < args->minLevel)) {
@@ -519,15 +519,11 @@ void forwardHHObjptr (GC_state s,
     size_t objectBytes;
     size_t copyBytes;
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
-#pragma message "Implement when I can"
-#if 0
-#else
       if (WEAK_TAG == tag) {
         die(__FILE__ ":%d: "
             "forwardHHObjptr() #define oes not support WEAK_TAG objects!",
             __LINE__);
       }
-#endif
       headerBytes = GC_NORMAL_HEADER_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       copyBytes = objectBytes;
@@ -548,7 +544,7 @@ void forwardHHObjptr (GC_state s,
       headerBytes = GC_STACK_HEADER_SIZE;
       stack = (GC_stack)p;
 
-#pragma message "This changes with non-local collection"
+      /* RAM_NOTE: This changes with non-local collection */
       /* Check if the pointer is the current stack of my processor. */
       current = getStackCurrent(s) == stack;
 
@@ -587,8 +583,8 @@ void forwardHHObjptr (GC_state s,
         "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
-#pragma message "Implement when I can"
 #if 0
+      /* RAM_NOTE: This is the saved code from forward...() */
       GC_weak w;
 
       w = (GC_weak)(s->forwardState.back + GC_NORMAL_HEADER_SIZE + offsetofWeak (s));
@@ -619,16 +615,10 @@ void forwardHHObjptr (GC_state s,
                                       s->heap->start);
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-#pragma message "Shouldn't happen!"
-#if 0
-      /* update level chunk head containingHH pointers */
-      HM_HH_updateLevelListPointers(*((objptr*)(p)));
-#else
-    die(__FILE__ ":%d: "
-        "forwardHHObjptr() does not support GC_HIERARCHICAL_HEAP_HEADER "
-        "objects!",
-        __LINE__);
-#endif
+      die(__FILE__ ":%d: "
+          "forwardHHObjptr() does not support GC_HIERARCHICAL_HEAP_HEADER "
+          "objects!",
+          __LINE__);
     }
   }
 
