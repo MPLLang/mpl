@@ -47,11 +47,6 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
                    void* fromChunkList);
 
 /**
- * ObjptrPredicateFunction for skipping global heap objects we don't care about
- */
-bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored);
-
-/**
  * Populates 'holes' with the current global heap holes from all processors.
  *
  * @attention
@@ -185,6 +180,8 @@ void HM_HHC_collectLocal(void) {
       hh->locallyCollectibleHeapSize,
       hh->locallyCollectibleSize);
 
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
+
   /* forward contents of stack */
   forwardHHObjptrArgs.objectsCopied = 0;
   foreachObjptrInObject(s,
@@ -248,41 +245,7 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied);
 
-#pragma message "Remove along with globalHeapObjptrPredicate when done"
-#if 0
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "START foreach %ld MB",
-      (s->heap->frontier - s->heap->start) / (1024 * 1024));
-
-#pragma message "Should be synchronized, but entrypoint for enter/leave is " \
-  "GC_collect :("
-  assert(s->numberOfProcs <= MAX_NUM_HOLES);
-  struct GlobalHeapHole holes[MAX_NUM_HOLES];
-  populateGlobalHeapHoles(s, holes);
-  pointer frontier = ((pointer)(0));
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    if (frontier < holes[i].start) {
-      frontier = holes[i].start;
-    }
-  }
-
-  forwardHHObjptrArgs.objectsCopied = 0;
-  /* forward global heap */
-  foreachObjptrInRange(s,
-                       s->heap->start,
-                       &frontier,
-                       TRUE,
-                       holes,
-                       globalHeapObjptrPredicate,
-                       NULL,
-                       forwardHHObjptr,
-                       &forwardHHObjptrArgs);
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "Copied %"PRIu64" objects from global heap",
-      forwardHHObjptrArgs.objectsCopied);
-#endif
-
-  LOG(LM_HH_COLLECTION, LL_DEBUG, "END foreach");
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
   /* do copy-collection */
   forwardHHObjptrArgs.objectsCopied = 0;
@@ -690,44 +653,6 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
 
   return frontier;
 }
-
-#pragma message "Resolve when done"
-#if 0
-bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
-  /* silence compliler */
-  ((void)(s));
-  ((void)(ignored));
-
-  /* run through FALSE cases */
-  GC_header header;
-  header = getHeader(p);
-  if ((GC_STACK_HEADER == header) ||
-      (GC_THREAD_HEADER == header) ||
-      (GC_HIERARCHICAL_HEAP_HEADER == header)) {
-    return FALSE;
-  }
-
-  return TRUE;
-}
-#else
-bool globalHeapObjptrPredicate(GC_state s, pointer p, void* ignored) {
-  /* silence compliler */
-  ((void)(s));
-  ((void)(ignored));
-
-  /* run through FALSE cases */
-  GC_header header;
-  header = getHeader(p);
-  if ((objptrToPointer(s->wsQueue, s->heap->start) == p) ||
-      (GC_STACK_HEADER == header) ||
-      (GC_THREAD_HEADER == header) ||
-      (GC_HIERARCHICAL_HEAP_HEADER == header)) {
-    return FALSE;
-  }
-
-  return TRUE;
-}
-#endif
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
