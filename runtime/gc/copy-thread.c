@@ -13,6 +13,7 @@ GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
   LOG(LM_THREAD, LL_DEBUG,
       "called on "FMTPTR,
       (uintptr_t)from);
+
   /* newThread may do a GC, which invalidates from.
    * Hence we need to stash from someplace that the GC can find it.
    */
@@ -30,6 +31,9 @@ GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
              (GC_stack)(objptrToPointer(to->stack, s->heap->start)));
   to->bytesNeeded = from->bytesNeeded;
   to->exnStack = from->exnStack;
+
+  Trace2(EVENT_THREAD_COPY, (EventInt)from, (EventInt)to);
+
   return to;
 }
 

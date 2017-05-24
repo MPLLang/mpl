@@ -163,8 +163,6 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 }
 
 void GC_done (GC_state s) {
-  s->syncReason = SYNC_FORCE;
-  ENTER0 (s);
   minorGC (s);
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {

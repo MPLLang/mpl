@@ -11,6 +11,7 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
+#include <stdlib.h>
 #include <strings.h>
 
 static bool stringToBool (char *s) {
@@ -428,6 +429,12 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "trace-buffer-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton trace-buffer-size missing argument.");
+          }
+          s->controls->traceBufferSize = stringToInt(argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -496,6 +503,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->summaryFormat = HUMAN;
   s->controls->summaryFile = stderr;
   s->controls->hhCollectionLevel = ALL;
+  s->controls->traceBufferSize = 10000;
 
   s->cumulativeStatistics = newCumulativeStatistics();
 
@@ -528,11 +536,14 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&s->signalsInfo.signalsHandled);
   sigemptyset (&s->signalsInfo.signalsPending);
+  s->self = pthread_self();
+  s->terminationLeader = INVALID_PROCESSOR_NUMBER;
   s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
   s->saveWorldStatus = true;
+  s->trace = NULL;
 
   /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
@@ -642,11 +653,14 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&d->signalsInfo.signalsHandled);
   sigemptyset (&d->signalsInfo.signalsPending);
+  d->self = s->self;
+  d->terminationLeader = INVALID_PROCESSOR_NUMBER;
   d->syncReason = SYNC_NONE;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
+  d->trace = NULL;
 
   // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
@@ -661,4 +675,26 @@ void GC_duplicate (GC_state d, GC_state s) {
   duplicateWorld (d, s);
   d->lock = s->lock;
   s->amInGC = FALSE;
+}
+
+// AG_NOTE: is this the proper place for this function?
+void GC_traceInit(GC_state s) {
+#ifdef ENABLE_TRACING
+  char filename[256];
+  const char *dir;
+
+  dir = getenv("MLTON_TRACE_DIR");
+  if (dir == NULL)
+    return;
+
+  snprintf(filename, 256, "%s/%d.%d.trace", dir, getpid(), s->procNumber);
+  s->trace = TracingNewContext(filename, s->controls->traceBufferSize,
+                               s->procNumber);
+#endif
+}
+
+void GC_traceFinish(GC_state s) {
+#ifdef ENABLE_TRACING
+  TracingCloseAndFreeContext(&s->trace);
+#endif
 }

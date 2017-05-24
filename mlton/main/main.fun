@@ -67,6 +67,7 @@ val buildConstants: bool ref = ref false
 val debugRuntime: bool ref = ref false
 datatype debugFormat = Dwarf | DwarfPlus | Dwarf2 | Stabs | StabsPlus
 val debugFormat: debugFormat option ref = ref NONE
+val traceRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunk: Control.chunk option ref = ref NONE
@@ -327,6 +328,8 @@ fun makeOptions {usage} =
            (fn s => reportAnnotation (s, flag,
                                       Control.Elaborate.processDefault s)))
        end,
+       (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
+        boolRef traceRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
         SpaceString
         (fn s => (case s of
@@ -1034,6 +1037,8 @@ fun commandLine (args: string list): unit =
          List.concat [[concat ["-L", !libTargetDir]],
                       if !debugRuntime then
                       ["-lmlton-gdb", "-lgdtoa-gdb"]
+                      else if !traceRuntime then
+                      ["-lmlton-trace", "-lgdtoa-trace"]
                       else if positionIndependent then
                       ["-lmlton-pic", "-lgdtoa-pic"]
                       else
@@ -1043,6 +1048,9 @@ fun commandLine (args: string list): unit =
          if !debugRuntime then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-gdb.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" }]
+         else if !traceRuntime then
+         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-trace.a" },
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-trace.a" }]
          else if positionIndependent then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-pic.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
@@ -1357,18 +1365,20 @@ fun commandLine (args: string list): unit =
                   fun compileC (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val debugSwitches = gccDebug @ ["-DASSERT=1"]
+                        val tracingSwitches = gccDebug @ ["-DENABLE_TRACING=1"]
                         val output = mkOutputO (c, input)
                      in
                         (
                           [
                             (gcc,
                              List.concat
-                                [[ "-std=gnu99", "-c" ],
+                                [[ "-std=gnu11", "-c" ],
                                  if !format = Executable
                                  then [] else [ "-DLIBNAME=" ^ !libname ],
                                  if positionIndependent
                                  then [ "-fPIC", "-DPIC" ] else [],
                                  if !debug then debugSwitches else [],
+                                 if !traceRuntime then tracingSwitches else [],
                                  ccOpts,
                                  ["-o", output],
                                  [input]])

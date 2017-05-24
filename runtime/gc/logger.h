@@ -89,7 +89,7 @@ extern bool L_flushLog[NUM_LOG_MODULES];
             (NULL == s) ? (-1) : (Proc_processorNumber(s)),             \
             __FILE__ ":" STRFY(__LINE__),                               \
             __VA_ARGS__);                                               \
-      exit(1);                                                          \
+      abort();                                                          \
   } while(FALSE)
 
 /**

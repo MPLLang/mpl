@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+
+usage() {
+    cat <<EOF
+Usage: $0 VERB OPTIONS
+Verbs:
+  help                   display this message
+  record COMMAND         run and record traces for COMMAND
+  logcat [FILE.trace.gz] display latest trace or FILE
+  corelog [BIN CORE]     flush the buffers of core dump to disk
+  export [FILE.trace.gz] export latest trace or FILE to sqlite3
+  sqlite [FILE.sqlite]   open latest db or FILE in sqlite3
+  visu [FILE.sqlite]     visualize FILE using the veezuh tool
+  stats [FILE.sqlite]    show basic statistics about FILE using the veezuh tool
+  clean                  erase trace files in the current directory
+EOF
+}
+
+export_sqlite3()
+{
+    sqlite3 "$1" <<EOF
+CREATE TABLE events(
+  kind TEXT,
+  argptr INTEGER,
+  time REAL,
+  arg1 INTEGER,
+  arg2 INTEGER,
+  arg3 INTEGER,
+  PRIMARY KEY(kind, argptr, time)
+) WITHOUT ROWID;
+.separator ","
+.import $2 events
+EOF
+}
+
+gdbscript() {
+    cat <<EOF
+set max-value-size unlimited
+set \$i = 0
+while \$i < gcState->numberOfProcs
+  append value $1 *gcState->procStates[\$i].trace->buffer@gcState->procStates[\$i].trace->index
+  set \$i = \$i + 1
+end
+EOF
+}
+
+if [ $# -le 0 ]; then
+    usage
+    exit 1
+fi
+
+TOOL=`dirname $0`/tracetr
+
+verb=$1
+shift
+case "$verb" in
+    record)
+        if [ $# -lt 1 ]; then
+            echo "Missing argument for verb \"record\""
+            usage
+            exit 1
+        fi
+
+        DIR=`mktemp -d`
+        MLTON_TRACE_DIR=$DIR $*
+        EX=$?
+
+        if [ $EX -ne 0 ]; then
+            echo "*** $* failed with exit code $EX" >&2
+            CORETRACE=`mktemp $DIR/XXXXXX.trace`
+            F=`echo $1 | cut -d' ' -f1`
+            echo "*** Trying to flush the latest core of $F into $CORETRACE" >&2
+            gdbscript $CORETRACE | coredumpctl gdb `readlink -f $F`
+        fi
+
+        OUT=${1##*/}.$$.trace.gz
+        echo "*** Collecting traces" >&2
+        cat $DIR/*.trace | gzip -c > $OUT
+        echo "*** Traces written to $OUT" >&2
+
+        rm -rf $DIR
+        ;;
+
+    logcat)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.trace.gz | head -n 1`
+        fi
+        gunzip -c $FILE | $TOOL -d
+        ;;
+
+    corelog)
+        if [ $# -ge 2 ]; then
+            OUT="$2.trace"
+            echo "*** Dumping traces from core $2" >&2
+            gdbscript $OUT | gdb $1 $2
+        else
+            OUT=`mktemp XXXXXXXX.trace`
+            echo "*** Dumping traces from latest core" >&2
+            gdbscript $OUT | coredumpctl gdb
+        fi
+
+        gzip -f $OUT
+        echo "*** Dumped traces in $OUT.gz" >&2
+        ;;
+
+    export)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.trace.gz | head -n 1`
+        fi
+        TMP=`mktemp`
+        DB=`basename $FILE .trace.gz`.sqlite
+
+        if [ -f $DB ]; then
+            echo "*** File $DB already exists, aborting"
+            exit 1
+        fi
+
+        echo "*** Exporting $FILE to SQLite 3" >&2
+        gunzip -c $FILE | $TOOL -c > $TMP
+        export_sqlite3 $DB $TMP
+        rm -f $TMP
+        echo "*** Wrote $DB" >&2
+        ;;
+
+    sqlite)
+        if [ $# -ge 1 ]; then
+            DB=$1
+        else
+            DB=`ls -t *.sqlite | head -n 1`
+        fi
+
+        echo "*** Opening $DB with SQLite 3" >&2
+        sqlite3 $DB
+        ;;
+
+    visu)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.sqlite | head -n 1`
+        fi
+        echo "*** Visualizing $FILE" >&2
+        veezuh $FILE
+        ;;
+
+    stats)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.sqlite | head -n 1`
+        fi
+        echo "*** Showing statistics of $FILE" >&2
+        veezuh -stats $FILE
+        ;;
+
+    clean)
+        echo -n 'Erase *.{trace{,.gz},sqlite} in the current directory? [N/y] '
+        read ANS
+        if [ "$ANS" = "y" ]; then
+            rm -f -- *.{trace{,.gz},sqlite} 2>/dev/null
+        fi
+        echo "*** Files erased" >&2
+
+        ;;
+
+    help)
+        usage
+        exit 0
+        ;;
+
+    *)
+        usage
+        exit 1
+esac

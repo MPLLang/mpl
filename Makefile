@@ -29,6 +29,7 @@ MLBPATHMAP := $(LIB)/mlb-path-map
 SPEC := package/rpm/mlton.spec
 LEX := mllex
 PROF := mlprof
+TRACE := mltrace
 YACC := mlyacc
 NLFFIGEN := mlnlffigen
 PATH := $(BIN):$(SRC)/bin:$(shell echo $$PATH)
@@ -249,9 +250,12 @@ tools:
 	$(MAKE) -C "$(LEX)"
 	$(MAKE) -C "$(NLFFIGEN)"
 	$(MAKE) -C "$(PROF)"
+	$(MAKE) -C "$(TRACE)"
 	$(MAKE) -C "$(YACC)"
 	$(CP) "$(LEX)/$(LEX)$(EXE)"		\
 		"$(NLFFIGEN)/$(NLFFIGEN)$(EXE)"	\
+		"$(TRACE)/$(TRACE)"			\
+		"$(TRACE)/tracetr"			\
 		"$(PROF)/$(PROF)$(EXE)"		\
 		"$(YACC)/$(YACC)$(EXE)"		\
 		"$(BIN)/"

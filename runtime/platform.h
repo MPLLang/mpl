@@ -99,6 +99,7 @@
 #include "basis-ffi.h"
 
 #include "gc.h"
+#include "tracing.h"
 
 /* ---------------------------------------------------------------- */
 /*                        Runtime Init/Exit/Alloc                   */

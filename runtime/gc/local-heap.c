@@ -49,6 +49,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       bytesRequested,
       heapBytesFree);
 
+  /* trace pre-collection occupancy before doing anything */
+  Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "Entering Management Heap GC");
@@ -82,12 +85,20 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   double allocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                           ((double)(hh->locallyCollectibleSize));
+  Trace3(EVENT_CHUNKP_RATIO,
+         hh->locallyCollectibleHeapSize,
+         hh->locallyCollectibleSize,
+         s->controls->hhConfig.allocatedRatio);
   if (forceGC || (allocatedRatio < s->controls->hhConfig.allocatedRatio)) {
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal();
 
     double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
                                ((double)(hh->locallyCollectibleSize));
+    Trace3(EVENT_CHUNKP_RATIO,
+           hh->locallyCollectibleHeapSize,
+           hh->locallyCollectibleSize,
+           s->controls->hhConfig.allocatedRatio);
 
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
         "Live Ratio %.2f < %.2f, performed local collection to increase "
@@ -101,6 +112,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         "%zu/%zu bytes allocated in Chunk Pool after collection",
         ChunkPool_allocated(),
         ChunkPool_size());
+
+    /* trace post-collection occupancy */
+    Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     HM_HH_maybeResizeLCHS(s, hh);
 

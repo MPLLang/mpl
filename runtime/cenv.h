@@ -13,8 +13,8 @@
 /********************************/
 /* GNU C Library Feature Macros */
 /********************************/
-/* C99 Features */
-#define _ISOC99_SOURCE
+/* C11 Features */
+#define _ISOC11_SOURCE
 
 /* POSIX 2008 Features */
 /*
@@ -55,6 +55,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>

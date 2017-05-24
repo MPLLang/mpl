@@ -37,16 +37,22 @@ void Parallel_lockInit (Pointer arg) {
 void Parallel_lockTake (Pointer arg) {
   spinlock_t* lock = ((spinlock_t*)(arg));
   uint32_t lockValue = Proc_processorNumber(pthread_getspecific(gcstate_key));
+  GC_state s = pthread_getspecific (gcstate_key);
+  size_t cpoll = 0;
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "trying to lock %p to %u",
       ((volatile void*)(lock)),
       lockValue);
+  Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
 
   do {
-    if (Proc_threadInSection ()) {
-      GC_state s = pthread_getspecific (gcstate_key);
+    if (GC_MightCheckForTerminationRequest(s, &cpoll)) {
+      Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
+      pthread_exit(NULL);
+    }
 
+    if (Proc_threadInSection ()) {
       ENTER1(s, arg);
       LEAVE1(s, arg);
       lock = ((spinlock_t*)(arg));
@@ -55,6 +61,7 @@ void Parallel_lockTake (Pointer arg) {
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "locked");
+  Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
 }
 
 void Parallel_lockRelease (Pointer arg) {
@@ -63,6 +70,7 @@ void Parallel_lockRelease (Pointer arg) {
   LOG(LM_PARALLEL, LL_DEBUG,
       "releasing %p",
       ((volatile void*)(lock)));
+  WITH_GCSTATE(Trace1(EVENT_LOCK_RELEASE, (EventInt)lock));
 
   spinlock_unlock(lock);
 }
@@ -77,6 +85,9 @@ bool Parallel_alreadyLockedByMe (Pointer arg) {
 void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer leftsTurn_)
 {
   Bool *mine, *other, *leftsTurn;
+  GC_state s = pthread_getspecific (gcstate_key);
+  size_t cpoll = 0;
+
   if (amLeft) {
     mine = (Bool *)left;
     other = (Bool *)right;
@@ -95,9 +106,11 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
     fprintf (stderr, "failed lock!\n");
   }
   while (*other) {
+    if (GC_MightCheckForTerminationRequest(s, &cpoll))
+      pthread_exit(NULL);
+
     //__sync_synchronize ();
     if (amLeft != *leftsTurn) {
-      GC_state s = pthread_getspecific (gcstate_key);
       //__sync_synchronize ();
       //*mine = 0;
       ////__sync_synchronize ();

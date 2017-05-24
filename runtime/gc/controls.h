@@ -89,6 +89,8 @@ struct GC_controls {
   enum SummaryFormat summaryFormat;
   FILE* summaryFile;
   enum HHCollectionLevel hhCollectionLevel;
+  /* Size of the trace buffer */
+  size_t traceBufferSize;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
