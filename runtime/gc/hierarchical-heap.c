@@ -15,6 +15,14 @@
 
 #include "hierarchical-heap.h"
 
+/********************/
+/* Extern Variables */
+/********************/
+const char* HM_HHStateToString[] = {
+  "LIVE",
+  "DEAD"
+};
+
 /******************************/
 /* Static Function Prototypes */
 /******************************/
@@ -290,7 +298,7 @@ void HM_HH_display (
            "\tlock = %s\n"
            "\tlevel = %u\n"
            "\tstealLevel = %u\n"
-           "\tid = %u\n"
+           "\tid = %"PRIu64"\n"
            "\tlevelList = %p\n"
            "\tparentHH = "FMTOBJPTR"\n"
            "\tnextChildHH = "FMTOBJPTR"\n"

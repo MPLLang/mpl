@@ -171,7 +171,7 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "collecting hh %p (%u/%u):\n"
       "  local scope is %u -> %u\n"
-      "  lchs %llu lcs %llu",
+      "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
       hh->stealLevel,
       hh->level,

@@ -183,7 +183,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
              NULL != levelHead;
              levelHead = getChunkInfo(levelHead)->split.levelHead.nextHead) {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-              "    level %u size %llu",
+              "    level %"PRIu32" size %"PRIu64,
               getChunkInfo(levelHead)->level,
               getChunkInfo(levelHead)->split.levelHead.size);
         }
@@ -194,7 +194,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
              NULL != hhCursor;
              hhCursor = HM_HH_objptrToStruct(s, hhCursor->nextChildHH)) {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-              "    %p state %s level %u stealLevel %u LCS %llu",
+              "    %p state %s level %"PRIu32" stealLevel %"PRIu32" LCS %"PRIu64,
               ((void*)(hhCursor)),
               HM_HHStateToString[hhCursor->state],
               hhCursor->level,
