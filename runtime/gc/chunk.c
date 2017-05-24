@@ -332,7 +332,7 @@ void HM_setChunkListToChunkList(void* chunkList, void* toChunkList) {
       toChunkList);
 }
 
-bool HM_getObjptrInfo(GC_state s,
+void HM_getObjptrInfo(GC_state s,
                       objptr object,
                       struct HM_ObjptrInfo* info) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
@@ -346,20 +346,10 @@ bool HM_getObjptrInfo(GC_state s,
                   (CHUNK_INVALID_LEVEL == getChunkInfo(chunkList)->level);
       chunkList = getChunkInfo(chunkList)->split.normal.levelHead) { }
 
-#pragma message "What am I trying to do here?"
-#if ASSERT
   if (NULL == chunkList) {
     DIE("Couldn't get objptrinfo for %p",
         ((void*)(object)));
   }
-#else
-  if (NULL == chunkList) {
-    LOG(LM_CHUNK, LL_DEBUG,
-        "Couldn't get objptrinfo for %p",
-        ((void*)(object)));
-    return FALSE;
-   }
-#endif
 
   /* now that I have the chunkList, path compress */
   void* parentChunk = NULL;
@@ -374,8 +364,6 @@ bool HM_getObjptrInfo(GC_state s,
   info->hh = getChunkInfo(chunkList)->split.levelHead.containingHH;
   info->chunkList = chunkList;
   info->level = getChunkInfo(chunkList)->level;
-
-  return TRUE;
 }
 
 Word32 HM_getHighestLevel(const void* levelList) {

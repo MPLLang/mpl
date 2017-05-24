@@ -451,32 +451,21 @@ void forwardHHObjptr (GC_state s,
   }
 
   struct HM_ObjptrInfo opInfo;
-  bool gotObjptrInfo = HM_getObjptrInfo(s, op, &opInfo);
+  HM_getObjptrInfo(s, op, &opInfo);
 
   assert((COPY_OBJECT_HH_VALUE != opInfo.hh) && ("op is in the toHeap!"));
 
-  if ((!gotObjptrInfo) || (opInfo.hh != args->hh)) {
+  if (opInfo.hh != args->hh) {
     /*
-     * Either did not successfully get the objptr info (which means I don't own
-     * it) or opp does not point to an HH objptr in my HH, so just return.
+     * opp does not point to an HH objptr in my HH, so just return.
      */
-    if (!gotObjptrInfo) {
-      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
-          "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": could not get objptrInfo.",
-          (uintptr_t)opp,
-          op,
-          (uintptr_t)p);
-    }
-
-    if (opInfo.hh != args->hh) {
-      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
-          "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": opInfo.hh (%p) != args->hh (%p).",
-          (uintptr_t)opp,
-          op,
-          (uintptr_t)p,
-          ((void*)(opInfo.hh)),
-          ((void*)(args->hh)));
-    }
+    LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
+        "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": opInfo.hh (%p) != args->hh (%p).",
+        (uintptr_t)opp,
+        op,
+        (uintptr_t)p,
+        ((void*)(opInfo.hh)),
+        ((void*)(args->hh)));
 
     return;
   }
@@ -631,8 +620,7 @@ void forwardHHObjptr (GC_state s,
 
 #if ASSERT
   /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE */
-  gotObjptrInfo = HM_getObjptrInfo(s, *opp, &opInfo);
-  assert(gotObjptrInfo);
+  HM_getObjptrInfo(s, *opp, &opInfo);
   assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
 #endif
 }

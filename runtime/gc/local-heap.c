@@ -155,11 +155,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   } else if (ensureCurrentLevel) {
     /* check if current allocation chunk at the current level */
     struct HM_ObjptrInfo info;
-    LOCAL_USED_FOR_ASSERT bool retrieved =
-        HM_getObjptrInfo(s,
-                         pointerToObjptr(s->frontier, s->heap->start),
-                         &info);
-    assert(retrieved);
+    HM_getObjptrInfo(s, pointerToObjptr(s->frontier, s->heap->start), &info);
 
     assert(info.level <= hh->level);
     if (info.level < hh->level) {
