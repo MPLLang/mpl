@@ -12,9 +12,9 @@ struct
   datatype 'a result = Finished of 'a ref HH.t
                      | Raised of exn ref HH.t
 
-  val dbgmsg =
+  val dbgmsg: (unit -> string) -> unit =
       if false
-      then fn msg => I.dbgmsg ("forkjoin: " ^ msg)
+      then fn m => I.dbgmsg ("forkjoin: " ^ (m ()))
       else fn _ => ()
 
   val numTasks = Array.array (I.numberOfProcessors, 0)
@@ -55,7 +55,7 @@ struct
           (* make sure a hh is set *)
           val hh = HH.get ()
           val level = HH.getLevel hh
-          val () = dbgmsg ("(" ^ (Int.toString level) ^ "): Called fork")
+          val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): Called fork")
 
           val var = V.empty ()
 
@@ -94,15 +94,15 @@ struct
           val t = B.addRight (rightside, level)(* might suspend *)
 
           (* Run the left side in the hierarchical heap *)
-          val () = dbgmsg ("(" ^ (Int.toString level) ^ "): START left")
+          val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): START left")
           val a = evaluateFunction f (fn () => (ignore (B.remove t)))
-          val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END left")
+          val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): END left")
 
           (*
            * Try to retract our offer -- if successful, run the right side
            * ourselves.
            *)
-          val () = dbgmsg ("(" ^ (Int.toString level) ^ "): START right")
+          val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): START right")
           val b =
               if B.remove t
               then
@@ -110,17 +110,17 @@ struct
                  * no need to yield since we expect this work to be the
                  * next thing in the queue
                  *)
-                (dbgmsg ("(" ^ (Int.toString level) ^ "): right not stolen");
+                (dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): right not stolen");
                  evaluateFunction g (fn () => ()))
               else
                 (* must have been stolen, so I have a heap to merge *)
-                (dbgmsg ("(" ^ (Int.toString level) ^ "): right stolen");
+                (dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): right stolen");
                  case V.read var
                   of (_, Finished (childHH)) =>
                      let
-                       val () = dbgmsg ("(" ^ (Int.toString level) ^ "): merging result")
+                       val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): merging result")
                        val b = HH.mergeIntoParentAndGetReturnValue childHH
-                       val () = dbgmsg ("(" ^ (Int.toString level) ^ "): done merging result")
+                       val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): done merging result")
                      in
                        case b
                         of NONE => raise ShouldNotHappen
@@ -139,7 +139,7 @@ struct
                          | SOME e => raise !e
                      end)
 
-          val () = dbgmsg ("(" ^ (Int.toString level) ^ "): END right")
+          val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): END right")
 
           (*
            * At this point, g is done and merged, as if it was performed

@@ -9,7 +9,10 @@ struct
   type work = W.work
   type unlocker = unit -> unit
 
-  val dbgmsg = fn _ => ()
+  val dbgmsg: (unit -> string) -> unit =
+      if false
+      then fn m => MLtonParallelInternal.dbgmsg ("wsworkqueue: " ^ (m ()))
+      else fn _ => ()
 
   val successfulSteals = ref 0
   val failedSteals = ref 0
@@ -97,7 +100,7 @@ struct
       in
         if i - j < l div 2 then
           let
-            val () = dbgmsg "copying!"
+            val () = dbgmsg (fn () => "copying!")
             fun erase k = if k = i then ()
                           else (A.update (w, k, Empty);
                                 erase (k + 1))
@@ -111,7 +114,7 @@ struct
           end
         else
           let
-            val () = dbgmsg "resizing!"
+            val () = dbgmsg (fn () => "resizing!")
             val w = A.tabulate (l * 2,
                                 fn k => if k < (i - j) then A.sub (w, k + j)
                                         else Empty)
@@ -126,9 +129,7 @@ struct
   fun addWork (p, w) =
     let
       val Lock { thiefLock, ... } = A.sub (locks, p)
-      val () = dbgmsg "tyring lock 1\n"
       val () = takeLock thiefLock; (* XTRA *)
-      val () = dbgmsg "got lock 1\n"
       val q as Queue { top, work, ... } = A.sub (queues, p)
       fun add w =
           let
@@ -151,9 +152,7 @@ struct
   fun getWork p =
     let
       val Lock { thiefLock, ... } = A.sub (locks, p)
-      val () = dbgmsg "tyring lock 2\n"
       val () = takeLock thiefLock (* XTRA *)
-      val () = dbgmsg "got lock 2\n"
 
       fun steal () =
           let
@@ -165,9 +164,7 @@ struct
                   val () = releaseLock thiefLock (* XTRA *)
                   (* Take the victim's lock *)
                   val Lock { thiefLock, ... } = A.sub (locks, p')
-                  val () = dbgmsg "tyring lock 3\n"
                   val () = takeLock thiefLock
-                  val () = dbgmsg "got lock 3\n"
                 in
                   fn () => (releaseLock thiefLock)
                 end
@@ -232,12 +229,10 @@ struct
             if p < numberOfProcessors then
               let
                 val Lock { thiefLock, ... } = A.sub (locks, p)
-                val () = dbgmsg "tyring lock 6\n"
                 val () = if p = p' then
                            takeLock thiefLock (* XTRA *)
                          else
                            takeLock thiefLock
-                val () = dbgmsg "got lock 6\n"
               in
                 fn _ => if p = p' then
                           releaseLock thiefLock (* XTRA *)
