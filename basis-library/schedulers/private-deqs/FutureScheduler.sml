@@ -1,9 +1,10 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-(* Scheduler implements a single structure.
+(* FutureScheduler implements two structures.
  *   ForkJoin : FORK_JOIN
- * It is pulled out of Scheduler at the bottom of this file. *)
-structure Scheduler =
+ *   Future : FUTURE
+ * These are pulled out of FutureScheduler at the bottom of this file. *)
+structure FutureScheduler =
 struct
 
   val P = MLton.Parallel.numberOfProcessors
@@ -30,11 +31,17 @@ struct
   (*structure Queue = SimpleQueue*)
   structure Queue = DoublyLinkedList
 
-  type vertex = int ref * unit Thread.t ref
-  type task = unit -> unit
+  structure Bag = ListBag
 
-  fun dummyTask () = die (fn _ => "Error: dummy task")
-  val dummyThread = Thread.new dummyTask
+  type vertex = int ref * unit Thread.t ref
+
+  datatype task =
+    Thunk of (unit -> unit) * vertex
+    (* Threads keep track locally of how many pushes they've done. *)
+  | Thread of unit Thread.t * int
+
+  fun dummyThunk () = die (fn _ => "Error: dummy thunk")
+  val dummyThread = Thread.new dummyThunk
 
   fun runnable (k : unit Thread.t) = Thread.prepare (k, ())
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
@@ -42,8 +49,8 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     MLton.Parallel.fetchAndAdd (x, ~1) = 1
 
-  (*fun increment (x : int ref) : unit =
-    ignore (MLton.Parallel.fetchAndAdd (x, 1))*)
+  fun increment (x : int ref) : unit =
+    ignore (MLton.Parallel.fetchAndAdd (x, 1))
 
   (*
   fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
@@ -72,9 +79,9 @@ struct
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
 
-  val mailboxes : task option Mailboxes.t = Mailboxes.new NONE
+  val mailboxes : (unit -> unit) option Mailboxes.t = Mailboxes.new NONE
 
-  (* val push : task * vertex -> unit
+  (* val push : (unit -> unit) * vertex -> unit
    * `push (t,v)` registers t as a dependency for v, and pushes t onto the task
    * stack. v should be thought of as a join vertex which has not yet been
    * assigned some computation. *)
@@ -82,8 +89,10 @@ struct
   fun push (t, v) = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) (t, v)
 
   (* val popDiscard : unit -> bool
-   * Attempts to pop a task off the task stack. If it fails (because the stack
-   * is empty) then the desired task must have been served to another worker. *)
+   * Attempts to pop a task off the current worker's task stack. It will fail
+   * if the current task has previously suspended, or if the task stack is
+   * empty. In the latter case, the desired task must have been served to
+   * another worker. *)
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
   fun popDiscard () = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) ()
 
@@ -95,37 +104,50 @@ struct
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return"))
   fun returnToSched v = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) v
 
+  (* val returnFutureToSched : unit Thread.t Bag.t -> unit *)
+  val returnFutureFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy future return"))
+  fun returnFutureToSched b = arraySub "returnFutureFuncs" (returnFutureFuncs, myWorkerId ()) b
+
+  (* val pushThread : unit Thread.t -> unit *)
+  val pushThreadFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push thread"))
+  fun pushThread k = arraySub "pushThreadFuncs" (pushThreadFuncs, myWorkerId ()) k
+
+  (* val suspend : unit -> unit *)
+  val suspendFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy suspend"))
+  fun suspend () = arraySub "suspendFuncs" (suspendFuncs, myWorkerId ()) ()
+
   (* val sync : vertex -> unit
    * `sync v` assigns the current continuation to v, decrements its counter,
    * and executes v if the counter hits zero. *)
-  (* TODO: the Thread.switch bug has been fixed, so it should be possible to
-   * not create a new thread in the case that our decrement hits zero. So, some
-   * of the code from `return` should be blended here. *)
+  (* TODO: Can we prevent making a new thread here? *)
+  (* NOTE: It is crucial that the continuation be assigned before the counter
+   * is decremented; otherwise, this continuation could be switched *to* by
+   * another worker before this switch completes. *)
   fun sync (counter, cont) =
     Thread.switch (fn k =>
       ( cont := k (* this must happen before decrementing the counter! *)
       ; runnable (Thread.new (fn _ => returnToSched (counter, cont)))
       ))
 
-  (* Create a new vertex (for join points) *)
+  (* Create a new join vertex *)
   fun new () = (ref 2, ref dummyThread)
+
+  datatype 'a result =
+    Waiting
+  | Finished of 'a
+  | Raised of exn
+
+  fun writeResult fr f () =
+    fr := (Finished (f ()) handle e => Raised e)
 
   (* ----------------------------------------------------------------------- *
    * ------------------------------ FORK-JOIN ------------------------------ *
-   * ------------------------------------------------------------------------*)
+   * ----------------------------------------------------------------------- *)
 
   structure ForkJoin :> FORK_JOIN =
   struct
 
     exception ForkJoin
-
-    datatype 'a result =
-      Waiting
-    | Finished of 'a
-    | Raised of exn
-
-    fun writeResult fr f () =
-      fr := (Finished (f ()) handle e => Raised e)
 
     fun fork (f : unit -> 'a, g : unit -> 'b) =
       let
@@ -146,6 +168,57 @@ struct
   end
 
   (* ----------------------------------------------------------------------- *
+   * ------------------------------- FUTURES ------------------------------- *
+   * ----------------------------------------------------------------------- *)
+
+  structure Future :> FUTURE =
+  struct
+
+    exception Future
+
+    type 'a t = 'a result ref * unit Thread.t Bag.t
+
+    fun run (fr, bag) f () =
+      ( writeResult fr f ()
+      ; returnFutureToSched bag
+      )
+
+    fun future f =
+      let
+        val fut = (ref Waiting, Bag.new ())
+      in
+        ( Thread.switch (fn k =>
+            ( pushThread k
+            ; runnable (Thread.new (run fut f))
+            ))
+        ; fut
+        )
+      end
+
+    fun poll (result, bag) =
+      if not (Bag.isDumped bag) then NONE
+      else case !result of
+             Finished x => SOME x
+           | Raised e => raise e
+           | Waiting => raise Future
+
+    fun suspend' (bag, k) () =
+      if Bag.insert (bag, k)
+      then suspend ()
+      else Thread.switch (fn _ => runnable k)
+
+    fun force (fut as (result, bag)) =
+      ( if Bag.isDumped bag then ()
+        else Thread.switch (fn k => runnable (Thread.new (suspend' (bag, k))))
+      ; case !result of
+          Finished x => x
+        | Raised e => raise e
+        | Waiting => raise Future
+      )
+
+  end
+
+  (* ----------------------------------------------------------------------- *
    * ------------------------- WORKER-LOCAL SETUP -------------------------- *
    * ----------------------------------------------------------------------- *)
 
@@ -154,6 +227,7 @@ struct
       val myQueue = Queue.new ()
       val myRand = SimpleRandom.rand myId
       val myRequestCell = requestCell myId
+      val pushCounter = ref 0
 
       fun communicate () =
         ( let
@@ -162,14 +236,17 @@ struct
             if friend = NO_REQUEST then ()
             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
             else ( myRequestCell := NO_REQUEST
-                 ; let val mail =
-                         case Queue.popTop myQueue of
-                           NONE => NONE
-                         | SOME (task, v) =>
-                             (* New counters start at 2 now, so we don't need to
-                              * increment the counter at a steal. *)
-                             SOME (fn () => (task (); returnToSched v))
-                   in Mailboxes.sendMail mailboxes (friend, mail)
+                 ; let
+                     val mail =
+                       case Queue.popTop myQueue of
+                         NONE => NONE
+                       | SOME (Thread (k, _)) => SOME (fn () => jumpTo k)
+                       | SOME (Thunk (work, v)) =>
+                           (* New counters start at 2 now, so we don't need to
+                            * increment the counter at a steal. *)
+                           SOME (fn () => (work (); returnToSched v))
+                   in
+                     Mailboxes.sendMail mailboxes (friend, mail)
                    end
                  )
           end
@@ -177,12 +254,22 @@ struct
         )
 
       fun push (t, v) =
-        Queue.pushBot ((t, v), myQueue)
+        ( Queue.pushBot (Thunk (t, v), myQueue)
+        ; pushCounter := !pushCounter + 1
+        ; communicate ()
+        )
+
+      fun pushThread k =
+        Queue.pushBot (Thread (k, !pushCounter), myQueue)
         before communicate ()
 
       fun popDiscard () =
-        Queue.popBotDiscard myQueue
-        before communicate ()
+        let val c = !pushCounter
+        in if c = 0 then (communicate (); false)
+           else (Queue.popBotDiscard myQueue before ( pushCounter := c - 1
+                                                    ; communicate ()
+                                                    ))
+        end
 
       (* ------------------------------------------------------------------- *)
 
@@ -220,7 +307,7 @@ struct
           then (verifyStatus (); request ())
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
-               | SOME task => task
+               | SOME work => work
         end
 
       (* ------------------------------------------------------------------- *)
@@ -228,22 +315,55 @@ struct
       fun acquireWork () =
         ( setStatus (myId, false)
         ; blockRequests ()
-        ; let val task = request ()
+        ; let val work = request ()
           in ( unblockRequests ()
-             ; task ()
+             ; pushCounter := 0
+             ; work ()
              )
           end
         )
 
+      fun suspend () =
+        case Queue.popBot myQueue of
+          NONE => acquireWork ()
+        | SOME (Thread (k, c)) => (communicate (); pushCounter := c; jumpTo k)
+        | SOME (Thunk (t, v)) =>
+            (* Execute it as though it were parallel. This is fine because the
+             * incounter at v was initialized to account for this thunk. Note
+             * that this will probably no longer be correct if we incorporate
+             * async/finish. *)
+            (communicate (); pushCounter := 0; t (); returnToSched v)
+
       fun return (counter, cont) =
         if decrementHitsZero counter
         then (communicate (); jumpTo (!cont))
-        else acquireWork ()
+        else suspend () (* seems like it's possible to reuse this *)
+
+
+      fun returnFuture bag =
+        case Bag.dump bag of
+          NONE => die (fn _ => "Error: returned from future but someone else dumped the bag.")
+
+        | SOME (k :: ks) =>
+            ( List.app (fn k' => Queue.pushBot (Thread (k', 0), myQueue)) ks
+            ; communicate ()
+            ; pushCounter := 0
+            ; jumpTo k
+            )
+
+        | SOME [] =>
+            case Queue.popBot myQueue of
+              NONE => acquireWork ()
+            | SOME (Thread (k, c)) => (communicate (); pushCounter := c; jumpTo k)
+            | SOME (Thunk _) => die (fn _ => "Error: thunk on stack after return from future")
 
     in
       ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
+      ; arrayUpdate "pushThreadFuncs" (pushThreadFuncs, myId, pushThread)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
+      ; arrayUpdate "suspendFuncs" (suspendFuncs, myId, suspend)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
+      ; arrayUpdate "returnFutureFuncs" (returnFutureFuncs, myId, returnFuture)
       ; acquireWork
       )
     end (* init *)
@@ -265,4 +385,5 @@ struct
 
 end
 
-structure ForkJoin :> FORK_JOIN = Scheduler.ForkJoin
+structure ForkJoin :> FORK_JOIN = FutureScheduler.ForkJoin
+structure Future :> FUTURE = FutureScheduler.Future

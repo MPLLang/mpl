@@ -14,9 +14,13 @@ struct
   fun empty (ref Leaf, _) = true
     | empty _ = false
 
+  (* prev : 'a t * 'a node -> 'a node ref
+   * prev (dll, n) is the pointer to n, from the left *)
   fun prev (_, Node (l, _, _)) = l
     | prev ((_, top), Leaf) = top
 
+  (* next : 'a t * 'a node -> 'a node ref
+   * next (dll, n) is the pointer to n, from the right *)
   fun next (_, Node (_, _, r)) = r
     | next ((bot, _), Leaf) = bot
 

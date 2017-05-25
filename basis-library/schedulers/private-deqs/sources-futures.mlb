@@ -4,13 +4,17 @@ local
   $(SML_LIB)/basis/unsafe.mlb
 
   FORK_JOIN.sig
+  FUTURE.sig
   queue/QUEUE.sig
+  bag/BAG.sig
   mailboxes/MAILBOXES.sig
 
   SimpleRandom.sml
   queue/DoublyLinkedList.sml
+  bag/ListBag.sml
   mailboxes/Mailboxes.sml
-  Scheduler.sml
+  FutureScheduler.sml
 in
   structure ForkJoin
+  structure Future
 end
