@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -61,30 +62,21 @@ pointer GC_arrayAllocate (GC_state s,
          (EventInt)header);
 
   /* Check for overflow when computing arraySize.
-   * Note: bytesPerElement > 0
    */
   bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-  if (numElements > (SIZE_MAX / bytesPerElement)) {
+  if (bytesPerElement > 0 and numElements > (SIZE_MAX / bytesPerElement)) {
     goto doOverflow;
   }
 
   arraySize = bytesPerElement * numElements;
-  if (arraySize > SIZE_MAX - GC_ARRAY_HEADER_SIZE) {
+  if (arraySize > SIZE_MAX - GC_ARRAY_METADATA_SIZE) {
     goto doOverflow;
   }
 
-  arraySize += GC_ARRAY_HEADER_SIZE;
+  arraySize += GC_ARRAY_METADATA_SIZE;
   arraySizeAligned = align (arraySize, s->alignment);
   if (arraySizeAligned < arraySize) {
     goto doOverflow;
-  }
-
-  if (arraySizeAligned < GC_ARRAY_HEADER_SIZE + OBJPTR_SIZE) {
-    /* Very small (including empty) arrays have OBJPTR_SIZE bytes
-     * space for the forwarding pointer.
-     */
-    arraySize = GC_ARRAY_HEADER_SIZE;
-    arraySizeAligned = align(GC_ARRAY_HEADER_SIZE + OBJPTR_SIZE, s->alignment);
   }
 
   LOG(LM_ALLOCATION, LL_DEBUG,
@@ -238,6 +230,9 @@ static pointer arrayInitialize(ARG_USED_FOR_ASSERT GC_state s,
 
   *((GC_header*)(frontier)) = header;
   frontier = frontier + GC_HEADER_SIZE;
+
+  *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  frontier = frontier + OBJPTR_SIZE;
 
   pointer result = frontier;
   assert (isAligned ((size_t)result, s->alignment));

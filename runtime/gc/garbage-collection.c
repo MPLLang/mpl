@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2010,2012 Matthew Fluet.
+/* Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -64,8 +64,8 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
   assert (allocInOldGen ?
-          hasHeapBytesFree (s, sizeofStackWithHeader (s, reserved), 0) :
-          hasHeapBytesFree (s, 0, sizeofStackWithHeader (s, reserved)));
+          hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
+          hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
@@ -147,7 +147,7 @@ void performGC (GC_state s,
   stackBytesRequested =
     stackTopOk
     ? 0
-    : sizeofStackWithHeader (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
+    : sizeofStackWithMetaData (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
   totalBytesRequested =
       oldGenBytesRequested
       + stackBytesRequested;
@@ -236,14 +236,12 @@ size_t fillGap (pointer start, pointer end) {
              (uintptr_t)start, (uintptr_t)end, diff);
 
   if (start) {
-    /* See note in the array case of foreach.c (line 103) */
-    if (diff >= GC_ARRAY_HEADER_SIZE + OBJPTR_SIZE) {
-      assert (diff >= GC_ARRAY_HEADER_SIZE);
+    if (diff >= GC_ARRAY_METADATA_SIZE) {
       /* Counter */
       *((GC_arrayCounter *)start) = 0;
       start = start + GC_ARRAY_COUNTER_SIZE;
       /* Length */
-      *((GC_arrayLength *)start) = diff - GC_ARRAY_HEADER_SIZE;
+      *((GC_arrayLength *)start) = diff - GC_ARRAY_METADATA_SIZE;
       start = start + GC_ARRAY_LENGTH_SIZE;
       /* Header */
       *((GC_header *)start) = GC_WORD8_VECTOR_HEADER;
@@ -387,7 +385,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
   stackBytesRequested =
     stackTopOk
     ? 0
-    : sizeofStackWithHeader (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
+    : sizeofStackWithMetaData (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
 
   /* try to satisfy (at least part of the) request locally */
   maybeSatisfyAllocationRequestLocally (s, nurseryBytesRequested + stackBytesRequested);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -23,6 +23,31 @@ bool isObjptrInToSpace (GC_state s, objptr op) {
 }
 #endif
 
+/* getFwdPtrp (p)
+ *
+ * Returns a pointer to the forwarding pointer for the object pointed to by p.
+ */
+objptr* getFwdPtrp (pointer p) {
+  return (objptr*)(p
+                   - OBJPTR_SIZE);
+}
+
+/* getFwdPtr (p)
+ *
+ * Returns the forwarding pointer for the object pointed to by p.
+ */
+objptr getFwdPtr (pointer p) {
+  return *(getFwdPtrp(p));
+}
+
+/* hasFwdPtr (p)
+ *
+ * Returns true if the object pointed to by p has a valid forwarding pointer.
+ */
+bool hasFwdPtr (pointer p) {
+  return (getFwdPtr (p) != BOGUS_OBJPTR);
+}
+
 /* forward (s, opp)
  * Forwards the object pointed to by *opp and updates *opp to point to
  * the new object.
@@ -30,7 +55,6 @@ bool isObjptrInToSpace (GC_state s, objptr op) {
 void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
   objptr op;
   pointer p;
-  GC_header header;
 
   /* silence compiler warning */
   ((void)(ignored));
@@ -53,27 +77,28 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
   }
 
   assert (isObjptrInFromSpace (s, *opp));
-  header = getHeader (p);
-  if (DEBUG_DETAILED and header == GC_FORWARDED)
+  if (DEBUG_DETAILED and hasFwdPtr(p))
     fprintf (stderr, "  already FORWARDED\n");
-  if (header != GC_FORWARDED) { /* forward the object */
+  if (not (hasFwdPtr(p))) { /* forward the object */
     size_t size, skip;
 
-    size_t headerBytes, objectBytes;
+    GC_header header;
+    size_t metaDataBytes, objectBytes;
     GC_objectTypeTag tag;
     uint16_t bytesNonObjptrs, numObjptrs;
 
+    header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    /* Compute the space taken by the header and object body. */
+    /* Compute the space taken by the metadata and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
-      headerBytes = GC_NORMAL_HEADER_SIZE;
+      metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       skip = 0;
     } else if (ARRAY_TAG == tag) {
-      headerBytes = GC_ARRAY_HEADER_SIZE;
-      objectBytes = sizeofArrayNoHeader (s, getArrayLength (p),
-                                         bytesNonObjptrs, numObjptrs);
+      metaDataBytes = GC_ARRAY_METADATA_SIZE;
+      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
+                                           bytesNonObjptrs, numObjptrs);
       skip = 0;
     } else { /* Stack. */
       bool current;
@@ -81,7 +106,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       GC_stack stack;
 
       assert (STACK_TAG == tag);
-      headerBytes = GC_STACK_HEADER_SIZE;
+      metaDataBytes = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
       /* Check if the pointer is the current stack of any processor. */
@@ -109,17 +134,17 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       objectBytes = sizeof (struct GC_stack) + stack->used;
       skip = stack->reserved - stack->used;
     }
-    size = headerBytes + objectBytes;
+    size = metaDataBytes + objectBytes;
     assert (s->forwardState.back + size + skip <= s->forwardState.toLimit);
     /* Copy the object. */
-    GC_memcpy (p - headerBytes, s->forwardState.back, size);
+    GC_memcpy (p - metaDataBytes, s->forwardState.back, size);
     /* If the object has a valid weak pointer, link it into the weaks
      * for update after the copying GC is done.
      */
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
       GC_weak w;
 
-      w = (GC_weak)(s->forwardState.back + GC_NORMAL_HEADER_SIZE + offsetofWeak (s));
+      w = (GC_weak)(s->forwardState.back + GC_NORMAL_METADATA_SIZE + offsetofWeak (s));
       if (DEBUG_WEAK)
         fprintf (stderr, "forwarding weak "FMTPTR" ",
                  (uintptr_t)w);
@@ -136,21 +161,21 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
       }
     }
 
-    /* Store the forwarding pointer in the old object. */
-    *((GC_header*)(p - GC_HEADER_SIZE)) = GC_FORWARDED;
-    *((objptr*)p) = pointerToObjptr (s->forwardState.back + headerBytes,
-                                     s->forwardState.toStart);
+    /* Store the forwarding pointer in the old object metadata. */
+    *(getFwdPtrp(p)) = pointerToObjptr (s->forwardState.back + metaDataBytes,
+                                        s->forwardState.toStart);
+    assert (hasFwdPtr(p));
     /* Update the back of the queue. */
     s->forwardState.back += size + skip;
-    assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_HEADER_SIZE,
+    assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_METADATA_SIZE,
                        s->alignment));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
       /* update level chunk head containingHH pointers */
-      HM_HH_updateLevelListPointers(*((objptr*)(p)));
+      HM_HH_updateLevelListPointers(getFwdPtr(p));
     }
   }
-  *opp = *((objptr*)p);
+  *opp = getFwdPtr(p);
   if (DEBUG_DETAILED)
     fprintf (stderr,
              "forwardObjptr --> *opp = "FMTPTR"\n",

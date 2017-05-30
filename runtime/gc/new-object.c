@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -41,8 +41,11 @@ pointer newObject (GC_state s,
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
-  *((GC_header*)frontier) = header;
-  result = frontier + GC_NORMAL_HEADER_SIZE;
+  *((GC_header*)(frontier)) = header;
+  frontier = frontier + GC_HEADER_SIZE;
+  *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  frontier = frontier + OBJPTR_SIZE;
+  result = frontier;
   assert (isAligned ((size_t)result, s->alignment));
   if (DEBUG)
     fprintf (stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX", %s)\n",
@@ -62,7 +65,7 @@ GC_stack newStack (GC_state s,
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
-                                sizeofStackWithHeader (s, reserved),
+                                sizeofStackWithMetaData (s, reserved),
                                 allocInOldGen));
   stack->reserved = reserved;
   stack->used = 0;
@@ -83,11 +86,11 @@ GC_thread newThread (GC_state s, size_t reserved) {
   if (HM_inGlobalHeap(s)) {
     ensureHasHeapBytesFreeAndOrInvariantForMutator (
         s, FALSE, FALSE, FALSE,
-        0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+        0, sizeofStackWithMetaData (s, reserved) + sizeofThread (s));
   } else {
     HM_ensureHierarchicalHeapAssurances(s,
                                         FALSE,
-                                        sizeofStackWithHeader (s, reserved) +
+                                        sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
   }

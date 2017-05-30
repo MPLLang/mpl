@@ -66,8 +66,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (!invariantForMutatorStack(s)) {
     /* need to grow stack */
     bytesRequested +=
-        sizeofStackWithHeader(s,
-                              sizeofStackGrowReserved (s, getStackCurrent (s)));
+        sizeofStackWithMetaData(s,
+                                sizeofStackGrowReserved (s, getStackCurrent (s)));
     growStack = TRUE;
   }
 

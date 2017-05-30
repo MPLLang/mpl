@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -12,6 +13,7 @@
  * Weak objects have the following layout:
  *
  * header ::
+ * fwdptr (object-pointer) ::
  * padding ::
  * link (native-pointer) ::
  * objptr (object-pointer)

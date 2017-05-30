@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -13,6 +13,7 @@
  * Stack objects have the following layout:
  *
  * header ::
+ * fwdptr (object-pointer) ::
  * markTop (native-pointer) ::
  * markIndex (word32) ::
  * reserved ::
@@ -49,7 +50,7 @@ typedef struct GC_stack {
    */
 } *GC_stack;
 
-#define GC_STACK_HEADER_SIZE GC_HEADER_SIZE
+#define GC_STACK_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
@@ -74,7 +75,7 @@ static inline GC_frameLayout getStackTopFrameLayout (GC_state s, GC_stack stack)
 static inline uint16_t getStackTopFrameSize (GC_state s, GC_stack stack);
 
 static inline size_t alignStackReserved (GC_state s, size_t reserved);
-static inline size_t sizeofStackWithHeader (GC_state s, size_t reserved);
+static inline size_t sizeofStackWithMetaData (GC_state s, size_t reserved);
 static inline size_t sizeofStackInitialReserved (GC_state s);
 static inline size_t sizeofStackMinimumReserved (GC_state s, GC_stack stack);
 static inline size_t sizeofStackGrowReserved (GC_state s, GC_stack stack);
