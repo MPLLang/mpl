@@ -47,7 +47,7 @@ void Parallel_lockTake (Pointer arg) {
   Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
 
   do {
-    if (GC_MightCheckForTerminationRequest(s, &cpoll)) {
+    if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
       GC_TerminateThread(s);
     }
@@ -106,8 +106,7 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
     fprintf (stderr, "failed lock!\n");
   }
   while (*other) {
-    if (GC_MightCheckForTerminationRequest(s, &cpoll))
-      GC_TerminateThread(s);
+    GC_MayTerminateThreadRarely(s, &cpoll);
 
     //__sync_synchronize ();
     if (amLeft != *leftsTurn) {

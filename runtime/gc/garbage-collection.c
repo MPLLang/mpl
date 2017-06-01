@@ -484,9 +484,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   Trace0(EVENT_RUNTIME_ENTER);
 
   /* Exit as soon as termination is requested. */
-  if (GC_CheckForTerminationRequest(s)) {
-    GC_TerminateThread(s);
-  }
+  GC_MayTerminateThread(s);
 
   /* SPOONHOWER_NOTE: Used to be enter() here */
   /* XXX copied from enter() */
