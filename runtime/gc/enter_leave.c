@@ -12,10 +12,8 @@
  * invariant.
  */
 void enter (GC_state s) {
-#pragma message "This should be more nuanced with HH collection"
-#if 1
+  /* RAM_NOTE: Is this necessary? */
   HM_enterGlobalHeap ();
-#endif
 
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -70,8 +68,7 @@ void leave (GC_state s) {
   endAtomic (s);
   s->syncReason = SYNC_NONE;
   Proc_endCriticalSection(s);
-#pragma message "This should be more nuanced with HH collection"
-#if 1
+
+  /* RAM_NOTE: Is this necessary? */
   HM_exitGlobalHeap();
-#endif
 }

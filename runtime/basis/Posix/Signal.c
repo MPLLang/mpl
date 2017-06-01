@@ -1,9 +1,5 @@
 #include "platform.h"
 
-static void handler (int signum) {
-  GC_handler (signum);
-}
-
 C_Errno_t(C_Int_t) Posix_Signal_default (C_Signal_t signum) {
   struct sigaction sa;
 

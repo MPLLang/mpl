@@ -439,7 +439,6 @@ size_t ChunkPool_allocated(void) {
 }
 
 size_t ChunkPool_size(void) {
-  #pragma message "Make correct when done"
   return ChunkPool_config.maxSize;
 }
 
@@ -514,7 +513,10 @@ bool ChunkPool_performFree(void* chunk) {
   assert(ChunkPool_bytesAllocated <= ChunkPool_config.maxSize);
   assert((ChunkPool_bytesAllocated % ChunkPool_MINIMUMCHUNKSIZE) == 0);
 
-#pragma message "Resolve"
+  /*
+   * RAM_NOTE: Implement coalescing here! Can be done by initializing first and
+   * last metadatas for every chunk
+   */
 #if 0
   /* Get the previous and next spans for coalescing */
   bool coalesced = FALSE;

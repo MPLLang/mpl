@@ -18,7 +18,7 @@
 
 #include <stdint.h>
 
-#pragma message "These atomics are only for x86/x86_64, and possibly overkill!"
+/* RAM_NOTE: These atomics are only for x86/x86_64, and possibly overkill! */
 
 #define ATOMIC_STORE(suffix, type)                                      \
   static inline void atomicStore##suffix(volatile type* destination, type value) { \
