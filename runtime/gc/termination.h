@@ -19,7 +19,7 @@ PRIVATE bool GC_CheckForTerminationRequest(GC_state s);
  * time, when its second reaches some treshold. It should be called in busy
  * waiting loops in order to prevent deadlocks. You do not need to increment the
  * counter yourself. */
-PRIVATE bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter);
+PRIVATE bool GC_CheckForTerminationRequestRarely(GC_state s, size_t *pcounter);
 
 /* This function tries to terminate the whole program by signaling other
  * threads. Fails if another processor beat us to it. Only returns true after

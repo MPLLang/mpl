@@ -29,7 +29,7 @@ bool GC_CheckForTerminationRequest(GC_state s) {
   return in_progress;
 }
 
-bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter) {
+bool GC_CheckForTerminationRequestRarely(GC_state s, size_t *pcounter) {
   (*pcounter)++;
   if (*pcounter < 10000)
     return false;
