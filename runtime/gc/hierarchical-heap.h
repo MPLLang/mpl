@@ -23,10 +23,7 @@ enum HM_HHState {
   DEAD = 1
 };
 
-static const char* HM_HHStateToString[] = {
-  "LIVE",
-  "DEAD"
-};
+extern const char* HM_HHStateToString[];
 
 /* RAM_NOTE: May need to be rearranged for cache efficiency */
 /* RAM_NOTE: Needs to be renamed to HM_HH_HierarchicalHeap */

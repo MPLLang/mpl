@@ -245,15 +245,13 @@ void HM_setChunkListToChunkList(void* chunkList, void* toChunkList);
  * Gets the info for the given objptr
  *
  * @attention
- * object <em>must</em> be within the hierarchical heap!
+ * object <em>must</em> be within the allocated hierarchical heap!
  *
  * @param s The GC_state to use
  * @param object The objptr to get the Hierarchical Heap for
  * @param retVal Pointer to the struct to populate with 'object''s info.
- *
- * @return TRUE if info was successfully retrieved, FALSE otherwise.
  */
-bool HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
+void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
 /**
  * This functions returns the highest level in a level list

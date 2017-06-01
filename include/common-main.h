@@ -31,7 +31,7 @@
 
 PRIVATE Pointer gcStateAddress;
 
-#pragma message "RAM_NOTE: figure out if globalObjptrNonRoot is required"
+/* RAM_NOTE: What is globalObjptrNonRoot? Is it required? */
 #define Initialize(s, al, mg, mfs, mmc, pk, ps, gnr)              \
         gcStateAddress = &s;                                      \
         s.alignment = al;                                         \

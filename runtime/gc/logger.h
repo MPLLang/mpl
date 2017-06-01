@@ -55,10 +55,10 @@ extern bool L_flushLog[NUM_LOG_MODULES];
 #define LOG(module, level, ...)                                         \
   do {                                                                  \
     if (L_levelEnabled(level, L_logLevels[module])) {                   \
-      GC_state s = pthread_getspecific(gcstate_key);                    \
+      GC_state loggerS = pthread_getspecific(gcstate_key);              \
       L_log(L_flushLog[module],                                         \
             level,                                                      \
-            (NULL == s) ? (-1) : (Proc_processorNumber(s)),             \
+            (NULL == loggerS) ? (-1) : (Proc_processorNumber(loggerS)), \
             __func__,                                                   \
             __VA_ARGS__);                                               \
     }                                                                   \
@@ -83,10 +83,10 @@ extern bool L_flushLog[NUM_LOG_MODULES];
 #define DIE(...)                                                        \
   do {                                                                  \
       fflush(NULL);                                                     \
-      GC_state s = pthread_getspecific(gcstate_key);                    \
+      GC_state loggerS = pthread_getspecific(gcstate_key);              \
       L_log(TRUE,                                                       \
             LL_ERROR,                                                   \
-            (NULL == s) ? (-1) : (Proc_processorNumber(s)),             \
+            (NULL == loggerS) ? (-1) : (Proc_processorNumber(loggerS)), \
             __FILE__ ":" STRFY(__LINE__),                               \
             __VA_ARGS__);                                               \
       abort();                                                          \
@@ -105,10 +105,10 @@ extern bool L_flushLog[NUM_LOG_MODULES];
     const bool result = (test);                                         \
     if (!result) {                                                      \
       fflush(NULL);                                                     \
-      GC_state s = pthread_getspecific(gcstate_key);                    \
+      GC_state loggerS = pthread_getspecific(gcstate_key);              \
       L_log(TRUE,                                                       \
             LL_ASSERT,                                                  \
-            (NULL == s) ? (-1) : (Proc_processorNumber(s)),             \
+            (NULL == loggerS) ? (-1) : (Proc_processorNumber(loggerS)), \
             __FILE__ ":" STRFY(__LINE__) " (" #test ")",                \
             __VA_ARGS__);                                               \
       abort();                                                          \
