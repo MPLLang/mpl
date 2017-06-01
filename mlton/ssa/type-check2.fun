@@ -506,8 +506,9 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
                            let
                               open Layout
                            in
-                              seq [Prim.layout prim, str " ",
-                                   tuple (Vector.toListMap (args, Type.layout))]
+                              seq [Prim.layout prim, str " @ ",
+                                   tuple (Vector.toListMap (args, Type.layout)),
+                                   str " : ", Type.layout resultType]
                            end)
          in
             resultType
