@@ -74,7 +74,8 @@ bool GC_TryToTerminate(GC_state s) {
 
   /* Force all processors to acknowledge termination. */
   for (uint32_t p = 0; p < s->numberOfProcs; p++)
-    s->procStates[p].limit = 0;
+    if (p != myself)
+      s->procStates[p].limit = 0;
 
   Trace0(EVENT_HALT_WAIT);
 
