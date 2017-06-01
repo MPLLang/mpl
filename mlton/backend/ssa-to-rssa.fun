@@ -160,6 +160,95 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "HM_newHierarchicalHeap"}
 
+      fun refDeref {arg, return} =
+        let
+           val cty = Type.toCType return
+           val target = concat ["Ref_deref_", CType.name cty]
+        in
+           T {args = Vector.new1 arg,
+              convention = Cdecl,
+              kind = Kind.Runtime {bytesNeeded = NONE,
+                                   ensuresBytesFree = false,
+                                   mayGC = false, (* unsure *)
+                                   maySwitchThreads = false,
+                                   modifiesFrontier = false,
+                                   readsStackTop = false,
+                                   writesStackTop = false},
+              prototype = (Vector.new1 CType.objptr,
+                           SOME cty),
+              return = return,
+              symbolScope = Private,
+              target = Direct target}
+        end
+
+      fun refAssign {dst, src} =
+        let
+           val cty = Type.toCType src
+           val target = concat ["Ref_assign_", CType.name cty]
+        in
+           T {args = Vector.new2 (dst, src),
+              convention = Cdecl,
+              kind = Kind.Runtime {bytesNeeded = NONE,
+                                   ensuresBytesFree = false,
+                                   mayGC = false, (* unsure *)
+                                   maySwitchThreads = false,
+                                   modifiesFrontier = false,
+                                   readsStackTop = false,
+                                   writesStackTop = false},
+              prototype = (Vector.new2 (CType.objptr, cty),
+                           NONE),
+              return = Type.unit,
+              symbolScope = Private,
+              target = Direct target}
+        end
+
+      fun arraySub {arg, offset, return} =
+        let
+           val cty = Type.toCType return
+           val target = concat ["Array_sub_", CType.name cty]
+        in
+           T {args = Vector.new3 (Type.gcState(), arg, offset),
+              convention = Cdecl,
+              kind = Kind.Runtime {bytesNeeded = NONE,
+                                   ensuresBytesFree = false,
+                                   mayGC = false,
+                                   maySwitchThreads = false,
+                                   modifiesFrontier = false,
+                                   readsStackTop = false,
+                                   writesStackTop = false},
+              prototype = (Vector.new3 (CType.gcState,
+                                        CType.objptr,
+                                        CType.seqIndex ()),
+                           SOME cty),
+              return = return,
+              symbolScope = Private,
+              target = Direct target}
+        end
+
+      fun arrayUpdate {dst, offset, src} =
+        let
+           val cty = Type.toCType src
+           val target = concat ["Array_update_", CType.name cty]
+        in
+           T {args = Vector.new4 (Type.gcState(), dst, offset, src),
+              convention = Cdecl,
+              kind = Kind.Runtime {bytesNeeded = NONE,
+                                   ensuresBytesFree = false,
+                                   mayGC = false,
+                                   maySwitchThreads = false,
+                                   modifiesFrontier = false,
+                                   readsStackTop = false,
+                                   writesStackTop = false},
+              prototype = (Vector.new4 (CType.gcState,
+                                        CType.objptr,
+                                        CType.seqIndex (),
+                                        cty),
+                           NONE),
+              return = Type.unit,
+              symbolScope = Private,
+              target = Direct target}
+        end
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1211,6 +1300,41 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                               case Prim.name prim of
                                  Array_array => array (a 0)
                                | Array_length => arrayOrVectorLength ()
+                               | Array_sub =>
+                                 (case toRtype ty of
+                                      NONE => none ()
+                                    | SOME t =>
+                                      let val arg = Operand.ty (a 0)
+                                          val offset = Operand.ty (a 1)
+                                          val func =
+                                              CFunction.arraySub
+                                                 { arg = arg,
+                                                   offset = offset,
+                                                   return = t }
+                                      in
+                                         ccall { args = Vector.new3 (GCState,
+                                                                     a 0,
+                                                                     a 1),
+                                                 func = func }
+                                      end)
+                               | Array_update =>
+                                 (case toRtype (varType (arg 2)) of
+                                     NONE => none ()
+                                   | SOME t =>
+                                     let val dst = Operand.ty (a 0)
+                                         val offset = Operand.ty (a 1)
+                                         val src = Operand.ty (a 2)
+                                         val func =
+                                             CFunction.arrayUpdate
+                                                { dst = dst,
+                                                  offset = offset,
+                                                  src = src }
+                                     in
+                                        ccall
+                                           { args = Vector.new4 (GCState,
+                                                                 a 0, a 1, a 2),
+                                             func = func }
+                                     end)
                                | Array_toVector =>
                                     let
                                        val array = a 0
@@ -1470,6 +1594,31 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                      (CFunction.weakCanGet
                                       {arg = Operand.ty (a 0)}),
                                      fn () => move (Operand.bool false))
+                               | Ref_deref =>
+                                 (case toRtype ty of
+                                      NONE => none ()
+                                    | SOME t =>
+                                      let val arg = Operand.ty (a 0)
+                                          val func =
+                                              CFunction.refDeref { arg = arg,
+                                                                   return = t }
+                                      in
+                                         ccall { args = Vector.new1 (a 0),
+                                                 func = func }
+                                      end)
+                               | Ref_assign =>
+                                 (case toRtype (varType (arg 1)) of
+                                     NONE => none ()
+                                   | SOME t =>
+                                     let val dst = Operand.ty (a 0)
+                                         val src = Operand.ty (a 1)
+                                         val func =
+                                             CFunction.refAssign { dst = dst,
+                                                                   src = src }
+                                     in
+                                        ccall { args = Vector.new2 (a 0, a 1),
+                                                func = func }
+                                     end)
                                | Weak_get =>
                                     ifIsWeakPointer
                                     (varType (arg 0),

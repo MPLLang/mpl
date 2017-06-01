@@ -140,6 +140,15 @@ structure Type =
 
       fun equals (t, t') = PropertyList.equals (plist t, plist t')
 
+      val deArrayOpt: t -> t Prod.t option =
+       fn t =>
+          case dest t of
+              Object {args, con = Array} => SOME args
+            | _ => NONE
+
+      val deArray: t -> t =
+       fn t => Prod.elt (valOf (deArrayOpt t), 0)
+
       val deVectorOpt: t -> t Prod.t option =
          fn t =>
          case dest t of
@@ -147,6 +156,14 @@ structure Type =
           | _ => NONE
 
       val isVector: t -> bool = isSome o deVectorOpt
+
+      val deRefOpt: t -> t option =
+         fn t =>
+         case dest t of
+             Object { args, ... } => SOME (Prod.elt (args, 0))
+           | _ => NONE
+
+      val deRef: t -> t = valOf o deRefOpt
 
       val deWeakOpt: t -> t option =
          fn t =>
@@ -323,10 +340,10 @@ structure Type =
                      (prim,
                       {args = args,
                        result = result,
-                       typeOps = {deArray = fn _ => raise BadPrimApp,
+                       typeOps = {deArray = deArray,
                                   deArrow = fn _ => raise BadPrimApp,
                                   deHierarchicalHeap = fn _ => raise BadPrimApp,
-                                  deRef = fn _ => raise BadPrimApp,
+                                  deRef = deRef,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
                in
@@ -344,7 +361,7 @@ structure Type =
                                hierarchicalHeap = hierarchicalHeap,
                                intInf = intInf,
                                real = real,
-                               reff = fn _ => raise BadPrimApp,
+                               reff = reff1,
                                thread = thread,
                                unit = unit,
                                vector = vector1,

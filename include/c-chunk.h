@@ -344,4 +344,73 @@ static inline Int32 Proc_threadInSection (void) {
   return Proc_syncCount > 0;
 }
 
+/* ------------------------------------------------- */
+/*                 References                        */
+/* ------------------------------------------------- */
+
+#define RefAccessFunctionsForOpaqueData(suffix,type) \
+    static inline type Ref_deref_##suffix (Objptr r) {                  \
+        return *(type *)r;                                              \
+    }                                                                   \
+                                                                        \
+    static inline void Ref_assign_##suffix (Objptr dst, type src) {     \
+        *(type *)dst = src;                                             \
+    }
+
+RefAccessFunctionsForOpaqueData(P,   Objptr)
+RefAccessFunctionsForOpaqueData(Q,   Pointer)
+RefAccessFunctionsForOpaqueData(I8,  Int8_t)
+RefAccessFunctionsForOpaqueData(I16, Int16_t)
+RefAccessFunctionsForOpaqueData(I32, Int32_t)
+RefAccessFunctionsForOpaqueData(I64, Int64_t)
+RefAccessFunctionsForOpaqueData(W8,  Word8_t)
+RefAccessFunctionsForOpaqueData(W16, Word16_t)
+RefAccessFunctionsForOpaqueData(W32, Word32_t)
+RefAccessFunctionsForOpaqueData(W64, Word64_t)
+RefAccessFunctionsForOpaqueData(R32, Real32_t)
+RefAccessFunctionsForOpaqueData(R64, Real64_t)
+
+/* ------------------------------------------------- */
+/*                 Arrays                            */
+/* ------------------------------------------------- */
+
+#define ArrayAccessFunctionsForOpaqueData(suffix, type)                 \
+  static inline type Array_sub_##suffix (                               \
+    CPointer s, Objptr src, Int64 index) {                              \
+        CPointer hh;                                                    \
+        CPointer src_repl;                                              \
+        type res;                                                       \
+                                                                        \
+        src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh); \
+        res = *((type *)src_repl + index);                              \
+        Assignable_unlockReplicaReader(s, hh);                          \
+                                                                        \
+        return res;                                                     \
+    }                                                                   \
+                                                                        \
+  static inline void Array_update_##suffix (CPointer s,                 \
+                                            Objptr dst,                 \
+                                            Int64 index,                \
+                                            type src) {                 \
+        CPointer hh;                                                    \
+        CPointer dst_repl;                                              \
+                                                                        \
+        dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
+        *((type *)dst_repl + index) = src;                              \
+        Assignable_unlockReplicaWriter(s, hh);                          \
+    }
+
+ArrayAccessFunctionsForOpaqueData(P,   Objptr)
+ArrayAccessFunctionsForOpaqueData(Q,   Pointer)
+ArrayAccessFunctionsForOpaqueData(I8,  Int8_t)
+ArrayAccessFunctionsForOpaqueData(I16, Int16_t)
+ArrayAccessFunctionsForOpaqueData(I32, Int32_t)
+ArrayAccessFunctionsForOpaqueData(I64, Int64_t)
+ArrayAccessFunctionsForOpaqueData(W8,  Word8_t)
+ArrayAccessFunctionsForOpaqueData(W16, Word16_t)
+ArrayAccessFunctionsForOpaqueData(W32, Word32_t)
+ArrayAccessFunctionsForOpaqueData(W64, Word64_t)
+ArrayAccessFunctionsForOpaqueData(R32, Real32_t)
+ArrayAccessFunctionsForOpaqueData(R64, Real64_t)
+
 #endif /* #ifndef _C_CHUNK_H_ */
