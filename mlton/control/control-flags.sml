@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -1044,17 +1044,19 @@ structure Target =
             val (cptrdiff: unit -> Bits.t, set_cptrdiff) = make "Size.cptrdiff"
             val (csize: unit -> Bits.t, set_csize) = make "Size.csize"
             val (header: unit -> Bits.t, set_header) = make "Size.header"
+            val (metaData: unit -> Bits.t, set_metaData) = make "Size.metaData"
             val (mplimb: unit -> Bits.t, set_mplimb) = make "Size.mplimb"
             val (objptr: unit -> Bits.t, set_objptr) = make "Size.objptr"
             val (seqIndex: unit -> Bits.t, set_seqIndex) = make "Size.seqIndex"
          end
       fun setSizes {cint, cpointer, cptrdiff, csize, 
-                    header, mplimb, objptr, seqIndex} =
+                    header, metaData, mplimb, objptr, seqIndex} =
          (Size.set_cint cint
           ; Size.set_cpointer cpointer
           ; Size.set_cptrdiff cptrdiff
           ; Size.set_csize csize
           ; Size.set_header header
+          ; Size.set_metaData metaData
           ; Size.set_mplimb mplimb
           ; Size.set_objptr objptr
           ; Size.set_seqIndex seqIndex)
@@ -1077,17 +1079,21 @@ fun mlbPathMap () =
              path = (case Bits.toInt (Target.Size.objptr ()) of
                         32 => "rep32"
                       | 64 => "rep64"
-                      | _ => Error.bug "Control.mlbPathMap")},
-            {var = "HEADER_WORD",
-             path = (case Bits.toInt (Target.Size.header ()) of
-                        32 => "word32"
-                      | 64 => "word64"
-                      | _ => Error.bug "Control.mlbPathMap")},
+                      | b => Error.bug (concat ["Control.mlbPathMap: OBJPTR_REP (",
+                                                Int.toString b, ")"]))},
+            {var = "METADATA_SIZE",
+             path = (case Bits.toInt (Target.Size.metaData ()) of
+                        32 => "size32"
+                      | 64 => "size64"
+                      | 128 => "size128"
+                      | b => Error.bug (concat ["Control.mlbPathMap: METADATA_SIZE (",
+                                                Int.toString b, ")"]))},
             {var = "SEQINDEX_INT",
              path = (case Bits.toInt (Target.Size.seqIndex ()) of
                         32 => "int32"
                       | 64 => "int64"
-                      | _ => Error.bug "Control.mlbPathMap")},
+                      | b => Error.bug (concat ["Control.mlbPathMap: SEQINDEX_INT (",
+                                                Int.toString b, ")"]))},
             {var = "DEFAULT_CHAR",
              path = !defaultChar},
             {var = "DEFAULT_WIDECHAR",

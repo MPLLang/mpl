@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -138,12 +139,7 @@ pointer foreachObjptrInObject (GC_state s,
     numElements = getArrayLength (p);
     bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
     dataBytes = numElements * bytesPerElement;
-    if (dataBytes < OBJPTR_SIZE) {
-      /* Very small (including empty) arrays have OBJPTR_SIZE bytes
-       * space for the forwarding pointer.
-       */
-      dataBytes = OBJPTR_SIZE;
-    } else if (0 == numObjptrs) {
+    if (0 == numObjptrs) {
       /* No objptrs to process. */
       ;
     } else {
@@ -182,7 +178,7 @@ pointer foreachObjptrInObject (GC_state s,
     }
 
  ARRAY_DOME:
-    p += alignWithExtra (s, dataBytes, GC_ARRAY_HEADER_SIZE);
+    p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
   } else if (STACK_TAG == tag) {
     GC_stack stack;
     pointer top, bottom;

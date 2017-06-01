@@ -1,4 +1,5 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -341,15 +342,14 @@ structure WordRep =
                 in
                    (SOME acc, Bits.+ (shift, Rep.width rep), ss :: statements)
                 end)
-            val (src, statements) =
-               case accOpt of
-                  NONE => (Operand.word (WordX.zero (WordSize.fromBits bits)), [])
-                | SOME acc => (acc, statements)
             val statements =
-               [Bind {dst = (dstVar, dstTy),
-                      isMutable = false,
-                      src = src}]
-               :: statements
+               case accOpt of
+                  NONE => []
+                | SOME src =>
+                     [Bind {dst = (dstVar, dstTy),
+                            isMutable = false,
+                            src = src}]
+                     :: statements
          in
             List.fold (statements, [], fn (ss, ac) => List.fold (ss, ac, op ::))
          end
@@ -834,20 +834,18 @@ structure ObjptrRep =
                           Bytes.- (alignWidth, width)
                        end
                else let
-                       (* An object needs space for a forwarding objptr. *)
-                       val width' = Bytes.max (width, Runtime.objptrSize ())
                        (* Note that with Align8 and objptrSize == 64bits,
                         * the following ensures that objptrs will be
                         * mod 8 aligned.
                         *)
-                       val width'' = Bytes.+ (width', Runtime.headerSize ())
-                       val alignWidth'' =
+                       val width' = Bytes.+ (width, Runtime.metaDataSize ())
+                       val alignWidth' =
                           case !Control.align of
-                             Control.Align4 => Bytes.alignWord32 width''
-                           | Control.Align8 => Bytes.alignWord64 width''
-                       val alignWidth' = Bytes.- (alignWidth'', Runtime.headerSize ())
+                             Control.Align4 => Bytes.alignWord32 width'
+                           | Control.Align8 => Bytes.alignWord64 width'
+                       val alignWidth = Bytes.- (alignWidth', Runtime.metaDataSize ())
                     in
-                       Bytes.- (alignWidth', width)
+                       Bytes.- (alignWidth, width)
                     end
             val (components, selects) =
                if Bytes.isZero padBytes
@@ -895,13 +893,6 @@ structure ObjptrRep =
                   end
             val componentsTy =
                Type.seq (Vector.map (components, Component.ty o #component))
-            (* If there are no components, then add a pad. *)
-            val componentsTy =
-               if Bits.isZero (Type.width componentsTy)
-                  then Type.zero (case !Control.align of
-                                     Control.Align4 => Bits.inWord32
-                                   | Control.Align8 => Bits.inWord64)
-               else componentsTy
          in
             T {components = components,
                componentsTy = componentsTy,
@@ -965,19 +956,23 @@ structure ObjptrRep =
                 let
                    val tmpVar = Var.newNoname ()
                    val tmpTy = Component.ty component
+                   val statements =
+                      Component.tuple (component,
+                                       {dst = (tmpVar, tmpTy), src = src})
                 in
-                   Component.tuple (component,
-                                    {dst = (tmpVar, tmpTy), src = src})
-                   @ (Move {dst = Offset {base = object,
-                                          offset = offset,
-                                          ty = tmpTy},
-                            src = Var {ty = tmpTy, var = tmpVar}}
-                      :: ac)
+                   if List.isEmpty statements
+                      then ac
+                      else statements
+                           @ (Move {dst = Offset {base = object,
+                                                  offset = offset,
+                                                  ty = tmpTy},
+                                    src = Var {ty = tmpTy, var = tmpVar}}
+                              :: ac)
                 end)
          in
             Object {dst = (dst, ty),
                     header = Runtime.typeIndexToHeader (ObjptrTycon.index tycon),
-                    size = Bytes.+ (Type.bytes componentsTy, Runtime.headerSize ())}
+                    size = Bytes.+ (Type.bytes componentsTy, Runtime.metaDataSize ())}
             :: stores
          end
 
@@ -2623,14 +2618,10 @@ fun compute (program as Ssa.Program.T {datatypes, ...}) =
                                                     TupleRep.ty tr
                                                | TupleRep.Indirect opr =>
                                                     ObjptrRep.componentsTy opr
-                                           val elt =
-                                              if Type.isUnit ty
-                                                 then Type.zero Bits.inByte
-                                              else ty
                                         in
                                            SOME (opt,
                                                  ObjectType.Array
-                                                 {elt = elt,
+                                                 {elt = ty,
                                                   hasIdentity = hasIdentity})
                                         end)
                                  in

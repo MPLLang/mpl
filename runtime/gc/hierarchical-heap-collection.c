@@ -386,7 +386,6 @@ void forwardHHObjptr (GC_state s,
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, s->heap->start);
-  GC_header header;
 
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -433,8 +432,7 @@ void forwardHHObjptr (GC_state s,
     return;
   }
 
-  header = getHeader (p);
-  if (GC_FORWARDED == header) {
+  if (hasFwdPtr(p)) {
     if (DEBUG_DETAILED) {
       fprintf (stderr, "  already FORWARDED\n");
     }
@@ -446,7 +444,7 @@ void forwardHHObjptr (GC_state s,
     assert(opInfo.level >= args->minLevel);
   }
 
-  if (GC_FORWARDED != header) {
+  if (not (hasFwdPtr(p))) {
     /* RAM_NOTE: This is more nuanced with non-local collection */
     if ((opInfo.hh != args->hh) ||
         /* cannot forward any object below 'args->minLevel' */
@@ -461,13 +459,15 @@ void forwardHHObjptr (GC_state s,
       return;
     }
     /* maybe forward the object */
+    GC_header header;
     GC_objectTypeTag tag;
     uint16_t bytesNonObjptrs;
     uint16_t numObjptrs;
+    header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    /* Compute the space taken by the header and object body. */
-    size_t headerBytes;
+    /* Compute the space taken by the metadata and object body. */
+    size_t metaDataBytes;
     size_t objectBytes;
     size_t copyBytes;
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
@@ -476,15 +476,13 @@ void forwardHHObjptr (GC_state s,
             "forwardHHObjptr() #define oes not support WEAK_TAG objects!",
             __LINE__);
       }
-      headerBytes = GC_NORMAL_HEADER_SIZE;
+      metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       copyBytes = objectBytes;
     } else if (ARRAY_TAG == tag) {
-      headerBytes = GC_ARRAY_HEADER_SIZE;
-      objectBytes = sizeofArrayNoHeader(s,
-                                        getArrayLength (p),
-                                        bytesNonObjptrs,
-                                        numObjptrs);
+      metaDataBytes = GC_ARRAY_METADATA_SIZE;
+      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
+                                           bytesNonObjptrs, numObjptrs);
       copyBytes = objectBytes;
     } else {
       /* Stack. */
@@ -493,7 +491,7 @@ void forwardHHObjptr (GC_state s,
       GC_stack stack;
 
       assert (STACK_TAG == tag);
-      headerBytes = GC_STACK_HEADER_SIZE;
+      metaDataBytes = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
       /* RAM_NOTE: This changes with non-local collection */
@@ -514,8 +512,8 @@ void forwardHHObjptr (GC_state s,
       args->stacksCopied++;
     }
 
-    objectBytes += headerBytes;
-    copyBytes += headerBytes;
+    objectBytes += metaDataBytes;
+    copyBytes += metaDataBytes;
     /* Copy the object. */
     if (opInfo.level > args->maxLevel) {
       assert(FALSE && "Entanglement Detected!");
@@ -523,7 +521,7 @@ void forwardHHObjptr (GC_state s,
     }
 
     pointer copyPointer = copyObject(args->hh,
-                                     p - headerBytes,
+                                     p - metaDataBytes,
                                      objectBytes,
                                      copyBytes,
                                      opInfo.level,
@@ -532,7 +530,7 @@ void forwardHHObjptr (GC_state s,
     args->bytesCopied += copyBytes;
     args->objectsCopied++;
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
-        "%p --> %p", ((void*)(p - headerBytes)), ((void*)(copyPointer)));
+        "%p --> %p", ((void*)(p - metaDataBytes)), ((void*)(copyPointer)));
 
     if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
 #if 0
@@ -561,10 +559,10 @@ void forwardHHObjptr (GC_state s,
 #endif
     }
 
-    /* Store the forwarding pointer in the old object. */
-    *((GC_header*)(p - GC_HEADER_SIZE)) = GC_FORWARDED;
-    *((objptr*)(p)) = pointerToObjptr(copyPointer + headerBytes,
-                                      s->heap->start);
+    /* Store the forwarding pointer in the old object metadata. */
+    *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
+                                        s->heap->start);
+    assert (hasFwdPtr(p));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
       die(__FILE__ ":%d: "
@@ -575,7 +573,7 @@ void forwardHHObjptr (GC_state s,
   }
 
 
-  *opp = *((objptr*)(p));
+  *opp = getFwdPtr(p);
   LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "opp "FMTPTR" set to "FMTOBJPTR,
       ((uintptr_t)(opp)),

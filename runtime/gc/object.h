@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -89,6 +90,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Normal objects have the following layout:
  *
  * header ::
+ * fwdptr (object-pointer) ::
  * (non heap-pointers)* ::
  * (heap pointers)*
  *
@@ -99,7 +101,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Likewise, a primitive value may span multiple native words (e.g.,
  * Word64.word on an x86).
 */
-#define GC_NORMAL_HEADER_SIZE GC_HEADER_SIZE
+#define GC_NORMAL_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
 /* RAM_NOTE: Should be defined in model.h */
 typedef uint64_t GC_smallGapSize;
 #define GC_SMALL_GAP_SIZE_SIZE sizeof (GC_smallGapSize)

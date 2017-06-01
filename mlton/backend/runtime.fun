@@ -1,4 +1,4 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2016 Matthew Fluet.
  * Copyright (C) 2002-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -224,14 +224,20 @@ val objptrSize : unit -> Bytes.t =
 val headerSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.header)
 val headerOffset : unit -> Bytes.t =
-   Promise.lazy (Bytes.~ o headerSize)
+   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
+                                            headerSize ())))
 
 (* see gc/array.h *)
 val arrayLengthSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.seqIndex)
 val arrayLengthOffset : unit -> Bytes.t =
-   Promise.lazy (fn () => Bytes.~ (Bytes.+ (headerSize (),
-                                            arrayLengthSize ())))
+   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
+                                   Bytes.+ (headerSize (),
+                                            arrayLengthSize ()))))
+
+(* see gc/object.h *)
+val metaDataSize : unit -> Bytes.t =
+   Promise.lazy (Bits.toBytes o Control.Target.Size.metaData)
 
 val cpointerSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.cpointer)

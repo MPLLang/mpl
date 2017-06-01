@@ -1,4 +1,5 @@
-/* Copyright (C) 2014-2015 Ram Raghunathan
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 2014-2015 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -44,14 +45,14 @@ void displayThread (GC_state s,
 size_t sizeofThread (GC_state s) {
   size_t res;
 
-  res = GC_NORMAL_HEADER_SIZE + sizeof (struct GC_thread);
+  res = GC_NORMAL_METADATA_SIZE + sizeof (struct GC_thread);
   res = align (res, s->alignment);
   if (DEBUG) {
     size_t check;
     uint16_t bytesNonObjptrs, numObjptrs;
 
     splitHeader (s, GC_THREAD_HEADER, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
-    check = GC_NORMAL_HEADER_SIZE + (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+    check = GC_NORMAL_METADATA_SIZE + (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
     if (DEBUG_DETAILED)
       fprintf (stderr,
                "sizeofThread: res = %"PRIuMAX"  check = %"PRIuMAX"\n",
@@ -63,7 +64,7 @@ size_t sizeofThread (GC_state s) {
 }
 
 size_t offsetofThread (GC_state s) {
-  return (sizeofThread (s)) - (GC_NORMAL_HEADER_SIZE + sizeof (struct GC_thread));
+  return (sizeofThread (s)) - (GC_NORMAL_METADATA_SIZE + sizeof (struct GC_thread));
 }
 
 static inline GC_thread threadObjptrToStruct(GC_state s, objptr threadObjptr) {
