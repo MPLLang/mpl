@@ -143,23 +143,6 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                  ty = ty,
                                  var = var})
                             end
-                       | Array_sub => sub ()
-                       | Array_update =>
-                            maybeBindUnit
-                            (S2.Statement.Update
-                             {base = Base.VectorSub {index = arg 1,
-                                                     vector = arg 0},
-                              offset = 0,
-                              value = arg 2})
-                       | Ref_assign =>
-                            maybeBindUnit
-                            (S2.Statement.Update
-                             {base = Base.Object (arg 0),
-                              offset = 0,
-                              value = arg 1})
-                       | Ref_deref =>
-                            simple (S2.Exp.Select {base = Base.Object (arg 0),
-                                                   offset = 0})
                        | Ref_ref =>
                             simple (S2.Exp.Object {args = Vector.new1 (arg 0),
                                                    con = NONE})
