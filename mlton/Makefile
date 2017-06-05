@@ -20,7 +20,7 @@ TARGET := self
 AOUT := mlton-compile
 PATH := $(BIN):$(shell echo $$PATH)
 
-FLAGS := @MLton ram-slop 0.7 gc-summary $(RUNTIME_ARGS) --
+FLAGS := @MLton ram-slop 0.7 gc-summary $(RUNTIME_ARGS) -- -drop-pass deepFlatten -drop-pass refFlatten
 
 ifeq (self, $(shell if [ -x "$(BIN)/mlton" ]; then echo self; fi))
   # We're compiling MLton with itself, so don't use any stubs.
