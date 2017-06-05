@@ -31,7 +31,7 @@ void MLton_halt (GC_state s, C_Int_t status) {
 
   GC_done (s);
 
-  /* Since we are going to call finish, pthread destructors will not run and we
+  /* Since we are going to call exit(), pthread destructors will not run and we
    * need to flush our trace buffer manually. */
   GC_traceFinish(s);
 
