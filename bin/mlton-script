@@ -30,6 +30,7 @@ else
 fi
 
 mlton_polyml="$lib/mlton-polyml$exe"
+action=""
 
 declare -a rargs
 case "$1" in
@@ -46,10 +47,18 @@ case "$1" in
                 exit 1
         fi
         ;;
+@gdb)
+        shift
+        action="gdb --args"
+        ;;
+@trace)
+        shift
+        action="mltrace record"
+        ;;
 esac
 
 doitMLton () {
-    exec "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
+    exec $action "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
 }
 doitSMLNJ () {
     exec "$smlnj" @SMLload="$mlton_smlnj_heap" "$@"
