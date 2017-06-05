@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/mlton-parmem
+export MLTON := $(BIN)/mlton-parmem
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
