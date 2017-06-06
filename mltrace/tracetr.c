@@ -39,6 +39,11 @@ static const char *EventKindStrings[] = {
   [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
   [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
 
+  [EVENT_RWLOCK_R_TAKE]         = "RWLOCK_R_TAKE",
+  [EVENT_RWLOCK_R_RELEASE]      = "RWLOCK_R_RELEASE",
+  [EVENT_RWLOCK_W_TAKE]         = "RWLOCK_W_TAKE",
+  [EVENT_RWLOCK_W_RELEASE]      = "RWLOCK_W_RELEASE",
+
   [EVENT_GSECTION_BEGIN_ENTER]  = "GSECTION_BEGIN_ENTER",
   [EVENT_GSECTION_BEGIN_LEAVE]  = "GSECTION_BEGIN_LEAVE",
   [EVENT_GSECTION_END_ENTER]    = "GSECTION_END_ENTER",
@@ -224,6 +229,16 @@ void printEventText(struct Event *event) {
 
   case EVENT_LOCK_TAKE_ENTER:
   case EVENT_LOCK_TAKE_LEAVE:
+    printf("lock = %llx", event->arg1);
+    break;
+
+  case EVENT_RWLOCK_R_TAKE:
+  case EVENT_RWLOCK_R_RELEASE:
+    printf("lock = %llx, readers = %llu", event->arg1, event->arg2);
+    break;
+
+  case EVENT_RWLOCK_W_TAKE:
+  case EVENT_RWLOCK_W_RELEASE:
     printf("lock = %llx", event->arg1);
     break;
 
