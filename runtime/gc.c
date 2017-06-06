@@ -74,6 +74,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/pointer.c"
 #include "gc/profiling.c"
 #include "gc/rusage.c"
+#include "gc/rwlock.c"
 #include "gc/share.c"
 #include "gc/signals.c"
 #include "gc/size.c"
