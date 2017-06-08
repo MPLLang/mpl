@@ -44,24 +44,27 @@ void Parallel_lockTake (Pointer arg) {
       "trying to lock %p to %u",
       ((volatile void*)(lock)),
       lockValue);
-  Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
 
-  do {
-    if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
+  if (!spinlock_trylock(lock, lockValue)) {
+      Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
+
+      do {
+          if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
+              Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
+              GC_TerminateThread(s);
+          }
+
+          if (Proc_threadInSection ()) {
+              ENTER1(s, arg);
+              LEAVE1(s, arg);
+              lock = ((spinlock_t*)(arg));
+          }
+      } while (!spinlock_trylock(lock, lockValue));
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
-      GC_TerminateThread(s);
-    }
-
-    if (Proc_threadInSection ()) {
-      ENTER1(s, arg);
-      LEAVE1(s, arg);
-      lock = ((spinlock_t*)(arg));
-    }
-  } while (!spinlock_trylock(lock, lockValue));
+  }
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "locked");
-  Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
 }
 
 void Parallel_lockRelease (Pointer arg) {
@@ -70,7 +73,6 @@ void Parallel_lockRelease (Pointer arg) {
   LOG(LM_PARALLEL, LL_DEBUG,
       "releasing %p",
       ((volatile void*)(lock)));
-  WITH_GCSTATE(Trace1(EVENT_LOCK_RELEASE, (EventInt)lock));
 
   spinlock_unlock(lock);
 }
