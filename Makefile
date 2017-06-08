@@ -41,9 +41,9 @@ RANLIB := ranlib
 # another round of compilation so that we get a MLton built without
 # stubs.
 ifeq (other, $(shell if [ ! -x "$(MLTON)" ]; then echo other; fi))
-	BOOTSTRAP_OTHER:=true
+	BOOTSTRAP_OTHER?=true
 else
-	BOOTSTRAP_OTHER:=false
+	BOOTSTRAP_OTHER?=false
 endif
 
 ifeq ($(origin VERSION), undefined)
@@ -67,8 +67,9 @@ all-no-docs:
 ifeq (true, $(BOOTSTRAP_OTHER))
 	rm -f "$(COMP)/$(AOUT)$(EXE)"
 	$(MAKE) -C "$(COMP)/front-end" clean
+	$(MAKE) compiler
 endif
-	$(MAKE) compiler basis
+	$(MAKE) basis
 	@echo 'Build of MLton succeeded.'
 
 .PHONY: basis-no-check
