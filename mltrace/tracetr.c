@@ -38,7 +38,6 @@ static const char *EventKindStrings[] = {
 
   [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
   [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
-  [EVENT_LOCK_RELEASE]          = "LOCK_RELEASE",
 
   [EVENT_GSECTION_BEGIN_ENTER]  = "GSECTION_BEGIN_ENTER",
   [EVENT_GSECTION_BEGIN_LEAVE]  = "GSECTION_BEGIN_LEAVE",
@@ -225,7 +224,6 @@ void printEventText(struct Event *event) {
 
   case EVENT_LOCK_TAKE_ENTER:
   case EVENT_LOCK_TAKE_LEAVE:
-  case EVENT_LOCK_RELEASE:
     printf("lock = %llx", event->arg1);
     break;
 
