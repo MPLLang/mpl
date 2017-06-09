@@ -186,6 +186,7 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
 void GC_done (GC_state s) {
   GC_PthreadAtExit(s);
+  HM_enterGlobalHeap();
   minorGC (s);
 
   if (s->controls->summary) {
