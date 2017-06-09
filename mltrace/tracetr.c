@@ -181,7 +181,7 @@ void printEventCSV(struct Event *event) {
 void printEventText(struct Event *event) {
   printEventTime(event);
   printf(" ");
-  printf("%" PRIxPTR, event->argptr);
+  printf("%" PRIuPTR, event->argptr);
   printf(" ");
   printEventKind(event->kind);
   printf("(");
