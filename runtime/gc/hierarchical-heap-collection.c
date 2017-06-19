@@ -28,6 +28,23 @@
 /* Static Function Prototypes */
 /******************************/
 /**
+ * Compute the size of the object, how much of it has to be copied, as well as
+ * how much metadata it has.
+ *
+ * @param s GC state
+ * @param p The pointer to copy
+ * @param objectSize Where to store the size of the object (in bytes)
+ * @param copySize Where to store the number of bytes to copy
+ * @param metaDataSize Where to store the metadata size (in bytes)
+ *
+ * @return the tag of the object
+ */
+GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
+                                             size_t *objectSize,
+                                             size_t *copySize,
+                                             size_t *metaDataSize);
+
+/**
  * Copies the object into the new level list of the hierarchical heap provided.
  *
  * @param hh The hierarchical heap to operate on.
@@ -515,65 +532,20 @@ void forwardHHObjptr (GC_state s,
       return;
     }
     /* maybe forward the object */
-    GC_header header;
     GC_objectTypeTag tag;
-    uint16_t bytesNonObjptrs;
-    uint16_t numObjptrs;
-    header = getHeader(p);
-    splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
-
-    /* Compute the space taken by the metadata and object body. */
     size_t metaDataBytes;
     size_t objectBytes;
     size_t copyBytes;
-    if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
-      if (WEAK_TAG == tag) {
-        die(__FILE__ ":%d: "
-            "forwardHHObjptr() #define oes not support WEAK_TAG objects!",
-            __LINE__);
-      }
-      metaDataBytes = GC_NORMAL_METADATA_SIZE;
-      objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-      copyBytes = objectBytes;
-    } else if (ARRAY_TAG == tag) {
-      metaDataBytes = GC_ARRAY_METADATA_SIZE;
-      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
-                                           bytesNonObjptrs, numObjptrs);
-      copyBytes = objectBytes;
-    } else {
-      /* Stack. */
-      bool current;
-      size_t reservedNew;
-      GC_stack stack;
 
-      assert (STACK_TAG == tag);
-      metaDataBytes = GC_STACK_METADATA_SIZE;
-      stack = (GC_stack)p;
+    /* compute object size and bytes to be copied */
+    tag = computeObjectCopyParameters(s,
+                                      p,
+                                      &objectBytes,
+                                      &copyBytes,
+                                      &metaDataBytes);
 
-      /* RAM_NOTE: This changes with non-local collection */
-      /* Check if the pointer is the current stack of my processor. */
-      current = getStackCurrent(s) == stack;
-
-      reservedNew = sizeofStackShrinkReserved (s, stack, current);
-      if (reservedNew < stack->reserved) {
-        LOG(LM_HH_COLLECTION, LL_DEBUG,
-            "Shrinking stack of size %s bytes to size %s bytes, using %s bytes.",
-            uintmaxToCommaString(stack->reserved),
-            uintmaxToCommaString(reservedNew),
-            uintmaxToCommaString(stack->used));
-        stack->reserved = reservedNew;
-      }
-      objectBytes = sizeof (struct GC_stack) + stack->reserved;
-      copyBytes = sizeof (struct GC_stack) + stack->used;
-      args->stacksCopied++;
-    }
-
-    objectBytes += metaDataBytes;
-    copyBytes += metaDataBytes;
-    /* Copy the object. */
-    if (opInfo.level > args->maxLevel) {
-      assert(FALSE && "Entanglement Detected!");
-      DIE("Pointer Invariant violated!");
+    if (STACK_TAG == tag) {
+        args->stacksCopied++;
     }
 
     pointer copyPointer = copyObject(args->hh,
@@ -588,7 +560,8 @@ void forwardHHObjptr (GC_state s,
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "%p --> %p", ((void*)(p - metaDataBytes)), ((void*)(copyPointer)));
 
-    if ((WEAK_TAG == tag) and (numObjptrs == 1)) {
+    /* if ((WEAK_TAG == tag) and (numObjptrs == 1)) { */
+    if (WEAK_TAG == tag) {
 #if 0
       /* RAM_NOTE: This is the saved code from forward...() */
       GC_weak w;
@@ -619,15 +592,7 @@ void forwardHHObjptr (GC_state s,
     *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
                                         s->heap->start);
     assert (hasFwdPtr(p));
-
-    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-      die(__FILE__ ":%d: "
-          "forwardHHObjptr() does not support GC_HIERARCHICAL_HEAP_HEADER "
-          "objects!",
-          __LINE__);
-    }
   }
-
 
   *opp = getFwdPtr(p);
   LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
@@ -642,6 +607,74 @@ void forwardHHObjptr (GC_state s,
 #endif
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
+
+GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
+                                             size_t *objectSize,
+                                             size_t *copySize,
+                                             size_t *metaDataSize) {
+    GC_header header;
+    GC_objectTypeTag tag;
+    uint16_t bytesNonObjptrs;
+    uint16_t numObjptrs;
+    header = getHeader(p);
+    splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+
+    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
+        die(__FILE__ ":%d: "
+            "computeObjectCopyParameters() does not support"
+            " GC_HIERARCHICAL_HEAP_HEADER objects!",
+            __LINE__);
+    }
+
+    /* Compute the space taken by the metadata and object body. */
+    if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
+      if (WEAK_TAG == tag) {
+        die(__FILE__ ":%d: "
+            "computeObjectSizeAndCopySize() #define does not support"
+            " WEAK_TAG objects!",
+            __LINE__);
+      }
+      *metaDataSize = GC_NORMAL_METADATA_SIZE;
+      *objectSize = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+      *copySize = *objectSize;
+    } else if (ARRAY_TAG == tag) {
+      *metaDataSize = GC_ARRAY_METADATA_SIZE;
+      *objectSize = sizeofArrayNoMetaData (s, getArrayLength (p),
+                                           bytesNonObjptrs, numObjptrs);
+      *copySize = *objectSize;
+    } else {
+      /* Stack. */
+      bool current;
+      size_t reservedNew;
+      GC_stack stack;
+
+      assert (STACK_TAG == tag);
+      *metaDataSize = GC_STACK_METADATA_SIZE;
+      stack = (GC_stack)p;
+
+      /* RAM_NOTE: This changes with non-local collection */
+      /* Check if the pointer is the current stack of my processor. */
+      current = getStackCurrent(s) == stack;
+
+      reservedNew = sizeofStackShrinkReserved (s, stack, current);
+      if (reservedNew < stack->reserved) {
+        LOG(LM_HH_COLLECTION, LL_DEBUG,
+            "Shrinking stack of size %s bytes to size %s bytes"
+            ", using %s bytes.",
+            uintmaxToCommaString(stack->reserved),
+            uintmaxToCommaString(reservedNew),
+            uintmaxToCommaString(stack->used));
+        stack->reserved = reservedNew;
+      }
+      *objectSize = sizeof (struct GC_stack) + stack->reserved;
+      *copySize = sizeof (struct GC_stack) + stack->used;
+    }
+
+    *objectSize += *metaDataSize;
+    *copySize += *metaDataSize;
+
+    return header;
+}
 
 pointer copyObject(struct HM_HierarchicalHeap* hh,
                    pointer p,
