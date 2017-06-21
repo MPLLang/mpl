@@ -193,3 +193,7 @@ Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
 bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
   return __sync_bool_compare_and_swap ((Int32 *)p, old, new);
 }
+
+bool Parallel_arrayCompareAndSwap (Pointer p, Int32 i, Int32 old, Int32 new) {
+  return __sync_bool_compare_and_swap (((Int32*)p)+i, old, new);
+}
