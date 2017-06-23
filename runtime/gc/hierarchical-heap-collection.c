@@ -245,6 +245,19 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied);
 
+  /* forward retVal pointer if necessary */
+  if (NULL != hh->retVal) {
+    objptr root = pointerToObjptr(hh->retVal, s->heap->start);
+
+    forwardHHObjptrArgs.objectsCopied = 0;
+    forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from hh->retVal",
+      forwardHHObjptrArgs.objectsCopied);
+
+    hh->retVal = objptrToPointer(root, s->heap->start);
+  }
+
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
   /* do copy-collection */
