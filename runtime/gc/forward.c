@@ -71,9 +71,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
      * We do not support collecting the global heap while the hierarchical
      * heaps are in play
      */
-    die(__FILE__ ":%d: forwardObjptr(): Tried to collect global heap while "
-        "hierarchical heaps are used!",
-        __LINE__);
+    DIE("Found HH object while collecting global heap");
   }
 
   assert (isObjptrInFromSpace (s, *opp));
