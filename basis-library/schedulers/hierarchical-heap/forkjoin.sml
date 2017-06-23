@@ -112,7 +112,7 @@ struct
                        val result = HH.mergeIntoParentAndGetReturnValue childHH
                        val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): done merging result")
                      in
-                         case !(valOf result)
+                         case !result
                           of Finished b => b
                            | Raised e => raise e
                      end)

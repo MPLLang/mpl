@@ -33,9 +33,8 @@ structure MLtonHM:> MLTON_HM =
 
                 val setReturnValue: 'a t * 'b -> 'b t = PrimHH.setReturnValue
 
-                val mergeIntoParentAndGetReturnValue: 'a t -> 'a option =
-                    fn hh =>
-                    SOME (PrimHH.mergeIntoParentHeapAndGetReturnValue hh)
+                val mergeIntoParentAndGetReturnValue: 'a t -> 'a =
+                    PrimHH.mergeIntoParentHeapAndGetReturnValue
 
                 val promoteChunks : 'a t -> unit = PrimHH.promoteChunks
 
