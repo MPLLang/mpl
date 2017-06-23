@@ -8,11 +8,11 @@ struct
       then fn m => MLtonParallelInternal.dbgmsg ("syncvar: " ^ (m ()))
       else fn _ => ()
 
-  datatype 'a state =
-      Waiting of B.t list
-    | Done of 'a
+  datatype state =
+           Waiting of B.t list
+         | Done
 
-  type 'a t = Word32.word ref * 'a state ref
+  type 'a t = Word32.word ref * state ref * 'a option ref
 
   val lockInit = MLton.Parallel.Deprecated.lockInit
   val lock = MLton.Parallel.Deprecated.takeLock
@@ -23,7 +23,7 @@ struct
         val r = ref (Word32.fromInt 0)
         val () = lockInit r
       in
-        (r, ref (Waiting nil))
+        (r, ref (Waiting nil), ref NONE)
       end
 
   fun die message =
@@ -42,13 +42,14 @@ struct
         | [_] => ()
         | _ => die "syncvar.sml: more than one reader waiting?!\n"
 
-  fun write ((r, v), a) =
+  fun write ((r, s, v), a) =
       (lock r;
-       (case !v of
-            Done _ => (unlock r; raise B.Parallel "two writes to sync var!")
+       (case !s of
+            Done => (unlock r; raise B.Parallel "two writes to sync var!")
           | Waiting readers =>
             let
-              val () = v := Done a
+              val () = v := SOME a
+              val () = s := Done
               val () = dbgmsg (fn () => "Wrote to syncvar")
               val () = unlock r
               val () = checkMaxOneReader readers
@@ -56,18 +57,21 @@ struct
               app (fn k => B.resume k) readers
             end))
 
-  fun read (r, v) =
+  fun read (r, s, v) =
       (lock r;
-       (case !v of
-            Done a => (unlock r; (false, a)) (* Do the easy case first *)
+       (case !s of
+            Done => (unlock r; (false, valOf (!v))) (* Do the easy case first *)
           | Waiting readers =>
             (checkZeroReader readers;
              dbgmsg (fn () => "suspending waiting for syncvar");
-             B.capture (fn k => (v := Waiting (k::readers);
+             B.capture (fn k => (s := Waiting (k::readers);
                                  unlock r));
              dbgmsg (fn () => "resuming before reading syncvar");
              lock r;
-             (case !v
-               of Done a => (unlock r; (true, a))
+             (case !s
+               of Done  => (unlock r;
+                             dbgmsg
+                                 (fn () => "read syncvar");
+                             (true, valOf (!v)))
                 | Waiting _ => (unlock r; die "Syncvar unwritten after resume.")))))
 end

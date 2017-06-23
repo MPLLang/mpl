@@ -169,7 +169,7 @@ void HM_HHC_collectLocal(void) {
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "collecting hh %p (%u/%u):\n"
+      "collecting hh %p (SL: %u L: %u):\n"
       "  local scope is %u -> %u\n"
       "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
@@ -244,6 +244,19 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied);
+
+  /* forward retVal pointer if necessary */
+  if (NULL != hh->retVal) {
+    objptr root = pointerToObjptr(hh->retVal, s->heap->start);
+
+    forwardHHObjptrArgs.objectsCopied = 0;
+    forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Copied %"PRIu64" objects from hh->retVal",
+      forwardHHObjptrArgs.objectsCopied);
+
+    hh->retVal = objptrToPointer(root, s->heap->start);
+  }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -428,6 +441,49 @@ void forwardHHObjptr (GC_state s,
         (uintptr_t)p,
         ((void*)(opInfo.hh)),
         ((void*)(args->hh)));
+
+#if ASSERT
+    GC_header header;
+    GC_objectTypeTag tag;
+    uint16_t bytesNonObjptrs;
+    uint16_t numObjptrs;
+
+    for (struct HM_HierarchicalHeap* cursor = opInfo.hh;
+         cursor != NULL;
+         cursor = HM_HH_objptrToStruct(s, cursor->parentHH)) {
+      header = getHeader(p);
+      splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+
+      ASSERTPRINT(cursor != args->hh,
+                  "Pointer %p (h: %lx, t: %s BNO: %"PRIu16" NO: %"PRIu16") resides in hh %p which is a descendant of collecting hh %p",
+                  ((void*)(objptrToPointer(op, s->heap->start))),
+                  header,
+                  objectTypeTagToString(tag),
+                  bytesNonObjptrs,
+                  numObjptrs,
+                  ((void*)(opInfo.hh)),
+                  ((void*)(args->hh)));
+    }
+
+    bool found = FALSE;
+    for (struct HM_HierarchicalHeap* cursor = args->hh;
+         cursor != NULL;
+         cursor = HM_HH_objptrToStruct(s, cursor->parentHH)) {
+      if (cursor == opInfo.hh) {
+        found = TRUE;
+        break;
+      }
+    }
+    ASSERTPRINT(found,
+                "Pointer %p (h: %lx, t: %s BNO: %"PRIu16" NO: %"PRIu16") resides in hh %p which is not an ancestor of collecting hh %p",
+                ((void*)(objptrToPointer(op, s->heap->start))),
+                header,
+                objectTypeTagToString(tag),
+                bytesNonObjptrs,
+                numObjptrs,
+                ((void*)(opInfo.hh)),
+                ((void*)(args->hh)));
+#endif
 
     return;
   }
