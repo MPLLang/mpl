@@ -9,8 +9,8 @@ struct
 
   exception ShouldNotHappen
 
-  datatype 'a result = Finished of 'a ref HH.t
-                     | Raised of exn ref HH.t
+  datatype 'a result = Finished of 'a
+                     | Raised of exn
 
   val dbgmsg: (unit -> string) -> unit =
       if false
@@ -41,7 +41,7 @@ struct
             | _ => raise ShouldNotHappen
         end
   in
-    fun fork (f, g) =
+    fun fork ((f, g): (unit -> 'a) * (unit -> 'b)): 'a * 'b =
         let
           (* Make sure calling thread is set to use hierarchical heaps *)
           val () = (HM.enterGlobalHeap ();
@@ -57,31 +57,21 @@ struct
           val level = HH.getLevel hh
           val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): Called fork")
 
-          val var = V.empty ()
+          val var: 'b result ref HH.t V.t = V.empty ()
 
           val rightside =
            fn () =>
               let
-                (*
-                 * RAM_NOTE: Is there a way to force a ref without
-                 * explicitly putting it in one?
-                 *)
-                val hh = HH.get ()
-                val result =
-                    let
-                      val r = ref (g ())
-                    in
-                      Finished (HH.setReturnValue (hh, r))
-                    end
-                    handle e =>
-                           let
-                             val e = ref e
-                           in
-                             Raised (HH.setReturnValue (hh, e))
-                           end
+                  (*
+                   * RAM_NOTE: Is there a way to force a ref without
+                   * explicitly putting it in one?
+                   *)
+                  val result = ref (Finished (g ()))
+                               handle e => ref (Raised e)
+                  val retHH = HH.setReturnValue(HH.get (), result)
               in
-                V.write (var, result);
-                B.return ()
+                  V.write (var, retHH);
+                  B.return ()
               end
               handle B.Parallel msg =>
                      (print (msg ^ "\n");
@@ -116,27 +106,15 @@ struct
                 (* must have been stolen, so I have a heap to merge *)
                 (dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): right stolen");
                  case V.read var
-                  of (_, Finished (childHH)) =>
+                  of (_, childHH) =>
                      let
                        val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): merging result")
-                       val b = HH.mergeIntoParentAndGetReturnValue childHH
+                       val result = HH.mergeIntoParentAndGetReturnValue childHH
                        val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): done merging result")
                      in
-                       case b
-                        of NONE => raise ShouldNotHappen
-                         | SOME b => !b
-                     end
-                   | (_, Raised (childHH)) =>
-                     (*
-                      * RAM_NOTE: This definitely needs to be handled
-                      * differently wrt HH operations later.
-                      *)
-                     let
-                       val e = HH.mergeIntoParentAndGetReturnValue childHH;
-                     in
-                       case e
-                        of NONE => raise ShouldNotHappen
-                         | SOME e => raise !e
+                         case !(valOf result)
+                          of Finished b => b
+                           | Raised e => raise e
                      end)
 
           val () = dbgmsg (fn () => "(" ^ (Int.toString level) ^ "): END right")
