@@ -19,5 +19,6 @@ PRIVATE Word64 Parallel_getTimeInGC (void);
 
 PRIVATE Int32 Parallel_fetchAndAdd (pointer p, Int32 v);
 PRIVATE bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new);
+PRIVATE bool Parallel_arrayCompareAndSwap (Pointer, Int32, Int32, Int32);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

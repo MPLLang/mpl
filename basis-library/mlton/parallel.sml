@@ -58,6 +58,7 @@ structure MLtonParallel:> MLTON_PARALLEL =
             MLtonThread.initPrimitive
         val arrayUninit: int -> 'a Array.array =
             Array.arrayUninit
+        val arrayCompareAndSwap = _import "Parallel_arrayCompareAndSwap" impure private: Int32.int array * Int32.int * Int32.int * Int32.int -> bool;
       end
 
     exception Return
@@ -75,6 +76,11 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     val initializeProcessors: unit -> unit =
         _import "Parallel_init" runtime private: unit -> unit;
+
+    fun arrayCompareAndSwap (xs, i, old, new) =
+      if i < 0 orelse i >= Array.length xs
+      then raise Subscript
+      else Unsafe.arrayCompareAndSwap (xs, i, old, new)
 
     (* shwestrick: needed these for private-deqs scheduler *)
     val compareAndSwap = _import "Parallel_compareAndSwap" impure private: Int32.int ref * Int32.int * Int32.int -> bool;

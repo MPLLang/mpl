@@ -58,6 +58,13 @@ signature MLTON_PARALLEL =
                  * Creates an uninitialized array of given size.
                  *)
                 val arrayUninit: int -> 'a Array.array
+                 
+                (**
+                 * `arrayCompareAndSwap (xs, i, old, new)` performs a CAS
+                 * of (old, new) at xs[i]. This implementation does not
+                 * do bounds checking on i.
+                 *)
+                val arrayCompareAndSwap : Int32.int array * Int32.int * Int32.int * Int32.int -> bool
               end
 
     exception Return
@@ -89,7 +96,13 @@ signature MLTON_PARALLEL =
      * registerProcessorFunction before calling this function!
      *)
     val initializeProcessors: unit -> unit;
- 
+
+    (**
+     * `arrayCompareAndSwap (xs, i, old, new)` performs a CAS
+     * of (old, new) at xs[i]. If i is out of bounds, it raises Subscript.
+     *)
+    val arrayCompareAndSwap : Int32.int array * Int32.int * Int32.int * Int32.int -> bool
+
     (* shwestrick: needed these for private-deqs scheduler *)
     val compareAndSwap : Int32.int ref * Int32.int * Int32.int -> bool
     val fetchAndAdd : Int32.int ref * Int32.int -> Int32.int
