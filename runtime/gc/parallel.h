@@ -17,8 +17,19 @@ PRIVATE Word64 Parallel_maxBytesLive (void);
 PRIVATE void Parallel_resetBytesLive (void);
 PRIVATE Word64 Parallel_getTimeInGC (void);
 
-PRIVATE Int32 Parallel_fetchAndAdd (pointer p, Int32 v);
-PRIVATE bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new);
-PRIVATE bool Parallel_arrayCompareAndSwap (Pointer, Int32, Int32, Int32);
+PRIVATE Int8 Parallel_fetchAndAdd8 (pointer p, Int8 v);
+PRIVATE Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v);
+PRIVATE Int32 Parallel_fetchAndAdd32 (pointer p, Int32 v);
+PRIVATE Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v);
+
+PRIVATE Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new);
+PRIVATE Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new);
+PRIVATE Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new);
+PRIVATE Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new);
+
+PRIVATE Int8 Parallel_arrayCompareAndSwap8 (Pointer, Int8, Int8, Int8);
+PRIVATE Int16 Parallel_arrayCompareAndSwap16 (Pointer, Int16, Int16, Int16);
+PRIVATE Int32 Parallel_arrayCompareAndSwap32 (Pointer, Int32, Int32, Int32);
+PRIVATE Int64 Parallel_arrayCompareAndSwap64 (Pointer, Int64, Int64, Int64);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

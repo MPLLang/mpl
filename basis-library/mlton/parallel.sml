@@ -58,7 +58,39 @@ structure MLtonParallel:> MLTON_PARALLEL =
             MLtonThread.initPrimitive
         val arrayUninit: int -> 'a Array.array =
             Array.arrayUninit
-        val arrayCompareAndSwap = _import "Parallel_arrayCompareAndSwap" impure private: Int32.int array * Int32.int * Int32.int * Int32.int -> bool;
+
+        fun arrayCompareAndSwap8 (xs, i) (old, new) =
+          let val cas = _import "Parallel_arrayCompareAndSwap8" impure private: int array * Int8.int * Int8.int * Int8.int -> Int8.int;
+          in Int8.toInt (cas (xs, Int8.fromInt i, Int8.fromInt old, Int8.fromInt new))
+          end
+        fun arrayCompareAndSwap16 (xs, i) (old, new) =
+          let val cas = _import "Parallel_arrayCompareAndSwap16" impure private: int array * Int16.int * Int16.int * Int16.int -> Int16.int;
+          in Int16.toInt (cas (xs, Int16.fromInt i, Int16.fromInt old, Int16.fromInt new))
+          end
+        fun arrayCompareAndSwap32 (xs, i) (old, new) =
+          let val cas = _import "Parallel_arrayCompareAndSwap32" impure private: int array * Int32.int * Int32.int * Int32.int -> Int32.int;
+          in Int32.toInt (cas (xs, Int32.fromInt i, Int32.fromInt old, Int32.fromInt new))
+          end
+        fun arrayCompareAndSwap64 (xs, i) (old, new) =
+          let val cas = _import "Parallel_arrayCompareAndSwap64" impure private: int array * Int64.int * Int64.int * Int64.int -> Int64.int;
+          in Int64.toInt (cas (xs, Int64.fromInt i, Int64.fromInt old, Int64.fromInt new))
+          end
+
+        local
+          val msg = "MLton.Parallel.Unsafe.arrayCompareAndSwap: "
+                  ^ "no implementation for integers with "
+          fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
+          fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+        in
+        val arrayCompareAndSwap =
+          case Int.precision of
+            SOME 8 => arrayCompareAndSwap8
+          | SOME 16 => arrayCompareAndSwap16
+          | SOME 32 => arrayCompareAndSwap32
+          | SOME 64 => arrayCompareAndSwap64
+          | SOME n => errorSize n
+          | NONE => errorArbitrary
+        end
       end
 
     exception Return
@@ -77,12 +109,82 @@ structure MLtonParallel:> MLTON_PARALLEL =
     val initializeProcessors: unit -> unit =
         _import "Parallel_init" runtime private: unit -> unit;
 
-    fun arrayCompareAndSwap (xs, i, old, new) =
+    fun arrayCompareAndSwap (xs, i) (old, new) =
       if i < 0 orelse i >= Array.length xs
       then raise Subscript
-      else Unsafe.arrayCompareAndSwap (xs, i, old, new)
+      else Unsafe.arrayCompareAndSwap (xs, i) (old, new)
+
+    (* ========================== compareAndSwap ========================== *)
+
+    fun compareAndSwap8 r (old, new) =
+      let val cas = _import "Parallel_compareAndSwap8" impure private: int ref * Int8.int * Int8.int -> Int8.int;
+      in Int8.toInt (cas (r, Int8.fromInt old, Int8.fromInt new))
+      end
+    fun compareAndSwap16 r (old, new) =
+      let val cas = _import "Parallel_compareAndSwap16" impure private: int ref * Int16.int * Int16.int -> Int16.int;
+      in Int16.toInt (cas (r, Int16.fromInt old, Int16.fromInt new))
+      end
+    fun compareAndSwap32 r (old, new) =
+      let val cas = _import "Parallel_compareAndSwap32" impure private: int ref * Int32.int * Int32.int -> Int32.int;
+      in Int32.toInt (cas (r, Int32.fromInt old, Int32.fromInt new))
+      end
+    fun compareAndSwap64 r (old, new) =
+      let val cas = _import "Parallel_compareAndSwap64" impure private: int ref * Int64.int * Int64.int -> Int64.int;
+      in Int64.toInt (cas (r, Int64.fromInt old, Int64.fromInt new))
+      end
+
+    local
+      val msg = "MLton.Parallel.compareAndSwap: "
+              ^ "no implementation for integers with "
+      fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
+      fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+    in
+    val compareAndSwap =
+      case Int.precision of
+        SOME 8 => compareAndSwap8
+      | SOME 16 => compareAndSwap16
+      | SOME 32 => compareAndSwap32
+      | SOME 64 => compareAndSwap64
+      | SOME n => errorSize n
+      | NONE => errorArbitrary
+    end
+
+    (* ========================== fetchAndAdd ========================== *)
+
+    fun fetchAndAdd8 r d =
+      let val faa = _import "Parallel_fetchAndAdd8" impure private: int ref * Int8.int -> Int8.int;
+      in Int8.toInt (faa (r, Int8.fromInt d))
+      end
+    fun fetchAndAdd16 r d =
+      let val faa = _import "Parallel_fetchAndAdd16" impure private: int ref * Int16.int -> Int16.int;
+      in Int16.toInt (faa (r, Int16.fromInt d))
+      end
+    fun fetchAndAdd32 r d =
+      let val faa = _import "Parallel_fetchAndAdd32" impure private: int ref * Int32.int -> Int32.int;
+      in Int32.toInt (faa (r, Int32.fromInt d))
+      end
+    fun fetchAndAdd64 r d =
+      let val faa = _import "Parallel_fetchAndAdd64" impure private: int ref * Int64.int -> Int64.int;
+      in Int64.toInt (faa (r, Int64.fromInt d))
+      end
+
+    local
+      val msg = "MLton.Parallel.fetchAndAdd: "
+              ^ "no implementation for integers with "
+      fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
+      fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+    in
+    val fetchAndAdd =
+      case Int.precision of
+        SOME 8 => fetchAndAdd8
+      | SOME 16 => fetchAndAdd16
+      | SOME 32 => fetchAndAdd32
+      | SOME 64 => fetchAndAdd64
+      | SOME n => errorSize n
+      | NONE => errorArbitrary
+    end
 
     (* shwestrick: needed these for private-deqs scheduler *)
-    val compareAndSwap = _import "Parallel_compareAndSwap" impure private: Int32.int ref * Int32.int * Int32.int -> bool;
-    val fetchAndAdd = _import "Parallel_fetchAndAdd" impure private: Int32.int ref * Int32.int -> Int32.int;
+    (* val compareAndSwap = _import "Parallel_compareAndSwap" impure private: Int32.int ref * Int32.int * Int32.int -> bool; *)
+    (* val fetchAndAdd = _import "Parallel_fetchAndAdd" impure private: Int32.int ref * Int32.int -> Int32.int; *)
   end

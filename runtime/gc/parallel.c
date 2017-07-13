@@ -186,14 +186,56 @@ uint64_t Parallel_getTimeInGC (void) {
   return gcTime;
 }
 
-Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
+// fetchAndAdd implementations
+
+Int8 Parallel_fetchAndAdd8 (pointer p, Int8 v) {
+  return __sync_fetch_and_add ((Int8 *)p, v);
+}
+
+Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v) {
+  return __sync_fetch_and_add ((Int16 *)p, v);
+}
+
+Int32 Parallel_fetchAndAdd32 (pointer p, Int32 v) {
   return __sync_fetch_and_add ((Int32 *)p, v);
 }
 
-bool Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
-  return __sync_bool_compare_and_swap ((Int32 *)p, old, new);
+Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v) {
+  return __sync_fetch_and_add ((Int64 *)p, v);
 }
 
-bool Parallel_arrayCompareAndSwap (Pointer p, Int32 i, Int32 old, Int32 new) {
-  return __sync_bool_compare_and_swap (((Int32*)p)+i, old, new);
+// compareAndSwap implementations
+
+Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
+  return __sync_val_compare_and_swap ((Int8 *)p, old, new);
+}
+
+Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new) {
+  return __sync_val_compare_and_swap ((Int16 *)p, old, new);
+}
+
+Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new) {
+  return __sync_val_compare_and_swap ((Int32 *)p, old, new);
+}
+
+Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
+  return __sync_val_compare_and_swap ((Int64 *)p, old, new);
+}
+
+// arrayCompareAndSwap implementations
+
+Int8 Parallel_arrayCompareAndSwap8 (Pointer p, Int8 i, Int8 old, Int8 new) {
+  return __sync_val_compare_and_swap (((Int8*)p)+i, old, new);
+}
+
+Int16 Parallel_arrayCompareAndSwap16 (Pointer p, Int16 i, Int16 old, Int16 new) {
+  return __sync_val_compare_and_swap (((Int16*)p)+i, old, new);
+}
+
+Int32 Parallel_arrayCompareAndSwap32 (Pointer p, Int32 i, Int32 old, Int32 new) {
+  return __sync_val_compare_and_swap (((Int32*)p)+i, old, new);
+}
+
+Int64 Parallel_arrayCompareAndSwap64 (Pointer p, Int64 i, Int64 old, Int64 new) {
+  return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
 }

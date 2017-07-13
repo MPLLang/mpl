@@ -58,13 +58,13 @@ signature MLTON_PARALLEL =
                  * Creates an uninitialized array of given size.
                  *)
                 val arrayUninit: int -> 'a Array.array
-                 
+
                 (**
-                 * `arrayCompareAndSwap (xs, i, old, new)` performs a CAS
-                 * of (old, new) at xs[i]. This implementation does not
-                 * do bounds checking on i.
+                 * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
+                 * of (old, new) at xs[i], returning the previous value stored
+                 * at xs[i]. This implementation does not check bounds on i.
                  *)
-                val arrayCompareAndSwap : Int32.int array * Int32.int * Int32.int * Int32.int -> bool
+                val arrayCompareAndSwap : int array * int -> int * int -> int
               end
 
     exception Return
@@ -98,12 +98,21 @@ signature MLTON_PARALLEL =
     val initializeProcessors: unit -> unit;
 
     (**
-     * `arrayCompareAndSwap (xs, i, old, new)` performs a CAS
-     * of (old, new) at xs[i]. If i is out of bounds, it raises Subscript.
+     * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
+     * of (old, new) at xs[i], returning the previous value stored at xs[i].
+     * If i is out of bounds, it raises Subscript.
      *)
-    val arrayCompareAndSwap : Int32.int array * Int32.int * Int32.int * Int32.int -> bool
+    val arrayCompareAndSwap : int array * int -> int * int -> int
 
-    (* shwestrick: needed these for private-deqs scheduler *)
-    val compareAndSwap : Int32.int ref * Int32.int * Int32.int -> bool
-    val fetchAndAdd : Int32.int ref * Int32.int -> Int32.int
+    (**
+     * `compareAndSwap r (old, new)` atomically does `r := new`, but only if
+     * `!r = old`. Returns the value of `!r` before the swap.
+     *)
+    val compareAndSwap : int ref -> int * int -> int
+
+    (**
+     * `fetchAndAdd r d` atomically does `r := !r + d` and returns the value of
+     * `!r` before the add.
+     *)
+    val fetchAndAdd : int ref -> int -> int
   end

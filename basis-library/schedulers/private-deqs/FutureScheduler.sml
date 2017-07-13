@@ -25,7 +25,10 @@ struct
    * ----------------------------------------------------------------------- *)
 
   structure Thread = MLton.Thread
-  val cas = MLton.Parallel.compareAndSwap
+  val vcas = MLton.Parallel.compareAndSwap
+  fun cas (r, old, new) = vcas r (old, new) = old
+
+  fun faa (r, d) = MLton.Parallel.fetchAndAdd r d
 
   (* TODO: Implement a faster queue? Is this necessary? *)
   (*structure Queue = SimpleQueue*)
@@ -47,10 +50,10 @@ struct
   fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k)
 
   fun decrementHitsZero (x : int ref) : bool =
-    MLton.Parallel.fetchAndAdd (x, ~1) = 1
+    faa (x, ~1) = 1
 
   fun increment (x : int ref) : unit =
-    ignore (MLton.Parallel.fetchAndAdd (x, 1))
+    ignore (faa (x, 1))
 
   (*
   fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)

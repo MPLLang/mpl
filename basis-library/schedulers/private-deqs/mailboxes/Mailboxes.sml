@@ -4,7 +4,8 @@ struct
   exception Mailboxes
 
   val P = MLton.Parallel.numberOfProcessors
-  val cas = MLton.Parallel.compareAndSwap
+  val vcas = MLton.Parallel.compareAndSwap
+  fun cas (r, old, new) = vcas r (old, new) = old
 
   type 'a mailbox = {flag : int ref, mail : 'a ref}
   type 'a t = 'a mailbox vector
