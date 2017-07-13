@@ -22,6 +22,11 @@ PRIVATE Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v);
 PRIVATE Int32 Parallel_fetchAndAdd32 (pointer p, Int32 v);
 PRIVATE Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v);
 
+PRIVATE Int8 Parallel_arrayFetchAndAdd8 (pointer p, Int8 i, Int8 v);
+PRIVATE Int16 Parallel_arrayFetchAndAdd16 (pointer p, Int16 i, Int16 v);
+PRIVATE Int32 Parallel_arrayFetchAndAdd32 (pointer p, Int32 i, Int32 v);
+PRIVATE Int64 Parallel_arrayFetchAndAdd64 (pointer p, Int64 i, Int64 v);
+
 PRIVATE Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new);
 PRIVATE Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new);
 PRIVATE Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new);

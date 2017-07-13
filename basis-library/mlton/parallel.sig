@@ -65,6 +65,13 @@ signature MLTON_PARALLEL =
                  * at xs[i]. This implementation does not check bounds on i.
                  *)
                 val arrayCompareAndSwap : int array * int -> int * int -> int
+
+                (**
+                 * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
+                 * returns the value of `xs[i]` before the add. This implementation
+                 * does not check bounds on i.
+                 *)
+                val arrayFetchAndAdd : int array * int -> int -> int
               end
 
     exception Return
@@ -98,6 +105,12 @@ signature MLTON_PARALLEL =
     val initializeProcessors: unit -> unit;
 
     (**
+     * `compareAndSwap r (old, new)` atomically does `r := new`, but only if
+     * `!r = old`. Returns the value of `!r` before the swap.
+     *)
+    val compareAndSwap : int ref -> int * int -> int
+
+    (**
      * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
      * of (old, new) at xs[i], returning the previous value stored at xs[i].
      * If i is out of bounds, it raises Subscript.
@@ -105,14 +118,15 @@ signature MLTON_PARALLEL =
     val arrayCompareAndSwap : int array * int -> int * int -> int
 
     (**
-     * `compareAndSwap r (old, new)` atomically does `r := new`, but only if
-     * `!r = old`. Returns the value of `!r` before the swap.
-     *)
-    val compareAndSwap : int ref -> int * int -> int
-
-    (**
      * `fetchAndAdd r d` atomically does `r := !r + d` and returns the value of
      * `!r` before the add.
      *)
     val fetchAndAdd : int ref -> int -> int
+
+    (**
+     * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
+     * returns the value of `xs[i]` before the add. If i is out of bounds, it
+     * raises Subscript.
+     *)
+    val arrayFetchAndAdd : int array * int -> int -> int
   end

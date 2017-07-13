@@ -204,6 +204,24 @@ Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v) {
   return __sync_fetch_and_add ((Int64 *)p, v);
 }
 
+// arrayFetchAndAdd implementations
+
+Int8 Parallel_arrayFetchAndAdd8 (Pointer p, Int8 i, Int8 v) {
+  return __sync_fetch_and_add (((Int8*)p)+i, v);
+}
+
+Int16 Parallel_arrayFetchAndAdd16 (Pointer p, Int16 i, Int16 v) {
+  return __sync_fetch_and_add (((Int16*)p)+i, v);
+}
+
+Int32 Parallel_arrayFetchAndAdd32 (Pointer p, Int32 i, Int32 v) {
+  return __sync_fetch_and_add (((Int32*)p)+i, v);
+}
+
+Int64 Parallel_arrayFetchAndAdd64 (Pointer p, Int64 i, Int64 v) {
+  return __sync_fetch_and_add (((Int64*)p)+i, v);
+}
+
 // compareAndSwap implementations
 
 Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
