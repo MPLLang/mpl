@@ -22,19 +22,19 @@ PRIVATE Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v);
 PRIVATE Int32 Parallel_fetchAndAdd32 (pointer p, Int32 v);
 PRIVATE Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v);
 
-PRIVATE Int8 Parallel_arrayFetchAndAdd8 (pointer p, Int8 i, Int8 v);
-PRIVATE Int16 Parallel_arrayFetchAndAdd16 (pointer p, Int16 i, Int16 v);
-PRIVATE Int32 Parallel_arrayFetchAndAdd32 (pointer p, Int32 i, Int32 v);
-PRIVATE Int64 Parallel_arrayFetchAndAdd64 (pointer p, Int64 i, Int64 v);
+PRIVATE Int8 Parallel_arrayFetchAndAdd8 (pointer p, GC_arrayLength i, Int8 v);
+PRIVATE Int16 Parallel_arrayFetchAndAdd16 (pointer p, GC_arrayLength i, Int16 v);
+PRIVATE Int32 Parallel_arrayFetchAndAdd32 (pointer p, GC_arrayLength i, Int32 v);
+PRIVATE Int64 Parallel_arrayFetchAndAdd64 (pointer p, GC_arrayLength i, Int64 v);
 
 PRIVATE Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new);
 PRIVATE Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new);
 PRIVATE Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new);
 PRIVATE Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new);
 
-PRIVATE Int8 Parallel_arrayCompareAndSwap8 (Pointer, Int8, Int8, Int8);
-PRIVATE Int16 Parallel_arrayCompareAndSwap16 (Pointer, Int16, Int16, Int16);
-PRIVATE Int32 Parallel_arrayCompareAndSwap32 (Pointer, Int32, Int32, Int32);
-PRIVATE Int64 Parallel_arrayCompareAndSwap64 (Pointer, Int64, Int64, Int64);
+PRIVATE Int8 Parallel_arrayCompareAndSwap8 (Pointer, GC_arrayLength, Int8, Int8);
+PRIVATE Int16 Parallel_arrayCompareAndSwap16 (Pointer, GC_arrayLength, Int16, Int16);
+PRIVATE Int32 Parallel_arrayCompareAndSwap32 (Pointer, GC_arrayLength, Int32, Int32);
+PRIVATE Int64 Parallel_arrayCompareAndSwap64 (Pointer, GC_arrayLength, Int64, Int64);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
