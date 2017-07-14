@@ -61,73 +61,36 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
         (* ======================== arrayCompareAndSwap ==================== *)
 
-        fun arrayCompareAndSwap8 (xs, i) (old, new) =
-          let val cas = _import "Parallel_arrayCompareAndSwap8" impure private: int array * Int8.int * Int8.int * Int8.int -> Int8.int;
-          in Int8.toInt (cas (xs, Int8.fromInt i, Int8.fromInt old, Int8.fromInt new))
-          end
-        fun arrayCompareAndSwap16 (xs, i) (old, new) =
-          let val cas = _import "Parallel_arrayCompareAndSwap16" impure private: int array * Int16.int * Int16.int * Int16.int -> Int16.int;
-          in Int16.toInt (cas (xs, Int16.fromInt i, Int16.fromInt old, Int16.fromInt new))
-          end
-        fun arrayCompareAndSwap32 (xs, i) (old, new) =
-          let val cas = _import "Parallel_arrayCompareAndSwap32" impure private: int array * Int32.int * Int32.int * Int32.int -> Int32.int;
-          in Int32.toInt (cas (xs, Int32.fromInt i, Int32.fromInt old, Int32.fromInt new))
-          end
-        fun arrayCompareAndSwap64 (xs, i) (old, new) =
-          let val cas = _import "Parallel_arrayCompareAndSwap64" impure private: int array * Int64.int * Int64.int * Int64.int -> Int64.int;
-          in Int64.toInt (cas (xs, Int64.fromInt i, Int64.fromInt old, Int64.fromInt new))
-          end
-
         local
-          val msg = "MLton.Parallel.Unsafe.arrayCompareAndSwap: "
-                  ^ "no implementation for integers with "
-          fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
-          fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+           structure I =
+              Int_ChooseInt
+              (type 'a t = 'a array * SeqIndex.int * 'a * 'a -> 'a
+               val fInt8 = _import "Parallel_arrayCompareAndSwap8" impure private: Int8.t array * SeqIndex.int * Int8.int * Int8.int -> Int8.int;
+               val fInt16 = _import "Parallel_arrayCompareAndSwap16" impure private: Int16.t array * SeqIndex.int * Int16.int * Int16.int -> Int16.int;
+               val fInt32 = _import "Parallel_arrayCompareAndSwap8" impure private: Int32.t array * SeqIndex.int * Int32.int * Int32.int -> Int32.int;
+               val fInt64 = _import "Parallel_arrayCompareAndSwap8" impure private: Int64.t array * SeqIndex.int * Int64.int * Int64.int -> Int64.int;
+               val fIntInf = fn _ => raise Fail "MLton.Parallel.Unsafe.arrayCompareAndSwap: IntInf")
         in
-        val arrayCompareAndSwap =
-          case Int.precision of
-            SOME 8 => arrayCompareAndSwap8
-          | SOME 16 => arrayCompareAndSwap16
-          | SOME 32 => arrayCompareAndSwap32
-          | SOME 64 => arrayCompareAndSwap64
-          | SOME n => errorSize n
-          | NONE => errorArbitrary
+           fun arrayCompareAndSwap (xs, i) (old, new) =
+              I.f (xs, SeqIndex.fromInt i, old, new)
         end
 
         (* ========================= arrayFetchAndAdd ========================= *)
 
-        fun arrayFetchAndAdd8 (xs, i) d =
-          let val faa = _import "Parallel_arrayFetchAndAdd8" impure private: int array * Int8.int * Int8.int -> Int8.int;
-          in Int8.toInt (faa (xs, Int8.fromInt i, Int8.fromInt d))
-          end
-        fun arrayFetchAndAdd16 (xs, i) d =
-          let val faa = _import "Parallel_arrayFetchAndAdd16" impure private: int array * Int16.int * Int16.int -> Int16.int;
-          in Int16.toInt (faa (xs, Int16.fromInt i, Int16.fromInt d))
-          end
-        fun arrayFetchAndAdd32 (xs, i) d =
-          let val faa = _import "Parallel_arrayFetchAndAdd32" impure private: int array * Int32.int * Int32.int -> Int32.int;
-          in Int32.toInt (faa (xs, Int32.fromInt i, Int32.fromInt d))
-          end
-        fun arrayFetchAndAdd64 (xs, i) d =
-          let val faa = _import "Parallel_arrayFetchAndAdd64" impure private: int array * Int64.int * Int64.int -> Int64.int;
-          in Int64.toInt (faa (xs, Int64.fromInt i, Int64.fromInt d))
-          end
-
         local
-          val msg = "MLton.Parallel.arrayFetchAndAdd: "
-                  ^ "no implementation for integers with "
-          fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
-          fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+           structure I =
+              Int_ChooseInt
+              (type 'a t = 'a array * SeqIndex.int * 'a -> 'a
+               val fInt8 = _import "Parallel_arrayFetchAndAdd8" impure private: Int8.t array * SeqIndex.int * Int8.int -> Int8.int;
+               val fInt16 = _import "Parallel_arrayFetchAndAdd16" impure private: Int16.t array * SeqIndex.int * Int16.int -> Int16.int;
+               val fInt32 = _import "Parallel_arrayFetchAndAdd8" impure private: Int32.t array * SeqIndex.int * Int32.int -> Int32.int;
+               val fInt64 = _import "Parallel_arrayFetchAndAdd8" impure private: Int64.t array * SeqIndex.int * Int64.int -> Int64.int;
+               val fIntInf = fn _ => raise Fail "MLton.Parallel.Unsafe.arrayFetchAndAdd: IntInf")
         in
-        val arrayFetchAndAdd =
-          case Int.precision of
-            SOME 8 => arrayFetchAndAdd8
-          | SOME 16 => arrayFetchAndAdd16
-          | SOME 32 => arrayFetchAndAdd32
-          | SOME 64 => arrayFetchAndAdd64
-          | SOME n => errorSize n
-          | NONE => errorArbitrary
+           fun arrayFetchAndAdd (xs, i) d =
+              I.f (xs, SeqIndex.fromInt i, d)
         end
+
       end
 
     exception Return
@@ -148,37 +111,18 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     (* ========================== compareAndSwap ========================== *)
 
-    fun compareAndSwap8 r (old, new) =
-      let val cas = _import "Parallel_compareAndSwap8" impure private: int ref * Int8.int * Int8.int -> Int8.int;
-      in Int8.toInt (cas (r, Int8.fromInt old, Int8.fromInt new))
-      end
-    fun compareAndSwap16 r (old, new) =
-      let val cas = _import "Parallel_compareAndSwap16" impure private: int ref * Int16.int * Int16.int -> Int16.int;
-      in Int16.toInt (cas (r, Int16.fromInt old, Int16.fromInt new))
-      end
-    fun compareAndSwap32 r (old, new) =
-      let val cas = _import "Parallel_compareAndSwap32" impure private: int ref * Int32.int * Int32.int -> Int32.int;
-      in Int32.toInt (cas (r, Int32.fromInt old, Int32.fromInt new))
-      end
-    fun compareAndSwap64 r (old, new) =
-      let val cas = _import "Parallel_compareAndSwap64" impure private: int ref * Int64.int * Int64.int -> Int64.int;
-      in Int64.toInt (cas (r, Int64.fromInt old, Int64.fromInt new))
-      end
-
     local
-      val msg = "MLton.Parallel.compareAndSwap: "
-              ^ "no implementation for integers with "
-      fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
-      fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+       structure I =
+          Int_ChooseInt
+          (type 'a t = 'a ref * 'a * 'a -> 'a
+           val fInt8 = _import "Parallel_compareAndSwap8" impure private: Int8.t ref * Int8.int * Int8.int -> Int8.int;
+           val fInt16 = _import "Parallel_compareAndSwap16" impure private: Int16.t ref * Int16.int * Int16.int -> Int16.int;
+           val fInt32 = _import "Parallel_compareAndSwap8" impure private: Int32.t ref * Int32.int * Int32.int -> Int32.int;
+           val fInt64 = _import "Parallel_compareAndSwap8" impure private: Int64.t ref * Int64.int * Int64.int -> Int64.int;
+           val fIntInf = fn _ => raise Fail "MLton.Parallel.compareAndSwap: IntInf")
     in
-    val compareAndSwap =
-      case Int.precision of
-        SOME 8 => compareAndSwap8
-      | SOME 16 => compareAndSwap16
-      | SOME 32 => compareAndSwap32
-      | SOME 64 => compareAndSwap64
-      | SOME n => errorSize n
-      | NONE => errorArbitrary
+       fun compareAndSwap r (old, new) =
+          I.f (r, old, new)
     end
 
     fun arrayCompareAndSwap (xs, i) (old, new) =
@@ -188,37 +132,18 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     (* ========================== fetchAndAdd ========================== *)
 
-    fun fetchAndAdd8 r d =
-      let val faa = _import "Parallel_fetchAndAdd8" impure private: int ref * Int8.int -> Int8.int;
-      in Int8.toInt (faa (r, Int8.fromInt d))
-      end
-    fun fetchAndAdd16 r d =
-      let val faa = _import "Parallel_fetchAndAdd16" impure private: int ref * Int16.int -> Int16.int;
-      in Int16.toInt (faa (r, Int16.fromInt d))
-      end
-    fun fetchAndAdd32 r d =
-      let val faa = _import "Parallel_fetchAndAdd32" impure private: int ref * Int32.int -> Int32.int;
-      in Int32.toInt (faa (r, Int32.fromInt d))
-      end
-    fun fetchAndAdd64 r d =
-      let val faa = _import "Parallel_fetchAndAdd64" impure private: int ref * Int64.int -> Int64.int;
-      in Int64.toInt (faa (r, Int64.fromInt d))
-      end
-
     local
-      val msg = "MLton.Parallel.fetchAndAdd: "
-              ^ "no implementation for integers with "
-      fun errorSize n _ _ = raise Fail (msg ^ "precision " ^ Int.toString n)
-      fun errorArbitrary _ _ = raise Fail (msg ^ "arbitrary precision")
+       structure I =
+          Int_ChooseInt
+          (type 'a t = 'a ref * 'a -> 'a
+           val fInt8 = _import "Parallel_fetchAndAdd8" impure private: Int8.t ref * Int8.int -> Int8.int;
+           val fInt16 = _import "Parallel_fetchAndAdd16" impure private: Int16.t ref * Int16.int -> Int16.int;
+           val fInt32 = _import "Parallel_fetchAndAdd8" impure private: Int32.t ref * Int32.int -> Int32.int;
+           val fInt64 = _import "Parallel_fetchAndAdd8" impure private: Int64.t ref * Int64.int -> Int64.int;
+           val fIntInf = fn _ => raise Fail "MLton.Parallel.fetchAndAdd: IntInf")
     in
-    val fetchAndAdd =
-      case Int.precision of
-        SOME 8 => fetchAndAdd8
-      | SOME 16 => fetchAndAdd16
-      | SOME 32 => fetchAndAdd32
-      | SOME 64 => fetchAndAdd64
-      | SOME n => errorSize n
-      | NONE => errorArbitrary
+       fun fetchAndAdd r d =
+          I.f (r, d)
     end
 
     fun arrayFetchAndAdd (xs, i) d =
