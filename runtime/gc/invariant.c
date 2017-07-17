@@ -8,7 +8,10 @@
  */
 
 #if ASSERT
-void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
+void assertIsObjptrInFromSpace (GC_state s, objptr *opp, void* ignored) {
+  /* silence compiler warning */
+  ((void)(ignored));
+
   assert (isObjptrInFromSpace (s, *opp));
   unless (isObjptrInFromSpace (s, *opp))
     die ("gc.c: assertIsObjptrInFromSpace "
@@ -20,8 +23,8 @@ void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
    * for stacks, the card containing the beginning of the stack is
    * marked, but any remaining cards aren't.
    */
-  if (FALSE and s->mutatorMarksCards 
-      and isPointerInOldGen (s, (pointer)opp) 
+  if (FALSE and s->mutatorMarksCards
+      and isPointerInOldGen (s, (pointer)opp)
       and isObjptrInNursery (s, *opp)
       and not isCardMarked (s, (pointer)opp)) {
     displayGCState (s, stderr);
@@ -30,8 +33,26 @@ void assertIsObjptrInFromSpace (GC_state s, objptr *opp) {
   }
 }
 
+static inline void assertIsObjptrReachable (GC_state s,
+                                            objptr *opp,
+                                            void* ignored) {
+  /* silence compiler warning */
+  ((void)(ignored));
+
+  assert (isObjptrInFromSpace (s, *opp) ||
+          HM_HH_objptrInHierarchicalHeap(s, *opp));
+
+  if (!isObjptrInFromSpace (s, *opp) &&
+      !HM_HH_objptrInHierarchicalHeap(s, *opp)) {
+    die ("gc.c: assertIsObjptrReachable "
+         "opp = "FMTPTR"  "
+         "*opp = "FMTOBJPTR"\n",
+         (uintptr_t)opp, *opp);
+  }
+}
+
 bool invariantForGC (GC_state s) {
-  int proc;
+  uint32_t proc;
   if (DEBUG)
     fprintf (stderr, "invariantForGC\n");
   /* Frame layouts */
@@ -50,12 +71,12 @@ bool invariantForGC (GC_state s) {
   }
   /* Generational */
   if (s->mutatorMarksCards) {
-    assert (s->generationalMaps.cardMap == 
+    assert (s->generationalMaps.cardMap ==
             &(s->generationalMaps.cardMapAbsolute
               [pointerToCardMapIndexAbsolute(s->heap->start)]));
     assert (&(s->generationalMaps.cardMapAbsolute
               [pointerToCardMapIndexAbsolute(s->heap->start + s->heap->size - 1)])
-            < (s->generationalMaps.cardMap 
+            < (s->generationalMaps.cardMap
                + (s->generationalMaps.cardMapLength * CARD_MAP_ELEM_SIZE)));
   }
   assert (isAligned (s->heap->size, s->sysvals.pageSize));
@@ -74,34 +95,60 @@ bool invariantForGC (GC_state s) {
     assert (s->limit == s->limitPlusSlop - GC_HEAP_LIMIT_SLOP);
     assert (hasHeapBytesFree (s, 0, 0));
   }
-  assert (s->secondaryHeap->start == NULL 
+  assert (s->secondaryHeap->start == NULL
           or s->heap->size == s->secondaryHeap->size);
   /* Check that all pointers are into from space. */
-  foreachGlobalObjptr (s, assertIsObjptrInFromSpace);
+  foreachGlobalObjptr (s, assertIsObjptrInFromSpace, NULL);
   pointer back = s->heap->start + s->heap->oldGenSize;
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking old generation.\n");
-  foreachObjptrInRange (s, alignFrontier (s, s->heap->start), &back, 
-                        assertIsObjptrInFromSpace, FALSE);
+  foreachObjptrInRange (s,
+                        alignFrontier (s, s->heap->start),
+                        &back,
+                        FALSE,
+                        NULL,
+                        trueObjptrPredicate,
+                        NULL,
+                        assertIsObjptrReachable,
+                        NULL);
   if (DEBUG_DETAILED)
     fprintf (stderr, "Checking nursery.\n");
   if (s->procStates) {
     pointer firstStart = s->heap->frontier;
     for (proc = 0; proc < s->numberOfProcs; proc++) {
-      foreachObjptrInRange (s, s->procStates[proc].start,
-                            &s->procStates[proc].frontier, 
-                            assertIsObjptrInFromSpace, FALSE);
+      foreachObjptrInRange (s,
+                            s->procStates[proc].start,
+                            &s->procStates[proc].frontier,
+                            FALSE,
+                            NULL,
+                            trueObjptrPredicate,
+                            NULL,
+                            assertIsObjptrReachable,
+                            NULL);
       if (s->procStates[proc].start
           and s->procStates[proc].start < firstStart)
         firstStart = s->procStates[proc].start;
     }
-    foreachObjptrInRange (s, s->heap->nursery,
+    foreachObjptrInRange (s,
+                          s->heap->nursery,
                           &firstStart,
-                          assertIsObjptrInFromSpace, FALSE);
+                          FALSE,
+                          NULL,
+                          trueObjptrPredicate,
+                          NULL,
+                          assertIsObjptrReachable,
+                          NULL);
   }
   else {
-    foreachObjptrInRange (s, s->start, &s->frontier, 
-                          assertIsObjptrInFromSpace, FALSE);
+    foreachObjptrInRange (s,
+                          s->start,
+                          &s->frontier,
+                          FALSE,
+                          NULL,
+                          trueObjptrPredicate,
+                          NULL,
+                          assertIsObjptrReachable,
+                          NULL);
   }
   /* Current thread. */
   GC_stack stack = getStackCurrent(s);
@@ -120,13 +167,13 @@ bool invariantForGC (GC_state s) {
 
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
-  return (thread->bytesNeeded 
+  return (thread->bytesNeeded
           <= (size_t)(s->limitPlusSlop - s->frontier));
 }
 
 bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
-  return (getStackTop (s, stack) 
+  return (getStackTop (s, stack)
           <= getStackLimit (s, stack) + getStackTopFrameSize (s, stack));
 }
 

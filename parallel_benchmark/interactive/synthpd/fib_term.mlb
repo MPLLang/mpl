@@ -2,7 +2,6 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 
 ../x/graphics.mlb
-$(SML_LIB)/basis/parallel/io.sig
-$(SML_LIB)/basis/parallel/io.sml
+$(SML_LIB)/basis/schedulers/interactive-prio.mlb
 atomint.sml
 fib_term.sml

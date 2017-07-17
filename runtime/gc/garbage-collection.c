@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2010,2012 Matthew Fluet.
+/* Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -64,8 +64,8 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
   assert (allocInOldGen ?
-          hasHeapBytesFree (s, sizeofStackWithHeader (s, reserved), 0) :
-          hasHeapBytesFree (s, 0, sizeofStackWithHeader (s, reserved)));
+          hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
+          hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
@@ -106,6 +106,9 @@ void performGC (GC_state s,
   size_t totalBytesRequested;
 
   enterGC (s);
+
+  Trace0(EVENT_GC_ENTER);
+
   s->cumulativeStatistics->numGCs++;
   if (DEBUG or s->controls->messages) {
     size_t nurserySize = s->heap->size - ((size_t)(s->heap->nursery - s->heap->start));
@@ -134,21 +137,23 @@ void performGC (GC_state s,
              100.0 * ((double)(nurseryUsed) / (double)(s->heap->size)),
              100.0 * ((double)(nurseryUsed) / (double)(nurserySize)));
   }
+
   assert (invariantForGC (s));
   if (needGCTime (s))
     startTiming (RUSAGE_THREAD, &ru_start);
   minorGC (s);
+
   stackTopOk = invariantForMutatorStack (s);
   stackBytesRequested =
     stackTopOk
     ? 0
-    : sizeofStackWithHeader (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
+    : sizeofStackWithMetaData (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
   totalBytesRequested =
       oldGenBytesRequested
       + stackBytesRequested;
 
   getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     /* It could be that other threads have already worked to satisfy their own
        requests.  We need to make sure that we don't invalidate the work
        they've done.
@@ -169,8 +174,8 @@ void performGC (GC_state s,
                             nurseryBytesRequested));
   unless (stackTopOk)
     growStackCurrent (s, TRUE);
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
-    /* DOC XXX must come first to setup maps properly */
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
+    /* SPOONHOWER_NOTE: must come first to setup maps properly */
     s->procStates[proc].generationalMaps = s->generationalMaps;
     setGCStateCurrentThreadAndStack (&s->procStates[proc]);
   }
@@ -213,12 +218,13 @@ void performGC (GC_state s,
     displayGCState (s, stderr);
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
   assert (invariantForGC (s));
+
+  Trace0(EVENT_GC_LEAVE);
+
   leaveGC (s);
 }
 
 size_t fillGap (pointer start, pointer end) {
-#warning Do I need to modify this to take into account card/cross-map-in-heap?
-#warning Unlikely since maps just moved, did not change behavior...
   size_t diff = end - start;
 
   if (diff == 0) {
@@ -230,14 +236,12 @@ size_t fillGap (pointer start, pointer end) {
              (uintptr_t)start, (uintptr_t)end, diff);
 
   if (start) {
-    /* See note in the array case of foreach.c (line 103) */
-    if (diff >= GC_ARRAY_HEADER_SIZE + OBJPTR_SIZE) {
-      assert (diff >= GC_ARRAY_HEADER_SIZE);
+    if (diff >= GC_ARRAY_METADATA_SIZE) {
       /* Counter */
       *((GC_arrayCounter *)start) = 0;
       start = start + GC_ARRAY_COUNTER_SIZE;
       /* Length */
-      *((GC_arrayLength *)start) = diff - GC_ARRAY_HEADER_SIZE;
+      *((GC_arrayLength *)start) = diff - GC_ARRAY_METADATA_SIZE;
       start = start + GC_ARRAY_LENGTH_SIZE;
       /* Header */
       *((GC_header *)start) = GC_WORD8_VECTOR_HEADER;
@@ -260,14 +264,6 @@ size_t fillGap (pointer start, pointer end) {
       fprintf (stderr, "FOUND A GAP OF %zu BYTES!\n", diff);
       exit (1);
     }
-
-#warning Remove when unnecessary!
-    /* XXX debug only */
-    /*
-    while (start < end) {
-      *(start++) = 0xDF;
-    }
-    */
 
     return diff;
   }
@@ -344,6 +340,11 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
         fprintf (stderr, "[GC: Local alloction of chunk @ "FMTPTR".]\n",
                  (uintptr_t)newProcFrontier);
 
+      LOG(LM_GARBAGE_COLLECTION, LL_DEBUG,
+          "[GC: Local alloction of chunk @ "FMTPTR" -- "FMTPTR"]",
+          (uintptr_t)newProcFrontier,
+          (uintptr_t)newHeapFrontier);
+
       s->start = newStart;
       s->frontier = newProcFrontier;
       assert (isFrontierAligned (s, s->frontier));
@@ -360,7 +361,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
   }
 }
 
-#warning Can this function be broken up? Seems to do a lot...
+/* RAM_NOTE: Can this function be broken up? Seems to do a lot... */
 // assumes that stack->used and thread->exnstack are up to date
 // assumes exclusive access to runtime if !mustEnter
 // forceGC = force major collection
@@ -384,7 +385,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
   stackBytesRequested =
     stackTopOk
     ? 0
-    : sizeofStackWithHeader (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
+    : sizeofStackWithMetaData (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
 
   /* try to satisfy (at least part of the) request locally */
   maybeSatisfyAllocationRequestLocally (s, nurseryBytesRequested + stackBytesRequested);
@@ -393,7 +394,7 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
       and (hasHeapBytesFree (s, 0, stackBytesRequested))) {
     if (DEBUG or s->controls->messages)
       fprintf (stderr, "GC: growing stack locally... [%d]\n",
-               s->procStates ? Proc_processorNumber (s) : -1);
+               Proc_processorNumber (s));
     growStackCurrent (s, FALSE);
     setGCStateCurrentThreadAndStack (s);
   }
@@ -404,8 +405,12 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
              hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested),
              Proc_threadInSection (),
              forceGC,
-             s->procStates ? Proc_processorNumber (s) : -1);
+             Proc_processorNumber (s));
   }
+
+  /* trace pre-collection occupancy */
+  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+         s->heap->frontier - s->heap->start);
 
   if (/* check the stack of the current thread */
       ((ensureStack and not invariantForMutatorStack (s))
@@ -433,13 +438,18 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
     }
     else
       if (DEBUG or s->controls->messages)
-        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n", s->procStates ? Proc_processorNumber (s) : -1);
+        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n",
+                 Proc_processorNumber (s));
 
     LEAVE0 (s);
+
+    /* trace post-collection occupancy */
+    Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+           s->heap->frontier - s->heap->start);
   }
   else {
     if (DEBUG or s->controls->messages)
-      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", s->procStates ? Proc_processorNumber (s) : -1);
+      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", Proc_processorNumber (s));
 
     /* These are safe even without ENTER/LEAVE */
     assert (isAligned (s->heap->size, s->sysvals.pageSize));
@@ -462,6 +472,14 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
+  Trace0(EVENT_RUNTIME_ENTER);
+
+  /* Exit as soon as termination is requested. */
+  if (GC_CheckForTerminationRequest(s)) {
+    Trace0(EVENT_RUNTIME_LEAVE);
+    pthread_exit(NULL);
+  }
+
   /* SPOONHOWER_NOTE: Used to be enter() here */
   /* XXX copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
@@ -469,25 +487,38 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic (s);
 
-  /* When the mutator requests zero bytes, it may actually need as
+  bool inGlobalHeap = !getThreadCurrent(s)->useHierarchicalHeap ||
+                      HM_inGlobalHeap(s);
+
+  /* adjust bytesRequested */
+  /*
+   * When the mutator requests zero bytes, it may actually need as
    * much as GC_HEAP_LIMIT_SLOP.
    */
-#warning Set back to upstream when I remove extra controls
-  if (bytesRequested < s->controls->allocChunkSize) {
-    /* first make sure that I hit the minimum */
+  bytesRequested += GC_HEAP_LIMIT_SLOP;
+
+  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+    /*
+     * first make sure that I hit the minimum if I am doing a global heap
+     * allocation
+     */
     bytesRequested = s->controls->allocChunkSize;
   }
-  /* add extra slop */
-  bytesRequested += GC_HEAP_LIMIT_SLOP;
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
-  ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
-                                                  TRUE, TRUE,
-                                                  0, 0);
+  if (inGlobalHeap) {
+    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
+                                                    TRUE, TRUE,
+                                                    0, 0);
+  } else {
+    HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
+  }
 
   endAtomic (s);
+
+  Trace0(EVENT_RUNTIME_LEAVE);
 }
 
 pointer FFI_getArgs (GC_state s) {

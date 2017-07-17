@@ -821,7 +821,7 @@ structure Type =
                    {ctype = ctype, name = name, tycon = tycon})
 
       val unary: Tycon.t list =
-         [Tycon.array, Tycon.reff, Tycon.vector]
+         [Tycon.array, Tycon.hierarchicalHeap, Tycon.reff, Tycon.vector]
 
       fun toNullaryCType (t: t): {ctype: CType.t, name: string} option =
          case deConOpt t of
@@ -859,15 +859,23 @@ structure Type =
 
       type z = {ctype: CType.t, name: string, ty: t}
 
-      fun toCBaseType (ty: t): z option =
-         case toCType ty of
-            NONE => NONE
-          | SOME {ctype, name} =>
-               SOME {ctype = ctype, name = name, ty = ty}
-      fun toCArgType (ty: t): z vector option =
+      fun toCBaseType ((ty, defaultToObjptr): t * bool): z option =
+          let
+              val cType = toCType ty
+              val cType = if cType = NONE andalso defaultToObjptr
+                          then SOME {ctype = CType.objptr,
+                                     name = "Runtime Objptr"}
+                          else cType
+          in
+              case cType
+               of NONE => NONE
+                | SOME {ctype, name} =>
+                  SOME {ctype = ctype, name = name, ty = ty}
+          end
+      fun toCArgType ((ty, runtimeImport): t * bool): z vector option =
          case deTupleOpt ty of
             NONE =>
-               (case toCBaseType ty of
+               (case toCBaseType (ty, runtimeImport) of
                    NONE => NONE
                  | SOME z => SOME (Vector.new1 z))
           | SOME tys =>
@@ -875,23 +883,24 @@ structure Type =
                (fn esc =>
                 (SOME o Vector.map)
                 (tys, fn ty =>
-                 case toCBaseType ty of
+                 case toCBaseType (ty, runtimeImport) of
                     NONE => esc NONE
                   | SOME z => z))
-      fun toCRetType (ty: t): z option option =
-         case toCBaseType ty of
+      fun toCRetType ((ty, runtimeImport): t * bool): z option option =
+         case toCBaseType (ty, runtimeImport) of
             NONE => if Type.isUnit ty
                        then SOME NONE
                        else NONE
           | SOME z => SOME (SOME z)
-      fun toCFunType (ty: t): (z vector * z option) option =
+      fun toCFunType ((ty, runtimeImport): t * bool):
+          (z vector * z option) option =
          case deArrowOpt ty of
             NONE => NONE
           | SOME (arg, ret) =>
-               (case toCArgType arg of
+               (case toCArgType (arg, runtimeImport) of
                    NONE => NONE
                  | SOME arg =>
-                      (case toCRetType ret of
+                      (case toCRetType (ret, runtimeImport) of
                           NONE => NONE
                         | SOME ret => SOME (arg, ret)))
       fun toCPtrType (ty: t): z option =
@@ -994,8 +1003,10 @@ fun import {attributes: ImportExportAttribute.t list,
          (region,
           str "invalid type for _import",
           Type.layoutPretty elabedTy)
+      val runtimeImport = List.keepAll (attributes, isIEAttributeKind) =
+                          [ImportExportAttribute.Runtime]
    in
-      case Type.toCFunType expandedTy of
+      case Type.toCFunType (expandedTy, runtimeImport) of
          NONE =>
             let
                val () = invalidType ()
@@ -1075,6 +1086,7 @@ fun primApp {args, prim, result: Type.t} =
                                       result = result,
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = Type.deArrow,
+                                                 deHierarchicalHeap = Type.deHierarchicalHeap,
                                                  deRef = Type.deRef,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}})
@@ -1317,7 +1329,7 @@ in
                               end
              end)
          val ctypeCbTy =
-            case Type.toCBaseType expandedCbTy of
+            case Type.toCBaseType (expandedCbTy, false) of
                NONE => (invalidType ()
                         ; CType.word (WordSize.word8, {signed = false}))
              | SOME {ctype, ...} => ctype
@@ -1414,7 +1426,7 @@ in
                                      end)
              end)
          val ctypeCbTy =
-            case Type.toCBaseType expandedCbTy of
+            case Type.toCBaseType (expandedCbTy, false) of
                NONE => (invalidType (); CType.word (WordSize.word8, {signed = false}))
              | SOME {ctype, ...} => ctype
          val () =
@@ -1475,7 +1487,7 @@ fun export {attributes: ImportExportAttribute.t list,
                            symbolScope = symbolScope,
                            region = region}
       val (exportId, args, res) =
-         case Type.toCFunType expandedTy of
+         case Type.toCFunType (expandedTy, false) of
             NONE =>
                (invalidType ()
                 ; (0, Vector.new0 (), NONE))

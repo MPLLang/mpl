@@ -10,16 +10,20 @@
 void displayGCState (GC_state s, FILE *stream) {
   fprintf (stream,
            "GC state\n");
+
   fprintf (stream, "\tcurrentThread = "FMTOBJPTR"\n", s->currentThread);
   displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, s->heap->start)
                                 + offsetofThread (s)),
                  stream);
+
   fprintf (stream, "\tgenerational\n");
   displayGenerationalMaps (s, &s->generationalMaps,
                            stream);
+
   fprintf (stream, "\theap\n");
   displayHeap (s, s->heap,
                stream);
+
   fprintf (stream,
            "\tstart = "FMTPTR"\n"
            "\tfrontier = "FMTPTR"\n"
@@ -67,7 +71,7 @@ void setGCStateCurrentHeap (GC_state s,
 
   if (not duringInit) {
     nurseryBytesRequested = 0;
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       GC_thread thread = getThreadCurrent(&s->procStates[proc]);
       if (thread)
         nurseryBytesRequested += thread->bytesNeeded;
@@ -80,7 +84,7 @@ void setGCStateCurrentHeap (GC_state s,
              uintmaxToCommaString(nurseryBytesRequested));
   h = s->heap;
   assert (isFrontierAligned (s, h->start + h->oldGenSize + oldGenBytesRequested));
-#warning What happens to s->limit{,PlusSlop}?
+  /* RAM_NOTE: What happens to s->limit{,PlusSlop}? */
   limit = h->start + h->size - bonus;
   nurserySize = h->size - (h->oldGenSize + oldGenBytesRequested) - bonus;
   assert (isFrontierAligned (s, limit - nurserySize));
@@ -111,14 +115,14 @@ void setGCStateCurrentHeap (GC_state s,
     nursery = genNursery;
     nurserySize = genNurserySize;
     clearCardMap (s);
-    /* XXX copy card map to other processors? */
+    /* SPOONHOWER_NOTE: copy card map to other processors? */
   } else {
     unless (nurseryBytesRequested <= nurserySize)
       die ("Out of memory.  Insufficient space in nursery.");
     s->canMinor = FALSE;
   }
 
-#warning What does this do?
+  /* RAM_NOTE: What does this do? */
   if (s->controls->restrictAvailableSize
       and
       (s->cumulativeStatistics->maxBytesLiveSinceReset > 0)) {
@@ -186,7 +190,7 @@ void setGCStateCurrentHeap (GC_state s,
   frontier = nursery;
 
   if (not duringInit) {
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].canMinor = s->canMinor;
       assert (isFrontierAligned (s, frontier));
       s->procStates[proc].start = s->procStates[proc].frontier = frontier;
@@ -194,10 +198,10 @@ void setGCStateCurrentHeap (GC_state s,
         getThreadCurrent(&s->procStates[proc])->bytesNeeded;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#warning Probably not necessary, remove after confirmation
-      /* XXX clearCardMap (?) */
+      /* RAM_NOTE: Probably not necessary, remove after confirmation */
+      /* SPOONHOWER_NOTE: clearCardMap (?) */
 
-#warning Might want to remove this after cleanup
+      /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -208,7 +212,7 @@ void setGCStateCurrentHeap (GC_state s,
   else {
     assert (Proc_processorNumber (s) == 0);
     /* SPOONHOWER_NOTE: this is a lot of copy-paste */
-    for (int proc = 1; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
       s->procStates[proc].canMinor = s->canMinor;
       assert (isFrontierAligned (s, frontier));
       s->procStates[proc].start = s->procStates[proc].frontier = frontier;
@@ -216,10 +220,10 @@ void setGCStateCurrentHeap (GC_state s,
         GC_HEAP_LIMIT_SLOP;
       s->procStates[proc].limit = s->procStates[proc].limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       assert (s->procStates[proc].frontier <= s->procStates[proc].limitPlusSlop);
-#warning Probably not necessary, remove after confirmation
-      /* XXX clearCardMap (?) */
+      /* RAM_NOTE: Probably not necessary, remove after confirmation */
+      /* SPOONHOWER_NOTE: clearCardMap (?) */
 
-#warning Might want to remove this after cleanup
+      /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
         for (size_t i = 0; i < GC_BONUS_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
@@ -230,8 +234,8 @@ void setGCStateCurrentHeap (GC_state s,
     s->start = s->frontier = frontier;
     s->limitPlusSlop = limit;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-#warning Probably not necessary, remove after confirmation
-    /* XXX clearCardMap (?) */
+    /* RAM_NOTE: Probably not necessary, remove after confirmation */
+    /* SPOONHOWER_NOTE: clearCardMap (?) */
 
     if (DEBUG)
       for (size_t i = 0; i < GC_BONUS_SLOP; i++)
@@ -302,6 +306,17 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   return s->cumulativeStatistics->maxBytesLive;
 }
 
+uintmax_t GC_getCumulativeStatisticsGCTime(void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  uintmax_t time = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    time += rusageTime(&(s->procStates[i].cumulativeStatistics->ru_gc));
+  }
+
+  return time;
+}
+
 void GC_setHashConsDuringGC (bool b) {
   GC_state s = pthread_getspecific (gcstate_key);
   s->hashConsDuringGC = b;
@@ -330,6 +345,44 @@ pointer GC_getCurrentThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   pointer p = objptrToPointer (s->currentThread, s->heap->start);
   return p;
+}
+
+void GC_setCurrentThreadUseHierarchicalHeap (void) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread currentThread = getThreadCurrent(s);
+
+  currentThread->useHierarchicalHeap = TRUE;
+}
+
+pointer GC_getCurrentHierarchicalHeap (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  GC_thread t = getThreadCurrent(s);
+
+  pointer retVal;
+  if (BOGUS_OBJPTR != t->hierarchicalHeap) {
+    retVal = objptrToPointer (t->hierarchicalHeap, s->heap->start);
+  } else {
+    /* create a new hierarchical heap to return */
+    retVal = HM_newHierarchicalHeap(s);
+    GC_setCurrentHierarchicalHeap(retVal);
+  }
+
+  return retVal;
+}
+
+void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr threadObjptr = getThreadCurrentObjptr(s);
+  GC_thread thread = threadObjptrToStruct(s, threadObjptr);
+
+  thread->hierarchicalHeap = hhObjptr;
+  HM_HH_setThread(HM_HH_objptrToStruct(s, hhObjptr), threadObjptr);
+
+  LOG(LM_GC_STATE, LL_DEBUG,
+      "Set HH of thread %p to %p",
+      ((void*)(thread)),
+      ((void*)(hhObjptr)));
 }
 
 pointer GC_getSavedThread (void) {

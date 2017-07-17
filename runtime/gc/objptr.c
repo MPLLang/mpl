@@ -63,6 +63,7 @@ objptr pointerToObjptr (pointer P, pointer B) {
  * runtime in a manner which is agnostic to the actual objptr
  * representation.
  */
+/* Can be simplified once I remove model stuff */
 pointer fetchObjptrToPointer (pointer OP, pointer B) {
   return objptrToPointer (*((objptr*)OP), B);
 }

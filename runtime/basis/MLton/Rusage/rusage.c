@@ -57,10 +57,7 @@ C_SUSeconds_t MLton_Rusage_gc_stime_usec (void) {
 }
 
 void MLton_Rusage_getrusage (void) {
-#warning Reenable when I can
-#if 0
   MLton_Rusage_gc = *(GC_getRusageGCAddr ());
-#endif
   getrusage (RUSAGE_SELF, &MLton_Rusage_self);
   getrusage (RUSAGE_CHILDREN, &MLton_Rusage_children);
 }

@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -89,6 +90,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Normal objects have the following layout:
  *
  * header ::
+ * fwdptr (object-pointer) ::
  * (non heap-pointers)* ::
  * (heap pointers)*
  *
@@ -99,9 +101,9 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Likewise, a primitive value may span multiple native words (e.g.,
  * Word64.word on an x86).
 */
-#define GC_NORMAL_HEADER_SIZE GC_HEADER_SIZE
-
-typedef uint32_t GC_smallGapSize;
+#define GC_NORMAL_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
+/* RAM_NOTE: Should be defined in model.h */
+typedef uint64_t GC_smallGapSize;
 #define GC_SMALL_GAP_SIZE_SIZE sizeof (GC_smallGapSize)
 #define GC_BONUS_SLOP (GC_HEADER_SIZE + GC_SMALL_GAP_SIZE_SIZE)
 
@@ -155,7 +157,8 @@ enum {
   WORD16_VECTOR_TYPE_INDEX = 5,
   WORD64_VECTOR_TYPE_INDEX = 6,
   HEADER_ONLY_TYPE_INDEX =   7,
-  FILL_TYPE_INDEX =          8
+  FILL_TYPE_INDEX =          8,
+  HIERARCHICAL_HEAP_INDEX =  9
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -169,9 +172,9 @@ enum {
 #define GC_WORD16_VECTOR_HEADER buildHeaderFromTypeIndex (WORD16_VECTOR_TYPE_INDEX)
 #define GC_WORD32_VECTOR_HEADER buildHeaderFromTypeIndex (WORD32_VECTOR_TYPE_INDEX)
 #define GC_WORD64_VECTOR_HEADER buildHeaderFromTypeIndex (WORD64_VECTOR_TYPE_INDEX)
-
 #define GC_HEADER_ONLY_HEADER buildHeaderFromTypeIndex (HEADER_ONLY_TYPE_INDEX)
 #define GC_FILL_HEADER buildHeaderFromTypeIndex (FILL_TYPE_INDEX)
+#define GC_HIERARCHICAL_HEAP_HEADER buildHeaderFromTypeIndex (HIERARCHICAL_HEAP_INDEX)
 
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,

@@ -7,6 +7,9 @@
  * See the file MLton-LICENSE for details.
  */
 
+#ifndef GC_STATE_H_
+#define GC_STATE_H_
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 struct GC_state {
@@ -32,14 +35,21 @@ struct GC_state {
   struct GC_controls *controls;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
-#warning Is this the right type?
+  objptr wsQueue; /* The work-stealing queue for this processor */
+  objptr wsQueueLock; /* The work-stealing queue lock for this processor */
+  /* RAM_NOTE: Is this the right type? */
   pointer ffiArgs;
   struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
   struct GC_generationalMaps generationalMaps;
-#warning Not sure if this is used anymore...
-  /* Currently only used to hold raise operands. XXX at least i think so */
+  pointer globalFrontier;
+  pointer globalLimitPlusSlop;
+  /* RAM_NOTE: Not sure if this is used anymore... */
+  /*
+   * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
+   * think so
+   */
   Pointer *globalObjptrNonRoot;
   /* Ordinary globals */
   objptr *globals;
@@ -53,7 +63,7 @@ struct GC_state {
   uint32_t maxFrameSize;
   bool mutatorMarksCards;
   /* The maximum amount of concurrency */
-  int32_t numberOfProcs;
+  uint32_t numberOfProcs;
   int32_t workersPerProc;
   GC_objectHashTable objectHashTable;
   GC_objectType objectTypes; /* Array of object types. */
@@ -78,6 +88,8 @@ struct GC_state {
   struct GC_sourceMaps sourceMaps;
   pointer stackBottom; /* Bottom of stack in current thread. */
   pointer start; /* Like heap.nursery but per processor.  nursery <= start <= frontier */
+  pthread_t self; /* thread owning the GC_state */
+  atomic_uint32_t terminationLeader;
   int32_t syncReason;
   struct GC_sysvals sysvals;
   struct GC_translateState translateState;
@@ -85,6 +97,8 @@ struct GC_state {
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
+  spinlock_t lock;
+  struct TracingContext *trace;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -114,12 +128,25 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
 PRIVATE void GC_setCallFromCHandlerThreads (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);
+PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (void);
+/**
+ * This function returns the current hierarchical heap
+ *
+ * @note
+ * If no hierarchical heap was set, a new one is created, set as current, and
+ * returned.
+ *
+ * @return pointer to the current hierarchical heap
+ */
+PRIVATE pointer GC_getCurrentHierarchicalHeap (void);
+PRIVATE void GC_setCurrentHierarchicalHeap (pointer hhPointer);
 PRIVATE pointer GC_getSavedThread (void);
 PRIVATE void GC_setSavedThread (pointer p);
 PRIVATE void GC_setSignalHandlerThreads (pointer p);
@@ -133,3 +160,5 @@ PRIVATE sigset_t* GC_getSignalsPendingAddr (void);
 PRIVATE void GC_setGCSignalHandled (bool b);
 PRIVATE bool GC_getGCSignalPending (void);
 PRIVATE void GC_setGCSignalPending (bool b);
+
+#endif /* GC_STATE_H_ */

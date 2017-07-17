@@ -1,0 +1,38 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+  end
+
+  priority.sig
+  priority.sml
+
+  basic.sig
+  syncvar.sig
+  future.sig
+  thread.sig
+  mlx-sig.sml
+  mlx.sml
+  io.sig
+
+  ann "allowFFI true" in
+    internal.sml
+    basic.sml
+    syncvar.sml
+    future.sml
+    thread.sml
+    io.sml
+  end
+in
+  structure Thread = Thread
+  structure Basic = MLtonParallelBasic
+  structure IO = IO
+  structure Priority = Priority
+end

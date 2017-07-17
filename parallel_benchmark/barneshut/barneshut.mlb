@@ -2,6 +2,9 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 
+$(T7_SML_LIB)/util/listutil-sig.sml
+$(T7_SML_LIB)/util/listutil.sml
+
 sim.sig
 simarg.sig
 

@@ -9,7 +9,6 @@
 size_t GC_size (GC_state s, pointer root) {
   size_t res;
 
-#warning This enter/leave may need to be removed...
   s->syncReason = SYNC_STACK;
   ENTER0 (s); /* update stack in heap, in case it is reached */
   if (DEBUG_SIZE)

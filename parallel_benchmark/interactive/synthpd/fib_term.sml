@@ -43,7 +43,7 @@ fun fib n =
                                ^ "\n")
                     else ()
 *)
-            val fork = MLton.Parallel.ForkJoin.fork
+            val fork = ForkJoin.fork
             val (a, b) = fork (fn () => fib (n - 1),
                                fn () => fib (n - 2))
         in
@@ -74,7 +74,7 @@ fun inploop () =
 
 (*val _ = fibdo 36 *)
 (* val _ = print "Starting fib_term\n" *)
-val _ = MLton.Parallel.ForkJoin.fork ((fn () => MLton.Parallel.FutureFGBG.fg inploop),
-                                      (fn () => fibdo 45)
-                                      )
+val _ = ForkJoin.fork ((fn () => FGBG.fg inploop),
+                       (fn () => fibdo 45)
+                      )
 (* val _ = loop fibs fibs *)

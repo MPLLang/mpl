@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor SsaToSsa2 (S: SSA_TO_SSA2_STRUCTS): SSA_TO_SSA2 = 
+functor SsaToSsa2 (S: SSA_TO_SSA2_STRUCTS): SSA_TO_SSA2 =
 struct
 
 open S
@@ -40,6 +40,8 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
               S.Type.Array t => S2.Type.array1 (convertType t)
             | S.Type.CPointer => S2.Type.cpointer
             | S.Type.Datatype tycon => S2.Type.datatypee tycon
+            | S.Type.HierarchicalHeap t =>
+              S2.Type.hierarchicalHeap (convertType t)
             | S.Type.IntInf => S2.Type.intInf
             | S.Type.Real s => S2.Type.real s
             | S.Type.Ref t => S2.Type.reff1 (convertType t)
@@ -295,7 +297,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                               start = start}
           end)
       val globals = convertStatements globals
-      val program = 
+      val program =
          S2.Program.T {datatypes = datatypes,
                        functions = functions,
                        globals = globals,

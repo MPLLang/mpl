@@ -8,6 +8,8 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+#include <stdio.h>
+
 enum {
   SYNC_NONE = 0,
   SYNC_OLD_GEN_ARRAY,
@@ -27,10 +29,15 @@ struct GC_cumulativeStatistics {
   uintmax_t bytesHashConsed;
   uintmax_t bytesMarkCompacted;
   uintmax_t bytesScannedMinor;
+  uintmax_t bytesHHLocaled;
 
   size_t maxBytesLive;
   size_t maxBytesLiveSinceReset;
   size_t maxHeapSize;
+
+  size_t maxHHLCS;
+  size_t maxHHLCHS;
+
   uintmax_t maxPauseTime;
   size_t maxStackSize;
 
@@ -47,14 +54,18 @@ struct GC_cumulativeStatistics {
   uintmax_t numHashConsGCs;
   uintmax_t numMarkCompactGCs;
   uintmax_t numMinorGCs;
+  uintmax_t numHHLocalGCs;
 
   struct rusage ru_gc; /* total resource usage in gc. */
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */
   struct rusage ru_gcMarkCompact; /* resource usage in major mark-compact gcs. */
   struct rusage ru_gcMinor; /* resource usage in minor copying gcs. */
+  struct rusage ru_gcHHLocal; /**< Resource usage during Hierachical Heap local
+                               * collections */
 
-  struct rusage ru_rt; /* total time "inside" runtime (not incl. synch.) */
-  struct rusage ru_sync; /* time waiting to synchronize in runtime */
+  struct rusage ru_crit; /* total time in critical sections */
+  struct rusage ru_sync; /* total time synchronizing for critical sections */
+  struct rusage ru_bsp; /* total time in BSP rounds */
 };
 
 struct GC_lastMajorStatistics {
@@ -68,7 +79,10 @@ struct GC_lastMajorStatistics {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-struct GC_cumulativeStatistics* newCumulativeStatistics();
-struct GC_lastMajorStatistics* newLastMajorStatistics();
+struct GC_cumulativeStatistics* newCumulativeStatistics(void);
+struct GC_lastMajorStatistics* newLastMajorStatistics(void);
+
+void S_outputCumulativeStatisticsJSON(
+    FILE* out, struct GC_cumulativeStatistics* statistics);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

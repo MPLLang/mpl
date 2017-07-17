@@ -37,6 +37,7 @@ local
    fun unary tycon t = con (tycon, Vector.new1 t)
 in
    val array = unary Tycon.array
+   val hierarchicalHeap = unary Tycon.hierarchicalHeap
    val list = unary Tycon.list
    val reff = unary Tycon.reff
    val vector = unary Tycon.vector
@@ -53,7 +54,7 @@ in
    val arrow = binary Tycon.arrow
 end
 
-val arrow = 
+val arrow =
    Trace.trace ("TypeOps.arrow", Layout.tuple2 (layout, layout), layout) arrow
 
 fun deUnaryOpt tycon t =
@@ -69,6 +70,7 @@ fun deUnary tycon t =
     | NONE => Error.bug "TypeOps.deUnary"
 
 val deArray = deUnary Tycon.array
+val deHierarchicalHeap = deUnary Tycon.hierarchicalHeap
 val deRef = deUnary Tycon.reff
 val deVector = deUnary Tycon.vector
 val deWeak = deUnary Tycon.weak
@@ -107,8 +109,8 @@ fun deArrow t =
     | NONE => Error.bug "TypeOps.deArrow"
 
 val deArrow =
-   Trace.trace 
-   ("TypeOps.deArrow", layout, Layout.tuple2 (layout, layout)) 
+   Trace.trace
+   ("TypeOps.deArrow", layout, Layout.tuple2 (layout, layout))
    deArrow
 
 end

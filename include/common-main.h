@@ -31,7 +31,7 @@
 
 PRIVATE Pointer gcStateAddress;
 
-#warning RR: figure out if globalObjptrNonRoot is required
+/* RAM_NOTE: What is globalObjptrNonRoot? Is it required? */
 #define Initialize(s, al, mg, mfs, mmc, pk, ps, gnr)              \
         gcStateAddress = &s;                                      \
         s.alignment = al;                                         \
@@ -72,6 +72,7 @@ PRIVATE Pointer gcStateAddress;
 
 static void MLton_callFromC ();
 
+/* RAM_NOTE: Should this be merged into gc/init.c:GC_duplicate? */
 void Duplicate (GC_state d, GC_state s) {
   // Initialize
   d->alignment = s->alignment;
@@ -103,6 +104,7 @@ void Duplicate (GC_state d, GC_state s) {
   d->sourceMaps.sourcesLength = s->sourceMaps.sourcesLength;
   d->profiling.kind = s->profiling.kind;
   d->profiling.stack = s->profiling.stack;
+  d->profiling.isOn = s->profiling.isOn;
   d->globalObjptrNonRoot = s->globalObjptrNonRoot;
   GC_duplicate (d, s);
 }

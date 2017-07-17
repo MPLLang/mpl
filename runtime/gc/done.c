@@ -42,13 +42,15 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   uintmax_t totalTime;
   uintmax_t gcTime;
   uintmax_t syncTime;
-  uintmax_t rtTime;
+  uintmax_t critTime;
+  uintmax_t bspTime;
 
   getrusage (RUSAGE_THREAD, &ru_total);
   totalTime = rusageTime (&ru_total);
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
   syncTime = rusageTime (&cumulativeStatistics->ru_sync);
-  rtTime = rusageTime (&cumulativeStatistics->ru_rt);
+  critTime = rusageTime (&cumulativeStatistics->ru_crit);
+  bspTime = rusageTime (&cumulativeStatistics->ru_bsp);
   fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
   fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
   displayCollectionStats
@@ -66,6 +68,11 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
      &cumulativeStatistics->ru_gcMinor,
      cumulativeStatistics->numMinorGCs,
      cumulativeStatistics->bytesCopiedMinor);
+  displayCollectionStats
+      (out, "HHLocal\t\t",
+       &cumulativeStatistics->ru_gcHHLocal,
+       cumulativeStatistics->numHHLocalGCs,
+       cumulativeStatistics->bytesHHLocaled);
   fprintf (out, "total time: %s ms\n",
            uintmaxToCommaString (totalTime));
   fprintf (out, "total GC time: %s ms (%.1f%%)\n",
@@ -76,10 +83,14 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (syncTime),
            (0 == totalTime) ?
            0.0 : 100.0 * ((double) syncTime) / (double)totalTime);
-  fprintf (out, "total rt time: %s ms (%.1f%%)\n",
-           uintmaxToCommaString (rtTime),
+  fprintf (out, "total crit time: %s ms (%.1f%%)\n",
+           uintmaxToCommaString (critTime),
            (0 == totalTime) ?
-           0.0 : 100.0 * ((double) rtTime) / (double)totalTime);
+           0.0 : 100.0 * ((double) critTime) / (double)totalTime);
+  fprintf (out, "total bsp time: %s ms (%.1f%%)\n",
+           uintmaxToCommaString (bspTime),
+           (0 == totalTime) ?
+           0.0 : 100.0 * ((double) bspTime) / (double)totalTime);
   fprintf (out, "max pause time: %s ms\n",
            uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",
@@ -88,6 +99,10 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
   fprintf (out, "max heap size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHeapSize));
+  fprintf (out, "max hierarchical heap LC size: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->maxHHLCS));
+  fprintf (out, "max hierarchical heap LC heap size: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->maxHHLCHS));
   fprintf (out, "max stack size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxStackSize));
   fprintf (out, "num cards marked: %s\n",
@@ -108,23 +123,65 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->syncMisc));
 }
 
-void GC_done (GC_state s) {
-  FILE *out;
+static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
+  struct rusage ru_total;
+  uintmax_t totalTime;
 
-  s->syncReason = SYNC_FORCE;
-  ENTER0 (s);
-  minorGC (s);
-  out = stderr;
-  if (s->controls->summary) {
-    if (s->procStates) {
-      for (int proc = 0; proc < s->numberOfProcs; proc++) {
-        fprintf (out, "Thread [%d]::\n", proc);
-        displayCumulativeStatistics (out, s->procStates[proc].cumulativeStatistics);
+  getrusage (RUSAGE_THREAD, &ru_total);
+  totalTime = rusageTime (&ru_total);
+
+  fprintf(out, "{ ");
+
+  {
+    /* Print per-thread statistics */
+    fprintf(out, "\"perThread\" : ");
+    fprintf(out, "[");
+    {
+      if (s->procStates) {
+        /* print cumulativeStatistics for each processor, separated by commas */
+        uint32_t proc;
+        for (proc = 0; proc < s->numberOfProcs - 1; proc++) {
+          S_outputCumulativeStatisticsJSON(
+              out, s->procStates[proc].cumulativeStatistics);
+          fprintf(out, ", ");
+        }
+        S_outputCumulativeStatisticsJSON(
+            out, s->procStates[proc].cumulativeStatistics);
+      } else {
+        S_outputCumulativeStatisticsJSON(out, s->cumulativeStatistics);
       }
-    } else {
-      displayCumulativeStatistics (out, s->cumulativeStatistics);
+    }
+    fprintf(out, "]");
+
+    fprintf(out, ", ");
+
+    /* print global statistics */
+    fprintf(out, "\"totalTime\" : %"PRIuMAX, totalTime);
+  }
+
+  fprintf(out, " }");
+}
+
+void GC_done (GC_state s) {
+  minorGC (s);
+  if (s->controls->summary) {
+    if (HUMAN == s->controls->summaryFormat) {
+      if (s->procStates) {
+        for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
+          fprintf (s->controls->summaryFile, "Thread [%d]::\n", proc);
+          displayCumulativeStatistics
+              (s->controls->summaryFile,
+               s->procStates[proc].cumulativeStatistics);
+        }
+      } else {
+        displayCumulativeStatistics(s->controls->summaryFile,
+                                    s->cumulativeStatistics);
+      }
+    } else if (JSON == s->controls->summaryFormat) {
+      displayCumulativeStatisticsJSON(s->controls->summaryFile, s);
+      fprintf(s->controls->summaryFile, "\n");
     }
   }
-  releaseHeap (s, s->heap);
-  releaseHeap (s, s->secondaryHeap);
+  releaseHeap(s, s->heap);
+  releaseHeap(s, s->secondaryHeap);
 }

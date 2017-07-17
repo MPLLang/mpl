@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-ann  
+ann
    "deadCode true"
    "sequenceNonUnit warn"
    "nonexhaustiveMatch warn" "redundantMatch warn"
@@ -22,6 +22,7 @@ in
       signature MLTON_EXN
       signature MLTON_FINALIZABLE
       signature MLTON_GC
+      signature MLTON_HM
       signature MLTON_INT_INF
       signature MLTON_IO
       signature MLTON_ITIMER

@@ -10,8 +10,10 @@
 GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
   GC_thread to;
 
-  if (DEBUG_THREADS or s->controls->messages)
-    fprintf (stderr, "copyThread ("FMTPTR")\n", (uintptr_t)from);
+  LOG(LM_THREAD, LL_DEBUG,
+      "called on "FMTPTR,
+      (uintptr_t)from);
+
   /* newThread may do a GC, which invalidates from.
    * Hence we need to stash from someplace that the GC can find it.
    */
@@ -29,6 +31,9 @@ GC_thread copyThread (GC_state s, GC_thread from, size_t used) {
              (GC_stack)(objptrToPointer(to->stack, s->heap->start)));
   to->bytesNeeded = from->bytesNeeded;
   to->exnStack = from->exnStack;
+
+  Trace2(EVENT_THREAD_COPY, (EventInt)from, (EventInt)to);
+
   return to;
 }
 
@@ -38,8 +43,8 @@ void GC_copyCurrentThread (GC_state s) {
   GC_thread toThread;
   LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
-  if (DEBUG_THREADS or s->controls->messages)
-    fprintf (stderr, "GC_copyCurrentThread [%d]\n", Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "called");
 
   /* SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
      synchronize unless we don't have enough room to allocate a new thread and stack. */
@@ -52,26 +57,17 @@ void GC_copyCurrentThread (GC_state s) {
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
                            + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-#warning Should this be fromStack->used?
-  toThread = copyThread (s, fromThread, fromStack->reserved);
+  /* RAM_NOTE: Should this be fromStack->used? */
+  toThread = copyThread (s, fromThread, fromStack->used);
 
-  /* Look up these again since a GC may have occurred and moved them */
-  fromThread = (GC_thread)(objptrToPointer(s->currentThread, s->heap->start)
-                           + offsetofThread (s));
-  fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
   toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap->start));
-  /* The following assert is no longer true, since alignment
-   * restrictions can force the reserved to be slightly larger than
-   * the used.
-   */
-  /* assert (fromStack->reserved == fromStack->used); */
-  assert (fromStack->reserved >= fromStack->used);
+  assert (toStack->reserved == alignStackReserved (s, toStack->used));
 
   /* SPOONHOWER_NOTE: Formerly: LEAVE1 (s, "toThread"); */
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, FMTPTR" = GC_copyCurrentThread [%d]\n",
-             (uintptr_t)toThread, Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "result is "FMTPTR,
+      (uintptr_t)toThread);
   assert (s->savedThread == BOGUS_OBJPTR);
   s->savedThread = pointerToObjptr((pointer)toThread - offsetofThread (s), s->heap->start);
 }
@@ -80,45 +76,35 @@ pointer GC_copyThread (GC_state s, pointer p) {
   GC_thread fromThread;
   GC_stack fromStack;
   GC_thread toThread;
+  LOCAL_USED_FOR_ASSERT GC_stack toStack;
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, "GC_copyThread ("FMTPTR") [%d]\n", (uintptr_t)p,
-             Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "called on "FMTPTR,
+      (uintptr_t)p);
 
-  /* Used to be an ENTER here, but we don't really need to synchronize unless
-     we don't have enough room to allocate a new thread and stack. */
+  /*
+   * SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
+   * synchronize unless we don't have enough room to allocate a new thread and
+   * stack.
+   */
 
-  /* XXX copied from enter() */
+  /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
   fromThread = (GC_thread)(p + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, s->heap->start));
-  /* The following assert is no longer true, since alignment
-   * restrictions can force the reserved to be slightly larger than
-   * the used.
-   */
-  /* assert (fromStack->reserved == fromStack->used); */
   assert (fromStack->reserved >= fromStack->used);
-#warning Should this be fromStack->used?
-  toThread = copyThread (s, fromThread, fromStack->reserved);
-
-#warning Remove dead code if possible
-#warning May have been dead-ified because I use fromStack->reserved above now.
-  /* The following assert is no longer true, since alignment
-   * restrictions can force the reserved to be slightly larger than
-   * the used.
-   */
-#if 0
-  toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap.start));
+  toThread = copyThread (s, fromThread, fromStack->used);
+  toStack = (GC_stack)(objptrToPointer(toThread->stack, s->heap->start));
   assert (toStack->reserved == alignStackReserved (s, toStack->used));
-#endif
 
   /* SPOONHOWER_NOTE: Formerly: LEAVE2 (s, "toThread", "fromThread"); */
 
-  if (DEBUG_THREADS)
-    fprintf (stderr, FMTPTR" = GC_copyThread ("FMTPTR") [%d]\n",
-             (uintptr_t)toThread, (uintptr_t)fromThread, Proc_processorNumber (s));
+  LOG(LM_THREAD, LL_DEBUG,
+      "result is "FMTPTR" from "FMTPTR,
+      (uintptr_t)toThread,
+      (uintptr_t)fromThread);
   return ((pointer)toThread - offsetofThread (s));
 }

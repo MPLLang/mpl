@@ -356,7 +356,10 @@ void GC_handleSigProf (code_pointer pc) {
     sourceSeqsIndex = SOURCE_SEQ_GC;
   else {
     frameIndex = getCachedStackTopFrameIndex (s);
-#warning This if-condition (and the else-block!) feels like a hack to get things to work. Figure out intent and fix.
+    /*
+     * RAM_NOTE: This if-condition (and the else-block!) feels like a hack to
+     * get things to work. Figure out intent and fix.
+     */
     if (frameIndex < s->frameLayoutsLength) {
       if (C_FRAME == s->frameLayouts[frameIndex].kind)
         sourceSeqsIndex = s->sourceMaps.frameSources[frameIndex];

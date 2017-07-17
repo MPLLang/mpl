@@ -1,4 +1,4 @@
-(* Copyright (C) 2010,2013 Matthew Fluet.
+(* Copyright (C) 2010,2013,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -30,7 +30,7 @@ fun shareAll () =
 fun size x =
    let
       val refOverhead =
-         Int.div (HeaderWord.wordSize + ObjptrWord.wordSize, 8)
+         Int32.toInt MetaDataSize.bytes + Int.div (ObjptrWord.wordSize, 8)
    in
       C_Size.toInt (Primitive.MLton.size (ref x)) - refOverhead
    end
@@ -58,6 +58,7 @@ end
 structure Cont = MLtonCont
 structure Exn = MLtonExn
 structure Finalizable = MLtonFinalizable
+structure HM = MLtonHM
 structure IntInf =
    struct
       open IntInf
@@ -82,20 +83,20 @@ structure Process = MLtonProcess
 (* structure Ptrace = MLtonPtrace *)
 structure Profile = MLtonProfile
 structure Random = MLtonRandom
-structure Real = 
+structure Real =
    struct
       open Real
       type t = real
    end
-structure Real32 = 
+structure Real32 =
    struct
       open Real32
       type t = real
       open Primitive.PackReal32
    end
-structure Real64 = 
+structure Real64 =
    struct
-      open Real64 
+      open Real64
       type t = real
       open Primitive.PackReal64
    end
@@ -142,7 +143,7 @@ structure Word8Vector = struct
    type t = vector
 end
 
-val _ = 
+val _ =
    (Primitive.TopLevel.setHandler MLtonExn.defaultTopLevelHandler
     ; Primitive.TopLevel.setSuffix Exit.defaultTopLevelSuffix)
 end

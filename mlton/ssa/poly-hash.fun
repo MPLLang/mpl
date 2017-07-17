@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor PolyHash (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM = 
+functor PolyHash (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM =
 struct
 
 open S
@@ -88,16 +88,16 @@ structure Hash =
                   fun extdW w =
                      if WordSize.equals (ws, workWordSize)
                         then w
-                     else Dexp.primApp {prim = Prim.wordExtdToWord 
-                                               (ws, workWordSize, 
+                     else Dexp.primApp {prim = Prim.wordExtdToWord
+                                               (ws, workWordSize,
                                                 {signed = false}),
                                         targs = Vector.new0 (),
                                         args = Vector.new1 w,
                                         ty = workTy}
 
-                  val mask = 
-                     (Dexp.word o WordX.resize) 
-                     (WordX.allOnes WordSize.word8, 
+                  val mask =
+                     (Dexp.word o WordX.resize)
+                     (WordX.allOnes WordSize.word8,
                       workWordSize)
 
                   fun loop (st, w, b) =
@@ -116,15 +116,15 @@ structure Hash =
                           in
                              Dexp.lett
                              {decs = [{var = w0, exp = w},
-                                      {var = bw, exp = 
+                                      {var = bw, exp =
                                        Dexp.andb (dw0, mask, workWordSize)},
-                                      {var = st1, exp = 
+                                      {var = st1, exp =
                                        combByte (dst0, dbw)},
-                                      {var = st2, exp = 
+                                      {var = st2, exp =
                                        mix dst1}],
-                              body = loop (dst2, 
-                                           Dexp.rshift (dw0, 
-                                                        Dexp.shiftBits Bits.inWord8, 
+                              body = loop (dst2,
+                                           Dexp.rshift (dw0,
+                                                        Dexp.shiftBits Bits.inWord8,
                                                         workWordSize),
                                            Bits.- (b, Bits.inWord8))}
                           end
@@ -145,9 +145,9 @@ structure Hash =
                              {decs = [{var = w0, exp = w},
                                       {var = ew, exp = extdW dw0},
                                       {var = st1, exp = loop (dst0, dew, loopBits)}],
-                              body = lp (dst1, 
-                                         Dexp.rshift (dw0, 
-                                                      Dexp.shiftBits workBits, 
+                              body = lp (dst1,
+                                         Dexp.rshift (dw0,
+                                                      Dexp.shiftBits workBits,
                                                       ws),
                                          Bits.- (b, workBits))}
                           end
@@ -165,7 +165,7 @@ structure Hash =
 (*
       (* Jenkins hash function
        * http://en.wikipedia.org/wiki/Jenkins_hash_function  (20100315)
-       *) 
+       *)
       val {stateTy: Type.t,
            init: unit -> Dexp.t,
            wordBytes: Dexp.t * Dexp.t * WordSize.t -> Dexp.t,
@@ -261,7 +261,7 @@ structure Hash =
             val stateTy = Type.word stateWordSize
             val workWordSize = resWordSize
             val workTy = Type.word workWordSize
-               
+
             local
                fun mk prim =
                   fn (w1, w2) => prim (w1, w2, stateWordSize)
@@ -337,11 +337,11 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
            set = setHashFunc,
            destroy = destroyHashFunc} =
          Property.destGetSet (Type.plist, Property.initConst NONE)
-      val {get = getTyconHashFunc: Tycon.t -> Func.t option, 
+      val {get = getTyconHashFunc: Tycon.t -> Func.t option,
            set = setTyconHashFunc, ...} =
          Property.getSet (Tycon.plist, Property.initConst NONE)
-      val {get = getVectorHashFunc: Type.t -> Func.t option, 
-           set = setVectorHashFunc, 
+      val {get = getVectorHashFunc: Type.t -> Func.t option,
+           set = setVectorHashFunc,
            destroy = destroyVectorHashFunc} =
          Property.destGetSet (Type.plist, Property.initConst NONE)
       val returns = SOME (Vector.new1 Hash.stateTy)
@@ -426,7 +426,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      val dlen = Dexp.var len
                      val body =
                         Dexp.lett
-                        {decs = [{var = #1 len, exp = 
+                        {decs = [{var = #1 len, exp =
                                   Dexp.primApp {prim = Prim.vectorLength,
                                                 targs = Vector.new1 ty,
                                                 args = Vector.new1 dvec,
@@ -464,16 +464,16 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                         let
                            val args =
                               Vector.new4
-                              (hashExp 
-                               (dst, 
+                              (hashExp
+                               (dst,
                                 Dexp.primApp {prim = Prim.vectorSub,
                                               targs = Vector.new1 ty,
                                               args = Vector.new2 (dvec, di),
                                               ty = ty},
                                 ty),
-                               dvec, 
+                               dvec,
                                dlen,
-                               Dexp.add (di, 
+                               Dexp.add (di,
                                          Dexp.word (WordX.one seqIndexWordSize),
                                          seqIndexWordSize))
                         in
@@ -521,7 +521,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
             val body =
                case Type.dest ty of
                   Type.Array _ => stateful ()
-                | Type.CPointer => 
+                | Type.CPointer =>
                      let
                         val ws = WordSize.cpointer ()
                         val toWord =
@@ -537,7 +537,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      Dexp.call {func = hashTyconFunc tycon,
                                 args = Vector.new2 (dst, dx),
                                 ty = Hash.stateTy}
-                | Type.IntInf => 
+                | Type.HierarchicalHeap _ => stateful ()
+                | Type.IntInf =>
                      let
                         val sws = WordSize.smallIntInfWord ()
                         val bws = WordSize.bigIntInfWord ()
@@ -559,7 +560,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      in
                         Dexp.lett
                         {decs = [{var = w, exp = toWord}],
-                         body = 
+                         body =
                          Dexp.casee
                          {test = Dexp.wordEqual (Dexp.andb (dw, one, sws), one, sws),
                           ty = Hash.stateTy,
@@ -571,7 +572,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                             body = Hash.wordBytes (dst, dw, sws)},
                            {con = Con.falsee,
                             args = Vector.new0 (),
-                            body = 
+                            body =
                             Dexp.call {func = vectorHashFunc (Type.word bws),
                                        args = Vector.new2 (dst, toVector),
                                        ty = Hash.stateTy}})}}
@@ -623,7 +624,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       fun hashFunc (ty: Type.t): Func.t =
          case getHashFunc ty of
             SOME f => f
-          | NONE => 
+          | NONE =>
                let
                   val name = Func.newString "hash"
                   val _ = setHashFunc (ty, SOME name)
@@ -636,7 +637,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val dstf = Dexp.var (stf, Hash.stateTy)
                   val w = Var.newNoname ()
                   val dw = Dexp.var (w, Hash.resTy)
-                  val body = 
+                  val body =
                      Dexp.lett
                      {decs = [{var = sti, exp = Hash.init ()},
                               {var = stf, exp = hashExp (dsti, dx, ty)},
@@ -686,9 +687,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           end)
       fun doit blocks =
          let
-            val blocks = 
+            val blocks =
                Vector.fold
-               (blocks, [], 
+               (blocks, [],
                 fn (block as Block.T {label, args, statements, transfer}, blocks) =>
                 if not (#hasHash (labelInfo label))
                    then block::blocks
@@ -701,9 +702,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                transfer = transfer}
                    val (blocks, las) =
                       Vector.fold
-                      (statements, 
+                      (statements,
                        (blocks, {label = label, args = args, statements = []}),
-                       fn (stmt as Statement.T {exp, var, ...}, 
+                       fn (stmt as Statement.T {exp, var, ...},
                            (blocks, las as {label, args, statements})) =>
                        let
                          fun normal () = (blocks,
@@ -720,11 +721,11 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                          val x = Vector.sub (args, 0)
                                          val l = Label.newNoname ()
                                       in
-                                        (finish 
-                                         (las, 
+                                        (finish
+                                         (las,
                                           Call {args = Vector.new1 x,
                                                 func = hashFunc ty,
-                                                return = Return.NonTail 
+                                                return = Return.NonTail
                                                          {cont = l,
                                                           handler = Handler.Caller}})
                                          :: blocks,
@@ -743,7 +744,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
             Vector.fromList blocks
          end
       val functions =
-         List.revMap 
+         List.revMap
          (functions, fn f =>
           let
              val {args, blocks, mayInline, name, raises, returns, start} =

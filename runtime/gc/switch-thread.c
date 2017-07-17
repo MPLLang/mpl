@@ -19,18 +19,20 @@ void switchToThread (GC_state s, objptr op) {
              "  reserved = %"PRIuMAX"\n",
              op, (uintmax_t)stack->used, (uintmax_t)stack->reserved);
   }
+
   s->currentThread = op;
   setGCStateCurrentThreadAndStack (s);
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  if (DEBUG_THREADS)
-    fprintf (stderr,
-             "GC_switchToThread ("FMTPTR", %"PRIuMAX") [%d]\n",
-             (uintptr_t)p,
-             (uintmax_t)ensureBytesFree,
-             Proc_processorNumber (s));
-#warning Switch to other branch when I can
+  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), s->heap->start);
+  LOG (LM_THREAD, LL_DEBUG,
+       "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
+       ((uintptr_t)(currentP)),
+       ((uintptr_t)(p)),
+       ensureBytesFree);
+
+  /* RAM_NOTE: Switch to other branch when I can */
   if (TRUE) {
     /* This branch is slower than the else branch, especially
      * when debugging is turned on, because it does an invariant
@@ -38,14 +40,42 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
      * So, we'll stick with the else branch for now.
      */
     //ENTER1 (s, p);
-    /* XXX copied from enter() */
+    /* SPOONHOWER_NOTE: copied from enter() */
     /* used needs to be set because the mutator has changed s->stackTop. */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
     getThreadCurrent(s)->exnStack = s->exnStack;
     beginAtomic (s);
 
+    if (!HM_inGlobalHeap(s)) {
+      /* save HH info for from-thread */
+      /* copied from HM_enterGlobalHeap() */
+      HM_exitLocalHeap(s);
+
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
+      s->frontier = s->globalFrontier;
+      s->limitPlusSlop = s->globalLimitPlusSlop;
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+      spinlock_unlock(&(s->lock));
+    }
+
+    /*
+     * at this point, the processor is in the global heap, but the thread is
+     * not.
+     */
+
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     switchToThread (s, pointerToObjptr(p, s->heap->start));
+
+    if (!HM_inGlobalHeap(s)) {
+      /* I need to switch to the HH for the to-thread */
+      /* copied from HM_exitGlobalHeap() */
+      spinlock_lock(&(s->lock), Proc_processorNumber(s));
+      s->globalFrontier = s->frontier;
+      s->globalLimitPlusSlop = s->limitPlusSlop;
+      HM_enterLocalHeap (s);
+      spinlock_unlock(&(s->lock));
+    }
+
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
@@ -57,7 +87,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     assert (invariantForMutatorStack(s));
     //LEAVE0 (s);
   } else {
-#warning Why? It looks exactly the same...
+    /* RAM_NOTE: Why? It looks exactly the same... */
     assert (false and "unsafe in a multiprocessor context");
     /* BEGIN: enter(s); */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);

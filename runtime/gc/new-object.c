@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -12,7 +12,7 @@
  * Allocate a new object in the heap.
  * bytesRequested includes the size of the header.
  */
-/* XXX DOC spoons must hold the runtime lock if allocInOldGen is true! */
+/* SPOONHOWER_NOTE: must hold the runtime lock if allocInOldGen is true! */
 pointer newObject (GC_state s,
                    GC_header header,
                    size_t bytesRequested,
@@ -27,6 +27,7 @@ pointer newObject (GC_state s,
   if (allocInOldGen) {
     /* NB you must have exclusive access to the runtime state
        if you are allocating in the older generation! */
+    assert(HM_inGlobalHeap(s));
     frontier = s->heap->start + s->heap->oldGenSize;
     s->heap->oldGenSize += bytesRequested;
     s->cumulativeStatistics->bytesAllocated += bytesRequested;
@@ -38,10 +39,13 @@ pointer newObject (GC_state s,
     frontier = s->frontier;
     s->frontier += bytesRequested;
   }
-  /* XXX unprotected concurrent access */
+  /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
-  *((GC_header*)frontier) = header;
-  result = frontier + GC_NORMAL_HEADER_SIZE;
+  *((GC_header*)(frontier)) = header;
+  frontier = frontier + GC_HEADER_SIZE;
+  *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  frontier = frontier + OBJPTR_SIZE;
+  result = frontier;
   assert (isAligned ((size_t)result, s->alignment));
   if (DEBUG)
     fprintf (stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX", %s)\n",
@@ -61,7 +65,7 @@ GC_stack newStack (GC_state s,
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
-                                sizeofStackWithHeader (s, reserved),
+                                sizeofStackWithMetaData (s, reserved),
                                 allocInOldGen));
   stack->reserved = reserved;
   stack->used = 0;
@@ -69,6 +73,7 @@ GC_stack newStack (GC_state s,
     fprintf (stderr, FMTPTR " = newStack (%"PRIuMAX")\n",
              (uintptr_t)stack,
              (uintmax_t)reserved);
+
   return stack;
 }
 
@@ -78,19 +83,76 @@ GC_thread newThread (GC_state s, size_t reserved) {
   pointer res;
 
   assert (isStackReservedAligned (s, reserved));
-  ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE, 0, sizeofStackWithHeader (s, reserved) + sizeofThread (s));
+  if (HM_inGlobalHeap(s)) {
+    ensureHasHeapBytesFreeAndOrInvariantForMutator (
+        s, FALSE, FALSE, FALSE,
+        0, sizeofStackWithMetaData (s, reserved) + sizeofThread (s));
+  } else {
+    HM_ensureHierarchicalHeapAssurances(s,
+                                        FALSE,
+                                        sizeofStackWithMetaData (s, reserved) +
+                                        sizeofThread (s),
+                                        FALSE);
+  }
   stack = newStack (s, reserved, FALSE);
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
+  thread->inGlobalHeapCounter = 0;
+  thread->useHierarchicalHeap = FALSE;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
+  thread->hierarchicalHeap = BOGUS_OBJPTR;
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
+  LOG(LM_ALLOCATION, LL_INFO,
+      FMTPTR" = newThreadOfSize (%"PRIuMAX")",
+      (uintptr_t)thread,
+      (uintmax_t)reserved);
+
   return thread;
+}
+
+pointer HM_newHierarchicalHeap (GC_state s) {
+  /* allocate the object */
+  ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
+                                                 FALSE,
+                                                 FALSE,
+                                                 FALSE,
+                                                 0,
+                                                 HM_HH_sizeof(s));
+  pointer hhObject = newObject (s,
+                                GC_HIERARCHICAL_HEAP_HEADER,
+                                HM_HH_sizeof(s),
+                                FALSE);
+  struct HM_HierarchicalHeap* hh =
+      ((struct HM_HierarchicalHeap*)(hhObject +
+                                     HM_HH_offsetof(s)));
+
+  hh->lastAllocatedChunk = NULL;
+  hh->lock = HM_HH_LOCK_INITIALIZER;
+  hh->state = LIVE;
+  hh->level = 0;
+  hh->stealLevel = HM_HH_INVALID_LEVEL;
+  hh->id = 0;
+  hh->levelList = NULL;
+  hh->newLevelList = NULL;
+  hh->locallyCollectibleSize = 0;
+  hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
+  hh->retVal = NULL;
+  hh->parentHH = BOGUS_OBJPTR;
+  hh->nextChildHH = BOGUS_OBJPTR;
+  hh->childHHList = BOGUS_OBJPTR;
+  hh->thread = BOGUS_OBJPTR;
+
+  if (DEBUG_HEAP_MANAGEMENT) {
+    fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));
+  }
+
+  return hhObject;
 }
 
 static inline void setFrontier (GC_state s, pointer p,

@@ -1,6 +1,9 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 
+$(T7_SML_LIB)/util/listutil-sig.sml
+$(T7_SML_LIB)/util/listutil.sml
+
 dense.sig
 densearg.sig
 

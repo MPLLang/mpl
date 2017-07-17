@@ -9,7 +9,7 @@ uts_term:
 	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6o-map -output uts2_term-ws6o uts_term.mlb
 
 fib_term:
-	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6-map -output fib_term-ws6 fib_term.mlb
+#	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6-map -output fib_term-ws6 fib_term.mlb
 #	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6ts-map -output fib_term-ws6ts fib_term.mlb
 #	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/ws6tslc-map -output fib_term-ws6tslc fib_term.mlb
 	../../../../mlton-parmem-master/build/bin/mlton-parmem -default-ann 'allowFFI true' -mlb-path-map ../../../../mlton-parmem-master/build/lib/sml/basis/parallel/ws6-map -output fib_term-ws6o fib_term.mlb
@@ -54,8 +54,8 @@ countcl: countcl.sml
 anagrams: anagrams.sml
 	../../build/bin/mlton -default-ann 'allowFFI true' -link-opt -L/usr/X11R6/lib -link-opt -lX11 -mlb-path-map ../../build/lib/sml/basis/parallel/ws6-map anagrams.mlb ../../../sml-lib/mlton/x/mlx.o
 
-fib_term-pd: fib_term.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
-	../../../build/bin/mlton -default-ann 'allowFFI true' -cc-opt -g -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_term-pd fib_term.mlb
+fib_term-pd: fib_term.sml
+	../../../build/bin/mlton-parmem -default-ann 'allowFFI true' -cc-opt -g -output fib_term-pd fib_term.mlb
 
 fib_net-pd: fib_net.sml ../../../build/lib/sml/basis/parallel/basicpd.sml
 	../../../build/bin/mlton -default-ann 'allowFFI true' -mlb-path-map ../../../build/lib/sml/basis/parallel/pd-map -output fib_net-pd fib_net.mlb

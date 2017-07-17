@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -12,8 +12,9 @@
  * Returns a pointer to the length for the array pointed to by p.
  */
 GC_arrayLength* getArrayLengthp (pointer a) {
-  return (GC_arrayLength*)(a 
-                           - GC_HEADER_SIZE 
+  return (GC_arrayLength*)(a
+                           - OBJPTR_SIZE
+                           - GC_HEADER_SIZE
                            - GC_ARRAY_LENGTH_SIZE);
 }
 
@@ -34,9 +35,10 @@ uintmax_t GC_getArrayLength (pointer a) {
  * Returns a pointer to the counter for the array pointed to by p.
  */
 GC_arrayCounter* getArrayCounterp (pointer a) {
-  return (GC_arrayCounter*)(a 
-                            - GC_HEADER_SIZE 
-                            - GC_ARRAY_LENGTH_SIZE 
+  return (GC_arrayCounter*)(a
+                            - OBJPTR_SIZE
+                            - GC_HEADER_SIZE
+                            - GC_ARRAY_LENGTH_SIZE
                             - GC_ARRAY_COUNTER_SIZE);
 }
 

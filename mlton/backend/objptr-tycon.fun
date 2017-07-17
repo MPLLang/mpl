@@ -40,6 +40,8 @@ fun toString (opt: t): string =
 
 val layout = Layout.str o toString
 
+(* RAM_NOTE: This declarative style is a *terrible* way to do this *)
+
 val stack = new ()
 val thread = new ()
 val weakGone = new ()
@@ -61,5 +63,6 @@ end
 
 val headerOnly = new ()
 val fill = new ()
+val hierarchicalHeap = new ()
 
 end

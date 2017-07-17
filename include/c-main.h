@@ -16,6 +16,11 @@ static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
   return (GC_frameIndex)ra;
 }
 
+static void MLtonGCCleanup(void *arg) {
+    GC_state s = (GC_state)arg;
+    GC_traceFinish(s);
+}
+
 #define MLtonCallFromC                                                  \
 static void MLton_callFromC (void* ffiArgs) {                           \
   struct cont cont;                                                     \
@@ -54,10 +59,13 @@ static void MLton_callFromC (void* ffiArgs) {                           \
 void MLton_threadFunc (void* arg) {                                     \
   struct cont cont;                                                     \
   GC_state s = (GC_state)arg;                                           \
-  uint32_t num = (Proc_processorNumber (s) / s->workersPerProc)         \
+  /* Do not set CPU affinity when running on a single processor  */     \
+  if (s->numberOfProcs > 1) {                                           \
+    uint32_t num = (Proc_processorNumber (s) / s->workersPerProc)       \
       * s->controls->affinityStride                                     \
       + s->controls->affinityBase;                                      \
-  set_cpu_affinity(num);                                                \
+    set_cpu_affinity(num);                                              \
+  }                                                                     \
                                                                         \
   /* Every thread blocks SIGALRM by default. */                         \
   sigset_t mask;                                                        \
@@ -78,6 +86,7 @@ void MLton_threadFunc (void* arg) {                                     \
   }                                                                     \
   /* Check to see whether or not we are the first thread */             \
   if (Proc_processorNumber (s) == 0) {                                  \
+    Trace0(EVENT_LAUNCH);                                               \
     /* Trampoline */                                                    \
     while (1) {                                                         \
       cont=(*(struct cont(*)(uintptr_t))cont.nextChunk)(cont.nextFun);  \
@@ -93,6 +102,7 @@ void MLton_threadFunc (void* arg) {                                     \
   else {                                                                \
     printf("Starting on %d!\n", Proc_processorNumber (s));               \
     Proc_waitForInitialization (s);                                     \
+    Trace0(EVENT_LAUNCH);                                               \
     Parallel_run ();                                                    \
   }                                                                     \
 }
@@ -110,7 +120,8 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
   void signal_thread(int p, int sig) {                                  \
     /* printf("signal_thread\n"); */                                    \
-    pthread_kill(threads[p], sig);                                      \
+    GC_state s = pthread_getspecific (gcstate_key);                     \
+    pthread_kill(s->procStates[p].self, sig);                           \
     /* printf("signaled thread\n"); */                                  \
   }                                                                     \
                                                                         \
@@ -121,10 +132,9 @@ void MLton_threadFunc (void* arg) {                                     \
       /* Initialize with a generic state to read in @MLtons, etc */     \
       Initialize (s, al, mg, mfs, mmc, pk, ps, gnr);                    \
                                                                         \
-      threads = (pthread_t *) malloc ((s.numberOfProcs) * sizeof (pthread_t)); \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
-      if (pthread_key_create(&gcstate_key, NULL)) {                     \
+      if (pthread_key_create(&gcstate_key, MLtonGCCleanup)) {                     \
         fprintf (stderr, "pthread_key_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \
@@ -140,13 +150,12 @@ void MLton_threadFunc (void* arg) {                                     \
       gcState[procNo].procStates = gcState;                             \
       gcState[procNo].procNumber = procNo;                              \
     }                                                                   \
-    pthread_attr_t attr;                                                \
-    pthread_attr_init(&attr);                                            \
-    /* pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED); */  \
-    /* pthread_attr_setschedpolicy(&attr, SCHED_RR);  */                \
+    /* Set up tracing infrastructure */                                 \
+    for (procNo = 0; procNo < gcState[0].numberOfProcs; procNo++)       \
+        GC_traceInit(&gcState[procNo]);                                 \
     /* Now create the threads */                                        \
     for (procNo = 1; procNo < gcState[0].numberOfProcs; procNo++) {     \
-      if (pthread_create (&threads[procNo - 1], &attr, &MLton_threadFunc, (void *)&gcState[procNo])) { \
+      if (pthread_create (&gcState[procNo].self, NULL, &MLton_threadFunc, (void *)&gcState[procNo])) { \
         fprintf (stderr, "pthread_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \

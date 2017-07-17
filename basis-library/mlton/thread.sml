@@ -68,89 +68,131 @@ fun prepare (t: 'a t, v: 'a): Runnable.t =
 
 fun new f = T (ref (New f))
 
+val numProcs = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
+val procNum = Int32.toInt o Primitive.MLton.Parallel.processorNumber
+
 local
-   val numProcs = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
-   val procNum = Int32.toInt o Primitive.MLton.Parallel.processorNumber
-   local
-      (* create one reference per processor *)
-      val func: (unit -> unit) option Array.array =
-          Array.tabulate (numProcs, fn _ => NONE)
-      val base: Prim.preThread =
-         let
-            val () = Prim.copyCurrent ()
-            (* Call to procNum *must* come after copy *)
-            val proc = procNum ()
-         in
-            case Array.unsafeSub (func, proc) of
-               NONE => Prim.savedPre ()
-             | SOME x =>
-                  (* This branch never returns. *)
-                  let
-                     (* Atomic 1 *)
-                     val () = Array.update (func, proc, NONE)
-                     val () = atomicEnd ()
-                     (* Atomic 0 *)
-                  in
-                     (x () handle e => MLtonExn.topLevelHandler e)
-                     ; die "Thread didn't exit properly.\n"
-                  end
-         end
-   in
-      fun newThread (f: unit -> unit) : Prim.thread =
-         let
-            (* Atomic 2 *)
-            val () = Array.update (func, procNum (), SOME f)
-         in
-            Prim.copy base
-         end
-   end
-   val switching = Array.tabulate (numProcs, fn _ => false)
+    local
+        (* create one reference per processor *)
+        val func: (unit -> unit) option Array.array =
+            Array.tabulate (numProcs, fn _ => NONE)
+        val base: Prim.preThread =
+            let
+                val () = Prim.copyCurrent ()
+                (* Call to procNum *must* come after copy *)
+                val proc = procNum ()
+            in
+                case Array.unsafeSub (func, proc) of
+                    NONE => Prim.savedPre ()
+                  | SOME x =>
+                    (* This branch never returns. *)
+                    let
+                        (* Atomic 1 *)
+                        val () = Array.update (func, proc, NONE)
+                        val () = atomicEnd ()
+                                           (* Atomic 0 *)
+                    in
+                        (x () handle e => MLtonExn.topLevelHandler e)
+                      ; die "Thread didn't exit properly.\n"
+                    end
+            end
+    in
+        fun newThread (f: unit -> unit) : Prim.thread =
+            let
+                (* Atomic 2 *)
+                val () = Array.update (func, procNum (), SOME f)
+            in
+                Prim.copy base
+            end
+    end
+    val switching = Array.tabulate (numProcs, fn _ => false)
 in
-   fun 'a atomicSwitch (f: 'a t -> Runnable.t): 'a =
-      let val proc = procNum () in
-      (* Atomic 1 *)
-      if Array.unsafeSub (switching, proc)
-         then let
-                 val () = atomicEnd ()
-                 (* Atomic 0 *)
-              in
-                 raise Fail "nested Thread.switch"
-              end
-      else
-         let
-            val _ = Array.update (switching, proc, true)
-            val r : (unit -> 'a) ref =
-               ref (fn () => die "Thread.atomicSwitch didn't set r.\n")
-            val t: 'a thread ref =
-               ref (Paused (fn x => r := x, Prim.current ()))
-            fun fail e = (t := Dead
-                          ; Array.update (switching, proc, false)
-                          ; atomicEnd ()
-                          ; raise e)
-            val (T t': Runnable.t) = f (T t) handle e => fail e
-            val primThread =
-               case !t' before t' := Dead of
-                  Dead => fail (Fail "switch to a Dead thread")
-                | Interrupted t => t
-                | New g => (atomicBegin (); newThread g)
-                | Paused (f, t) => (f (fn () => ()); t)
+    fun 'a atomicSwitchTop
+           (f: 'a t -> Runnable.t)
+           (cont: (unit -> Runnable.t) * (exn -> Runnable.t) -> unit): 'a =
+        let
+            val proc = procNum ()
+        in
+            (* Atomic 1 *)
+            if Array.unsafeSub (switching, proc)
+            then
+                let
+                    val () = atomicEnd ()
+                                       (* Atomic 0 *)
+                in
+                    raise Fail "atomicSwitchTop while switching (nested Thread.switch?)"
+                end
+            else
+                let
+                    val _ = Array.update (switching, proc, true)
 
-            val _ = if not (Array.unsafeSub (switching, proc))
-                    then raise Fail "switching switched?"
-                    else ()
+                    val curPrimThread = Prim.current ()
 
-            val _ = Array.update (switching, proc, false)
-            (* Atomic 1 when Paused/Interrupted, Atomic 2 when New *)
-            val _ = Prim.switchTo primThread (* implicit atomicEnd() *)
-            (* Atomic 0 when resuming *)
-         in
-            !r ()
-         end
-      end
+                    val r : (unit -> 'a) ref =
+                        ref (fn () => die "Thread.atomicSwitch didn't set r.\n")
+                    val t: 'a thread ref =
+                        ref (Paused (fn x => r := x, curPrimThread))
 
-   fun switch f =
-      (atomicBegin ()
-       ; atomicSwitch f)
+                    val t': unit thread ref =
+                        ref (Interrupted curPrimThread)
+                    val re: exn option ref = ref NONE
+
+                    fun fail e = (t := Dead
+                                 ; Array.update (switching, proc, false)
+                                 ; atomicEnd ()
+                                 ; raise e)
+                in
+                    cont (fn () => f (T t),
+                          fn e => (re := SOME e; t := Dead; T t'))
+                    handle e => fail e;
+                    (case !re
+                      of NONE => ()
+                       | SOME e => raise e);
+                    !r ()
+                end
+        end
+
+    fun 'a atomicSwitchBottom (T t': Runnable.t): unit =
+        let
+            val proc = procNum ()
+        in
+            (* Atomic 1 *)
+            if not (Array.unsafeSub (switching, proc))
+            then
+                let
+                    val () = atomicEnd ()
+                                       (* Atomic 0 *)
+                in
+                    raise Fail "atomicSwitchBottom while not switching (nested Thread.switch?)"
+                end
+            else
+                let
+                    val primThread =
+                        case !t' before t' := Dead of
+                            Dead => raise Fail "switch to a Dead thread"
+                          | Interrupted t => t
+                          | New g => (atomicBegin (); newThread g)
+                          | Paused (f, t) => (f (fn () => ()); t)
+
+                    val _ = if not (Array.unsafeSub (switching, proc))
+                            then raise Fail "switching switched?"
+                            else ()
+
+                    val _ = Array.update (switching, proc, false)
+                    (* Atomic 1 when Paused/Interrupted, Atomic 2 when New *)
+                    val _ = Prim.switchTo primThread (* implicit atomicEnd() *)
+                                          (* Atomic 0 when resuming *)
+                in
+                    ()
+                end
+        end
+
+    fun atomicSwitch f =
+        atomicSwitchTop f (fn (x, _) => atomicSwitchBottom (x ()))
+
+    fun switch f =
+        (atomicBegin ();
+         atomicSwitch f)
 end
 
 fun fromPrimitive (t: Prim.thread): Runnable.t =
@@ -176,10 +218,9 @@ fun toPrimitive (t as T r : unit t): Prim.thread =
           ; f (fn () => ())
           ; t)
 
+val initPrimitive: unit t -> unit t = fromPrimitive o toPrimitive
 
 local
-   val numProcs = Int32.toInt Primitive.MLton.Parallel.numberOfProcessors
-   val procNum = Int32.toInt o Primitive.MLton.Parallel.processorNumber
    val signalHandlers: Prim.thread option array = Array.array (numProcs, NONE)
    datatype state = Normal | InHandler
    val state: state array = Array.array (numProcs, Normal)
@@ -304,6 +345,78 @@ in
       in
          fn (i, f) => Array.update (exports, i, f)
       end
+end
+
+(* Redefine switch to use intermediate threads for public use *)
+val intermediateThreads: Runnable.t array =
+    Array.tabulate (numProcs, fn _ => prepare (new (fn () => ()), ()))
+
+val intermediateSwitchArgs:
+    ((unit -> Runnable.t) * (exn -> Runnable.t)) option array =
+    Array.array (numProcs, NONE)
+
+val intermediateSwitchLoop: unit -> unit =
+ fn () =>
+    let
+        fun loop ((): unit): unit  =
+            let
+                (* make sure I am not using a HH *)
+                val () = (MLtonHM.enterGlobalHeap ();
+                          MLtonHM.HierarchicalHeap.setUseHierarchicalHeap false;
+                          MLtonHM.exitGlobalHeap ())
+
+                val p = procNum ()
+
+                (* get args *)
+                val (x, h): (unit -> Runnable.t) * (exn -> Runnable.t) =
+                    valOf (Array.sub (intermediateSwitchArgs, p))
+                val () = Array.update (intermediateSwitchArgs, p, NONE)
+
+                (* update intermediateThread for switching *)
+                val iT: unit t =
+                    T (ref (Interrupted (Prim.current ())))
+                val () = Array.update (intermediateThreads, p, iT)
+
+                (* get new thread *)
+                val t' = x () handle e => h e
+            in
+                atomicSwitchBottom t';
+                (* next switch here *)
+                loop ()
+            end
+    in
+        loop ()
+    end
+
+val () = Array.modify
+             (fn _ => initPrimitive (new intermediateSwitchLoop))
+             intermediateThreads
+
+local
+    fun cont (arg: (unit -> Runnable.t) * (exn -> Runnable.t)): unit =
+        let
+            val p = procNum ()
+            val t: unit thread ref =
+                ref (Interrupted (Prim.current ()))
+            val () = Array.update (intermediateSwitchArgs, p, SOME arg)
+            val T iT = Array.sub (intermediateThreads, p)
+            val primIT = case !iT before iT := Dead
+                          of Dead => raise Fail "switch to a Dead intermediate thread"
+                           | Interrupted t => t
+                           | New g => raise Fail "switch to a New intermediate thread"
+                           | Paused (f, t) => (f (fn () => ()); t)
+            val () = Prim.switchTo primIT
+        in
+            ()
+        end
+in
+fun atomicSwitch f =
+    (atomicBegin(); (* add atomic because I'm doing two switches *)
+     atomicSwitchTop f cont)
+
+fun switch f =
+    (atomicBegin();
+     atomicSwitch f)
 end
 
 end

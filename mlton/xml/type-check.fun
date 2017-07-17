@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor TypeCheck (S: TYPE_CHECK_STRUCTS): TYPE_CHECK = 
+functor TypeCheck (S: TYPE_CHECK_STRUCTS): TYPE_CHECK =
 struct
 
 open S
@@ -61,17 +61,17 @@ fun typeCheck (program as Program.T {datatypes, body, overflow}): unit =
            set = setVar, ...} =
          Property.getSet (Var.plist,
                           Property.initRaise ("var scheme", Var.layout))
-      val getVar = 
-         Trace.trace 
+      val getVar =
+         Trace.trace
          ("Xml.TypeCheck.getVar", Var.layout, fn {tyvars, ty} =>
           Layout.record [("tyvars", Vector.layout Tyvar.layout tyvars),
                          ("ty", Type.layout ty)])
          getVar
-      val setVar = 
-         Trace.trace2 
+      val setVar =
+         Trace.trace2
          ("Xml.TypeCheck.setVar", Var.layout, fn {tyvars, ty} =>
           Layout.record [("tyvars", Vector.layout Tyvar.layout tyvars),
-                         ("ty", Type.layout ty)], 
+                         ("ty", Type.layout ty)],
           Layout.ignore)
          setVar
       fun checkVarExp (VarExp.T {var, targs}): Type.t =
@@ -112,16 +112,16 @@ fun typeCheck (program as Program.T {datatypes, body, overflow}): unit =
                | _ => Type.error ("constructor pattern mismatch", Pat.layout p)
          end
       val traceCheckExp =
-         Trace.trace 
+         Trace.trace
          ("Xml.TypeCheck.checkExp", Exp.layout, Type.layout)
-      val traceCheckPrimExp = 
+      val traceCheckPrimExp =
          Trace.trace2
          ("Xml.TypeCheck.checkPrimExp", PrimExp.layout, Type.layout, Type.layout)
-      val traceCheckLambda = 
-         Trace.trace 
+      val traceCheckLambda =
+         Trace.trace
          ("Xml.TypeCheck.checkLambda", Lambda.layout, Type.layout)
-      val traceCheckDec = 
-         Trace.trace 
+      val traceCheckDec =
+         Trace.trace
          ("Xml.TypeCheck.checkDec", Dec.layout, Unit.layout)
       local
          val exnType = ref NONE
@@ -147,7 +147,7 @@ fun typeCheck (program as Program.T {datatypes, body, overflow}): unit =
           end) arg
       and checkPrimExp arg: Type.t =
          traceCheckPrimExp
-         (fn (e: PrimExp.t, ty: Type.t) => 
+         (fn (e: PrimExp.t, ty: Type.t) =>
          let
             fun error msg =
                Type.error (msg, let open Layout
@@ -333,7 +333,7 @@ fun typeCheck (program as Program.T {datatypes, body, overflow}): unit =
       ()
    end
 
-val typeCheck = 
+val typeCheck =
    Trace.trace ("Xml.TypeCheck.typeCheck", Program.layout, Unit.layout) typeCheck
 
 val typeCheck = Control.trace (Control.Pass, "typeCheck") typeCheck

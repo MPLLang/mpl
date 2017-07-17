@@ -1,24 +1,24 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
 
-../../../sml-lib/util/stringutil-sig.sml
-../../../sml-lib/util/stringutil.sml
-../../../sml-lib/util/listutil-sig.sml
-../../../sml-lib/util/listutil.sml
+$(T7_SML_LIB)/util/stringutil-sig.sml
+$(T7_SML_LIB)/util/stringutil.sml
+$(T7_SML_LIB)/util/listutil-sig.sml
+$(T7_SML_LIB)/util/listutil.sml
 
 sort.sig
 sortarg.sig
 insertionsort.fun
 selectionsort.fun
 quicksort.fun
-quicksortfutures.fun
+(* quicksortfutures.fun *)
 merge.sig
 mergeseq.fun
 mergepar.fun
-mergefutures.fun
+(* mergefutures.fun *)
 mergesort.fun
-mergesortfutures.fun
-mergesortfutures2.fun
+(* mergesortfutures.fun *)
+(* mergesortfutures2.fun *)
 
 sortinplace.sig
 insertionsortinplace.fun

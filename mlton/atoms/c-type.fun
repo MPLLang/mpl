@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor CType (S: C_TYPE_STRUCTS): C_TYPE = 
+functor CType (S: C_TYPE_STRUCTS): C_TYPE =
 struct
 
 open S
@@ -33,6 +33,7 @@ val all = [CPointer,
 
 val cpointer = CPointer
 val objptr = Objptr
+val hierarchicalHeap = objptr
 val thread = objptr
 
 val equals: t * t -> bool = op =

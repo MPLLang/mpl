@@ -315,8 +315,9 @@ struct
 
   fun sort cmp s =
     case length s of
-      (0 | 1) => s
-    | n => merge cmp (par (fn () => sort cmp (take s (n div 2)),
+        0 => s
+      | 1 => s
+      | n => merge cmp (par (fn () => sort cmp (take s (n div 2)),
                            fn () => sort cmp (drop s (n div 2))))
 
   fun enum s = tabulate (fn i => (i, nth s i)) (length s)
@@ -428,7 +429,7 @@ struct
       in reduce best 0 (tabulate (fn i => i) (length s))
       end
 
-  fun inject (s, idx) = raise NYI
+  fun inject _ = raise NYI
   fun update (s, (i, x)) = inject (s, singleton (i, x))
 
   fun collect cmp s =

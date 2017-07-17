@@ -1,0 +1,20 @@
+local
+   $(SML_LIB)/basis/basis.mlb
+   $(SML_LIB)/basis/mlton.mlb
+
+   internal.sml
+   workqueue.sig
+   basic.sig
+   syncvar.sig
+   forkjoin.sig
+   array.sig
+   wsworkqueue.sml
+   basic.sml
+   syncvar.sml
+   forkjoin.sml
+   array.sml
+   init.sml
+in
+   structure ForkJoin = MLtonParallelForkJoin
+   structure SchedBasic = MLtonParallelBasic
+end

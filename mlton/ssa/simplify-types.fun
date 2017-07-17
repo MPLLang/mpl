@@ -39,7 +39,7 @@
  * the datatype and replace the lhs by the rhs, i.e. we must keep the
  * circularity around.
  * Must do similar things for vectors.
- * 
+ *
  * Also, to eliminate as many Transparent constructors as possible, for
  * something like the following,
  *   datatype t = T of u array
@@ -50,7 +50,7 @@
  * where all uses of t are replaced by u array.
  *)
 
-functor SimplifyTypes (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM = 
+functor SimplifyTypes (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM =
 struct
 
 open S
@@ -74,6 +74,11 @@ structure ConRep =
          Useless
        | Transparent
        | Useful
+       | FFI
+
+      val isFFI =
+       fn FFI => true
+        | _ => false
 
       val isUseful =
          fn Useful => true
@@ -87,6 +92,7 @@ structure ConRep =
          fn Useless => "useless"
           | Transparent => "transparent"
           | Useful => "useful"
+          | FFI => "ffi"
 
       val layout = Layout.str o toString
    end
@@ -129,9 +135,14 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          setConRep
       val conIsUseful = ConRep.isUseful o conRep
       val conIsUseful =
-         Trace.trace 
-         ("SimplifyTypes.conIsUseful", Con.layout, Bool.layout) 
+         Trace.trace
+         ("SimplifyTypes.conIsUseful", Con.layout, Bool.layout)
          conIsUseful
+      val conIsFFI = ConRep.isFFI o conRep
+      val conIsFFI =
+         Trace.trace
+         ("SimplifyTypes.conIsFFI", Con.layout, Bool.layout)
+         conIsFFI
       (* Initialize conInfo *)
       val _ =
          Vector.foreach
@@ -175,25 +186,80 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                 dependents = ref [],
                                 isOnWorklist = ref false
                                 }))
-      (* Tentatively mark all constructors appearing in a ConApp as Useful
-       * (some may later be marked as Transparent).
+      (* Tentatively mark all constructors appearing in a ConApp or an FFI as
+       * Useful (some may later be marked as Transparent).
        *)
       val _ =
          let
             fun handleStatement (Statement.T {exp, ...}) =
-               case exp of
-                  ConApp {con, ...} => setConRep (con, ConRep.Useful)
-                | _ => ()
+               case exp
+                of ConApp {con, ...} => if not (conIsFFI con)
+                                        then setConRep (con, ConRep.Useful)
+                                        else ()
+
+                 | PrimApp {prim, ...} =>
+                   let
+                       fun deepSetFFI t =
+                           case Type.dest t
+                            of Type.Array t => deepSetFFI t
+                             | Type.Datatype tycon =>
+                               (Control.diagnostics
+                                    (fn display =>
+                                        let
+                                            open Layout
+                                        in
+                                            display (seq [str "  tycon: ",
+                                                          Tycon.layout tycon])
+                                        end);
+                                Vector.foreach ((! o #cons o tyconInfo) tycon,
+                                                fn {con, ...} =>
+                                                   let
+                                                   in
+                                                       Control.diagnostics
+                                                           (fn display =>
+                                                               let
+                                                                   open Layout
+                                                               in
+                                                                   display (seq [str "    con: ",
+                                                                                 Con.layout con])
+                                                               end);
+                                                       setConRep (con, ConRep.FFI)
+                                                   end))
+                             | Type.HierarchicalHeap t => deepSetFFI t
+                             | Type.Ref t => deepSetFFI t
+                             | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
+                             | Type.Vector t => deepSetFFI t
+                             | Type.Weak t => deepSetFFI t
+                             | _ => ()
+
+                       open Prim.Name
+                   in
+                       case Prim.name prim
+                        of FFI cfunction =>
+                           (Control.diagnostics
+                                (fn display =>
+                                    let
+                                        open Layout
+                                    in
+                                        display (seq [str "deepSetFFI for ",
+                                                      str (CFunction.cPrototype cfunction)])
+                                    end);
+                            Vector.foreach (CFunction.args cfunction,
+                                            deepSetFFI);
+                            deepSetFFI (CFunction.return cfunction))
+                         | _ => ()
+                   end
+                 | _ => ()
             (* Booleans are special because they are generated by primitives. *)
             val _ =
-               List.foreach ([Con.truee, Con.falsee], fn c =>
-                             setConRep (c, ConRep.Useful))
+                List.foreach ([Con.truee, Con.falsee], fn c =>
+                                                          setConRep (c, ConRep.Useful))
             val _ = Vector.foreach (globals, handleStatement)
-            val _ = List.foreach 
-                    (functions, fn f =>
-                     Vector.foreach
-                     (Function.blocks f, fn Block.T {statements, ...} =>
-                      Vector.foreach (statements, handleStatement)))
+            val _ = List.foreach
+                        (functions, fn f =>
+                                       Vector.foreach
+                                           (Function.blocks f, fn Block.T {statements, ...} =>
+                                                                  Vector.foreach (statements, handleStatement)))
          in ()
          end
 
@@ -204,7 +270,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          Vector.keepAllMap
          (datatypes, fn Datatype.T {tycon, cons} =>
           let
-             val cons = Vector.keepAll (cons, conIsUseful o #con)
+              val cons = Vector.keepAll (cons, fn {con, ...} =>
+                                                  conIsUseful con orelse
+                                                  conIsFFI con)
           in
              if 0 = Vector.length cons
                 then (setTyconReplacement (tycon, Type.unit)
@@ -212,6 +280,27 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
              else (#cons (tyconInfo tycon) := cons
                    ; SOME (Datatype.T {tycon = tycon, cons = cons}))
           end)
+
+      val _ = Control.diagnostics
+                  (fn display =>
+                      let
+                          open Layout
+                      in
+                          display (Layout.str
+                                       "isFFI");
+                          Vector.foreach
+                              (datatypes,
+                               fn Datatype.T {tycon, cons} =>
+                                  (display (Tycon.layout tycon);
+                                   Vector.foreach
+                                       (cons,
+                                        fn {con, ...} =>
+                                           display (seq [str "   ",
+                                                         Con.layout con,
+                                                         str " ",
+                                                         str (Bool.toString (conIsFFI con))]))))
+                      end)
+
       (* Build the dependents for each tycon. *)
       val _ =
          Vector.foreach
@@ -228,6 +317,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                    | CPointer => ()
                    | Datatype tycon' =>
                         List.push (#dependents (tyconInfo tycon'), tycon)
+                   | HierarchicalHeap t => setTypeDependents t
                    | IntInf => ()
                    | Real _ => ()
                    | Ref t => setTypeDependents t
@@ -252,7 +342,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
               display (seq [str "dependents of ",
                             Tycon.layout tycon,
                             str " = ",
-                            List.layout Tycon.layout 
+                            List.layout Tycon.layout
                             (!(#dependents (tyconInfo tycon)))]))
           end)
 
@@ -289,7 +379,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          let
             (* list of datatype tycons whose cardinality has not yet stabilized *)
             val worklist =
-               ref (Vector.fold 
+               ref (Vector.fold
                     (datatypes, [], fn (Datatype.T {tycon, ...}, ac) =>
                      tycon :: ac))
             fun loop () =
@@ -337,7 +427,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          Control.diagnostics
          (fn display =>
           let open Layout
-          in Vector.foreach 
+          in Vector.foreach
              (datatypes, fn Datatype.T {tycon, ...} =>
               display (seq [str "cardinality of ",
                             Tycon.layout tycon,
@@ -351,19 +441,20 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       (* "unary" is datatypes with one constructor whose rhs contains an
        * array (or vector) type.
        * For datatypes with one variant not containing an array type, eliminate
-       * the datatype. 
+       * the datatype unless it is an FFI type.
        *)
       fun containsArrayOrVector (ty: Type.t): bool =
          let
             datatype z = datatype Type.dest
             fun loop t =
                case Type.dest t of
-                  Array _ => true
-                | Ref t => loop t
-                | Tuple ts => Vector.exists (ts, loop)
-                | Vector _ => true
-                | Weak t => loop t
-                | _ => false
+                   Array _ => true
+                 | HierarchicalHeap t => loop t
+                 | Ref t => loop t
+                 | Tuple ts => Vector.exists (ts, loop)
+                 | Vector _ => true
+                 | Weak t => loop t
+                 | _ => false
          in loop ty
          end
       val (datatypes, unary) =
@@ -378,6 +469,18 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     Cardinality.Zero => (setConRep (con, ConRep.Useless)
                                          ; NONE)
                   | _ => SOME c)
+
+             val _ = Control.diagnostics
+                         (fn display =>
+                             let
+                                 open Layout
+                             in
+                                 display (Layout.str
+                                              "Remaining numCons");
+                                 display (seq [Tycon.layout tycon,
+                                               str " = ",
+                                               str (Int.toString (Vector.length cons))])
+                             end)
           in case Vector.length cons of
              0 => (setTyconNumCons (tycon, 0)
                     ; setTyconReplacement (tycon, Type.unit)
@@ -386,15 +489,48 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 let
                    val {con, args} = Vector.sub (cons, 0)
                 in
-                   if Vector.exists (args, containsArrayOrVector)
-                      then (datatypes,
-                            {tycon = tycon, con = con, args = args} :: unary)
-                   else (transparent (tycon, con, args)
-                         ; (datatypes, unary))
+                    if conIsFFI con
+                    then (Datatype.T {tycon = tycon, cons = cons} :: datatypes,
+                          unary)
+                    else if Vector.exists (args, containsArrayOrVector)
+                    then (datatypes,
+                          {tycon = tycon, con = con, args = args} :: unary)
+                    else
+                        (transparent (tycon, con, args)
+                        ; (datatypes, unary))
                 end
            | _ => (Datatype.T {tycon = tycon, cons = cons} :: datatypes,
                    unary)
           end)
+
+      val _ = Control.diagnostics (fn display =>
+                                      let
+                                          open Layout
+                                      in
+                                          display (Layout.str
+                                                       "Remaining datatypes 1");
+                                          display (Layout.str "datatypes");
+                                          Vector.foreach
+                                              (Vector.fromList datatypes,
+                                               fn Datatype.T {tycon, ...} =>
+                                                  display (Tycon.layout tycon));
+                                          display (Layout.str "unary");
+                                          Vector.foreach
+                                              (Vector.fromList unary,
+                                               fn {tycon, ...} =>
+                                                  display (Tycon.layout tycon))
+                                      end)
+
+      (* convert FFI datatypes back into useful *)
+      val _ = List.foreach (datatypes,
+                            fn Datatype.T {cons, ...} =>
+                               Vector.foreach (cons,
+                                               fn {con, ...} =>
+                                                  if conIsFFI con
+                                                  then setConRep
+                                                           (con, ConRep.Useful)
+                                                  else ()))
+
       fun containsTycon (ty: Type.t, tyc: Tycon.t): bool =
          let
             datatype z = datatype Type.dest
@@ -409,6 +545,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                        (case tyconReplacement tyc' of
                            NONE => Tycon.equals (tyc, tyc')
                          | SOME t => containsTycon t)
+                  | HierarchicalHeap t => containsTycon t
                   | Tuple ts => Vector.exists (ts, containsTycon)
                   | Ref t => containsTycon t
                   | Vector t => containsTycon t
@@ -424,10 +561,23 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          (unary, datatypes, fn ({tycon, con, args}, accum) =>
           if Vector.exists (args, fn arg => containsTycon (arg, tycon))
              then Datatype.T {tycon = tycon,
-                              cons = Vector.new1 {con = con, args = args}} 
+                              cons = Vector.new1 {con = con, args = args}}
                   :: accum
           else (transparent (tycon, con, args)
-                ; accum))
+               ; accum))
+
+      val _ = Control.diagnostics (fn display =>
+                                      let
+                                          open Layout
+                                      in
+                                          display (Layout.str
+                                                       "Remaining datatypes 2");
+                                          Vector.foreach
+                                              (Vector.fromList datatypes,
+                                               fn Datatype.T {tycon, ...} =>
+                                                  display (Tycon.layout tycon))
+                                      end)
+
       fun makeKeepSimplifyTypes simplifyType ts =
          Vector.keepAllMap (ts, fn t =>
                             let
@@ -447,7 +597,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
               open Type
            in case dest t of
               Array t => array (simplifyType t)
-            | Datatype tycon => 
+            | Datatype tycon =>
                  (case tyconReplacement tycon of
                      SOME t =>
                         let
@@ -457,6 +607,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            t
                         end
                    | NONE => t)
+            | HierarchicalHeap t => hierarchicalHeap (simplifyType t)
             | Ref t => reff (simplifyType t)
             | Tuple ts => Type.tuple (keepSimplifyTypes ts)
             | Vector t => vector (simplifyType t)
@@ -479,7 +630,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                              args = keepSimplifyTypes args})}))
       val unitVar = Var.newNoname ()
       val {get = varInfo: Var.t -> Type.t, set = setVarInfo, ...} =
-         Property.getSetOnce  
+         Property.getSetOnce
          (Var.plist, Property.initRaise ("varInfo", Var.layout))
       fun simplifyVarType (x: Var.t, t: Type.t): Type.t =
          (setVarInfo (x, t)
@@ -521,10 +672,11 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  | ConRep.Useful =>
                       Keep (ConApp {con = con,
                                     args = removeUselessVars args})
-                 | ConRep.Useless => Bugg)
+                 | ConRep.Useless => Bugg
+                 | ConRep.FFI => Bugg)
           | PrimApp {prim, targs, args} =>
                Keep
-               (let 
+               (let
                    fun normal () =
                       PrimApp {prim = prim,
                                targs = simplifyTypes targs,
@@ -614,7 +766,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                               (* This case can occur because an array or vector
                                * tycon was kept around.
                                *)
-                              normal () 
+                              normal ()
                         else (* The type has become a tuple.  Do the selects. *)
                            let
                               val ts = keepSimplifyTypes (conArgs con)
@@ -627,8 +779,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                      (ts, fn (i, ty) =>
                                       let val x = Var.newNoname ()
                                       in (x,
-                                          Statement.T 
-                                          {var = SOME x, 
+                                          Statement.T
+                                          {var = SOME x,
                                            ty = ty,
                                            exp = Select {tuple = test,
                                                          offset = i}})
@@ -654,7 +806,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          simplifyTransfer
       fun simplifyStatement (Statement.T {var, ty, exp}) =
          let
-            val ty = simplifyMaybeVarType (var, ty)      
+            val ty = simplifyMaybeVarType (var, ty)
          in
             (* It is wrong to omit calling simplifyExp when var = NONE because
              * targs in a PrimApp may still need to be simplified.

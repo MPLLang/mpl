@@ -7,4 +7,6 @@
 
 #define MLTON_UTIL
 #include "util/die.c"
+#include "util/log.c"
+#include "util/spinlock.c"
 #include "util/to-string.c"

@@ -8,7 +8,7 @@ struct
   val sorts = ref [] : string list ref
   val ordered = ref false
 
-  local 
+  local
     fun processSortArgs nil = ()
       | processSortArgs (args as (arg::rest)) =
 
@@ -66,8 +66,8 @@ struct
   structure SSortList = SelectionSort (ListSortArgSeq)
   structure QSortList = QuickSort (ListSortArgSeq)
   structure QSortParList = QuickSort (ListSortArgParNoDelay)
-  structure QSortFutListNoDelay = QuickSortFutures (ListSortArgParNoDelay)
-  structure QSortFutListMaybeDelay = QuickSortFutures (ListSortArgParMaybeDelay)
+  (* structure QSortFutListNoDelay = QuickSortFutures (ListSortArgParNoDelay) *)
+  (* structure QSortFutListMaybeDelay = QuickSortFutures (ListSortArgParMaybeDelay) *)
   structure MSeqList = MergeSeq (ListSortArgSeq)
   structure MSortSeqList = MergeSort (structure A =
                                         ListSortArgSeq
@@ -100,45 +100,45 @@ struct
                                       structure M2 =
                                         MParTree)
   structure PrintParTree = Print (structure A = TreeSortArgSeq)
-  structure MFutTreeNoDelay = MergeFutures (TreeSortArgParNoDelay)
-  structure MFutTreeMaybeDelay = MergeFutures (TreeSortArgParMaybeDelay)
-  structure MSortParFutTreeNoDelay = MergeSort (structure A =
-                                           TreeSortArgParNoDelay
-                                         structure M1 =
-                                           MSeqTree
-                                         structure M2 =
-                                           MFutTreeNoDelay)
-  structure MSortParFutTreeMaybeDelay = MergeSort (structure A =
-                                           TreeSortArgParMaybeDelay
-                                         structure M1 =
-                                           MSeqTree
-                                         structure M2 =
-                                           MFutTreeMaybeDelay)
-  structure MSortSeqFutTreeNoDelay = MergeSort (structure A =
-                                           TreeSortArgSeq
-                                         structure M1 =
-                                           MSeqTree
-                                         structure M2 =
-                                           MFutTreeNoDelay)
-  structure MSortSeqFutTreeMaybeDelay = MergeSort (structure A =
-                                           TreeSortArgSeq
-                                         structure M1 =
-                                           MSeqTree
-                                         structure M2 =
-                                           MFutTreeMaybeDelay)
-  structure MSortFutTreeNoDelay = MergeSortFutures (structure A =
-                                           TreeSortArgParNoDelay)
-  structure MSortFutTreeMaybeDelay = MergeSortFutures (structure A =
-                                           TreeSortArgParMaybeDelay)
-  structure MSortFut2NoDelay = MergeSortFutures2 (VectorSliceSortArgParNoDelay)
-  structure MSortFut2MaybeDelay = MergeSortFutures2 (VectorSliceSortArgParMaybeDelay)
+  (* structure MFutTreeNoDelay = MergeFutures (TreeSortArgParNoDelay) *)
+  (* structure MFutTreeMaybeDelay = MergeFutures (TreeSortArgParMaybeDelay) *)
+  (* structure MSortParFutTreeNoDelay = MergeSort (structure A = *)
+  (*                                          TreeSortArgParNoDelay *)
+  (*                                        structure M1 = *)
+  (*                                          MSeqTree *)
+  (*                                        structure M2 = *)
+  (*                                          MFutTreeNoDelay) *)
+  (* structure MSortParFutTreeMaybeDelay = MergeSort (structure A = *)
+  (*                                          TreeSortArgParMaybeDelay *)
+  (*                                        structure M1 = *)
+  (*                                          MSeqTree *)
+  (*                                        structure M2 = *)
+  (*                                          MFutTreeMaybeDelay) *)
+  (* structure MSortSeqFutTreeNoDelay = MergeSort (structure A = *)
+  (*                                          TreeSortArgSeq *)
+  (*                                        structure M1 = *)
+  (*                                          MSeqTree *)
+  (*                                        structure M2 = *)
+  (*                                          MFutTreeNoDelay) *)
+  (* structure MSortSeqFutTreeMaybeDelay = MergeSort (structure A = *)
+  (*                                          TreeSortArgSeq *)
+  (*                                        structure M1 = *)
+  (*                                          MSeqTree *)
+  (*                                        structure M2 = *)
+  (*                                          MFutTreeMaybeDelay) *)
+  (* structure MSortFutTreeNoDelay = MergeSortFutures (structure A = *)
+  (*                                          TreeSortArgParNoDelay) *)
+  (* structure MSortFutTreeMaybeDelay = MergeSortFutures (structure A = *)
+  (*                                          TreeSortArgParMaybeDelay) *)
+  (* structure MSortFut2NoDelay = MergeSortFutures2 (VectorSliceSortArgParNoDelay) *)
+  (* structure MSortFut2MaybeDelay = MergeSortFutures2 (VectorSliceSortArgParMaybeDelay) *)
 
 
   fun printVector v = print (VS.foldr (fn (x, s) => Real.toString x
                                                     ^ ", " ^ s) "\n" v)
 
-  fun run name size seqCutoff parCutoff = 
-    let 
+  fun run name size seqCutoff parCutoff =
+    let
       val isort = ISort.sort { cutoff = 0, fallback = fn x => x }
       val ssort = SSort.sort { cutoff = 0, fallback = fn x => x }
       val qsort_seq = QSort.sort { cutoff = seqCutoff, fallback = ssort }
@@ -151,8 +151,8 @@ struct
       val ssortl = SSortList.sort { cutoff = 0, fallback = fn x => x }
       val qsortl_seq = QSortList.sort { cutoff = seqCutoff, fallback = ssortl }
       val qsortl = QSortParList.sort { cutoff = parCutoff, fallback = qsortl_seq }
-      val qsortfln = QSortFutListNoDelay.sort { cutoff = parCutoff, fallback = qsortl_seq }
-      val qsortflm = QSortFutListMaybeDelay.sort { cutoff = parCutoff, fallback = qsortl_seq }
+      (* val qsortfln = QSortFutListNoDelay.sort { cutoff = parCutoff, fallback = qsortl_seq } *)
+      (* val qsortflm = QSortFutListMaybeDelay.sort { cutoff = parCutoff, fallback = qsortl_seq } *)
       val msortl_seq = MSortSeqList.sort { cutoff = seqCutoff, fallback = ssortl }
       val msortl = MSortParList.sort { cutoff = parCutoff, fallback = msortl_seq }
       val ssortt = SSortTree.sort { cutoff = 0, fallback = fn x => x }
@@ -161,14 +161,14 @@ struct
       val msortt_seq = MSortSeqTree.sort { cutoff = seqCutoff, fallback = ssortt }
       val msortt = MSortParTree.sort { cutoff = parCutoff, fallback = msortt_seq }
       val print_msortt = PrintParTree.sort { cutoff = parCutoff, fallback = msortt }
-      val msortsftn = MSortSeqFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortsftm = MSortSeqFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortpftn = MSortParFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortpftm = MSortParFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortftn = MSortFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortftm = MSortFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq }
-      val msortfvn = MSortFut2NoDelay.sort { cutoff = parCutoff, fallback = msort_seq }
-      val msortfvm = MSortFut2MaybeDelay.sort { cutoff = parCutoff, fallback = msort_seq }
+      (* val msortsftn = MSortSeqFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortsftm = MSortSeqFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortpftn = MSortParFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortpftm = MSortParFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortftn = MSortFutTreeNoDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortftm = MSortFutTreeMaybeDelay.sort { cutoff = parCutoff, fallback = msortt_seq } *)
+      (* val msortfvn = MSortFut2NoDelay.sort { cutoff = parCutoff, fallback = msort_seq } *)
+      (* val msortfvm = MSortFut2MaybeDelay.sort { cutoff = parCutoff, fallback = msort_seq } *)
 
       local
         fun wrapInplace sort v =
@@ -218,8 +218,8 @@ struct
                  else if name = "ssortl" then wrapList ssortl
                  else if name = "qsortl_seq" then wrapList qsortl_seq
                  else if name = "qsortl" then wrapList qsortl
-                 else if name = "qsortfln" then wrapList qsortfln
-                 else if name = "qsortflm" then wrapList qsortflm
+                 (* else if name = "qsortfln" then wrapList qsortfln *)
+                 (* else if name = "qsortflm" then wrapList qsortflm *)
                  else if name = "msortl_seq" then wrapList msortl_seq
                  else if name = "msortl" then wrapList msortl
                  else if name = "ssortt" then wrapTree ssortt
@@ -227,21 +227,21 @@ struct
                  else if name = "qsortt" then wrapTree qsortt
                  else if name = "msortt_seq" then wrapTree msortt_seq
                  else if name = "msortt" then wrapTree msortt
-                 else if name = "msortpftn" then wrapTree msortpftn
-                 else if name = "msortpftm" then wrapTree msortpftm
-                 else if name = "msortsftn" then wrapTree msortsftn
-                 else if name = "msortsftm" then wrapTree msortsftm
-                 else if name = "msortftn" then wrapTree msortftn
-                 else if name = "msortftm" then wrapTree msortftm
-                 else if name = "msortfvn" then msortfvn
-                 else if name = "msortfvm" then msortfvm
+                 (* else if name = "msortpftn" then wrapTree msortpftn *)
+                 (* else if name = "msortpftm" then wrapTree msortpftm *)
+                 (* else if name = "msortsftn" then wrapTree msortsftn *)
+                 (* else if name = "msortsftm" then wrapTree msortsftm *)
+                 (* else if name = "msortftn" then wrapTree msortftn *)
+                 (* else if name = "msortftm" then wrapTree msortftm *)
+                 (* else if name = "msortfvn" then msortfvn *)
+                 (* else if name = "msortfvm" then msortfvm *)
                  else raise Argument ("unknown sort option: " ^ name)
       end
 
-      fun checkResult a = 
-        let 
+      fun checkResult a =
+        let
           val == = Real.== infix 4 ==
-          fun increasing i = 
+          fun increasing i =
             if i = (VS.length a - 1) then print "success\n"
             else if (if !ordered then VS.sub (a, i) == VS.sub (a, i + 1) - 1.0
                      else VS.sub (a, i) <= VS.sub (a, i + 1))
@@ -252,13 +252,13 @@ struct
           else print "FAILED!\n"
         end
 
-      fun build () = 
+      fun build () =
           let
             val a = if !ordered then
                       VS.full (V.tabulate
                                    (size, fn i => Real.fromInt (size - i)))
                     else
-                      VS.full (V.tabulate 
+                      VS.full (V.tabulate
                                    (size, fn _ => randomReal (Real.fromInt (!maxVal))))
           in
             if !printResult then
@@ -267,9 +267,9 @@ struct
             a
           end
 
-      fun post _ a = 
+      fun post _ a =
           let in
-            if !check then checkResult a 
+            if !check then checkResult a
             else print "done\n";
             if !printResult then printVector a
             else ()
@@ -277,16 +277,16 @@ struct
 
       val { space, time, successfulSteals, failedSteals, suspends } = repeatTest name build sort post
     in
-      print (String.concat [(*"#",*) 
-                            name, " ", 
+      print (String.concat [(*"#",*)
+                            name, " ",
                             MLton.Parallel.Basic.policyName, " ",
                             Int.toString MLton.Parallel.Basic.numberOfProcessors, " ",
-                            Int.toString size, " ", 
-                            Int.toString seqCutoff, " ", 
-                            Int.toString parCutoff, " ", 
+                            Int.toString size, " ",
+                            Int.toString seqCutoff, " ",
+                            Int.toString parCutoff, " ",
                             Word64.fmt StringCvt.DEC space, " ",
                             LargeInt.toString time, " ",
-                            Int.toString successfulSteals, " ", 
+                            Int.toString successfulSteals, " ",
                             Int.toString failedSteals, " ",
                             Int.toString suspends, "\n"])
     end

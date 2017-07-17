@@ -10,7 +10,12 @@
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 #if ASSERT
-static inline void assertIsObjptrInFromSpace (GC_state s, objptr *opp);
+static inline void assertIsObjptrInFromSpace (GC_state s,
+                                              objptr *opp,
+                                              void* ignored);
+static inline void assertIsObjptrReachable (GC_state s,
+                                            objptr *opp,
+                                            void* ignored);
 static bool invariantForGC (GC_state s);
 #endif
 static inline bool invariantForMutatorFrontier (GC_state s);

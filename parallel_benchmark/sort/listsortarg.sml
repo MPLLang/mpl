@@ -17,8 +17,8 @@ struct
   fun fromList _ a = a
   fun toList a = a
 
-  fun foldli f y a = 
-    let 
+  fun foldli f y a =
+    let
       fun loop nil i y = y
         | loop (x::xs) i y = loop xs (i + 1) (f (i, x, y))
     in
@@ -33,12 +33,12 @@ struct
   fun update _ = raise Sort
   fun copy _ = raise Sort
 
-  fun unfoldi _ (n, y : 'a, f) = 
+  fun unfoldi _ (n, y : 'a, f) =
       let
-        fun loop i y acc = 
+        fun loop i y acc =
             if i = n then (acc, y)
-            else 
-              let 
+            else
+              let
                 val (x, y) = f (i, y)
               in
                 loop (i + 1) y (x::acc)
@@ -59,8 +59,8 @@ struct
   fun slice (a, i, NONE) = List.drop (a, i)
     | slice (a, i, SOME j) = List.take (List.drop (a, i), j)
 
-  fun halve a = 
-      let 
+  fun halve a =
+      let
         val l = length a div 2
       in
         (List.take (a, l), List.drop (a, l))
@@ -77,8 +77,8 @@ structure ListSortArgParNoDelay : SORTARG =
 struct
   open ListSortArgSeq
 
-  fun filter maxSeq f l = 
-      let 
+  fun filter maxSeq f l =
+      let
         fun loop 0 l acc = (MLton.Parallel.Basic.yield (); loop maxSeq l acc)
           | loop i nil acc = acc
           | loop i (x::xs) acc = if f x then loop (i - 1) xs (x::acc)
@@ -88,9 +88,9 @@ struct
       end
 
   val fork = MLton.Parallel.ForkJoin.fork
-  type 'a future = 'a MLton.Parallel.FutureSuspend.t
-  val future = MLton.Parallel.FutureSuspend.future
-  val touch = MLton.Parallel.FutureSuspend.touch
+  (* type 'a future = 'a MLton.Parallel.FutureSuspend.t *)
+  (* val future = MLton.Parallel.FutureSuspend.future *)
+  (* val touch = MLton.Parallel.FutureSuspend.touch *)
 
 end
 
@@ -98,8 +98,8 @@ structure ListSortArgParMaybeDelay : SORTARG =
 struct
   open ListSortArgSeq
 
-  fun filter maxSeq f l = 
-      let 
+  fun filter maxSeq f l =
+      let
         fun loop 0 l acc = (MLton.Parallel.Basic.yield (); loop maxSeq l acc)
           | loop i nil acc = acc
           | loop i (x::xs) acc = if f x then loop (i - 1) xs (x::acc)
@@ -109,15 +109,15 @@ struct
       end
 
   val fork = MLton.Parallel.ForkJoin.fork
-  type 'a future = 'a MLton.Parallel.FutureSuspendMaybeDelay.t
-  val future = MLton.Parallel.FutureSuspendMaybeDelay.future
-  val touch = MLton.Parallel.FutureSuspendMaybeDelay.touch
+  (* type 'a future = 'a MLton.Parallel.FutureSuspendMaybeDelay.t *)
+  (* val future = MLton.Parallel.FutureSuspendMaybeDelay.future *)
+  (* val touch = MLton.Parallel.FutureSuspendMaybeDelay.touch *)
 (*
-  fun halve a = 
-      let 
+  fun halve a =
+      let
         val l = length a div 2
       in
-        fork (fn () => List.take (a, l), 
+        fork (fn () => List.take (a, l),
               fn () => List.drop (a, l)))
       end
 *)

@@ -23,5 +23,6 @@ signature MLTON_GC =
             val numMarkCompactGCs: unit -> IntInf.int
             val numMinorGCs: unit -> IntInf.int
             val maxBytesLive: unit -> IntInf.int
+            val time: unit -> Time.time
          end
    end

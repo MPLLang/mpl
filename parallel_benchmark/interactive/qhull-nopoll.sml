@@ -117,7 +117,7 @@ fun randpoints n =
 
 val _ = print "Starting\n"
 
-val ptsl = randpoints 1000000
+val ptsl = [] (* randpoints 1000000 *)
 val pts = fromList ptsl (* Array.tabulate (3500000, randpt) *)
 
 val f = MLton.Parallel.FutureSuspend.future (fn () => (print "starting\n";

@@ -1,4 +1,4 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -21,12 +21,11 @@ void updateWeaksForCheneyCopy (GC_state s) {
     if (DEBUG_WEAK)
       fprintf (stderr, "updateWeaksForCheneyCopy  w = "FMTPTR"  ", (uintptr_t)w);
     p = objptrToPointer (w->objptr, s->heap->start);
-    if (GC_FORWARDED == getHeader (p)) {
+    if (hasFwdPtr(p)) {
       if (DEBUG_WEAK)
         fprintf (stderr, "forwarded from "FMTOBJPTR" to "FMTOBJPTR"\n",
-                 w->objptr,
-                 *(objptr*)p);
-      w->objptr = *(objptr*)p;
+                 w->objptr, getFwdPtr(p));
+      w->objptr = getFwdPtr(p);
     } else {
       if (DEBUG_WEAK)
         fprintf (stderr, "cleared\n");
@@ -40,7 +39,7 @@ void updateWeaksForCheneyCopy (GC_state s) {
 void swapHeapsForCheneyCopy (GC_state s) {
   GC_heap tempHeap;
 
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     tempHeap = s->procStates[proc].secondaryHeap;
     s->procStates[proc].secondaryHeap = s->procStates[proc].heap;
     s->procStates[proc].heap = tempHeap;
@@ -81,8 +80,16 @@ void majorCheneyCopyGC (GC_state s) {
   assert (s->secondaryHeap->size >= s->heap->oldGenSize);
   toStart = alignFrontier (s, s->secondaryHeap->start);
   s->forwardState.back = toStart;
-  foreachGlobalObjptr (s, forwardObjptr);
-  foreachObjptrInRange (s, toStart, &s->forwardState.back, forwardObjptr, TRUE);
+  foreachGlobalObjptr (s, forwardObjptr, NULL);
+  foreachObjptrInRange (s,
+                        toStart,
+                        &s->forwardState.back,
+                        TRUE,
+                        NULL,
+                        trueObjptrPredicate,
+                        NULL,
+                        forwardObjptr,
+                        NULL);
   updateWeaksForCheneyCopy (s);
   s->secondaryHeap->oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap->start);
   bytesCopied = s->secondaryHeap->oldGenSize;
@@ -116,7 +123,7 @@ void minorCheneyCopyGC (GC_state s) {
     return;
   s->cumulativeStatistics->bytesAllocated += bytesAllocated;
   if (not s->canMinor) {
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       /* Add in the bonus slop now since we need to fill it */
       s->procStates[proc].limitPlusSlop += GC_BONUS_SLOP;
       if (s->procStates[proc].limitPlusSlop != s->heap->frontier) {
@@ -156,10 +163,17 @@ void minorCheneyCopyGC (GC_state s) {
     /* Forward all globals.  Would like to avoid doing this once all
      * the globals have been assigned.
      */
-    foreachGlobalObjptr (s, forwardObjptrIfInNursery);
+    foreachGlobalObjptr (s, forwardObjptrIfInNursery, NULL);
     forwardInterGenerationalObjptrs (s);
-    foreachObjptrInRange (s, s->forwardState.toStart, &s->forwardState.back,
-                          forwardObjptrIfInNursery, TRUE);
+    foreachObjptrInRange (s,
+                          s->forwardState.toStart,
+                          &s->forwardState.back,
+                          TRUE,
+                          NULL,
+                          trueObjptrPredicate,
+                          NULL,
+                          forwardObjptrIfInNursery,
+                          NULL);
     updateWeaksForCheneyCopy (s);
     bytesCopied = (size_t)(s->forwardState.back - s->forwardState.toStart);
     s->cumulativeStatistics->bytesCopiedMinor += bytesCopied;

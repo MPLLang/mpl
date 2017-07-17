@@ -101,6 +101,8 @@ signature PROCESS =
                        ppid: Pid.t,
                        state: State.t} list
 
+      val numberOfMLtonJobs : unit -> int
+      val foreachPar : int * 'a list * ('a -> unit) -> unit
    end
 
 functor TestProcess (S: PROCESS): sig end =

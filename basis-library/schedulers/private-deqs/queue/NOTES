@@ -1,0 +1,48 @@
+Below is a broken attempt at doubly linked lists (DLL) with handles. It doesn't
+work because handles are implicitly invalidated at pops. This was intended to
+fit in seamlessly with the existing implementation of DLLs.
+
+
+signature QUEUE_HANDLES =
+sig
+  include QUEUE
+
+  type 'a h
+
+  (* `pushBotHandle (x, dll)` adds x to the front of dll and returns a handle
+   * pointing to x. *)
+  val pushBotHandle : 'a * 'a t -> 'a h
+
+  (* `removeHandle (h, dll)` returns true if h points to an element of dll, and
+   * deletes that element from the list. It returns false if h is not an element
+   * of this dll. For a given h, calling `removeHandle (h, _)` after a previous
+   * call has returned true is undefined. *)
+  val removeHandle : 'a h * 'a t -> bool
+end
+
+type 'a h = ('a node ref * 'a node ref) * 'a t
+
+(* val equal : 'a t * 'a t -> bool
+ * Same dll? *)
+fun equal ((bot1, _), (bot2, _)) = bot1 = bot2
+
+fun pushBotHandle (x, dll as (bot, _)) =
+  let
+    val n = !bot
+    val (l, r) = (ref Leaf, ref n)
+    val nx = Node (l, x, r)
+  in
+    ( bot := nx
+    ; prev (dll, n) := nx
+    ; ((l, r), dll)
+    )
+  end
+
+fun removeHandle (((l, r), dll), dll') =
+  if not (equal (dll, dll')) then false
+  else let val (ln, rn) = (!l, !r)
+       in ( prev (dll, rn) := ln
+          ; next (dll, ln) := rn
+          ; true
+          )
+       end

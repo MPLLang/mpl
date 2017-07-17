@@ -1,4 +1,4 @@
-(* Copyright (C) 2013 Matthew Fluet.
+(* Copyright (C) 2013,2016 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -28,7 +28,7 @@ in
       ../config/bind/word-prim.sml
    in ann "forceUsed" in
       ../config/objptr/objptr-$(OBJPTR_REP).sml
-      ../config/header/header-$(HEADER_WORD).sml
+      ../config/metadata/metadata-$(METADATA_SIZE).sml
       ../config/seqindex/seqindex-$(SEQINDEX_INT).sml
       $(LIB_MLTON_DIR)/targets/$(TARGET)/sml/c-types.sml
    end end
@@ -39,7 +39,7 @@ in
       local
          ../config/bind/int-prim.sml
          ../config/bind/int-inf-prim.sml
-      in ann "forceUsed" in 
+      in ann "forceUsed" in
          ../config/default/default-$(DEFAULT_INT).sml
       end end
    in
@@ -136,7 +136,6 @@ in
       ../config/bind/real-prim.sml
       ../config/bind/word-top.sml
    in ann "forceUsed" in
-      ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
       $(LIB_MLTON_DIR)/targets/$(TARGET)/sml/c-types.sml
       ../config/c/position.sml
@@ -169,7 +168,6 @@ in
       ../config/bind/real-prim.sml
       ../config/bind/word-top.sml
    in ann "forceUsed" in
-      ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
       $(LIB_MLTON_DIR)/targets/$(TARGET)/sml/c-types.sml
       ../config/c/position.sml
@@ -230,7 +228,6 @@ in
       ../config/bind/real-top.sml
       ../config/bind/word-top.sml
    in ann "forceUsed" in
-      ../config/header/header-$(HEADER_WORD).sml
       ../config/objptr/objptr-$(OBJPTR_REP).sml
       $(LIB_MLTON_DIR)/targets/$(TARGET)/sml/c-types.sml
       ../config/c/position.sml
@@ -300,6 +297,9 @@ in
    ../mlton/exn.sig
    ../mlton/exn.sml
 
+   ../mlton/HM.sig
+   ../mlton/HM.sml
+
    ../mlton/thread.sig
    ../mlton/thread.sml
    ../mlton/signal.sig
@@ -308,6 +308,7 @@ in
    ../mlton/process.sml
    ../mlton/gc.sig
    ../mlton/gc.sml
+
    ../mlton/rusage.sig
    ../mlton/rusage.sml
 
@@ -359,6 +360,12 @@ in
       ../mlton/ffi.sml
    end
    ../mlton/int-inf.sig
+   ann
+      "allowFFI true"
+   in
+      ../mlton/parallel.sig
+      ../mlton/parallel.sml
+   end
    ../mlton/proc-env.sig
    ../mlton/proc-env.sml
    ../mlton/profile.sig
@@ -380,30 +387,6 @@ in
    ../mlton/world.sml
    ../mlton/mono-array.sig
    ../mlton/mono-vector.sig
-
-   ../parallel/internal.sml
-   ../parallel/workqueue.sig
-   ../parallel/basic.sig
-   ../parallel/syncvar.sig
-   ../parallel/future.sig
-   ../parallel/forkjoin.sig
-   ../parallel/fgbg.sig
-   ../parallel/array.sig
-   ../parallel/parallel.sig
-   ann "allowFFI true" in
-      ../parallel/wsworkqueue.sml
-      ../parallel/wsworkqueuets.sml
-      ../parallel/wsworkqueuelc.sml
-      ../parallel/wsworkqueueo.sml
-      ../parallel/$(WORK_QUEUE).sml
-      ../parallel/$(BASIC).sml
-      ../parallel/syncvar.sml
-      ../parallel/future.sml
-      ../parallel/forkjoin.sml
-      ../parallel/fgbg.sml
-   end
-   ../parallel/array.sml
-   ../parallel/parallel.sml
 
    ../mlton/mlton.sig
    ../mlton/mlton.sml

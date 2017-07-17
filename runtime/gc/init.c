@@ -11,6 +11,9 @@
 /*                          Initialization                          */
 /* ---------------------------------------------------------------- */
 
+#include <stdlib.h>
+#include <strings.h>
+
 static bool stringToBool (char *s) {
   if (0 == strcmp (s, "false"))
     return FALSE;
@@ -43,7 +46,7 @@ static int32_t stringToInt (char *s) {
   return i;
 }
 
-static size_t stringToBytes (char *s) {
+static size_t stringToBytes (const char *s) {
   double d;
   char *endptr;
   size_t factor;
@@ -123,9 +126,46 @@ int processAtMLton (GC_state s, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
+        } else if (0 == strcmp (arg, "hm-messages")) {
+          i++;
+          s->controls->HMMessages = TRUE;
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;
+        } else if (0 == strcmp (arg, "gc-summary-format")) {
+          i++;
+
+          if (i == argc) {
+            die ("@MLton gc-summary-format missing argument.");
+          }
+
+          const char* format = argv[i++];
+          if (0 == strcmp (format, "human")) {
+            s->controls->summaryFormat = HUMAN;
+          } else if (0 == strcmp (format, "json")) {
+            s->controls->summaryFormat = JSON;
+          } else {
+            die ("@MLton gc-summary-format \"%s\" invalid. Must be one of "
+                 "human or json.",
+                 format);
+          }
+        } else if (0 == strcmp(arg, "gc-summary-file")) {
+          i++;
+          if (i == argc) {
+            die("@MLton gc-summary-file missing argument.");
+          }
+
+          const char* filePath = argv[i++];
+          if (0 == strcmp(filePath, "-")) {
+            s->controls->summaryFile = stdout;
+          } else {
+            FILE* file = fopen(filePath, "w");
+            if (NULL == file) {
+              diee("@MLton Could not open specified GC summary file.");
+            } else {
+              s->controls->summaryFile = file;
+            }
+          }
         } else if (0 == strcmp (arg, "alloc-chunk")) {
           i++;
           if (i == argc)
@@ -183,6 +223,33 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc)
             die ("@MLton load-world missing argument.");
           *worldFile = argv[i++];
+        } else if (0 == strcmp(arg, "log-file")) {
+          i++;
+          if (i == argc) {
+            die("@MLton log-file missing argument.");
+          }
+
+          const char* filePath = argv[i++];
+          if (0 == strcmp(filePath, "-")) {
+            L_setFile(stdout);
+          } else {
+            FILE* file = fopen(filePath, "w");
+            if (NULL == file) {
+              diee("@MLton Could not open specified log file.");
+            } else {
+              L_setFile(file);
+            }
+          }
+        } else if (0 == strcmp(arg, "log-level")) {
+          i++;
+          if (i == argc) {
+            die("@MLton log-level missing argument.");
+          }
+
+          char* levelString = argv[i++];
+          if (!initLogLevels(levelString)) {
+            die ("@MLton log-level invalid argument");
+          }
         } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {
           i++;
           if (i == argc)
@@ -292,6 +359,87 @@ int processAtMLton (GC_state s, int argc, char **argv,
           if (i == argc)
             die ("@MLton workers-per-proc missing argument.");
           s->workersPerProc = stringToFloat (argv[i++]);
+        } else if (0 == strcmp(arg, "initial-chunk-pool-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton initial-chunk-pool-size missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.initialSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "max-chunk-pool-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton max-chunk-pool-size missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.maxSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "chunk-pool-live-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton chunk-pool-live-ratio missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.liveRatio = stringToFloat(argv[i++]);
+          if (s->controls->chunkPoolConfig.liveRatio < 1.0) {
+            die("@MLton chunk-pool-live-ratio must be at least 1.0");
+          }
+        } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-allocated-ratio missing argument.");
+          }
+
+          s->controls->hhConfig.allocatedRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.allocatedRatio < 2.0) {
+            die("@MLton hh-allocated-ratio must be at least 2.0");
+          }
+        } else if (0 == strcmp (arg, "hh-collection-level")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-collection-level missing argument.");
+          }
+          const char* level = argv[i++];
+          if (0 == strcmp (level, "none")) {
+            s->controls->hhCollectionLevel = NONE;
+          } else if (0 == strcmp (level, "superlocal")) {
+            s->controls->hhCollectionLevel = SUPERLOCAL;
+          } else if (0 == strcmp (level, "local")) {
+            s->controls->hhCollectionLevel = LOCAL;
+          } else {
+            die ("@MLton hh-collection-level \"%s\" invalid. Must be one of "
+                 "none, superlocal, or local.",
+                 level);
+          }
+        } else if (0 == strcmp(arg, "hh-live-lc-ratio")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-live-lc-ratio missing argument.");
+          }
+
+          s->controls->hhConfig.liveLCRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.liveLCRatio < 1.0) {
+            die("@MLton hh-live-lc-ratio must be at least 2.0");
+          }
+        } else if (0 == strcmp(arg, "hh-initial-lc-heap-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-initial-lc-heap-size missing argument.");
+          }
+
+          s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton hh-max-lc-heap-size missing argument.");
+          }
+
+          s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "trace-buffer-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton trace-buffer-size missing argument.");
+          }
+          s->controls->traceBufferSize = stringToInt(argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -301,6 +449,7 @@ int processAtMLton (GC_state s, int argc, char **argv,
       }
     }
   }
+
   return i;
 }
 
@@ -326,6 +475,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->mayPageHeap = FALSE;
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
+  s->controls->HMMessages = FALSE;
   s->controls->oldGenArraySize = 0x100000;
   s->controls->allocChunkSize = 4096;
   s->controls->affinityBase = 0;
@@ -346,12 +496,28 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
+  s->controls->hhConfig.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.maxLCHS = 1; /* RAM_NOTE: Sentinel value */
+  s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
+  s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
+  s->controls->summaryFormat = HUMAN;
+  s->controls->summaryFile = stderr;
+  s->controls->hhCollectionLevel = ALL;
+  s->controls->traceBufferSize = 10000;
 
   s->cumulativeStatistics = newCumulativeStatistics();
 
   s->currentThread = BOGUS_OBJPTR;
+  s->wsQueue = BOGUS_OBJPTR;
+  s->wsQueueLock = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
+  s->globalFrontier = NULL;
+  s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;
 
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
@@ -376,19 +542,24 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&s->signalsInfo.signalsHandled);
   sigemptyset (&s->signalsInfo.signalsPending);
+  s->self = pthread_self();
+  s->terminationLeader = INVALID_PROCESSOR_NUMBER;
   s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
   s->saveWorldStatus = true;
+  s->trace = NULL;
 
-#warning Why is this not found in the Spoonhower copy?
+  /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;
+  s->lock = SPINLOCK_INITIALIZER;
 
   unless (isAligned (s->sysvals.pageSize, CARD_SIZE))
     die ("Page size must be a multiple of card size.");
+  L_setFile(stderr);
   processAtMLton (s, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, argc, argv, &s->worldFile);
   if (s->controls->fixedHeap > 0 and s->controls->maxHeap > 0)
@@ -428,6 +599,14 @@ int GC_init (GC_state s, int argc, char **argv) {
                  ]);
     }
   }
+
+  /* now that options are processed, do post options init. */
+  if (1 == s->controls->hhConfig.maxLCHS) {
+    /* maxLCHS wasn't set, so default to max chunk pool */
+    s->controls->hhConfig.maxLCHS = s->controls->chunkPoolConfig.maxSize;
+  }
+  ChunkPool_initialize(&(s->controls->chunkPoolConfig));
+
   return res;
 }
 
@@ -463,6 +642,10 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->controls = s->controls;
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
+  d->wsQueue = BOGUS_OBJPTR;
+  d->wsQueueLock = BOGUS_OBJPTR;
+  d->globalFrontier = NULL;
+  d->globalLimitPlusSlop = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
@@ -477,22 +660,48 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->signalsInfo.signalIsPending = FALSE;
   sigemptyset (&d->signalsInfo.signalsHandled);
   sigemptyset (&d->signalsInfo.signalsPending);
+  d->self = s->self;
+  d->terminationLeader = INVALID_PROCESSOR_NUMBER;
   d->syncReason = SYNC_NONE;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
+  d->trace = NULL;
 
-  // XXX spoons better duplicate?
+  // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
 
   d->sysvals.ram = s->sysvals.ram;
 
-  // XXX spoons better duplicate
+  // SPOONHOWER_NOTE: better duplicate
   //initProfiling (d);
 
   // Multi-processor support is incompatible with saved-worlds
   assert (d->amOriginal);
   duplicateWorld (d, s);
+  d->lock = s->lock;
   s->amInGC = FALSE;
+}
+
+// AG_NOTE: is this the proper place for this function?
+void GC_traceInit(GC_state s) {
+#ifdef ENABLE_TRACING
+  char filename[256];
+  const char *dir;
+
+  dir = getenv("MLTON_TRACE_DIR");
+  if (dir == NULL)
+    return;
+
+  snprintf(filename, 256, "%s/%d.%d.trace", dir, getpid(), s->procNumber);
+  s->trace = TracingNewContext(filename, s->controls->traceBufferSize,
+                               s->procNumber);
+#endif
+}
+
+void GC_traceFinish(GC_state s) {
+#ifdef ENABLE_TRACING
+  TracingCloseAndFreeContext(&s->trace);
+#endif
 }

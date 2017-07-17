@@ -12,34 +12,63 @@
  * invariant.
  */
 void enter (GC_state s) {
-  if (DEBUG)
-    fprintf (stderr, "enter\n");
+  /* RAM_NOTE: Is this necessary? */
+  HM_enterGlobalHeap ();
+
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+
   Proc_beginCriticalSection(s);
-  if (DEBUG)
-    fprintf (stderr, "enter locked\n");
-  if (DEBUG)
-    displayGCState (s, stderr);
   beginAtomic (s);
+
+  if (DEBUG) {
+    /* RAM_NOTE: Switch to using LOG */
+    displayGCState (s, stderr);
+  }
+
   assert (invariantForGC (s));
-  if (DEBUG)
-    fprintf (stderr, "enter ok\n");
+
+  switch (s->syncReason) {
+    case SYNC_NONE:
+      /* I am just a passenger on this critical section */
+      break;
+    case SYNC_OLD_GEN_ARRAY:
+      s->cumulativeStatistics->syncForOldGenArray++;
+      break;
+    case SYNC_NEW_GEN_ARRAY:
+      s->cumulativeStatistics->syncForNewGenArray++;
+      break;
+    case SYNC_STACK:
+      s->cumulativeStatistics->syncForStack++;
+      break;
+    case SYNC_HEAP:
+      s->cumulativeStatistics->syncForHeap++;
+      break;
+    case SYNC_FORCE:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    case SYNC_PACK:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    case SYNC_SAVE_WORLD:
+      s->cumulativeStatistics->syncMisc++;
+      break;
+    default:
+      DIE("Unknown sync reason!");
+  }
 }
 
 void leave (GC_state s) {
-  if (DEBUG)
-    fprintf (stderr, "leave\n");
   /* The mutator frontier invariant may not hold
    * for functions that don't ensureBytesFree.
    */
-  assert (invariantForMutator (s, FALSE, TRUE));
+  assert(invariantForMutator(s, FALSE, TRUE));
+
   endAtomic (s);
   s->syncReason = SYNC_NONE;
-  if (DEBUG)
-    fprintf (stderr, "leave ok\n");
   Proc_endCriticalSection(s);
-  if (DEBUG)
-    fprintf (stderr, "leave unlocked\n");
+
+  /* RAM_NOTE: Is this necessary? */
+  HM_exitGlobalHeap();
 }

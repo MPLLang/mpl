@@ -15,7 +15,7 @@ void die (const char *fmt, ...) {
   vfprintf(stderr, fmt, args);
   va_end(args);
   fprintf(stderr, "\n");
-  exit(1);
+  abort();
 }
 
 void diee (const char * fmt, ...) {
@@ -27,5 +27,5 @@ void diee (const char * fmt, ...) {
   va_end(args);
 
   fprintf(stderr, " (%s)\n", strerror(errno));
-  exit(1);
+  abort();
 }

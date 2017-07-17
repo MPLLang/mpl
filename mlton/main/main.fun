@@ -1,4 +1,4 @@
-(* Copyright (C) 2010-2011,2013-2014 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2016 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -67,6 +67,7 @@ val buildConstants: bool ref = ref false
 val debugRuntime: bool ref = ref false
 datatype debugFormat = Dwarf | DwarfPlus | Dwarf2 | Stabs | StabsPlus
 val debugFormat: debugFormat option ref = ref NONE
+val traceRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunk: Control.chunk option ref = ref NONE
@@ -327,6 +328,8 @@ fun makeOptions {usage} =
            (fn s => reportAnnotation (s, flag,
                                       Control.Elaborate.processDefault s)))
        end,
+       (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
+        boolRef traceRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
         SpaceString
         (fn s => (case s of
@@ -985,6 +988,7 @@ fun commandLine (args: string list): unit =
              cptrdiff = lookup "cptrdiff",
              csize = lookup "csize",
              header = lookup "header",
+             metaData = lookup "metaData",
              mplimb = lookup "mplimb",
              objptr = lookup "objptr",
              seqIndex = lookup "seqIndex"}
@@ -1034,6 +1038,8 @@ fun commandLine (args: string list): unit =
          List.concat [[concat ["-L", !libTargetDir]],
                       if !debugRuntime then
                       ["-lmlton-gdb", "-lgdtoa-gdb"]
+                      else if !traceRuntime then
+                      ["-lmlton-trace", "-lgdtoa-trace"]
                       else if positionIndependent then
                       ["-lmlton-pic", "-lgdtoa-pic"]
                       else
@@ -1043,6 +1049,9 @@ fun commandLine (args: string list): unit =
          if !debugRuntime then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-gdb.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" }]
+         else if !traceRuntime then
+         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-trace.a" },
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-trace.a" }]
          else if positionIndependent then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-pic.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
@@ -1354,71 +1363,74 @@ fun commandLine (args: string list): unit =
                                              xsuf,
                                              ".bc"])
                         else temp (xsuf ^ ".bc")
-                  fun compileC (c: Counter.t, input: File.t): File.t =
+                  fun compileC (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val debugSwitches = gccDebug @ ["-DASSERT=1"]
+                        val tracingSwitches = gccDebug @ ["-DENABLE_TRACING=1"]
                         val output = mkOutputO (c, input)
-
-                        val _ =
-                           System.system
+                     in
+                        (
+                          [
                             (gcc,
                              List.concat
-                             [[ "-std=gnu99", "-c" ],
-                              if !format = Executable
-                              then [] else [ "-DLIBNAME=" ^ !libname ],
-                              if positionIndependent
-                              then [ "-fPIC", "-DPIC" ] else [],
-                              if !debug then debugSwitches else [],
-                              ccOpts,
-                              ["-o", output],
-                              [input]])
-                     in
-                        output
+                                [[ "-std=gnu11", "-c" ],
+                                 if !format = Executable
+                                 then [] else [ "-DLIBNAME=" ^ !libname ],
+                                 if positionIndependent
+                                 then [ "-fPIC", "-DPIC" ] else [],
+                                 if !debug then debugSwitches else [],
+                                 if !traceRuntime then tracingSwitches else [],
+                                 ccOpts,
+                                 ["-o", output],
+                                 [input]])
+                          ],
+                          output
+                        )
                      end
-                  fun compileS (c: Counter.t, input: File.t): File.t =
+                  fun compileS (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val output = mkOutputO (c, input)
-                        val _ =
-                           System.system
-                           (gcc,
-                            List.concat
-                            [["-c"],
-                             if !debug then [asDebug] else [],
-                             asOpts,
-                             ["-o", output],
-                             [input]])
                      in
-                        output
+                        (
+                          [
+                            (gcc,
+                             List.concat
+                                 [["-c"],
+                                  if !debug then [asDebug] else [],
+                                  asOpts,
+                                  ["-o", output],
+                                  [input]])
+                            ],
+                          output
+                        )
                      end
-                  fun compileLL (c: Counter.t, input: File.t): File.t =
+                  fun compileLL (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val asBC = mkOutputBC (c, input, ".as")
-                        val _ =
-                           System.system
-                           (llvm_as,
-                            List.concat
-                            [llvm_asOpts,
-                             ["-o", asBC],
-                             [input]])
                         val optBC = mkOutputBC (c, input, ".opt")
-                        val _ =
-                           System.system
-                           (llvm_opt,
-                            List.concat
-                            [llvm_optOpts,
-                             ["-o", optBC],
-                             [asBC]])
                         val output = mkOutputO (c, input)
-                        val _ =
-                           System.system
-                           (llvm_llc,
-                            List.concat
-                            [llvm_llcOpts,
-                             ["-filetype=obj"],
-                             ["-o", output],
-                             [optBC]])
                      in
-                        output
+                        (
+                          [
+                            (llvm_as,
+                             List.concat
+                                 [llvm_asOpts,
+                                  ["-o", asBC],
+                                  [input]]),
+                            (llvm_opt,
+                             List.concat
+                                 [llvm_optOpts,
+                                  ["-o", optBC],
+                                  [asBC]]),
+                            (llvm_llc,
+                             List.concat
+                                 [llvm_llcOpts,
+                                  ["-filetype=obj"],
+                                  ["-o", output],
+                                  [optBC]])
+                          ],
+                          output
+                        )
                      end
                   fun compileCSO (inputs: File.t list): unit =
                      if List.forall (inputs, fn f =>
@@ -1427,30 +1439,35 @@ fun commandLine (args: string list): unit =
                      else
                      let
                         val c = Counter.new 0
-                        val oFiles =
+                        val (allCommands, oFiles) =
                            trace (Top, "Compile and Assemble")
                            (fn () =>
                             List.fold
-                            (inputs, [], fn (input, ac) =>
+                            (inputs, ([], []), fn (input, (allCommands, allOutputs)) =>
                              let
                                 val extension = File.extension input
+                                val (commands, output) =
+                                    if SOME "o" = extension
+                                    then ([], input)
+                                    else if SOME "c" = extension
+                                    then compileC (c, input)
+                                    else if SOME "ll" = extension
+                                    then compileLL(c, input)
+                                    else if SOME "s" = extension
+                                            orelse SOME "S" = extension
+                                    then compileS (c, input)
+                                    else Error.bug
+                                             (concat
+                                                  ["invalid extension: ",
+                                                   Option.toString (fn s => s) extension])
                              in
-                                if SOME "o" = extension
-                                   then input :: ac
-                                else if SOME "c" = extension
-                                   then (compileC (c, input)) :: ac
-                                else if SOME "ll" = extension
-                                   then (compileLL(c, input)) :: ac
-                                else if SOME "s" = extension
-                                        orelse SOME "S" = extension
-                                   then (compileS (c, input)) :: ac
-                                else Error.bug
-                                     (concat
-                                      ["invalid extension: ",
-                                       Option.toString (fn s => s) extension])
+                                (commands :: allCommands, output :: allOutputs)
                              end))
                            ()
+
+                        fun doIt l = List.foreach (l, System.system)
                      in
+                        Process.foreachPar (Process.numberOfMLtonJobs (), rev allCommands, doIt);
                         case stop of
                            Place.O => ()
                          | _ => compileO (rev oFiles)

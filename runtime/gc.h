@@ -23,8 +23,11 @@ typedef GC_state GCState_t;
 #error POINTER_BITS not defined
 #endif
 
-#include "gc/debug.h"
 
+#include "gc/debug.h"
+#include "gc/logger.h"
+
+#include "gc/chunk-pool.h"
 #include "gc/align.h"
 #include "gc/model.h"
 #include "gc/pointer.h"
@@ -65,6 +68,7 @@ typedef GC_state GCState_t;
 #include "gc/call-stack.h"
 #include "gc/profiling.h"
 #include "gc/rusage.h"
+#include "gc/termination.h"
 #include "gc/gc_state.h"
 #include "gc/init-world.h"
 #include "gc/world.h"
@@ -76,5 +80,11 @@ typedef GC_state GCState_t;
 #include "gc/share.h"
 #include "gc/parallel.h"
 #include "gc/processor.h"
+#include "gc/hierarchical-heap.h"
+#include "gc/hierarchical-heap-collection.h"
+#include "gc/heap-utils.h"
+#include "gc/global-heap.h"
+#include "gc/local-heap.h"
+#include "gc/chunk.h"
 
 #endif /* _MLTON_GC_H_ */

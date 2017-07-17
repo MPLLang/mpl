@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2010,2014 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2016 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -109,6 +109,9 @@ structure Type =
 
       val compareRes = word WordSize.compareRes
 
+      val hierarchicalHeap: unit -> t =
+       fn () => objptr ObjptrTycon.hierarchicalHeap
+
       val objptrHeader: unit -> t = word o WordSize.objptrHeader
 
       val seqIndex: unit -> t = word o WordSize.seqIndex
@@ -124,6 +127,7 @@ structure Type =
       val word0: t = bits Bits.zero
       val word8: t = word WordSize.word8
       val word32: t = word WordSize.word32
+      val word64: t = word WordSize.word64
 
       val wordVector: WordSize.t -> t =
          objptr o ObjptrTycon.wordVector o WordSize.bits
@@ -399,18 +403,16 @@ structure ObjectType =
                let
                   val b = Type.width elt
                in
-                  Bits.> (b, Bits.zero)
-                  andalso Bits.isByteAligned b
+                  Bits.isByteAligned b
                end
           | Normal {ty, ...} =>
                let
                   val b = Bits.+ (Type.width ty,
                                   Type.width (Type.objptrHeader ()))
                in
-                  not (Type.isUnit ty)
-                  andalso (case !Control.align of
-                              Control.Align4 => Bits.isWord32Aligned b
-                            | Control.Align8 => Bits.isWord64Aligned b)
+                  case !Control.align of
+                     Control.Align4 => Bits.isWord32Aligned b
+                   | Control.Align8 => Bits.isWord64Aligned b
                end
           | Stack => true
           | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
@@ -419,41 +421,156 @@ structure ObjectType =
 
       val stack = Stack
 
-      val thread = fn () =>
-         let
-            val padding =
-               let
-                  val align =
-                     case !Control.align of
-                        Control.Align4 => Bytes.fromInt 4
-                      | Control.Align8 => Bytes.fromInt 8
-                  val bytesHeader =
-                     Bits.toBytes (Control.Target.Size.header ())
-                  val bytesCSize =
-                     Bits.toBytes (Control.Target.Size.csize ())
-                  val bytesExnStack =
-                     Bits.toBytes (Type.width (Type.exnStack ()))
-                  val bytesStack =
-                     Bits.toBytes (Type.width (Type.stack ()))
+      val thread =
+       fn () =>
+          let
+              val padding =
+                  let
+                      val align =
+                          case !Control.align
+                           of Control.Align4 => Bytes.fromInt 4
+                            | Control.Align8 => Bytes.fromInt 8
+                      val bytesMetaData =
+                          Bits.toBytes (Control.Target.Size.metaData ())
+                      val bytesInGlobalHeapCounter =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesUseHierarchicalHeap =
+                          Bits.toBytes (Type.width Type.bool)
+                      val bytesBytesNeeded =
+                          Bits.toBytes (Control.Target.Size.csize ())
+                      val bytesExnStack =
+                          Bits.toBytes (Type.width (Type.exnStack ()))
+                      val bytesStack =
+                          Bits.toBytes (Type.width (Type.stack ()))
+                      val bytesHierarchicalHeap =
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
 
-                  val bytesObject =
-                     Bytes.+ (bytesHeader,
-                     Bytes.+ (bytesCSize,
-                     Bytes.+ (bytesExnStack,
-                              bytesStack)))
-                  val bytesTotal =
-                     Bytes.align (bytesObject, {alignment = align})
-                  val bytesPad = Bytes.- (bytesTotal, bytesObject)
-               in
-                  Type.bits (Bytes.toBits bytesPad)
-               end
-         in
-            Normal {hasIdentity = true,
-                    ty = Type.seq (Vector.new4 (padding,
-                                                Type.csize (),
-                                                Type.exnStack (),
-                                                Type.stack ()))}
-         end
+                      val bytesObject =
+                          let
+                              infix 6 +
+                              val op+ = Bytes.+
+                          in
+                              bytesMetaData +
+                              bytesInGlobalHeapCounter +
+                              bytesUseHierarchicalHeap +
+                              bytesBytesNeeded +
+                              bytesExnStack +
+                              bytesStack +
+                              bytesHierarchicalHeap
+                          end
+
+                      val bytesTotal = Bytes.align (bytesObject,
+                                                    {alignment = align})
+                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
+                  in
+                      Type.bits (Bytes.toBits bytesPad)
+                  end
+          in
+              Normal {hasIdentity = true,
+                      ty =
+                      Type.seq (Vector.fromList [padding,
+                                                 Type.word32,
+                                                 Type.bool,
+                                                 Type.csize (),
+                                                 Type.exnStack (),
+                                                 Type.stack (),
+                                                 Type.hierarchicalHeap ()])}
+          end
+
+      val hierarchicalHeap =
+       fn () =>
+          let
+              val padding =
+                  let
+                      val align =
+                          case !Control.align of
+                              Control.Align4 => Bytes.fromInt 4
+                            | Control.Align8 => Bytes.fromInt 8
+
+                      val bytesMetaData =
+                          Bits.toBytes (Control.Target.Size.metaData ())
+                      val bytesLastAllocatedChunk =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLock =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesState =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesLevel =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesLastSharedLevel =
+                          Bits.toBytes (Type.width Type.word32)
+                      val bytesID =
+                          Bits.toBytes (Type.width Type.word64)
+                      (*
+                       * RAM_NOTE: Not sure if I can use cpointer for both
+                       * pointer and void*
+                       *)
+                      val bytesLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesNewLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesLocallyCollectibleSize =
+                          Bits.toBytes (Type.width Type.word64)
+                      val bytesLocallyCollectibleHeapSize =
+                          Bits.toBytes (Type.width Type.word64)
+                      val bytesRetVal =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      val bytesParentHH =
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
+                      val bytesNextChildHH =
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
+                      val bytesChildHHList =
+                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
+                      val bytesThread =
+                          Bits.toBytes (Type.width (Type.thread ()))
+                      val bytesObject =
+                          let
+                              infix 6 +
+                              val op+ = Bytes.+
+                          in
+                              bytesMetaData +
+                              bytesLastAllocatedChunk +
+                              bytesLock +
+                              bytesState +
+                              bytesLevel +
+                              bytesLastSharedLevel +
+                              bytesID +
+                              bytesLevelList +
+                              bytesNewLevelList +
+                              bytesLocallyCollectibleSize +
+                              bytesLocallyCollectibleHeapSize +
+                              bytesRetVal +
+			      bytesParentHH +
+			      bytesNextChildHH +
+			      bytesChildHHList +
+                              bytesThread
+                          end
+
+                      val bytesTotal =
+                          Bytes.align (bytesObject, {alignment = align})
+                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
+                  in
+                      Type.bits (Bytes.toBits bytesPad)
+                  end
+          in
+              Normal {hasIdentity = true,
+                      ty = Type.seq (Vector.fromList [padding,
+                                                      Type.cpointer (),
+                                                      Type.word32,
+                                                      Type.word32,
+                                                      Type.word32,
+                                                      Type.word32,
+                                                      Type.word64,
+                                                      Type.cpointer (),
+                                                      Type.cpointer (),
+                                                      Type.word64,
+                                                      Type.word64,
+                                                      Type.cpointer (),
+                                                      Type.hierarchicalHeap (),
+                                                      Type.hierarchicalHeap (),
+                                                      Type.hierarchicalHeap (),
+                                                      Type.thread ()])}
+          end
 
       (* Order in the following vector matters.  The basic pointer tycons must
        * correspond to the constants in gc/object.h.
@@ -464,9 +581,9 @@ structure ObjectType =
        * WORD16_VECTOR_TYPE_INDEX,
        * WORD32_VECTOR_TYPE_INDEX.
        * WORD64_VECTOR_TYPE_INDEX.
-       * ZERO_WORD_TYPE_INDEX,
-       * ONE_WORD_TYPE_INDEX,
-       * TWO_WORD_TYPE_INDEX.
+       * HEADER_ONLY_TYPE_INDEX,
+       * FILL_TYPE_INDEX,
+       * HIERARCHICAL_HEAP_INDEX
        *)
       val basic = fn () =>
          let
@@ -488,7 +605,8 @@ structure ObjectType =
              wordVec 16,
              wordVec 64,
              (ObjptrTycon.headerOnly, HeaderOnly),
-             (ObjptrTycon.fill, Fill)]
+             (ObjptrTycon.fill, Fill),
+             (ObjptrTycon.hierarchicalHeap, hierarchicalHeap ())]
          end
 
       local

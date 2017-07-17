@@ -1,0 +1,6 @@
+structure THREAD =
+struct
+
+type 'a t
+val spawn : (unit -> 'a) -> 'a t
+val sync : 'a t -> 'a

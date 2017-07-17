@@ -18,13 +18,30 @@ typedef enum {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+typedef bool (*dfsDescendHookFun)(GC_state s, void* rawArgs, objptr object);
+typedef void (*dfsAscendHookFun)(GC_state s,
+                                 void* rawArgs,
+                                 objptr* objectObjptr);
+
 static inline bool isPointerMarked (pointer p);
 static inline bool isPointerMarkedByMode (pointer p, GC_markMode m);
+static size_t dfsMarkByModeCustom (GC_state s, pointer root,
+                                   GC_markMode mode,
+                                   bool shouldHashCons,
+                                   bool shouldLinkWeaks,
+                                   dfsDescendHookFun descendHook,
+                                   void* descendHookArgs,
+                                   dfsAscendHookFun ascendHook,
+                                   void* ascendHookArgs);
 static size_t dfsMarkByMode (GC_state s, pointer root,
-                             GC_markMode mode, 
+                             GC_markMode mode,
                              bool shouldHashCons,
                              bool shouldLinkWeaks);
-static inline void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp);
-static inline void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s, objptr *opp);
+static inline void dfsMarkWithHashConsWithLinkWeaks (GC_state s,
+                                                     objptr *opp,
+                                                     void* ignored);
+static inline void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s,
+                                                        objptr *opp,
+                                                        void* ignored);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
