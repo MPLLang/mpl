@@ -27,7 +27,7 @@ void MLton_init (int argc, char **argv, GC_state s) {
 
 void MLton_halt (GC_state s, C_Int_t status) {
   if (!GC_TryToTerminate(s))
-    pthread_exit(NULL);
+    GC_TerminateThread(s);
 
   GC_done (s);
 
