@@ -133,7 +133,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
                                      HM_HH_offsetof(s)));
 
   hh->lastAllocatedChunk = NULL;
-  hh->lock = HM_HH_LOCK_INITIALIZER;
+  rwlock_init(&hh->lock);
   hh->state = LIVE;
   hh->level = 0;
   hh->stealLevel = HM_HH_INVALID_LEVEL;

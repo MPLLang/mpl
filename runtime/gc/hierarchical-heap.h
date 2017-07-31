@@ -17,6 +17,8 @@
 #ifndef HIERARCHICAL_HEAP_H_
 #define HIERARCHICAL_HEAP_H_
 
+#include "rwlock.h"
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 enum HM_HHState {
   LIVE = 0,
@@ -55,7 +57,7 @@ extern const char* HM_HHStateToString[];
 struct HM_HierarchicalHeap {
   void* lastAllocatedChunk; /**< The last allocated chunk */
 
-  Int32 lock; /**< The spinlock for exclusive access to the childHHList */
+  rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
 
   volatile enum HM_HHState state; /**< The state of this hierarchical heap */
 
@@ -313,6 +315,17 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
  */
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
 
+/*
+ * Returns the lowest private level
+ *
+ * @param s The GC_state to use
+ * @param hh The hierarchical heap to inspect
+ *
+ * @return the lowest private level
+ */
+Word32 HM_HH_getLowestPrivateLevel(GC_state s,
+                                   const struct HM_HierarchicalHeap *hh);
+
 /**
  * Gets the heap limit from a struct HM_HierarchicalHeap
  *
@@ -411,6 +424,35 @@ void HM_HH_updateLevelListPointers(objptr hhObjptr);
  */
 void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
                         void* frontier);
+
+/**
+ * Gets the writer lock on 'hh'
+ *
+ * @param hh the struct HM_HierarchicalHeap* to lock
+ */
+void lockWriterHH(struct HM_HierarchicalHeap* hh);
+
+/**
+ * Releases the writer lock on 'hh'
+ *
+ * @param hh the struct HM_HierarchicalHeap* to unlock
+ */
+void unlockWriterHH(struct HM_HierarchicalHeap* hh);
+
+/**
+ * Gets the writer lock on 'hh'
+ *
+ * @param hh the struct HM_HierarchicalHeap* to lock
+ */
+void lockReaderHH(struct HM_HierarchicalHeap* hh);
+
+/**
+ * Releases the writer lock on 'hh'
+ *
+ * @param hh the struct HM_HierarchicalHeap* to unlock
+ */
+void unlockReaderHH(struct HM_HierarchicalHeap* hh);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

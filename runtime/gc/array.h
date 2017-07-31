@@ -52,6 +52,9 @@ static inline GC_arrayLength* getArrayLengthp (pointer a);
 static inline GC_arrayLength getArrayLength (pointer a);
 static inline GC_arrayCounter* getArrayCounterp (pointer a);
 static inline GC_arrayCounter getArrayCounter (pointer a);
+static inline size_t getArrayBytesPerElement (GC_state s, pointer a);
+static inline size_t getArraySize (GC_state s, pointer a);
+static inline pointer getArrayAfterLastp (GC_state s, pointer a);
 
 #if ASSERT
 static inline pointer indexArrayAtObjptrIndex (GC_state s, pointer a,
