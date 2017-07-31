@@ -16,17 +16,33 @@
 #ifndef HIERARCHICAL_HEAP_COLLECTION_H_
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
+/* objptr* opp */
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
+  Word32 tgtLevel;              /* can be set to CHUNK_INVALID_LEVEL to preserve
+                                 * levels during forwarding. */
+  void *tgtFromChunkList;       /* should be non-NULL if tgtLevel is different
+                                 * from CHUNK_INVALID_LEVEL. */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
 };
 
 #define MAX_NUM_HOLES 512
+
+/**********/
+/* Macros */
+/**********/
+#if ASSERT
+#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(0xb000deadfee1dead))
+#else
+#define COPY_OBJECT_HH_VALUE (NULL)
+#endif
+
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))

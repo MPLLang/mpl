@@ -165,7 +165,7 @@ structure CFunction =
            val cty = Type.toCType return
            val target = concat ["Ref_deref_", CType.name cty]
         in
-           T {args = Vector.new1 arg,
+           T {args = Vector.new2 (Type.gcState(), arg),
               convention = Cdecl,
               kind = Kind.Runtime {bytesNeeded = NONE,
                                    ensuresBytesFree = false,
@@ -174,7 +174,7 @@ structure CFunction =
                                    modifiesFrontier = false,
                                    readsStackTop = false,
                                    writesStackTop = false},
-              prototype = (Vector.new1 CType.objptr,
+              prototype = (Vector.new2 (CType.gcState, CType.objptr),
                            SOME cty),
               return = return,
               symbolScope = Private,
@@ -186,7 +186,7 @@ structure CFunction =
            val cty = Type.toCType src
            val target = concat ["Ref_assign_", CType.name cty]
         in
-           T {args = Vector.new2 (dst, src),
+           T {args = Vector.new3 (Type.gcState(), dst, src),
               convention = Cdecl,
               kind = Kind.Runtime {bytesNeeded = NONE,
                                    ensuresBytesFree = false,
@@ -195,7 +195,7 @@ structure CFunction =
                                    modifiesFrontier = false,
                                    readsStackTop = false,
                                    writesStackTop = false},
-              prototype = (Vector.new2 (CType.objptr, cty),
+              prototype = (Vector.new3 (CType.gcState, CType.objptr, cty),
                            NONE),
               return = Type.unit,
               symbolScope = Private,
@@ -1603,7 +1603,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                               CFunction.refDeref { arg = arg,
                                                                    return = t }
                                       in
-                                         ccall { args = Vector.new1 (a 0),
+                                         ccall { args = Vector.new2 (GCState,
+                                                                     a 0),
                                                  func = func }
                                       end)
                                | Ref_assign =>
@@ -1616,7 +1617,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                              CFunction.refAssign { dst = dst,
                                                                    src = src }
                                      in
-                                        ccall { args = Vector.new2 (a 0, a 1),
+                                        ccall { args = Vector.new3 (GCState,
+                                                                    a 0, a 1),
                                                 func = func }
                                      end)
                                | Weak_get =>

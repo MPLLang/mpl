@@ -30,6 +30,7 @@ extern C_Pthread_Key_t gcstate_key;
 
 #include "gc/array-allocate.c"
 #include "gc/array.c"
+#include "gc/assign.c"
 #include "gc/atomic.c"
 #include "gc/call-stack.c"
 #include "gc/cheney-copy.c"
@@ -61,6 +62,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/int-inf.c"
 #include "gc/invariant.c"
 #include "gc/global-heap.c"
+#include "gc/level.c"
 #include "gc/local-heap.c"
 #include "gc/logger.c"
 #include "gc/mark-compact.c"
@@ -73,6 +75,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/parallel.c"
 #include "gc/pointer.c"
 #include "gc/profiling.c"
+#include "gc/promote.c"
 #include "gc/rusage.c"
 #include "gc/rwlock.c"
 #include "gc/share.c"

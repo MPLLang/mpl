@@ -88,5 +88,8 @@ typedef GC_state GCState_t;
 #include "gc/global-heap.h"
 #include "gc/local-heap.h"
 #include "gc/chunk.h"
+#include "gc/assign.h"
+#include "gc/level.h"
+#include "gc/promote.h"
 
 #endif /* _MLTON_GC_H_ */

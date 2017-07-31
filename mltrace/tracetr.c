@@ -51,6 +51,11 @@ static const char *EventKindStrings[] = {
 
   [EVENT_ARRAY_ALLOCATE_ENTER]  = "ARRAY_ALLOCATE_ENTER",
   [EVENT_ARRAY_ALLOCATE_LEAVE]  = "ARRAY_ALLOCATE_LEAVE",
+
+  [EVENT_PROMOTION_ENTER]       = "PROMOTION_ENTER",
+  [EVENT_PROMOTION_LEAVE]       = "PROMOTION_LEAVE",
+  [EVENT_PROMOTED_WRITE]        = "PROMOTED_WRITE",
+  [EVENT_PROMOTION]             = "PROMOTION",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -245,6 +250,18 @@ void printEventText(struct Event *event) {
   case EVENT_ARRAY_ALLOCATE_ENTER:
     printf("ensureBytesFree = %llx, numElements = %lld, header = %llx",
            event->arg1, event->arg2, event->arg3);
+    break;
+
+  case EVENT_PROMOTION_ENTER:
+    printf("src = %llx, dest_chunk = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_PROMOTED_WRITE:
+    printf("orig_o = %llx, o = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_PROMOTION:
+    printf("src = %llx, repl = %llx", event->arg1, event->arg2);
     break;
 
   default:

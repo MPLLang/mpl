@@ -51,6 +51,11 @@ enum EventKind {
 
   EVENT_ARRAY_ALLOCATE_ENTER  = 23,
   EVENT_ARRAY_ALLOCATE_LEAVE  = 24,
+
+  EVENT_PROMOTION_ENTER       = 28,
+  EVENT_PROMOTION_LEAVE       = 29,
+  EVENT_PROMOTED_WRITE        = 30,
+  EVENT_PROMOTION             = 31,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)

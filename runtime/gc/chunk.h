@@ -58,6 +58,9 @@ struct HM_ChunkInfo {
 
       Word64 size; /**< The size in number of bytes of this level, both
                       allocated and unallocated. */
+
+      bool isInToSpace; /**< False if the corresponding Chunk List is in
+                         * from-space, true if it is in to-space. */
     } levelHead; /**< The struct containing information for level head chunks */
 
     struct {
@@ -125,13 +128,16 @@ void* HM_allocateLevelHeadChunk(void** levelList,
  * @param predicate The predicate function to apply to foreachObjptrInObject()
  * @param the arguments to the predicate function.
  * @param forwardHHObjptrArgs the args to use for forwardHHObjptr()
+ * @param expectEntanglement Whether or not we expect entanglement during the
+ *                           scan.
  */
 void HM_forwardHHObjptrsInLevelList(
     GC_state s,
     void** levelList,
     ObjptrPredicateFunction predicate,
     void* predicateArgs,
-    struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
+    struct ForwardHHObjptrArgs* forwardHHObjptrArgs,
+    bool expectEntanglement);
 
 /**
  * Frees chunks in the level list up to the level specified, inclusive
@@ -263,10 +269,12 @@ Word32 HM_getHighestLevel(const void* levelList);
  * @param destinationLevelList The destination of the merge
  * @param levelList The list to merge
  * @param hh The HH containing the destination level list.
+ * @param resetToFromSpace if true, reset the whole level list to to-space
  */
 void HM_mergeLevelList(void** destinationLevelList,
                        void* levelList,
-                       struct HM_HierarchicalHeap * const hh);
+                       struct HM_HierarchicalHeap * const hh,
+                       bool resetToFromSpace);
 
 /**
  * This function promotes the chunks from level 'level' to the level 'level -
@@ -299,10 +307,13 @@ void HM_assertChunkInLevelList(const void* levelList, const void* chunk);
  * @param levelList The level list to assert invariants for.
  * @param hh The hierarchical heap this level list belongs to.
  * @param stealLevel The level this level list was stolen from.
+ * @param inToSpace If true, check that all the chunks are in to-space,
+                    otherwise they should all be from-space.
  */
 void HM_assertLevelListInvariants(const void* levelList,
                                   const struct HM_HierarchicalHeap* hh,
-                                  Word32 stealLevel);
+                                  Word32 stealLevel,
+                                  bool inToSpace);
 
 /**
  * Updates the chunk's values to reflect mutator
@@ -337,6 +348,62 @@ struct HM_ChunkInfo* HM_getChunkInfo(void* chunk);
  * for more details
  */
 const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk);
+
+/**
+ * Gets the head chunk for the given chunk info
+ *
+ * @param ci The chunk info to use
+ * @param retVal Pointer to the head chunk of this chunk
+ */
+struct HM_ChunkInfo *HM_getChunkHeadChunk(struct HM_ChunkInfo *ci);
+
+/**
+ * Gets the level head chunk for the given objptr
+ *
+ * @attention
+ * object <em>must</em> be within the allocated hierarchical heap!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr to get the Hierarchical Heap for
+ * @param retVal Pointer to the head chunk of this object's level.
+ */
+struct HM_ChunkInfo *HM_getObjptrLevelHeadChunk(GC_state s, objptr object);
+
+/**
+ * Gets the HH for the given objptr
+ *
+ * @attention
+ * object <em>must</em> be within the allocated hierarchical heap!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr to get the Hierarchical Heap for
+ * @param retVal Pointer to the HH of the object
+ */
+struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
+
+/**
+ * Gets the HH lock for the given objptr
+ *
+ * @attention
+ * object <em>must</em> be within the allocated hierarchical heap!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr to get the Hierarchical Heap lock for
+ * @param retVal Pointer to the rwlock of this object's HH.
+ */
+rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
+
+/**
+ * Check whether the given objptr is in to-space
+ *
+ * @attention
+ * object <em>must</em> be within the allocated hierarchical heap!
+ *
+ * @param s The GC_state to use
+ * @param object The objptr to get the Hierarchical Heap for
+ * @param retVal True if the objptr is in to-space, false otherwise
+ */
+bool HM_isObjptrInToSpace(GC_state s, objptr object);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
