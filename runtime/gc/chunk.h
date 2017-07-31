@@ -322,6 +322,22 @@ void HM_updateChunkValues(void* chunk, void* frontier);
  */
 void HM_updateLevelListPointers(void* levelList,
                                 struct HM_HierarchicalHeap* hh);
+
+/**
+ * This function retrieves the ChunkInfo object from a chunk
+ *
+ * @param chunk The chunk to retrieve the object from
+ *
+ * @return the ChunkInfo struct pointer
+ */
+struct HM_ChunkInfo* HM_getChunkInfo(void* chunk);
+
+/**
+ * Same as HM_getChunkInfo() except for const-correctness. See HM_getChunkInfo()
+ * for more details
+ */
+const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* CHUNK_H_ */
