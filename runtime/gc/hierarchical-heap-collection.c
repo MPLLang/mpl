@@ -315,10 +315,10 @@ void HM_HHC_collectLocal(void) {
     for (void* chunkList = hh->levelList;
          (NULL != chunkList) && (HM_getChunkListLevel(chunkList) >=
                                  forwardHHObjptrArgs.minLevel);
-         chunkList = getChunkInfo(chunkList)->split.levelHead.nextHead) {
+         chunkList = HM_getChunkInfo(chunkList)->split.levelHead.nextHead) {
       for (void* chunk = chunkList;
            NULL != chunk;
-           chunk = getChunkInfo(chunk)->nextChunk) {
+           chunk = HM_getChunkInfo(chunk)->nextChunk) {
         fromBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
       }
     }
@@ -327,10 +327,10 @@ void HM_HHC_collectLocal(void) {
     size_t toBytes = 0;
     for (void* chunkList = hh->newLevelList;
          NULL != chunkList;
-         chunkList = getChunkInfo(chunkList)->split.levelHead.nextHead) {
+         chunkList = HM_getChunkInfo(chunkList)->split.levelHead.nextHead) {
       for (void* chunk = chunkList;
            NULL != chunk;
-           chunk = getChunkInfo(chunk)->nextChunk) {
+           chunk = HM_getChunkInfo(chunk)->nextChunk) {
         toBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
       }
     }
@@ -689,7 +689,7 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
     void* cursor;
     for (cursor = hh->newLevelList;
          (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
-         cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
+         cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead) {
     }
     assert((NULL == cursor) || (HM_getChunkListLevel(cursor) != level));
   } else {
@@ -698,7 +698,7 @@ pointer copyObject(struct HM_HierarchicalHeap* hh,
     void* cursor;
     for (cursor = hh->newLevelList;
          (NULL != cursor) && (HM_getChunkListLevel(cursor) > level);
-         cursor = getChunkInfo(cursor)->split.levelHead.nextHead) {
+         cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead) {
     }
     assert(chunkList == cursor);
   }

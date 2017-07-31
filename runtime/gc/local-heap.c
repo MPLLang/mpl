@@ -179,11 +179,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
             "  Level List:");
         for (void* levelHead = hh->levelList;
              NULL != levelHead;
-             levelHead = getChunkInfo(levelHead)->split.levelHead.nextHead) {
+             levelHead = HM_getChunkInfo(levelHead)->split.levelHead.nextHead) {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
               "    level %"PRIu32" size %"PRIu64,
-              getChunkInfo(levelHead)->level,
-              getChunkInfo(levelHead)->split.levelHead.size);
+              HM_getChunkInfo(levelHead)->level,
+              HM_getChunkInfo(levelHead)->split.levelHead.size);
         }
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
