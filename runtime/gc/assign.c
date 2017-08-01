@@ -10,21 +10,65 @@ static pointer Assignable_findLockedTrueReplica(
   GC_state s, objptr o, struct HM_HierarchicalHeap **phh,
   bool for_reading, bool keep_intermediate_levels_locked);
 
+static objptr Assignable_findLockedTrueReplicaSlow(
+  GC_state s, objptr o, struct HM_HierarchicalHeap **phh,
+  bool for_reading, bool keep_intermediate_levels_locked);
+
 static pointer Assignable_findLockedTrueReplica(
+  GC_state s, objptr o, struct HM_HierarchicalHeap **phh,
+  bool for_reading, bool keep_intermediate_levels_locked) {
+    if (phh) {
+        *phh = NULL;
+    }
+
+    /* Objects in the global heap are not supposed to have forwarding pointers
+     * outside of collection periods. */
+    if (!HM_HH_objptrInHierarchicalHeap(s, o)) {
+        goto fast_path;
+    }
+
+    /** If the object lives in the private data of the running thread and has no
+     * forwarding pointer, we do not have to lock anything and can simply
+     * return.  */
+    if (!hasFwdPtr(objptrToPointer(o, s->heap->start))) {
+        struct HM_HierarchicalHeap *hhCurrent;
+        struct HM_ObjptrInfo info;
+
+        assert (getThreadCurrent(s)->hierarchicalHeap != BOGUS_OBJPTR);
+        hhCurrent =
+            (struct HM_HierarchicalHeap *)
+            objptrToPointer(getThreadCurrent(s)->hierarchicalHeap,
+                            s->heap->start);
+        HM_getObjptrInfo(s, o, &info);
+
+        /* TODO Is this correct? If the deque has not been locked, a thief might
+         * scoop in and potentially change this level. */
+        if (info.level == hhCurrent->level) {
+            goto fast_path;
+        }
+    }
+
+    /** TODO implement a fast-path for when the object is at the root without a
+     * forwarding pointer. */
+
+    o = Assignable_findLockedTrueReplicaSlow(s, o, phh,
+                                             for_reading,
+                                             keep_intermediate_levels_locked);
+
+fast_path:
+    assert (!hasFwdPtr(objptrToPointer(o, s->heap->start)));
+    return objptrToPointer(o, s->heap->start);
+}
+
+static objptr Assignable_findLockedTrueReplicaSlow(
   GC_state s, objptr o, struct HM_HierarchicalHeap **phh,
   bool for_reading, bool keep_intermediate_levels_locked) {
     assert (s);
     assert (o);
+    assert (HM_HH_objptrInHierarchicalHeap(s, o));
+
     struct HM_HierarchicalHeap *hh, *new_hh;
     objptr o_orig = o;
-
-    if (phh)
-        *phh = NULL;
-
-    /* Do not do anything for objects living in the global heap. */
-    if (!HM_HH_objptrInHierarchicalHeap(s, o)) {
-        return objptrToPointer(o, s->heap->start);
-    }
 
     hh = HM_getObjptrHH(s, o);
 
@@ -90,7 +134,7 @@ static pointer Assignable_findLockedTrueReplica(
         assert (hh == new_hh);
     }
 
-    /* Store the current lock. */
+    /* Store the current HH. */
     if (phh)
         *phh = hh;
 
@@ -101,7 +145,7 @@ static pointer Assignable_findLockedTrueReplica(
     }
 
     /* Return the true replica, which is locked. */
-    return objptrToPointer(o, s->heap->start);
+    return o;
 }
 
 pointer Assignable_findLockedTrueReplicaReader(
@@ -174,8 +218,8 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
         (void *)objptrToPointer(src, s->heap->start));
 
     /* Assignments to objects in the global heap are not locked. Writing a
-     * pointer in the hierarchical heap to the global heap is only permitted
-     * when writing to the deque. */
+     * pointer in the hierarchical heap to the global heap should only permitted
+     * when writing to the deque, but we only print a warning for now. */
     if (!HM_HH_objptrInHierarchicalHeap(s, dst)) {
         if (HM_HH_objptrInHierarchicalHeap(s, src)) {
             assert (BOGUS_OBJPTR != s->wsQueue);
@@ -237,7 +281,12 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
                    &args);
 
     /* Find the true replica of the destination, locking intermediate levels
-     * along the way. */
+     * along the way.
+     *
+     * The 'hh' variable will hold a non-NULL hierarchical heap only if the fast
+     * path of Assignable_findLockedTrueReplica() didn't trigger. We will use it
+     * to know when we have something to unlock. */
+    struct HM_HierarchicalHeap *hh;
 
     if (rwlock_is_locked_by_me_for_writing(&dst_info.hh->lock)) {
       /* We first unlock the HH of dst, which might have been locked above if it
@@ -250,12 +299,13 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
       unlockWriterHH(dst_info.hh);
     }
 
-    dst_repl = Assignable_findLockedTrueReplica(s, dst, NULL, false, true);
+    dst_repl = Assignable_findLockedTrueReplica(s, dst, &hh, false, true);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
-        "Found true replica %p of %p",
+        "Found true replica %p of %p (hh %p)",
         (void *)dst_repl,
-        (void *)objptrToPointer(dst, s->heap->start));
+        (void *)objptrToPointer(dst, s->heap->start),
+        (void *)hh);
 
     HM_getObjptrInfo(s, pointerToObjptr(dst_repl, s->heap->start), &dst_info);
 
@@ -269,21 +319,26 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     /* Perform the write. */
     *((pointer *)dst_repl + index) = src_repl;
 
-    /* Unlock all the levels between dst_repl and src. */
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "Unlocking from level %u of %p to level %u of %p",
-        dst_info.level,
-        (void *)objptrToPointer(dst, s->heap->start),
-        HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
-        (void *)objptrToPointer(src, s->heap->start));
-    args.for_locking = false;
-    args.prev_hh = NULL;
-    HM_foreachHHDown(s,
-                     src_info.hh,
-                     dst_info.level,
-                     hhLockUnlock,
-                     &args);
+    /* If hh != NULL, we have to unlock all the levels between dst_repl and src,
+     * otherwise nothing was locked. */
 
+    if (hh != NULL) {
+        LOG(LM_HH_PROMOTION, LL_DEBUG,
+            "Unlocking from level %u of %p to level %u of %p",
+            dst_info.level,
+            (void *)objptrToPointer(dst, s->heap->start),
+            HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
+            (void *)objptrToPointer(src, s->heap->start));
+        args.for_locking = false;
+        args.prev_hh = NULL;
+        HM_foreachHHDown(s,
+                         src_info.hh,
+                         dst_info.level,
+                         hhLockUnlock,
+                         &args);
+    } else {
+        LOG(LM_HH_PROMOTION, LL_DEBUG, "Nothing to unlock");
+    }
 
 end:
     LOG(LM_HH_PROMOTION, LL_INFO,
