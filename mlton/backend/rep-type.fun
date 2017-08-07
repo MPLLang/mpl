@@ -375,8 +375,6 @@ structure ObjectType =
                     ty: ty}
        | Stack
        | Weak of Type.t option
-       | HeaderOnly
-       | Fill
 
       fun layout (t: t) =
          let
@@ -393,8 +391,6 @@ structure ObjectType =
                                ("ty", Type.layout ty)]]
              | Stack => str "Stack"
              | Weak t => seq [str "Weak ", Option.layout Type.layout t]
-             | HeaderOnly => str "HeaderOnly"
-             | Fill => str "Fill"
          end
 
       fun isOk (t: t): bool =
@@ -416,8 +412,6 @@ structure ObjectType =
                end
           | Stack => true
           | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
-          | HeaderOnly => true
-          | Fill => true
 
       val stack = Stack
 
@@ -581,8 +575,8 @@ structure ObjectType =
        * WORD16_VECTOR_TYPE_INDEX,
        * WORD32_VECTOR_TYPE_INDEX.
        * WORD64_VECTOR_TYPE_INDEX.
-       * HEADER_ONLY_TYPE_INDEX,
-       * FILL_TYPE_INDEX,
+       * FILL0_NORMAL_TYPE_INDEX,
+       * FILL8_NORMAL_TYPE_INDEX,
        * HIERARCHICAL_HEAP_INDEX
        *)
       val basic = fn () =>
@@ -604,8 +598,10 @@ structure ObjectType =
              wordVec 32,
              wordVec 16,
              wordVec 64,
-             (ObjptrTycon.headerOnly, HeaderOnly),
-             (ObjptrTycon.fill, Fill),
+             (ObjptrTycon.fill0Normal,
+              Normal { hasIdentity = false, ty = Type.unit }),
+             (ObjptrTycon.fill8Normal,
+              Normal { hasIdentity = false, ty = Type.word WordSize.word64 }),
              (ObjptrTycon.hierarchicalHeap, hierarchicalHeap ())]
          end
 
@@ -632,8 +628,6 @@ structure ObjectType =
                   end
              | Stack => R.Stack
              | Weak to => R.Weak {gone = Option.isNone to}
-             | HeaderOnly => R.HeaderOnly
-             | Fill => R.Fill
       end
    end
 

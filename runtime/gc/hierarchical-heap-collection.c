@@ -713,7 +713,7 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
     spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));
 
     pointer start = s->procStates[i].frontier;
-    pointer end = s->procStates[i].limitPlusSlop + GC_BONUS_SLOP;
+    pointer end = s->procStates[i].limitPlusSlop + GC_GAP_SLOP;
 
     if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
                                                           s->heap->start))) {
@@ -725,7 +725,7 @@ void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
 
       /* use the saved global frontier */
       start = s->procStates[i].globalFrontier;
-      end = s->procStates[i].globalLimitPlusSlop + GC_BONUS_SLOP;
+      end = s->procStates[i].globalLimitPlusSlop + GC_GAP_SLOP;
     }
 
     holes[i].start = start;
