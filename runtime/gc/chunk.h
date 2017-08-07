@@ -116,6 +116,24 @@ void* HM_allocateLevelHeadChunk(void** levelList,
                                 struct HM_HierarchicalHeap* hh);
 
 /**
+ * Calls foreachHHObjptrInObject() on every object starting at 'start', which
+ * should be inside a chunk.
+ *
+ * @param s The GC_state to use
+ * @param start The pointer at which the scanning starts. Should point to the
+ * beginning of the metadata of the object.
+ * @param predicate The predicate function to apply to foreachObjptrInObject()
+ * @param the arguments to the predicate function.
+ * @param forwardHHObjptrArgs the args to use for forwardHHObjptr()
+ */
+void HM_forwardHHObjptrsInChunkList(
+    GC_state s,
+    void *start,
+    ObjptrPredicateFunction predicate,
+    void* predicateArgs,
+    struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
+
+/**
  * Calls foreachHHObjptrInObject() on every object in 'destinationLevelList',
  * until no more objects exist.
  *
