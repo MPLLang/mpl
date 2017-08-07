@@ -95,7 +95,7 @@ void initWorld (GC_state s) {
     s->globals[i] = BOGUS_OBJPTR;
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive (s);
   minSize = s->lastMajorStatistics->bytesLive
-    + ((GC_HEAP_LIMIT_SLOP + GC_BONUS_SLOP) * s->numberOfProcs);
+    + ((GC_HEAP_LIMIT_SLOP + GC_GAP_SLOP) * s->numberOfProcs);
   createHeap (s, s->heap,
               sizeofHeapDesired (s, minSize, 0),
               minSize);
@@ -103,7 +103,7 @@ void initWorld (GC_state s) {
   start = alignFrontier (s, s->heap->start);
   s->start = start;
   s->frontier = start;
-  s->limitPlusSlop = s->heap->start + s->heap->size - GC_BONUS_SLOP;
+  s->limitPlusSlop = s->heap->start + s->heap->size - GC_GAP_SLOP;
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   initVectors (s);
   assert ((size_t)(s->frontier - start) <= s->lastMajorStatistics->bytesLive);

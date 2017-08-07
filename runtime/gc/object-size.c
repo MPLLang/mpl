@@ -43,16 +43,6 @@ size_t sizeofObject (GC_state s, pointer p) {
     metaDataBytes = GC_STACK_METADATA_SIZE;
     objectBytes = sizeofStackNoMetaData (s, (GC_stack)p);
   }
-  else if (HEADER_ONLY_TAG == tag) {
-    metaDataBytes = GC_HEADER_SIZE;
-    objectBytes = 0;
-  }
-  else if (FILL_TAG == tag) {
-    GC_smallGapSize bytes;
-    metaDataBytes = GC_HEADER_SIZE;
-    bytes = *((GC_smallGapSize *)p);
-    objectBytes = GC_SMALL_GAP_SIZE_SIZE + bytes;
-  }
   else {
     metaDataBytes = 0;
     objectBytes = 0;

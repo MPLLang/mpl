@@ -67,7 +67,7 @@ void setGCStateCurrentHeap (GC_state s,
   size_t genNurserySize;
   pointer limit;
   pointer frontier;
-  size_t bonus = GC_BONUS_SLOP * s->numberOfProcs;
+  size_t bonus = GC_GAP_SLOP * s->numberOfProcs;
 
   if (not duringInit) {
     nurseryBytesRequested = 0;
@@ -203,10 +203,10 @@ void setGCStateCurrentHeap (GC_state s,
 
       /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
-        for (size_t i = 0; i < GC_BONUS_SLOP; i++)
+        for (size_t i = 0; i < GC_GAP_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
 
-      frontier = s->procStates[proc].limitPlusSlop + GC_BONUS_SLOP;
+      frontier = s->procStates[proc].limitPlusSlop + GC_GAP_SLOP;
     }
   }
   else {
@@ -225,10 +225,10 @@ void setGCStateCurrentHeap (GC_state s,
 
       /* RAM_NOTE: Might want to remove this after cleanup */
       if (DEBUG)
-        for (size_t i = 0; i < GC_BONUS_SLOP; i++)
+        for (size_t i = 0; i < GC_GAP_SLOP; i++)
           *(s->procStates[proc].limitPlusSlop + i) = 0xBF;
 
-      frontier = s->procStates[proc].limitPlusSlop + GC_BONUS_SLOP;
+      frontier = s->procStates[proc].limitPlusSlop + GC_GAP_SLOP;
     }
 
     s->start = s->frontier = frontier;
@@ -238,10 +238,10 @@ void setGCStateCurrentHeap (GC_state s,
     /* SPOONHOWER_NOTE: clearCardMap (?) */
 
     if (DEBUG)
-      for (size_t i = 0; i < GC_BONUS_SLOP; i++)
+      for (size_t i = 0; i < GC_GAP_SLOP; i++)
         *(s->limitPlusSlop + i) = 0xBF;
 
-    frontier = s->limitPlusSlop + GC_BONUS_SLOP;
+    frontier = s->limitPlusSlop + GC_GAP_SLOP;
   }
   h->frontier = frontier;
   assert (h->frontier <= h->start + h->availableSize);
