@@ -23,10 +23,10 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
-  Word32 tgtLevel;              /* can be set to CHUNK_INVALID_LEVEL to preserve
-                                 * levels during forwarding. */
-  void *tgtFromChunkList;       /* should be non-NULL if tgtLevel is different
-                                 * from CHUNK_INVALID_LEVEL. */
+  void *tgtChunkList;           /* If not NULL, designates the chunk list where
+                                 * the object is to be copied. If NULL, the
+                                 * to-space chunk at the level of the object
+                                 * will be used. */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
@@ -86,7 +86,8 @@ PRIVATE void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPoint
 void HM_HHC_collectLocal(void);
 
 /**
- * Forwards the object pointed to by 'opp' into 'destinationLevelList'
+ * Forwards the object pointed to by 'opp' into 'destinationLevelList' starting
+ * in its last chunk.
  *
  * @param s The GC_state to use
  * @param opp The objptr to forward

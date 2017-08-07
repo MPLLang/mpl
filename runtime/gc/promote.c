@@ -10,8 +10,18 @@ pointer HM_Promote(GC_state s,
     dst_chunk = HM_getChunkHeadChunk(dst_chunk);
     struct HM_ChunkInfo *src_chunk =
         HM_getObjptrLevelHeadChunk(s, pointerToObjptr(src, s->heap->start));
+    void *tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
     struct HM_HierarchicalHeap *dst_hh =
         dst_chunk->split.levelHead.containingHH;
+    bool needToUpdateLCS = false;
+
+    struct HM_HierarchicalHeap *current_hh = getHierarchicalHeapCurrent(s);
+    if (dst_chunk->level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
+      assert (dst_hh == current_hh);
+      needToUpdateLCS = true;
+      dst_hh->locallyCollectibleSize -=
+          HM_getChunkInfo(tgtChunkList)->split.levelHead.size;
+    }
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Promoting src %p to chunk list %p",
@@ -25,12 +35,20 @@ pointer HM_Promote(GC_state s,
 
     assert (!dst_hh->newLevelList);
 
+    if (dst_hh->lastAllocatedChunk == HM_getChunkListLastChunk(tgtChunkList)) {
+        /* chunk in use, so append a new one to it */
+        HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
+        LOG(LM_HH_PROMOTION, LL_DEBUG,
+            "Chunk %p at level %u in use, so appending new chunk",
+            dst_hh->lastAllocatedChunk,
+            dst_chunk->level);
+    }
+
     struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
         .hh = dst_hh,
         .minLevel = dst_chunk->level + 1,
         .maxLevel = src_chunk->level,
-        .tgtLevel = dst_chunk->level,
-        .tgtFromChunkList = HM_getChunkHeadChunk(dst_chunk),
+        .tgtChunkList = tgtChunkList,
         .bytesCopied = 0,
         .objectsCopied = 0,
         .stacksCopied = 0
@@ -48,50 +66,44 @@ pointer HM_Promote(GC_state s,
 
     LOG(LM_HH_PROMOTION, LL_DEBUG, "START src copy");
 
+    void *lastChunk = HM_getChunkListLastChunk(tgtChunkList);
+    pointer start = HM_getChunkFrontier(lastChunk);
+
     forwardHHObjptr(s, &srcobj, &forwardHHObjptrArgs);
 
-    LOG(LM_HH_PROMOTION, LL_DEBUG, "START copy loop");
+    if (lastChunk != HM_getChunkListLastChunk(tgtChunkList)) {
+        start = HM_getChunkStart(HM_getChunkListLastChunk(tgtChunkList));
+    }
 
-    HM_forwardHHObjptrsInLevelList(
+    LOG(LM_HH_PROMOTION, LL_DEBUG, "START copy loop at %p", (void *)start);
+
+    HM_forwardHHObjptrsInChunkList(
         s,
-        &dst_hh->newLevelList,
+        start,
         trueObjptrPredicate,
         NULL,
-        &forwardHHObjptrArgs,
-        true);
-
-    /* We should only ever have one level. */
-    assert(!HM_getChunkInfo(dst_hh->newLevelList)->split.levelHead.nextHead);
+        &forwardHHObjptrArgs);
 
     /* We need to ensure some invariants.
 
-       1/ Merge the level list.
+       1/ Reset the to-space level list.
 
-       2/ Reset the to-space level list.
-
-       3/ Reset the cached pointer from the from-space chunk list to the
+       2/ Reset the cached pointer from the from-space chunk list to the
        to-space chunk list.
 
-       4/ Update locallyCollectibleSize if we have been promoting to a locally
+       3/ Update locallyCollectibleSize if we have been promoting to a locally
        collectible level.
     */
 
-    size_t lcs_dst_level =
-      HM_getChunkInfo(dst_hh->newLevelList)->split.levelHead.size;
-    HM_mergeLevelList(&dst_hh->levelList, dst_hh->newLevelList, dst_hh, true);
-
     dst_hh->newLevelList = NULL;
 
-    assert (forwardHHObjptrArgs.tgtFromChunkList);
-    assert (HM_getChunkInfo(forwardHHObjptrArgs.tgtFromChunkList)->
+    assert (forwardHHObjptrArgs.tgtChunkList);
+    assert (!HM_getChunkInfo(forwardHHObjptrArgs.tgtChunkList)->
             split.levelHead.toChunkList);
-    HM_getChunkInfo(forwardHHObjptrArgs.tgtFromChunkList)->
-        split.levelHead.toChunkList = NULL;
 
-    struct HM_HierarchicalHeap *current_hh = getHierarchicalHeapCurrent(s);
-    if (dst_chunk->level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
-      assert (dst_hh == current_hh);
-      dst_hh->locallyCollectibleSize += lcs_dst_level;
+    if (needToUpdateLCS) {
+        dst_hh->locallyCollectibleSize +=
+            HM_getChunkInfo(tgtChunkList)->split.levelHead.size;
     }
 
     assertInvariants(s, dst_hh, LIVE);

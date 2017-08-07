@@ -203,6 +203,37 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   return chunk;
 }
 
+void HM_forwardHHObjptrsInChunkList(
+    GC_state s,
+    void *start,
+    ObjptrPredicateFunction predicate,
+    void* predicateArgs,
+    struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
+  void *chunk = ChunkPool_find(start);
+  pointer p = start;
+
+  if (chunk == NULL) {
+      DIE("could not find chunk of %p", chunk);
+  }
+
+  for (;
+       NULL != chunk;
+       chunk = HM_getChunkInfo(chunk)->nextChunk, p = HM_getChunkStart(chunk)) {
+      /* Can I use foreachObjptrInRange() for this? */
+    while (p != HM_getChunkInfo(chunk)->frontier) {
+      p = advanceToObjectData(s, p);
+
+      p = foreachObjptrInObject(s,
+                                p,
+                                FALSE,
+                                predicate,
+                                predicateArgs,
+                                forwardHHObjptr,
+                                forwardHHObjptrArgs);
+    }
+  }
+}
+
 void HM_forwardHHObjptrsInLevelList(
     GC_state s,
     void** levelList,
@@ -216,38 +247,28 @@ void HM_forwardHHObjptrsInLevelList(
   for (void* levelHead = *levelList;
        NULL != levelHead;
        levelHead = HM_getChunkInfo(levelHead)->split.levelHead.nextHead) {
+    LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;
+
     LOG(LM_HH_COLLECTION, LL_DEBUG,
         "Sweeping level %u in %p",
         HM_getChunkInfo(levelHead)->level,
         (void *)levelList);
-    for (void* chunk = levelHead;
-         NULL != chunk;
-         chunk = HM_getChunkInfo(chunk)->nextChunk) {
-      /* Can I use foreachObjptrInRange() for this? */
-      for (pointer p = HM_getChunkStart(chunk);
-           p != HM_getChunkInfo(chunk)->frontier;) {
-        LOCAL_USED_FOR_ASSERT void* savedLevelList = *levelList;
 
-        p = advanceToObjectData(s, p);
-        /* RAM_NOTE: Changing of maxLevel here is redundant sometimes */
-        if (expectEntanglement) {
-          forwardHHObjptrArgs->maxLevel = savedMaxLevel;
-        } else {
-          forwardHHObjptrArgs->maxLevel = HM_getChunkInfo(levelHead)->level;
-        }
-
-        p = foreachObjptrInObject(s,
-                                  p,
-                                  FALSE,
-                                  predicate,
-                                  predicateArgs,
-                                  forwardHHObjptr,
-                                  forwardHHObjptrArgs);
-
-        /* asserts that no new lower level has been created */
-        assert(savedLevelList == *levelList);
-      }
+    /* RAM_NOTE: Changing of maxLevel here is redundant sometimes */
+    if (expectEntanglement) {
+        forwardHHObjptrArgs->maxLevel = savedMaxLevel;
+    } else {
+        forwardHHObjptrArgs->maxLevel = HM_getChunkInfo(levelHead)->level;
     }
+
+    HM_forwardHHObjptrsInChunkList(s,
+                                   HM_getChunkStart(levelHead),
+                                   predicate,
+                                   predicateArgs,
+                                   forwardHHObjptrArgs);
+
+    /* asserts that no new lower level has been created */
+    assert(savedLevelList == *levelList);
   }
 
   forwardHHObjptrArgs->maxLevel = savedMaxLevel;
