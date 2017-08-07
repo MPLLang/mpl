@@ -9,6 +9,7 @@
 #ifndef _C_CHUNK_H_
 #define _C_CHUNK_H_
 
+#include <pthread.h>
 #include <stdio.h>
 
 #include "ml-types.h"
