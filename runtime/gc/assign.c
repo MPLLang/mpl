@@ -183,8 +183,10 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
             objptr afterlastp = pointerToObjptr(getArrayAfterLastp(s, queuep),
                                                 s->heap->start);
             if (dst < s->wsQueue || dst >= afterlastp) {
-                DIE("Trying to write from HH to global heap outside of deque:"
-                    " *%p = %p", (void *)dst, (void *)src);
+                LOG(LM_HH_PROMOTION, LL_DEBUGMORE,
+                    "Writing %p from HH to %p in global heap",
+                    (void *)dst,
+                    (void *)src);
             } else {
                 LOG(LM_HH_PROMOTION, LL_DEBUG,
                     "Writing %p to the deque at %p",
