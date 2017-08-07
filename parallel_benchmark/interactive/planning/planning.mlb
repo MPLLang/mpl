@@ -4,6 +4,24 @@ $(SML_LIB)/basis/mlton.mlb
 ../x/graphics.mlb
 $(SML_LIB)/basis/schedulers/interactive-pprio.mlb
 SEQUENCE.sig
+
+types.sml
 primitives.sml
 ChunkedTreeSequence.sml
+rrt.sml
+PRIO_QUEUE.sig
+../../../../sml-lib/algo/heap-sig.sml
+../../../../sml-lib/algo/heap.sml
+../../../../sml-lib/njlib/ord-key-sig.sml
+../../../../sml-lib/njlib/ord-map-sig.sml
+../../../../sml-lib/njlib/lib-base-sig.sml
+../../../../sml-lib/njlib/lib-base.sml
+../../../../sml-lib/njlib/splaytree-sig.sml
+../../../../sml-lib/njlib/splaytree.sml
+../../../../sml-lib/njlib/splay-map-fn.sml
+astar.sml
+bmp.sml
+(* sim.sml *)
+world.sig
+guisim.sml
 plan.sml
