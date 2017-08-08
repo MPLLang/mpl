@@ -134,7 +134,15 @@ struct
       fun add w =
           let
             val i = !top
-            val () = if i = A.length (!work) then resize p q else ()
+            val () =
+                if i = A.length (!work)
+                then
+                   (
+                     MLton.HM.enterGlobalHeap ();
+                     resize p q;
+                     MLton.HM.exitGlobalHeap ()
+                   )
+                else ()
             val i = !top (* in case of resize *)
             val t = newToken p
           in
