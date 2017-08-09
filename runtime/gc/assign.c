@@ -27,9 +27,9 @@ static pointer Assignable_findLockedTrueReplica(
         goto fast_path;
     }
 
-    /** If the object lives in the private data of the running thread and has no
-     * forwarding pointer, we do not have to lock anything and can simply
-     * return.  */
+
+    /* If the object has no forwarding pointer, we try to be smart before
+     * calling the general locking code. */
     if (!hasFwdPtr(objptrToPointer(o, s->heap->start))) {
         struct HM_HierarchicalHeap *hhCurrent;
         struct HM_ObjptrInfo info;
@@ -41,9 +41,17 @@ static pointer Assignable_findLockedTrueReplica(
                             s->heap->start);
         HM_getObjptrInfo(s, o, &info);
 
-        /* TODO Is this correct? If the deque has not been locked, a thief might
-         * scoop in and potentially change this level. */
+        /* We do not have to lock anything if the object lives either at a leaf
+         * (since no one can promote it concurrently), or in the root (since no
+         * further promotion can occur). */
+
         if (info.level == hhCurrent->level) {
+            /* at a leaf */
+            goto fast_path;
+        }
+
+        if (info.level == 0) {
+            /* at the root */
             goto fast_path;
         }
     }
