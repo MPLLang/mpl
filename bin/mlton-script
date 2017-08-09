@@ -154,4 +154,5 @@ doit "$lib" \
         -profile-exclude '\$\(SML_LIB\)'                         \
 	-mark-cards false                                        \
         -drop-pass deepFlatten -drop-pass refFlatten             \
+        -cc-opt '-flto'                                          \
         "$@"
