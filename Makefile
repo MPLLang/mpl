@@ -35,7 +35,7 @@ NLFFIGEN := mlnlffigen
 PATH := $(BIN):$(SRC)/bin:$(shell echo $$PATH)
 CP := /bin/cp -fpR
 GZIP := gzip --force --best
-RANLIB := ranlib
+RANLIB := gcc-ranlib
 
 # If we're compiling with another version of MLton, then we want to do
 # another round of compilation so that we get a MLton built without
