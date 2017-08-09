@@ -129,6 +129,13 @@ void* ChunkPool_find (void* object);
 size_t ChunkPool_allocated(void);
 
 /**
+ * This function returns the maximum number of bytes allocated from the pool
+ *
+ * @return maximum number of bytes allocated.
+ */
+size_t ChunkPool_maxAllocated(void);
+
+/**
  * This function returns the current size of the pool, in bytes.
  *
  * @return current size of the pool in bytes.

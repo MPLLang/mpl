@@ -174,6 +174,7 @@ static struct ChunkPool_config ChunkPool_config;
 static void* ChunkPool_poolStart = NULL;
 static void* ChunkPool_poolEnd = NULL;
 static size_t ChunkPool_bytesAllocated = 0ULL;
+static size_t ChunkPool_maxBytesAllocated = 0ULL;
 static size_t ChunkPool_currentPoolSize = 0ULL;
 
 static struct ChunkPool_chunkMetadata* ChunkPool_chunkMetadatas = NULL;
@@ -348,6 +349,11 @@ void* ChunkPool_allocate (size_t* bytesRequested) {
         LOG(LM_CHUNK_POOL, LL_DEBUG, "Allocating chunk %p", chunk);
         VALGRIND_MEMPOOL_ALLOC(&ChunkPool_poolStart, chunk, *bytesRequested);
 
+        /* update maxBytesAllocated */
+        if (ChunkPool_bytesAllocated > ChunkPool_maxBytesAllocated) {
+          ChunkPool_maxBytesAllocated = ChunkPool_bytesAllocated;
+        }
+
         return chunk;
       }
     }
@@ -440,6 +446,10 @@ void* ChunkPool_find (void* object) {
 
 size_t ChunkPool_allocated(void) {
   return ChunkPool_bytesAllocated;
+}
+
+size_t ChunkPool_maxAllocated(void) {
+  return ChunkPool_maxBytesAllocated;
 }
 
 size_t ChunkPool_size(void) {

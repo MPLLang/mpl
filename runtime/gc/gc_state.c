@@ -341,6 +341,10 @@ uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
   return retVal;
 }
 
+size_t GC_getCumulativeStatisticsMaxChunkPoolOccupancy (void) {
+  return ChunkPool_maxAllocated ();
+}
+
 size_t GC_getCumulativeStatisticsMaxHeapOccupancy (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 

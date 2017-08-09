@@ -128,6 +128,7 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsBytesPromoted (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
+PRIVATE size_t GC_getCumulativeStatisticsMaxChunkPoolOccupancy (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
