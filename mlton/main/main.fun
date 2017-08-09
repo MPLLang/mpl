@@ -68,6 +68,7 @@ val debugRuntime: bool ref = ref false
 datatype debugFormat = Dwarf | DwarfPlus | Dwarf2 | Stabs | StabsPlus
 val debugFormat: debugFormat option ref = ref NONE
 val traceRuntime: bool ref = ref false
+val ltoRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunk: Control.chunk option ref = ref NONE
@@ -330,6 +331,8 @@ fun makeOptions {usage} =
        end,
        (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
         boolRef traceRuntime),
+       (Expert, "lto-runtime", " {false|true}", "perform C-level whole-program optimization",
+        boolRef ltoRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
         SpaceString
         (fn s => (case s of
@@ -1040,6 +1043,8 @@ fun commandLine (args: string list): unit =
                       ["-lmlton-gdb", "-lgdtoa-gdb"]
                       else if !traceRuntime then
                       ["-lmlton-trace", "-lgdtoa-trace"]
+                      else if !ltoRuntime then
+                      ["-lmlton-lto", "-lgdtoa-lto", "-O3", "-flto"]
                       else if positionIndependent then
                       ["-lmlton-pic", "-lgdtoa-pic"]
                       else
@@ -1052,6 +1057,9 @@ fun commandLine (args: string list): unit =
          else if !traceRuntime then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-trace.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-trace.a" }]
+         else if !ltoRuntime then
+         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-lto.a" },
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-lto.a" }]
          else if positionIndependent then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-pic.a" },
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
@@ -1367,6 +1375,7 @@ fun commandLine (args: string list): unit =
                      let
                         val debugSwitches = gccDebug @ ["-DASSERT=1"]
                         val tracingSwitches = gccDebug @ ["-DENABLE_TRACING=1"]
+                        val ltoSwitches = ["-O3", "-flto"]
                         val output = mkOutputO (c, input)
                      in
                         (
@@ -1380,6 +1389,7 @@ fun commandLine (args: string list): unit =
                                  then [ "-fPIC", "-DPIC" ] else [],
                                  if !debug then debugSwitches else [],
                                  if !traceRuntime then tracingSwitches else [],
+                                 if !ltoRuntime then ltoSwitches else [],
                                  ccOpts,
                                  ["-o", output],
                                  [input]])
