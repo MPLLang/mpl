@@ -13,16 +13,12 @@ TARGET := self
 
 ifeq ($(TARGET), self)
 CC := gcc -std=gnu11
-AR := ar rc
-GCC-AR := gcc-ar rc
-RANLIB := ranlib
-GCC-RANLIB := gcc-ranlib
+AR := gcc-ar rc
+RANLIB := gcc-ranlib
 else
 CC := $(TARGET)-gcc -std=gnu11
-AR := $(TARGET)-ar rc
-GCC-AR := $(TARGET)-gcc-ar rc
-RANLIB := $(TARGET)-ranlib
-GCC-RANLIB := $(TARGET)-gcc-ranlib
+AR := $(TARGET)-gcc-ar rc
+RANLIB := $(TARGET)-gcc-ranlib
 endif
 
 TARGET_ARCH := $(shell ../bin/host-arch)
@@ -406,6 +402,7 @@ libmlton.a: $(MLTON_OBJS)
 libmlton-gdb.a: $(MLTON_DEBUG_OBJS)
 libmlton-pic.a: $(MLTON_PIC_OBJS)
 libmlton-trace.a: $(MLTON_TRACE_OBJS)
+libmlton-lto.a: $(MLTON_LTO_OBJS)
 
 ### gen/sizes ###
 
@@ -421,17 +418,10 @@ gen/gen-sizes.stamp: gen/gen-sizes.c libmlton.a $(HFILES)
 
 ######
 
-libmlton-lto.a: $(MLTON_LTO_OBJS)
-	rm -f $@
-	$(GCC-AR) $@ $^
-	$(GCC-RANLIB) $@
-
 %.a:
 	rm -f $@
 	$(AR) $@ $^
 	$(RANLIB) $@
-
-
 
 .PHONY: flags
 flags:
