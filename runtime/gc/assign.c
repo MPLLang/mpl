@@ -180,6 +180,10 @@ void Assignable_unlockReplicaWriter(
     }
 }
 
+int Assignable_isMaster (GC_state s, objptr o) {
+    return !hasFwdPtr(objptrToPointer(o, s->heap->start));
+}
+
 objptr Assignable_get (GC_state s, objptr src, Int64 index) {
     struct HM_HierarchicalHeap *hh;
     pointer src_repl, res;

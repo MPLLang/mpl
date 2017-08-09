@@ -29,6 +29,8 @@ PRIVATE void Assignable_unlockReplicaWriter(
   GC_state, struct HM_HierarchicalHeap *
   );
 
+PRIVATE int Assignable_isMaster(GC_state s, objptr o);
+
 PRIVATE objptr Assignable_get(
   GC_state s, objptr src, Int64 index
   );

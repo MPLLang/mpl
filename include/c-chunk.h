@@ -348,12 +348,18 @@ static inline Int32 Proc_threadInSection (void) {
 /*                 References                        */
 /* ------------------------------------------------- */
 
+#define IDX(ty, b, i) ((ty*)(b) + (i))
+
 extern CPointer Assignable_findLockedTrueReplicaReader(
   CPointer, Objptr, CPointer *
   );
 extern CPointer Assignable_findLockedTrueReplicaWriter(
   CPointer, Objptr, CPointer *
   );
+
+extern int Assignable_isMaster(
+    CPointer, Objptr
+    );
 
 extern void Assignable_unlockReplicaReader(
   CPointer, CPointer
@@ -367,7 +373,14 @@ extern Objptr Assignable_get(CPointer, Objptr, Int64);
 extern void Assignable_set(CPointer, Objptr, Int64, Objptr);
 
 static inline Objptr Ref_deref_P(CPointer s, Objptr src) {
-  return Assignable_get(s, src, 0);
+    Objptr res;
+
+    res = *IDX(Objptr, src, 0);
+    if (Assignable_isMaster(s, src)) {
+        return res;
+    }
+
+    return Assignable_get(s, src, 0);
 }
 
 static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
@@ -380,8 +393,13 @@ static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
         CPointer src_repl;                                              \
         type res;                                                       \
                                                                         \
+        res = *IDX(type, src, 0);                                       \
+        if (Assignable_isMaster(s, src)) {                              \
+            return res;                                                 \
+        }                                                               \
+                                                                        \
         src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh); \
-        res = *(type *)src_repl;                                        \
+        res = *IDX(type, src_repl, 0);                                  \
         Assignable_unlockReplicaReader(s, hh);                          \
                                                                         \
         return res;                                                     \
@@ -392,8 +410,13 @@ static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
         CPointer hh;                                                    \
         CPointer dst_repl;                                              \
                                                                         \
+        *IDX(type, dst, 0) = src;                                       \
+        if (Assignable_isMaster(s, dst)) {                              \
+            return;                                                     \
+        }                                                               \
+                                                                        \
         dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
-        *(type *)dst_repl = src;                                        \
+        *IDX(type, dst_repl, 0) = src;                                  \
         Assignable_unlockReplicaWriter(s, hh);                          \
     }
 
@@ -414,7 +437,14 @@ RefAccessFunctionsForOpaqueData(R64, Real64_t)
 /* ------------------------------------------------- */
 
 static inline Objptr Array_sub_P(CPointer s, Objptr src, Int64 index) {
-  return Assignable_get(s, src, index);
+    Objptr res;
+
+    res = *IDX(Objptr, src, index);
+    if (Assignable_isMaster(s, src)) {
+        return res;
+    }
+
+    return Assignable_get(s, src, index);
 }
 
 static inline void Array_update_P(
@@ -429,8 +459,13 @@ static inline void Array_update_P(
         CPointer src_repl;                                              \
         type res;                                                       \
                                                                         \
+        res = *IDX(type, src, index);                                   \
+        if (Assignable_isMaster(s, src)) {                              \
+            return res;                                                 \
+        }                                                               \
+                                                                        \
         src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh); \
-        res = *((type *)src_repl + index);                              \
+        res = *IDX(type, src_repl, index);                              \
         Assignable_unlockReplicaReader(s, hh);                          \
                                                                         \
         return res;                                                     \
@@ -443,8 +478,13 @@ static inline void Array_update_P(
         CPointer hh;                                                    \
         CPointer dst_repl;                                              \
                                                                         \
+        *IDX(type, dst, index) = src;                                   \
+        if (Assignable_isMaster(s, dst)) {                              \
+            return;                                                     \
+        }                                                               \
+                                                                        \
         dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
-        *((type *)dst_repl + index) = src;                              \
+        *IDX(type, dst_repl, index) = src;                              \
         Assignable_unlockReplicaWriter(s, hh);                          \
     }
 
