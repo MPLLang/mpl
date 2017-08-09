@@ -106,7 +106,7 @@ doit "$lib" \
         -ar-script "$lib/static-library"                         \
         -cc "$gcc"                                               \
         -cc-opt-quote "-I$lib/include"                           \
-        -cc-opt '-O1 -fno-common'                                \
+        -cc-opt '-O3 -fno-common'                                \
         -cc-opt '-fno-strict-aliasing -fomit-frame-pointer -w'   \
 	-link-opt '-lm -lgmp'                                    \
 	-llvm-llc-opt '-O2'                                      \
@@ -154,5 +154,4 @@ doit "$lib" \
         -profile-exclude '\$\(SML_LIB\)'                         \
 	-mark-cards false                                        \
         -drop-pass deepFlatten -drop-pass refFlatten             \
-        -cc-opt '-flto'                                          \
         "$@"
