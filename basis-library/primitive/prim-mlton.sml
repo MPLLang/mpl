@@ -129,7 +129,9 @@ structure GC =
       val getNumMinorGCs =
          _import "GC_getCumulativeStatisticsNumMinorGCs" runtime private: unit -> C_UIntmax.t;
       val getLastBytesLive =
-         _import "GC_getLastMajorStatisticsBytesLive" runtime private: unit -> C_Size.t;
+          _import "GC_getLastMajorStatisticsBytesLive" runtime private: unit -> C_Size.t;
+      val getMaxChunkPoolOccupancy =
+          _import "GC_getCumulativeStatisticsMaxChunkPoolOccupancy" runtime private: unit -> C_Size.t;
       val getMaxHeapOccupancy =
          _import "GC_getCumulativeStatisticsMaxHeapOccupancy" runtime private: unit -> C_Size.t;
       val getMaxBytesLive =

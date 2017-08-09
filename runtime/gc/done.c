@@ -101,6 +101,8 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxHeapOccupancy));
   fprintf (out, "max global heap size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHeapSize));
+  fprintf (out, "max chunk pool occupancy: %s bytes\n",
+           uintmaxToCommaString (ChunkPool_maxAllocated ()));
   fprintf (out, "max hierarchical heap LC size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHHLCS));
   fprintf (out, "max hierarchical heap LC heap size: %s bytes\n",
@@ -159,6 +161,10 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
     /* print global statistics */
     fprintf(out, "\"totalTime\" : %"PRIuMAX, totalTime);
+    fprintf(out, ", ");
+    fprintf(out,
+            "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
+            ChunkPool_maxAllocated ());
   }
 
   fprintf(out, " }");

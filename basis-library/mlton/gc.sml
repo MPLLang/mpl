@@ -35,6 +35,7 @@ structure MLtonGC =
             in
                val bytesAllocated = mkUIntmax getBytesAllocated
                val lastBytesLive = mkSize getLastBytesLive
+               val maxChunkPoolOccupancy = mkSize getMaxChunkPoolOccupancy
                val maxHeapOccupancy = mkSize getMaxHeapOccupancy
                val maxBytesLive = mkSize getMaxBytesLive
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
