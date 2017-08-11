@@ -39,3 +39,11 @@ PRIVATE void GC_MayTerminateThreadRarely(GC_state s, size_t *pcounter);
  * all all other processors have exited cleanly.
  */
 PRIVATE bool GC_TryToTerminate(GC_state s);
+
+/**
+ * This function does some wrap-up for statistics. It should be called
+ * before the thread exits.
+ *
+ * @param s The GC_state of the thread that will exit.
+ */
+PRIVATE void GC_PthreadAtExit(GC_state s);

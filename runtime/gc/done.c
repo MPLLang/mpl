@@ -37,6 +37,16 @@ static void displayCollectionStats (FILE *out, const char *name, struct rusage *
   fprintf (out, "\n");
 }
 
+static void displayGlobalCumulativeStatistics (
+    FILE *out,
+    struct GC_globalCumulativeStatistics* globalCumulativeStatistics) {
+    fprintf (out, "max global heap occupancy: %s bytes\n",
+           uintmaxToCommaString (globalCumulativeStatistics->maxHeapOccupancy));
+    fprintf (out, "max chunk pool occupancy: %s bytes\n",
+             uintmaxToCommaString (ChunkPool_maxAllocated ()));
+}
+
+
 static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatistics *cumulativeStatistics) {
   struct rusage ru_total;
   uintmax_t totalTime;
@@ -99,12 +109,8 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->bytesPromoted));
   fprintf (out, "max global heap bytes live: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
-  fprintf (out, "max global heap occupancy: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxHeapOccupancy));
   fprintf (out, "max global heap size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHeapSize));
-  fprintf (out, "max chunk pool occupancy: %s bytes\n",
-           uintmaxToCommaString (ChunkPool_maxAllocated ()));
   fprintf (out, "max hierarchical heap LC size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxHHLCS));
   fprintf (out, "max hierarchical heap LC heap size: %s bytes\n",
@@ -163,7 +169,15 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
     /* print global statistics */
     fprintf(out, "\"totalTime\" : %"PRIuMAX, totalTime);
+
     fprintf(out, ", ");
+
+    fprintf(out,
+            "\"maxGlobalHeapOccupancy\" : %"PRIuMAX,
+            s->globalCumulativeStatistics->maxHeapOccupancy);
+
+    fprintf(out, ", ");
+
     fprintf(out,
             "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
             ChunkPool_maxAllocated ());
@@ -173,12 +187,15 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 }
 
 void GC_done (GC_state s) {
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_enterGlobalHeap();
+  GC_PthreadAtExit(s);
   minorGC (s);
+
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {
+      fprintf (s->controls->summaryFile, "Global::\n");
+      displayGlobalCumulativeStatistics
+              (s->controls->summaryFile,
+               s->globalCumulativeStatistics);
       if (s->procStates) {
         for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
           fprintf (s->controls->summaryFile, "Thread [%d]::\n", proc);
