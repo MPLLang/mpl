@@ -8,6 +8,11 @@
  */
 
 void minorGC (GC_state s) {
+  size_t currentOccupancy = s->heap->frontier - s->heap->start;
+  if (s->cumulativeStatistics->maxHeapOccupancy < currentOccupancy) {
+    s->cumulativeStatistics->maxHeapOccupancy = currentOccupancy;
+  }
+
   minorCheneyCopyGC (s);
 }
 

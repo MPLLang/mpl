@@ -283,27 +283,85 @@ void GC_setControlsRusageMeasureGC (bool b) {
 
 uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->bytesAllocated;
+
+  /* return sum across all processors */
+  size_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesAllocated;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numCopyingGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numCopyingGCs;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numMarkCompactGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numMarkCompactGCs;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numMinorGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numMinorGCs;
+  }
+
+  return retVal;
+}
+
+size_t GC_getCumulativeStatisticsMaxHeapOccupancy (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  size_t currentOccupancy = s->heap->frontier - s->heap->start;
+  if (s->cumulativeStatistics->maxHeapOccupancy < currentOccupancy) {
+    s->cumulativeStatistics->maxHeapOccupancy = currentOccupancy;
+  }
+
+  /* return max across all processors */
+  size_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    size_t candidate = s->procStates[i].cumulativeStatistics->maxHeapOccupancy;
+    if (candidate > retVal) {
+      retVal = candidate;
+    }
+  }
+
+  return retVal;
 }
 
 size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->maxBytesLive;
+
+  /* return max across all processors */
+  size_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    size_t candidate = s->procStates[i].cumulativeStatistics->maxBytesLive;
+    if (candidate > retVal) {
+      retVal = candidate;
+    }
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsGCTime(void) {

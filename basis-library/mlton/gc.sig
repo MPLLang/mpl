@@ -24,5 +24,6 @@ signature MLTON_GC =
             val numMinorGCs: unit -> IntInf.int
             val maxBytesLive: unit -> IntInf.int
             val time: unit -> Time.time
+            val maxHeapOccupancy: unit -> IntInf.int
          end
    end
