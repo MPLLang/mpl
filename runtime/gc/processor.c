@@ -59,7 +59,7 @@ void Proc_waitForInitialization (GC_state s) {
   size_t pcounter = 0;
   while (!Proc_beginInit) {
     if (GC_MightCheckForTerminationRequest(s, &pcounter)) {
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
     }
   }
 
@@ -67,7 +67,7 @@ void Proc_waitForInitialization (GC_state s) {
 
   while (!Proc_isInitialized (s)) {
     if (GC_MightCheckForTerminationRequest(s, &pcounter)) {
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
     }
   }
 }

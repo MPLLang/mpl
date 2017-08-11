@@ -33,6 +33,7 @@ struct GC_state {
   struct GC_callStackState callStackState;
   bool canMinor; /* TRUE iff there is space for a minor gc. */
   struct GC_controls *controls;
+  struct GC_globalCumulativeStatistics* globalCumulativeStatistics;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
@@ -123,12 +124,12 @@ PRIVATE void GC_setAmOriginal (bool b);
 PRIVATE void GC_setControlsMessages (bool b);
 PRIVATE void GC_setControlsSummary (bool b);
 PRIVATE void GC_setControlsRusageMeasureGC (bool b);
+PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
+PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
-PRIVATE size_t GC_getCumulativeStatisticsMaxChunkPoolOccupancy (void);
-PRIVATE size_t GC_getCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);

@@ -49,7 +49,7 @@ void Parallel_lockTake (Pointer arg) {
   do {
     if (GC_MightCheckForTerminationRequest(s, &cpoll)) {
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
     }
 
     if (Proc_threadInSection ()) {
@@ -107,7 +107,7 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
   }
   while (*other) {
     if (GC_MightCheckForTerminationRequest(s, &cpoll))
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
 
     //__sync_synchronize ();
     if (amLeft != *leftsTurn) {

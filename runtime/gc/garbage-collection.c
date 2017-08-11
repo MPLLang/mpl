@@ -8,12 +8,12 @@
  */
 
 void minorGC (GC_state s) {
-  size_t currentOccupancy = s->heap->frontier - s->heap->start;
-  if (s->cumulativeStatistics->maxHeapOccupancy < currentOccupancy) {
-    s->cumulativeStatistics->maxHeapOccupancy = currentOccupancy;
-  }
-
   minorCheneyCopyGC (s);
+
+  size_t currentOccupancy = s->heap->oldGenSize;
+  if (s->globalCumulativeStatistics->maxHeapOccupancy < currentOccupancy) {
+    s->globalCumulativeStatistics->maxHeapOccupancy = currentOccupancy;
+  }
 }
 
 void majorGC (GC_state s, size_t bytesRequested, bool mayResize) {
@@ -171,10 +171,15 @@ void performGC (GC_state s,
   }
 
   if (forceMajor
-      or totalBytesRequested > s->heap->availableSize - s->heap->oldGenSize)
+      or totalBytesRequested > s->heap->availableSize - s->heap->oldGenSize) {
     majorGC (s, totalBytesRequested, mayResize);
+  }
   setGCStateCurrentHeap (s, oldGenBytesRequested + stackBytesRequested,
                          nurseryBytesRequested, false);
+  size_t currentOccupancy = s->heap->frontier - s->heap->start;
+  if (s->globalCumulativeStatistics->maxHeapOccupancy < currentOccupancy) {
+        s->globalCumulativeStatistics->maxHeapOccupancy = currentOccupancy;
+  }
   assert (hasHeapBytesFree (s, oldGenBytesRequested + stackBytesRequested,
                             nurseryBytesRequested));
   unless (stackTopOk)
@@ -481,8 +486,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   /* Exit as soon as termination is requested. */
   if (GC_CheckForTerminationRequest(s)) {
-    Trace0(EVENT_RUNTIME_LEAVE);
-    pthread_exit(NULL);
+    GC_TerminateThread(s);
   }
 
   /* SPOONHOWER_NOTE: Used to be enter() here */
