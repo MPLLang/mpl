@@ -470,35 +470,69 @@ void GC_setSignalHandlerThreads (pointer p) {
   }
 }
 
-void GC_getRusageGC (struct rusage* rusage) {
+struct TLSObjects* GC_getTLSObjects(void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  rusageZero(rusage);
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
-    /* global heap collection is stop-the-world, so multiply by P */
-    struct rusage stwGC;
-    rusageZero(&stwGC);
+  return &(s->tlsObjects);
+}
 
-    rusagePlusMax(&stwGC,
-                  &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
-                  &stwGC);
-    rusagePlusMax(&stwGC,
-                  &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
-                  &stwGC);
-    rusagePlusMax(&stwGC,
-                  &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
-                  &stwGC);
-    rusageMultiply(&stwGC,
-                   s->numberOfProcs,
-                   &stwGC);
+void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  if (p < 0) {
+    /* get process gc rusage */
+    rusageZero(rusage);
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      /* global heap collection is stop-the-world, so multiply by P */
+      struct rusage stwGC;
+      rusageZero(&stwGC);
+
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
+                    &stwGC);
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
+                    &stwGC);
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
+                    &stwGC);
+      rusageMultiply(&stwGC,
+                     s->numberOfProcs,
+                     &stwGC);
+
+      rusagePlusMax(rusage,
+                    &stwGC,
+                    rusage);
+
+      /* HHLocal collection is parallel, so just add it in */
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcHHLocal),
+                    rusage);
+    }
+  } else {
+    /* get processor gc rusage */
+    rusageZero(rusage);
+
+    if (p >= s->numberOfProcs) {
+      /* proc doesn't exist so return zero */
+      return;
+    }
+
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      /* global heap collection is stop-the-world, so gather from all procs */
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
+                    rusage);
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
+                    rusage);
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
+                    rusage);
+    }
 
     rusagePlusMax(rusage,
-                  &stwGC,
-                  rusage);
-
-    /* HHLocal collection is parallel, so just add it in */
-    rusagePlusMax(rusage,
-                  &(s->procStates[proc].cumulativeStatistics->ru_gcHHLocal),
+                  &(s->procStates[p].cumulativeStatistics->ru_gcHHLocal),
                   rusage);
   }
 }

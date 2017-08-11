@@ -104,6 +104,7 @@ val gc_stime_sec = _import "MLton_Rusage_gc_stime_sec" private : unit -> C_Time.
 val gc_stime_usec = _import "MLton_Rusage_gc_stime_usec" private : unit -> C_SUSeconds.t;
 val gc_utime_sec = _import "MLton_Rusage_gc_utime_sec" private : unit -> C_Time.t;
 val gc_utime_usec = _import "MLton_Rusage_gc_utime_usec" private : unit -> C_SUSeconds.t;
+val getGCRusageOfProc = _import "MLton_Rusage_getGCRusageOfProc" private : Int32.t -> unit;
 val getrusage = _import "MLton_Rusage_getrusage" private : unit -> unit;
 val self_stime_sec = _import "MLton_Rusage_self_stime_sec" private : unit -> C_Time.t;
 val self_stime_usec = _import "MLton_Rusage_self_stime_usec" private : unit -> C_SUSeconds.t;

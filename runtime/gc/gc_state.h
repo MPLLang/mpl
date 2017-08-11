@@ -98,6 +98,7 @@ struct GC_state {
   char *worldFile;
   spinlock_t lock;
   struct TracingContext *trace;
+  struct TLSObjects tlsObjects;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -153,7 +154,9 @@ PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE void GC_getRusageGC (struct rusage* rusage);
+PRIVATE struct TLSObjects* GC_getTLSObjects(void);
+
+PRIVATE void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage);
 
 PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
 PRIVATE sigset_t* GC_getSignalsPendingAddr (void);
