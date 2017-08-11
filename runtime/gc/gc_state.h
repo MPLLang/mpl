@@ -153,7 +153,7 @@ PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE struct rusage* GC_getRusageGCAddr (void);
+PRIVATE void GC_getRusageGC (struct rusage* rusage);
 
 PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
 PRIVATE sigset_t* GC_getSignalsPendingAddr (void);

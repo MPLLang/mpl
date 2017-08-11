@@ -470,9 +470,37 @@ void GC_setSignalHandlerThreads (pointer p) {
   }
 }
 
-struct rusage* GC_getRusageGCAddr (void) {
+void GC_getRusageGC (struct rusage* rusage) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return &(s->cumulativeStatistics->ru_gc);
+
+  rusageZero(rusage);
+  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    /* global heap collection is stop-the-world, so multiply by P */
+    struct rusage stwGC;
+    rusageZero(&stwGC);
+
+    rusagePlusMax(&stwGC,
+                  &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
+                  &stwGC);
+    rusagePlusMax(&stwGC,
+                  &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
+                  &stwGC);
+    rusagePlusMax(&stwGC,
+                  &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
+                  &stwGC);
+    rusageMultiply(&stwGC,
+                   s->numberOfProcs,
+                   &stwGC);
+
+    rusagePlusMax(rusage,
+                  &stwGC,
+                  rusage);
+
+    /* HHLocal collection is parallel, so just add it in */
+    rusagePlusMax(rusage,
+                  &(s->procStates[proc].cumulativeStatistics->ru_gcHHLocal),
+                  rusage);
+  }
 }
 
 // Signal disposition is per-process; use primary to maintain handled set.

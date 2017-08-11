@@ -40,7 +40,6 @@ structure MLtonGC =
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
                val numMarkCompactGCs = mkUIntmax getNumMarkCompactGCs
                val numMinorGCs = mkUIntmax getNumMinorGCs
-               val time = mkMilliseconds time
             end
          end
 
