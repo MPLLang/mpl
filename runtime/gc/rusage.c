@@ -55,6 +55,28 @@ void rusageMinusMax (struct rusage *ru1,
   ru->ru_stime.tv_usec = usec;
 }
 
+static inline void rusageMultiply (struct rusage *ru1,
+                                   size_t factor,
+                                   struct rusage *ru) {
+  const int       million = 1000000;
+  time_t          sec;
+  suseconds_t     usec;
+
+  sec = ru1->ru_utime.tv_sec * factor;
+  usec = ru1->ru_utime.tv_usec * factor;
+  sec += (usec / million);
+  usec %= million;
+  ru->ru_utime.tv_sec = sec;
+  ru->ru_utime.tv_usec = usec;
+
+  sec = ru1->ru_stime.tv_sec * factor;
+  usec = ru1->ru_stime.tv_usec * factor;
+  sec += (usec / million);
+  usec %= million;
+  ru->ru_stime.tv_sec = sec;
+  ru->ru_stime.tv_usec = usec;
+}
+
 uintmax_t rusageTime (struct rusage *ru) {
   uintmax_t result;
 

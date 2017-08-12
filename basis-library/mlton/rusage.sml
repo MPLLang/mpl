@@ -31,7 +31,7 @@ structure MLtonRusage: MLTON_RUSAGE =
       val measureGC = MLtonGC.setRusageMeasureGC
 
       val rusage =
-         let 
+         let
             val () = measureGC true
          in
             fn () =>
@@ -47,4 +47,18 @@ structure MLtonRusage: MLTON_RUSAGE =
                                 self_stime_sec, self_stime_usec)}
             end
          end
+
+      val gcRusageOfProc =
+          let
+              val () = measureGC true
+          in
+              fn p =>
+                 let
+                     val () = Prim.getGCRusageOfProc (Int32.fromInt p)
+                     open Prim
+                 in
+                     collect (gc_utime_sec, gc_utime_usec,
+                              gc_stime_sec, gc_stime_usec)
+                 end
+          end
    end

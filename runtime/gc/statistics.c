@@ -38,6 +38,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->bytesHHLocaled = 0;
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
+  cumulativeStatistics->maxHeapOccupancy = 0;
   cumulativeStatistics->maxHeapSize = 0;
   cumulativeStatistics->maxHHLCS = 0;
   cumulativeStatistics->maxHHLCHS = 0;
@@ -190,11 +191,15 @@ void S_outputCumulativeStatisticsJSON(
 
     fprintf(out, ", ");
 
-    fprintf(out, "\"maxBytesLive\" : %"PRIuMAX, statistics->maxBytesLive);
+    fprintf(out, "\"maxGlobalHeapBytesLive\" : %"PRIuMAX, statistics->maxBytesLive);
 
     fprintf(out, ", ");
 
-    fprintf(out, "\"maxHeapSize\" : %"PRIuMAX, statistics->maxHeapSize);
+    fprintf(out, "\"maxGlobalHeapOccupancy\" : %"PRIuMAX, statistics->maxHeapOccupancy);
+
+    fprintf(out, ", ");
+
+    fprintf(out, "\"maxGlobalHeapSize\" : %"PRIuMAX, statistics->maxHeapSize);
 
     fprintf(out, ", ");
 

@@ -35,11 +35,11 @@ structure MLtonGC =
             in
                val bytesAllocated = mkUIntmax getBytesAllocated
                val lastBytesLive = mkSize getLastBytesLive
+               val maxHeapOccupancy = mkSize getMaxHeapOccupancy
                val maxBytesLive = mkSize getMaxBytesLive
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
                val numMarkCompactGCs = mkUIntmax getNumMarkCompactGCs
                val numMinorGCs = mkUIntmax getNumMinorGCs
-               val time = mkMilliseconds time
             end
          end
 

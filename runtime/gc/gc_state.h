@@ -98,6 +98,7 @@ struct GC_state {
   char *worldFile;
   spinlock_t lock;
   struct TracingContext *trace;
+  struct TLSObjects tlsObjects;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -126,6 +127,7 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
+PRIVATE size_t GC_getCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
@@ -152,7 +154,9 @@ PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE struct rusage* GC_getRusageGCAddr (void);
+PRIVATE struct TLSObjects* GC_getTLSObjects(void);
+
+PRIVATE void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage);
 
 PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
 PRIVATE sigset_t* GC_getSignalsPendingAddr (void);

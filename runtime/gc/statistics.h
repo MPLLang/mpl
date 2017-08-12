@@ -33,6 +33,7 @@ struct GC_cumulativeStatistics {
 
   size_t maxBytesLive;
   size_t maxBytesLiveSinceReset;
+  size_t maxHeapOccupancy;
   size_t maxHeapSize;
 
   size_t maxHHLCS;

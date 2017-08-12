@@ -130,6 +130,8 @@ structure GC =
          _import "GC_getCumulativeStatisticsNumMinorGCs" runtime private: unit -> C_UIntmax.t;
       val getLastBytesLive =
          _import "GC_getLastMajorStatisticsBytesLive" runtime private: unit -> C_Size.t;
+      val getMaxHeapOccupancy =
+         _import "GC_getCumulativeStatisticsMaxHeapOccupancy" runtime private: unit -> C_Size.t;
       val getMaxBytesLive =
          _import "GC_getCumulativeStatisticsMaxBytesLive" runtime private: unit -> C_Size.t;
       val setHashConsDuringGC =
@@ -138,7 +140,6 @@ structure GC =
       val setRusageMeasureGC =
          _import "GC_setControlsRusageMeasureGC" runtime private: bool -> unit;
       val setSummary = _import "GC_setControlsSummary" runtime private: bool -> unit;
-      val time = _import "GC_getCumulativeStatisticsGCTime" runtime private: unit -> C_UIntmax.t;
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
    end
 

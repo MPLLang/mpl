@@ -13,4 +13,5 @@ signature MLTON_RUSAGE =
 
       val measureGC: bool -> unit
       val rusage: unit -> {children: t, gc: t, self: t}
+      val gcRusageOfProc: int -> t
    end
