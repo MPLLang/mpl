@@ -122,6 +122,8 @@ structure GC =
       val pack = _import "GC_pack" runtime private: unit -> unit;
       val getBytesAllocated =
          _import "GC_getCumulativeStatisticsBytesAllocated" runtime private: unit -> C_UIntmax.t;
+      val getBytesPromoted =
+         _import "GC_getCumulativeStatisticsBytesPromoted" runtime private: unit -> C_UIntmax.t;
       val getNumCopyingGCs =
          _import "GC_getCumulativeStatisticsNumCopyingGCs" runtime private: unit -> C_UIntmax.t;
       val getNumMarkCompactGCs =

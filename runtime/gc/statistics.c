@@ -38,6 +38,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics = (struct GC_cumulativeStatistics *)
     malloc (sizeof (struct GC_cumulativeStatistics));
   cumulativeStatistics->bytesAllocated = 0;
+  cumulativeStatistics->bytesPromoted = 0;
   cumulativeStatistics->bytesFilled = 0;
   cumulativeStatistics->bytesCopied = 0;
   cumulativeStatistics->bytesCopiedMinor = 0;
@@ -196,6 +197,10 @@ void S_outputCumulativeStatisticsJSON(
     fprintf(out, ", ");
 
     fprintf(out, "\"bytesAllocated\" : %"PRIuMAX, statistics->bytesAllocated);
+
+    fprintf(out, ", ");
+
+    fprintf(out, "\"bytesPromoted\" : %"PRIuMAX, statistics->bytesPromoted);
 
     fprintf(out, ", ");
 

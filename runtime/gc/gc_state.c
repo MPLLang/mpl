@@ -303,6 +303,18 @@ uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
   return retVal;
 }
 
+uintmax_t GC_getCumulativeStatisticsBytesPromoted (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  /* sum over all procs */
+  uintmax_t retVal = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    retVal += s->procStates[p].cumulativeStatistics->bytesAllocated;
+  }
+
+  return retVal;
+}
+
 uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
