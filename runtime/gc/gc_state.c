@@ -364,17 +364,6 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   return retVal;
 }
 
-uintmax_t GC_getCumulativeStatisticsGCTime(void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  uintmax_t time = 0;
-  for (size_t i = 0; i < s->numberOfProcs; i++) {
-    time += rusageTime(&(s->procStates[i].cumulativeStatistics->ru_gc));
-  }
-
-  return time;
-}
-
 void GC_setHashConsDuringGC (bool b) {
   GC_state s = pthread_getspecific (gcstate_key);
   s->hashConsDuringGC = b;
