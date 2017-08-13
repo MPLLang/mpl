@@ -83,8 +83,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  double allocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
-                          ((double)(hh->locallyCollectibleSize));
+  double allocatedRatio = HM_HH_getLCRatio(hh);
   Trace3(EVENT_CHUNKP_RATIO,
          hh->locallyCollectibleHeapSize,
          hh->locallyCollectibleSize,
@@ -93,8 +92,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal();
 
-    double newAllocatedRatio = ((double)(hh->locallyCollectibleHeapSize)) /
-                               ((double)(hh->locallyCollectibleSize));
+    double newAllocatedRatio = HM_HH_getLCRatio(hh);
     Trace3(EVENT_CHUNKP_RATIO,
            hh->locallyCollectibleHeapSize,
            hh->locallyCollectibleSize,
