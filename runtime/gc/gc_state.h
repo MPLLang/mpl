@@ -124,6 +124,7 @@ PRIVATE void GC_setControlsMessages (bool b);
 PRIVATE void GC_setControlsSummary (bool b);
 PRIVATE void GC_setControlsRusageMeasureGC (bool b);
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
+PRIVATE uintmax_t GC_getCumulativeStatisticsBytesPromoted (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);

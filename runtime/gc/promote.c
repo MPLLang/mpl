@@ -108,6 +108,8 @@ pointer HM_Promote(GC_state s,
 
     assertInvariants(s, dst_hh, LIVE);
 
+    s->cumulativeStatistics->bytesPromoted += forwardHHObjptrArgs.bytesCopied;
+
     /* Exit. */
 
     Trace0(EVENT_PROMOTION_LEAVE);

@@ -95,6 +95,8 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesAllocated));
+  fprintf (out, "total bytes promoted: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesPromoted));
   fprintf (out, "max global heap bytes live: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
   fprintf (out, "max global heap occupancy: %s bytes\n",

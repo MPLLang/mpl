@@ -23,6 +23,7 @@ enum {
 
 struct GC_cumulativeStatistics {
   uintmax_t bytesAllocated;
+  uintmax_t bytesPromoted;
   uintmax_t bytesFilled; /* i.e. unused gaps */
   uintmax_t bytesCopied;
   uintmax_t bytesCopiedMinor;
