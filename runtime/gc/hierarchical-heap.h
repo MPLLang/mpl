@@ -20,7 +20,8 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 enum HM_HHState {
   LIVE = 0,
-  DEAD = 1
+  DEAD = 1,
+  MERGED = 2
 };
 
 extern const char* HM_HHStateToString[];
@@ -304,6 +305,15 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
                                    const struct HM_HierarchicalHeap* hh);
 
 /**
+ * Gets the frontier from a struct HM_HierarchicalHeap
+ *
+ * @param hh The struct HM_HierarchicalHeap to use
+ *
+ * @return the frontier of the currently active chunk.
+ */
+void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
+
+/**
  * Gets the heap limit from a struct HM_HierarchicalHeap
  *
  * @param hh The struct HM_HierarchicalHeap to use
@@ -313,13 +323,13 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
 void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
 
 /**
- * Gets the frontier from a struct HM_HierarchicalHeap
+ * Returns the current lchs/lcs ratio
  *
- * @param hh The struct HM_HierarchicalHeap to use
+ * @param hh The HH to get the ratio of
  *
- * @return the frontier of the currently active chunk.
+ * @return The ratio.
  */
-void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
+double HM_HH_getLCRatio(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Resizes the locally collectible heap size, if necessary, according the

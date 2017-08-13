@@ -20,12 +20,25 @@
 /********************/
 const char* HM_HHStateToString[] = {
   "LIVE",
-  "DEAD"
+  "DEAD",
+  "MERGED"
 };
 
 /******************************/
 /* Static Function Prototypes */
 /******************************/
+/**
+ * Adjusts the LCHS to reflect the ratio provided. Limits adjustment to
+ * [s->controls->initialLCHS, s->controls->maxLCHS].
+ *
+ * @param s The GC_state to use
+ * @param hh The hiererchical heap to adjust
+ * @param desiredRatio The desired ratio to adjust to.
+ */
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio);
+
 /**
  * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
  *
@@ -99,7 +112,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
 
   if ((HM_HH_INVALID_LEVEL == oldHighestStolenLevel) ||
       (stealLevel > oldHighestStolenLevel)) {
-    /* need to update locally collectible size */
+    /* need to update lcs and lchs */
     Word64 sizeDelta = 0;
     /* off-by-one loop to prevent underflow and infinite loop */
     Word32 level;
@@ -110,13 +123,29 @@ void HM_HH_appendChild(pointer parentHHPointer,
     }
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+    size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+    double ratio = HM_HH_getLCRatio(parentHH);
+    if (isinf(ratio)) {
+      /* lcs is zero, so just bottom-out lchs with ratio 0 */
+      ratio = 0.0;
+    }
+
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
         "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
         ((void*)(parentHH)),
         parentHH->locallyCollectibleSize,
         sizeDelta,
         parentHH->locallyCollectibleSize - sizeDelta);
     parentHH->locallyCollectibleSize -= sizeDelta;
+
+    adjustLCHS(s, parentHH, ratio);
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+        "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
+        "(ratio %.2f)",
+        ((void*)(parentHH)),
+        oldLCHS,
+        parentHH->locallyCollectibleHeapSize,
+        ratio);
   }
 
   /* cannot assert parentHH as it is still running! */
@@ -175,14 +204,18 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert(BOGUS_OBJPTR != *cursor);
   *cursor = hh->nextChildHH;
 
-  /* update locally collectible size */
+  /* update lcs and lchs */
+  size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+  double parentHHRatio = HM_HH_getLCRatio(parentHH);
+  double hhRatio = HM_HH_getLCRatio(hh);
+
   Word64 sizeDelta = 0;
   /* off-by-one loop to prevent underflow and infinite loop */
   Word32 level;
   Word32 highestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
   for (level = hh->stealLevel;
        level > (highestStolenLevel + 1);
-       level--) {
+       level--) {;
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
   }
   sizeDelta += HM_getLevelSize(parentHH->levelList, level);
@@ -210,8 +243,18 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       ((void*)(hh)),
       ((void*)(parentHH)));
 
+  double newRatio = (parentHHRatio < hhRatio) ? parentHHRatio : hhRatio;
+  adjustLCHS(s, parentHH, newRatio);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" (ratio %.2f)",
+      ((void*)(parentHH)),
+      oldLCHS,
+      parentHH->locallyCollectibleHeapSize,
+      newRatio);
+
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
+  hh->state = MERGED;
 
   unlockHH(parentHH);
   unlockHH(hh);
@@ -383,32 +426,32 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
   }
 }
 
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
-  return HM_getChunkLimit(hh->lastAllocatedChunk);
-}
-
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 
+void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
+  return HM_getChunkLimit(hh->lastAllocatedChunk);
+}
+
+double HM_HH_getLCRatio(const struct HM_HierarchicalHeap* hh) {
+  return (((double)(hh->locallyCollectibleHeapSize)) /
+          ((double)(hh->locallyCollectibleSize)));
+}
+
 void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
   size_t oldLCHS = hh->locallyCollectibleHeapSize;
+  double desiredRatio = 2 * (s->controls->hhConfig.liveLCRatio + 1);
+  double ratio = HM_HH_getLCRatio(hh);
 
-  double ratio = ((double)(hh->locallyCollectibleHeapSize)) /
-                 ((double)(hh->locallyCollectibleSize));
-
-  size_t preferredNewLCHS = (2 * (s->controls->hhConfig.liveLCRatio + 1)) *
-                            hh->locallyCollectibleSize;
-
-  hh->locallyCollectibleHeapSize =
-      (preferredNewLCHS > s->controls->hhConfig.maxLCHS) ?
-      s->controls->hhConfig.maxLCHS : preferredNewLCHS;
+  adjustLCHS(s, hh, desiredRatio);
 
   if (oldLCHS != hh->locallyCollectibleHeapSize) {
     LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "Live Ratio %.2f < %.2f, so resized LCHS from %zu bytes to %zu bytes",
+        "Live Ratio %.2f %s %.2f, so resized LCHS from %zu bytes to %zu bytes",
         ratio,
-        2 * (s->controls->hhConfig.liveLCRatio + 1),
+        (ratio < desiredRatio) ? "<" : ">",
+        desiredRatio,
         oldLCHS,
         hh->locallyCollectibleHeapSize);
   }
@@ -490,6 +533,24 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
   HM_updateChunkValues(hh->lastAllocatedChunk, frontier);
 }
 #endif /* MLTON_GC_INTERNAL_FUNCS */
+
+/*******************************/
+/* Static Function Definitions */
+/*******************************/
+
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio) {
+  size_t newLCHS = desiredRatio * hh->locallyCollectibleSize;
+
+  if (newLCHS < s->controls->hhConfig.initialLCHS) {
+    newLCHS = s->controls->hhConfig.initialLCHS;
+  } else if (newLCHS > s->controls->hhConfig.maxLCHS) {
+    newLCHS = s->controls->hhConfig.maxLCHS;
+  }
+
+  hh->locallyCollectibleHeapSize = newLCHS;
+}
 
 #if ASSERT
 void assertInvariants(GC_state s,
