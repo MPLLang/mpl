@@ -165,6 +165,9 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 }
 
 void GC_done (GC_state s) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_enterGlobalHeap();
   minorGC (s);
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {

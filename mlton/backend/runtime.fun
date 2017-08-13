@@ -173,8 +173,6 @@ structure RObjectType =
                     numObjptrs: int}
        | Stack
        | Weak of {gone: bool}
-       | HeaderOnly
-       | Fill
 
       fun layout (t: t): Layout.t =
          let
@@ -195,8 +193,6 @@ structure RObjectType =
              | Weak {gone} =>
                   seq [str "Weak",
                        record [("gone", Bool.layout gone)]]
-             | HeaderOnly => str "HeaderOnly"
-             | Fill => str "Fill"
 
          end
       val _ = layout (* quell unused warning *)

@@ -410,8 +410,6 @@ fun outputDeclarations
                       in
                          ("WEAK_TAG", false, bytesNonObjptrs, numObjptrs)
                       end
-                 | HeaderOnly => ("HEADER_ONLY_TAG", false, 0, 0)
-                 | Fill => ("FILL_TAG", false, 0, 0)
           in
              concat ["{ ", tag, ", ",
                      C.bool hasIdentity, ", ",

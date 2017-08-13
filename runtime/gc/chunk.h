@@ -66,20 +66,7 @@ struct HM_ChunkInfo {
                         * is set to CHUNK_INVALID_LEVEL */
     } normal; /**< The struct containing information for normal chunks */
   } split;
-} __attribute__((packed));
-
-COMPILE_TIME_ASSERT(HM_ChunkInfo__packed,
-                    sizeof(struct HM_ChunkInfo) ==
-                    sizeof(void*) +
-                    sizeof(void*) +
-                    sizeof(void*) +
-                    sizeof(Word32) +
-                    sizeof(uint32_t) +
-                    sizeof(void*) +
-                    sizeof(void*) +
-                    sizeof(struct HM_HierarchicalHeap*) +
-                    sizeof(void*) +
-                    sizeof(Word64));
+} __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_ChunkInfo__aligned,
                     (sizeof(struct HM_ChunkInfo) % 8) == 0);
@@ -335,6 +322,22 @@ void HM_updateChunkValues(void* chunk, void* frontier);
  */
 void HM_updateLevelListPointers(void* levelList,
                                 struct HM_HierarchicalHeap* hh);
+
+/**
+ * This function retrieves the ChunkInfo object from a chunk
+ *
+ * @param chunk The chunk to retrieve the object from
+ *
+ * @return the ChunkInfo struct pointer
+ */
+struct HM_ChunkInfo* HM_getChunkInfo(void* chunk);
+
+/**
+ * Same as HM_getChunkInfo() except for const-correctness. See HM_getChunkInfo()
+ * for more details
+ */
+const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* CHUNK_H_ */

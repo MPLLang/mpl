@@ -82,7 +82,7 @@ WARNXCFLAGS += -Wnested-externs
 
 XCFLAGS := -fno-common $(WARNXCFLAGS)
 OPTXCFLAGS := -Wdisabled-optimization -O2 -fomit-frame-pointer -g
-DEBUGXCFLAGS := -DASSERT=1 -Wno-uninitialized -O0 -g
+DEBUGXCFLAGS := -DASSERT=1 -DENABLE_TRACING -Wno-uninitialized -O0 -g
 PICXCFLAGS :=
 TRACEXCFLAGS := -DENABLE_TRACING $(OPTXCFLAGS)
 
