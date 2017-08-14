@@ -108,7 +108,7 @@ pointer HM_followForwardPointerUntilNullOrBelowLevel(GC_state s,
         HM_getObjptrInfo(s, next, &info);
 
         /* Either we are in to-space, or the level has to decrease strictly. */
-        assert (HM_isObjptrInToSpace(s, next) || prevLevel > info.level);
+        assert (HM_isObjptrInToSpace(s, next) || prevLevel >= info.level);
 
         if (info.level < minLevel) {
             break;
