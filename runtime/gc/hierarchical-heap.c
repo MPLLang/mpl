@@ -231,7 +231,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       ((void*)(parentHH)));
 
   double newRatio = (parentHHRatio < hhRatio) ? parentHHRatio : hhRatio;
-  adjustLCHS(s, parentHH, newRatio);
+  //adjustLCHS(s, parentHH, newRatio);
+  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize;
   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
       "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" (ratio %.2f)",
       ((void*)(parentHH)),
