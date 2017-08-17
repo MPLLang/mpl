@@ -233,6 +233,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   double newRatio = (parentHHRatio < hhRatio) ? parentHHRatio : hhRatio;
   //adjustLCHS(s, parentHH, newRatio);
   parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize;
+
   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
       "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" (ratio %.2f)",
       ((void*)(parentHH)),
@@ -243,6 +244,11 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
   hh->state = MERGED;
+
+  Trace3(EVENT_MERGED_HEAP,
+         (EventInt)parentHH,
+         (EventInt)hh,
+         parentHH->locallyCollectibleHeapSize);
 
   unlockWriterHH(parentHH);
   unlockWriterHH(hh);
