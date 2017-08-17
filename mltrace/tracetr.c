@@ -56,6 +56,8 @@ static const char *EventKindStrings[] = {
   [EVENT_PROMOTION_LEAVE]       = "PROMOTION_LEAVE",
   [EVENT_PROMOTED_WRITE]        = "PROMOTED_WRITE",
   [EVENT_PROMOTION]             = "PROMOTION",
+
+  [EVENT_MERGED_HEAP]           = "MERGED_HEAP",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -262,6 +264,11 @@ void printEventText(struct Event *event) {
 
   case EVENT_PROMOTION:
     printf("src = %llx, repl = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_MERGED_HEAP:
+    printf("parenthh = %llx, childhh = %llx, newlchs = %llx",
+           event->arg1, event->arg2, event->arg3);
     break;
 
   default:

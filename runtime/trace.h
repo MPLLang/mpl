@@ -56,6 +56,8 @@ enum EventKind {
   EVENT_PROMOTION_LEAVE       = 29,
   EVENT_PROMOTED_WRITE        = 30,
   EVENT_PROMOTION             = 31,
+
+  EVENT_MERGED_HEAP           = 32,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)
