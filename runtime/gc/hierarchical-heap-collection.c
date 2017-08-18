@@ -596,7 +596,7 @@ void forwardHHObjptr (GC_state s,
         if (toChunkList == NULL) {
             /* Level does not exist, so create it */
             toChunkList = HM_allocateLevelHeadChunk(&(args->hh->newLevelList),
-                                                    objectBytes,
+                                                    objectBytes * 8,
                                                     opInfo.level,
                                                     COPY_OBJECT_HH_VALUE);
             if (NULL == toChunkList) {
@@ -735,7 +735,7 @@ pointer copyObject(pointer p,
 
   if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
       /* need to allocate a new chunk */
-      chunk = HM_allocateChunk(toChunkList, objectSize);
+      chunk = HM_allocateChunk(toChunkList, objectSize * 8);
       if (NULL == chunk) {
           die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
       }
