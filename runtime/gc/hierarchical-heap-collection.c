@@ -201,6 +201,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from stack",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
 
   /* forward contents of thread (hence including stack) */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -215,6 +219,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from thread",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
 
   /* forward thread itself */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -222,6 +230,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from GC_state" : "Did not copy thread from GC_state");
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
 
 
 #if ASSERT
@@ -231,6 +243,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from HH" : "Did not copy thread from HH");
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
   assert(hh->thread == s->currentThread);
 #else
   /* update thread in hh */
@@ -250,6 +266,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
 
   /* forward retVal pointer if necessary */
   if (NULL != hh->retVal) {
@@ -291,6 +311,10 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" stacks in copy-collection",
       forwardHHObjptrArgs.stacksCopied);
+  Trace3(EVENT_COPY,
+	 forwardHHObjptrArgs.bytesCopied,
+	 forwardHHObjptrArgs.objectsCopied,
+	 forwardHHObjptrArgs.stacksCopied);
 
   assertInvariants(s, hh, LIVE);
 
