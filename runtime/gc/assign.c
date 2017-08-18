@@ -311,7 +311,9 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
       unlockWriterHH(dst_info.hh);
     }
 
-    dst_repl = Assignable_findLockedTrueReplica(s, dst, &hh, false, true);
+    dst_repl =
+      objptrToPointer(Assignable_findLockedTrueReplicaSlow(s, dst, &hh, false, true),
+		      s->heap->start);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Found true replica %p of %p (hh %p)",
@@ -331,26 +333,21 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     /* Perform the write. */
     *((pointer *)dst_repl + index) = src_repl;
 
-    /* If hh != NULL, we have to unlock all the levels between dst_repl and src,
-     * otherwise nothing was locked. */
-
-    if (hh != NULL) {
-        LOG(LM_HH_PROMOTION, LL_DEBUG,
-            "Unlocking from level %u of %p to level %u of %p",
-            dst_info.level,
-            (void *)objptrToPointer(dst, s->heap->start),
-            HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
-            (void *)objptrToPointer(src, s->heap->start));
-        args.for_locking = false;
-        args.prev_hh = NULL;
-        HM_foreachHHDown(s,
-                         src_info.hh,
-                         dst_info.level,
-                         hhLockUnlock,
-                         &args);
-    } else {
-        LOG(LM_HH_PROMOTION, LL_DEBUG, "Nothing to unlock");
-    }
+    /* Unlock the heaps from the true replica of dst to src. */
+    assert(hh != NULL);
+    LOG(LM_HH_PROMOTION, LL_DEBUG,
+	"Unlocking from level %u of %p to level %u of %p",
+	dst_info.level,
+	(void *)objptrToPointer(dst, s->heap->start),
+	HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
+	(void *)objptrToPointer(src, s->heap->start));
+    args.for_locking = false;
+    args.prev_hh = NULL;
+    HM_foreachHHDown(s,
+		     src_info.hh,
+		     dst_info.level,
+		     hhLockUnlock,
+		     &args);
 
 end:
     LOG(LM_HH_PROMOTION, LL_INFO,
