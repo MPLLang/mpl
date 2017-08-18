@@ -245,10 +245,12 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* don't assert hh here as it should be thrown away! */
   hh->state = MERGED;
 
-  Trace3(EVENT_MERGED_HEAP,
-         (EventInt)parentHH,
-         (EventInt)hh,
-         parentHH->locallyCollectibleHeapSize);
+  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)hh);
+
+  Trace3(EVENT_CHUNKP_RATIO,
+         parentHH->locallyCollectibleHeapSize,
+         parentHH->locallyCollectibleSize,
+         s->controls->hhConfig.allocatedRatio);
 
   unlockWriterHH(parentHH);
   unlockWriterHH(hh);
