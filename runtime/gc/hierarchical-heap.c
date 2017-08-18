@@ -70,8 +70,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
   struct HM_HierarchicalHeap* childHH = HM_HH_objptrToStruct(s, childHHObjptr);
 
-  lockWriterHH(parentHH);
   lockWriterHH(childHH);
+  lockWriterHH(parentHH);
 
   assertInvariants(s, parentHH, LIVE);
   Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
@@ -138,8 +138,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   assertInvariants(s, parentHH, LIVE);
   assertInvariants(s, childHH, LIVE);
 
-  unlockWriterHH(childHH);
   unlockWriterHH(parentHH);
+  unlockWriterHH(childHH);
 }
 
 size_t HM_HH_getLevel(pointer hhPointer) {
