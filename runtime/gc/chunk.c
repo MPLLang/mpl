@@ -211,6 +211,7 @@ void HM_forwardHHObjptrsInChunkList(
     struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
   void *chunk = ChunkPool_find(start);
   pointer p = start;
+  size_t i = 0;
 
   if (chunk == NULL) {
       DIE("could not find chunk of %p", chunk);
@@ -230,7 +231,14 @@ void HM_forwardHHObjptrsInChunkList(
                                 predicateArgs,
                                 forwardHHObjptr,
                                 forwardHHObjptrArgs);
+      if ((i++ % 1024) == 0) {
+	Trace3(EVENT_COPY,
+	       (EventInt)forwardHHObjptrArgs->bytesCopied,
+	       (EventInt)forwardHHObjptrArgs->objectsCopied,
+	       (EventInt)forwardHHObjptrArgs->stacksCopied);
+      }
     }
+
     Trace3(EVENT_COPY,
            (EventInt)forwardHHObjptrArgs->bytesCopied,
            (EventInt)forwardHHObjptrArgs->objectsCopied,
