@@ -94,6 +94,7 @@ void majorCheneyCopyGC (GC_state s) {
   s->secondaryHeap->oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap->start);
   bytesCopied = s->secondaryHeap->oldGenSize;
   s->cumulativeStatistics->bytesCopied += bytesCopied;
+  Trace3(EVENT_COPY, bytesCopied, 0, 0);
   swapHeapsForCheneyCopy (s);
   s->lastMajorStatistics->kind = GC_COPYING;
   if (detailedGCTime (s))
