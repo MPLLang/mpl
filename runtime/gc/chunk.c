@@ -231,6 +231,10 @@ void HM_forwardHHObjptrsInChunkList(
                                 forwardHHObjptr,
                                 forwardHHObjptrArgs);
     }
+    Trace3(EVENT_COPY,
+           (EventInt)forwardHHObjptrArgs->bytesCopied,
+           (EventInt)forwardHHObjptrArgs->objectsCopied,
+           (EventInt)forwardHHObjptrArgs->stacksCopied);
   }
 }
 

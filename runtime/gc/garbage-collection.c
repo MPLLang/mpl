@@ -113,6 +113,7 @@ void performGC (GC_state s,
   enterGC (s);
 
   Trace0(EVENT_GC_ENTER);
+  Trace3(EVENT_COPY, 0, 0, 0);
 
   s->cumulativeStatistics->numGCs++;
   if (DEBUG or s->controls->messages) {
@@ -229,6 +230,7 @@ void performGC (GC_state s,
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
   assert (invariantForGC (s));
 
+  Trace3(EVENT_COPY, 0, 0, 0);
   Trace0(EVENT_GC_LEAVE);
 
   leaveGC (s);

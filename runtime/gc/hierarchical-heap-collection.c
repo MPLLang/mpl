@@ -110,6 +110,7 @@ void HM_HHC_collectLocal(void) {
   struct rusage ru_start;
   Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, s->heap->start);
   bool queueLockHeld = FALSE;
+  uint64_t oldObjectCopied;
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
@@ -127,6 +128,7 @@ void HM_HHC_collectLocal(void) {
       "START");
 
   Trace0(EVENT_GC_ENTER);
+  Trace3(EVENT_COPY, 0, 0, 0);
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
@@ -187,7 +189,7 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
   /* forward contents of stack */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
                                         s->heap->start),
@@ -198,10 +200,10 @@ void HM_HHC_collectLocal(void) {
                         &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from stack",
-      forwardHHObjptrArgs.objectsCopied);
+      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
 
   /* forward contents of thread (hence including stack) */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(getThreadCurrentObjptr(s),
                                         s->heap->start),
@@ -212,22 +214,22 @@ void HM_HHC_collectLocal(void) {
                         &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from thread",
-      forwardHHObjptrArgs.objectsCopied);
+      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
 
   /* forward thread itself */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
-      (1 == forwardHHObjptrArgs.objectsCopied) ?
+      (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from GC_state" : "Did not copy thread from GC_state");
 
 
 #if ASSERT
   /* forward thread from hh */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   forwardHHObjptr(s, &(hh->thread), &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
-      (1 == forwardHHObjptrArgs.objectsCopied) ?
+      (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from HH" : "Did not copy thread from HH");
   assert(hh->thread == s->currentThread);
 #else
@@ -236,7 +238,7 @@ void HM_HHC_collectLocal(void) {
 #endif
 
   /* forward contents of deque */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(s->wsQueue,
                                         s->heap->start),
@@ -247,17 +249,17 @@ void HM_HHC_collectLocal(void) {
                         &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from deque",
-      forwardHHObjptrArgs.objectsCopied);
+      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
 
   /* forward retVal pointer if necessary */
   if (NULL != hh->retVal) {
     objptr root = pointerToObjptr(hh->retVal, s->heap->start);
 
-    forwardHHObjptrArgs.objectsCopied = 0;
+    oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
     forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
     LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from hh->retVal",
-      forwardHHObjptrArgs.objectsCopied);
+      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
 
     hh->retVal = objptrToPointer(root, s->heap->start);
   }
@@ -265,7 +267,7 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
   /* do copy-collection */
-  forwardHHObjptrArgs.objectsCopied = 0;
+  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   /*
    * I skip the stack and thread since they are already forwarded as roots
    * above
@@ -285,7 +287,7 @@ void HM_HHC_collectLocal(void) {
       false);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
-      forwardHHObjptrArgs.objectsCopied);
+      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" stacks in copy-collection",
       forwardHHObjptrArgs.stacksCopied);
@@ -395,6 +397,7 @@ void HM_HHC_collectLocal(void) {
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
 
+  Trace3(EVENT_COPY, 0, 0, 0);
   Trace0(EVENT_GC_LEAVE);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
