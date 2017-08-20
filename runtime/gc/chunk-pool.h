@@ -28,6 +28,8 @@ struct ChunkPool_config {
   size_t maxSize; /**< Maximum size of the pool, in bytes */
 
   double liveRatio; /**< minimum Heap:Live ratio to maintain */
+
+  bool populate; /**< populate pages at startup */
 };
 
 typedef void* (*ChunkPool_BatchFreeFunction) (void* args);
