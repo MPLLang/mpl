@@ -53,7 +53,6 @@ struct HM_HierarchicalHeapConfig {
   size_t initialLCHS; /**< initial LCHS, in bytes */
 
   size_t maxLCHS; /**< maximum LCHS, in bytes. */
-
 };
 
 enum HHCollectionLevel {

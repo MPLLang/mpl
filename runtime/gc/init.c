@@ -429,11 +429,19 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "populate-chunk-pool")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton populate-chunk-pool missing argument.");
+          }
+
+          s->controls->chunkPoolConfig.populate = stringToBool(argv[i++]);
         } else if (0 == strcmp(arg, "trace-buffer-size")) {
           i++;
           if (i == argc) {
             die ("@MLton trace-buffer-size missing argument.");
           }
+
           s->controls->traceBufferSize = stringToInt(argv[i++]);
         } else if (0 == strcmp (arg, "--")) {
           i++;
@@ -498,6 +506,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
   s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
   s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->chunkPoolConfig.populate = true;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;

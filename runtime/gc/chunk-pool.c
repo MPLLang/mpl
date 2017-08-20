@@ -214,10 +214,14 @@ void ChunkPool_initialize (struct ChunkPool_config* config) {
   /* at this point, the inputs are adjusted and ready to use */
 
   /* map the chunks */
+  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+  if (config->populate) {
+      flags |= MAP_POPULATE;
+  }
   void* region = mmap (NULL,
                        ChunkPool_config.maxSize + ChunkPool_MINIMUMCHUNKSIZE,
                        PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE,
+                       flags,
                        -1,
                        0);
   if (MAP_FAILED == region) {
