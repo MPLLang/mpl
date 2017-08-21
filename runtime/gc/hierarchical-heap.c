@@ -213,7 +213,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       sizeDelta,
       parentHH->locallyCollectibleSize + sizeDelta);
   parentHH->locallyCollectibleSize += sizeDelta;
-
+  parentHH->locallyCollectibleHeapSize += 2 * sizeDelta;
+  
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
   hh->levelList = NULL;
