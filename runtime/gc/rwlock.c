@@ -27,12 +27,22 @@ void lock_lock_explicit(lock_t *lock, bool check) {
   double prob = 1.0;
 
   while (true) {
-    if ((1.0 <= prob) || (drand48() <= prob)) {
-      if(atomic_compare_exchange_strong(lock,
-                                        &expected,
-                                        (char)Proc_processorNumber(s))) {
-        break;
+    bool tryCAS = false;
+    if (1.0 <= prob) {
+      tryCAS = true;
+    } else {
+      double flip;
+      drand48_r(&(s->tlsObjects.drand48_data), &flip);
+      if (flip <= prob) {
+        tryCAS = true;
       }
+    }
+
+    if (tryCAS &&
+        (atomic_compare_exchange_strong(lock,
+                                        &expected,
+                                        (char)Proc_processorNumber(s)))) {
+      break;
     }
 
     if (INVALID_PROC == *lock) {

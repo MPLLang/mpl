@@ -554,6 +554,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->weaks = NULL;
   s->saveWorldStatus = true;
   s->trace = NULL;
+  srand48_r(0, &(s->tlsObjects.drand48_data));
 
   /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
@@ -672,6 +673,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
   d->trace = NULL;
+  srand48_r(0, &(d->tlsObjects.drand48_data));
 
   // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
