@@ -24,10 +24,32 @@ void lock_lock_explicit(lock_t *lock, bool check) {
   GC_state s = pthread_getspecific(gcstate_key);
   char expected = INVALID_PROC;
   size_t cpoll = 0;
+  double prob = 1.0;
 
-  while (!atomic_compare_exchange_strong(lock,
-                                         &expected,
-                                         (char)Proc_processorNumber(s))) {
+  while (true) {
+    if ((1.0 <= prob) || (drand48() <= prob)) {
+      if(atomic_compare_exchange_strong(lock,
+                                        &expected,
+                                        (char)Proc_processorNumber(s))) {
+        break;
+      }
+    }
+
+    if (INVALID_PROC == *lock) {
+      /* I may have won if I tried, so increase prob */
+      prob *= 2.0;
+      if (prob > 1.0) {
+        prob = 1.0;
+      }
+    } else {
+      /* I lost, or would have lost, so decrease prob */
+      double newProb = prob / 2.0;
+      if (0.0 < newProb) {
+        /* make sure prob doesn't bottom out at zero */
+        prob = newProb;
+      }
+    }
+
     if (check && expected == (char)Proc_processorNumber(s)) {
       DIE ("Trying to acquire lock %p that I already own",
            (_Atomic void *)lock);
