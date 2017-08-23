@@ -172,6 +172,15 @@ PRIVATE void HM_HH_appendChild(pointer parentHHPointer,
 PRIVATE size_t HM_HH_getLevel(pointer hhPointer);
 
 /**
+ * FFI wrapper for HM_HH_getLowestPrivateLevel()
+ *
+ * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
+ *
+ * @return The lowest private level of the HM_HierarchicalHeap
+ */
+PRIVATE size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer);
+
+/**
  * Merges the specified hierarchical heap back into its source hierarchical
  * heap.
  *

@@ -17,6 +17,7 @@ signature MLTON_HM =
 
                       val setLevel: 'a t * int -> unit
                       val getLevel: 'a t -> int
+                      val getLowestPrivateLevel: 'a t -> int
 
                       val appendChild: 'a t * 'b t * int -> unit
                       val setReturnValue: 'a t * 'b -> 'b t

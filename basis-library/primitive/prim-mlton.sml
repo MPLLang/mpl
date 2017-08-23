@@ -163,6 +163,10 @@ structure HM =
                     _import "HM_HH_getLevel" runtime private:
                     'a t -> Word32.word;
 
+                val getLowestPrivateLevel: 'a t -> Word32.word =
+                    _import "HM_HH_getLowestPrivateLevelFFI" runtime private:
+                    'a t -> Word32.word;
+
                 val mergeIntoParentHeap: 'a t -> unit =
                     _import "HM_HH_mergeIntoParent" runtime private:
                     'a t -> unit;

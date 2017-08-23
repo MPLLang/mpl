@@ -25,6 +25,8 @@ structure MLtonHM:> MLTON_HM =
 
                 fun getLevel (hh: 'a t): int = Word32.toInt (PrimHH.getLevel hh)
 
+                fun getLowestPrivateLevel (hh: 'a t): int = Word32.toInt (PrimHH.getLowestPrivateLevel hh)
+
                 fun appendChild ((parentHH, childHH, stealLevel):
                                  ('a t * 'b t * int)): unit =
                     PrimHH.appendChildHeap (parentHH,

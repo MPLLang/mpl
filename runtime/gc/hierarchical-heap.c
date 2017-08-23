@@ -151,6 +151,15 @@ size_t HM_HH_getLevel(pointer hhPointer) {
   return hh->level;
 }
 
+size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
+
+  return HM_HH_getLowestPrivateLevel(s, hh);
+}
+
 void HM_HH_mergeIntoParent(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
@@ -214,7 +223,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       parentHH->locallyCollectibleSize + sizeDelta);
   parentHH->locallyCollectibleSize += sizeDelta;
   parentHH->locallyCollectibleHeapSize += 2 * sizeDelta;
-  
+
   /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
   hh->levelList = NULL;
