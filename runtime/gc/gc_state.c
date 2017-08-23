@@ -309,7 +309,7 @@ uintmax_t GC_getCumulativeStatisticsBytesPromoted (void) {
   /* sum over all procs */
   uintmax_t retVal = 0;
   for (uint32_t p = 0; p < s->numberOfProcs; p++) {
-    retVal += s->procStates[p].cumulativeStatistics->bytesAllocated;
+    retVal += s->procStates[p].cumulativeStatistics->bytesPromoted;
   }
 
   return retVal;
