@@ -12,7 +12,7 @@ val w = W.init ()
 val (width, height) = W.dim w
 
 val threshold = 1.0
-val short_plan_interval = 2000
+val short_plan_interval = 5000
 val long_plan_interval = 10000
 
 val sp_prio = Priority.top
@@ -28,10 +28,14 @@ fun new_short_plan start goal sp =
     let val (width, height) = W.dim w
     in
         ignore (Thread.spawn
-                    (fn _ => (sp := SOME (CP.plan
+                    (fn _ => (let val p = CP.plan
                                              width height (W.obst w)
-                                             start goal);
-                              print "new short plan\n"
+                                             start goal
+                              in
+                                  sp := SOME p;
+                                  print ("new short plan of length " ^
+                                         (Int.toString (List.length p)) ^ "\n")
+                              end
                     ))
                     sp_prio)
     end
@@ -68,7 +72,11 @@ fun new_long_plan start goal lp =
                                   | NONE => NONE
                         in
                             lp := path';
-                            print "new long plan\n"
+                            (case path' of
+                                 SOME p =>
+                                 print ("new long plan of length " ^
+                                        (Int.toString (List.length p)) ^ "\n")
+                               | NONE => ())
                         end)
                     lp_prio)
     end
@@ -114,9 +122,18 @@ fun loop (w, short_goal, long_goal, short_plan, long_plan,
                          (short_plan := SOME sp';
                           (w, SOME pt', short_plan, next_short_plan))
                  else
-                     (print "moving\n";
-                     (W.move w (dir pos pt), short_goal,
-                      short_plan, next_short_plan))
+                     ((* print "moving\n"; *)
+                       (if W.sense w (dir pos pt, 3.1) then
+                            (* close to collision, replan *)
+                            (print "too close\n";
+                             (case short_goal of
+                                 SOME g => new_short_plan pos g short_plan
+                               | NONE => ());
+                             w)
+                        else
+                            W.move w (dir pos pt)),
+                       short_goal,
+                       short_plan, next_short_plan)
                 )
               | _ => (w, short_goal, short_plan, next_short_plan)
         val w = case !short_plan of
@@ -136,7 +153,8 @@ fun loop (w, short_goal, long_goal, short_plan, long_plan,
                 next_short_plan
         val next_long_plan =
             if t >= next_long_plan then
-                (new_long_plan pos long_goal long_plan;
+                (new_long_plan (case short_goal of SOME g => g | NONE => pos)
+                               long_goal long_plan;
                  t + long_plan_interval)
             else
                 next_long_plan

@@ -13,6 +13,10 @@ sig
     val pos : t -> int * int
     (* (delta-x, delta-y) *)
     val move : t -> int * int -> t
+    (* (delta-x, delta-y, dist)
+     * Returns true if moving that far in that direction would result
+     * in a collision *)
+    val sense : t -> (int * int) * real -> bool
 
     val time : t -> int
 

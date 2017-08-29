@@ -76,8 +76,8 @@ fun plan (g: graph)
                         (* Not a better path *)
                         (q, paths, gscores, tokens)
                     else
-                        let val p = lookup_def [] (paths, n)
-                            val paths' = M.insert (paths, n', n::p)
+                        let val p = lookup_def [n] (paths, n)
+                            val paths' = M.insert (paths, n', n'::p)
                             val gscores' = M.insert (gscores, n', ngs')
                             val f' = ngs' + (h n')
                             val (q', tokens') =
@@ -118,7 +118,7 @@ fun plan (g: graph)
                 end
         val (q, t) = PQ.insert PQ.empty (start, h start)
         val gscores = M.insert (M.empty, start, 0.0)
-        val paths = M.insert (M.empty, start, [])
+        val paths = M.insert (M.empty, start, [start])
         val tokens = M.insert (M.empty, start, t)
     in
         iter q gscores paths M.empty tokens

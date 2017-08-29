@@ -7,7 +7,7 @@ structure V = Vector
 type t =
      {width: int,
       height: int,
-      map: obst,
+      map: bool -> obst,
       graph: graph,
       pts: (int * int) V.vector,
       pixels: bool V.vector V.vector,
@@ -16,7 +16,7 @@ type t =
       long_plan: (int * int) list,
       short_plan: (int * int) list}
 
-val speed = 1.0
+val speed = 0.1
 
 val startTime = Time.now ()
 
@@ -29,9 +29,19 @@ fun initFromBmp s =
             if r < 0wx0f andalso g < 0wx0f andalso b > 0wxf0 then
                 (print "pt\n"; true)
             else false)
-        fun isobst (x, y) = iszero (V.sub (V.sub (pixels, y), x))
-        fun map ((x1, y1), (x2, y2)) =
-            if isobst (x1, y1) orelse isobst (x2, y2) then
+        fun isobst bumper (x, y) =
+            iszero (V.sub (V.sub (pixels, y), x)) orelse
+            (bumper andalso
+             (iszero (V.sub (V.sub (pixels, y - 1), x)) orelse
+              iszero (V.sub (V.sub (pixels, y + 1), x)) orelse
+              iszero (V.sub (V.sub (pixels, y), x - 1)) orelse
+              iszero (V.sub (V.sub (pixels, y - 1), x - 1)) orelse
+              iszero (V.sub (V.sub (pixels, y + 1), x - 1)) orelse
+              iszero (V.sub (V.sub (pixels, y), x + 1)) orelse
+              iszero (V.sub (V.sub (pixels, y - 1), x + 1)) orelse
+              iszero (V.sub (V.sub (pixels, y + 1), x + 1))))
+        fun map bumper ((x1, y1), (x2, y2)) =
+            if isobst bumper (x1, y1) orelse isobst bumper (x2, y2) then
                 true
             else if Int.abs (x1 - x2) <= 1 andalso Int.abs (y1 - y2) <= 1 then
                 false
@@ -39,7 +49,7 @@ fun initFromBmp s =
                 let val piv = (x1 + Int.div (x2 - x1, 2),
                                y1 + Int.div (y2 - y1, 2))
                 in
-                    map ((x1, y1), piv) orelse map (piv, (x2, y2))
+                    map bumper ((x1, y1), piv) orelse map bumper (piv, (x2, y2))
                 end
         fun dist (x1, y1) (x2, y2) =
             let val (x1, y1) = (Real.fromInt x1, Real.fromInt y1)
@@ -87,7 +97,7 @@ fun initFromBmp s =
                         (V.foldli
                              (fn (i, (x', y'), l) =>
                                  if (x = x' andalso y = y') orelse
-                                    map ((x, y), (x', y'))
+                                    map true ((x, y), (x', y'))
                                  then
                                      l
                                  else
@@ -121,9 +131,9 @@ fun drawPath height p =
         (Graphics.drawline x1 (height - y1) x2 (height - y2);
          drawPath height ((x2, y2)::p'))
 
-fun drawWorld {width, height, pixels, pos, short_plan, long_plan, ...} =
-    let val _ = Graphics.clear ()
-        fun noop () = print ""
+fun drawWorld (ow: t option)
+              ({width, height, pixels, pos, short_plan, long_plan, ...} : t) =
+    let fun noop () = print ""
         fun draw (x, y) =
             if y >= height then (Graphics.flush (); 0)
             else if x >= width then draw (0, y + 1)
@@ -144,21 +154,34 @@ fun drawWorld {width, height, pixels, pos, short_plan, long_plan, ...} =
         val (x, y) = pos
         val ipos = (Real.round x, Real.round y)
     in
-        draw (0, 0);
+        (case ow of
+             NONE => ignore (draw (0, 0))
+           | SOME ow =>
+             let val (ox, oy) = #pos ow
+                 val oipos = (Real.round ox, Real.round oy)
+             in
+                 Graphics.setforeground (MLX.fromints 255 255 255);
+                 drawPath height (oipos::(#short_plan ow));
+                 drawPath height (#long_plan ow);
+                 drawpt oipos;
+                 Graphics.setforeground (MLX.fromints 0 0 0)
+             end
+           );
         Graphics.setforeground (MLX.fromints 255 0 0);
-        drawPath height short_plan;
+        drawPath height (ipos::short_plan);
         Graphics.setforeground (MLX.fromints 0 0 255);
         drawPath height long_plan;
         Graphics.setforeground (MLX.fromints 0 0 0);
         drawpt ipos;
-        Graphics.flush ()
+        Graphics.flush ();
+        ignore (Posix.Process.sleep (Time.fromMilliseconds 100))
     end
 
 fun init () =
     let val _ = Graphics.openwindow NONE (504, 891) (* (#width w, #height w) *)
         val w = initFromBmp "gates.bmp"
     in
-        drawWorld w;
+        drawWorld NONE w;
         w
     end
 
@@ -166,41 +189,57 @@ fun dim ({width, height, ...}: t) = (width, height)
 fun map ({graph, ...}: t) = graph
 fun pts ({pts, ...} : t) = pts
 fun obst ({map, obsts, ...}: t) =
-    GS.append (GS.singleton map, obsts)
+    GS.append (GS.singleton (map true), obsts)
 
 fun pos ({pos, ...}: t) = (Real.round (#1 pos), Real.round (#2 pos))
-fun move ({width, height, map, graph, pts, obsts, pos, pixels, long_plan,
+
+fun newpos (x, y) (dx, dy) d =
+    let val (dx, dy) = (Real.fromInt dx, Real.fromInt dy)
+        val dist = Math.sqrt (Math.pow (dx, 2.0) + Math.pow (dy, 2.0))
+    in
+        if dist < 1.0 then
+            (0.0, 0.0)
+        else (x + dx * d / dist, y + dy * d / dist)
+    end
+
+fun sense_int map obsts (width, height) (x, y) (nx, ny) =
+    (* out of bounds *)
+    (nx >= (Real.fromInt width) orelse nx < 0.0 orelse
+     ny >= (Real.fromInt height) orelse ny < 0.0)
+    orelse
+    (let val (x, y) = (Real.round x, Real.round y)
+         val (nx, ny) = (Real.round nx, Real.round ny)
+     in
+         (* collision with walls *)
+         (map false ((x, y), (nx, ny))) orelse
+         (GS.reduce (fn (a, b) => a orelse b)
+                    false
+                    (GS.map (fn ob => ob ((x, y),
+                                          (nx, ny)))
+                            obsts))
+     end)
+
+fun sense (w as {width, height, pos, map, obsts, ...}: t) (dir, dist) =
+    let val (nx, ny) = newpos pos dir dist
+    in
+        sense_int map obsts (width, height) pos (nx, ny)
+    end
+
+fun move (ow as {width, height, map, graph, pts, obsts, pos, pixels, long_plan,
            short_plan }: t) (dx, dy) =
     let val (x, y) = pos
-        val (dx, dy) = (Real.fromInt dx, Real.fromInt dy)
-        val dist = Math.sqrt (Math.pow (dx, 2.0) + Math.pow (dy, 2.0))
-        val (dx, dy) = if dist < 1.0 then
-                           (0.0, 0.0)
-                       else (dx * speed / dist, dy * speed / dist)
-        val (nx, ny) =
-            if x + dx >= (Real.fromInt width) orelse x + dx < 0.0 orelse
-               y + dy >= (Real.fromInt height) orelse y + dy < 0.0
-            then
-                (x, y)
-            else if map ((Real.round x, Real.round y),
-                         (Real.round (x + dx), Real.round (y + dy))) then
-                (x, y)
-            else if GS.reduce (fn (a, b) => a orelse b)
-                              false
-                              (GS.map (fn ob => ob ((Real.round x, Real.round y),
-                                                    (Real.round (x + dx), Real.round (y + dy))))
-                                      obsts)
-            then
-                (x, y)
-            else
-                (x + dx, y + dy)
+        val (nx, ny) = newpos pos (dx, dy) speed
+        val (nx, ny) = if sense_int map obsts (width, height) pos (nx, ny) then
+                           (x, y)
+                       else
+                           (nx, ny)
         val nw = {width = width,
                   height = height,
                   map = map,
                   graph = graph,
                   pts = pts,
                   obsts = obsts,
-                  pos = (x + dx, y + dy),
+                  pos = (nx, ny),
                   pixels = pixels,
                   long_plan = long_plan,
                   short_plan = short_plan}
@@ -208,7 +247,7 @@ fun move ({width, height, map, graph, pts, obsts, pos, pixels, long_plan,
         (if (Real.round nx <> Real.round x) orelse
             (Real.round ny <> Real.round y)
          then
-             drawWorld nw
+             drawWorld (SOME ow) nw
          else ());
         nw
     end
@@ -217,8 +256,8 @@ fun time _ =
     LargeInt.toInt (LargeInt.- (Time.toMilliseconds (Time.now ()),
                                 Time.toMilliseconds startTime))
 
-fun register_short_plan ({width, height, map, graph, pts, obsts, pos, pixels,
-                          long_plan, short_plan }: t) nsp =
+fun register_short_plan (ow as {width, height, map, graph, pts, obsts, pos,
+                                pixels, long_plan, short_plan }: t) nsp =
     let val nw = {width = width,
                   height = height,
                   map = map,
@@ -230,12 +269,12 @@ fun register_short_plan ({width, height, map, graph, pts, obsts, pos, pixels,
                   long_plan = long_plan,
                   short_plan = nsp}
     in
-        drawWorld nw;
+        drawWorld (SOME ow) nw;
         nw
     end
 
-fun register_long_plan ({width, height, map, graph, pts, obsts, pos, pixels,
-                          long_plan, short_plan }: t) nlp =
+fun register_long_plan (ow as {width, height, map, graph, pts, obsts, pos,
+                               pixels, long_plan, short_plan }: t) nlp =
     let val nw = {width = width,
                   height = height,
                   map = map,
@@ -247,7 +286,7 @@ fun register_long_plan ({width, height, map, graph, pts, obsts, pos, pixels,
                   long_plan = nlp,
                   short_plan = short_plan}
     in
-        drawWorld nw;
+        drawWorld (SOME ow) nw;
         nw
     end
 

@@ -93,7 +93,9 @@ fun rrt mult (width, height, obst_list, (xs, ys), (xg, yg)) =
                 if collide ((xe, ye), (xt, yt)) then
                     Nothing
                 else
-                    if collide ((xe, ye), (xg, yg)) then
+                    if (dist ((xe, ye), (xg, yg)) > extend_dist) orelse
+                       (collide ((xe, ye), (xg, yg)))
+                    then
                         Points (GS.singleton (xe, ye, Node (xt, yt, path)))
                     else
                         Found ((xg, yg)::(xe, ye)::(xt, yt)::(path_to_list path))
@@ -127,6 +129,6 @@ fun rrt mult (width, height, obst_list, (xs, ys), (xg, yg)) =
     end
 
 fun plan width height obst_list (xs, ys) (xg, yg) =
-    rrt 4 (width, height, obst_list, (xs, ys), (xg, yg))
+    rrt 1 (width, height, obst_list, (xs, ys), (xg, yg))
 
 end
