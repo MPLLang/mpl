@@ -1,0 +1,37 @@
+Prepare a 45-minute talk
+Each slide can have any amount of 3 types of content:
+- Motivation
+- Technical
+- Related work
+
+Student has two meters: stamina and knowledge
+Committee members have two meters: confusion and patience
+
+During talk:
+- Committee members can ask questions
+-- Motivation
+-- Technical
+-- Related work
+- Answering questions
+-- If on a future slide (random):
+--- Skip (increases confusion of all)
+--- Delay (decreases patience of all)
+-- If on a previous slide (random):
+--- Go back
+--- Remind (decreases patience of asker)
+-- No matter what:
+--- Answer (requires knowledge)
+--- Dodge (decreases patience of asker)
+
+Each question has a timer. When timer expires, patience of all (especially asker) decreases.
+
+Stamina decreases over time
+Confusion increases with technical material, may increase or decrease otherwise.
+Patience decreases somewhat through 45 minutes, quickly after
+
+Other actions:
+-- Water (increase stamina, decrease patience)
+-- Pause (increase stamina(slightly)+knowledge, decrease confusion)
+
+Student loses when any committee member's patience runs out.
+Student wins after getting through a fixed amount of technical material.
