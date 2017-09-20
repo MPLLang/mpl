@@ -78,6 +78,9 @@ fun updates (t: talk) us =
 fun slide (t: talk) (n: int) =
     #1 (Vector.sub (#slides t, n))
 
+fun numslides (t: talk) =
+    Vector.length (#slides t)
+
 fun currslide (t: talk) =
     #currslide t
 
@@ -87,15 +90,23 @@ fun covered (t: talk) (n: int) =
         cov > 0.5
     end
 
-open Action
+fun slides (t: talk) =
+    V.map #1 (#slides t)
 
+local
+open Action
+in
 fun stu_action (t: talk) (a: Action.stu_act option) (now, speed) =
     let val (s, cov) = V.sub (#slides t, currslide t)
         val {motivation, technical, related} = s
 
         val tm = GTime.minus (now, #lasttime t)
-        val dcov = Real.min ((GTime.toMinutes tm) * speed * 0.9 + 0.1,
+        val dcov = Real.min ((GTime.toMinutes tm) * (speed * 0.9 + 0.1),
                              1.0 - cov)
+        (* val _ = print ("now: " ^ (GTime.toString now) ^ "\n")
+        val _ = print ("dtm: " ^ (GTime.toString tm) ^ "\n")
+        val _ = print ((Real.toString (GTime.toMinutes tm)) ^ "\n")
+        val _ = print ((Real.toString dcov) ^ "\n") *)
         val dm = Real.* (Real.fromInt motivation, dcov)
         val dt = Real.* (Real.fromInt technical, dcov)
         val dr = Real.* (Real.fromInt related, dcov)
@@ -124,4 +135,5 @@ fun stu_action (t: talk) (a: Action.stu_act option) (now, speed) =
     in
         (t', dm, dt, dr)
     end
+end
 end

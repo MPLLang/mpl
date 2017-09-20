@@ -15,6 +15,10 @@ type state =
        speed: real,
        questions: (Action.question * asker) list }
 
+fun talk ({talk, ...}: state) = talk
+fun questions ({questions, ...}: state) = questions
+fun committee ({committee, ...}: state) = committee
+
 fun init ((knowledge, stamina): real * real)
          (talk: Talk.talk)
          (committee: CInfo.cinfo Vector.vector) (speed: real) =
@@ -32,6 +36,16 @@ fun rp r =
 
 fun p i = Int.toString i
 
+fun qtos ({typ, slide, expires}, a) =
+    (case typ of
+         Action.Motivation => "Motivation"
+       | Action.Related => "Related"
+       | Action.Technical => "Technical") ^
+    " question from " ^ (p a) ^
+    (case slide of
+         NONE => ""
+       | SOME n => " answer is on slide " ^ (Int.toString n))
+
 fun toString {knowledge, stamina, talk, committee, time, technical_content,
               speed, questions} =
     "K\t" ^ (rp knowledge) ^ "\t\tS\t" ^ (rp stamina) ^ "\n" ^
@@ -43,7 +57,10 @@ fun toString {knowledge, stamina, talk, committee, time, technical_content,
               committee) ^
     "time left: " ^ (GTime.toString (GTime.minus (GTime.fromMinutes 45.0,
                                                   time))) ^ "\n" ^
-    "covered: " ^ (rp technical_content) ^ "\n"
+    "covered: " ^ (p (Real.floor technical_content)) ^ "\n" ^
+    (List.foldl (fn (q, r) => (qtos q) ^ "\n" ^ r)
+                ""
+                questions) ^ "\n"
 
 datatype update =
          Knowledge of real -> real
@@ -89,7 +106,7 @@ fun update s u =
     }
 
 fun status (s: state) (now: GTime.gtime) : status =
-    if #technical_content s >= 150.0 then
+    if #technical_content s >= 120.0 then
         StudentWins
     else if Vector.exists (fn ci => #patience ci <= 0.0) (#committee s)
     then
@@ -97,7 +114,60 @@ fun status (s: state) (now: GTime.gtime) : status =
     else
         InProgress
 
+local
 open Action
+in
+fun act_is_legal (s: state) (a: Action.stu_act) =
+    let val talk = #talk s
+        val slides = Talk.numslides talk
+    in
+        case a of
+            NextSlide => (Talk.currslide talk < slides - 1)
+          | Jump i => i >= 0 andalso i < slides
+          | Delay i => i >= 0 andalso i < slides
+          | Remind i => i >= 0 andalso i < slides
+          | _ => true
+    end
+
+fun question_cost (q: ext_question) (cinfo: CInfo.cinfo) =
+    let val c = Real.round (#confusion cinfo)
+        val p = Real.round (#patience cinfo)
+        val b = #boldness cinfo
+        val f = #friendliness cinfo
+    in
+        if #urgent q then
+            (case (#typ q) of
+               Motivation => (Int.div (100 - f, 5)) + 60 + p
+             | Technical => (Int.div (b, 10)) + 20 + p
+             | Related => (Int.div (b, 5)) + 60 + p)
+        else
+          (case (#typ q) of
+               Motivation => (Int.div (100 - f, 5)) + 15 (* 60 *)
+             | Technical => (Int.div (b, 10)) + 20
+             | Related => (Int.div (b, 5)) + 17 (* 60 *))
+    end
+
+fun question_is_legal (s: state) (q: ext_question) (asker: int) =
+    let val cinfo = V.sub (#committee s, asker)
+        val c = Real.round (#confusion cinfo)
+        val p = Real.round (#patience cinfo)
+        val b = #boldness cinfo
+        val f = #friendliness cinfo
+    in
+        (c > question_cost q cinfo)
+        andalso
+        (case #slide q of
+             NONE => true
+           | SOME n =>
+             let val {motivation, technical, related} = Talk.slide (#talk s) n
+             in
+                 case (#typ q) of
+                     Motivation => motivation > 0
+                   | Technical => technical > 0
+                   | Related => related > 0
+             end)
+    end
+
 fun stu_act (s: state) (a: Action.stu_act option) (now: GTime.gtime) : state =
     let val dtm = GTime.minus (now, #time s)
         (* val _ = print ("now: " ^ (GTime.toString now) ^ "\n")
@@ -119,9 +189,11 @@ fun stu_act (s: state) (a: Action.stu_act option) (now: GTime.gtime) : state =
                                                (CInfo.add (dm, dt, dr)))))
         (* Update student's stats *)
         val s = update s (Stamina (fn st =>
-                                      Real.max (st - ((#speed s) - 0.8) * dtm
-                                               * 10.0,
-                                                0.0)))
+                                      if #speed s > 0.01 then
+                                          Real.max (st - ((#speed s) * dtm),
+                                                    0.0)
+                                      else
+                                          st + 10.0 * dtm))
         val s = if #speed s < 0.01 then
                     update s (Knowledge (fn k => k + dtm))
                 else
@@ -136,40 +208,49 @@ fun stu_act (s: state) (a: Action.stu_act option) (now: GTime.gtime) : state =
                 NONE => s
               | SOME Pause => update s (Speed (fn _ => 0.0))
               | SOME Resume => update s (Speed (fn _ => 1.0))
-              | SOME NextSlide => s
-              | SOME (Jump _) => update s (Committee (Vector.map CInfo.jump))
-              | SOME (Delay _) => update s (Committee (Vector.map CInfo.delay))
               | SOME Drink => update (update s (Stamina (fn st => st + 1.0)))
                                      (Committee (Vector.map CInfo.drink))
               | _ => s
-        fun answers ({ typ, slide, expires }, _) a talk candodge =
-            case (slide, a) of
-                (SOME slide, NextSlide) =>
-                slide = (Talk.currslide talk) + 1
-              | (SOME slide, Jump slide') => slide = slide'
-              | (SOME slide, Delay slide') =>
-                (slide = slide') andalso
-                (not (Talk.covered talk slide'))
-              | (SOME slide, Remind slide') =>
-                (slide = slide') andalso
-                (Talk.covered talk slide')
-              | (_, Answer) => true
-              | (_, Dodge) => candodge
-              | _ => false
         fun unanswered ({ typ, slide, expires }, asker) s =
             update s (Committee (Vector.mapi (fn (i, c) =>
                                                  CInfo.didntanswer (i = asker) c
                                              )))
         fun handle_q (q as ({ typ, slide, expires }, asker), (qs, s, candodge))
             =
-            let val answered =
-                    case a of
-                        NONE => false
-                      | SOME a => answers q a (#talk s) candodge
-                val dodged =
-                    case a of
-                        SOME Dodge => true
-                      | _ => false
+            let val talk = #talk s
+                val (answered, dodged, s) =
+                    case (slide, a) of
+                        (_, NONE) => (false, false, s)
+                      | (SOME slide, SOME NextSlide) =>
+                        (slide = (Talk.currslide talk) + 1, false, s)
+                      | (SOME slide, SOME (Jump slide')) =>
+                        (slide = slide', false,
+                         update s (Committee (Vector.map CInfo.jump)))
+                      | (SOME slide, SOME (Delay slide')) =>
+                        ((slide = slide') andalso
+                         (not (Talk.covered talk slide')),
+                         false,
+                         update s (Committee (Vector.map CInfo.delay)))
+                      | (SOME slide, SOME (Remind slide')) =>
+                        ((slide = slide') andalso
+                         (Talk.covered talk slide'),
+                         false,
+                         update s (Committee (Vector.map CInfo.remind)))
+                      | (_, SOME Answer) =>
+                        (true, false,
+                         update s (Knowledge (fn k => k -
+                                                 (case typ of
+                                                     Motivation => 5.0
+                                                   | Related => 50.0 (* 7.0 *)
+                                                   | Technical => 3.0) /
+                                                 (Real.fromInt
+                                                      (List.length
+                                                           (#questions s))))))
+                      | (_, SOME Dodge) =>
+                        (candodge,
+                         candodge,
+                         update s (Committee (Vector.map CInfo.dodge)))
+                      | _ => (false, false, s)
             in
                 if answered then
                     (* Question has been answered *)
@@ -188,8 +269,33 @@ fun stu_act (s: state) (a: Action.stu_act option) (now: GTime.gtime) : state =
        s
     end
 
-fun addq s q asker =
-    update s (Questions (fn qs => (q, asker)::qs))
+fun addq s (eq as {typ, slide, urgent}) asker (now: GTime.gtime) =
+    let val q = {typ = typ, slide = slide,
+                 expires = if urgent then
+                               GTime.plus (now, GTime.fromMinutes 0.5)
+                           else
+                               GTime.plus (now, GTime.fromMinutes 1.0)
+                }
+        val cinfo = V.sub (#committee s, asker)
+        val cost = question_cost eq cinfo
+        val cinfo' = CInfo.updatec cinfo (fn c => c - (Real.fromInt cost))
+        val s' = update s (Committee (fn cs => V.update (cs, asker, cinfo')))
+        val s' = case typ of
+                     Technical => update s' (TechnicalContent
+                                                 (fn tc => tc + 120.0))
+                   | Related =>
+                     update s'
+                            (Committee
+                                 (Vector.map
+                                      (fn cinfo => CInfo.updatep
+                                                       cinfo
+                                                       (fn p => p - 50.0))
+                                 )
+                            )
+                   | _ => s'
+    in
+        update s' (Questions (fn qs => (q, asker)::qs))
+    end
 
 fun within dist (r1, r2) =
     Real.abs (r1 - r2) < dist
@@ -204,10 +310,10 @@ fun qeq ((q1, a1), (q2, a2)) =
     (case (#slide q1, #slide q2) of
          (SOME s1, SOME s2) => s1 = s2
        | (NONE, NONE) => true
-       | _ => false) andalso
-    (GTime.within (GTime.fromSeconds 0.1) (#expires q1, #expires q2))
+       | _ => false)(* andalso
+    (GTime.within (GTime.fromMinutes 1.0) (#expires q1, #expires q2)) *)
 
-fun cmpq ((q1, a1), (q2, a2)) =
+fun cmpq ((q1, a1): question * int, (q2, a2) : question * int) =
     (Int.compare (a1, a2)) andthen
     (case (#typ q1, #typ q2) of
          (Motivation, Motivation) => EQUAL
@@ -221,8 +327,8 @@ fun cmpq ((q1, a1), (q2, a2)) =
          (NONE, NONE) => EQUAL
        | (NONE, _) => LESS
        | (_, NONE) => GREATER
-       | (SOME s1, SOME s2) => Int.compare (s1, s2)) andthen
-    (GTime.cwithin (GTime.fromSeconds 0.1) (#expires q1, #expires q2))
+       | (SOME s1, SOME s2) => Int.compare (s1, s2)) (* andthen
+    (GTime.cwithin (GTime.fromMinutes 1.0) (#expires q1, #expires q2)) *)
 
 fun eq dist ((s1, s2): state * state) =
     (within dist (#knowledge s1, #knowledge s2)) andalso
@@ -232,6 +338,7 @@ fun eq dist ((s1, s2): state * state) =
                   rest andalso (CInfo.eq dist (c, V.sub (#committee s2, i))))
               true
               (#committee s1)) andalso
+    (* (within dist (#time s1, #time s2)) andalso *)
     (within dist (#technical_content s1, #technical_content s2)) andalso
     (within 0.01 (#speed s1, #speed s2)) andalso
     ListPair.allEq qeq (#questions s1, #questions s2)
@@ -245,8 +352,13 @@ fun compare dist ((s1, s2): state * state) =
                        (CInfo.compare dist (c, V.sub (#committee s2, i))))
               EQUAL
               (#committee s1)) andthen
+    (* (cwithin dist (#time s1, #time s2)) andthen *)
     (cwithin dist (#technical_content s1, #technical_content s2)) andthen
     (cwithin 0.01 (#speed s1, #speed s2)) andthen
     ListPair.foldl (fn (a, b, c) => c andthen cmpq (a, b))
-                   EQUAL (#questions s1, #questions s2)
+    EQUAL (#questions s1, #questions s2)
+
+fun advance (dt: GTime.gtime) (s: state) =
+    update s (Time (fn t => GTime.plus (t, dt)))
+end
 end

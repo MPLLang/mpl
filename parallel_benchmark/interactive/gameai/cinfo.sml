@@ -27,7 +27,7 @@ fun compare dist ((c1, c2): cinfo * cinfo) =
 
 fun init boldness expertise friendliness =
     { patience = Real.fromInt friendliness,
-      confusion = 100.0 - (Real.fromInt expertise),
+      confusion = 0.0,
       boldness = boldness,
       expertise = expertise,
       friendliness = friendliness }
@@ -106,7 +106,7 @@ fun dodge (c as {boldness, expertise, friendliness, ...} : cinfo) =
         val e = Real.fromInt expertise
         val f = Real.fromInt friendliness
     in
-        updatep c (fn p => p - 0.1 * (b + (100.0 - f)))
+        updatep c (fn p => p - 10.0 (* 0.1 *) * (b + (100.0 - f)))
     end
 
 fun remind (c as {boldness, expertise, friendliness, ...} : cinfo) =
@@ -123,7 +123,7 @@ fun didntanswer amasker (c as {boldness, expertise, friendliness, ...} : cinfo)
         val e = Real.fromInt expertise
         val f = Real.fromInt friendliness
     in
-        updatep c (fn p => p - 0.05 * (b + (100.0 - f)) * (if amasker then 2.0
+        updatep c (fn p => p - 10.0 (* 0.05 *) * (b + (100.0 - f)) * (if amasker then 2.0
                                                            else 1.0))
     end
 

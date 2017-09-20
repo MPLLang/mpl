@@ -1,13 +1,27 @@
 structure ComPlayer =
 struct
 
-type com_player = unit
+datatype com_player = AIPlayer of AIPlayer.t
+                    | NullPlayer
 
-fun move _ _ =
-    ((), NONE)
+datatype initas = InitAI of (int StatePlayerMap.map ref *
+                             int StatePlayerMap.map ref)
+                | InitNull
 
-fun init () = ()
+fun move st (AIPlayer p) =
+    let val (p, m) = AIPlayer.move st p
+    in
+        (AIPlayer p, m)
+    end
+  | move _ NullPlayer =
+    (NullPlayer, NONE)
 
-fun endgame _ _ = ()
+fun init (ai: initas) (id: int) =
+    case ai of
+        InitAI (plays, wins) => AIPlayer (AIPlayer.init id plays wins)
+      | InitNull => NullPlayer
+
+fun endgame win (AIPlayer p) = AIPlayer.endgame win p
+  | endgame _ NullPlayer = ()
 
 end

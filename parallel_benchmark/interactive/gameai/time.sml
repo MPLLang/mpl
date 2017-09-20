@@ -16,8 +16,8 @@ fun now () =
     case !start of
         NONE => 0.0
       | SOME t =>
-        ((Real.fromLargeInt (Time.toSeconds (Time.- (Time.now (), t)))) * (!speed))
-        / 60.0
+        ((Real.fromLargeInt (Time.toMilliseconds (Time.- (Time.now (), t)))) * (!speed))
+        / 60000.0
 
 fun toMinutes (t: gtime) : real =
     t
@@ -55,7 +55,12 @@ fun toString t =
         val mins = Real.round mins
         val secs = Real.round secs
         val (mins, secs) = if secs >= 60 then (mins + 1, 0) else (mins, secs)
+        val (sign, mins, secs) = if t < 0.0 then
+                                     (false, ~mins, ~secs)
+                                 else
+                                     (true, mins, secs)
     in
+        (if not sign then "-" else "") ^
         (Int.toString mins) ^ (if secs < 10 then ":0" else ":") ^
         (Int.toString secs)
     end

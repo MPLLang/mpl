@@ -2,7 +2,7 @@ val SOME FILES = Int.fromString (List.nth(CommandLine.arguments (), 1))
 val SOME DELAY = Int.fromString (List.nth(CommandLine.arguments (), 3))
 val LINES_PER_FILE = 1
 
-structure B = MLton.Parallel.Basic
+structure B = Basic
 
 fun inputLine () : string option =
     let val start = Time.now ()
@@ -61,7 +61,7 @@ fun fib n =
             val fork = if n <= 25 then
                            (fn (f1, f2) => (f1 (), f2 ()))
                        else
-                           MLton.Parallel.ForkJoin.fork
+                           ForkJoin.fork
             val (a, b) = fork (fn () => fib (n - 1),
                                fn () => fib (n - 2))
         in
@@ -74,7 +74,7 @@ fun forkn n f =
             if n = 1 then f i else
             let val left = Int.div (n, 2)
                 val right = n - left
-                val (l, r) = MLton.Parallel.ForkJoin.fork
+                val (l, r) = ForkJoin.fork
                     ((fn () => fork_int left i),
                      (fn () => fork_int right (i + left)))
             in

@@ -9,7 +9,7 @@ type committee = CP.com_player V.vector
 val _ = Basic.finalizePriorities ()
 val _ = Basic.init ()
 
-val frame = GTime.fromSeconds 5.0 (* GTime.fromMinutes (1.0 / (60.0 * 24.0)) *)
+val frame = GTime.fromMinutes (1.0 / 60.0) (* (1.0 / (60.0 * 24.0)) *)
 
 fun loop (state: S.state)
          (student: SP.stu_player)
@@ -20,7 +20,7 @@ fun loop (state: S.state)
         val committee' = Vector.map #1 cpms
         val cmoves = Vector.map #2 cpms
         val (student', smove) = SP.move (state, now) student
-        fun addq (i, SOME q, s) = S.addq s q i
+        fun addq (i, SOME q, s) = S.addq s q i now
           | addq (i, NONE, s) = s
         val state' = S.stu_act state smove now
         val state' = Vector.foldli addq state' cmoves
@@ -38,14 +38,16 @@ fun loop (state: S.state)
     end
 
 fun init () =
-    let val committee = V.tabulate (5, fn _ => CP.init ())
+    let val plays = ref StatePlayerMap.empty
+        val wins = ref StatePlayerMap.empty
+        val committee = V.tabulate (5, (CP.init (CP.InitAI (plays, wins))))
         val student = SP.init ()
         val cinfos = V.tabulate (5, fn _ => CInfo.init 50 50 50)
         val talk = SP.talk cinfos
         val state = State.init (50.0, 50.0) talk cinfos 1.0
     in
         GTime.init ();
-        GTime.setspeed 10.0;
+        GTime.setspeed 2.0;
         loop state student committee
     end
 

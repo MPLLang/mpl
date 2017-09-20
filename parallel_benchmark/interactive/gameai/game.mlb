@@ -12,17 +12,18 @@ talk.sml
 cinfo.sml
 state.sml
 
-set/ord-key-sig.sml
-set/ord-map-sig.sml
-set/lib-base-sig.sml
-set/lib-base.sml
-set/splaytree-sig.sml
-set/splaytree.sml
-set/splay-set-fn.sml
-stateset.sml
+map/ord-key-sig.sml
+map/ord-map-sig.sml
+map/lib-base-sig.sml
+map/lib-base.sml
+map/splaytree-sig.sml
+map/splaytree.sml
+map/splay-map-fn.sml
+spmap.sml
 
 complayer.sig
 stuplayer.sig
+aiplayer.sml
 complayer.sml
 stuplayer.sml
 
