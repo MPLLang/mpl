@@ -3,7 +3,8 @@ struct
 
   exception ListBag
 
-  val cas = MLton.Parallel.compareAndSwap
+  val vcas = MLton.Parallel.compareAndSwap
+  fun cas (r, old, new) = vcas r (old, new) = old
 
   val UNLOCKED = 0
   val LOCKED = 1

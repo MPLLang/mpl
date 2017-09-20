@@ -58,6 +58,39 @@ structure MLtonParallel:> MLTON_PARALLEL =
             MLtonThread.initPrimitive
         val arrayUninit: int -> 'a Array.array =
             Array.arrayUninit
+
+        (* ======================== arrayCompareAndSwap ==================== *)
+
+        local
+           structure I =
+              Int_ChooseInt
+              (type 'a t = 'a array * SeqIndex.int * 'a * 'a -> 'a
+               val fInt8 = _import "Parallel_arrayCompareAndSwap8" impure private: Int8.t array * SeqIndex.int * Int8.int * Int8.int -> Int8.int;
+               val fInt16 = _import "Parallel_arrayCompareAndSwap16" impure private: Int16.t array * SeqIndex.int * Int16.int * Int16.int -> Int16.int;
+               val fInt32 = _import "Parallel_arrayCompareAndSwap32" impure private: Int32.t array * SeqIndex.int * Int32.int * Int32.int -> Int32.int;
+               val fInt64 = _import "Parallel_arrayCompareAndSwap64" impure private: Int64.t array * SeqIndex.int * Int64.int * Int64.int -> Int64.int;
+               val fIntInf = fn _ => raise Fail "MLton.Parallel.Unsafe.arrayCompareAndSwap: IntInf")
+        in
+           fun arrayCompareAndSwap (xs, i) (old, new) =
+              I.f (xs, SeqIndex.fromInt i, old, new)
+        end
+
+        (* ========================= arrayFetchAndAdd ========================= *)
+
+        local
+           structure I =
+              Int_ChooseInt
+              (type 'a t = 'a array * SeqIndex.int * 'a -> 'a
+               val fInt8 = _import "Parallel_arrayFetchAndAdd8" impure private: Int8.t array * SeqIndex.int * Int8.int -> Int8.int;
+               val fInt16 = _import "Parallel_arrayFetchAndAdd16" impure private: Int16.t array * SeqIndex.int * Int16.int -> Int16.int;
+               val fInt32 = _import "Parallel_arrayFetchAndAdd32" impure private: Int32.t array * SeqIndex.int * Int32.int -> Int32.int;
+               val fInt64 = _import "Parallel_arrayFetchAndAdd64" impure private: Int64.t array * SeqIndex.int * Int64.int -> Int64.int;
+               val fIntInf = fn _ => raise Fail "MLton.Parallel.Unsafe.arrayFetchAndAdd: IntInf")
+        in
+           fun arrayFetchAndAdd (xs, i) d =
+              I.f (xs, SeqIndex.fromInt i, d)
+        end
+
       end
 
     exception Return
@@ -76,7 +109,46 @@ structure MLtonParallel:> MLTON_PARALLEL =
     val initializeProcessors: unit -> unit =
         _import "Parallel_init" runtime private: unit -> unit;
 
-    (* shwestrick: needed these for private-deqs scheduler *)
-    val compareAndSwap = _import "Parallel_compareAndSwap" impure private: Int32.int ref * Int32.int * Int32.int -> bool;
-    val fetchAndAdd = _import "Parallel_fetchAndAdd" impure private: Int32.int ref * Int32.int -> Int32.int;
+    (* ========================== compareAndSwap ========================== *)
+
+    local
+       structure I =
+          Int_ChooseInt
+          (type 'a t = 'a ref * 'a * 'a -> 'a
+           val fInt8 = _import "Parallel_compareAndSwap8" impure private: Int8.t ref * Int8.int * Int8.int -> Int8.int;
+           val fInt16 = _import "Parallel_compareAndSwap16" impure private: Int16.t ref * Int16.int * Int16.int -> Int16.int;
+           val fInt32 = _import "Parallel_compareAndSwap32" impure private: Int32.t ref * Int32.int * Int32.int -> Int32.int;
+           val fInt64 = _import "Parallel_compareAndSwap64" impure private: Int64.t ref * Int64.int * Int64.int -> Int64.int;
+           val fIntInf = fn _ => raise Fail "MLton.Parallel.compareAndSwap: IntInf")
+    in
+       fun compareAndSwap r (old, new) =
+          I.f (r, old, new)
+    end
+
+    fun arrayCompareAndSwap (xs, i) (old, new) =
+      if i < 0 orelse i >= Array.length xs
+      then raise Subscript
+      else Unsafe.arrayCompareAndSwap (xs, i) (old, new)
+
+    (* ========================== fetchAndAdd ========================== *)
+
+    local
+       structure I =
+          Int_ChooseInt
+          (type 'a t = 'a ref * 'a -> 'a
+           val fInt8 = _import "Parallel_fetchAndAdd8" impure private: Int8.t ref * Int8.int -> Int8.int;
+           val fInt16 = _import "Parallel_fetchAndAdd16" impure private: Int16.t ref * Int16.int -> Int16.int;
+           val fInt32 = _import "Parallel_fetchAndAdd32" impure private: Int32.t ref * Int32.int -> Int32.int;
+           val fInt64 = _import "Parallel_fetchAndAdd64" impure private: Int64.t ref * Int64.int -> Int64.int;
+           val fIntInf = fn _ => raise Fail "MLton.Parallel.fetchAndAdd: IntInf")
+    in
+       fun fetchAndAdd r d =
+          I.f (r, d)
+    end
+
+    fun arrayFetchAndAdd (xs, i) d =
+      if i < 0 orelse i >= Array.length xs
+      then raise Subscript
+      else Unsafe.arrayFetchAndAdd (xs, i) d
+
   end

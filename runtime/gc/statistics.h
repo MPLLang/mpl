@@ -21,6 +21,10 @@ enum {
   SYNC_SAVE_WORLD,
 };
 
+struct GC_globalCumulativeStatistics {
+  size_t maxHeapOccupancy;
+};
+
 struct GC_cumulativeStatistics {
   uintmax_t bytesAllocated;
   uintmax_t bytesFilled; /* i.e. unused gaps */
@@ -79,6 +83,7 @@ struct GC_lastMajorStatistics {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+struct GC_globalCumulativeStatistics* newGlobalCumulativeStatistics(void);
 struct GC_cumulativeStatistics* newCumulativeStatistics(void);
 struct GC_lastMajorStatistics* newLastMajorStatistics(void);
 

@@ -16,6 +16,12 @@ atomic_uint32_t *pleader(GC_state s) {
   return &s->procStates[0].terminationLeader;
 }
 
+void GC_TerminateThread(GC_state s) {
+  GC_PthreadAtExit(s);
+  Trace0(EVENT_RUNTIME_LEAVE);
+  pthread_exit(NULL);
+}
+
 bool GC_CheckForTerminationRequest(GC_state s) {
   if (s->procStates == NULL)
     return false;
@@ -68,4 +74,14 @@ bool GC_TryToTerminate(GC_state s) {
       }
 
   return true;
+}
+
+PRIVATE void GC_PthreadAtExit(GC_state s) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  /*
+   * RAM_NOTE: This is for global heap stat tracking. I may need to update HH
+   * stats also
+   */
+  HM_enterGlobalHeap ();
 }

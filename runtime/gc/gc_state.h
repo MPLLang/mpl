@@ -33,6 +33,7 @@ struct GC_state {
   struct GC_callStackState callStackState;
   bool canMinor; /* TRUE iff there is space for a minor gc. */
   struct GC_controls *controls;
+  struct GC_globalCumulativeStatistics* globalCumulativeStatistics;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
@@ -99,6 +100,7 @@ struct GC_state {
   char *worldFile;
   spinlock_t lock;
   struct TracingContext *trace;
+  struct TLSObjects tlsObjects;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -123,12 +125,13 @@ PRIVATE void GC_setAmOriginal (bool b);
 PRIVATE void GC_setControlsMessages (bool b);
 PRIVATE void GC_setControlsSummary (bool b);
 PRIVATE void GC_setControlsRusageMeasureGC (bool b);
+PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
+PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
-PRIVATE uintmax_t GC_getCumulativeStatisticsGCTime(void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
@@ -153,7 +156,9 @@ PRIVATE void GC_setSignalHandlerThreads (pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE struct rusage* GC_getRusageGCAddr (void);
+PRIVATE struct TLSObjects* GC_getTLSObjects(void);
+
+PRIVATE void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage);
 
 PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
 PRIVATE sigset_t* GC_getSignalsPendingAddr (void);

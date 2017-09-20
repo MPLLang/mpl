@@ -72,6 +72,7 @@ PRIVATE C_Time_t MLton_Rusage_gc_stime_sec(void);
 PRIVATE C_SUSeconds_t MLton_Rusage_gc_stime_usec(void);
 PRIVATE C_Time_t MLton_Rusage_gc_utime_sec(void);
 PRIVATE C_SUSeconds_t MLton_Rusage_gc_utime_usec(void);
+PRIVATE void MLton_Rusage_getGCRusageOfProc(Int32_t);
 PRIVATE void MLton_Rusage_getrusage(void);
 PRIVATE C_Time_t MLton_Rusage_self_stime_sec(void);
 PRIVATE C_SUSeconds_t MLton_Rusage_self_stime_usec(void);

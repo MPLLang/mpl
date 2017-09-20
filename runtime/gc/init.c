@@ -510,6 +510,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
+  s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
 
   s->currentThread = BOGUS_OBJPTR;
@@ -640,6 +641,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->atomicState = 0;
   d->callFromCHandlerThread = BOGUS_OBJPTR;
   d->controls = s->controls;
+  d->globalCumulativeStatistics = s->globalCumulativeStatistics;
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;

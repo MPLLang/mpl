@@ -50,7 +50,7 @@ void Parallel_lockTake (Pointer arg) {
   do {
     if (GC_MightCheckForTerminationRequest(s, &cpoll)) {
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
     }
 
     if (Proc_threadInSection ()) {
@@ -108,7 +108,7 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
   }
   while (*other) {
     if (GC_MightCheckForTerminationRequest(s, &cpoll))
-      pthread_exit(NULL);
+      GC_TerminateThread(s);
 
     //__sync_synchronize ();
     if (amLeft != *leftsTurn) {
@@ -187,18 +187,76 @@ uint64_t Parallel_getTimeInGC (void) {
   return gcTime;
 }
 
-inline Int32 Parallel_fetchAndAdd (pointer p, Int32 v) {
+// fetchAndAdd implementations
+
+Int8 Parallel_fetchAndAdd8 (pointer p, Int8 v) {
+  return __sync_fetch_and_add ((Int8 *)p, v);
+}
+
+Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v) {
+  return __sync_fetch_and_add ((Int16 *)p, v);
+}
+
+Int32 Parallel_fetchAndAdd32 (pointer p, Int32 v) {
   return __sync_fetch_and_add ((Int32 *)p, v);
 }
 
-inline Int32 Parallel_compareAndSwap (pointer p, Int32 old, Int32 new) {
-  if(__sync_bool_compare_and_swap ((Int32 *)p, old, new)) {
-    //printf("cas(%d, %d, %d) succeeded\n", p, old, new);
-    return 1;
-  } else {
-    //printf("cas(%d, %d, %d) failed\n", p, old, new);
-    return 0;
-  }
+Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v) {
+  return __sync_fetch_and_add ((Int64 *)p, v);
+}
+
+// arrayFetchAndAdd implementations
+
+Int8 Parallel_arrayFetchAndAdd8 (Pointer p, GC_arrayLength i, Int8 v) {
+  return __sync_fetch_and_add (((Int8*)p)+i, v);
+}
+
+Int16 Parallel_arrayFetchAndAdd16 (Pointer p, GC_arrayLength i, Int16 v) {
+  return __sync_fetch_and_add (((Int16*)p)+i, v);
+}
+
+Int32 Parallel_arrayFetchAndAdd32 (Pointer p, GC_arrayLength i, Int32 v) {
+  return __sync_fetch_and_add (((Int32*)p)+i, v);
+}
+
+Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_arrayLength i, Int64 v) {
+  return __sync_fetch_and_add (((Int64*)p)+i, v);
+}
+
+// compareAndSwap implementations
+
+Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
+  return __sync_val_compare_and_swap ((Int8 *)p, old, new);
+}
+
+Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new) {
+  return __sync_val_compare_and_swap ((Int16 *)p, old, new);
+}
+
+Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new) {
+  return __sync_val_compare_and_swap ((Int32 *)p, old, new);
+}
+
+Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
+  return __sync_val_compare_and_swap ((Int64 *)p, old, new);
+}
+
+// arrayCompareAndSwap implementations
+
+Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_arrayLength i, Int8 old, Int8 new) {
+  return __sync_val_compare_and_swap (((Int8*)p)+i, old, new);
+}
+
+Int16 Parallel_arrayCompareAndSwap16 (Pointer p, GC_arrayLength i, Int16 old, Int16 new) {
+  return __sync_val_compare_and_swap (((Int16*)p)+i, old, new);
+}
+
+Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_arrayLength i, Int32 old, Int32 new) {
+  return __sync_val_compare_and_swap (((Int32*)p)+i, old, new);
+}
+
+Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, Int64 new) {
+  return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
 }
 
 void Parallel_block_sig (int sig) {

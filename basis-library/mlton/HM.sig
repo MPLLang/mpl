@@ -20,7 +20,7 @@ signature MLTON_HM =
 
                       val appendChild: 'a t * 'b t * int -> unit
                       val setReturnValue: 'a t * 'b -> 'b t
-                      val mergeIntoParentAndGetReturnValue: 'a t -> 'a option
+                      val mergeIntoParentAndGetReturnValue: 'a t -> 'a
                       val promoteChunks: 'a t -> unit
 
                       val setDead: 'a t -> unit

@@ -281,40 +281,77 @@ void GC_setControlsRusageMeasureGC (bool b) {
   s->controls->rusageMeasureGC = b;
 }
 
+size_t GC_getMaxChunkPoolOccupancy (void) {
+  return ChunkPool_maxAllocated ();
+}
+
+size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  return s->globalCumulativeStatistics->maxHeapOccupancy;
+}
+
 uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->bytesAllocated;
+
+  /* return sum across all processors */
+  size_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesAllocated;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numCopyingGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numCopyingGCs;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numMarkCompactGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numMarkCompactGCs;
+  }
+
+  return retVal;
 }
 
 uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->numMinorGCs;
+
+  /* return sum across all processors */
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->numMinorGCs;
+  }
+
+  return retVal;
 }
 
 size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return s->cumulativeStatistics->maxBytesLive;
-}
 
-uintmax_t GC_getCumulativeStatisticsGCTime(void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  uintmax_t time = 0;
+  /* return max across all processors */
+  size_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
-    time += rusageTime(&(s->procStates[i].cumulativeStatistics->ru_gc));
+    size_t candidate = s->procStates[i].cumulativeStatistics->maxBytesLive;
+    if (candidate > retVal) {
+      retVal = candidate;
+    }
   }
 
-  return time;
+  return retVal;
 }
 
 void GC_setHashConsDuringGC (bool b) {
@@ -412,9 +449,71 @@ void GC_setSignalHandlerThreads (pointer p) {
   }
 }
 
-struct rusage* GC_getRusageGCAddr (void) {
+struct TLSObjects* GC_getTLSObjects(void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  return &(s->cumulativeStatistics->ru_gc);
+
+  return &(s->tlsObjects);
+}
+
+void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  if (p < 0) {
+    /* get process gc rusage */
+    rusageZero(rusage);
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      /* global heap collection is stop-the-world, so multiply by P */
+      struct rusage stwGC;
+      rusageZero(&stwGC);
+
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
+                    &stwGC);
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
+                    &stwGC);
+      rusagePlusMax(&stwGC,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
+                    &stwGC);
+      rusageMultiply(&stwGC,
+                     s->numberOfProcs,
+                     &stwGC);
+
+      rusagePlusMax(rusage,
+                    &stwGC,
+                    rusage);
+
+      /* HHLocal collection is parallel, so just add it in */
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcHHLocal),
+                    rusage);
+    }
+  } else {
+    /* get processor gc rusage */
+    rusageZero(rusage);
+
+    if (p >= s->numberOfProcs) {
+      /* proc doesn't exist so return zero */
+      return;
+    }
+
+    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+      /* global heap collection is stop-the-world, so gather from all procs */
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),
+                    rusage);
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMarkCompact),
+                    rusage);
+      rusagePlusMax(rusage,
+                    &(s->procStates[proc].cumulativeStatistics->ru_gcMinor),
+                    rusage);
+    }
+
+    rusagePlusMax(rusage,
+                  &(s->procStates[p].cumulativeStatistics->ru_gcHHLocal),
+                  rusage);
+  }
 }
 
 // Signal disposition is per-process; use primary to maintain handled set.

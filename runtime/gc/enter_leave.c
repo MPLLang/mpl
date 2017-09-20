@@ -12,7 +12,10 @@
  * invariant.
  */
 void enter (GC_state s) {
-  /* RAM_NOTE: Is this necessary? */
+  /*
+   * RAM_NOTE: Need to switch to make sure that s->{frontier,limit} etc. point
+   * to global heap
+   */
   HM_enterGlobalHeap ();
 
   /* used needs to be set because the mutator has changed s->stackTop. */
@@ -69,6 +72,5 @@ void leave (GC_state s) {
   s->syncReason = SYNC_NONE;
   Proc_endCriticalSection(s);
 
-  /* RAM_NOTE: Is this necessary? */
   HM_exitGlobalHeap();
 }

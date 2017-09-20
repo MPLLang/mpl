@@ -23,6 +23,15 @@ void outputSyncStatisticsJSON(FILE* out,
 /* Function Definitions */
 /************************/
 
+struct GC_globalCumulativeStatistics* newGlobalCumulativeStatistics(void) {
+  struct GC_globalCumulativeStatistics* stats;
+
+  stats = malloc(sizeof(struct GC_globalCumulativeStatistics));
+  stats->maxHeapOccupancy = 0;
+
+  return stats;
+}
+
 struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   struct GC_cumulativeStatistics *cumulativeStatistics;
 
@@ -190,11 +199,11 @@ void S_outputCumulativeStatisticsJSON(
 
     fprintf(out, ", ");
 
-    fprintf(out, "\"maxBytesLive\" : %"PRIuMAX, statistics->maxBytesLive);
+    fprintf(out, "\"maxGlobalHeapBytesLive\" : %"PRIuMAX, statistics->maxBytesLive);
 
     fprintf(out, ", ");
 
-    fprintf(out, "\"maxHeapSize\" : %"PRIuMAX, statistics->maxHeapSize);
+    fprintf(out, "\"maxGlobalHeapSize\" : %"PRIuMAX, statistics->maxHeapSize);
 
     fprintf(out, ", ");
 

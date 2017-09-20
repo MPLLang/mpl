@@ -7,13 +7,13 @@
  */
 
 bool detailedGCTime (GC_state s) {
-  return s->controls->summary;
+  return s->controls->summary or s->controls->rusageMeasureGC;
 }
 
 bool needGCTime (GC_state s) {
-  return 
-    DEBUG 
-    or s->controls->summary 
+  return
+    DEBUG
+    or s->controls->summary
     or s->controls->messages
     or s->controls->rusageMeasureGC;
 }
