@@ -39,15 +39,15 @@ type ord_key = sp
 fun compare ((s1, t1, p1), (s2, t2, p2)) =
     case (p1, p2) of
         (Student, Student) =>
-        (GTime.cwithin (GTime.fromMinutes 1.0) (t1, t2))
-            andthen (State.compare 5.0 (s1, s2))
+        (*(GTime.cwithin (GTime.fromMinutes 1.0) (t1, t2))
+            andthen *) (State.compare 5.0 (s1, s2))
       | (Student, _) => LESS
       | (Committee _, Student) => GREATER
       | (Committee i1, Committee i2) =>
         if i1 < i2 then LESS
         else if i1 > i2 then GREATER
-        else ((GTime.cwithin (GTime.fromMinutes 1.0) (t1, t2))
-                  andthen (State.compare 5.0 (s1, s2)))
+        else ((*(GTime.cwithin (GTime.fromMinutes 1.0) (t1, t2))
+                  andthen *) (State.compare 5.0 (s1, s2)))
 end
 
 structure Map : ORD_MAP = SplayMapFn (StatePlayerKey)

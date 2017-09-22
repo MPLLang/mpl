@@ -3,6 +3,8 @@ $(SML_LIB)/basis/mlton.mlb
 
 $(SML_LIB)/basis/schedulers/interactive-pprio.mlb
 
+constants.sml
+
 sorder.sml
 time.sig
 time.sml

@@ -2,6 +2,7 @@ structure State =
 struct
 
 structure V = Vector
+structure Const = Constants
 
 type asker = int
 
@@ -55,8 +56,9 @@ fun toString {knowledge, stamina, talk, committee, time, technical_content,
                   (rp confusion) ^ "\n" ^ s)
               ""
               committee) ^
-    "time left: " ^ (GTime.toString (GTime.minus (GTime.fromMinutes 45.0,
-                                                  time))) ^ "\n" ^
+    "time left: " ^ (GTime.toString (GTime.minus
+                                         (GTime.fromMinutes Const.talk_time,
+                                          time))) ^ "\n" ^
     "covered: " ^ (p (Real.floor technical_content)) ^ "\n" ^
     (List.foldl (fn (q, r) => (qtos q) ^ "\n" ^ r)
                 ""
@@ -106,7 +108,7 @@ fun update s u =
     }
 
 fun status (s: state) (now: GTime.gtime) : status =
-    if #technical_content s >= 120.0 then
+    if #technical_content s >= Const.win_tech_content then
         StudentWins
     else if Vector.exists (fn ci => #patience ci <= 0.0) (#committee s)
     then
@@ -137,14 +139,14 @@ fun question_cost (q: ext_question) (cinfo: CInfo.cinfo) =
     in
         if #urgent q then
             (case (#typ q) of
-               Motivation => (Int.div (100 - f, 5)) + 60 + p
-             | Technical => (Int.div (b, 10)) + 20 + p
-             | Related => (Int.div (b, 5)) + 60 + p)
+               Motivation => (Int.div (100 - f, 5)) + Const.q_cost_motivation + p
+             | Technical => (Int.div (b, 10)) + Const.q_cost_technical + p
+             | Related => (Int.div (b, 5)) + Const.q_cost_related + p)
         else
           (case (#typ q) of
-               Motivation => (Int.div (100 - f, 5)) + 15 (* 60 *)
-             | Technical => (Int.div (b, 10)) + 20
-             | Related => (Int.div (b, 5)) + 17 (* 60 *))
+               Motivation => (Int.div (100 - f, 5)) + Const.q_cost_motivation
+             | Technical => (Int.div (b, 10)) + Const.q_cost_technical
+             | Related => (Int.div (b, 5)) + Const.q_cost_related)
     end
 
 fun question_is_legal (s: state) (q: ext_question) (asker: int) =
@@ -238,11 +240,15 @@ fun stu_act (s: state) (a: Action.stu_act option) (now: GTime.gtime) : state =
                          update s (Committee (Vector.map CInfo.remind)))
                       | (_, SOME Answer) =>
                         (true, false,
-                         update s (Knowledge (fn k => k -
-                                                 (case typ of
-                                                     Motivation => 5.0
-                                                   | Related => 50.0 (* 7.0 *)
-                                                   | Technical => 3.0) /
+                         update s (Knowledge
+                                       (fn k => k -
+                                                (case typ of
+                                                     Motivation =>
+                                                     Const.ans_cost_motivation
+                                                   | Related =>
+                                                     Const.ans_cost_related
+                                                   | Technical =>
+                                                     Const.ans_cost_technical) /
                                                  (Real.fromInt
                                                       (List.length
                                                            (#questions s))))))
@@ -280,6 +286,7 @@ fun addq s (eq as {typ, slide, urgent}) asker (now: GTime.gtime) =
         val cost = question_cost eq cinfo
         val cinfo' = CInfo.updatec cinfo (fn c => c - (Real.fromInt cost))
         val s' = update s (Committee (fn cs => V.update (cs, asker, cinfo')))
+                        (*
         val s' = case typ of
                      Technical => update s' (TechnicalContent
                                                  (fn tc => tc + 120.0))
@@ -293,6 +300,7 @@ fun addq s (eq as {typ, slide, urgent}) asker (now: GTime.gtime) =
                                  )
                             )
                    | _ => s'
+*)
     in
         update s' (Questions (fn qs => (q, asker)::qs))
     end

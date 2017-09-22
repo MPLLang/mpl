@@ -5,6 +5,7 @@ structure M = StatePlayerMap
 
 open Action
 structure V = Vector
+structure C = Constants
 
 val _ = MLton.Random.srand (case MLton.Random.seed () of
                                 SOME w => w
@@ -71,22 +72,24 @@ fun moves (sp: M.sp) =
                                    []
                                    (Talk.slides (State.talk (M.state sp)))) *)
                       in
-                          (if c - (Int.div (100 - f, 5)) > 15 (* 60 *) then
+                          (if c - (Int.div (100 - f, 5)) >
+                              C.q_cost_motivation then
                                qs Motivation false
                            else []) @
-                          (if c - (Int.div (b, 10)) > 20 then
+                          (if c - (Int.div (b, 10)) > C.q_cost_technical then
                                qs Technical false
                            else []) @
-                          (if c - (Int.div (b, 5)) > 16 (* 60 *) then
+                          (if c - (Int.div (b, 5)) > C.q_cost_related then
                                qs Related false
                            else []) @
-                          (if c - (Int.div (100 - f, 5)) > 60 + p then
+                          (if c - (Int.div (100 - f, 5)) >
+                              C.q_cost_motivation + p then
                                qs Motivation true
                            else []) @
-                          (if c - (Int.div (b, 10)) > 20 + p then
+                          (if c - (Int.div (b, 10)) > C.q_cost_technical + p then
                                qs Technical true
                            else []) @
-                          (if c - (Int.div (b, 5)) > 60 + p then
+                          (if c - (Int.div (b, 5)) > C.q_cost_related + p then
                                qs Related true
                            else [])
                       end)
@@ -116,7 +119,8 @@ fun sim (sp: M.sp) (plays: int M.map) (wins: int M.map) (d: int)
                 then
                     (* We have stats on all of the possible moves, so pick
                        the best one. *)
-                    let val tot_plays =
+                    let (* val _ = print ("UCB at depth " ^ (Int.toString d) ^ "\n") *)
+                        val tot_plays =
                             List.foldl (fn (sp, a) => case M.find (plays, sp) of
                                                           SOME p => p + a
                                                         | NONE => a (* raise Option*) )
@@ -162,6 +166,12 @@ fun sim (sp: M.sp) (plays: int M.map) (wins: int M.map) (d: int)
                     in
                         (List.nth (moves, r), List.nth (next_states, r))
                     end
+            val _ = case next_move of
+                        SOME (M.ComMove ({typ, ...}, _)) =>
+                        (case typ of
+                             Action.Related => print "W"
+                           | _ => ())
+                        | _ => ()
             (* If this is the first unexplored state, add it to our list *)
             val (expand', plays', wins') =
                 if expand andalso (case M.find (plays, next_sp) of
@@ -264,7 +274,7 @@ fun move ((s, now): State.state * GTime.gtime)
                                    else
                                        (bestpct, bestm)
                            end)
-                       (0.49, NONE) (* If no move is that good, wait *)
+                       (0.8, NONE) (* If no move is that good, wait *)
                        moves
     in
         rplays := plays;
