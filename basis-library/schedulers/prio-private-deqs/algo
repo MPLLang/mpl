@@ -26,6 +26,22 @@ switchPrios(p):
   secondaryPrio[p] = 0
   sendPrio[p] = drawFromTimeshareDist()
 
+tryClearFlag(p, prio):
+  if mailboxes[p, prio].flagSet() then
+    //Try to clear the flag; return the mail if full
+    mbTask = mailboxes[p, prio].tryClear()
+    if mbTask <> NULL then
+      //Somebody sent a task since we checked mail
+      deques[p, prio].insert(mbTask)
+
+push(p, prio, task):
+  deques[p, prio].push(task)
+  tryClearFlag(p, prio)
+
+insert(p, prio, task):
+  deques[p, prio].insert(task)
+  tryClearFlag(p, prio)
+
 schedule(p):
   if now > nextSwitch[p] then
     switchPrios(p)
@@ -43,10 +59,11 @@ schedule(p):
 
   if assigned = NULL then
     prio[p] = secondaryPrio[p]
-    tasks = mailboxes[p, prio[p]].check()
+    //Check the mailbox. If it's full, take the task
+    //and clear the flag.
+    tasks = mailboxes[p, prio[p]].checkAndClear()
     if tasks <> NULL then
       deques[p, prio[p]].pushAll(tasks)
-      mailboxes[p, prio[p]].clearFlag()
     assigned = deques[p, prio[p]].popBottom ()
 
   if assigned <> NULL then
@@ -65,4 +82,5 @@ interrupt(p, k):
 
 main(p):
   beginCriticalSection()
+  installInterrupts(p, interruptInterval)
   schedule(p)
