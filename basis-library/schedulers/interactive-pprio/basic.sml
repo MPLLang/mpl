@@ -51,8 +51,9 @@ structure Tm = Time
   val P = numberOfProcessors
 
 val yield = _import "Parallel_yield" runtime private: unit -> unit;
-val compareAndSwap = _import "Parallel_compareAndSwap" runtime private: int ref * int * int -> bool;
-val fetchAndAdd = _import "Parallel_fetchAndAdd" runtime private: int ref * int -> int;
+fun compareAndSwap (r, old, new) =
+    MLton.Parallel.compareAndSwap r (old, new) = old
+fun fetchAndAdd (r, d) = MLton.Parallel.fetchAndAdd r d
 
 structure S = MLton.Signal
 val pblocksig = _import "Parallel_block_sig" runtime private: S.t -> unit;
