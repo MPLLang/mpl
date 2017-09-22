@@ -1,0 +1,68 @@
+mailbox[P, R] mailboxes
+deque[P, R] deques
+prio[P] primaryPrio
+prio[P] secondaryPrio
+prio[P] sendPrio
+prio[P] prio
+time[P] nextSwitch
+time[P] nextDeal
+taskList[P] ioqueue
+
+handleResumed(p):
+  for task in ioqueue[p]:
+    if task.ready() then
+      deque[P, task.prio].insert(task)
+      ioqueue[p].remove(task)
+
+dealAttempt(p):
+  p' = random({0, ..., P-1}\{p})
+  if mailboxes[p', sendPrio[p]].flagSet() then
+    if mailboxes[p', sendPrio[p]].claim(p) then
+      tasks = deque[p, sendPrio[p]].split()
+      mailboxes[p', sendPrio[p]].send(tasks)
+
+switchPrios(p):
+  primaryPrio[p] = drawFromTimeshareDist()
+  secondaryPrio[p] = 0
+  sendPrio[p] = drawFromTimeshareDist()
+
+schedule(p):
+  if now > nextSwitch[p] then
+    switchPrios(p)
+    nextSwitch[p] += switchInterval
+  handleResumed(p)
+  if now > nextDeal[p] then
+    dealAttempt(p)
+    nextDeal[p] += dealInterval
+  prio[p] = primaryPrio[p]
+  tasks = mailboxes[p, prio[p]].check()
+  if tasks <> NULL then
+    deques[p, prio[p]].pushAll(tasks)
+    mailboxes[p, prio[p]].clearFlag()
+  assigned = deques[p, prio[p]].popBottom ()
+
+  if assigned = NULL then
+    prio[p] = secondaryPrio[p]
+    tasks = mailboxes[p, prio[p]].check()
+    if tasks <> NULL then
+      deques[p, prio[p]].pushAll(tasks)
+      mailboxes[p, prio[p]].clearFlag()
+    assigned = deques[p, prio[p]].popBottom ()
+
+  if assigned <> NULL then
+    endCriticalSection()
+    assigned.execute()
+    beginCriticalSection()
+    secondaryPrio = 0
+  else
+    secondaryPrio = secondaryPrio + 1 mod R
+  schedule(p)
+
+interrupt(p, k):
+  beginCriticalSection()
+  deque[P, [p]].push(k)
+  schedule(p)
+
+main(p):
+  beginCriticalSection()
+  schedule(p)
