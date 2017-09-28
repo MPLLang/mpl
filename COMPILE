@@ -1,0 +1,8 @@
+To compile you need 
+
+0) Linux OS
+1) mlton-20130715-2
+on aware this is 
+/opt/parmem-bin/mlton-20130715-2/bin/mlton
+so add the following to your path
+/opt/parmem-bin/mlton-20130715-2/bin/mlton
