@@ -1,0 +1,24 @@
+To compile you need 
+
+0) Linux OS
+1) mlton-20130715-2
+on aware.aladdin.cs.cmu.edu this is 
+/opt/parmem-bin/mlton-20130715-2/bin/mlton
+so add the following to your path
+/opt/parmem-bin/mlton-20130715-2/bin/mlton
+
+2) To make type  at the root
+
+$ make all-no-docs
+
+This creates build/bin/mlton-parmem
+
+3) Put the mlton-parmem executable directory into your path, e.g.,
+   $PATH:~/mltop/build/bin/
+
+4) An example bencmark is given in examples/fib.sml
+  To compile type
+  $ mlton-parmem sources.mlb
+  To run type
+  $ ./sources @MLton number-processors 32 --
+  This will return fib 39, computed on 32 cores.
