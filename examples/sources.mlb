@@ -1,0 +1,6 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/schedulers/spoonhower.mlb
+in
+  fib.sml
+end
