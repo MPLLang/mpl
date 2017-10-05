@@ -6,44 +6,54 @@ functor ListQueue (Elem : sig
 struct
 
   type task = Elem.t
-  type t = (int * task) list
+  type t = int * task list
   type task_set = t
 
-  val empty : t = []
+  fun empty () = (0, [])
+
+  fun rev (w, q) = (w, List.rev q)
 
   fun fromSet s = s
 
-  fun weight q =
-    case q of
-      [] => 0
-    | (w, _) :: _ => w
+  fun weight (w, es) = w
 
-  fun push q e = (Elem.weight e + weight q, e) :: q
+  fun push (w, es) e = (Elem.weight e + w, e :: es)
 
-  fun insert q e = raise Fail "ListQueue: insert not implemented"
+  fun insert (w, es) e =
+    let
+      val we = Elem.weight e
 
-  fun choose q =
-    case q of
-      [] => (NONE, empty)
-    | (_, e) :: q' => (SOME e, q')
+      fun insert' front back =
+        case back of
+          [] => List.revAppend (front, [e])
+        | x :: back' =>
+            if we < Elem.weight x
+            then List.revAppend (front, e :: back)
+            else insert' (x :: front) back'
+    in
+      (w + we, insert' [] es)
+    end
+
+  fun choose (w, es) =
+    case es of
+      [] => (NONE, (w, es))
+    | e :: es => (SOME e, (w - Elem.weight e, es))
 
   fun split q =
     let
-      fun split' es =
-        case es of
-          [] => ([], [])
-        | (w, e) :: es' =>
-            if 4 * w >= weight q
-            then ([(w, e)], List.map (fn (a, x) => (a - w, x)) es')
-            else let val (l, r) = split' es'
-                 in (l, (w - weight l, e) :: r)
-                 end
-    in
-      case q of
-        ([] | [_]) => (NONE, q)
-      | _ => let val (a, b) = split' (List.rev q)
-             in (SOME (List.rev a), List.rev  b)
+      fun split' (wl, l) (wr, r) =
+        if 4 * wl >= (wl + wr) orelse List.null r
+        then ((wl, l), (wr, List.rev r))
+        else let val e = List.hd r
+                 val we = Elem.weight e
+             in split' (wl + we, e :: l) (wr - we, List.tl r)
              end
+
+      val (q1, q2) = split' (empty ()) (rev q)
+    in
+      case q1 of
+        (_, []) => (NONE, q2)
+      | _ => (SOME q1, q2)
     end
 
 end
@@ -52,7 +62,7 @@ end
 
 fun fromList xs =
   case xs of
-    [] => Q.empty
+    [] => Q.empty ()
   | x :: xs' => Q.push (fromList xs') x
 
 val q1 = fromList [1,3,8,15,15]
