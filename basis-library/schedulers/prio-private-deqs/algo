@@ -51,10 +51,9 @@ schedule(p):
     dealAttempt(p)
     nextDeal[p] += dealInterval
   prio[p] = primaryPrio[p]
-  tasks = mailboxes[p, prio[p]].check()
+  tasks = mailboxes[p, prio[p]].checkAndClear()
   if tasks <> NULL then
     deques[p, prio[p]].pushAll(tasks)
-    mailboxes[p, prio[p]].clearFlag()
   assigned = deques[p, prio[p]].popBottom ()
 
   if assigned = NULL then

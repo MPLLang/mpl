@@ -6,26 +6,28 @@ functor ListQueue (Elem : sig
 struct
 
   type task = Elem.t
-  type t = (int * task) list
+  type t = (int * task) list ref
   type task_set = t
 
-  val empty : t = []
+  fun empty () : t = ref []
 
-  fun fromSet s = s
+  fun fromSet s = ref s
 
   fun weight q =
-    case q of
+    case !q of
       [] => 0
     | (w, _) :: _ => w
 
-  fun push q e = (Elem.weight e + weight q, e) :: q
+  fun push (q, e) = q := (Elem.weight e + weight (!q), e) :: (!q)
 
   fun insert q e = raise Fail "ListQueue: insert not implemented"
 
   fun choose q =
-    case q of
-      [] => (NONE, empty)
-    | (_, e) :: q' => (SOME e, q')
+    case !q of
+      [] => NONE
+     | (_, e) :: q' =>
+       (q := q';
+        SOME e)
 
   fun split q =
     let
@@ -39,11 +41,13 @@ struct
                  in (l, (w - weight l, e) :: r)
                  end
     in
-      case q of
+      case !q of
         ([] | [_]) => (NONE, q)
-      | _ => let val (a, b) = split' (List.rev q)
-             in (SOME (List.rev a), List.rev  b)
-             end
+       | _ => let val (a, b) = split' (List.rev q)
+              in
+                  q := List.rev b;
+                  SOME (List.rev a)
+              end
     end
 
 end

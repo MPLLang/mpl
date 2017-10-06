@@ -49,7 +49,7 @@ fun getMail {flag, mail} =
     case checkMail {flag, mail} of
         NONE => NONE
       | SOME x => x
-                  before (flag := (status_to_flag Waiting);
+                  before (flag := (status_to_flag NotWaiting);
                           mail := NONE
 
                          ))
