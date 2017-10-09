@@ -1,17 +1,28 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/mlton.mlb
-$(SML_LIB)/basis/unsafe.mlb
 
-random.sml
+local
+    $(SML_LIB)/basis/unsafe.mlb
+    random.sml
 
-interrupt/interrupt.sig
-mailbox/mailbox.sig
-priority/priority.sig
-queue/queue.sig
+    interrupt/interrupt.sig
+    mailbox/mailbox.sig
+    priority/priority.sig
+    queue/queue.sig
+    io/io.sig
+    bag/bag.sig
+    thread.sig
 
-interrupt/interrupt.sml
-mailbox/mailbox.sml
-priority/priority.sml
-queue/queue.sml
+    bag/ListBag.sml
+    mailbox/mailbox.sml
+    interrupt/interrupt.sml
 
-scheduler.sml
+    priority/priority.sml
+    queue/queue.sml
+
+    scheduler.sml
+
+    io/io-sdl.sml
+in
+    thread.sml
+end

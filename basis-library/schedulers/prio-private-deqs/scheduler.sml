@@ -66,6 +66,9 @@ fun queueIndex (p, r) = p * numberOfPriorities + r
 fun queue (p, r) =
     A.sub (queues, queueIndex (p, r))
 
+fun curPrio p =
+    A.sub (curprios, p)
+
 fun workOnTask p (w, d) =
     (A.update (depth, p, d);
      case w of
@@ -139,8 +142,9 @@ fun tryClearFlag (m, q) (p, r) =
           | _ => ()
     end
 
-fun pushOrInsert f (p, r, t) =
-    let val m = mb (p, r)
+fun pushOrInsert f (r, t) =
+    let val p = processorNumber ()
+        val m = mb (p, r)
         val q = q (p, r)
     in
         f (q, t);
@@ -165,20 +169,20 @@ fun newTask (w : Task.work) : Task.t =
         (w, d + 1)
     end
 
-fun suspend (f: Task.t -> unit) -> unit =
+fun suspend (f: P.t * Task.t -> unit) -> unit =
     T.switch (fn k =>
                  let val p = processorNumber ()
+                     val r = curPrio p
                      val d = A.sub (depth, p)
                      val t = (Thread (T.prepare (k, ())), d)
-                     val _ = f t
+                     val _ = f (r, t)
                  in
                      T.new (schedule p NONE)
                  end)
 
 fun suspendIO (f: unit -> bool) =
-    suspend (fn t => let val p = processorNumber
+    suspend (fn (r, t) => let val p = processorNumber
                          val q = A.sub (ioqueues, p)
-                         val r = A.sub (curprios, p)
                      in
                          A.update (ioqueues, p, (f, t, r)::q)
                      end)
@@ -203,7 +207,7 @@ fun schedule p kt =
         val _ = handleResumed p
         val _ = maybeDeal p
         val _ = case kt of
-                    SOME kt => push (p, A.sub (curprios, p), kt)
+                    SOME kt => push (p, curPrio p, kt)
                   | NONE => ()
         fun getWorkAt r =
             let val m = mb (p, pr)
@@ -237,6 +241,12 @@ fun schedule p kt =
              schedule p NONE)
     end
 end
+
+fun returnToSched () =
+    let val p = processorNumber ()
+    in
+        schedule p NONE
+    end
 
 fun finalizePriorities () = P.init ()
 
