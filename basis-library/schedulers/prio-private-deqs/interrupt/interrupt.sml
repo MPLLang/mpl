@@ -1,8 +1,9 @@
 structure Interrupt :> INTERRUPT =
 struct
 
-type handler = MLton.Thread.Runnable.t -> MLton.Thread.Runnable.t
+type handler = int * MLton.Thread.Runnable.t -> MLton.Thread.Runnable.t
 structure P = MLton.Parallel
+structure S = MLton.Signal
 
 val procsInit = ref 0
 
@@ -10,6 +11,7 @@ val prim_sig = MLton.Itimer.signal MLton.Itimer.Real
 val sec_sig = Posix.Signal.usr1
 
 val numberOfProcessors = MLton.Parallel.numberOfProcessors
+val processorNumber = MLton.Parallel.processorNumber
 val signalThread = _import "signal_thread" runtime private: int * SysWord.word -> unit;
 
 val inCriticalSection = Array.array (numberOfProcessors, false)
@@ -42,7 +44,7 @@ fun interrupt handler k =
 
 fun init (handler: handler) (interval: Time.time) =
     let val p = P.processorNumber ()
-        val pi = P.fetchAndAdd (procsInit, 1)
+        val pi = P.fetchAndAdd procsInit 1
     in
         S.setHandler (prim_sig, (S.Handler.handler
                                      (interruptFst interval handler)));
@@ -51,7 +53,7 @@ fun init (handler: handler) (interval: Time.time) =
         (if p = 0 then
              (
                S.Mask.unblock (S.Mask.some [prim_sig]);
-               S.Mask.block (S.Mask.some [sec_sig]);
+               S.Mask.block (S.Mask.some [sec_sig])
              )
          else
              (
@@ -59,7 +61,7 @@ fun init (handler: handler) (interval: Time.time) =
                S.Mask.unblock (S.Mask.some [sec_sig])
              )
         );
-        (if pi = P - 1 then
+        (if pi = numberOfProcessors - 1 then
              MLton.Itimer.set (MLton.Itimer.Real,
                                {interval = Time.zeroTime, value = interval})
          else

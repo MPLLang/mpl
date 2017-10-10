@@ -1,8 +1,9 @@
-$(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/basis/mlton.mlb
-
 local
+    $(SML_LIB)/basis/basis.mlb
+    $(SML_LIB)/basis/mlton.mlb
     $(SML_LIB)/basis/unsafe.mlb
+    x/graphics.mlb
+
     random.sml
 
     interrupt/interrupt.sig
@@ -10,19 +11,21 @@ local
     priority/priority.sig
     queue/queue.sig
     io/io.sig
-    bag/bag.sig
-    thread.sig
+    bag/BAG.sig
 
     bag/ListBag.sml
     mailbox/mailbox.sml
     interrupt/interrupt.sml
 
     priority/priority.sml
-    queue/queue.sml
+    queue/list-queue.sml
 
     scheduler.sml
 
-    io/io-sdl.sml
+    thread.sig
+
+(*    MLSDL/srcSML/MLTon/SDLFuncs/SDLFuncs.sml *)
+    io/io.sml
 in
     thread.sml
 end

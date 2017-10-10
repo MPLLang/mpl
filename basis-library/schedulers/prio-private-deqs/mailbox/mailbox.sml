@@ -17,7 +17,7 @@ datatype status =
          | Claimed of int
 
 fun new () =
-    {flag = ref NOT_WAITING, mail = NONE}
+    {flag = ref NOT_WAITING, mail = ref NONE}
 
 fun flag_to_status flag =
     if flag = NOT_WAITING then
@@ -36,23 +36,21 @@ fun status_to_flag NotWaiting  = NOT_WAITING
 fun status {flag, mail} =
     flag_to_status (!flag)
 
-fun checkMail {flag, mail} =
+fun checkMail (mb as {flag, mail}) =
     case flag_to_status (!flag) of
         NotWaiting => NONE
       | Waiting => NONE
       | Claimed _ =>
         (case !mail of
-             NONE => getMail {flag = flag, mail = mail}
-           | SOME x => x)
+             NONE => checkMail mb
+           | SOME x => SOME x)
 
-fun getMail {flag, mail} =
-    case checkMail {flag, mail} of
+fun getMail (mb as {flag, mail}) =
+    case checkMail mb of
         NONE => NONE
-      | SOME x => x
+      | SOME x => SOME x
                   before (flag := (status_to_flag NotWaiting);
-                          mail := NONE
-
-                         ))
+                          mail := NONE)
 
 fun tryClaim {flag, mail} p =
     cas (flag, status_to_flag Waiting, status_to_flag (Claimed p))
@@ -60,14 +58,14 @@ fun tryClaim {flag, mail} p =
 fun sendMail {flag, mail} m =
     mail := SOME m
 
-fun tryClear {flag, mail} =
-    case checkMail {flag, mail} of
+fun tryClear (mb as {flag, mail}) =
+    case checkMail mb of
         NONE =>
         if cas (flag, status_to_flag Waiting, status_to_flag NotWaiting) then
             NONE
         else
-            tryClear {flag, mail}
-      | SOME x => x
+            tryClear mb
+      | SOME x => SOME x
                   before (flag := (status_to_flag Waiting);
                           mail := NONE)
 

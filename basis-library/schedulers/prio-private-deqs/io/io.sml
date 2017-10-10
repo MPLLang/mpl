@@ -1,10 +1,6 @@
 structure IO : MLTON_PARALLEL_IO =
 struct
 
-structure B = MLtonParallelBasic
-
-
-
 fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) option =
     let fun f () =
             ((* print "in f\n"; *)
@@ -13,14 +9,14 @@ fun input1 (is: TextIO.StreamIO.instream) : (char * TextIO.StreamIO.instream) op
                | SOME _ => true)
             (* before
             print "out f\n" *))
-        (* val _ = print ("input1 on " ^ (Int.toString (B.processorNumber ())) ^ "\n") *)
+        (* val _ = print ("input1 on " ^ (Int.toString (processorNumber ())) ^ "\n") *)
     in
         if f () then
             TextIO.StreamIO.input1 is
         else
             (* Performing the input would block *)
             ((* print "calling suspend\n"; *)
-             B.suspend (fn t => B.addtoio (t, f));
+              suspendIO f;
              input1 is)
     end
 
@@ -35,7 +31,7 @@ fun yield () =
                 r
             end
     in
-        B.suspend (fn t => B.addtoio (t, f))
+        suspendIO f
     end
 
 structure Graphics : GRAPHICS =
@@ -145,7 +141,7 @@ fun nextevent () : event =
                         NONE => raise NoWindowOpen (* Impossible *)
                       | SOME e => e
                 else
-                    (B.suspend (fn t => B.addtoio (t, f));
+                    (suspendIO f;
                      ne_int ())
             end
     in
@@ -171,7 +167,7 @@ fun maskevent (m: MLX.Mask.mask) : event =
                         NONE => raise NoWindowOpen (* Impossible *)
                       | SOME e => e
                 else
-                    (B.suspend (fn t => B.addtoio (t, f));
+                    (suspendIO f;
                      me_int ())
             end
     in
@@ -225,7 +221,7 @@ fun readkey () : char =
                 NONE => raise NoWindowOpen (* Impossible *)
               | SOME c => c
         else
-            (B.suspend (fn t => B.addtoio (t, f));
+            (suspendIO f;
              readkey ())
     end
 
@@ -284,7 +280,7 @@ fun B_of_NB (f: 'a -> 'b option) (v: 'a) : 'b =
                     NONE => raise OS.SysErr ("Impossible", NONE)
                   | SOME c => c
             else
-                (B.suspend (fn t => B.addtoio (t, f'));
+                (suspendIO f';
                  bnb_rec ())
     in
         bnb_rec ()

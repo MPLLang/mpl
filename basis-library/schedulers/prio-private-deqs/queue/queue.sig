@@ -6,6 +6,7 @@ sig
     type task_set
 
     val empty : unit -> t
+    val isEmpty : t -> bool
     (* Create a new queue from a task set. *)
     val fromSet : task_set -> t
 

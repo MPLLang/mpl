@@ -1,8 +1,9 @@
-structure Thread =
+structure Thread :> THREAD =
 struct
 
 structure T = MLton.Thread
 structure P = Priority
+structure Bag = ListBag
 
 exception Thread
 exception IncompatiblePriorities
@@ -17,8 +18,11 @@ fun writeResult fr f () =
 
 type 'a t = 'a result ref * P.t * (P.t * Task.t) Bag.t
 
-fun run (fr, bag) f () =
+fun run (fr, _, bag) f () =
     ( writeResult fr f ();
+      (case Bag.dump bag of
+           NONE => raise Thread
+         | SOME l => List.app push l);
       returnToSched ()
     )
 
@@ -27,9 +31,9 @@ fun spawn f r' =
         val p = processorNumber ()
         val r = curPrio p
         val td = (ref Waiting, r, Bag.new ())
-        val task = newTask (Thunk f)
+        val task = newTask (Task.Thunk (run td f))
     in
-        (if P.pe (r, r') then push else insert) (r, t);
+        (if P.pe (r, r') then push else insert) (r', task);
         td
     end
 
@@ -39,11 +43,6 @@ fun poll (result, _, bag) =
              Finished x => SOME x
            | Raised e => raise e
            | Waiting => raise Thread
-
-fun suspend' (bag, k) () =
-    if Bag.insert (bag, k)
-    then suspend ()
-    else T.switch (fn _ => runnable k)
 
 fun sync (result, r', bag) =
     let val p = processorNumber ()
@@ -70,4 +69,13 @@ fun sync (result, r', bag) =
 end
 
 structure Priority = Priority
-structure IO = IOSDL
+structure IO = IO
+
+structure Basic =
+struct
+val init = init
+val finalizePriorities = finalizePriorities
+fun currentPrio () = curPrio (processorNumber ())
+val suspend = suspend
+val suspend = suspendIO
+end

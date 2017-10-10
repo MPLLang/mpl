@@ -25,7 +25,7 @@ struct
     val initialized = ref false
     val checked = ref false
 
-    val distFunc = ref (fn () => top)
+    val distFunc = ref (fn _ => top)
 
     fun count () = !numberOfPrios
 
@@ -54,6 +54,11 @@ struct
         if not (!checked) then raise Uninitialized
         else
             p1 = p2 orelse get p1 p2
+
+    fun pe (((p1, _, _): t), ((p2, _, _): t)) : bool =
+        if not (!checked) then raise Uninitialized
+        else
+            p1 = p2
 
     fun set p1 p2 (v: bool) : unit =
         A2.update (!ltMat, p1, p2, v)
@@ -89,13 +94,16 @@ struct
                     (* already visited *)
                     ()
                 else
-                    (List.app dfs_int (List.map (fn i => V.sub (!byid, i))
+                    (print ((Int.toString pi) ^ "\n");
+                     List.app dfs_int (List.map (fn i => V.sub (!byid, i))
                                                 (getNbrs pi));
                      ipo := !po;
                      A.update (!bypostorder, !po, (pi, ipo, s));
+                     print ("post " ^ (Int.toString pi) ^ "\n");
                      po := !po + 1)
         in
             bypostorder := A.tabulate (count (), fn _ => (~1, ref (~1), SOME "dummy"));
+            dfs_int bot;
             V.app dfs_int (!byid)
         end
 
@@ -171,9 +179,10 @@ struct
         let val raw = V.tabulate (count (),
                                   fn i => let val r = fromInt i
                                           in
-                                              (i, f i)
+                                              (r, f r)
                                           end)
-            val sum = Real.fromInt (List.foldl op+ 0 raw)
+            val sum = Real.fromInt (Vector.foldl (fn ((_, n), a) => a + n)
+                                                 0 raw)
             val cumulative =
                 Vector.foldl (fn ((r, n), (a, l)) =>
                                  let val prob = Real./ (Real.fromInt n, sum)
@@ -188,7 +197,7 @@ struct
                   | (r, p)::t => if x < p then r
                                  else find t x
         in
-            distFunc := (find cumulative)
+            distFunc := (find (#2 cumulative))
         end
 
     fun chooseFromDist () =
@@ -198,5 +207,10 @@ struct
         end
 
     fun next (r: t) =
-        fromInt (((toInt r) + 1) mod (count ()))
+        let val po = toInt r
+        in
+            if po = 1 then top
+            else
+                fromInt (po - 1)
+        end
 end
