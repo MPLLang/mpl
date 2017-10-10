@@ -2,7 +2,7 @@ functor ListQueue (Elem : sig
                             type t
                             val weight : t -> int
                           end)
-  : QUEUE where type task = Elem.t =
+  :> QUEUE where type task = Elem.t =
 struct
 
   type task = Elem.t
@@ -10,6 +10,13 @@ struct
   type task_set = t
 
   fun empty () = ref (0, [])
+
+  fun isEmpty q =
+      let val (w, es) = !q in
+          case es of
+              [] => true
+            | _ => false
+      end
 
   fun rev qr =
       let val (w, q) = !qr
@@ -25,13 +32,13 @@ struct
           w
       end
 
-  fun push q e =
+  fun push (q, e) =
       let val (w, es) = !q
       in
           q := (Elem.weight e + w, e :: es)
       end
 
-  fun insert q e =
+  fun insert (q, e) =
       let
           val (w, es) = !q
           val we = Elem.weight e
@@ -65,11 +72,11 @@ struct
              in split' (wl + we, e :: l) (wr - we, List.tl r)
              end
 
-      val (q1, q2) = split' (empty ()) (rev (!q))
+      val (q1, q2) = split' (0, []) (rev (q))
     in
       case q1 of
         (_, []) => NONE
-       | _ => (q := q2; SOME q1)
+       | _ => (q := q2; SOME (ref q1))
     end
 
 end
