@@ -18,6 +18,7 @@ void T_setCurrentThreadUseHierarchicalHeap(Bool use) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = getThreadCurrent(s);
 
+  s->heap->usingHierarchicalHeaps = TRUE;
   thread->useHierarchicalHeap = use;
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */

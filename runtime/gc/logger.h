@@ -76,6 +76,23 @@ extern bool L_flushLog[NUM_LOG_MODULES];
 #define LOG_ENABLED(module, level) (L_levelEnabled(level, L_logLevels[module]))
 
 /**
+ * This is a convenience function for a warning message which automatically
+ * fetches the processor number and function name.
+ *
+ * @param ... Both the format and the arguments for the message.
+ */
+#define WARN(...)                                                       \
+  do {                                                                  \
+      fflush(NULL);                                                     \
+      GC_state loggerS = pthread_getspecific(gcstate_key);              \
+      L_log(TRUE,                                                       \
+            LL_WARNING,                                                 \
+            (NULL == loggerS) ? (-1) : (Proc_processorNumber(loggerS)), \
+            __FILE__ ":" STRFY(__LINE__),                               \
+            __VA_ARGS__);                                               \
+  } while(FALSE)
+
+/**
  * This is a convenience function for a dying message which automatically
  * fetches the processor number and function name.
  *

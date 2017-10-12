@@ -36,6 +36,7 @@ void initHeap (__attribute__ ((unused)) GC_state s,
   h->start = NULL;
   h->withMapsSize = 0;
   h->frontier = NULL;
+  h->usingHierarchicalHeaps = FALSE;
 }
 
 /* sizeofHeapDesired (s, l, cs)
