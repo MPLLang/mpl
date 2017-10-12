@@ -172,7 +172,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
 
   if (getThreadCurrent(s)->useHierarchicalHeap &&
       !HM_inGlobalHeap(s)) {
-    HM_ensureHierarchicalHeapAssurances(s, false, 0, true);
+    HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
   }
 
   endAtomic (s);
