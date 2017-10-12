@@ -32,7 +32,7 @@ fun randFilter f =
 
 fun randInt (a, b) =
     let val diff = W.fromInt (b - a + 1)
-        val max = W.* (diff, W.mod (maxWord, diff))
+        val max = W.* (diff, W.div (maxWord, diff))
         val r = randFilter (fn w => W.< (w, max))
         val wmod = W.mod (r, diff)
     in

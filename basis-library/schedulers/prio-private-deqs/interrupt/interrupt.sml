@@ -14,7 +14,19 @@ val numberOfProcessors = MLton.Parallel.numberOfProcessors
 val processorNumber = MLton.Parallel.processorNumber
 val signalThread = _import "signal_thread" runtime private: int * SysWord.word -> unit;
 
-val inCriticalSection = Array.array (numberOfProcessors, false)
+val inCriticalSection = Array.tabulate (numberOfProcessors,
+                                        fn p => p <> 0)
+
+fun block p =
+    Array.update (inCriticalSection, p, true)
+
+fun unblock p =
+    Array.update (inCriticalSection, p, false)
+
+fun atomically p f a =
+    (block p;
+     f a
+     before (unblock p))
 
 fun signalOthers p sg n =
       if n = numberOfProcessors then ()
@@ -31,7 +43,8 @@ fun interruptFst iv handler k =
                           {interval = Time.zeroTime, value = iv});
         (if Array.sub (inCriticalSection, p) then k
          else
-             handler (p, k))
+             (block p;
+              handler (p, k)))
     end
 
 fun interrupt handler k =
@@ -39,11 +52,13 @@ fun interrupt handler k =
     in
         if Array.sub (inCriticalSection, p) then k
         else
-            handler (p, k)
+            (block p;
+             handler (p, k))
     end
 
 fun init (handler: handler) (interval: Time.time) =
     let val p = P.processorNumber ()
+        val _ = print ("in init on " ^ (Int.toString p) ^ "\n")
         val pi = P.fetchAndAdd procsInit 1
     in
         S.setHandler (prim_sig, (S.Handler.handler
@@ -67,16 +82,5 @@ fun init (handler: handler) (interval: Time.time) =
          else
              ())
     end
-
-fun block p =
-    Array.update (inCriticalSection, p, true)
-
-fun unblock p =
-    Array.update (inCriticalSection, p, false)
-
-fun atomically p f a =
-    (block p;
-     f a
-     before (unblock p))
 
 end

@@ -1,81 +1,85 @@
 functor ListQueue (Elem : sig
                             type t
-                            val weight : t -> int
+                            val depth : t -> int
                           end)
-  :> QUEUE where type task = Elem.t =
+  : QUEUE where type task = Elem.t =
 struct
 
+  structure P = Potential
+  type potential = P.potential
   type task = Elem.t
-  type t = (int * task list) ref
+  type t = (potential * int * task list) ref
   type task_set = t
 
-  fun empty () = ref (0, [])
+  fun empty () = ref (P.zero, 0, [])
 
   fun isEmpty q =
-      let val (w, es) = !q in
+      let val (_, _, es) = !q in
           case es of
               [] => true
             | _ => false
       end
 
-  fun rev qr =
-      let val (w, q) = !qr
-      in
-          (w, List.rev q)
-      end
-
   fun fromSet s = s
 
   fun weight q =
-      let val (w, es) = !q
+      let val (w, _, _) = !q
       in
           w
       end
 
   fun push (q, e) =
-      let val (w, es) = !q
+      let val d = Elem.depth e
+          val (w, md, es) = !q
+          val md' = Int.max (d, md)
+          val we = P.fromDepth md' d
+          val w' = P.l (w, md' - md)
       in
-          q := (Elem.weight e + w, e :: es)
+          q := (P.p (w', we), md', e :: es)
       end
 
   fun insert (q, e) =
       let
-          val (w, es) = !q
-          val we = Elem.weight e
+          val (w, md, es) = !q
+          val d = Elem.depth e
+          val md' = Int.max (d, md)
+          val we = P.fromDepth md' d
+          val w' = P.l (w, md' - md)
           fun insert' front back =
               case back of
                   [] => List.revAppend (front, [e])
                 | x :: back' =>
-                  if we < Elem.weight x
+                  if d < Elem.depth x
                   then List.revAppend (front, e :: back)
                   else insert' (x :: front) back'
       in
-          q := (w + we, insert' [] es)
+          q := (P.p (w', we), md', insert' [] es)
       end
 
   fun choose q =
-      let val (w, es) = !q
+      let val (w, md, es) = !q
       in
           case es of
               [] => NONE
-            | e :: es => (q := (w - Elem.weight e, es);
-                          SOME e)
+           |  e :: es => (q := (P.m (w, P.fromDepth md (Elem.depth e)), md, es);
+                                SOME e)
       end
 
   fun split q =
     let
-      fun split' (wl, l) (wr, r) =
-        if 4 * wl >= (wl + wr) orelse List.null r
-        then ((wl, l), (wr, List.rev r))
+      fun split' (wl, mdl, l) (wr, mdr, r) =
+        if P.ge (P.l (wl, 2), P.p (wl, wr)) orelse List.null r
+        then ((wl, mdl, l), (wr, mdr, List.rev r))
         else let val e = List.hd r
-                 val we = Elem.weight e
-             in split' (wl + we, e :: l) (wr - we, List.tl r)
+                 val we = P.fromDepth mdl (Elem.depth e)
+             in split' (P.p (wl, we), mdl, e :: l)
+                       (P.m (wr, we), mdr, List.tl r)
              end
-
-      val (q1, q2) = split' (0, []) (rev (q))
+      val (w, md, es) = !q
+      val (q1, q2) = split' (P.zero, md, []) (w, md, List.rev es)
     in
       case q1 of
-        (_, []) => NONE
+        (_, _, []) => NONE
        | _ => (q := q2; SOME (ref q1))
     end
 

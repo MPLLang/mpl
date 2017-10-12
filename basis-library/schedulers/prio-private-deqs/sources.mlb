@@ -18,6 +18,7 @@ local
     interrupt/interrupt.sml
 
     priority/priority.sml
+    queue/potential.sml
     queue/list-queue.sml
 
     scheduler.sml

@@ -17,5 +17,6 @@ sig
     val tryClaim: 'a t -> int -> bool
     val sendMail: 'a t -> 'a -> unit
     val tryClear: 'a t -> 'a option
+    val setWaiting: 'a t -> unit
 
 end

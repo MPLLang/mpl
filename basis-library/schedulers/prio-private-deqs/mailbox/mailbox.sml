@@ -17,7 +17,7 @@ datatype status =
          | Claimed of int
 
 fun new () =
-    {flag = ref NOT_WAITING, mail = ref NONE}
+    {flag = ref WAITING, mail = ref NONE}
 
 fun flag_to_status flag =
     if flag = NOT_WAITING then
@@ -68,5 +68,8 @@ fun tryClear (mb as {flag, mail}) =
       | SOME x => SOME x
                   before (flag := (status_to_flag Waiting);
                           mail := NONE)
+
+fun setWaiting (mb as {flag, mail}) =
+    flag := status_to_flag Waiting
 
 end

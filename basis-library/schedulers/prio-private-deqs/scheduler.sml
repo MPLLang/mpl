@@ -11,7 +11,7 @@ datatype work =
          Thunk of unit -> unit
          | Thread of T.Runnable.t
 type t = work * int
-fun weight (_, w) = w
+fun depth (_, w) = w
 end
 
 structure M = Mailbox
@@ -42,9 +42,22 @@ end
 val numberOfProcessors = MLton.Parallel.numberOfProcessors
 val processorNumber = MLton.Parallel.processorNumber
 
+val printMutex = ref 0
+fun lockMutex m =
+    if !m <> 0 then
+        lockMutex m
+    else
+        if MLton.Parallel.compareAndSwap m (0, 1) = 0 then
+            ()
+        else
+            lockMutex m
+fun unlockMutex m = m := 0
+
 fun log l s =
     if l < 0 then
-        print s
+        (lockMutex printMutex;
+         print s;
+         unlockMutex printMutex)
     else
         ()
 
@@ -87,13 +100,14 @@ fun workOnTask p (w, d) =
 fun newNextSwitch () =
     Tm.+ (Tm.now (), switchInterval)
 
-fun newNextDeal () =
+fun newNextDeal () = Tm.+ (Tm.now (), dealInterval)
+                              (*
     let val df = Real.fromLargeInt (Time.toMicroseconds dealInterval)
-        val iv = df * Math.ln (R.rand01ex ())
+        val iv = df * Math.ln 0.5 (* (R.rand01ex ()) *)
         val iiv = Real.round iv
     in
         Tm.- (Time.now (), Tm.fromMicroseconds (IntInf.fromInt iiv))
-    end
+    end *)
 
 fun switchPrios p =
     A.update (prios, p, { primary = P.chooseFromDist (),
@@ -115,30 +129,51 @@ fun dealAttempt (p, r) =
         val p' = if p' >= p then p' + 1 else p'
         val m = mb (p', r)
         val q = queue (p, r)
+        val _ = log 2 ("deal attempt on " ^ (Int.toString p) ^
+                       " at " ^ (P.toString r) ^ "\n")
+        fun length q =
+            let val (_, _, es) = !q
+            in
+                List.length es
+            end
     in
         case (Q.isEmpty q, M.status m) of
-            (true, _) => () (* Nothing to send; don't bother. *)
+            (true, _) => (log 2 ("nothing to send\n");
+                          () (* Nothing to send; don't bother. *))
           | (_, M.Waiting) =>
             (if M.tryClaim m p then
                  (* We've claimed this mailbox. Send half. *)
+                 (log 2 ("deal " ^ (Int.toString p) ^ " -> " ^
+                         (Int.toString p') ^ "\n");
                  case Q.split q of
-                     SOME ts => M.sendMail m ts
-                   | NONE => ()
+                     SOME ts => (M.sendMail m ts;
+                                 log 2 ("sent " ^ (Int.toString (length ts))
+                                        ^ "; " ^ (Int.toString (length q)) ^
+                                        " left\n"))
+                   | NONE => raise ShouldntGetHere)
              else
              (* We failed to claim the mailbox. Give up. *)
-                 ())
+                 (log 2 "failed to claim\n";
+                  ()))
           | _ => (* Mailbox is claimed or not waiting. *)
-            ()
+            (log 2 "mb claimed/not waiting\n";
+             ())
     end
 
 fun maybeDeal (p, prios) =
-    let val nd = A.sub (nextDeal, p)
+    let val _ = log 4 ("maybeDeal " ^ (Int.toString p) ^ "\n")
+        val nd = A.sub (nextDeal, p)
     in
         if Tm.> (Tm.now (), nd) then
-            (dealAttempt (p, #send prios);
-             A.update (nextDeal, p, newNextDeal ()))
+            (log 3 ("attempting " ^ (Int.toString p) ^ "\n");
+             (* dealAttempt (p, #send prios); *)
+             dealAttempt (p, curPrio p);
+             log 3 ("attempted " ^ (Int.toString p) ^ "\n");
+             A.update (nextDeal, p, newNextDeal ());
+             log 3 ("updated " ^ (Int.toString p) ^ "\n")
+            )
         else
-            ()
+            log 4 ("not time " ^ (Int.toString p) ^ "\n")
     end
 
 fun pushAll ((p, r), (ts: Q.task_set)) =
@@ -157,7 +192,7 @@ fun pushOrInsert f (r, t) =
     let val p = processorNumber ()
         val m = mb (p, r)
         val q = queue (p, r)
-        val _ = log 3 ("pushing work at " ^ (P.toString r) ^ "\n")
+        val _ = log 7 ("pushing work at " ^ (P.toString r) ^ "\n")
     in
         f (q, t);
         tryClearFlag (m, p, r)
@@ -200,7 +235,8 @@ fun handleResumed p =
     end
 
 fun schedule p kt =
-    let val _ = maybeSwitchPrios p
+    let val _ = log 5 ("schedule " ^ (Int.toString p) ^ "\n")
+        val _ = maybeSwitchPrios p
         val prio_rec = A.sub (prios, p)
         val _ = handleResumed p
         val _ = if numberOfProcessors > 1 then maybeDeal (p, prio_rec)
@@ -209,14 +245,17 @@ fun schedule p kt =
                     SOME kt => push (curPrio p, kt)
                   | NONE => ()
         fun getWorkAt r =
-            let val _ = log 5 ("getting work at " ^ (P.toString r) ^ "\n")
+            let val _ = log 6 ("getting work at " ^ (P.toString r) ^ "\n")
                 val m = mb (p, r)
                 val q = queue (p, r)
                 val _ = case M.getMail m of
                             NONE => ()
                           | SOME tasks => pushAll ((p, r), tasks)
             in
-                Q.choose q
+                case Q.choose q of
+                    NONE => (M.setWaiting m;
+                             NONE)
+                  | SOME x => SOME x
             end
         (* First try getting work at the primary priority *)
         val _ = logPrios 4 prio_rec
@@ -232,7 +271,7 @@ fun schedule p kt =
             SOME t =>
             (* Do the work. It shouldn't return. *)
             (A.update (curprios, p, prio);
-             log 3 ("found work at " ^ (P.toString prio) ^ "\n");
+             log 6 ("found work at " ^ (P.toString prio) ^ "\n");
              I.unblock p;
              workOnTask p t;
              raise ShouldntGetHere)
@@ -250,6 +289,7 @@ fun suspend (f: P.t * Task.t -> unit) : unit =
                      val t = (Task.Thread (T.prepare (k, ())), d)
                      val _ = f (r, t)
                  in
+                     I.block p;
                      T.prepare (T.new (schedule p), NONE)
                  end)
 
@@ -263,20 +303,23 @@ fun suspendIO (f: unit -> bool) =
 fun returnToSched () =
     let val p = processorNumber ()
     in
+        I.block p;
         schedule p NONE
     end
 
 fun finalizePriorities () = P.init ()
 
 fun interruptHandler (p, k) =
-    let val d = A.sub (depth, p) in
-        T.switch (schedule p (SOME (Task.Thread k, d)))
+    let val _ = log 4 ("interrupt on " ^ (Int.toString p) ^ "\n")
+        val d = A.sub (depth, p) in
+        T.prepare (T.new (schedule p), SOME (Task.Thread k, d))
     end
 
 fun prun () =
     let val p = processorNumber ()
     in
-        I.init interruptHandler;
+        I.init interruptHandler interruptInterval;
+        log 1 ("initialized " ^ (Int.toString p) ^ "\n");
         schedule p NONE
     end
 
@@ -288,7 +331,9 @@ fun init () =
                                  fn _ => M.new ());
         queues := A.tabulate (numberOfProcessors * (P.count ()),
                               fn _ => Q.empty ());
+        ignore (M.tryClear (mb (0, P.bot)));
         MLton.Parallel.registerProcessorFunction prun;
-        I.init interruptHandler;
-        log 3 "initialized"
+        MLton.Parallel.initializeProcessors ();
+        I.init interruptHandler interruptInterval;
+        log 1 "initialized"
     end
