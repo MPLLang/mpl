@@ -384,13 +384,7 @@ pointer GC_getCurrentThread (void) {
   return p;
 }
 
-void GC_setCurrentThreadUseHierarchicalHeap (void) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  GC_thread currentThread = getThreadCurrent(s);
-
-  currentThread->useHierarchicalHeap = TRUE;
-}
-
+/* RAM_NOTE: These function should be moved to thread.c */
 pointer GC_getCurrentHierarchicalHeap (void) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread t = getThreadCurrent(s);

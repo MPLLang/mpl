@@ -52,6 +52,11 @@ static inline void assertIsObjptrReachable (GC_state s,
 }
 
 bool invariantForGC (GC_state s) {
+  if (s->heap->usingHierarchicalHeaps) {
+    WARN("Skipping GC invariants check while hierarchical heaps are used.");
+    return TRUE;
+  }
+
   uint32_t proc;
   if (DEBUG)
     fprintf (stderr, "invariantForGC\n");

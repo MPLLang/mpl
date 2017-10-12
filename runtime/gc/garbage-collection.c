@@ -110,6 +110,10 @@ void performGC (GC_state s,
   struct rusage ru_start;
   size_t totalBytesRequested;
 
+  if (s->heap->usingHierarchicalHeaps) {
+    DIE("Tried to collect global heap while hierarchical heaps are used.");
+  }
+
   enterGC (s);
 
   Trace0(EVENT_GC_ENTER);
