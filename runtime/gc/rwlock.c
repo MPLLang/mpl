@@ -45,7 +45,7 @@ void lock_lock_explicit(lock_t *lock, bool check) {
       break;
     }
 
-    if (INVALID_PROC == *lock) {
+    if (INVALID_PROC == atomic_load(lock)) {
       /* I may have won if I tried, so increase prob */
       prob *= 2.0;
       if (prob > 1.0) {

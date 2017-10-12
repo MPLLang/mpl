@@ -201,8 +201,6 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
 
   /* update lcs and lchs */
   size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
-  double parentHHRatio = HM_HH_getLCRatio(parentHH);
-  double hhRatio = HM_HH_getLCRatio(hh);
 
   Word64 sizeDelta = 0;
   /* off-by-one loop to prevent underflow and infinite loop */
@@ -240,8 +238,6 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       ((void*)(hh)),
       ((void*)(parentHH)));
 
-  double newRatio = (parentHHRatio < hhRatio) ? parentHHRatio : hhRatio;
-  //adjustLCHS(s, parentHH, newRatio);
   parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize;
 
   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
@@ -249,7 +245,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
       ((void*)(parentHH)),
       oldLCHS,
       parentHH->locallyCollectibleHeapSize,
-      newRatio);
+      HM_HH_getLCRatio(parentHH));
 
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
