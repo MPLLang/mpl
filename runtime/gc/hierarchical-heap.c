@@ -166,11 +166,28 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
+
+  if (getThreadCurrent(s)->useHierarchicalHeap &&
+      !HM_inGlobalHeap(s)) {
+    HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
+  }
+
+  endAtomic (s);
+
   /* wait until hh is dead */
   while (DEAD != hh->state) { }
 
   assert (BOGUS_OBJPTR != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s, hh->parentHH);
+
+  /*
+   * This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == parentHH);
 
   /* can only merge from the thread that owns the parent hierarchical heap! */
   assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap());
