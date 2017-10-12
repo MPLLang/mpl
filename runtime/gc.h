@@ -77,6 +77,7 @@ typedef GC_state GCState_t;
 #include "gc/done.h"
 #include "gc/copy-thread.h"
 #include "gc/pack.h"
+#include "gc/rwlock.h"
 #include "gc/size.h"
 #include "gc/share.h"
 #include "gc/parallel.h"
@@ -87,5 +88,8 @@ typedef GC_state GCState_t;
 #include "gc/global-heap.h"
 #include "gc/local-heap.h"
 #include "gc/chunk.h"
+#include "gc/assign.h"
+#include "gc/level.h"
+#include "gc/promote.h"
 
 #endif /* _MLTON_GC_H_ */

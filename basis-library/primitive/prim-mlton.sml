@@ -122,6 +122,8 @@ structure GC =
       val pack = _import "GC_pack" runtime private: unit -> unit;
       val getBytesAllocated =
          _import "GC_getCumulativeStatisticsBytesAllocated" runtime private: unit -> C_UIntmax.t;
+      val getBytesPromoted =
+         _import "GC_getCumulativeStatisticsBytesPromoted" runtime private: unit -> C_UIntmax.t;
       val getNumCopyingGCs =
          _import "GC_getCumulativeStatisticsNumCopyingGCs" runtime private: unit -> C_UIntmax.t;
       val getNumMarkCompactGCs =
@@ -161,6 +163,10 @@ structure HM =
 
                 val getLevel: 'a t -> Word32.word =
                     _import "HM_HH_getLevel" runtime private:
+                    'a t -> Word32.word;
+
+                val getLowestPrivateLevel: 'a t -> Word32.word =
+                    _import "HM_HH_getLowestPrivateLevelFFI" runtime private:
                     'a t -> Word32.word;
 
                 val mergeIntoParentHeap: 'a t -> unit =

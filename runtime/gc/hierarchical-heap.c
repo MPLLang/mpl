@@ -20,12 +20,25 @@
 /********************/
 const char* HM_HHStateToString[] = {
   "LIVE",
-  "DEAD"
+  "DEAD",
+  "MERGED"
 };
 
 /******************************/
 /* Static Function Prototypes */
 /******************************/
+/**
+ * Adjusts the LCHS to reflect the ratio provided. Limits adjustment to
+ * [s->controls->initialLCHS, s->controls->maxLCHS].
+ *
+ * @param s The GC_state to use
+ * @param hh The hiererchical heap to adjust
+ * @param desiredRatio The desired ratio to adjust to.
+ */
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio);
+
 /**
  * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
  *
@@ -40,20 +53,6 @@ const char* HM_HHStateToString[] = {
 static void assertInvariants(GC_state s,
                              const struct HM_HierarchicalHeap* hh,
                              enum HM_HHState state);
-
-/**
- * Gets the lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to lock
- */
-static void lockHH(struct HM_HierarchicalHeap* hh);
-
-/**
- * Releases the lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to unlock
- */
-static void unlockHH(struct HM_HierarchicalHeap* hh);
 
 /************************/
 /* Function Definitions */
@@ -71,8 +70,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
   struct HM_HierarchicalHeap* childHH = HM_HH_objptrToStruct(s, childHHObjptr);
 
-  lockHH(parentHH);
-  lockHH(childHH);
+  lockWriterHH(childHH);
+  lockWriterHH(parentHH);
 
   assertInvariants(s, parentHH, LIVE);
   Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
@@ -99,7 +98,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
 
   if ((HM_HH_INVALID_LEVEL == oldHighestStolenLevel) ||
       (stealLevel > oldHighestStolenLevel)) {
-    /* need to update locally collectible size */
+    /* need to update lcs and lchs */
     Word64 sizeDelta = 0;
     /* off-by-one loop to prevent underflow and infinite loop */
     Word32 level;
@@ -110,21 +109,37 @@ void HM_HH_appendChild(pointer parentHHPointer,
     }
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+    size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+    double ratio = HM_HH_getLCRatio(parentHH);
+    if (isinf(ratio)) {
+      /* lcs is zero, so just bottom-out lchs with ratio 0 */
+      ratio = 0.0;
+    }
+
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
         "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
         ((void*)(parentHH)),
         parentHH->locallyCollectibleSize,
         sizeDelta,
         parentHH->locallyCollectibleSize - sizeDelta);
     parentHH->locallyCollectibleSize -= sizeDelta;
+
+    adjustLCHS(s, parentHH, ratio);
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+        "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
+        "(ratio %.2f)",
+        ((void*)(parentHH)),
+        oldLCHS,
+        parentHH->locallyCollectibleHeapSize,
+        ratio);
   }
 
   /* cannot assert parentHH as it is still running! */
   assertInvariants(s, parentHH, LIVE);
   assertInvariants(s, childHH, LIVE);
 
-  unlockHH(childHH);
-  unlockHH(parentHH);
+  unlockWriterHH(parentHH);
+  unlockWriterHH(childHH);
 }
 
 size_t HM_HH_getLevel(pointer hhPointer) {
@@ -134,6 +149,15 @@ size_t HM_HH_getLevel(pointer hhPointer) {
   const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   return hh->level;
+}
+
+size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
+
+  return HM_HH_getLowestPrivateLevel(s, hh);
 }
 
 void HM_HH_mergeIntoParent(pointer hhPointer) {
@@ -151,8 +175,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* can only merge from the thread that owns the parent hierarchical heap! */
   assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap());
 
-  lockHH(hh);
-  lockHH(parentHH);
+  lockWriterHH(hh);
+  lockWriterHH(parentHH);
 
   assertInvariants(s, parentHH, LIVE);
   assertInvariants(s, hh, DEAD);
@@ -175,46 +199,67 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert(BOGUS_OBJPTR != *cursor);
   *cursor = hh->nextChildHH;
 
-  /* update locally collectible size */
+  /* update lcs and lchs */
+  size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+
   Word64 sizeDelta = 0;
   /* off-by-one loop to prevent underflow and infinite loop */
   Word32 level;
   Word32 highestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
   for (level = hh->stealLevel;
        level > (highestStolenLevel + 1);
-       level--) {
+       level--) {;
     sizeDelta += HM_getLevelSize(parentHH->levelList, level);
   }
   sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
       sizeDelta,
       parentHH->locallyCollectibleSize + sizeDelta);
   parentHH->locallyCollectibleSize += sizeDelta;
+  parentHH->locallyCollectibleHeapSize += 2 * sizeDelta;
 
   /* merge level lists */
-  HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH);
+  HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
+  hh->levelList = NULL;
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
       parentHH->locallyCollectibleSize,
       hh->locallyCollectibleSize,
       parentHH->locallyCollectibleSize + hh->locallyCollectibleSize);
   parentHH->locallyCollectibleSize += hh->locallyCollectibleSize;
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
       "merged hh %p into hh %p",
       ((void*)(hh)),
       ((void*)(parentHH)));
 
+  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize;
+
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" (ratio %.2f)",
+      ((void*)(parentHH)),
+      oldLCHS,
+      parentHH->locallyCollectibleHeapSize,
+      HM_HH_getLCRatio(parentHH));
+
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
+  hh->state = MERGED;
 
-  unlockHH(parentHH);
-  unlockHH(hh);
+  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)hh);
+
+  Trace3(EVENT_CHUNKP_RATIO,
+         parentHH->locallyCollectibleHeapSize,
+         parentHH->locallyCollectibleSize,
+         s->controls->hhConfig.allocatedRatio);
+
+  unlockWriterHH(parentHH);
+  unlockWriterHH(hh);
 }
 
 pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
@@ -242,14 +287,14 @@ void HM_HH_promoteChunks(pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
-  lockHH(hh);
+  lockWriterHH(hh);
 
   assert(HM_getHighestLevel(hh->levelList) <= hh->level);
   HM_promoteChunks(&(hh->levelList), hh->level);
 
   assertInvariants(s, hh, LIVE);
 
-  unlockHH(hh);
+  unlockWriterHH(hh);
 }
 
 void HM_HH_setDead(pointer hhPointer) {
@@ -293,6 +338,23 @@ pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {
 void HM_HH_display (
     const struct HM_HierarchicalHeap* hh,
     FILE* stream) {
+  const char *lockStatus;
+
+  switch (rwlock_status(&hh->lock)) {
+  case RWLOCK_STATUS_NOBODY:
+    lockStatus = "NOBODY";
+    break;
+  case RWLOCK_STATUS_READERS:
+    lockStatus = "READERS";
+    break;
+  case RWLOCK_STATUS_WRITER:
+    lockStatus = "WRITER";
+    break;
+  default:
+    lockStatus = "???";
+    break;
+  }
+
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
            "\tlock = %s\n"
@@ -304,7 +366,7 @@ void HM_HH_display (
            "\tnextChildHH = "FMTOBJPTR"\n"
            "\tchildHHList= "FMTOBJPTR"\n",
            hh->lastAllocatedChunk,
-           (HM_HH_LOCK_LOCKED == hh->lock) ? "locked" : "unlocked",
+           lockStatus,
            hh->level,
            hh->stealLevel,
            hh->id,
@@ -330,7 +392,7 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
  * copyObject
  */
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  lockHH(hh);
+  lockWriterHH(hh);
 
   Word32 level = HM_getHighestLevel(hh->levelList);
   void* chunk;
@@ -347,7 +409,7 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   }
 
   if (NULL == chunk) {
-    unlockHH(hh);
+    unlockWriterHH(hh);
     return FALSE;
   }
 
@@ -363,7 +425,7 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   hh->lastAllocatedChunk = chunk;
   hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
-  unlockHH(hh);
+  unlockWriterHH(hh);
   return TRUE;
 }
 
@@ -383,32 +445,44 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
   }
 }
 
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
-  return HM_getChunkLimit(hh->lastAllocatedChunk);
-}
-
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 
+Word32 HM_HH_getLowestPrivateLevel(GC_state s,
+                                   const struct HM_HierarchicalHeap *hh) {
+  struct HM_HierarchicalHeap* highestStolenLevelHH =
+      HM_HH_objptrToStruct(s, hh->childHHList);
+
+  if (NULL == highestStolenLevelHH) {
+    return hh->stealLevel + 1;
+  } else {
+    return highestStolenLevelHH->stealLevel + 1;
+  }
+}
+
+void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
+  return HM_getChunkLimit(hh->lastAllocatedChunk);
+}
+
+double HM_HH_getLCRatio(const struct HM_HierarchicalHeap* hh) {
+  return (((double)(hh->locallyCollectibleHeapSize)) /
+          ((double)(hh->locallyCollectibleSize)));
+}
+
 void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
   size_t oldLCHS = hh->locallyCollectibleHeapSize;
+  double desiredRatio = 2 * (s->controls->hhConfig.liveLCRatio + 1);
+  double ratio = HM_HH_getLCRatio(hh);
 
-  double ratio = ((double)(hh->locallyCollectibleHeapSize)) /
-                 ((double)(hh->locallyCollectibleSize));
-
-  size_t preferredNewLCHS = (2 * (s->controls->hhConfig.liveLCRatio + 1)) *
-                            hh->locallyCollectibleSize;
-
-  hh->locallyCollectibleHeapSize =
-      (preferredNewLCHS > s->controls->hhConfig.maxLCHS) ?
-      s->controls->hhConfig.maxLCHS : preferredNewLCHS;
+  adjustLCHS(s, hh, desiredRatio);
 
   if (oldLCHS != hh->locallyCollectibleHeapSize) {
     LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "Live Ratio %.2f < %.2f, so resized LCHS from %zu bytes to %zu bytes",
+        "Live Ratio %.2f %s %.2f, so resized LCHS from %zu bytes to %zu bytes",
         ratio,
-        2 * (s->controls->hhConfig.liveLCRatio + 1),
+        (ratio < desiredRatio) ? "<" : ">",
+        desiredRatio,
         oldLCHS,
         hh->locallyCollectibleHeapSize);
   }
@@ -491,6 +565,24 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
 }
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
+/*******************************/
+/* Static Function Definitions */
+/*******************************/
+
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio) {
+  size_t newLCHS = desiredRatio * hh->locallyCollectibleSize;
+
+  if (newLCHS < s->controls->hhConfig.initialLCHS) {
+    newLCHS = s->controls->hhConfig.initialLCHS;
+  } else if (newLCHS > s->controls->hhConfig.maxLCHS) {
+    newLCHS = s->controls->hhConfig.maxLCHS;
+  }
+
+  hh->locallyCollectibleHeapSize = newLCHS;
+}
+
 #if ASSERT
 void assertInvariants(GC_state s,
                       const struct HM_HierarchicalHeap* hh,
@@ -506,19 +598,21 @@ void assertInvariants(GC_state s,
               ((const void*)(hh)),
               (LIVE == state) ? ("live") : ("dead"));
 
+#if 0
   if (BOGUS_OBJPTR != hh->thread) {
     assert(HM_HH_objptrToStruct(s,
                                 threadObjptrToStruct(s, hh->thread)->
                                 hierarchicalHeap) ==
            hh);
   }
+#endif
 
   if ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)) {
     HM_assertChunkInLevelList(hh->levelList, hh->lastAllocatedChunk);
   } else {
     assert((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk));
   }
-  HM_assertLevelListInvariants(hh->levelList, hh, hh->stealLevel);
+  HM_assertLevelListInvariants(hh->levelList, hh, hh->stealLevel, false);
   assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
          ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
 
@@ -570,18 +664,46 @@ void assertInvariants(GC_state s,
 }
 #endif /* ASSERT */
 
-void lockHH(struct HM_HierarchicalHeap* hh) {
-  volatile Int32* lock = &(hh->lock);
-
-  do {
-  } while ((HM_HH_LOCK_LOCKED == *lock) ||
-           (!__sync_bool_compare_and_swap (lock,
-                                           HM_HH_LOCK_UNLOCKED,
-                                           HM_HH_LOCK_LOCKED)));
+void lockWriterHH(struct HM_HierarchicalHeap* hh) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Locking writer HH %p",
+      (void *)hh);
+  rwlock_writer_lock(s, &hh->lock);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Locked writer HH %p",
+      (void *)hh);
 }
 
-void unlockHH(struct HM_HierarchicalHeap* hh) {
-  assert(HM_HH_LOCK_LOCKED == hh->lock);
-  __sync_synchronize();
-  hh->lock = HM_HH_LOCK_UNLOCKED;
+void unlockWriterHH(struct HM_HierarchicalHeap* hh) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Unlocking writer HH %p",
+      (void *)hh);
+  rwlock_writer_unlock(s, &hh->lock);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Unlocked writer HH %p",
+      (void *)hh);
+}
+
+void lockReaderHH(struct HM_HierarchicalHeap* hh) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Locking reader HH %p",
+      (void *)hh);
+  rwlock_reader_lock(s, &hh->lock);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Locked reader HH %p",
+      (void *)hh);
+}
+
+void unlockReaderHH(struct HM_HierarchicalHeap* hh) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Unlocking reader HH %p",
+      (void *)hh);
+  rwlock_reader_unlock(s, &hh->lock);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+      "Unlocked reader HH %p",
+      (void *)hh);
 }

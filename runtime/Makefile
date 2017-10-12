@@ -13,12 +13,12 @@ TARGET := self
 
 ifeq ($(TARGET), self)
 CC := gcc -std=gnu11
-AR := ar rc
-RANLIB := ranlib
+AR := gcc-ar rc
+RANLIB := gcc-ranlib
 else
 CC := $(TARGET)-gcc -std=gnu11
-AR := $(TARGET)-ar rc
-RANLIB := $(TARGET)-ranlib
+AR := $(TARGET)-gcc-ar rc
+RANLIB := $(TARGET)-gcc-ranlib
 endif
 
 TARGET_ARCH := $(shell ../bin/host-arch)
@@ -82,9 +82,10 @@ WARNXCFLAGS += -Wnested-externs
 
 XCFLAGS := -fno-common $(WARNXCFLAGS)
 OPTXCFLAGS := -Wdisabled-optimization -O2 -fomit-frame-pointer -g
-DEBUGXCFLAGS := -DASSERT=1 -Wno-uninitialized -O0 -g
+DEBUGXCFLAGS := -DASSERT=1 -DENABLE_TRACING -Wno-uninitialized -O0 -g
 PICXCFLAGS :=
 TRACEXCFLAGS := -DENABLE_TRACING $(OPTXCFLAGS)
+LTOXCFLAGS := -flto $(OPTXCFLAGS)
 
 # Win32&64 don't use PIC code, all other platforms do
 ifeq ($(findstring $(TARGET_OS), mingw cygwin),)
@@ -175,9 +176,10 @@ OPTCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(OPTXCFLAGS)
 DEBUGCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(DEBUGXCFLAGS)
 PICCFLAGS := $(OPTCFLAGS) $(PICXCFLAGS)
 TRACECFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(TRACEXCFLAGS)
+LTOCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(LTOXCFLAGS)
 
-ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a libgdtoa-trace.a \
-       libmlton.a libmlton-gdb.a libmlton-pic.a libmlton-trace.a \
+ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a libgdtoa-trace.a libgdtoa-lto.a \
+       libmlton.a libmlton-gdb.a libmlton-pic.a libmlton-trace.a libmlton-lto.a \
 	$(XLIBS)
 ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
 
@@ -198,6 +200,8 @@ util-gdb.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
 	$(CC) $(DEBUGCFLAGS) -c -o $@ $<
 util-trace.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
 	$(CC) $(TRACECFLAGS) -c -o $@ $<
+util-lto.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
+	$(CC) $(LTOCFLAGS) -c -o $@ $<
 util.o:     util.c $(UTILCFILES) cenv.h $(UTILHFILES)
 	$(CC) $(OPTCFLAGS) -c -o $@ $<
 
@@ -245,6 +249,7 @@ GDTOA_OBJS       := $(patsubst %.c,%.o,$(GDTOACFILES))
 GDTOA_DEBUG_OBJS := $(patsubst %.c,%-gdb.o,$(GDTOACFILES))
 GDTOA_PIC_OBJS   := $(patsubst %.c,%-pic.o,$(GDTOACFILES))
 GDTOA_TRACE_OBJS := $(patsubst %.c,%-trace.o,$(GDTOACFILES))
+GDTOA_LTO_OBJS := $(patsubst %.c,%-lto.o,$(GDTOACFILES))
 
 gdtoa/README: gdtoa.tgz gdtoa.may_alias-unions.patch gdtoa.rename-public-fns.patch gdtoa.hide-private-fns.patch gdtoa.hide-public-fns.patch
 	gzip -dc gdtoa.tgz | tar xf -
@@ -275,6 +280,8 @@ gdtoa/qnan.out: gdtoa/arith.h gdtoa/qnan.c
 gdtoa/gd_qnan.h: gdtoa/qnan.out
 	cd gdtoa && ./qnan.out >gd_qnan.h
 
+gdtoa/%-lto.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
+	$(CC) $(LTOCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
 gdtoa/%-trace.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
 	$(CC) $(TRACECFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
 gdtoa/%-pic.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
@@ -288,6 +295,7 @@ libgdtoa.a:     $(GDTOA_OBJS)
 libgdtoa-gdb.a: $(GDTOA_DEBUG_OBJS)
 libgdtoa-pic.a: $(GDTOA_PIC_OBJS)
 libgdtoa-trace.a: $(GDTOA_TRACE_OBJS)
+libgdtoa-lto.a: $(GDTOA_LTO_OBJS)
 
 ### libmlton ###
 
@@ -326,12 +334,15 @@ MLTON_OBJS += $(foreach f, $(basename $(BASISCFILES)), $(f).o)
 MLTON_DEBUG_OBJS := $(patsubst %.o,%-gdb.o,$(MLTON_OBJS))
 MLTON_PIC_OBJS   := $(patsubst %.o,%-pic.o,$(MLTON_OBJS))
 MLTON_TRACE_OBJS := $(patsubst %.o,%-trace.o,$(MLTON_OBJS))
+MLTON_LTO_OBJS := $(patsubst %.o,%-lto.o,$(MLTON_OBJS))
 
+platform/$(TARGET_OS)-lto.o:	$(PLATFORMCFILES)
 platform/$(TARGET_OS)-trace.o:	$(PLATFORMCFILES)
 platform/$(TARGET_OS)-pic.o:	$(PLATFORMCFILES)
 platform/$(TARGET_OS)-gdb.o:	$(PLATFORMCFILES)
 platform/$(TARGET_OS).o:	$(PLATFORMCFILES)
 
+gc-lto.o:	$(GCCFILES)
 gc-trace.o:	$(GCCFILES)
 gc-pic.o:	$(GCCFILES)
 gc-gdb.o:	$(GCCFILES)
@@ -339,19 +350,23 @@ gc.o:		$(GCCFILES)
 
 gc.c_XCFLAGS := -Wno-unreachable-code
 
+basis/Real/Math-lto.o:		basis/Real/Math-fns.h
 basis/Real/Math-trace.o:	basis/Real/Math-fns.h
 basis/Real/Math-pic.o:		basis/Real/Math-fns.h
 basis/Real/Math-gdb.o:		basis/Real/Math-fns.h
 basis/Real/Math.o:		basis/Real/Math-fns.h
+basis/Real/Real-lto.o:		basis/Real/Real-ops.h
 basis/Real/Real-trace.o:	basis/Real/Real-ops.h
 basis/Real/Real-pic.o:		basis/Real/Real-ops.h
 basis/Real/Real-gdb.o:		basis/Real/Real-ops.h
 basis/Real/Real.o:		basis/Real/Real-ops.h
 basis/Real/Real.c_XCFLAGS := -Wno-float-equal
+basis/Real/gdtoa-lto.o:	$(GDTOAHFILES)
 basis/Real/gdtoa-trace.o:	$(GDTOAHFILES)
 basis/Real/gdtoa-pic.o:	$(GDTOAHFILES)
 basis/Real/gdtoa-gdb.o:	$(GDTOAHFILES)
 basis/Real/gdtoa.o:		$(GDTOAHFILES)
+basis/Real/strto-lto.o:	$(GDTOAHFILES)
 basis/Real/strto-trace.o:	$(GDTOAHFILES)
 basis/Real/strto-pic.o:	$(GDTOAHFILES)
 basis/Real/strto-gdb.o:	$(GDTOAHFILES)
@@ -361,15 +376,19 @@ basis/Word/Word-trace.o: basis/Word/Word-consts.h basis/Word/Word-ops.h basis/Wo
 basis/Word/Word-pic.o:   basis/Word/Word-consts.h basis/Word/Word-ops.h basis/Word/Word-check.h
 basis/Word/Word-gdb.o:   basis/Word/Word-consts.h basis/Word/Word-ops.h basis/Word/Word-check.h
 basis/Word/Word.o:       basis/Word/Word-consts.h basis/Word/Word-ops.h basis/Word/Word-check.h
+basis/coerce-lto.o:      basis/coerce.h
 basis/coerce-trace.o:    basis/coerce.h
 basis/coerce-pic.o:      basis/coerce.h
 basis/coerce-gdb.o:      basis/coerce.h
 basis/coerce.o:          basis/coerce.h
+basis/cpointer-lto.o:    basis/cpointer.h
 basis/cpointer-trace.o:  basis/cpointer.h
 basis/cpointer-pic.o:    basis/cpointer.h
 basis/cpointer-gdb.o:    basis/cpointer.h
 basis/cpointer.o:        basis/cpointer.h
 
+%-lto.o: %.c $(HFILES)
+	$(CC) $(LTOCFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
 %-trace.o: %.c $(HFILES)
 	$(CC) $(TRACECFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
 %-pic.o: %.c $(HFILES)
@@ -383,6 +402,7 @@ libmlton.a: $(MLTON_OBJS)
 libmlton-gdb.a: $(MLTON_DEBUG_OBJS)
 libmlton-pic.a: $(MLTON_PIC_OBJS)
 libmlton-trace.a: $(MLTON_TRACE_OBJS)
+libmlton-lto.a: $(MLTON_LTO_OBJS)
 
 ### gen/sizes ###
 
@@ -398,13 +418,10 @@ gen/gen-sizes.stamp: gen/gen-sizes.c libmlton.a $(HFILES)
 
 ######
 
-
 %.a:
 	rm -f $@
 	$(AR) $@ $^
 	$(RANLIB) $@
-
-
 
 .PHONY: flags
 flags:

@@ -18,7 +18,7 @@ LIB := $(BUILD)/lib
 INC := $(LIB)/include
 COMP := $(SRC)/mlton
 RUN := $(SRC)/runtime
-MLTON := $(BIN)/mlton-parmem
+export MLTON := $(BIN)/mlton-parmem
 AOUT := mlton-compile
 ifeq (mingw, $(TARGET_OS))
 EXE := .exe
@@ -35,15 +35,15 @@ NLFFIGEN := mlnlffigen
 PATH := $(BIN):$(SRC)/bin:$(shell echo $$PATH)
 CP := /bin/cp -fpR
 GZIP := gzip --force --best
-RANLIB := ranlib
+RANLIB := gcc-ranlib
 
 # If we're compiling with another version of MLton, then we want to do
 # another round of compilation so that we get a MLton built without
 # stubs.
 ifeq (other, $(shell if [ ! -x "$(MLTON)" ]; then echo other; fi))
-	BOOTSTRAP_OTHER:=true
+	BOOTSTRAP_OTHER?=true
 else
-	BOOTSTRAP_OTHER:=false
+	BOOTSTRAP_OTHER?=false
 endif
 
 ifeq ($(origin VERSION), undefined)
@@ -67,8 +67,9 @@ all-no-docs:
 ifeq (true, $(BOOTSTRAP_OTHER))
 	rm -f "$(COMP)/$(AOUT)$(EXE)"
 	$(MAKE) -C "$(COMP)/front-end" clean
+	$(MAKE) compiler
 endif
-	$(MAKE) compiler basis
+	$(MAKE) basis
 	@echo 'Build of MLton succeeded.'
 
 .PHONY: basis-no-check
@@ -115,7 +116,7 @@ constants:
 
 .PHONY: debugged
 debugged:
-	$(MAKE) -C "$(COMP)" "AOUT=$(AOUT).debug" COMPILE_ARGS="-debug true -const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true' -drop-pass 'deepFlatten'"
+	$(MAKE) -C "$(COMP)" "AOUT=$(AOUT).debug" COMPILE_ARGS="-debug true -const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true'"
 	$(CP) "$(COMP)/$(AOUT).debug" "$(LIB)/"
 	sed 's/mlton-compile/mlton-compile.debug/' < "$(MLTON)" > "$(MLTON).debug"
 	chmod a+x "$(MLTON).debug"
@@ -240,7 +241,7 @@ smlnj-mlton-quad:
 
 .PHONY: traced
 traced:
-	$(MAKE) -C "$(COMP)" "AOUT=$(AOUT).trace" COMPILE_ARGS="-const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true' -drop-pass 'deepFlatten'"
+	$(MAKE) -C "$(COMP)" "AOUT=$(AOUT).trace" COMPILE_ARGS="-const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true' -trace-runtime true -keep g"
 	$(CP) "$(COMP)/$(AOUT).trace" "$(LIB)/"
 	sed 's/mlton-compile/mlton-compile.trace/' < "$(MLTON)" > "$(MLTON).trace"
 	chmod a+x "$(MLTON).trace"

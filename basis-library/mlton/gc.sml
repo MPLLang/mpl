@@ -34,6 +34,7 @@ structure MLtonGC =
                val mkMilliseconds = mk (Time.fromMilliseconds o C_UIntmax.toLargeInt)
             in
                val bytesAllocated = mkUIntmax getBytesAllocated
+               val bytesPromoted = mkUIntmax getBytesPromoted
                val lastBytesLive = mkSize getLastBytesLive
                val maxChunkPoolOccupancy = mkSize getMaxChunkPoolOccupancy
                val maxHeapOccupancy = mkSize getMaxHeapOccupancy

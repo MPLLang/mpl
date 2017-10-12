@@ -18,6 +18,8 @@ atomic_uint32_t *pleader(GC_state s) {
 
 void GC_TerminateThread(GC_state s) {
   GC_PthreadAtExit(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
   Trace0(EVENT_RUNTIME_LEAVE);
   pthread_exit(NULL);
 }
@@ -35,13 +37,24 @@ bool GC_CheckForTerminationRequest(GC_state s) {
   return in_progress;
 }
 
-bool GC_MightCheckForTerminationRequest(GC_state s, size_t *pcounter) {
+void GC_MayTerminateThread(GC_state s) {
+  bool in_progress = GC_CheckForTerminationRequest(s);
+  if (in_progress)
+    GC_TerminateThread(s);
+}
+
+bool GC_CheckForTerminationRequestRarely(GC_state s, size_t *pcounter) {
   (*pcounter)++;
   if (*pcounter < 10000)
     return false;
 
   *pcounter = 0;
   return GC_CheckForTerminationRequest(s);
+}
+
+void GC_MayTerminateThreadRarely(GC_state s, size_t *pcounter) {
+  if (GC_CheckForTerminationRequestRarely(s, pcounter))
+    GC_TerminateThread(s);
 }
 
 bool GC_TryToTerminate(GC_state s) {
@@ -61,7 +74,8 @@ bool GC_TryToTerminate(GC_state s) {
 
   /* Force all processors to acknowledge termination. */
   for (uint32_t p = 0; p < s->numberOfProcs; p++)
-    s->procStates[p].limit = 0;
+    if (p != myself)
+      s->procStates[p].limit = 0;
 
   Trace0(EVENT_HALT_WAIT);
 

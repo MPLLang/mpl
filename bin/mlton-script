@@ -30,6 +30,7 @@ else
 fi
 
 mlton_polyml="$lib/mlton-polyml$exe"
+action=""
 
 declare -a rargs
 case "$1" in
@@ -46,10 +47,18 @@ case "$1" in
                 exit 1
         fi
         ;;
+@gdb)
+        shift
+        action="gdb --args"
+        ;;
+@trace)
+        shift
+        action="mltrace record"
+        ;;
 esac
 
 doitMLton () {
-    exec "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
+    exec $action "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
 }
 doitSMLNJ () {
     exec "$smlnj" @SMLload="$mlton_smlnj_heap" "$@"
@@ -97,7 +106,7 @@ doit "$lib" \
         -ar-script "$lib/static-library"                         \
         -cc "$gcc"                                               \
         -cc-opt-quote "-I$lib/include"                           \
-        -cc-opt '-O1 -fno-common'                                \
+        -cc-opt '-O3 -fno-common'                                \
         -cc-opt '-fno-strict-aliasing -fomit-frame-pointer -w'   \
 	-link-opt '-lm -lgmp'                                    \
 	-llvm-llc-opt '-O2'                                      \
@@ -144,4 +153,5 @@ doit "$lib" \
         -target-link-opt x86 '-m32'                              \
         -profile-exclude '\$\(SML_LIB\)'                         \
 	-mark-cards false                                        \
+        -drop-pass deepFlatten -drop-pass refFlatten             \
         "$@"

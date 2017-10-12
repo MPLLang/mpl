@@ -205,6 +205,8 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | Real_rndToWord _ => true
        | Real_round _ => true
        | Real_sub _ => true
+       | Ref_assign => true
+       | Ref_deref => true
        | Word_add _ => true
        | Word_addCheck _ => true
        | Word_andb _ => true
@@ -410,8 +412,6 @@ fun outputDeclarations
                       in
                          ("WEAK_TAG", false, bytesNonObjptrs, numObjptrs)
                       end
-                 | HeaderOnly => ("HEADER_ONLY_TAG", false, 0, 0)
-                 | Fill => ("FILL_TAG", false, 0, 0)
           in
              concat ["{ ", tag, ", ",
                      C.bool hasIdentity, ", ",

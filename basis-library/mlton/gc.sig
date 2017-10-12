@@ -18,6 +18,7 @@ signature MLTON_GC =
       structure Statistics :
          sig
             val bytesAllocated: unit -> IntInf.int
+            val bytesPromoted: unit -> IntInf.int
             val lastBytesLive: unit -> IntInf.int
             val numCopyingGCs: unit -> IntInf.int
             val numMarkCompactGCs: unit -> IntInf.int

@@ -11,6 +11,7 @@ struct TLSObjects {
   struct rusage MLton_Rusage_self;
   struct rusage MLton_Rusage_children;
   struct rusage MLton_Rusage_gc;
+  struct drand48_data drand48_data;
 };
 
 #endif /* TLS_OBJECTS_H_ */

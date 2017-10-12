@@ -113,6 +113,7 @@ void performGC (GC_state s,
   enterGC (s);
 
   Trace0(EVENT_GC_ENTER);
+  Trace3(EVENT_COPY, 0, 0, 0);
 
   s->cumulativeStatistics->numGCs++;
   if (DEBUG or s->controls->messages) {
@@ -167,7 +168,7 @@ void performGC (GC_state s,
       getThreadCurrent(&s->procStates[proc])->bytesNeeded = GC_HEAP_LIMIT_SLOP;
     }
     totalBytesRequested += getThreadCurrent(&s->procStates[proc])->bytesNeeded;
-    totalBytesRequested += GC_BONUS_SLOP;
+    totalBytesRequested += GC_GAP_SLOP;
   }
 
   if (forceMajor
@@ -229,6 +230,7 @@ void performGC (GC_state s,
   assert (hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested));
   assert (invariantForGC (s));
 
+  Trace3(EVENT_COPY, 0, 0, 0);
   Trace0(EVENT_GC_LEAVE);
 
   leaveGC (s);
@@ -256,20 +258,19 @@ size_t fillGap (pointer start, pointer end) {
       /* Header */
       *((GC_header *)start) = GC_WORD8_VECTOR_HEADER;
       start = start + GC_HEADER_SIZE;
+      *((objptr *)start) = BOGUS_OBJPTR;
     }
-    else if (diff == GC_HEADER_SIZE) {
-      *((GC_header *)start) = GC_HEADER_ONLY_HEADER;
+    else if (diff == GC_NORMAL_METADATA_SIZE + 8) {
+      *((GC_header *)start) = GC_FILL8_NORMAL_HEADER;
       start = start + GC_HEADER_SIZE;
+      *((objptr *)start) = BOGUS_OBJPTR;
     }
-    else if (diff >= GC_BONUS_SLOP) {
-      assert (diff < INT_MAX);
-      *((GC_header *)start) = GC_FILL_HEADER;
+    else if (diff == GC_NORMAL_METADATA_SIZE) {
+      *((GC_header *)start) = GC_FILL0_NORMAL_HEADER;
       start = start + GC_HEADER_SIZE;
-      *((GC_smallGapSize *)start) = diff - (GC_HEADER_SIZE + GC_SMALL_GAP_SIZE_SIZE);
-      start = start + GC_SMALL_GAP_SIZE_SIZE;
+      *((objptr *)start) = BOGUS_OBJPTR;
     }
     else {
-      assert(0 == diff);
       /* SPOONHOWER_NOTE: debug message! */
       fprintf (stderr, "FOUND A GAP OF %zu BYTES!\n", diff);
       exit (1);
@@ -313,7 +314,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
     }
     /* Perhaps there is not enough space in the nursery to satify this
        request; if that's true then we need to do a full collection */
-    if (nurseryBytesRequested + GC_BONUS_SLOP > availableBytes) {
+    if (nurseryBytesRequested + GC_GAP_SLOP > availableBytes) {
       if (DEBUG)
         fprintf (stderr, "[GC: aborting local alloc: no space.]\n");
       return;
@@ -323,21 +324,21 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
        Let's see what that will entail... */
 
     /* Now see if we were the most recent thread to allocate */
-    if (oldFrontier == s->limitPlusSlop + GC_BONUS_SLOP) {
+    if (oldFrontier == s->limitPlusSlop + GC_GAP_SLOP) {
       /* This is the next chunk so no need to fill */
-      newHeapFrontier = s->frontier + nurseryBytesRequested + GC_BONUS_SLOP;
+      newHeapFrontier = s->frontier + nurseryBytesRequested + GC_GAP_SLOP;
       /* Leave "start" and "frontier" where they are */
       newStart = s->start;
       newProcFrontier = s->frontier;
     }
     else {
       /* Fill the old gap */
-      fillGap (s->frontier, s->limitPlusSlop + GC_BONUS_SLOP);
+      fillGap (s->frontier, s->limitPlusSlop + GC_GAP_SLOP);
       /* Don't update frontier or limitPlusSlop since we will either
          overwrite them (if we succeed) or just fill the same gap again
          (if we fail).  (There is no obvious other pair of values that
          we can set them to that is safe.) */
-      newHeapFrontier = oldFrontier + nurseryBytesRequested + GC_BONUS_SLOP;
+      newHeapFrontier = oldFrontier + nurseryBytesRequested + GC_GAP_SLOP;
       newProcFrontier = oldFrontier;
       /* Move "start" since the space between old-start and frontier is not
          necessary filled */
@@ -358,7 +359,7 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
       s->start = newStart;
       s->frontier = newProcFrontier;
       assert (isFrontierAligned (s, s->frontier));
-      s->limitPlusSlop = newHeapFrontier - GC_BONUS_SLOP;
+      s->limitPlusSlop = newHeapFrontier - GC_GAP_SLOP;
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
       return;
@@ -485,9 +486,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   Trace0(EVENT_RUNTIME_ENTER);
 
   /* Exit as soon as termination is requested. */
-  if (GC_CheckForTerminationRequest(s)) {
-    GC_TerminateThread(s);
-  }
+  GC_MayTerminateThread(s);
 
   /* SPOONHOWER_NOTE: Used to be enter() here */
   /* XXX copied from enter() */

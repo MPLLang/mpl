@@ -21,6 +21,11 @@ AOUT := mlton-compile
 PATH := $(BIN):$(shell echo $$PATH)
 
 FLAGS := @MLton ram-slop 0.7 gc-summary $(RUNTIME_ARGS) --
+ifeq (drop, $(shell if $(MLTON) -expert true -h 2>&1 | grep -- "-disable-pass" >/dev/null; then echo disable; else echo drop; fi))
+FLAGS += -drop-pass deepFlatten -drop-pass refFlatten
+else
+FLAGS += -disable-pass deepFlatten -disable-pass refFlatten
+endif
 
 ifeq (self, $(shell if [ -x "$(BIN)/mlton" ]; then echo self; fi))
   # We're compiling MLton with itself, so don't use any stubs.

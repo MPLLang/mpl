@@ -105,6 +105,8 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesAllocated));
+  fprintf (out, "total bytes promoted: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesPromoted));
   fprintf (out, "max global heap bytes live: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
   fprintf (out, "max global heap size: %s bytes\n",
@@ -186,6 +188,7 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
 void GC_done (GC_state s) {
   GC_PthreadAtExit(s);
+  HM_enterGlobalHeap();
   minorGC (s);
 
   if (s->controls->summary) {

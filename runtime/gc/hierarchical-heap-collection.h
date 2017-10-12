@@ -16,17 +16,33 @@
 #ifndef HIERARCHICAL_HEAP_COLLECTION_H_
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
+/* objptr* opp */
+
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
+  void *tgtChunkList;           /* If not NULL, designates the chunk list where
+                                 * the object is to be copied. If NULL, the
+                                 * to-space chunk at the level of the object
+                                 * will be used. */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
 };
 
 #define MAX_NUM_HOLES 512
+
+/**********/
+/* Macros */
+/**********/
+#if ASSERT
+#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(0xb000deadfee1dead))
+#else
+#define COPY_OBJECT_HH_VALUE (NULL)
+#endif
+
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -70,7 +86,8 @@ PRIVATE void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPoint
 void HM_HHC_collectLocal(void);
 
 /**
- * Forwards the object pointed to by 'opp' into 'destinationLevelList'
+ * Forwards the object pointed to by 'opp' into 'destinationLevelList' starting
+ * in its last chunk.
  *
  * @param s The GC_state to use
  * @param opp The objptr to forward

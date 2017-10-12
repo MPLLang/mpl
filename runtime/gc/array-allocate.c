@@ -56,14 +56,15 @@ pointer GC_arrayAllocate (GC_state s,
       numElements, header,
       Proc_processorNumber (s));
 
+  bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+
   Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
          (EventInt)ensureBytesFree,
          (EventInt)numElements,
-         (EventInt)header);
+         (EventInt)bytesPerElement);
 
   /* Check for overflow when computing arraySize.
    */
-  bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
   if (bytesPerElement > 0 and numElements > (SIZE_MAX / bytesPerElement)) {
     goto doOverflow;
   }

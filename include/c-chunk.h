@@ -9,6 +9,7 @@
 #ifndef _C_CHUNK_H_
 #define _C_CHUNK_H_
 
+#include <pthread.h>
 #include <stdio.h>
 
 #include "ml-types.h"
@@ -342,5 +343,161 @@ extern volatile int32_t Proc_syncCount;
 static inline Int32 Proc_threadInSection (void) {
   return Proc_syncCount > 0;
 }
+
+/* ------------------------------------------------- */
+/*                 References                        */
+/* ------------------------------------------------- */
+
+#define IDX(ty, b, i) ((ty*)(b) + (i))
+
+extern CPointer Assignable_findLockedTrueReplicaReader(
+  CPointer, Objptr, CPointer *
+  );
+extern CPointer Assignable_findLockedTrueReplicaWriter(
+  CPointer, Objptr, CPointer *
+  );
+
+extern int Assignable_isMaster(
+    CPointer, Objptr
+    );
+
+extern void Assignable_unlockReplicaReader(
+  CPointer, CPointer
+  );
+
+extern void Assignable_unlockReplicaWriter(
+  CPointer, CPointer
+  );
+
+extern Objptr Assignable_get(CPointer, Objptr, Int64);
+extern void Assignable_set(CPointer, Objptr, Int64, Objptr);
+
+static inline Objptr Ref_deref_P(CPointer s, Objptr src) {
+    Objptr res;
+
+    res = *IDX(Objptr, src, 0);
+    if (Assignable_isMaster(s, src)) {
+        return res;
+    }
+
+    return Assignable_get(s, src, 0);
+}
+
+static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
+  Assignable_set(s, dst, 0, src);
+}
+
+#define RefAccessFunctionsForOpaqueData(suffix, type)                   \
+    static inline type Ref_deref_##suffix (CPointer s, Objptr src) {    \
+        CPointer hh;                                                    \
+        CPointer src_repl;                                              \
+        type res;                                                       \
+                                                                        \
+        res = *IDX(type, src, 0);                                       \
+        if (Assignable_isMaster(s, src)) {                              \
+            return res;                                                 \
+        }                                                               \
+                                                                        \
+        src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh); \
+        res = *IDX(type, src_repl, 0);                                  \
+        Assignable_unlockReplicaReader(s, hh);                          \
+                                                                        \
+        return res;                                                     \
+    }                                                                   \
+                                                                        \
+    static inline void Ref_assign_##suffix (CPointer s,                 \
+                                            Objptr dst, type src) {     \
+        CPointer hh;                                                    \
+        CPointer dst_repl;                                              \
+                                                                        \
+        *IDX(type, dst, 0) = src;                                       \
+        if (Assignable_isMaster(s, dst)) {                              \
+            return;                                                     \
+        }                                                               \
+                                                                        \
+        dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
+        *IDX(type, dst_repl, 0) = src;                                  \
+        Assignable_unlockReplicaWriter(s, hh);                          \
+    }
+
+RefAccessFunctionsForOpaqueData(Q,   Pointer)
+RefAccessFunctionsForOpaqueData(I8,  Int8_t)
+RefAccessFunctionsForOpaqueData(I16, Int16_t)
+RefAccessFunctionsForOpaqueData(I32, Int32_t)
+RefAccessFunctionsForOpaqueData(I64, Int64_t)
+RefAccessFunctionsForOpaqueData(W8,  Word8_t)
+RefAccessFunctionsForOpaqueData(W16, Word16_t)
+RefAccessFunctionsForOpaqueData(W32, Word32_t)
+RefAccessFunctionsForOpaqueData(W64, Word64_t)
+RefAccessFunctionsForOpaqueData(R32, Real32_t)
+RefAccessFunctionsForOpaqueData(R64, Real64_t)
+
+/* ------------------------------------------------- */
+/*                 Arrays                            */
+/* ------------------------------------------------- */
+
+static inline Objptr Array_sub_P(CPointer s, Objptr src, Int64 index) {
+    Objptr res;
+
+    res = *IDX(Objptr, src, index);
+    if (Assignable_isMaster(s, src)) {
+        return res;
+    }
+
+    return Assignable_get(s, src, index);
+}
+
+static inline void Array_update_P(
+  CPointer s, Objptr dst, Int64 index, Objptr src) {
+  Assignable_set(s, dst, index, src);
+}
+
+#define ArrayAccessFunctionsForOpaqueData(suffix, type)                 \
+  static inline type Array_sub_##suffix (                               \
+    CPointer s, Objptr src, Int64 index) {                              \
+        CPointer hh;                                                    \
+        CPointer src_repl;                                              \
+        type res;                                                       \
+                                                                        \
+        res = *IDX(type, src, index);                                   \
+        if (Assignable_isMaster(s, src)) {                              \
+            return res;                                                 \
+        }                                                               \
+                                                                        \
+        src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh); \
+        res = *IDX(type, src_repl, index);                              \
+        Assignable_unlockReplicaReader(s, hh);                          \
+                                                                        \
+        return res;                                                     \
+    }                                                                   \
+                                                                        \
+  static inline void Array_update_##suffix (CPointer s,                 \
+                                            Objptr dst,                 \
+                                            Int64 index,                \
+                                            type src) {                 \
+        CPointer hh;                                                    \
+        CPointer dst_repl;                                              \
+                                                                        \
+        *IDX(type, dst, index) = src;                                   \
+        if (Assignable_isMaster(s, dst)) {                              \
+            return;                                                     \
+        }                                                               \
+                                                                        \
+        dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
+        *IDX(type, dst_repl, index) = src;                              \
+        Assignable_unlockReplicaWriter(s, hh);                          \
+    }
+
+ArrayAccessFunctionsForOpaqueData(Q,   Pointer)
+ArrayAccessFunctionsForOpaqueData(I8,  Int8_t)
+ArrayAccessFunctionsForOpaqueData(I16, Int16_t)
+ArrayAccessFunctionsForOpaqueData(I32, Int32_t)
+ArrayAccessFunctionsForOpaqueData(I64, Int64_t)
+ArrayAccessFunctionsForOpaqueData(W8,  Word8_t)
+ArrayAccessFunctionsForOpaqueData(W16, Word16_t)
+ArrayAccessFunctionsForOpaqueData(W32, Word32_t)
+ArrayAccessFunctionsForOpaqueData(W64, Word64_t)
+ArrayAccessFunctionsForOpaqueData(R32, Real32_t)
+ArrayAccessFunctionsForOpaqueData(R64, Real64_t)
 
 #endif /* #ifndef _C_CHUNK_H_ */

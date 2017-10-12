@@ -224,13 +224,6 @@ pointer foreachObjptrInObject (GC_state s,
 
  STACK_DONE:
     p += sizeof (struct GC_stack) + stack->reserved;
-  } else if (HEADER_ONLY_TAG == tag) {
-    /* do nothing for header-only objects */
-  } else if (FILL_TAG == tag) {
-    GC_smallGapSize bytes;
-    bytes = *((GC_smallGapSize *)p);
-    p += GC_SMALL_GAP_SIZE_SIZE;
-    p += bytes;
   } else {
     assert (0 and "unknown object tag type");
   }

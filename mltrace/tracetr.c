@@ -38,7 +38,11 @@ static const char *EventKindStrings[] = {
 
   [EVENT_LOCK_TAKE_ENTER]       = "LOCK_TAKE_ENTER",
   [EVENT_LOCK_TAKE_LEAVE]       = "LOCK_TAKE_LEAVE",
-  [EVENT_LOCK_RELEASE]          = "LOCK_RELEASE",
+
+  [EVENT_RWLOCK_R_TAKE]         = "RWLOCK_R_TAKE",
+  [EVENT_RWLOCK_R_RELEASE]      = "RWLOCK_R_RELEASE",
+  [EVENT_RWLOCK_W_TAKE]         = "RWLOCK_W_TAKE",
+  [EVENT_RWLOCK_W_RELEASE]      = "RWLOCK_W_RELEASE",
 
   [EVENT_GSECTION_BEGIN_ENTER]  = "GSECTION_BEGIN_ENTER",
   [EVENT_GSECTION_BEGIN_LEAVE]  = "GSECTION_BEGIN_LEAVE",
@@ -47,6 +51,15 @@ static const char *EventKindStrings[] = {
 
   [EVENT_ARRAY_ALLOCATE_ENTER]  = "ARRAY_ALLOCATE_ENTER",
   [EVENT_ARRAY_ALLOCATE_LEAVE]  = "ARRAY_ALLOCATE_LEAVE",
+
+  [EVENT_PROMOTION_ENTER]       = "PROMOTION_ENTER",
+  [EVENT_PROMOTION_LEAVE]       = "PROMOTION_LEAVE",
+  [EVENT_PROMOTED_WRITE]        = "PROMOTED_WRITE",
+  [EVENT_PROMOTION]             = "PROMOTION",
+
+  [EVENT_MERGED_HEAP]           = "MERGED_HEAP",
+
+  [EVENT_COPY]                  = "COPY",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -182,7 +195,7 @@ void printEventCSV(struct Event *event) {
 void printEventText(struct Event *event) {
   printEventTime(event);
   printf(" ");
-  printf("%" PRIxPTR, event->argptr);
+  printf("%" PRIuPTR, event->argptr);
   printf(" ");
   printEventKind(event->kind);
   printf("(");
@@ -225,12 +238,42 @@ void printEventText(struct Event *event) {
 
   case EVENT_LOCK_TAKE_ENTER:
   case EVENT_LOCK_TAKE_LEAVE:
-  case EVENT_LOCK_RELEASE:
+    printf("lock = %llx", event->arg1);
+    break;
+
+  case EVENT_RWLOCK_R_TAKE:
+  case EVENT_RWLOCK_R_RELEASE:
+    printf("lock = %llx, readers = %llu", event->arg1, event->arg2);
+    break;
+
+  case EVENT_RWLOCK_W_TAKE:
+  case EVENT_RWLOCK_W_RELEASE:
     printf("lock = %llx", event->arg1);
     break;
 
   case EVENT_ARRAY_ALLOCATE_ENTER:
     printf("ensureBytesFree = %llx, numElements = %lld, header = %llx",
+           event->arg1, event->arg2, event->arg3);
+    break;
+
+  case EVENT_PROMOTION_ENTER:
+    printf("src = %llx, dest_chunk = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_PROMOTED_WRITE:
+    printf("orig_o = %llx, o = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_PROMOTION:
+    printf("src = %llx, repl = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_MERGED_HEAP:
+    printf("parenthh = %llx, childhh = %llx", event->arg1, event->arg2);
+    break;
+
+  case EVENT_COPY:
+    printf("bytes = %lld, obj = %lld, stack = %lld",
            event->arg1, event->arg2, event->arg3);
     break;
 

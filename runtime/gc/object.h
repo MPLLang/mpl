@@ -23,8 +23,6 @@ typedef enum {
   NORMAL_TAG = 1,
   STACK_TAG = 2,
   WEAK_TAG = 3,
-  HEADER_ONLY_TAG = 4,
-  FILL_TAG = 5
 } GC_objectTypeTag;
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -102,10 +100,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Word64.word on an x86).
 */
 #define GC_NORMAL_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
-/* RAM_NOTE: Should be defined in model.h */
-typedef uint64_t GC_smallGapSize;
-#define GC_SMALL_GAP_SIZE_SIZE sizeof (GC_smallGapSize)
-#define GC_BONUS_SLOP (GC_HEADER_SIZE + GC_SMALL_GAP_SIZE_SIZE)
+#define GC_GAP_SLOP (GC_NORMAL_METADATA_SIZE)
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
@@ -156,8 +151,8 @@ enum {
   WORD32_VECTOR_TYPE_INDEX = 4,
   WORD16_VECTOR_TYPE_INDEX = 5,
   WORD64_VECTOR_TYPE_INDEX = 6,
-  HEADER_ONLY_TYPE_INDEX =   7,
-  FILL_TYPE_INDEX =          8,
+  FILL0_NORMAL_TYPE_INDEX =  7,
+  FILL8_NORMAL_TYPE_INDEX =  8,
   HIERARCHICAL_HEAP_INDEX =  9
 };
 
@@ -172,8 +167,8 @@ enum {
 #define GC_WORD16_VECTOR_HEADER buildHeaderFromTypeIndex (WORD16_VECTOR_TYPE_INDEX)
 #define GC_WORD32_VECTOR_HEADER buildHeaderFromTypeIndex (WORD32_VECTOR_TYPE_INDEX)
 #define GC_WORD64_VECTOR_HEADER buildHeaderFromTypeIndex (WORD64_VECTOR_TYPE_INDEX)
-#define GC_HEADER_ONLY_HEADER buildHeaderFromTypeIndex (HEADER_ONLY_TYPE_INDEX)
-#define GC_FILL_HEADER buildHeaderFromTypeIndex (FILL_TYPE_INDEX)
+#define GC_FILL0_NORMAL_HEADER buildHeaderFromTypeIndex (FILL0_NORMAL_TYPE_INDEX)
+#define GC_FILL8_NORMAL_HEADER buildHeaderFromTypeIndex (FILL8_NORMAL_TYPE_INDEX)
 #define GC_HIERARCHICAL_HEAP_HEADER buildHeaderFromTypeIndex (HIERARCHICAL_HEAP_INDEX)
 
 static inline void splitHeader (GC_state s, GC_header header,

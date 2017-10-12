@@ -50,6 +50,26 @@ GC_arrayCounter getArrayCounter (pointer a) {
   return *(getArrayCounterp (a));
 }
 
+size_t getArrayBytesPerElement (GC_state s, pointer a) {
+  GC_header header;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  GC_objectTypeTag tag;
+
+  header = getHeader (a);
+  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+  assert (tag == ARRAY_TAG);
+
+  return bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+}
+
+size_t getArraySize (GC_state s, pointer a) {
+    return getArrayLength(a) * getArrayBytesPerElement(s, a);
+}
+
+pointer getArrayAfterLastp (GC_state s, pointer a) {
+    return (pointer)((char *)a + getArraySize(s, a));
+}
 
 #if ASSERT
 pointer indexArrayAtObjptrIndex (GC_state s, pointer a,
@@ -65,7 +85,7 @@ pointer indexArrayAtObjptrIndex (GC_state s, pointer a,
   assert (tag == ARRAY_TAG);
 
   return a
-    + (arrayIndex * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE)))
+    + (arrayIndex * getArrayBytesPerElement(s, a))
     + bytesNonObjptrs
     + (objptrIndex * OBJPTR_SIZE);
 }

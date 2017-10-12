@@ -94,6 +94,7 @@ void majorCheneyCopyGC (GC_state s) {
   s->secondaryHeap->oldGenSize = (size_t)(s->forwardState.back - s->secondaryHeap->start);
   bytesCopied = s->secondaryHeap->oldGenSize;
   s->cumulativeStatistics->bytesCopied += bytesCopied;
+  Trace3(EVENT_COPY, bytesCopied, 0, 0);
   swapHeapsForCheneyCopy (s);
   s->lastMajorStatistics->kind = GC_COPYING;
   if (detailedGCTime (s))
@@ -125,7 +126,7 @@ void minorCheneyCopyGC (GC_state s) {
   if (not s->canMinor) {
     for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       /* Add in the bonus slop now since we need to fill it */
-      s->procStates[proc].limitPlusSlop += GC_BONUS_SLOP;
+      s->procStates[proc].limitPlusSlop += GC_GAP_SLOP;
       if (s->procStates[proc].limitPlusSlop != s->heap->frontier) {
         /* Fill to avoid an uninitialized gap in the middle of the heap */
         bytesFilled += fillGap (s->procStates[proc].frontier,
