@@ -200,8 +200,8 @@ struct
             distFunc := (find (#2 cumulative))
         end
 
-    fun chooseFromDist () =
-        let val x = UsefulRandom.rand01 ()
+    fun chooseFromDist x =
+        let (* val x = UsefulRandom.rand01 () *)
         in
             (!distFunc) x
         end

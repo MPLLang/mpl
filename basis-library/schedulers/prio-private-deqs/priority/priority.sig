@@ -37,7 +37,7 @@ sig
     val toString : t -> string
 
     val installDist : (t -> int) -> unit
-    val chooseFromDist : unit -> t
+    val chooseFromDist : real (* unit *) -> t
 
     val top : t
     val bot : t

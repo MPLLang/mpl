@@ -4,6 +4,7 @@ structure P = Priority
 structure I = Interrupt
 structure T = MLton.Thread
 structure R = UsefulRandom
+structure MT = MersenneTwister
 
 structure Task =
 struct
@@ -76,10 +77,36 @@ val prios = A.array (numberOfProcessors, {primary = P.bot,
                                           secondary = P.bot,
                                           send = P.bot})
 val ioqueues = A.tabulate (numberOfProcessors, fn _ => IOQ.new ())
+val rands = A.tabulate (numberOfProcessors, fn i => MT.init32
+                                                        (Word.fromInt i))
 
 (* These are initialized after the priorities. *)
 val mailboxes = ref (A.fromList [])
 val queues = ref (A.fromList [])
+
+                 (*
+structure R =
+struct
+fun randInt (a, b) =
+    let val p = processorNumber ()
+        val mt = A.sub (rands, p)
+    in
+        (MT.random_nat mt (b + 1)) + a
+    end
+
+fun rand01 () =
+    let val n = Real.fromInt (randInt (0, 1000000))
+    in
+        n / 1000000.0
+    end
+
+fun rand01ex () =
+    let val n = Real.fromInt ((randInt (0, 999998)) + 1)
+    in
+        n / 1000000.0
+    end
+end
+*)
 
 fun mb (p, r) =
     A.sub (!mailboxes, p * (P.count ()) + (P.toInt r) - 1)
@@ -100,19 +127,18 @@ fun workOnTask p (w, d) =
 fun newNextSwitch () =
     Tm.+ (Tm.now (), switchInterval)
 
-fun newNextDeal () = Tm.+ (Tm.now (), dealInterval)
-                              (*
+fun newNextDeal () = (* Tm.+ (Tm.now (), dealInterval) *)
     let val df = Real.fromLargeInt (Time.toMicroseconds dealInterval)
-        val iv = df * Math.ln 0.5 (* (R.rand01ex ()) *)
+        val iv = df * Math.ln (R.rand01ex ())
         val iiv = Real.round iv
     in
         Tm.- (Time.now (), Tm.fromMicroseconds (IntInf.fromInt iiv))
-    end *)
+    end
 
 fun switchPrios p =
-    A.update (prios, p, { primary = P.chooseFromDist (),
-                          secondary = P.top,
-                          send = P.chooseFromDist () })
+    A.update (prios, p, { primary = P.chooseFromDist (R.rand01 ()),
+                          secondary = P.bot, (* XXX P.top, *)
+                          send = P.chooseFromDist (R.rand01 ()) })
 
 fun maybeSwitchPrios p =
     let val ns = A.sub (nextSwitch, p)

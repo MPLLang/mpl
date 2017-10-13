@@ -4,7 +4,11 @@ local
     $(SML_LIB)/basis/unsafe.mlb
     x/graphics.mlb
 
+    real-atom.sml
+
     random.sml
+    mersenne-twister-sig.sml
+    mersenne-twister.sml
 
     interrupt/interrupt.sig
     mailbox/mailbox.sig
