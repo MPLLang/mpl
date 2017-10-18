@@ -2,6 +2,7 @@ structure Potential =
 struct
 
 type potential = Word64.word
+type t = potential
 
 val zero = Word64.fromInt 0
 
