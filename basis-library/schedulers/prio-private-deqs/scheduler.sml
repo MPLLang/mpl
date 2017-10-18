@@ -9,14 +9,16 @@ structure MT = MersenneTwister
 structure Task =
 struct
 datatype work =
-         Thunk of unit -> unit
+         Empty
+         | Thunk of unit -> unit
          | Thread of T.Runnable.t
 type t = work * int
+val default = (Empty, 0)
 fun depth (_, w) = w
 end
 
 structure M = Mailbox
-structure Q = ListQueue(Task)
+structure Q = BinaryHeapQueue(Task)
 
 exception ShouldntGetHere
 
@@ -157,11 +159,11 @@ fun dealAttempt (p, r) =
         val q = queue (p, r)
         val _ = log 2 ("deal attempt on " ^ (Int.toString p) ^
                        " at " ^ (P.toString r) ^ "\n")
-        fun length q =
+(*        fun length q =
             let val (_, _, es) = !q
             in
                 List.length es
-            end
+            end*)
     in
         case (Q.isEmpty q, M.status m) of
             (true, _) => (log 2 ("nothing to send\n");
@@ -172,10 +174,10 @@ fun dealAttempt (p, r) =
                  (log 2 ("deal " ^ (Int.toString p) ^ " -> " ^
                          (Int.toString p') ^ "\n");
                  case Q.split q of
-                     SOME ts => (M.sendMail m ts;
+                     SOME ts => (M.sendMail m ts (*;
                                  log 2 ("sent " ^ (Int.toString (length ts))
                                         ^ "; " ^ (Int.toString (length q)) ^
-                                        " left\n"))
+                                        " left\n")*))
                    | NONE => raise ShouldntGetHere)
              else
              (* We failed to claim the mailbox. Give up. *)
@@ -233,11 +235,11 @@ fun logPrios n {primary, secondary, send} =
 fun advancePrios p =
     let val {primary, secondary, send} = A.sub (prios, p)
     in
-        logPrios 4 (A.sub (prios, p));
+        (* logPrios 4 (A.sub (prios, p)); *)
         A.update (prios, p, {primary = primary,
                              secondary = P.next secondary,
-                             send = send});
-        logPrios 4 (A.sub (prios, p))
+                             send = send}) (*;
+        logPrios 4 (A.sub (prios, p)) *)
     end
 
 fun newTask (w : Task.work) : Task.t =
@@ -261,7 +263,7 @@ fun handleResumed p =
     end
 
 fun schedule p kt =
-    let val _ = log 5 ("schedule " ^ (Int.toString p) ^ "\n")
+    let (* val _ = log 5 ("schedule " ^ (Int.toString p) ^ "\n") *)
         val _ = maybeSwitchPrios p
         val prio_rec = A.sub (prios, p)
         val _ = handleResumed p
@@ -271,20 +273,20 @@ fun schedule p kt =
                     SOME kt => push (curPrio p, kt)
                   | NONE => ()
         fun getWorkAt r =
-            let val _ = log 6 ("getting work at " ^ (P.toString r) ^ "\n")
+            let (* val _ = log 6 ("getting work at " ^ (P.toString r) ^ "\n") *)
                 val m = mb (p, r)
                 val q = queue (p, r)
-                val _ = case M.getMail m of
-                            NONE => ()
-                          | SOME tasks => pushAll ((p, r), tasks)
             in
                 case Q.choose q of
                     NONE => (M.setWaiting m;
-                             NONE)
+                             case M.getMail m of
+                                 NONE => NONE
+                               | SOME tasks => (pushAll ((p, r), tasks);
+                                                Q.choose (queue (p, r))))
                   | SOME x => SOME x
             end
         (* First try getting work at the primary priority *)
-        val _ = logPrios 4 prio_rec
+        (* val _ = logPrios 4 prio_rec *)
         val prio = #primary prio_rec
         val t = getWorkAt prio
         (* If there's no work there, try the secondary. *)
@@ -297,7 +299,7 @@ fun schedule p kt =
             SOME t =>
             (* Do the work. It shouldn't return. *)
             (A.update (curprios, p, prio);
-             log 6 ("found work at " ^ (P.toString prio) ^ "\n");
+             (* log 6 ("found work at " ^ (P.toString prio) ^ "\n"); *)
              I.unblock p;
              workOnTask p t;
              raise ShouldntGetHere)
@@ -336,7 +338,7 @@ fun returnToSched () =
 fun finalizePriorities () = P.init ()
 
 fun interruptHandler (p, k) =
-    let val _ = log 4 ("interrupt on " ^ (Int.toString p) ^ "\n")
+    let (* val _ = log 4 ("interrupt on " ^ (Int.toString p) ^ "\n") *)
         val d = A.sub (depth, p) in
         T.prepare (T.new (schedule p), SOME (Task.Thread k, d))
     end

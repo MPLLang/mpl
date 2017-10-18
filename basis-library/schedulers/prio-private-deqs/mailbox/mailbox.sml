@@ -70,6 +70,8 @@ fun tryClear (mb as {flag, mail}) =
                           mail := NONE)
 
 fun setWaiting (mb as {flag, mail}) =
-    flag := status_to_flag Waiting
+    case flag_to_status (!flag) of
+        NotWaiting => flag := status_to_flag Waiting
+      | _ => ()
 
 end

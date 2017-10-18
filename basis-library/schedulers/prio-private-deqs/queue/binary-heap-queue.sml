@@ -51,7 +51,7 @@ struct
       val de = Elem.depth e
       val maxd' = Int.max (!maxd, de)
       val diff = maxd' - !maxd
-      val weight' = P.l (!weight, diff) + P.fromDepth maxd' de
+      val weight' = P.p (P.l (!weight, diff), P.fromDepth maxd' de)
     in
       upd data (!len, e);
       len := (!len + 1);
@@ -70,8 +70,8 @@ struct
       0 => NONE
     | n => let val e = nth data (n-1)
            in len := n - 1;
-              upd data (n-1, Elem.default);
-              weight := !weight - P.fromDepth (!maxd) (Elem.depth e);
+              (* XXX do we have to do this? upd data (n-1, Elem.default); *)
+              weight := P.m (!weight, P.fromDepth (!maxd) (Elem.depth e));
               SOME e
            end
 
@@ -111,7 +111,7 @@ struct
            in upd data (0, Elem.default);
               swap data (0, n-1);
               len := n-1;
-              weight := !weight - P.fromDepth (!maxd) (Elem.depth e);
+              weight := P.m (!weight, P.fromDepth (!maxd) (Elem.depth e));
               siftDown (data, n-1) 0;
               SOME e
            end
@@ -123,8 +123,9 @@ struct
       val md = !maxd
 
       fun findPrefixLen wi i =
-        if P.l (wi, 2) >= tw orelse i = n then (wi, i)
-        else findPrefixLen (wi + P.fromDepth md (Elem.depth (nth data i))) (i+1)
+        if P.gt (P.l (wi, 2), tw) orelse i = n then (wi, i)
+        else findPrefixLen (P.p (wi, P.fromDepth md (Elem.depth (nth data i))))
+                           (i+1)
 
       val (ws, s) = findPrefixLen P.zero 0
       val front = ArraySlice.slice (data, 0, SOME s)
@@ -144,7 +145,7 @@ struct
       then ArraySlice.modify (fn _ => Elem.default) front
       else fixup (s, n);
       len := n - s;
-      weight := tw - ws;
+      weight := P.m (tw, ws);
       if List.null result then NONE else SOME result
     end
 

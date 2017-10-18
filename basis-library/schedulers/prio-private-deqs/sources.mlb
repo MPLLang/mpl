@@ -28,7 +28,7 @@ local
 
     priority/priority.sml
     queue/potential.sml
-    queue/list-queue.sml
+    queue/binary-heap-queue.sml
 
     scheduler.sml
 
