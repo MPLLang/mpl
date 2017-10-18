@@ -45,26 +45,20 @@ struct
 
 (*fun write ((r, v), a) =
       case !v
-       of Done _ => (* XXX silently ignore write *)
-          print "two writes to sync var\n"
-          (* raise B.Parallel "two writes to sync var!" *)
+       of Done _ => raise B.Parallel "two writes to sync var!"
         | Waiting _ =>
           let
             (* First take the lock *)
-              (* val () = print "locking\n" *)
             val () = lock r
-            (* val () = print "got lock\n" *)
             (* Now read the wait list *)
             val readers = case !v
                            of Waiting w => w
                             | Done _ => raise B.Parallel "async write to sync var!"
             val () = v := Done a
             val () = unlock r
-            (* val () = print ("unlocked, waking " ^ (Int.toString (List.length readers)) ^ " readers\n") *)
           in
             (* Add readers to the queue *)
             app (fn k => B.resume (k, (true, a))) readers
-            (* print "done\n" *)
           end
 
   fun read (r, v) =
@@ -84,11 +78,6 @@ struct
               | Waiting readers =>
                 B.suspend (fn k => (v := Waiting (k::readers); unlock r))
           end*)
-
-  fun poll (r, v) =
-      case !v of
-          Done a => SOME a
-        | Waiting _ => NONE
 
 (*
   fun read (r, v) =

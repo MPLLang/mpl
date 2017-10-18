@@ -7,9 +7,6 @@ struct
   structure FutureSuspend : MLTON_PARALLEL_FUTURE = MLtonParallelFutureSuspend
   structure FutureSuspendDelay : MLTON_PARALLEL_FUTURE = MLtonParallelFutureSuspendDelay
   structure FutureSuspendMaybeDelay : MLTON_PARALLEL_FUTURE = MLtonParallelFutureSuspendMaybeDelay
-  structure SyncVarSuspend : MLTON_PARALLEL_SYNCVAR = MLtonParallelSyncVarSuspend
-  structure FutureFGBG : MLTON_PARALLEL_FGBG = MLtonParallelFutureFGBG
-  (* structure IO : MLTON_PARALLEL_IO = MLtonParallelIOSuspend *)
 (*
   structure FutureCapture : MLTON_PARALLEL_FUTURE = MLtonParallelFutureCapture
   structure FutureCaptureDelay : MLTON_PARALLEL_FUTURE = MLtonParallelFutureCaptureDelay

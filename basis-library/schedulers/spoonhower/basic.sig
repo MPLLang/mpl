@@ -10,12 +10,6 @@ sig
   (* a suspended computation waiting for a value of type 'a *)
   type 'a t
 
-  val stringOfToken : token -> string
-
-  val addtoio : unit t * (unit -> bool) -> unit
-
-  val processorNumber : unit -> int
-
   (* Suspends the current thread of execution and runs the given function,
     passing in a reified form of the original thread.  The given function must
     not call any other function in this signature. *)
@@ -25,33 +19,26 @@ sig
   (* similar to suspend, but doesn't maintain the priority associated with this job *)
   val capture : ('a t -> unit) -> 'a
 
-  (* Run the given work as a latency-sensitive task *)
-  val event : (unit -> 'a) -> 'a
-
   (* Add the given work to the queue; the work is consider to have lower
     priority than the current task.  Returns a token that may be used to
     remove this task from the scheduling queue.  This operation may suspend
     under some scheduling policies. *)
   (* "Right" adds to the right of the current task -- lower priority than the
     current task *)
-  val addRightLat : bool * work -> token
   val addRight : work -> token
   (* "Left" adds to the left of the current task -- higher priority than the
     current task *)
-  val addLeftLat : bool * work -> token
   val addLeft : work -> token
   (* Remove a task from the work queue if no processor has yet started work on
     it.  Returns true if the task was successfully removed and, we are
     guaranteed that no other processor will execute that task.  At most call
     to remove work (for a given task) will return true. *)
   val remove : token -> bool
-  val removeLat : bool -> token -> bool
 
   (* Adds to the queue after the current task has finished.  (Finished is
     defined as the next time this task suspends: possibly one of suspend,
     capture, addRight, addLift, return, or yield.) This operation never
     suspend the current task. *)
-  val delayedAddLat : bool * work -> unit
   val delayedAdd : work -> unit
 
   (* End the current task *)

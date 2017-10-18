@@ -5,7 +5,6 @@ struct
   val resumeWorkLocally = true
   val stealEntireQueues = false (* NA *)
   val stealFromSuspendedQueues = false (* NA *)
-  fun workOnLatency n p = p = n - 1
   val policyName = "ws6"
 end
 

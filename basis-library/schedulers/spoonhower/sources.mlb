@@ -17,6 +17,7 @@ local
   syncvar.sig
   forkjoin.sig
   future.sig
+  array.sig
 
   wsworkqueue.sml
   wspolicy6.sml
