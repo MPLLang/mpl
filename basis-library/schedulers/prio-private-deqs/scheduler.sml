@@ -77,9 +77,9 @@ val prios = A.array (numberOfProcessors, {primary = P.bot,
                                           secondary = P.bot,
                                           send = P.bot})
 val ioqueues = A.tabulate (numberOfProcessors, fn _ => IOQ.new ())
-val rands = A.tabulate (numberOfProcessors, fn i => MT.init32
+(*val rands = A.tabulate (numberOfProcessors, fn i => MT.init32
                                                         (Word.fromInt i))
-
+*)
 (* These are initialized after the priorities. *)
 val mailboxes = ref (A.fromList [])
 val queues = ref (A.fromList [])
@@ -137,7 +137,7 @@ fun newNextDeal () = (* Tm.+ (Tm.now (), dealInterval) *)
 
 fun switchPrios p =
     A.update (prios, p, { primary = P.chooseFromDist (R.rand01 ()),
-                          secondary = P.bot, (* XXX P.top, *)
+                          secondary = P.top,
                           send = P.chooseFromDist (R.rand01 ()) })
 
 fun maybeSwitchPrios p =

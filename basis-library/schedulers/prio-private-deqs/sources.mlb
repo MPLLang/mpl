@@ -6,9 +6,14 @@ local
 
     real-atom.sml
 
-    random.sml
+(*
+    SimpleRandom.sml
     mersenne-twister-sig.sml
     mersenne-twister.sml
+    *)
+
+    MersenneTwister.sml
+    MTRandom.sml
 
     interrupt/interrupt.sig
     mailbox/mailbox.sig
