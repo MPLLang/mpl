@@ -44,6 +44,9 @@ struct
   (* Assume for now that we don't need to resize.
    * Requires: depth(e) >= depth(e') for any e' in the queue already *)
   fun push ({data, len, weight, maxd}, e) =
+    if !len >= Array.length data
+    then raise Fail "BinaryHeapQueue resize not implemented yet"
+    else
     let
       val de = Elem.depth e
       val maxd' = Int.max (!maxd, de)
