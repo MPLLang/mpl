@@ -1,5 +1,6 @@
 structure Tm = Time
 structure A = Array
+structure V = Vector
 structure P = Priority
 structure I = Interrupt
 structure T = MLton.Thread
@@ -85,6 +86,7 @@ val ioqueues = A.tabulate (numberOfProcessors, fn _ => IOQ.new ())
 (* These are initialized after the priorities. *)
 val mailboxes = ref (A.fromList [])
 val queues = ref (A.fromList [])
+val topprios = V.tabulate (numberOfProcessors, fn _ => ref ~1)
 
                  (*
 structure R =
@@ -118,6 +120,28 @@ fun queue (p, r) =
 
 fun curPrio p =
     A.sub (curprios, p)
+
+fun incTopPrio p newPrio =
+    let val pto = P.toInt newPrio
+        val tpref = V.sub (topprios, p)
+        fun try () =
+            let val ctprio = !tpref
+            in
+                if ctprio >= pto then
+                    (* Priority is currently higher. Do nothing. *)
+                    ()
+                else
+                    if MLton.Parallel.compareAndSwap
+                           tpref (ctprio, pto) = ctprio
+                    then
+                        (* Success *)
+                        ()
+                    else (* Try again *)
+                        try ()
+            end
+    in
+        try ()
+    end
 
 fun workOnTask p (w, d) =
     (A.update (depth, p, d);
@@ -177,7 +201,8 @@ fun dealAttempt (p, r) =
                      SOME ts => (M.sendMail m ts (*;
                                  log 2 ("sent " ^ (Int.toString (length ts))
                                         ^ "; " ^ (Int.toString (length q)) ^
-                                        " left\n")*))
+                                        " left\n")*);
+                                incTopPrio p' r)
                    | NONE => raise ShouldntGetHere)
              else
              (* We failed to claim the mailbox. Give up. *)
@@ -220,10 +245,11 @@ fun pushOrInsert f (r, t) =
     let val p = processorNumber ()
         val m = mb (p, r)
         val q = queue (p, r)
-        val _ = log 7 ("pushing work at " ^ (P.toString r) ^ "\n")
+        (* val _ = log 7 ("pushing work at " ^ (P.toString r) ^ "\n") *)
     in
         f (q, t);
-        tryClearFlag (m, p, r)
+        tryClearFlag (m, p, r);
+        incTopPrio p r
     end
 val push = pushOrInsert Q.push
 val insert = pushOrInsert Q.insert
@@ -255,7 +281,8 @@ fun handleResumed p =
         fun resume (t, r) =
             let val q = queue (p, r)
             in
-                Q.push (q, t)
+                Q.insert (q, t);
+                incTopPrio p r
             end
         val ioq' = IOQ.process resume ioq
     in
@@ -285,15 +312,37 @@ fun schedule p kt =
                                                 Q.choose (queue (p, r))))
                   | SOME x => SOME x
             end
+        fun iterGetWork r =
+            case getWorkAt r of
+                SOME x => (r, SOME x)
+              | NONE => (if P.pe (r, P.bot) then
+                             (r, NONE)
+                         else
+                             iterGetWork (P.next r))
         (* First try getting work at the primary priority *)
         (* val _ = logPrios 4 prio_rec *)
         val prio = #primary prio_rec
         val t = getWorkAt prio
-        (* If there's no work there, try the secondary. *)
+        (* If there's no work there, try the stored top priority. *)
         val (prio, t) = case t of
-                    SOME t => (prio, SOME t)
-                         | NONE => (#secondary prio_rec,
-                                    getWorkAt (#secondary prio_rec))
+                            SOME t => (prio, SOME t)
+                          | NONE => let val top =
+                                            P.fromInt (!(V.sub (topprios, p)))
+                                    in
+                                        (top, getWorkAt top)
+                                    end
+        (* Finally, scan through the priorities *)
+        val (prio, t) = case t of
+                            SOME t => (prio, SOME t)
+                          | NONE =>
+                            (* Reset the stored top priority. There's
+                             * a race condition here, but that OK
+                             * since this is just a heuristic anyway *)
+                            let val (r, t) = iterGetWork P.top
+                            in
+                                V.sub (topprios, p) := P.toInt r;
+                                (r, t)
+                            end
     in
         case t of
             SOME t =>
@@ -305,7 +354,7 @@ fun schedule p kt =
              raise ShouldntGetHere)
           | NONE =>
             (* Continue scanning through secondary priorities *)
-            (advancePrios p;
+            ((* advancePrios p; *)
              schedule p NONE)
     end
 
@@ -359,6 +408,7 @@ fun init () =
                                  fn _ => M.new ());
         queues := A.tabulate (numberOfProcessors * (P.count ()),
                               fn _ => Q.empty ());
+        V.app (fn r => r := P.toInt P.bot) topprios;
         ignore (M.tryClear (mb (0, P.bot)));
         MLton.Parallel.registerProcessorFunction prun;
         MLton.Parallel.initializeProcessors ();
