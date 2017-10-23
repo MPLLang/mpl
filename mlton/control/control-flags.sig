@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014-2016 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2017 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -63,8 +63,8 @@ signature CONTROL_FLAGS =
       (* List of pass names to keep diagnostic info on. *)
       val diagPasses: Regexp.Compiled.t list ref
 
-      (* List of optimization passes to skip. *)
-      val dropPasses: Regexp.Compiled.t list ref
+      (* List of optimization passes to disable/enable. *)
+      val executePasses: (Regexp.Compiled.t * bool) list ref
 
       structure Elaborate:
          sig
@@ -98,16 +98,37 @@ signature CONTROL_FLAGS =
             val allowFFI: (bool,bool) t
             val allowOverload: (bool,bool) t
             val allowPrim: (bool,bool) t
-            val allowRebindEquals: (bool,bool) t
+            val allowRedefineSpecialIds: (bool,bool) t
+            val allowSpecifySpecialIds: (bool,bool) t
             val deadCode: (bool,bool) t
             val forceUsed: (unit,bool) t
             val ffiStr: (string,string option) t
-            val nonexhaustiveExnMatch: (DiagDI.t,DiagDI.t) t
+            val nonexhaustiveBind: (DiagEIW.t,DiagEIW.t) t
+            val nonexhaustiveExnBind: (DiagDI.t,DiagDI.t) t
+            val redundantBind: (DiagEIW.t,DiagEIW.t) t
             val nonexhaustiveMatch: (DiagEIW.t,DiagEIW.t) t
+            val nonexhaustiveExnMatch: (DiagDI.t,DiagDI.t) t
             val redundantMatch: (DiagEIW.t,DiagEIW.t) t
+            val nonexhaustiveRaise: (DiagEIW.t,DiagEIW.t) t
+            val nonexhaustiveExnRaise: (DiagDI.t,DiagDI.t) t
+            val redundantRaise: (DiagEIW.t,DiagEIW.t) t
             val resolveScope: (ResolveScope.t,ResolveScope.t) t
             val sequenceNonUnit: (DiagEIW.t,DiagEIW.t) t
+            val valrecConstr: (DiagEIW.t,DiagEIW.t) t
             val warnUnused: (bool,bool) t
+
+            (* Successor ML *)
+            val allowDoDecls: (bool,bool) t
+            val allowExtendedNumConsts: (bool,bool) t
+            val allowExtendedTextConsts: (bool,bool) t
+            val allowLineComments: (bool,bool) t
+            val allowOptBar: (bool,bool) t
+            val allowOptSemicolon: (bool,bool) t
+            val allowOrPats: (bool,bool) t
+            val allowRecordPunExps: (bool,bool) t
+            val allowSigWithtype: (bool,bool) t
+            val allowVectorExps: (bool,bool) t
+            val allowVectorPats: (bool,bool) t
 
             val current: ('args, 'st) t -> 'st
             val default: ('args, 'st) t -> 'st
@@ -115,8 +136,8 @@ signature CONTROL_FLAGS =
             val expert: ('args, 'st) t -> bool
             val name: ('args, 'st) t -> string
 
-            datatype ('a, 'b) parseResult =
-               Bad | Deprecated of 'a | Good of 'b | Other
+            datatype 'a parseResult =
+               Bad | Good of 'a | Other | Proxy of 'a list * {deprecated: bool}
 
             structure Id :
                sig
@@ -124,17 +145,17 @@ signature CONTROL_FLAGS =
                   val name: t -> string
                end
             val equalsId: ('args, 'st) t * Id.t -> bool
-            val parseId: string -> (Id.t list , Id.t) parseResult
+            val parseId: string -> Id.t parseResult
 
             structure Args :
                sig
                   type t
                   val processAnn: t -> (unit -> unit)
                end
-            val parseIdAndArgs: string -> ((Id.t * Args.t) list, Id.t * Args.t) parseResult
+            val parseIdAndArgs: string -> (Id.t * Args.t) parseResult
 
-            val processDefault: string -> (Id.t list, unit) parseResult
-            val processEnabled: string * bool -> (Id.t list, unit) parseResult
+            val processDefault: string -> Id.t parseResult
+            val processEnabled: string * bool -> Id.t parseResult
 
             val withDef: (unit -> 'a) -> 'a
             val snapshot: unit -> (unit -> 'a) -> 'a
@@ -195,6 +216,8 @@ signature CONTROL_FLAGS =
       (* List of pass names to save the input/output. *)
       val keepPasses: Regexp.Compiled.t list ref
 
+      (* Save the AST to a file. *)
+      val keepAST: bool ref
       (* Save the final CoreML to a file. *)
       val keepCoreML: bool ref
       (* Save the final Machine to a file. *)
@@ -226,6 +249,10 @@ signature CONTROL_FLAGS =
 
       (* Number of times to loop through optimization passes. *)
       val loopPasses: int ref
+
+      (* Limit the code growth loop unrolling/unswitching will allow. *)
+      val loopUnrollLimit: int ref
+      val loopUnswitchLimit: int ref
 
       (* Should the mutator mark cards? *)
       val markCards: bool ref

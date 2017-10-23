@@ -1,4 +1,5 @@
-(* Copyright (C) 2003-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2015 Matthew Fluet.
+ * Copyright (C) 2003-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a BSD-style license.
@@ -26,59 +27,62 @@ structure Convention =
 structure Kind =
    struct
       datatype t = 
-	       Functional
-	     | Impure
-	     | Runtime of {bytesNeeded: int option, 
-			   ensuresBytesFree: bool,
-			   mayGC: bool,
-			   maySwitchThreads: bool,
-			   modifiesFrontier: bool,
-			   readsStackTop: bool,
-			   writesStackTop: bool}
+         Impure
+       | Pure
+       | Runtime of {bytesNeeded: int option, 
+                     ensuresBytesFree: bool,
+                     mayGC: bool,
+                     maySwitchThreads: bool,
+                     modifiesFrontier: bool,
+                     readsStackTop: bool,
+                     writesStackTop: bool}
 
       val runtimeDefault = Runtime {bytesNeeded = NONE,
-				    ensuresBytesFree = false,
-				    mayGC = true,
-				    maySwitchThreads = false,
-				    modifiesFrontier = true,
-				    readsStackTop = true,
-				    writesStackTop = true}
+                                    ensuresBytesFree = false,
+                                    mayGC = true,
+                                    maySwitchThreads = false,
+                                    modifiesFrontier = true,
+                                    readsStackTop = true,
+                                    writesStackTop = true}
+      val pure = Pure
+      val impure = Impure
+      val reentrant = runtimeDefault
 
-      fun layout k = 
-	  case k of
-	      Functional => Layout.str "Functional" 
-	    | Impure => Layout.str "Impure"
-	    | Runtime {bytesNeeded, ensuresBytesFree, mayGC,
-                       maySwitchThreads, modifiesFrontier,
-                       readsStackTop, writesStackTop} => 
-	      Layout.namedRecord 
-		  ("Runtime", 
-		   [("bytesNeeded", Option.layout Int.layout bytesNeeded),
-		    ("ensuresBytesFree", Bool.layout ensuresBytesFree),
-		    ("mayGC", Bool.layout mayGC),
-		    ("maySwitchThreads", Bool.layout maySwitchThreads),
-		    ("modifiesFrontier", Bool.layout modifiesFrontier),
-		    ("readsStackTop", Bool.layout readsStackTop),
-		    ("writesStackTop", Bool.layout writesStackTop)])
+      fun layout k =
+         case k of
+            Impure => Layout.str "Impure"
+          | Pure => Layout.str "Pure"
+          | Runtime {bytesNeeded, ensuresBytesFree, mayGC,
+                     maySwitchThreads, modifiesFrontier,
+                     readsStackTop, writesStackTop} =>
+               Layout.namedRecord
+               ("Runtime",
+                [("bytesNeeded", Option.layout Int.layout bytesNeeded),
+                 ("ensuresBytesFree", Bool.layout ensuresBytesFree),
+                 ("mayGC", Bool.layout mayGC),
+                 ("maySwitchThreads", Bool.layout maySwitchThreads),
+                 ("modifiesFrontier", Bool.layout modifiesFrontier),
+                 ("readsStackTop", Bool.layout readsStackTop),
+                 ("writesStackTop", Bool.layout writesStackTop)])
 
       val toString = Layout.toString o layout
 
       local
-	  fun make (sel, default) k = 
-	      case k of
-		  Functional => default
-		| Impure => default
-		| Runtime r => sel r
-	  fun makeBool sel = make (sel, false)
-	  fun makeOpt sel = make (sel, NONE)
+         fun make (sel, default) k = 
+            case k of
+               Impure => default
+             | Pure => default
+             | Runtime r => sel r
+         fun makeBool sel = make (sel, false)
+         fun makeOpt sel = make (sel, NONE)
       in
-          val bytesNeeded = makeOpt #bytesNeeded
-	  val ensuresBytesFree = makeBool #ensuresBytesFree
-          val mayGC = makeBool #mayGC
-          val maySwitchThreads = makeBool #maySwitchThreads
-          val modifiesFrontier = makeBool #modifiesFrontier
-          val readsStackTop = makeBool #readsStackTop
-          val writesStackTop = makeBool #writesStackTop
+         val bytesNeeded = makeOpt #bytesNeeded
+         val ensuresBytesFree = makeBool #ensuresBytesFree
+         val mayGC = makeBool #mayGC
+         val maySwitchThreads = makeBool #maySwitchThreads
+         val modifiesFrontier = makeBool #modifiesFrontier
+         val readsStackTop = makeBool #readsStackTop
+         val writesStackTop = makeBool #writesStackTop
       end
    end
 
