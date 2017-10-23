@@ -5,7 +5,7 @@ To compile you need
 on aware.aladdin.cs.cmu.edu this is 
 /opt/parmem-bin/mlton-20130715-2/bin/mlton
 so add the following to your path
-/opt/parmem-bin/mlton-20130715-2/bin/mlton
+/opt/parmem-bin/mlton-20130715-2/bin
 
 2) To make type  at the root
 
