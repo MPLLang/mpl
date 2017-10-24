@@ -128,7 +128,7 @@ void HM_HHC_collectLocal(void) {
       "START");
 
   Trace0(EVENT_GC_ENTER);
-  Trace3(EVENT_COPY, 0, 0, 0);
+  TraceResetCopy();
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
@@ -421,7 +421,7 @@ void HM_HHC_collectLocal(void) {
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
 
-  Trace3(EVENT_COPY, 0, 0, 0);
+  TraceResetCopy();
   Trace0(EVENT_GC_LEAVE);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,

@@ -57,4 +57,6 @@ void Trace_(struct TracingContext *ctx, int kind,
 #define Trace2(k, a0, a1)       Trace(k, a0, a1,  0)
 #define Trace3(k, a0, a1, a2)   Trace(k, a0, a1, a2)
 
+#define TraceResetCopy() Trace0(EVENT_COPY)
+
 #endif  /* TRACING_H */

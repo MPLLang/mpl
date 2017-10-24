@@ -28,7 +28,7 @@ pointer HM_Promote(GC_state s,
         (void *)src, (void *)dst_chunk);
 
     Trace2(EVENT_PROMOTION_ENTER, (EventInt)src, (EventInt)dst_chunk);
-    Trace3(EVENT_COPY, 0, 0, 0);
+    TraceResetCopy(); /* Reset copy events. */
 
     /* AG_NOTE is this needed? */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -113,7 +113,7 @@ pointer HM_Promote(GC_state s,
 
     /* Exit. */
 
-    Trace3(EVENT_COPY, 0, 0, 0);
+    TraceResetCopy();
     Trace0(EVENT_PROMOTION_LEAVE);
 
     pointer res = objptrToPointer(srcobj, s->heap->start);
