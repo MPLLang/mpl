@@ -58,7 +58,7 @@ fun lockMutex m =
 fun unlockMutex m = m := 0
 
 fun log l s =
-    if l < 0 then
+    if l < 3 then
         (lockMutex printMutex;
          print s;
          unlockMutex printMutex)
@@ -221,10 +221,10 @@ fun dealAttempt (p, r) =
                  (log 2 ("deal " ^ (Int.toString p) ^ " -> " ^
                          (Int.toString p') ^ "\n");
                  case Q.split q of
-                     SOME ts => (M.sendMail m ts (*;
-                                 log 2 ("sent " ^ (Int.toString (length ts))
-                                        ^ "; " ^ (Int.toString (length q)) ^
-                                        " left\n")*);
+                     SOME ts => (M.sendMail m ts;
+                                 log 2 ("sent " ^ (Int.toString (Q.numts ts))
+                                        ^ "; " ^ (Int.toString (Q.size q)) ^
+                                        " left\n");
                                 incTopPrio p' r)
                    | NONE => raise ShouldntGetHere)
              else
@@ -255,7 +255,7 @@ fun maybeDeal (p, prios) =
 fun makeRequest (p, r) =
     if numberOfProcessors = 1 then ()
     else
-        let val p' = R.randInt (0, numberOfProcessors - 2)
+        let val p' = Int.div (p, 2) (*  R.randInt (0, numberOfProcessors - 2) *)
             val p' = if p' >= p then p' + 1 else p'
             val c = V.sub (reqCells, p')
             val req = requestOfPR (p, r)
@@ -345,8 +345,9 @@ fun schedule p kt =
             in
                 case Q.choose q of
                     NONE => (M.setWaiting m;
-                             (*if (P.pe (r, P.bot)) then *)
-                             makeRequest (p, r) (* else ()*);
+                             if (P.pe (r, P.bot)) then
+                             	makeRequest (p, r)
+                             else ();
                              case M.getMail m of
                                  NONE => NONE
                                | SOME tasks => (pushAll ((p, r), tasks);
