@@ -103,7 +103,7 @@ struct
         end
 
     fun next (r: t) =
-        if r = 0 then top
+        if r = 1 then top
         else r - 1
 
 end

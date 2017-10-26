@@ -112,7 +112,7 @@ struct
     fun next (r: t) =
         let val po = toInt r
         in
-            if toInt r = 0 then
+            if toInt r = 1 then
                 Top
             else
                 N (po - 1)
