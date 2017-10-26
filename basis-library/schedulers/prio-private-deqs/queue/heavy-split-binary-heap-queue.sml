@@ -146,10 +146,5 @@ struct
 
 end
 
-<<<<<<< 36ea0e2bdaf9dd0fe4902caf4efe523125e8ac9f
 (*structure E = struct type t = int val default = 0 fun depth x = x end
 structure Q = HeavySplitBinaryHeapQueue (E)*)
-=======
-(* structure E = struct type t = int val default = 0 fun depth x = x end
-structure Q = BinaryHeapQueue (E) *)
->>>>>>> Try out heavy split queue
