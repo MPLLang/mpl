@@ -26,9 +26,11 @@ local
     mailbox/mailbox.sml
     interrupt/interrupt.sml
 
-    priority/priority.sml
+    (*priority/priority.sml*)
+    priority/totprio.sml
+    (*priority/intprio.sml*)
     queue/potential.sml
-    queue/binary-heap-queue.sml
+    queue/heavy-split-binary-heap-queue.sml
 
     scheduler.sml
 
