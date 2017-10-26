@@ -350,7 +350,7 @@ fun schedule p kt =
                 case Q.choose q of
                     NONE => (M.setWaiting m;
                              if (P.pe (r, P.bot)) then
-                             	makeRequest (p, r)
+                                 makeRequest (p, r)
                              else ();
                              case M.getMail m of
                                  NONE => NONE
