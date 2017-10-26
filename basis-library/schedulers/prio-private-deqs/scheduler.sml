@@ -19,7 +19,7 @@ fun depth (_, w) = w
 end
 
 structure M = Mailbox
-structure Q = HeavySplitBinaryHeapQueue(Task)
+structure Q = HybridBinaryHeapQueue(Task)
 
 exception ShouldntGetHere
 
@@ -61,7 +61,7 @@ fun log l f =
     if l < 0 then
         (lockMutex printMutex;
          print (f ());
-	 TextIO.flushOut TextIO.stdOut;
+         TextIO.flushOut TextIO.stdOut;
          unlockMutex printMutex)
     else
         ()

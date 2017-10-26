@@ -37,7 +37,7 @@ struct
     | isEmpty _ = false
 
   val numts = List.length
-  
+
   fun size ({len, back, ...} : t) =
     !len + List.length (!back)
 
