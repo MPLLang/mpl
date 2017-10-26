@@ -1,0 +1,44 @@
+local
+    $(SML_LIB)/basis/basis.mlb
+    $(SML_LIB)/basis/mlton.mlb
+    $(SML_LIB)/basis/unsafe.mlb
+    x/graphics.mlb
+
+    real-atom.sml
+
+(*
+    SimpleRandom.sml
+    mersenne-twister-sig.sml
+    mersenne-twister.sml
+    *)
+
+    MersenneTwister.sml
+    MTRandom.sml
+
+    interrupt/interrupt.sig
+    mailbox/mailbox.sig
+    priority/priority.sig
+    queue/queue.sig
+    io/io.sig
+    bag/BAG.sig
+
+    bag/ListBag.sml
+    mailbox/mailbox.sml
+    interrupt/interrupt.sml
+
+    priority/priority.sml
+    (*priority/totprio.sml*)
+    (*priority/intprio.sml*)
+    queue/potential.sml
+    (*queue/heavy-split-binary-heap-queue.sml*)
+    queue/hybrid-binary-heap-queue.sml
+
+    scheduler.sml
+
+    thread.sig
+
+(*    MLSDL/srcSML/MLTon/SDLFuncs/SDLFuncs.sml *)
+    io/io.sml
+in
+    thread.sml
+end

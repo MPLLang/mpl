@@ -19,7 +19,7 @@ fun depth (_, w) = w
 end
 
 structure M = Mailbox
-structure Q = HybridBinaryHeapQueue(Task)
+structure Q = BinaryHeapQueue(Task)
 
 exception ShouldntGetHere
 

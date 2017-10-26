@@ -1,4 +1,4 @@
-functor HybridBinaryHeapQueue
+functor BinaryHeapQueue
   (Elem : sig
             type t
             val default : t
