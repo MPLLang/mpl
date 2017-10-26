@@ -10,6 +10,9 @@ sig
     (* Create a new queue from a task set. *)
     val fromSet : task_set -> t
 
+    val size : t -> int
+    val numts : task_set -> int
+
     (* Push a task *in order* to the bottom of the queue *)
     val push : t * task -> unit
     (* Insert an arbitrary task to its correct position in the queue *)

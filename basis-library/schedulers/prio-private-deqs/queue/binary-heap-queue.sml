@@ -33,6 +33,12 @@ struct
   fun isEmpty ({len, ...} : t) =
     !len = 0
 
+  fun size ({len, ...} : t) =
+    !len
+
+  fun numts (l : task_set) =
+    List.length l
+
   (* fun weight ({weight, ...} : t) = weight
   fun capacity ({data, ...} : t) = Array.length data *)
 
