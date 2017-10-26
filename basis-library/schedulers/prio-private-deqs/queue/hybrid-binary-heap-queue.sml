@@ -1,4 +1,4 @@
-functor HeavySplitBinaryHeapQueue
+functor HybridBinaryHeapQueue
   (Elem : sig
             type t
             val default : t
@@ -15,8 +15,12 @@ struct
   type task = Elem.t
 
   type t =
-    { data : Elem.t array
-    , len : int ref (* size of relevant prefix of `data` *)
+    { back : Elem.t list ref
+    , data : Elem.t array
+    , len : int ref       (* size of relevant prefix of `data` *)
+    , weight : P.t ref    (* total potential of all elements in the queue *)
+    , maxd : int ref      (* largest depth seen so far (of any element that
+                           * has ever been in the queue) *)
     }
 
   type task_set = Elem.t list
@@ -24,14 +28,18 @@ struct
   fun empty () =
     { data = Array.array (1024, Elem.default)
     , len = ref 0
+    , weight = ref P.zero
+    , maxd = ref 0
+    , back = ref []
     }
 
-  fun isEmpty ({len, ...} : t) =
-    !len = 0
+  fun isEmpty ({len = ref 0, back = ref [], ...} : t) = true
+    | isEmpty _ = false
 
-  fun size ({len, ...} : t) = !len
-  
   val numts = List.length
+  
+  fun size ({len, back, ...} : t) =
+    !len + List.length (!back)
 
   (* fun weight ({weight, ...} : t) = weight
   fun capacity ({data, ...} : t) = Array.length data *)
@@ -43,8 +51,9 @@ struct
 
   (* Assume for now that we don't need to resize.
    * Requires: depth(e) >= depth(e') for any e' in the queue already *)
-  fun push ({data, len}, e) =
-    (upd data (!len, e); len := !len + 1)
+  fun push ({data, len, weight, maxd, back}, e) =
+    back := e :: !back
+    
 
   fun fromSet es =
     let val q = empty ()
@@ -52,10 +61,42 @@ struct
        q
     end
 
-  fun choose {data, len} =
-    case !len of
-      0 => NONE
-    | n => (len := n - 1; SOME (nth data (n-1)))
+  fun totalWeight md dataslice =
+    let
+      fun addWeight (e, w) =
+        P.p (w, P.fromDepth md (Elem.depth e))
+    in
+      ArraySlice.foldl addWeight P.zero dataslice
+    end
+
+  fun populateBack {data, len, weight, maxd, back} =
+    let
+      val n = !len
+      val numToMove = Int.min (n, 100)
+      val moveSlice = ArraySlice.slice (data, n - numToMove, SOME numToMove)
+    in
+      back := ArraySlice.foldl op:: [] moveSlice;
+      weight := P.m (!weight, totalWeight (!maxd) moveSlice);
+      len := n - numToMove
+    end
+
+  fun heavyPush {data, len, weight, maxd, back} e =
+    let
+      val de = Elem.depth e
+      val maxd' = Int.max (!maxd, de)
+      val diff = maxd' - !maxd
+      val weight' = P.p (P.l (!weight, diff), P.fromDepth maxd' de)
+    in
+      upd data (!len, e);
+      len := (!len + 1);
+      weight := weight';
+      maxd := maxd'
+    end
+
+  fun choose (q as {data, len, weight, maxd, back}) =
+    case !back of
+      e :: es => (back := es; SOME e)
+    | [] => if !len = 0 then NONE else (populateBack q; choose q)
 
   fun swap d (i, j) =
     let val tmp = nth d i
@@ -81,42 +122,34 @@ struct
     then (swap d (i, right i); siftDown (d, len) (right i))
     else ()
 
-  fun insert (q as {data, len}, e) =
-    ( push (q, e)
-    ; siftUp data (!len - 1)
-    )
-
-  fun top {data, len} =
-    case !len of
-      0 => NONE
-    | n => let val e = nth data 0
-           in upd data (0, Elem.default);
-              swap data (0, n-1);
-              len := n-1;
-              siftDown (data, n-1) 0;
-              SOME e
-           end
-
-  fun totalWeightAndMaxDepth (data, n) =
+  fun insert (q as {data, len, weight, maxd, back}, e) =
     let
-      fun addWeight (e, (w, md)) =
-        let
-          val de = Elem.depth e
-          val md' = Int.max (md, de)
-          val w' = P.p (P.l (w, md' - md), P.fromDepth md' de)
-        in
-          (w', md')
-        end
+      val _ =
+        List.app (heavyPush q) (List.rev (!back))
+        before back := []
 
-      val s = ArraySlice.slice (data, 0, SOME n)
+      val n = !len
+      val de = Elem.depth e
+      val maxd' = Int.max (!maxd, de)
+      val diff = maxd' - !maxd
+      val weight' = P.p (P.l (!weight, diff), P.fromDepth maxd' de)
     in
-      ArraySlice.foldl addWeight (P.zero, 0) s
+      upd data (n, e);
+      siftUp data n;
+      len := n + 1;
+      weight := weight';
+      maxd := maxd'
     end
 
-  fun split {data, len} =
+  fun split (q as {data, len, weight, maxd, back}) =
     let
+      val _ =
+        List.app (heavyPush q) (List.rev (!back))
+        before back := []
+
+      val tw = !weight
       val n = !len
-      val (tw, md) = totalWeightAndMaxDepth (data, n)
+      val md = !maxd
 
       fun findPrefixLen wi i =
         if P.gt (P.l (wi, 2), tw) orelse i = n then (wi, i)
@@ -141,10 +174,11 @@ struct
       then ArraySlice.modify (fn _ => Elem.default) front
       else fixup (s, n);
       len := n - s;
+      weight := P.m (tw, ws);
       if List.null result then NONE else SOME result
     end
 
 end
 
 (*structure E = struct type t = int val default = 0 fun depth x = x end
-structure Q = HeavySplitBinaryHeapQueue (E)*)
+structure Q = HybridBinaryHeapQueue (E)*)
