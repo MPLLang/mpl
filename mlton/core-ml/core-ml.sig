@@ -1,4 +1,5 @@
-(* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2015,2017 Matthew Fluet
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -42,9 +43,10 @@ signature CORE_ML =
              | Const of unit -> Const.t
              | Layered of Var.t * t
              | List of t vector
+             | Or of t vector
              | Record of t Record.t
-             | Tuple of t vector
              | Var of Var.t
+             | Vector of t vector
              | Wild
 
             val dest: t -> node * Type.t
@@ -72,17 +74,18 @@ signature CORE_ML =
             datatype noMatch = Impossible | RaiseAgain | RaiseBind | RaiseMatch
             datatype node =
                App of t * t
-             | Case of {kind: string,
-                        lay: unit -> Layout.t,
+             | Case of {ctxt: unit -> Layout.t,
+                        kind: string * string,
                         nest: string list,
+                        matchDiags: {nonexhaustiveExn: Control.Elaborate.DiagDI.t,
+                                     nonexhaustive: Control.Elaborate.DiagEIW.t,
+                                     redundant: Control.Elaborate.DiagEIW.t},
                         noMatch: noMatch,
-                        nonexhaustiveExnMatch: Control.Elaborate.DiagDI.t,
-                        nonexhaustiveMatch: Control.Elaborate.DiagEIW.t,
-                        redundantMatch: Control.Elaborate.DiagEIW.t,
                         region: Region.t,
                         rules: {exp: t,
-                                lay: (unit -> Layout.t) option,
-                                pat: Pat.t} vector,
+                                layPat: (unit -> Layout.t) option,
+                                pat: Pat.t,
+                                regionPat: Region.t} vector,
                         test: t}
              | Con of Con.t * Type.t vector
              | Const of unit -> Const.t
@@ -100,19 +103,21 @@ signature CORE_ML =
              | Record of t Record.t
              | Seq of t vector
              | Var of (unit -> Var.t) * (unit -> Type.t vector)
+             | Vector of t vector
 
             val andAlso: t * t -> t
-            val casee: {kind: string,
-                        lay: unit -> Layout.t,
+            val casee: {ctxt: unit -> Layout.t,
+                        kind: string * string,
                         nest: string list,
+                        matchDiags: {nonexhaustiveExn: Control.Elaborate.DiagDI.t,
+                                     nonexhaustive: Control.Elaborate.DiagEIW.t,
+                                     redundant: Control.Elaborate.DiagEIW.t},
                         noMatch: noMatch,
-                        nonexhaustiveExnMatch: Control.Elaborate.DiagDI.t,
-                        nonexhaustiveMatch: Control.Elaborate.DiagEIW.t,
-                        redundantMatch: Control.Elaborate.DiagEIW.t,
                         region: Region.t,
                         rules: {exp: t,
-                                lay: (unit -> Layout.t) option,
-                                pat: Pat.t} vector,
+                                layPat: (unit -> Layout.t) option,
+                                pat: Pat.t,
+                                regionPat: Region.t} vector,
                         test: t} -> t
             val dest: t -> node * Type.t
             val iff: t * t * t -> t
@@ -162,16 +167,18 @@ signature CORE_ML =
              | Fun of {decs: {lambda: Lambda.t,
                               var: Var.t} vector,
                        tyvars: unit -> Tyvar.t vector}
-             | Val of {nonexhaustiveExnMatch: Control.Elaborate.DiagDI.t,
-                       nonexhaustiveMatch: Control.Elaborate.DiagEIW.t,
+             | Val of {matchDiags: {nonexhaustiveExn: Control.Elaborate.DiagDI.t,
+                                    nonexhaustive: Control.Elaborate.DiagEIW.t,
+                                    redundant: Control.Elaborate.DiagEIW.t},
                        rvbs: {lambda: Lambda.t,
                               var: Var.t} vector,
                        tyvars: unit -> Tyvar.t vector,
-                       vbs: {exp: Exp.t,
-                             lay: unit -> Layout.t,
+                       vbs: {ctxt: unit -> Layout.t,
+                             exp: Exp.t,
+                             layPat: unit -> Layout.t,
                              nest: string list,
                              pat: Pat.t,
-                             patRegion: Region.t} vector}
+                             regionPat: Region.t} vector}
 
             val layout: t -> Layout.t
          end

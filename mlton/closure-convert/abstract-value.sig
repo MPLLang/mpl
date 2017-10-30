@@ -51,6 +51,7 @@ signature ABSTRACT_VALUE =
       val deArray: t -> t
       val deHierarchicalHeap: t -> t
       val deRef: t -> t
+      val deVector: t -> t
       val deWeak: t -> t
       val dest: t -> dest
       (* Destroy info associated with Sxml.Type used to keep track of arrows. *)
