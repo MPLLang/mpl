@@ -5,6 +5,8 @@ sig
     type t
     type task_set
 
+    exception Full
+
     val empty : unit -> t
     val isEmpty : t -> bool
     (* Create a new queue from a task set. *)

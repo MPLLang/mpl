@@ -74,6 +74,8 @@ val print : string -> unit
 
 val yield : unit -> unit
 
+val sleep : Time.time -> unit
+
 structure Graphics : GRAPHICS
 
 structure Network : NETWORK

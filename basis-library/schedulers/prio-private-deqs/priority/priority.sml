@@ -177,7 +177,7 @@ struct
 
     fun installDist (f: t -> int) =
         let val raw = V.tabulate (count (),
-                                  fn i => let val r = fromInt i
+                                  fn i => let val r = fromInt (i + 1)
                                           in
                                               (r, f r)
                                           end)

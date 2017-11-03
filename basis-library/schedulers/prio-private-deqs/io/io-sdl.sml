@@ -35,6 +35,14 @@ fun yield () =
         suspendIO f
     end
 
+fun sleep t =
+    let val cur = Time.now ()
+        val t' = Time.+ (cur, t)
+        fun f () = Time.> (Time.now (), t')
+    in
+        suspendIO f
+    end
+
 structure Graphics (* : GRAPHICS *) =
 struct
 

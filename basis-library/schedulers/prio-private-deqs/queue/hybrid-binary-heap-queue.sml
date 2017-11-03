@@ -25,8 +25,11 @@ struct
 
   type task_set = Elem.t list
 
+  val maxSize = 1024
+  exception Full
+
   fun empty () =
-    { data = Array.array (1024, Elem.default)
+    { data = Array.array (maxSize, Elem.default)
     , len = ref 0
     , weight = ref P.zero
     , maxd = ref 0
@@ -72,7 +75,7 @@ struct
   fun populateBack {data, len, weight, maxd, back} =
     let
       val n = !len
-      val numToMove = Int.min (n, 100)
+      val numToMove = Int.min (n, 10)
       val moveSlice = ArraySlice.slice (data, n - numToMove, SOME numToMove)
     in
       back := ArraySlice.foldl op:: [] moveSlice;
@@ -81,7 +84,8 @@ struct
     end
 
   fun heavyPush {data, len, weight, maxd, back} e =
-    let
+      let
+          val _ = if !len >= maxSize then raise Full else ()
       val de = Elem.depth e
       val maxd' = Int.max (!maxd, de)
       val diff = maxd' - !maxd
@@ -125,17 +129,21 @@ struct
   fun insert (q as {data, len, weight, maxd, back}, e) =
     let
       val _ =
-        List.app (heavyPush q) (List.rev (!back))
-        before back := []
+        (List.app (heavyPush q) (List.rev (!back))
+         before back := [])
+        handle Subscript => (print "130\n"; raise Subscript)
 
       val n = !len
+      val _ = if n >= maxSize then raise Full else ()
       val de = Elem.depth e
       val maxd' = Int.max (!maxd, de)
       val diff = maxd' - !maxd
       val weight' = P.p (P.l (!weight, diff), P.fromDepth maxd' de)
     in
-      upd data (n, e);
-      siftUp data n;
+        upd data (n, e)
+        handle Subscript => (print "139\n"; raise Subscript);
+        siftUp data n
+        handle Subscript => (print "141\n"; raise Subscript);
       len := n + 1;
       weight := weight';
       maxd := maxd'

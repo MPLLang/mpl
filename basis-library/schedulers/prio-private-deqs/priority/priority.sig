@@ -39,7 +39,7 @@ sig
     val installDist : (t -> int) -> unit
     val chooseFromDist : real (* unit *) -> t
 
-    val top : t
+    val top : unit -> t
     val bot : t
 
 end

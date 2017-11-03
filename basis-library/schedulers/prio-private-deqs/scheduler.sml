@@ -165,9 +165,15 @@ fun newNextDeal () = (* Tm.+ (Tm.now (), dealInterval) *)
     end
 
 fun switchPrios p =
-    A.update (prios, p, { primary = P.chooseFromDist (R.rand01 ()),
-                          secondary = P.top,
-                          send = P.chooseFromDist (R.rand01 ()) })
+    (A.update (prios, p, { primary = P.chooseFromDist (R.rand01 ()),
+                          secondary = P.top (),
+                          send = P.chooseFromDist (R.rand01 ()) }))
+    (* handle Subscript => (log (~1) (fn _ => "switchPrios\n"); raise Subscript)) *)
+(*;
+     log 6 (fn _ => "switched to " ^ (P.toString (#primary (A.sub (prios, p)))) ^ "\n"))*)
+     (*;
+     log ~1 (fn _ => "blah"))(*
+     log ~1 (fn _ => "switched to " ^ (P.toString (#primary (A.sub (prios, p)))) ^ "\n"))*)*)
 
 fun maybeSwitchPrios p =
     let val ns = A.sub (nextSwitch, p)
@@ -282,20 +288,56 @@ fun tryClearFlag (m, p, r) =
            | NONE => ())
       | _ => ()
 
-fun pushOrInsert f (r, t) =
+                 (*
+fun pushOrInsert insched f (r, t) =
     let val p = processorNumber ()
         val _ = I.block p
         val m = mb (p, r)
         val q = queue (p, r)
         (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
     in
-        f (q, t);
         tryClearFlag (m, p, r);
+        f (q, t);
         incTopPrio p r;
-	I.unblock p
+        I.unblock p
     end
-val push = pushOrInsert Q.push
-val insert = pushOrInsert Q.insert
+                 *)
+
+fun insertInt insched (r, t) =
+    let val p = processorNumber ()
+        val insched = true
+        val _ = if insched then () else I.block p
+        val m = mb (p, r)
+                (* handle Subscript => (log (~1) (fn _ => "306\n"); raise Match) *)
+        val q = queue (p, r)
+                (* handle Subscript => (log (~1) (fn _ => "308\n"); raise Bind) *)
+        (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
+    in
+        tryClearFlag (m, p, r);
+        Q.insert (q, t);
+        incTopPrio p r;
+        if insched then () else I.unblock p
+    end
+
+val insert = insertInt false
+
+fun pushInt (r, t) =
+    let val p = processorNumber ()
+        val q = queue (p, r)
+        (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
+    in
+        Q.push (q, t)
+    end
+
+fun push (r, t) =
+    let val p = processorNumber ()
+        val _ = I.block p
+        val q = queue (p, r)
+        (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
+    in
+        Q.push (q, t);
+        I.unblock p
+    end
 
 fun logPrios n {primary, secondary, send} =
     log n (fn _ => "{" ^ (P.toString primary) ^ ", " ^ (P.toString secondary) ^ ", " ^
@@ -322,11 +364,7 @@ fun newTask (w : Task.work) : Task.t =
 fun handleResumed p =
     let val ioq = A.sub (ioqueues, p)
         fun resume (t, r) =
-            let val q = queue (p, r)
-            in
-                Q.insert (q, t);
-                incTopPrio p r
-            end
+            insertInt true (r, t)
         val ioq' = IOQ.process resume ioq
     in
         A.update (ioqueues, p, ioq')
@@ -340,10 +378,10 @@ fun schedule p kt =
         val _ = if numberOfProcessors > 1 then maybeDeal (p, prio_rec)
                 else ()
         val _ = case kt of
-                    SOME kt => push (curPrio p, kt)
+                    SOME kt => pushInt (curPrio p, kt)
                   | NONE => ()
         fun getWorkAt r =
-            let (* val _ = log 6 (fn _ => "getting work at " ^ (P.toString r) ^ "\n") *)
+            let val _ = log 6 (fn _ => "getting work at " ^ (P.toString r) ^ "\n")
                 val m = mb (p, r)
                 val q = queue (p, r)
             in
@@ -377,7 +415,7 @@ fun schedule p kt =
                                  case getWorkAt top of
                                      SOME t => (top, SOME t)
                                    | NONE =>
-                                     (let val (r, t) = iterGetWork P.top
+                                     (let val (r, t) = iterGetWork (P.top ())
                                       in
                                       (* Reset the stored top priority. There's
                                        * a race condition here, but that OK
@@ -404,7 +442,7 @@ fun schedule p kt =
 fun suspend (f: P.t * Task.t -> unit) : unit =
     T.switch (fn k =>
                  let val p = processorNumber ()
-		     val _ = I.block p
+                     val _ = I.block p
                      val r = curPrio p
                      val d = A.sub (depth, p)
                      val t = (Task.Thread (T.prepare (k, ())), d)
