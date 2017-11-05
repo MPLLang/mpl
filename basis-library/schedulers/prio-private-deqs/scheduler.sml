@@ -263,7 +263,7 @@ fun maybeDeal (p, prios) =
 fun makeRequest (p, r) =
     if numberOfProcessors = 1 then ()
     else
-        let val p' = Int.div (p, 2) (*  R.randInt (0, numberOfProcessors - 2) *)
+        let val p' = R.randInt (0, numberOfProcessors - 2)
             val p' = if p' >= p then p' + 1 else p'
             val c = V.sub (reqCells, p')
             val req = requestOfPR (p, r)
