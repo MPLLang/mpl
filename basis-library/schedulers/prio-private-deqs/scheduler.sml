@@ -70,7 +70,7 @@ fun log l f =
 val switchInterval = Tm.fromMicroseconds 10000
 val dealInterval = Tm.fromMicroseconds 200
 val dIf = 200.0
-val interruptInterval = Tm.fromMicroseconds 500
+val interruptInterval = Tm.fromMicroseconds 5000
 
 
 (*** Per-processor state ***)
