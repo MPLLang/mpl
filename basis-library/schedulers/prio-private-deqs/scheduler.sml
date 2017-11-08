@@ -19,7 +19,9 @@ fun depth (_, w) = w
 end
 
 structure M = Mailbox
-structure Q = BinaryHeapQueue(Task)
+(*structure Q = BinaryHeapQueue(Task)*)
+structure Q = ListQueue(Task)
+(*structure Q = HeavyInsertDLLQueue(Task)*)
 
 exception ShouldntGetHere
 
@@ -69,7 +71,7 @@ fun log l f =
 (*** Constants ***)
 val switchInterval = Tm.fromMicroseconds 10000
 val dealInterval = Tm.fromMicroseconds 200
-val dIf = 200.0
+val dIf = 20.0
 val interruptInterval = Tm.fromMicroseconds 5000
 
 

@@ -1,70 +1,84 @@
-functor ListQueue (Elem : sig
-                            type t
-                            val depth : t -> int
-                          end)
+functor ListQueue
+  (Elem : sig
+            type t
+            val depth : t -> int
+          end)
   : QUEUE where type task = Elem.t =
 struct
 
   structure P = Potential
   type potential = P.potential
   type task = Elem.t
-  type t = (potential * int * task list) ref
+  type t = task list ref
   type task_set = t
 
-  fun empty () = ref (P.zero, 0, [])
+  exception Full
 
-  fun isEmpty q =
-      let val (_, _, es) = !q in
-          case es of
-              [] => true
-            | _ => false
-      end
+  fun empty () = ref []
+
+  fun isEmpty (ref es) = List.null es
 
   fun fromSet s = s
 
-  fun weight q =
-      let val (w, _, _) = !q
-      in
-          w
-      end
+  fun numts (ref l) = List.length l
+
+  fun size (ref es) =
+    case es of
+      _ :: _ :: _ => 2
+    | [_] => 1
+    | _ => 0
 
   fun push (q, e) =
-      let val d = Elem.depth e
-          val (w, md, es) = !q
-          val md' = Int.max (d, md)
-          val we = P.fromDepth md' d
-          val w' = P.l (w, md' - md)
-      in
-          q := (P.p (w', we), md', e :: es)
-      end
-
+    q := e :: !q
+  
   fun insert (q, e) =
-      let
-          val (w, md, es) = !q
-          val d = Elem.depth e
-          val md' = Int.max (d, md)
-          val we = P.fromDepth md' d
-          val w' = P.l (w, md' - md)
-          fun insert' front back =
-              case back of
-                  [] => List.revAppend (front, [e])
-                | x :: back' =>
-                  if d < Elem.depth x
-                  then List.revAppend (front, e :: back)
-                  else insert' (x :: front) back'
-      in
-          q := (P.p (w', we), md', insert' [] es)
-      end
+    let
+      val es = !q
+      val de = Elem.depth e
+      fun insert' front back =
+        case back of
+          [] => List.revAppend (front, [e])
+        | x :: back' =>
+            if de > Elem.depth x
+            then List.revAppend (front, e :: back)
+            else insert' (x :: front) back'
+    in
+      q := insert' [] es
+    end
 
-  fun choose q =
-      let val (w, md, es) = !q
-      in
-          case es of
-              [] => NONE
-           |  e :: es => (q := (P.m (w, P.fromDepth md (Elem.depth e)), md, es);
-                                SOME e)
-      end
+  fun choose (q as ref es) =
+    case es of
+      e :: es' => (q := es'; SOME e)
+    | [] => NONE
+  
+  fun split (q as ref es) =
+    let
+      val maxDepth = case es of [] => 0 | e :: _ => Elem.depth e
+      fun pot e = P.fromDepth maxDepth (Elem.depth e)
+      val (totpot, reves) =
+        List.foldl
+          (fn (e, (p, es')) => (P.p (p, pot e), e :: es'))
+          (P.zero, [])
+          es
 
+      fun split' (front, p) back =
+        if P.ge (P.l (p, 2), totpot) orelse List.null back
+        then (front, List.rev back)
+        else let
+               val e = List.hd back
+             in
+               split' (e :: front, P.p (p, pot e)) (List.tl back)
+             end
+
+      val (toSend, es') = split' ([], P.zero) reves
+      val _ = q := es'
+    in
+      case toSend of
+        [] => NONE
+      | _ => SOME (ref toSend)
+    end
+  
+  (*
   fun split q =
     let
       fun split' (wl, mdl, l) (wr, mdr, r) =
@@ -82,18 +96,16 @@ struct
         (_, _, []) => NONE
        | _ => (q := q2; SOME (ref q1))
     end
-
+  *)
 end
 
-(* structure Q = ListQueue (struct type t = int fun weight x = x end)
+(*structure Q = ListQueue (struct type t = int fun depth x = x end)
 
 fun fromList xs =
-  case xs of
-    [] => Q.empty ()
-  | x :: xs' => Q.push (fromList xs') x
+  List.foldl (fn (x, q) => q before Q.push (q, x)) (Q.empty ()) xs*)
 
-val q1 = fromList [1,3,8,15,15]
-val (s1, q1') = Q.split q1
+(*val q1 = fromList [1,3,8,15,15]
+val s1 = Q.split q1
 
 val q2 = fromList [1,1,100,100]
-val (s2, q2') = Q.split q2 *)
+val s2 = Q.split q2*)
