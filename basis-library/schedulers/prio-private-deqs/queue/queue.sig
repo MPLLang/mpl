@@ -4,6 +4,7 @@ sig
     type task
     type t
     type task_set
+    type hand
 
     exception Full
 
@@ -16,9 +17,9 @@ sig
     val numts : task_set -> int
 
     (* Push a task *in order* to the bottom of the queue *)
-    val push : t * task -> unit
+    val push : t * task -> hand
     (* Insert an arbitrary task to its correct position in the queue *)
-    val insert : t * task -> unit
+    val insert : t * task -> hand
 
     (* Pull from the "bottom" of the queue. Return NONE if the queue
      * is empty. *)
@@ -27,5 +28,7 @@ sig
      * and, if the set of tasks has size > 1, at most 3/4 of the total.
      * Returns NONE if the queue is empty or has one element. *)
     val split : t -> task_set option
+
+    val tryRemove : t * hand -> bool
 
 end

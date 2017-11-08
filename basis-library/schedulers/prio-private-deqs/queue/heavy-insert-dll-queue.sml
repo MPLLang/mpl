@@ -15,10 +15,11 @@ struct
   exception Full
 
   type t = task DLL.t
+  type hand = task DLL.node
 
   fun fromSet s =
     let val q = DLL.new ()
-    in List.foldr (fn (e, _) => DLL.pushFront (e, q)) () s;
+    in List.foldr (fn (e, _) => ignore (DLL.pushFront (e, q))) () s;
        q
     end
 
@@ -32,22 +33,28 @@ struct
   (* a hack *)
   fun size (q as (front, back)) =
     case !front of
-      DLL.Node (_, _, ref (DLL.Node _)) => 2
+      DLL.Node (_, _, ref (DLL.Node _), _) => 2
     | DLL.Node _ => 1
     | DLL.Leaf => 0
 
-  fun push (q, e) = DLL.pushFront (e, q) 
+  fun push (q, e) = DLL.pushFront (e, q)
 
   fun choose q = DLL.popFront q
 
   fun insert (q, e) =
-    ignore (DLL.insertBefore (q, DLL.findl (fn e' => Elem.depth e' < Elem.depth e) q) e)
+    DLL.insertBefore (q, DLL.findl (fn e' => Elem.depth e' < Elem.depth e) q) e
 
   fun split q =
     case DLL.popBack q of
       SOME e => SOME [e]
     | NONE => NONE
 
+  fun tryRemove (q, h) =
+      if DLL.isInList h then
+          ( DLL.remove (q, h)
+          ; true)
+      else
+          false
 end
 
 (*structure Q = HeavyInsertDLLQueue (struct type t = int fun depth x = x end)*)

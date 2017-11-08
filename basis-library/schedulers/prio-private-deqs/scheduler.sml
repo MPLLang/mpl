@@ -20,8 +20,8 @@ end
 
 structure M = Mailbox
 (*structure Q = BinaryHeapQueue(Task)*)
-structure Q = ListQueue(Task)
-(*structure Q = HeavyInsertDLLQueue(Task)*)
+(* structure Q = ListQueue(Task) *)
+structure Q = HeavyInsertDLLQueue(Task)
 
 exception ShouldntGetHere
 
@@ -316,9 +316,9 @@ fun insertInt insched (r, t) =
         (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
     in
         tryClearFlag (m, p, r);
-        Q.insert (q, t);
-        incTopPrio p r;
-        if insched then () else I.unblock p
+        Q.insert (q, t)
+        before (incTopPrio p r;
+                if insched then () else I.unblock p)
     end
 
 val insert = insertInt false
@@ -337,8 +337,17 @@ fun push (r, t) =
         val q = queue (p, r)
         (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
     in
-        Q.push (q, t);
-        I.unblock p
+        Q.push (q, t)
+        before I.unblock p
+    end
+
+fun tryRemove (r, h) =
+    let val p = processorNumber ()
+        val _ = I.block p
+        val q = queue (p, r)
+    in
+        Q.tryRemove (q, h)
+        before I.unblock p
     end
 
 fun logPrios n {primary, secondary, send} =
@@ -366,7 +375,7 @@ fun newTask (w : Task.work) : Task.t =
 fun handleResumed p =
     let val ioq = A.sub (ioqueues, p)
         fun resume (t, r) =
-            insertInt true (r, t)
+            ignore (insertInt true (r, t))
         val ioq' = IOQ.process resume ioq
     in
         A.update (ioqueues, p, ioq')
@@ -380,7 +389,7 @@ fun schedule p kt =
         val _ = if numberOfProcessors > 1 then maybeDeal (p, prio_rec)
                 else ()
         val _ = case kt of
-                    SOME kt => pushInt (curPrio p, kt)
+                    SOME kt => ignore (pushInt (curPrio p, kt))
                   | NONE => ()
         fun getWorkAt r =
             let val _ = log 6 (fn _ => "getting work at " ^ (P.toString r) ^ "\n")

@@ -7,4 +7,6 @@ type 'a t
 val spawn : (unit -> 'a) -> Priority.t -> 'a t
 val sync : 'a t -> 'a
 
+val fork : (unit -> 'a) * (unit -> 'b) -> 'a * 'b
+
 end
