@@ -10,11 +10,16 @@ exception IncompatiblePriorities
 
 datatype 'a result =
          Waiting
-         | Finished of 'a
-         | Raised of exn
+         | Finished of 'a * int (* result, depth *)
+         | Raised of exn * int
 
 fun writeResult fr f () =
-    fr := (Finished (f ()) handle e => Raised e)
+    let val r = f ()
+        val d = getDepth (processorNumber ())
+    in
+        fr := Finished (r, d)
+    end
+    handle e => fr := Raised (e, getDepth (processorNumber ()))
 
 type 'a t = 'a result ref * P.t * (P.t * Task.t) Bag.t * Q.hand
 
@@ -41,8 +46,8 @@ fun spawn f r' =
 fun poll (result, _, bag, _) =
     if not (Bag.isDumped bag) then NONE
     else case !result of
-             Finished x => SOME x
-           | Raised e => raise e
+             Finished (x, _) => SOME x
+           | Raised (e, _) => raise e
            | Waiting => raise Thread
 
 fun sync (result, r', bag, _) =
@@ -58,12 +63,13 @@ fun sync (result, r', bag, _) =
             else
         (* Bag was just dumped, so we can directly add the task *)
                 ignore (push rt)
+        val d = getDepth p
         val _ = if Bag.isDumped bag then ()
                 else suspend f
     in
         case !result of
-            Finished x => x
-          | Raised e => raise e
+            Finished (x, d') => (setDepth (p, Int.max (d, d') + 1); x)
+          | Raised (e, d') => (setDepth (p, Int.max (d, d') + 1); raise e)
           | Waiting => raise Thread
     end
 
@@ -88,6 +94,7 @@ struct
 val init = init
 val finalizePriorities = finalizePriorities
 fun currentPrio () = curPrio (processorNumber ())
+val numberOfProcessors = numberOfProcessors
 val suspend = suspend
 val suspend = suspendIO
 end

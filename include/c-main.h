@@ -100,7 +100,6 @@ void MLton_threadFunc (void* arg) {                                     \
     }                                                                   \
   }                                                                     \
   else {                                                                \
-    printf("Starting on %d!\n", Proc_processorNumber (s));               \
     Proc_waitForInitialization (s);                                     \
     Trace0(EVENT_LAUNCH);                                               \
     Parallel_run ();                                                    \

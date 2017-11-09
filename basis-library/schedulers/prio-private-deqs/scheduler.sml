@@ -126,8 +126,10 @@ fun queue (p, r) =
 fun curPrio p =
     A.sub (curprios, p)
 
-fun setDepth d =
-    A.update (depth, processorNumber (), d)
+fun getDepth p =
+    A.sub (depth, p)
+fun setDepth (p, d) =
+    A.update (depth, p, d)
 
 fun incTopPrio p newPrio =
     let val pto = P.toInt newPrio
