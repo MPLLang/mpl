@@ -6,8 +6,10 @@ structure DoublyLinkedList =
 struct
 
   datatype 'a node = Leaf | Node of 'a node ref * 'a * 'a node ref * bool ref
+  
+  type 'a hand = 'a node ref * 'a * 'a node ref * bool ref
 
-  (* bottom, top *)
+  (* front, back *)
   type 'a t = 'a node ref * 'a node ref
 
   fun new () = (ref Leaf, ref Leaf)
@@ -15,20 +17,43 @@ struct
   fun isEmpty (ref Leaf, _) = true
     | isEmpty _ = false
 
-  fun prev (_, Node (l, _, _, _)) = l
-    | prev ((_, top), Leaf) = top
+  fun next (_, _, r, _) = case !r of Node h => SOME h | Leaf => NONE
+  fun prev (l, _, _, _) = case !l of Node h => SOME h | Leaf => NONE
 
-  fun next (_, Node (_, _, r, _)) = r
-    | next ((bot, _), Leaf) = bot
+  fun last (_, back) =
+    case !back of
+      Leaf => NONE
+    | Node h => SOME h
+
+  fun inspect (_, x, _, _) = x
+
+  fun prevp (_, Node (l, _, _, _)) = l
+    | prevp ((_, top), Leaf) = top
+
+  fun nextp (_, Node (_, _, r, _)) = r
+    | nextp ((bot, _), Leaf) = bot
 
   fun pushFront (x, dll as (bot, _)) =
     let
       val n = !bot
-      val nx = Node (ref Leaf, x, ref n, ref true)
+      val hx = (ref Leaf, x, ref n, ref true)
+      val nx = Node hx
     in
       ( bot := nx
-      ; prev (dll, n) := nx;
-      nx
+      ; prevp (dll, n) := nx
+      ; hx
+      )
+    end
+
+  fun pushBack (x, dll as (_, back)) =
+    let
+      val n = !back
+      val hx = (ref n, x, ref Leaf, ref true)
+      val nx = Node hx
+    in
+      ( back := nx
+      ; nextp (dll, n) := nx
+      ; hx
       )
     end
 
@@ -36,7 +61,7 @@ struct
     case !bot of
       Node (_, x, r, il) =>
           let val n = !r
-          in ( prev (dll, n) := Leaf
+          in ( prevp (dll, n) := Leaf
              ; bot := n
              ; il := false
              ; SOME x
@@ -48,103 +73,148 @@ struct
     case !top of
       Node (l, x, _, il) =>
           let val n = !l
-          in ( next (dll, n) := Leaf
+          in ( nextp (dll, n) := Leaf
              ; top := n
              ; il := false
              ; SOME x
              )
           end
-     | Leaf => NONE
+    | Leaf => NONE
 
-  fun remove (dll, n as Node (_, _, _, il)) =
-      let
-          val ln = !(prev (dll, n))
-          val rn = !(next (dll, n))
-      in
-          ( next (dll, ln) := rn
-          ; prev (dll, rn) := ln
-          ; il := false
-          )
-      end
-    | remove (dll, Leaf) = raise (Fail "remove: Leaf")
+  fun remove (dll, h as (_, _, _, il)) =
+    let
+      val n = Node h
+      val ln = !(prevp (dll, n))
+      val rn = !(nextp (dll, n))
+    in
+      ( nextp (dll, ln) := rn
+      ; prevp (dll, rn) := ln
+      ; il := false
+      )
+    end
 
-  fun peekBot (bot, _) =
-    case !bot of
+  fun peekFront (front, _) =
+    case !front of
       Node (_, x, _, _) => SOME x
     | Leaf => NONE
 
-  fun peekTop (_, top) =
-    case !top of
+  fun peekBack (_, back) =
+    case !back of
       Node (_, x, _, _) => SOME x
     | Leaf => NONE
 
-  fun foldl f b (bot, _) =
+  fun foldl f b (front, _) =
     let
       fun leftToRight b r =
         case !r of
           Node (_, x, r', _) => leftToRight (f (x, b)) r'
         | Leaf => b
     in
-      leftToRight b bot 
+      leftToRight b front 
     end
 
-  fun foldr f b (_, top) =
+  fun foldr f b (_, back) =
     let
       fun rightToLeft b l =
         case !l of
           Node (l', x, _, _) => rightToLeft (f (x, b)) l'
         | Leaf => b
     in
-      rightToLeft b top
+      rightToLeft b back
     end
 
   fun length dll =
     foldl (fn (_, c) => c + 1) 0 dll
 
-  fun insertAfter (dll, n) x =
+  fun insertAfter (dll, h as (_, _, r, _)) x =
     let
-      val n' = !(next (dll, n))
-      val nx = Node (ref n, x, ref n', ref true)
+      val n = Node h
+      val n' = !r
+      val hx = (ref n, x, ref n', ref true)
+      val nx = Node hx
     in
-      ( next (dll, n) := nx
-      ; prev (dll, n') := nx
-      ; nx
+      ( r := nx
+      ; prevp (dll, n') := nx
+      ; hx
       )
     end
 
-  fun insertBefore (dll, n) x =
+  fun insertBefore (dll, h as (l, _, _, _)) x =
     let
-      val n' = !(prev (dll, n))
-      val nx = Node (ref n', x, ref n, ref true)
+      val n = Node h
+      val n' = !l
+      val hx = (ref n', x, ref n, ref true)
+      val nx = Node hx
     in
-      ( next (dll, n') := nx
-      ; prev (dll, n) := nx
-      ; nx
+      ( nextp (dll, n') := nx
+      ; l := nx
+      ; hx
       )
     end
 
-  fun findl (p : 'a -> bool) (bot, _) =
+  fun error msg =
+    (print (msg ^ "\n"); OS.Process.exit OS.Process.failure)
+
+  fun verify (dll as (front, back)) =
+    let
+      fun verify' r =
+        case !r of
+          Leaf => ()
+        | Node (l, _, r', il) =>
+            if nextp (dll, !l) <> r then
+              raise Fail "DLL link mismatch"
+            else if not (!il) then
+              raise Fail "DLL not in list"
+            else
+              verify' r'
+    in
+      case (!front, !back) of
+        (Leaf, Node _) => raise Fail "DLL front mismatch"
+      | (Node _, Leaf) => raise Fail "DLL back mismatch"
+      | (_, Node (_, _, ref (Node _), _)) => raise Fail "DLL last node mismatch"
+      | _ => verify' front
+    end
+
+  fun splitAt ((front, back), h as (l, _, _, _)) =
+    let
+      val n = Node h
+      val n' = !l
+      val (front', back') = new ()
+    in
+      ( l := Leaf
+      ; front' := n
+      ; back' := !back
+      ; back := n'
+      ; case n' of
+          Leaf => front := Leaf
+        | Node (_, _, r, _) => r := Leaf
+      (*; verify (front, back) handle Fail msg => error ("DLL split left error: " ^ msg)
+      ; verify (front', back') handle Fail msg => error ("DLL split right error: " ^ msg)*)
+      ; (front', back')
+      )
+    end
+
+  fun findl (p : 'a -> bool) (front, _) =
     let
       fun leftToRight (ref n) =
         case n of
-          Node (_, x, r, _) => if p x then n else leftToRight r
-        | Leaf => n
+          Node (h as (_, x, r, _)) => if p x then SOME h else leftToRight r
+        | Leaf => NONE
     in
-      leftToRight bot
+      leftToRight front
     end
 
-  fun findr (p : 'a -> bool) (_, top) =
+  fun findr (p : 'a -> bool) (_, back) =
     let
       fun rightToLeft (ref n) =
         case n of
-          Node (l, x, _, _) => if p x then n else rightToLeft l
-        | Leaf => n
+          Node (h as (l, x, _, _)) => if p x then SOME h else rightToLeft l
+        | Leaf => NONE
     in
-      rightToLeft top
+      rightToLeft back
     end
 
-  fun isInList (Node (_, _, _, il)) = !il
-    | isInList (Leaf) = false
+  fun isInList (_, _, _, ref b) = b
 
 end
 

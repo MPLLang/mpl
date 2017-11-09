@@ -15,11 +15,11 @@ struct
   exception Full
 
   type t = task DLL.t
-  type hand = task DLL.node
+  type hand = task DLL.hand
 
   fun fromSet s =
     let val q = DLL.new ()
-    in List.foldr (fn (e, _) => ignore (DLL.pushFront (e, q))) () s;
+    in foldl (fn (x, _) => ignore (DLL.pushBack (x, q))) () s;
        q
     end
 
@@ -42,19 +42,37 @@ struct
   fun choose q = DLL.popFront q
 
   fun insert (q, e) =
-    DLL.insertBefore (q, DLL.findl (fn e' => Elem.depth e' < Elem.depth e) q) e
+    case DLL.findl (fn e' => Elem.depth e' < Elem.depth e) q of
+      SOME h => DLL.insertBefore (q, h) e
+    | NONE => DLL.pushBack (e, q)
 
   fun split q =
-    case DLL.popBack q of
-      SOME e => SOME [e]
-    | NONE => NONE
+    let
+      val maxDepth =
+        case DLL.peekFront q of
+          SOME e => Elem.depth e
+        | NONE => 0
+      
+      fun pot e = P.fromDepth maxDepth (Elem.depth e)
+      val totpot = DLL.foldl (fn (e, p) => P.p (p, pot e)) P.zero q
+
+      fun split' (s, p) =
+        if P.ge (P.l (p, 2), totpot)
+        then s
+        else case DLL.popBack q of
+               SOME e => split' (e :: s, P.p (p, pot e))
+             | NONE => s
+    in
+      case split' ([], P.zero) of
+        [] => NONE
+      | es => SOME es
+    end
 
   fun tryRemove (q, h) =
-      if DLL.isInList h then
-          ( DLL.remove (q, h)
-          ; true)
-      else
-          false
+    if DLL.isInList h then
+      (DLL.remove (q, h); true)
+    else
+      false
 end
 
 (*structure Q = HeavyInsertDLLQueue (struct type t = int fun depth x = x end)*)
