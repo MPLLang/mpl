@@ -1,5 +1,11 @@
-structure Tm = Time
-structure A = Array
+(*structure Tm =
+struct
+  open Time
+  fun fromTime t = t
+  fun toTime t = t
+end*)
+structure Tm = BetterTime
+structure A = Array 
 structure V = Vector
 structure P = Priority
 structure I = Interrupt
@@ -70,7 +76,7 @@ fun log l f =
 
 (*** Constants ***)
 val switchInterval = Tm.fromMicroseconds 10000
-val dealInterval = Tm.fromMicroseconds 100
+(*val dealInterval = Tm.fromMicroseconds 100*)
 val dIf = 100.0
 val interruptInterval = Tm.fromMicroseconds 5000
 
@@ -117,11 +123,13 @@ fun rand01ex () =
 end
 *)
 
+fun queueIndex (p, r) =
+  p * (P.count ()) + (P.toInt r) - 1
+
 fun mb (p, r) =
-    A.sub (!mailboxes, p * (P.count ()) + (P.toInt r) - 1)
-fun queueIndex (p, r) = p * (P.count ()) + (P.toInt r) - 1
+  A.sub (!mailboxes, queueIndex (p, r))
 fun queue (p, r) =
-    A.sub (!queues, queueIndex (p, r))
+  A.sub (!queues, queueIndex (p, r))
 
 fun curPrio p =
     A.sub (curprios, p)
@@ -168,7 +176,7 @@ fun newNextDeal () = (* Tm.+ (Tm.now (), dealInterval) *)
         val iv = dIf * Math.ln (R.rand01ex ())
         val iiv = Real.round iv
     in
-        Tm.- (Time.now (), Tm.fromMicroseconds (IntInf.fromInt iiv))
+        Tm.- (Tm.now (), Tm.fromMicroseconds (IntInf.fromInt iiv))
     end
 
 fun switchPrios p =
@@ -309,7 +317,6 @@ fun pushOrInsert insched f (r, t) =
         I.unblock p
     end
                  *)
-
 fun insertInt insched (r, t) =
     let val p = processorNumber ()
         val insched = true
@@ -492,7 +499,7 @@ fun interruptHandler (p, k) =
 fun prun () =
     let val p = processorNumber ()
     in
-        I.init interruptHandler interruptInterval;
+        I.init interruptHandler (Tm.toTime interruptInterval);
         log 1 (fn _ => "initialized " ^ (Int.toString p) ^ "\n");
         schedule p NONE
     end
@@ -509,6 +516,6 @@ fun init () =
         ignore (M.tryClear (mb (0, P.bot)));
         MLton.Parallel.registerProcessorFunction prun;
         MLton.Parallel.initializeProcessors ();
-        I.init interruptHandler interruptInterval;
+        I.init interruptHandler (Tm.toTime interruptInterval);
         log 1 (fn _ => "initialized")
     end

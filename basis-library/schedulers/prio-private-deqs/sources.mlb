@@ -6,6 +6,12 @@ local
 
     real-atom.sml
 
+    local
+      $(SML_LIB)/basis/build/sources.mlb
+    in
+      BetterTime.sml
+    end
+
 (*
     SimpleRandom.sml
     mersenne-twister-sig.sml
