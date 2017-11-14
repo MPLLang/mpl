@@ -67,6 +67,13 @@ struct
         [] => NONE
       | es => SOME es
     end
+  
+  (*
+  fun split q =
+    case DLL.popBack q of
+      NONE => NONE
+    | SOME e => SOME [e]
+  *)
 
   fun tryRemove (q, h) =
     if DLL.isInList h then

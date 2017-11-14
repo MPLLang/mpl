@@ -9,7 +9,8 @@ local
     local
       $(SML_LIB)/basis/build/sources.mlb
     in
-      BetterTime.sml
+      (*BetterTime.sml*)
+      TSCTime.sml
     end
 
 (*

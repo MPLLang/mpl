@@ -10,3 +10,9 @@ C_Int_t Time_getTimeOfDay (Ref(C_Time_t) sec, Ref(C_SUSeconds_t) usec) {
   }
   return res;
 }
+
+Word64 Time_rdtsc() {
+  unsigned int lo, hi;
+  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));                        
+  return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );  
+}
