@@ -58,7 +58,7 @@ fun interrupt handler k =
 
 fun init (handler: handler) (interval: Time.time) =
     let val p = P.processorNumber ()
-        val _ = print ("in init on " ^ (Int.toString p) ^ "\n")
+        (*val _ = print ("in init on " ^ (Int.toString p) ^ "\n")*)
         val pi = P.fetchAndAdd procsInit 1
     in
         S.setHandler (prim_sig, (S.Handler.handler

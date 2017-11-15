@@ -95,6 +95,7 @@ val init = init
 val finalizePriorities = finalizePriorities
 fun currentPrio () = curPrio (processorNumber ())
 val numberOfProcessors = numberOfProcessors
+val processorNumber = processorNumber
 val suspend = suspend
 val suspend = suspendIO
 end

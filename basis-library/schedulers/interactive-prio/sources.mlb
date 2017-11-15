@@ -32,5 +32,6 @@ local
 in
   structure ForkJoin = MLtonParallelForkJoin
   structure FGBG = MLtonParallelFutureFGBG
+  structure Future = MLtonParallelFutureSuspend
   structure IO = IO
 end
