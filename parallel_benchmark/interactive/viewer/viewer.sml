@@ -10,7 +10,7 @@ val finish = _import "finish": image -> unit;
 
 val swidth = 600
 val sheight = 600
-val numtorender = 2
+val numtorender = 4
 
 (*
 val d = MLX.opendisplay NONE
@@ -159,19 +159,19 @@ fun filename n =
 val surfarr = array (njpegs, NONE)
 
 fun renderinback n =
-    ((* print ("rendering " ^ (Int.toString n) ^ "\n"); *)
+    (print ("rendering " ^ (Int.toString n) ^ " on " ^ (Int.toString (Basic.processorNumber ())) ^ "\n");
      (case sub (surfarr, n) of
           SOME _ => ()
         | NONE =>
           update (surfarr, n, SOME (render (filename n)))
-     )(* ;
-     print ("rendered " ^ (Int.toString n) ^ "\n") *))
+     );
+     print ("rendered " ^ (Int.toString n) ^ "\n"))
 
 fun rendernext (n, num) =
     if num = 0 then ()
     else
-        ((* print ("spawning " ^ (Int.toString n) ^ "\n"); *)
-         ignore (MLton.Parallel.FutureSuspend.future
+        (print ("spawning " ^ (Int.toString n) ^ "\n");
+         ignore (Future.future
                      (fn () => renderinback n));
          rendernext (n + 1, num - 1))
 
@@ -204,4 +204,4 @@ fun loop n =
         loop (n' mod njpegs)
     end
 
-val _ = MLton.Parallel.Basic.event (fn _ => loop 0)
+val _ = Basic.event (fn _ => loop 0)
