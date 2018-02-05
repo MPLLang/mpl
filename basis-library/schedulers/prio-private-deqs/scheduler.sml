@@ -76,10 +76,10 @@ fun log l f =
         ()
 
 (*** Constants ***)
-val switchInterval = Tm.fromMicroseconds 10000
+val switchInterval = Tm.fromMicroseconds 5000
 (*val dealInterval = Tm.fromMicroseconds 100*)
 val dIf = 100.0
-val interruptInterval = Tm.fromMicroseconds 5000
+val interruptInterval = Tm.fromMicroseconds 1000
 
 
 (*** Per-processor state ***)
@@ -139,6 +139,7 @@ val dealCounter = Array.array (numberOfProcessors, 0)
 val failedDealCounter = Array.array (numberOfProcessors, 0)
 val newThreadCounter = Array.array (numberOfProcessors, 0)
 val switchCounter = Array.array (numberOfProcessors, 0)
+val succRequestCounter = Array.array (numberOfProcessors, 0)
 
 fun incrementCounter (cs, p) =
   if not doInstrument then ()
@@ -173,6 +174,7 @@ fun timerStrings () =
     , counterString ("~deals", failedDealCounter)
     , counterString ("new thd", newThreadCounter)
     , counterString ("switch", switchCounter)
+    , counterString ("succ requests", succRequestCounter)
     ]
     
 val _ = OS.Process.atExit (fn _ =>
@@ -273,19 +275,19 @@ fun dealAttempt (p, r) =
             let val p' = R.randInt (0, numberOfProcessors - 2)
             in if p' >= p then p' + 1 else p'
             end
-        val (p', r) =
+        val (isreq, p', r) =
             if req > 0 then
                 let val (p', r') = PROfRequest req
                     val q = queue (p, r')
                     val _ = V.sub (reqCells, p) := ~1
                 in
                     if Q.isEmpty q then
-                        (randP (), r)
+                        (false, randP (), r)
                     else
-                        (p', r')
+                        (true, p', r')
                 end
             else
-                (randP (), r)
+                (false, randP (), r)
         val m = mb (p', r)
         val q = queue (p, r)
         val _ = log 2 (fn _ =>"deal attempt on " ^ (Int.toString p) ^
@@ -307,6 +309,9 @@ fun dealAttempt (p, r) =
                  case Q.split q of
                      SOME ts => (M.sendMail m ts;
                                  incrementCounter (dealCounter, p);
+				 (if isreq then
+				 incrementCounter (succRequestCounter, p)
+				 else ());
                                  log 2 (fn _ =>"sent " ^ (Int.toString (Q.numts ts))
                                         ^ "; " ^ (Int.toString (Q.size q)) ^
                                         " left\n");
