@@ -1,10 +1,15 @@
-fun fib n = 
-  if n <= 2 then
-    n
+(* a hack to get around unnecessary global heap collection *)
+val a = Array.array (100000, "hello")
+
+fun serial n =
+  if n <= 1 then n else serial (n-1) + serial (n-2)
+
+fun fib n =
+  if n <= 20 then serial n
   else
-    let 
-      val (x,y) = ForkJoin.fork (fn () => fib (n-1), fn () => fib (n-2))
-    in 
+    let
+      val (x,y) = ForkJoin.fork (fn _ => fib (n-1), fn _ => fib (n-2))
+    in
       x + y
     end
 
