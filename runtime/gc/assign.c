@@ -21,12 +21,15 @@ static pointer Assignable_findLockedTrueReplica(
         *phh = NULL;
     }
 
+    assert(isObjptr(o));
+
     /* Objects in the global heap are not supposed to have forwarding pointers
      * outside of collection periods. */
-    if (!HM_HH_objptrInHierarchicalHeap(s, o)) {
+    if (isObjptrInGlobalHeap(s, o)) {
         goto fast_path;
     }
 
+    assert(HM_HH_objptrInHierarchicalHeap(s, o));
 
     /* If the object has no forwarding pointer, we try to be smart before
      * calling the general locking code. */
@@ -229,11 +232,14 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
         (void *)objptrToPointer(dst, s->heap->start),
         (void *)objptrToPointer(src, s->heap->start));
 
+    assert(isObjptr(dst));
+
     /* Assignments to objects in the global heap are not locked. Writing a
      * pointer in the hierarchical heap to the global heap should only permitted
      * when writing to the deque, but we only print a warning for now. */
-    if (!HM_HH_objptrInHierarchicalHeap(s, dst)) {
-        if (HM_HH_objptrInHierarchicalHeap(s, src)) {
+    if (isObjptrInGlobalHeap(s, dst)) {
+        if (isObjptr(src) && !isObjptrInGlobalHeap(s, src)) {
+            assert(HM_HH_objptrInHierarchicalHeap(s, src));
             assert (BOGUS_OBJPTR != s->wsQueue);
             pointer queuep = objptrToPointer(s->wsQueue, s->heap->start);
             objptr afterlastp = pointerToObjptr(getArrayAfterLastp(s, queuep),
@@ -260,15 +266,19 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
         goto end;
     }
 
-    /* Pointer from the hierarhical heap to the global heap cannot trigger
+    assert(HM_HH_objptrInHierarchicalHeap(s, dst));
+
+    /* Pointer from the hierarchical heap to the global heap cannot trigger
      * promotions. Just find the true replica. */
-    if (!HM_HH_objptrInHierarchicalHeap(s, src)) {
+    if (!isObjptr(src) || isObjptrInGlobalHeap(s, src)) {
         struct HM_HierarchicalHeap *hh;
         dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh);
         *((pointer *)dst_repl + index) = objptrToPointer(src, s->heap->start);
         Assignable_unlockReplicaWriter(s, hh);
         goto end;
     }
+
+    assert(HM_HH_objptrInHierarchicalHeap(s, src));
 
     HM_getObjptrInfo(s, src, &src_info);
     HM_getObjptrInfo(s, dst, &dst_info);

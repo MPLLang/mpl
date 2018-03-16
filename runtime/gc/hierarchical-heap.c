@@ -507,8 +507,12 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
 
 /* RAM_NOTE: should this be moved to local-heap.h? */
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
+#if ASSERT
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
   return ChunkPool_pointerInChunkPool(candidatePointer);
+#else
+  DIE('HM_HH_objptrInHierarchicalHeap deprecated');
+#endif
 }
 
 struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr) {

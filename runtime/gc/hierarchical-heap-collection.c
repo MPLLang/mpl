@@ -451,7 +451,7 @@ void forwardHHObjptr (GC_state s,
       op,
       (uintptr_t)p);
 
-  if (!HM_HH_objptrInHierarchicalHeap(s, op)) {
+  if (!isObjptr(op) || isObjptrInGlobalHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",
@@ -460,6 +460,9 @@ void forwardHHObjptr (GC_state s,
         (uintptr_t)p);
     return;
   }
+
+  // if it's not in the global heap, then it must be in the HH
+  assert(HM_HH_objptrInHierarchicalHeap(s, op));
 
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
@@ -749,30 +752,32 @@ pointer copyObject(pointer p,
 }
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));
+  DIE('populateGlobalHeapHoles deprecated');
 
-    pointer start = s->procStates[i].frontier;
-    pointer end = s->procStates[i].limitPlusSlop + GC_GAP_SLOP;
+//   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+//     spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));
 
-    if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
-                                                          s->heap->start))) {
-#if 0
-      assert(HM_HH_objptrInHierarchicalHeap(s,
-                                            pointerToObjptr(end,
-                                                            s->heap->start)));
-#endif
+//     pointer start = s->procStates[i].frontier;
+//     pointer end = s->procStates[i].limitPlusSlop + GC_GAP_SLOP;
 
-      /* use the saved global frontier */
-      start = s->procStates[i].globalFrontier;
-      end = s->procStates[i].globalLimitPlusSlop + GC_GAP_SLOP;
-    }
+//     if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
+//                                                           s->heap->start))) {
+// #if 0
+//       assert(HM_HH_objptrInHierarchicalHeap(s,
+//                                             pointerToObjptr(end,
+//                                                             s->heap->start)));
+// #endif
 
-    holes[i].start = start;
-    holes[i].end = end;
+//       /* use the saved global frontier */
+//       start = s->procStates[i].globalFrontier;
+//       end = s->procStates[i].globalLimitPlusSlop + GC_GAP_SLOP;
+//     }
 
-    spinlock_unlock(&(s->procStates[i].lock));
-  }
+//     holes[i].start = start;
+//     holes[i].end = end;
+
+//     spinlock_unlock(&(s->procStates[i].lock));
+//   }
 }
 
 bool skipStackAndThreadObjptrPredicate(GC_state s,

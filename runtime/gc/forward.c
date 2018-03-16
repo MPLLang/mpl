@@ -66,13 +66,10 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
              (uintptr_t)opp, op, (uintptr_t)p);
 
-  if (HM_HH_objptrInHierarchicalHeap(s, *opp)) {
-    /*
-     * We do not support collecting the global heap while the hierarchical
-     * heaps are in play
-     */
-    DIE("Found HH object while collecting global heap");
-  }
+  /* We do not support collecting the global heap while the hierarchical
+   * heaps are in play */
+  ASSERTPRINT(!HM_HH_objptrInHierarchicalHeap(s, *opp),
+    "Found HH object while collecting global heap");
 
   assert (isObjptrInFromSpace (s, *opp));
   if (DEBUG_DETAILED and hasFwdPtr(p))
