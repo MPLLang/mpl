@@ -95,6 +95,21 @@ void* HM_freeLevelListIterator(void* arg);
 static const void* getLevelHeadChunk(const void* chunk);
 #endif
 
+static inline void* ChunkPool_find_checked(void* p) {
+  /* Find the chunk front with a simple address truncation; the alignment
+   * constant is chosen to match ChunkPool_MINIMUMCHUNKSIZE. */
+  void* chunk = (void*)(pointer)alignDown((size_t)p, 512ULL * 1024);
+#if ASSERT
+  void* correctChunk = ChunkPool_find(p);
+  ASSERTPRINT(chunk == correctChunk,
+    "ChunkPool_find(%p) == %p (should be truncated address %p)",
+    p,
+    correctChunk,
+    chunk);
+#endif
+  return chunk;
+}
+
 /************************/
 /* Function Definitions */
 /************************/
@@ -209,7 +224,9 @@ void HM_forwardHHObjptrsInChunkList(
     ObjptrPredicateFunction predicate,
     void* predicateArgs,
     struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
-  void *chunk = ChunkPool_find(start);
+
+  void *chunk = ChunkPool_find_checked(start);
+
   pointer p = start;
   size_t i = 0;
 
@@ -232,10 +249,10 @@ void HM_forwardHHObjptrsInChunkList(
                                 forwardHHObjptr,
                                 forwardHHObjptrArgs);
       if ((i++ % 1024) == 0) {
-	Trace3(EVENT_COPY,
-	       (EventInt)forwardHHObjptrArgs->bytesCopied,
-	       (EventInt)forwardHHObjptrArgs->objectsCopied,
-	       (EventInt)forwardHHObjptrArgs->stacksCopied);
+        Trace3(EVENT_COPY,
+               (EventInt)forwardHHObjptrArgs->bytesCopied,
+               (EventInt)forwardHHObjptrArgs->objectsCopied,
+               (EventInt)forwardHHObjptrArgs->stacksCopied);
       }
     }
 
@@ -371,7 +388,7 @@ void HM_getObjptrInfo(GC_state s,
                       struct HM_ObjptrInfo* info) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
-  void* chunk = ChunkPool_find(objptrToPointer(object, s->heap->start));
+  void* chunk = ChunkPool_find_checked(objptrToPointer(object, s->heap->start));
   assert(NULL != chunk);
 
   void* chunkList;
@@ -629,7 +646,7 @@ void HM_assertLevelListInvariants(const void* levelList,
 #endif /* ASSERT */
 
 void HM_updateChunkValues(void* chunk, void* frontier) {
-  assert(ChunkPool_find(((char*)(frontier)) - 1) == chunk);
+  assert(ChunkPool_find_checked(((char*)(frontier)) - 1) == chunk);
   HM_getChunkInfo(chunk)->frontier = frontier;
 }
 
@@ -697,7 +714,7 @@ void HM_assertChunkInvariants(const void* chunk,
                               const void* levelHeadChunk) {
   const struct HM_ChunkInfo* chunkInfo = HM_getChunkInfoConst(chunk);
 
-  assert(ChunkPool_find(((char*)(chunkInfo->frontier)) - 1) == chunk);
+  assert(ChunkPool_find_checked(((char*)(chunkInfo->frontier)) - 1) == chunk);
 
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */
