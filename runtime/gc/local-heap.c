@@ -39,6 +39,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
                                          size_t bytesRequested,
                                          bool ensureCurrentLevel) {
+
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
   bool emptyHH = FALSE;
   bool extend = FALSE;

@@ -434,9 +434,9 @@ void* ChunkPool_find (void* object) {
   }
 
 #if ASSERT
-  chunkMetadata = ChunkPool_chunkToChunkMetadata(chunk);
-  assert(ChunkPool_ALLOCATED == chunkMetadata->previous);
-  assert(ChunkPool_ALLOCATED == chunkMetadata->next);
+//  chunkMetadata = ChunkPool_chunkToChunkMetadata(chunk);
+//  assert(ChunkPool_ALLOCATED == chunkMetadata->previous);
+//  assert(ChunkPool_ALLOCATED == chunkMetadata->next);
 #endif
 
   LOG(LM_CHUNK_POOL, LL_DEBUGMORE, "pointer %p in chunk %p", object, chunk);

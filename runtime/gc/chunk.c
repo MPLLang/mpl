@@ -106,6 +106,7 @@ static inline void* ChunkPool_find_checked(void* p) {
     p,
     correctChunk,
     chunk);
+  assert(HM_getChunkInfo(chunk)->magic == CHUNK_MAGIC);
 #endif
   return chunk;
 }
@@ -138,6 +139,7 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
   chunkInfo->split.levelHead.toChunkList = ((void*)(0xcafebabedeadbeef));
 #endif
 
+  chunkInfo->magic = CHUNK_MAGIC;
   chunkInfo->frontier = HM_getChunkStart(chunk);
   chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
   chunkInfo->level = CHUNK_INVALID_LEVEL;
@@ -189,6 +191,7 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 
   /* setup chunk info */
   struct HM_ChunkInfo* chunkInfo = HM_getChunkInfo(chunk);
+  chunkInfo->magic = CHUNK_MAGIC;
   chunkInfo->frontier = HM_getChunkStart(chunk);
   chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
   chunkInfo->nextChunk = NULL;
@@ -646,7 +649,7 @@ void HM_assertLevelListInvariants(const void* levelList,
 #endif /* ASSERT */
 
 void HM_updateChunkValues(void* chunk, void* frontier) {
-  assert(ChunkPool_find_checked(((char*)(frontier)) - 1) == chunk);
+  assert(ChunkPool_find(((char*)(frontier)) - 1) == chunk);
   HM_getChunkInfo(chunk)->frontier = frontier;
 }
 
@@ -714,7 +717,7 @@ void HM_assertChunkInvariants(const void* chunk,
                               const void* levelHeadChunk) {
   const struct HM_ChunkInfo* chunkInfo = HM_getChunkInfoConst(chunk);
 
-  assert(ChunkPool_find_checked(((char*)(chunkInfo->frontier)) - 1) == chunk);
+  assert(ChunkPool_find(((char*)(chunkInfo->frontier)) - 1) == chunk);
 
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */

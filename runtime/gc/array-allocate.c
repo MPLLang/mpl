@@ -147,7 +147,9 @@ pointer GC_arrayAllocate (GC_state s,
     }
   } else {
     /* Allocate in Hierarchical Heap */
+
     size_t bytesRequested = arraySizeAligned + ensureBytesFree;
+
     /* RAM_NOTE: This should be wrapped in a function */
     /* used needs to be set because the mutator has changed s->stackTop. */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -163,6 +165,9 @@ pointer GC_arrayAllocate (GC_state s,
      * level
      */
 
+    /* remember which chunk this array starts in */
+    pointer blockOfFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
+
     frontier = s->frontier;
     result = arrayInitialize(s,
                              frontier,
@@ -172,9 +177,22 @@ pointer GC_arrayAllocate (GC_state s,
                              bytesNonObjptrs,
                              numObjptrs);
 
-      pointer newFrontier = frontier + arraySizeAligned;
-      assert (isFrontierAligned (s, newFrontier));
-      s->frontier = newFrontier;
+    pointer newFrontier = frontier + arraySizeAligned;
+    assert (isFrontierAligned (s, newFrontier));
+    s->frontier = newFrontier;
+
+    pointer blockOfNewFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
+    if (blockOfNewFrontier != blockOfFrontier) {
+      /* force a new chunk to be created so that no new objects lie after this
+       * array, which crossed a block boundary. */
+      struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+      HM_HH_updateValues(hh, s->frontier);
+      HM_HH_extend(hh, ensureBytesFree);
+      s->frontier = HM_HH_getFrontier(hh);
+      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    }
+    assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
 
   GC_profileAllocInc (s, arraySizeAligned);

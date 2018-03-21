@@ -22,6 +22,8 @@
  */
 #define CHUNK_INVALID_LEVEL (~((Word32)(0)))
 
+#define CHUNK_MAGIC 0xcafedabbedfacade
+
 /**
  * @brief
  * Represents the information about the chunk
@@ -29,6 +31,10 @@
  * This packed object is placed at the beginning of a chunk for easy access
  */
 struct HM_ChunkInfo {
+
+  /* magic number for checking... */
+  Word64 magic;
+
   /* common between all chunks */
   void* frontier; /**< The end of the allocations in this chunk */
 

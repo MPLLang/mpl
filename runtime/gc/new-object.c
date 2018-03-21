@@ -38,6 +38,7 @@ pointer newObject (GC_state s,
                (uintptr_t)(s->frontier + bytesRequested));
     frontier = s->frontier;
     s->frontier += bytesRequested;
+    assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
@@ -93,8 +94,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
+    assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
   stack = newStack (s, reserved, FALSE);
+  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
