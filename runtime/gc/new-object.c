@@ -38,7 +38,21 @@ pointer newObject (GC_state s,
                (uintptr_t)(s->frontier + bytesRequested));
     frontier = s->frontier;
     s->frontier += bytesRequested;
-    assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+    if (!isPointerInGlobalHeap(s, s->frontier)) {
+      pointer blockOfFrontier = (pointer)alignDown((size_t)frontier, 512ULL * 1024);
+      pointer blockOfNewFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
+      if (blockOfNewFrontier != blockOfFrontier) {
+        /* force a new chunk to be created so that no new objects lie after this
+         * array, which crossed a block boundary. */
+        struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+        HM_HH_updateValues(hh, s->frontier);
+        HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+        s->frontier = HM_HH_getFrontier(hh);
+        s->limitPlusSlop = HM_HH_getLimit(hh);
+        s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+      }
+      assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+    }
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
