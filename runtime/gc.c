@@ -32,6 +32,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/array.c"
 #include "gc/assign.c"
 #include "gc/atomic.c"
+#include "gc/blocks.c"
 #include "gc/call-stack.c"
 #include "gc/cheney-copy.c"
 #include "gc/chunk.c"

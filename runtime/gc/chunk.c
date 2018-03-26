@@ -100,12 +100,12 @@ static inline void* ChunkPool_find_checked(void* p) {
    * constant is chosen to match ChunkPool_MINIMUMCHUNKSIZE. */
   void* chunk = (void*)(pointer)alignDown((size_t)p, 512ULL * 1024);
 #if ASSERT
-  void* correctChunk = ChunkPool_find(p);
-  ASSERTPRINT(chunk == correctChunk,
-    "ChunkPool_find(%p) == %p (should be truncated address %p)",
-    p,
-    correctChunk,
-    chunk);
+  // void* correctChunk = ChunkPool_find(p);
+  // ASSERTPRINT(chunk == correctChunk,
+  //   "ChunkPool_find(%p) == %p (should be truncated address %p)",
+  //   p,
+  //   correctChunk,
+  //   chunk);
   assert(HM_getChunkInfo(chunk)->magic == CHUNK_MAGIC);
 #endif
   return chunk;
@@ -117,7 +117,8 @@ static inline void* ChunkPool_find_checked(void* p) {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
   size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
-  void* chunk = ChunkPool_allocate(&totalSize);
+  void* chunk = GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
+  //void* chunk = ChunkPool_allocate(&totalSize);
 
   if (NULL == chunk) {
     return NULL;
@@ -141,7 +142,8 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
 
   chunkInfo->magic = CHUNK_MAGIC;
   chunkInfo->frontier = HM_getChunkStart(chunk);
-  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
+  // chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
+  chunkInfo->limit = (void*)(((char*)chunk) + totalSize);
   chunkInfo->level = CHUNK_INVALID_LEVEL;
   chunkInfo->split.normal.levelHead = levelHeadChunk;
 
@@ -176,7 +178,8 @@ void* HM_allocateLevelHeadChunk(void** levelList,
                                 Word32 level,
                                 struct HM_HierarchicalHeap* hh) {
   size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
-  void* chunk = ChunkPool_allocate(&totalSize);
+  void* chunk = GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
+  //void* chunk = ChunkPool_allocate(&totalSize);
 
   if (NULL == chunk) {
     return NULL;
@@ -193,7 +196,8 @@ void* HM_allocateLevelHeadChunk(void** levelList,
   struct HM_ChunkInfo* chunkInfo = HM_getChunkInfo(chunk);
   chunkInfo->magic = CHUNK_MAGIC;
   chunkInfo->frontier = HM_getChunkStart(chunk);
-  chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
+  // chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
+  chunkInfo->limit = (void*)(((char*)chunk) + totalSize);
   chunkInfo->nextChunk = NULL;
   chunkInfo->level = level;
   chunkInfo->split.levelHead.nextHead = NULL;
@@ -316,9 +320,12 @@ void HM_freeChunks(void** levelList, Word32 minLevel) {
       "START FreeChunks levelList = %p, minLevel = %u",
       ((void*)(iteratorArgs.levelList)),
       iteratorArgs.minLevel);
-  LOCAL_USED_FOR_ASSERT bool result =
-      ChunkPool_iteratedFree(HM_freeLevelListIterator, &iteratorArgs);
-  assert(result);
+  for (void* chunk = HM_freeLevelListIterator(&iteratorArgs);
+       NULL != chunk;
+       chunk = HM_freeLevelListIterator(&iteratorArgs));
+  // LOCAL_USED_FOR_ASSERT bool result =
+  //     ChunkPool_iteratedFree(HM_freeLevelListIterator, &iteratorArgs);
+  // assert(result);
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "END FreeChunks levelList = %p, minLevel = %u",
       ((void*)(iteratorArgs.levelList)),
@@ -649,7 +656,7 @@ void HM_assertLevelListInvariants(const void* levelList,
 #endif /* ASSERT */
 
 void HM_updateChunkValues(void* chunk, void* frontier) {
-  assert(ChunkPool_find(((char*)(frontier)) - 1) == chunk);
+  assert(ChunkPool_find_checked(((char*)(frontier)) - 1) == chunk);
   HM_getChunkInfo(chunk)->frontier = frontier;
 }
 
@@ -717,7 +724,7 @@ void HM_assertChunkInvariants(const void* chunk,
                               const void* levelHeadChunk) {
   const struct HM_ChunkInfo* chunkInfo = HM_getChunkInfoConst(chunk);
 
-  assert(ChunkPool_find(((char*)(chunkInfo->frontier)) - 1) == chunk);
+  assert(ChunkPool_find_checked(((char*)(chunkInfo->frontier)) - 1) == chunk);
 
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */

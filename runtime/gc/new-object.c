@@ -39,6 +39,7 @@ pointer newObject (GC_state s,
     frontier = s->frontier;
     s->frontier += bytesRequested;
     if (!isPointerInGlobalHeap(s, s->frontier)) {
+      assert(!HM_inGlobalHeap(s));
       pointer blockOfFrontier = (pointer)alignDown((size_t)frontier, 512ULL * 1024);
       pointer blockOfNewFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
       if (blockOfNewFrontier != blockOfFrontier) {
@@ -51,7 +52,7 @@ pointer newObject (GC_state s,
         s->limitPlusSlop = HM_HH_getLimit(hh);
         s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       }
-      assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+      assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
     }
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
@@ -108,10 +109,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
-    assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+    assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
   stack = newStack (s, reserved, FALSE);
-  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);

@@ -148,6 +148,8 @@ pointer GC_arrayAllocate (GC_state s,
   } else {
     /* Allocate in Hierarchical Heap */
 
+    assert(!HM_inGlobalHeap(s));
+
     size_t bytesRequested = arraySizeAligned + ensureBytesFree;
 
     /* RAM_NOTE: This should be wrapped in a function */
@@ -192,7 +194,7 @@ pointer GC_arrayAllocate (GC_state s,
       s->limitPlusSlop = HM_HH_getLimit(hh);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
-    assert(ChunkPool_find(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+    assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
 
   GC_profileAllocInc (s, arraySizeAligned);

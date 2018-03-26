@@ -84,8 +84,8 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(!HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr (queuePointer,
-                                                             s->heap->start)));
+  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
+                                                  s->heap->start)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
                                                       s->heap->start);
@@ -95,8 +95,8 @@ void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(!HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr (queueLockPointer,
-                                                             s->heap->start)));
+  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
+                                                  s->heap->start)));
 
   s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
                                                           s->heap->start);
@@ -755,7 +755,7 @@ pointer copyObject(pointer p,
     newFrontier = HM_getChunkFrontier(chunk);
   }
   HM_updateChunkValues(chunk, newFrontier);
-  assert(ChunkPool_find(newFrontier) == alignDown((size_t)newFrontier, 512ULL * 1024));
+  assert(ChunkPool_find_checked(newFrontier) == alignDown((size_t)newFrontier, 512ULL * 1024));
 
   return frontier;
 }

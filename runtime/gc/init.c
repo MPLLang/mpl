@@ -514,6 +514,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
+  size_t bs = 512ULL * 1024;
+  s->controls->blocksConfig.blockSize = bs;
+  s->controls->blocksConfig.batchSize = bs * 100;
+  assert(isAligned(s->controls->blocksConfig.batchSize, s->controls->blocksConfig.blockSize));
+
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
 
@@ -524,6 +529,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->globalFrontier = NULL;
   s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;
+
+  s->freeBlocks = NULL;
+  s->freeBlocksLength = 0;
 
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
   initHeap (s, s->heap);
@@ -650,6 +658,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueLock = BOGUS_OBJPTR;
+  d->freeBlocks = NULL;
+  d->freeBlocksLength = 0;
   d->globalFrontier = NULL;
   d->globalLimitPlusSlop = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;

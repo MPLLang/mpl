@@ -55,6 +55,12 @@ struct HM_HierarchicalHeapConfig {
   size_t maxLCHS; /**< maximum LCHS, in bytes. */
 };
 
+
+struct Blocks_config {
+  size_t blockSize;
+  size_t batchSize;
+};
+
 enum HHCollectionLevel {
   ALL,
   LOCAL,
@@ -83,6 +89,7 @@ struct GC_controls {
   struct GC_ratios ratios;
   struct HM_HierarchicalHeapConfig hhConfig;
   struct ChunkPool_config chunkPoolConfig;
+  struct Blocks_config blocksConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
   enum SummaryFormat summaryFormat;

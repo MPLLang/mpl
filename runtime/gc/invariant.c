@@ -43,7 +43,7 @@ static inline void assertIsObjptrReachable (GC_state s,
           HM_HH_objptrInHierarchicalHeap(s, *opp));
 
   if (!isObjptrInFromSpace (s, *opp) &&
-      !HM_HH_objptrInHierarchicalHeap(s, *opp)) {
+      isObjptrInGlobalHeap(s, *opp)) {
     die ("gc.c: assertIsObjptrReachable "
          "opp = "FMTPTR"  "
          "*opp = "FMTOBJPTR"\n",

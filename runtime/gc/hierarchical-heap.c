@@ -506,10 +506,12 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
 }
 
 /* RAM_NOTE: should this be moved to local-heap.h? */
+#pragma warning "THIS SHOULD ONLY BE USED IN POSITIVE ASSERTS, I.E. assert(HM_HH_objptrInHierarchicalHeap(s, op)"
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
 #if ASSERT
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
-  return ChunkPool_pointerInChunkPool(candidatePointer);
+  // return ChunkPool_pointerInChunkPool(candidatePointer);
+  return ((struct HM_ChunkInfo*)alignDown((size_t)candidatePointer, 512ULL * 1024))->magic == CHUNK_MAGIC;
 #else
   DIE('HM_HH_objptrInHierarchicalHeap deprecated');
 #endif
