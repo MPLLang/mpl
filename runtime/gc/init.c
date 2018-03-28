@@ -515,9 +515,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->traceBufferSize = 10000;
 
   size_t bs = 512ULL * 1024;
-  s->controls->blocksConfig.blockSize = bs;
-  s->controls->blocksConfig.batchSize = bs * 100;
-  assert(isAligned(s->controls->blocksConfig.batchSize, s->controls->blocksConfig.blockSize));
+  s->controls->blockConfig.blockSize = bs;
+  s->controls->blockConfig.batchSize = bs * 100;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
@@ -619,6 +618,7 @@ int GC_init (GC_state s, int argc, char **argv) {
     s->controls->hhConfig.maxLCHS = s->controls->chunkPoolConfig.maxSize;
   }
   ChunkPool_initialize(&(s->controls->chunkPoolConfig));
+  initBlocks(&(s->controls->blockConfig));
 
   return res;
 }

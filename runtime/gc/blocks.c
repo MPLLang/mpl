@@ -4,64 +4,66 @@
  * See the file MLton-LICENSE for details.
  */
 
-#if (defined (MLTON_GC_INTERNAL_TYPES))
+// #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-struct Blocks_batchInfo {
-  void* base;
-  size_t len;
-};
+// struct Block_batchInfo {
+//   void* base;
+//   size_t len;
+// };
 
-#define BATCH_INFO_PTR(p) ((struct Blocks_batchInfo*)((size_t)p - sizeof(struct Blocks_batchInfo)))
+// #define BATCH_INFO_PTR(p) ((struct Blocks_batchInfo*)((size_t)p - sizeof(struct Blocks_batchInfo)))
 
-#endif /* defined MLTON_GC_INTERNAL_TYPES */
+// #endif /* defined MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+static struct Block_config Block_sizes;
+
+static void initBlocks(struct Block_config* config) {
+  assert(isAligned(config->blockSize, GC_MODEL_MINALIGN));
+  assert(config->blockSize >= GC_HEAP_LIMIT_SLOP);
+  assert(isAligned(config->batchSize, config->blockSize));
+  Block_sizes.blockSize = config->blockSize;
+  Block_sizes.batchSize = config->batchSize;
+}
+
+static inline bool inSameBlock(pointer p, pointer q) {
+  return (pointer)alignDown((size_t)p, Block_sizes.blockSize) ==
+         (pointer)alignDown((size_t)q, Block_sizes.blockSize);
+}
+
 /* Allocate a region of size at least *bytesRequested, storing the resulting
  * usable size at *bytesRequested. The returned pointer is aligned at the
- * specified alignment.
- *
- * requests an extra `alignment` bytes in order to store a batchInfo at
- * the front of the batch (and therefore requires that the requested alignment
- * is at least as large as the size of the batchInfo) */
-static pointer Blocks_allocRegion(size_t* bytesRequested, size_t alignment) {
-  assert(sizeof(struct Blocks_batchInfo) <= alignment);
-  size_t len = align(*bytesRequested, alignment);
+ * block size. */
+static pointer Block_allocRegion(size_t* bytesRequested) {
+  size_t bs = Block_sizes.blockSize;
+  size_t len = align(*bytesRequested, bs);
   *bytesRequested = len;
-  pointer base = (pointer) GC_mmapAnon(NULL, len + alignment);
-  /* make sure there is space at the front for batchInfo */
-  pointer p = (pointer) alignDown((size_t)base + alignment, alignment);
-  BATCH_INFO_PTR(p)->base = (void*)base;
-  BATCH_INFO_PTR(p)->len = len + alignment;
+  pointer base = (pointer) GC_mmapAnon(NULL, len + bs);
+  pointer p = (pointer) align((size_t)base, bs);
 
-  assert(isAligned((size_t)p, alignment));
+  assert(isAligned((size_t)p, bs));
   return p;
 }
 
-void Blocks_freeBatch(pointer p) {
-  GC_release(BATCH_INFO_PTR(p)->base, BATCH_INFO_PTR(p)->len);
-}
-
 pointer GC_getBlocks(GC_state s, size_t* bytesRequested) {
-  size_t blockSize = s->controls->blocksConfig.blockSize;
-  size_t batchSize = s->controls->blocksConfig.batchSize;
   size_t requested = *bytesRequested;
 
   /* When a large allocation is requested, just mmap a batch for it directly */
-  if (requested > batchSize) {
-    return Blocks_allocRegion(bytesRequested, blockSize);
+  if (requested > Block_sizes.batchSize) {
+    return Block_allocRegion(bytesRequested);
   }
 
   if (NULL == s->freeBlocks || s->freeBlocksLength < requested) {
-    s->freeBlocksLength = batchSize;
-    s->freeBlocks = Blocks_allocRegion(&(s->freeBlocksLength), blockSize);
+    s->freeBlocksLength = Block_sizes.batchSize;
+    s->freeBlocks = Block_allocRegion(&(s->freeBlocksLength));
   }
 
   assert(s->freeBlocks != NULL);
-  assert(s->freeBlocksLength >= requested);
-  assert(isAligned(s->freeBlocks, blockSize));
+  assert(s->freeBlocksLength >= align(requested, Block_sizes.blockSize));
+  assert(isAligned(s->freeBlocks, Block_sizes.blockSize));
 
-  size_t len = align(requested, blockSize);
+  size_t len = align(requested, Block_sizes.blockSize);
   *bytesRequested = len;
   pointer p = s->freeBlocks;
   s->freeBlocks += len;
