@@ -49,7 +49,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     if (!HM_inGlobalHeap(s)) {
       /* save HH info for from-thread */
       /* copied from HM_enterGlobalHeap() */
-      HM_exitLocalHeap(s);
+      HM_exitLocalHeap(s); // remembers s->frontier in HH
 
       spinlock_lock(&(s->lock), Proc_processorNumber(s));
       s->frontier = s->globalFrontier;
@@ -78,9 +78,13 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
-    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
-                                                    TRUE, TRUE,
-                                                    0, 0);
+    if (HM_inGlobalHeap(s)) {
+      ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
+                                                      TRUE, TRUE,
+                                                      0, 0);
+    } else {
+      HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
+    }
 
     endAtomic (s);
     assert (invariantForMutatorFrontier(s));
