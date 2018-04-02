@@ -1,6 +1,3 @@
-(* a hack to get around unnecessary global heap collection *)
-val a = Array.array (100000, "hello")
-
 fun serial n =
   if n <= 1 then n else serial (n-1) + serial (n-2)
 
