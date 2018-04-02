@@ -1,6 +1,12 @@
 MLTON=../build/bin/mlton-parmem
 MLTRACE=../build/bin/mltrace
 
+tab: tab.sml tab.mlb
+	$(MLTON) -output tab tab.mlb
+
+tab.dbg: tab.sml tab.mlb
+	$(MLTON) -debug true -debug-runtime true -output tab.dbg tab.mlb
+
 fib: fib.sml sources.mlb
 	$(MLTON) -output fib sources.mlb
 
