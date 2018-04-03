@@ -22,7 +22,9 @@ static struct Block_config Block_sizes;
 static void initBlocks(struct Block_config* config) {
   assert(isAligned(config->blockSize, GC_MODEL_MINALIGN));
   assert(config->blockSize >= GC_HEAP_LIMIT_SLOP);
-  assert(isAligned(config->batchSize, config->blockSize));
+  if (!isAligned(config->batchSize, config->blockSize)) {
+    DIE("Error: batch size is not a multiple of the block size");
+  }
   Block_sizes.blockSize = config->blockSize;
   Block_sizes.batchSize = config->batchSize;
 }

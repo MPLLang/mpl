@@ -361,6 +361,13 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->chunkPoolConfig.initialSize = stringToBytes(argv[i++]);
+
+        } else if (0 == strcmp(arg, "block-size")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton block-size missing argument.");
+          }
+          s->controls->blockConfig.blockSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "max-chunk-pool-size")) {
           i++;
           if (i == argc) {
