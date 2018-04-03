@@ -20,6 +20,7 @@ struct Block_config {
 
 static void initBlocks(struct Block_config* config);
 static inline bool inSameBlock(pointer p, pointer q);
+static inline pointer blockOf(pointer p);
 
 pointer GC_getBlocks(GC_state s, size_t* bytesRequested);
 

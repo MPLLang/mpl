@@ -167,9 +167,6 @@ pointer GC_arrayAllocate (GC_state s,
      * level
      */
 
-    /* remember which chunk this array starts in */
-    pointer blockOfFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
-
     frontier = s->frontier;
     result = arrayInitialize(s,
                              frontier,
@@ -183,8 +180,7 @@ pointer GC_arrayAllocate (GC_state s,
     assert (isFrontierAligned (s, newFrontier));
     s->frontier = newFrontier;
 
-    pointer blockOfNewFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
-    if (blockOfNewFrontier != blockOfFrontier) {
+    if (!inSameBlock(frontier, s->frontier)) {
       /* force a new chunk to be created so that no new objects lie after this
        * array, which crossed a block boundary. */
       struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
@@ -194,7 +190,6 @@ pointer GC_arrayAllocate (GC_state s,
       s->limitPlusSlop = HM_HH_getLimit(hh);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
-    assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
   }
 
   GC_profileAllocInc (s, arraySizeAligned);

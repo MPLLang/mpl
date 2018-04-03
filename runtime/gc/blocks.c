@@ -27,9 +27,12 @@ static void initBlocks(struct Block_config* config) {
   Block_sizes.batchSize = config->batchSize;
 }
 
+static inline pointer blockOf(pointer p) {
+  return (pointer)alignDown((size_t)p, Block_sizes.blockSize);
+}
+
 static inline bool inSameBlock(pointer p, pointer q) {
-  return (pointer)alignDown((size_t)p, Block_sizes.blockSize) ==
-         (pointer)alignDown((size_t)q, Block_sizes.blockSize);
+  return blockOf(p) == blockOf(q);
 }
 
 /* Allocate a region of size at least *bytesRequested, storing the resulting

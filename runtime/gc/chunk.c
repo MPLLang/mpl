@@ -96,18 +96,8 @@ static const void* getLevelHeadChunk(const void* chunk);
 #endif
 
 static inline void* ChunkPool_find_checked(void* p) {
-  /* Find the chunk front with a simple address truncation; the alignment
-   * constant is chosen to match ChunkPool_MINIMUMCHUNKSIZE. */
-  void* chunk = (void*)(pointer)alignDown((size_t)p, 512ULL * 1024);
-#if ASSERT
-  // void* correctChunk = ChunkPool_find(p);
-  // ASSERTPRINT(chunk == correctChunk,
-  //   "ChunkPool_find(%p) == %p (should be truncated address %p)",
-  //   p,
-  //   correctChunk,
-  //   chunk);
+  pointer chunk = blockOf(p);
   assert(HM_getChunkInfo(chunk)->magic == CHUNK_MAGIC);
-#endif
   return chunk;
 }
 
@@ -656,7 +646,7 @@ void HM_assertLevelListInvariants(const void* levelList,
 #endif /* ASSERT */
 
 void HM_updateChunkValues(void* chunk, void* frontier) {
-  assert(ChunkPool_find_checked(((char*)(frontier)) - 1) == chunk);
+  assert(HM_getChunkInfo(chunk)->frontier <= frontier && frontier <= HM_getChunkInfo(chunk)->limit);
   HM_getChunkInfo(chunk)->frontier = frontier;
 }
 
@@ -724,7 +714,7 @@ void HM_assertChunkInvariants(const void* chunk,
                               const void* levelHeadChunk) {
   const struct HM_ChunkInfo* chunkInfo = HM_getChunkInfoConst(chunk);
 
-  assert(ChunkPool_find_checked(((char*)(chunkInfo->frontier)) - 1) == chunk);
+  assert(HM_getChunkStart(chunk) <= chunkInfo->frontier && chunkInfo->frontier <= chunkInfo->limit);
 
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */

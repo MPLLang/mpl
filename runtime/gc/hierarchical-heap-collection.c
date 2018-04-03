@@ -747,7 +747,7 @@ pointer copyObject(pointer p,
 
   GC_memcpy(p, frontier, copySize);
   void* newFrontier = ((void*)(((char*)(frontier)) + objectSize));
-  if (alignDown((size_t)newFrontier, 512ULL * 1024) != chunk) {
+  if (blockOf(newFrontier) != chunk) {
     chunk = HM_allocateChunk(toChunkList, 42); /* I just need to extend with a new chunk... size is arbitrary. */
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
@@ -755,7 +755,7 @@ pointer copyObject(pointer p,
     newFrontier = HM_getChunkFrontier(chunk);
   }
   HM_updateChunkValues(chunk, newFrontier);
-  assert(ChunkPool_find_checked(newFrontier) == alignDown((size_t)newFrontier, 512ULL * 1024));
+  assert(ChunkPool_find_checked(newFrontier) == blockOf(newFrontier));
 
   return frontier;
 }

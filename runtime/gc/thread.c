@@ -66,6 +66,7 @@ size_t sizeofThread (GC_state s) {
   return res;
 }
 
+// SAM_NOTE: padding for alignment.
 size_t offsetofThread (GC_state s) {
   return (sizeofThread (s)) - (GC_NORMAL_METADATA_SIZE + sizeof (struct GC_thread));
 }

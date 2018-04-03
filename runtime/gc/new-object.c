@@ -40,9 +40,7 @@ pointer newObject (GC_state s,
     s->frontier += bytesRequested;
     if (!isPointerInGlobalHeap(s, s->frontier)) {
       assert(!HM_inGlobalHeap(s));
-      pointer blockOfFrontier = (pointer)alignDown((size_t)frontier, 512ULL * 1024);
-      pointer blockOfNewFrontier = (pointer)alignDown((size_t)s->frontier, 512ULL * 1024);
-      if (blockOfNewFrontier != blockOfFrontier) {
+      if (!inSameBlock(frontier, s->frontier)) {
         /* force a new chunk to be created so that no new objects lie after this
          * array, which crossed a block boundary. */
         struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
@@ -52,7 +50,6 @@ pointer newObject (GC_state s,
         s->limitPlusSlop = HM_HH_getLimit(hh);
         s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
       }
-      assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
     }
   }
   /* SPOONHOWER_NOTE: unprotected concurrent access */
@@ -83,6 +80,12 @@ GC_stack newStack (GC_state s,
   stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
                                 sizeofStackWithMetaData (s, reserved),
                                 allocInOldGen));
+
+  if (!isPointerInGlobalHeap(s, (pointer)stack))
+    LOG(LM_ALLOCATION, LL_INFO,
+      "Allocated stack in HH at "FMTPTR"",
+      (uintptr_t)stack);
+
   stack->reserved = reserved;
   stack->used = 0;
   if (DEBUG_STACKS)
@@ -92,6 +95,46 @@ GC_stack newStack (GC_state s,
 
   return stack;
 }
+
+/* return a pointer to a region of at least `bytes` bytes in size.
+ * updates s->frontier appropriately. */
+// pointer allocateSpace(GC_state s, size_t bytes)
+// {
+//   assert(isAligned(bytes, s->alignment));
+//   assert(isFrontierAligned(s, s->frontier));
+
+//   if (HM_inGlobalHeap(s)) {
+//     ensureHasHeapBytesFreeAndOrInvariantForMutator(s, FALSE, FALSE, FALSE, 0, bytes);
+//     pointer frontier = s->frontier;
+//     s->frontier += bytes;
+//     assert(isFrontierAligned(s, s->frontier));
+//     return frontier;
+//   }
+
+//   /* Allocate in the HH */
+
+//   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+
+//   // is this true? When can we guarantee consistency between frontier recorded
+//   // in HH vs s->frontier?
+//   assert(s->frontier == HM_HH_getFrontier(hh));
+
+//   assert(s->limitPlusSlop == HM_HH_getLimit(hh));
+
+//   if ((size_t)(s->limitPlusSlop - s->frontier) <= bytes) {
+//     pointer frontier = s->frontier;
+//     s->frontier += bytes;
+//     assert(isFrontierAligned(s, s->frontier));
+
+//     // this is probably not necessary -- when is consistency restored?
+//     HM_HH_updateValues(hh, s->frontier);
+//     return frontier;
+//   }
+
+//   // TODO: need to allocate a new chunk. If we have to ensure the current level
+//   // this is easy: just extend. But if we can take advantage of allocating
+//   // within
+// }
 
 GC_thread newThread (GC_state s, size_t reserved) {
   GC_stack stack;
@@ -109,10 +152,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
-    assert(ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+    assert(ChunkPool_find_checked(s->frontier) == blockOf(s->frontier));
   }
   stack = newStack (s, reserved, FALSE);
-  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find_checked(s->frontier) == alignDown((size_t)s->frontier, 512ULL * 1024));
+  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find_checked(s->frontier) == blockOf(s->frontier));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
