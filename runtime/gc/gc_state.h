@@ -126,6 +126,7 @@ PRIVATE void GC_setAmOriginal (bool b);
 PRIVATE void GC_setControlsMessages (bool b);
 PRIVATE void GC_setControlsSummary (bool b);
 PRIVATE void GC_setControlsRusageMeasureGC (bool b);
+// SAM_NOTE: TODO: remove this and replace with blocks statistics
 PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
 PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);

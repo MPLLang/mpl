@@ -282,8 +282,9 @@ void GC_setControlsRusageMeasureGC (bool b) {
   s->controls->rusageMeasureGC = b;
 }
 
+// SAM_NOTE: TODO: remove this and replace with blocks statistics
 size_t GC_getMaxChunkPoolOccupancy (void) {
-  return ChunkPool_maxAllocated ();
+  return 0;
 }
 
 size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void) {

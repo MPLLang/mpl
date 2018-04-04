@@ -28,7 +28,6 @@ typedef GC_state GCState_t;
 #include "gc/logger.h"
 
 #include "gc/tls-objects.h"
-#include "gc/chunk-pool.h"
 #include "gc/align.h"
 #include "gc/blocks.h"
 #include "gc/model.h"

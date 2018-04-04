@@ -92,7 +92,7 @@ struct HM_ChunkInfo;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static void* ChunkPool_find_checked(void* p);
+static void* chunkOf(void* p);
 
 /**
  * This function allocates and initializes a chunk of at least allocableSize

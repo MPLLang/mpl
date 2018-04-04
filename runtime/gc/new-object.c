@@ -152,10 +152,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
-    assert(ChunkPool_find_checked(s->frontier) == blockOf(s->frontier));
+    assert(chunkOf(s->frontier) == blockOf(s->frontier));
   }
   stack = newStack (s, reserved, FALSE);
-  assert(isPointerInGlobalHeap(s, s->frontier) || ChunkPool_find_checked(s->frontier) == blockOf(s->frontier));
+  assert(isPointerInGlobalHeap(s, s->frontier) || chunkOf(s->frontier) == blockOf(s->frontier));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);

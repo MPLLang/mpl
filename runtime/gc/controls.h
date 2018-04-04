@@ -41,6 +41,8 @@ struct GC_ratios {
   float available;
 };
 
+#define MAX_LCHS_INFINITE ((size_t)-1)
+
 /**
  * Ratios for Hierarchical Heap operations
  */
@@ -82,7 +84,6 @@ struct GC_controls {
   bool restrictAvailableSize; /* Use smaller heaps to improve space profiling accuracy */
   struct GC_ratios ratios;
   struct HM_HierarchicalHeapConfig hhConfig;
-  struct ChunkPool_config chunkPoolConfig;
   struct Block_config blockConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */

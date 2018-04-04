@@ -42,8 +42,9 @@ static void displayGlobalCumulativeStatistics (
     struct GC_globalCumulativeStatistics* globalCumulativeStatistics) {
     fprintf (out, "max global heap occupancy: %s bytes\n",
            uintmaxToCommaString (globalCumulativeStatistics->maxHeapOccupancy));
-    fprintf (out, "max chunk pool occupancy: %s bytes\n",
-             uintmaxToCommaString (ChunkPool_maxAllocated ()));
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // fprintf (out, "max chunk pool occupancy: %s bytes\n",
+    //          uintmaxToCommaString (ChunkPool_maxAllocated ()));
 }
 
 
@@ -178,9 +179,10 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
     fprintf(out, ", ");
 
-    fprintf(out,
-            "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
-            ChunkPool_maxAllocated ());
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // fprintf(out,
+    //         "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
+    //         ChunkPool_maxAllocated ());
   }
 
   fprintf(out, " }");

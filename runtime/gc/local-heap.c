@@ -50,8 +50,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       bytesRequested,
       heapBytesFree);
 
-  /* trace pre-collection occupancy before doing anything */
-  Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+  // trace pre-collection occupancy before doing anything
+  // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+  // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
@@ -107,13 +108,16 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         newAllocatedRatio,
         hh->locallyCollectibleHeapSize,
         hh->locallyCollectibleSize);
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
-        "%zu/%zu bytes allocated in Chunk Pool after collection",
-        ChunkPool_allocated(),
-        ChunkPool_size());
+
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
+    //     "%zu/%zu bytes allocated in Chunk Pool after collection",
+    //     ChunkPool_allocated(),
+    //     ChunkPool_size());
 
     /* trace post-collection occupancy */
-    Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     HM_HH_maybeResizeLCHS(s, hh);
 

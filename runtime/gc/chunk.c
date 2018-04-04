@@ -95,7 +95,7 @@ void* HM_freeLevelListIterator(void* arg);
 static const void* getLevelHeadChunk(const void* chunk);
 #endif
 
-static inline void* ChunkPool_find_checked(void* p) {
+static inline void* chunkOf(void* p) {
   pointer chunk = blockOf(p);
   assert(HM_getChunkInfo(chunk)->magic == CHUNK_MAGIC);
   return chunk;
@@ -222,7 +222,7 @@ void HM_forwardHHObjptrsInChunkList(
     void* predicateArgs,
     struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
 
-  void *chunk = ChunkPool_find_checked(start);
+  void *chunk = chunkOf(start);
 
   pointer p = start;
   size_t i = 0;
@@ -388,7 +388,7 @@ void HM_getObjptrInfo(GC_state s,
                       struct HM_ObjptrInfo* info) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
-  void* chunk = ChunkPool_find_checked(objptrToPointer(object, s->heap->start));
+  void* chunk = chunkOf(objptrToPointer(object, s->heap->start));
   assert(NULL != chunk);
 
   void* chunkList;

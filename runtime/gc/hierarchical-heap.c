@@ -599,7 +599,8 @@ void adjustLCHS(GC_state s,
 
   if (newLCHS < s->controls->hhConfig.initialLCHS) {
     newLCHS = s->controls->hhConfig.initialLCHS;
-  } else if (newLCHS > s->controls->hhConfig.maxLCHS) {
+  } else if (s->controls->hhConfig.maxLCHS != MAX_LCHS_INFINITE &&
+             newLCHS > s->controls->hhConfig.maxLCHS) {
     newLCHS = s->controls->hhConfig.maxLCHS;
   }
 

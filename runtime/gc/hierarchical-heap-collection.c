@@ -755,7 +755,7 @@ pointer copyObject(pointer p,
     newFrontier = HM_getChunkFrontier(chunk);
   }
   HM_updateChunkValues(chunk, newFrontier);
-  assert(ChunkPool_find_checked(newFrontier) == blockOf(newFrontier));
+  assert(chunkOf(newFrontier) == blockOf(newFrontier));
 
   return frontier;
 }
