@@ -1,5 +1,8 @@
-MLTON=../build/bin/mlton-parmem
+MLTON=MLTON_JOBS=32 ../build/bin/mlton-parmem
 MLTRACE=../build/bin/mltrace
+
+# to guarantee that they always remake
+.PHONY: tab tab.dbg fib fib.dbg fib.trc trace
 
 tab: tab.sml tab.mlb
 	$(MLTON) -output tab tab.mlb
@@ -15,8 +18,6 @@ fib.dbg: fib.sml sources.mlb
 
 fib.trc: fib.sml sources.mlb
 	$(MLTON) -trace true -trace-runtime true -output fib.trc sources.mlb
-
-.PHONY: trace
 
 trace: fib.trc
 	$(MLTRACE) record ./fib.trc @MLton number-processors 4 fixed-heap 2G --
