@@ -116,6 +116,9 @@ struct
                     val () = incrSteals 1
                     val childHH = HH.new ()
                     val () = HH.appendChild (parentHH, childHH, sharedLevel)
+                    val _ = useHH childHH
+                    val childT = T.prepare (T.new (fn _ => (useHH childHH; unlocker (); w ())), ())
+                    val _ = stopUseHH ()
                 in
                     dbgmsg (fn () => "switching to new thread");
                     (* switch to childHH to allocate the thread there *)
@@ -123,17 +126,7 @@ struct
                                  (Array.update (schedThreads,
                                                 p,
                                                 SOME (T.prepare (st, ())));
-                                  useHH childHH;
-                                  T.prepare (T.new (fn () =>
-                                                       (*
-                                                        * make sure to use
-                                                        * the HH in the new
-                                                        * thread too.
-                                                        *)
-                                                       (useHH childHH;
-                                                        unlocker ();
-                                                        w ())),
-                                             ())));
+                                  childT));
                     dbgmsg (fn () => "returned to scheduler from new thread");
                     maybeSetHHDead p
                 end
@@ -143,17 +136,20 @@ struct
                  * This doesn't have to be stolen as it
                  * could be a resume parent
                  *)
-                (dbgmsg (fn () => "switching to suspended thread");
-                 T.switch (fn st =>
-                              (Array.update (schedThreads,
-                                             p,
-                                             SOME (T.prepare (st, ())));
-                               useHH hh;
-                               T.prepare (T.prepend (k, fn () => (useHH hh;
-                                                                  unlocker ())),
-                                          ())));
-                 dbgmsg (fn () => "returned to scheduler from suspended thread");
-                 maybeSetHHDead p))
+                let
+                  val _ = useHH hh
+                  val childT = T.prepare (T.prepend (k, fn () => (useHH hh; unlocker ())), ())
+                  val _ = stopUseHH ()
+                in
+                  (dbgmsg (fn () => "switching to suspended thread");
+                   T.switch (fn st =>
+                                (Array.update (schedThreads,
+                                               p,
+                                               SOME (T.prepare (st, ())));
+                                 childT));
+                   dbgmsg (fn () => "returned to scheduler from suspended thread");
+                   maybeSetHHDead p)
+                end)
            (* PERF? this handle only makes sense for the Work case *)
            (* PERF? move this handler out to the native entry point? *)
            handle e => (HM.enterGlobalHeap ();

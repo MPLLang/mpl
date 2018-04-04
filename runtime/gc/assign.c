@@ -34,6 +34,9 @@ static pointer Assignable_findLockedTrueReplica(
         struct HM_HierarchicalHeap *hhCurrent;
         struct HM_ObjptrInfo info;
 
+        if (getThreadCurrent(s)->hierarchicalHeap == BOGUS_OBJPTR) {
+          goto fast_path;
+        }
         assert (getThreadCurrent(s)->hierarchicalHeap != BOGUS_OBJPTR);
         hhCurrent =
             (struct HM_HierarchicalHeap *)
