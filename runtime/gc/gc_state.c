@@ -232,8 +232,7 @@ void setGCStateCurrentHeap (GC_state s,
     }
 
     s->start = s->frontier = frontier;
-    frontier += s->controls->allocChunkSize;
-    s->limitPlusSlop = frontier;
+    s->limitPlusSlop = s->start + GC_HEAP_LIMIT_SLOP;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     /* RAM_NOTE: Probably not necessary, remove after confirmation */
     /* SPOONHOWER_NOTE: clearCardMap (?) */
