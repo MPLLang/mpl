@@ -118,6 +118,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
 
 pointer HM_newHierarchicalHeap (GC_state s) {
   /* allocate the object */
+  assert(HM_inGlobalHeap(s));
   ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
                                                  FALSE,
                                                  FALSE,
