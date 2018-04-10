@@ -330,6 +330,7 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   hh->level = level;
+  // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
 }
 
 pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {

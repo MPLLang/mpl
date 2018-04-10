@@ -8,7 +8,7 @@ local
   mailboxes/MAILBOXES.sig
 
   SimpleRandom.sml
-  queue/MkRingBuffer.sml
+  queue/ArrayQueue.sml
   mailboxes/Mailboxes.sml
   Scheduler.sml
 in

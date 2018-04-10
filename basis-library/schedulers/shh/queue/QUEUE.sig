@@ -2,17 +2,18 @@ signature QUEUE =
 sig
   type 'a t
 
-  (* new procnum *)
+  (* new p -- registers this queue on processor p *)
   val new : int -> 'a t
   val empty : 'a t -> bool
 
-  val pushBot : 'a * 'a t -> unit
+  val pushFront : 'a * 'a t -> unit
 
-  val popBotDiscard : 'a t -> bool
-  val popBot : 'a t -> 'a option
-  val popTop : 'a t -> 'a option
+  val popFront : 'a t -> 'a option
+  val popBack : 'a t -> 'a option
 
-  val peekBot : 'a t -> 'a option
-  val peekTop : 'a t -> 'a option
+  val toList : 'a t -> 'a list
+
+  (* val peekFront : 'a t -> 'a option
+  val peekBack : 'a t -> 'a option *)
 
 end

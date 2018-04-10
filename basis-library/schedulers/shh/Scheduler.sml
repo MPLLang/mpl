@@ -22,6 +22,22 @@ struct
     ; ()
     )
 
+  val doDebugMsg = true
+  val printLock : Word32.word ref = ref 0w0
+  val _ = MLton.Parallel.Deprecated.lockInit printLock
+  fun dbgmsg m =
+    if not doDebugMsg then () else
+    let
+      val p = myWorkerId ()
+      val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
+    in
+      ( MLton.Parallel.Deprecated.takeLock printLock
+      ; TextIO.output (TextIO.stdErr, msg)
+      ; TextIO.flushOut TextIO.stdErr
+      ; MLton.Parallel.Deprecated.releaseLock printLock
+      )
+    end
+
   (* ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *)
@@ -35,10 +51,11 @@ struct
   (* TODO: Implement a faster queue? Is this necessary? *)
   (*structure Queue = SimpleQueue*)
   (* structure Queue = DoublyLinkedList *)
-  structure Queue = MkRingBuffer (val initialCapacity = 1024)
+  (* structure Queue = MkRingBuffer (val initialCapacity = 1024) *)
+  structure Queue = ArrayQueue
 
-  type vertex = int ref * unit Thread.t ref
-  type task = unit -> unit
+  type vertex = int ref * unit Thread.t option ref
+  type task = (unit -> unit) * unit HH.t * int
 
   fun dummyTask () = die (fn _ => "Error: dummy task")
   val dummyThread = Thread.new dummyTask
@@ -65,11 +82,11 @@ struct
   (*fun increment (x : int ref) : unit =
     ignore (faa (x, 1))*)
 
-  (*
-  fun arraySub str (a, i) = Array.sub (a, i) handle e => (Atomic.print (fn _ => "Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  fun arrayUpdate str (a, i, x) = Array.update (a, i, x) handle e => (Atomic.print (fn _ => "Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
-  fun vectorSub str (v, i) = Vector.sub (v, i) handle e => (Atomic.print (fn _ => "Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  *)
+
+  (* fun arraySub str (a, i) = Array.sub (a, i) handle e => (print ("Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
+  fun arrayUpdate str (a, i, x) = Array.update (a, i, x) handle e => (print ("Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
+  fun vectorSub str (v, i) = Vector.sub (v, i) handle e => (print ("Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e) *)
+
 
   fun arraySub str (a, i) = Array.sub (a, i)
   fun arrayUpdate str (a, i, x) = Array.update (a, i, x)
@@ -122,12 +139,13 @@ struct
    * and executes v if the counter hits zero. *)
   fun sync (counter, cont) =
     Thread.switch (fn k =>
-      ( cont := k (* this must happen before decrementing the counter! *)
+      ( cont := SOME k (* this must happen before decrementing the counter! *)
+      ; dbgmsg (fn _ => "finished writing to cont")
       ; Thread.prepare (schedThread (), (counter, cont))
       ))
 
   (* Create a new vertex (for join points) *)
-  fun new () = (ref 2, ref dummyThread)
+  fun new () = (ref 2, ref NONE)
 
   (* ----------------------------------------------------------------------- *
    * ------------------------------ FORK-JOIN ------------------------------ *
@@ -139,8 +157,7 @@ struct
     exception ForkJoin
 
     datatype 'a result =
-      Waiting
-    | Finished of 'a
+      Finished of 'a
     | Raised of exn
 
     (* Must be called from a "user" thread, which has an associated HH *)
@@ -150,17 +167,18 @@ struct
         val hh = HH.get ()
         val level = HH.getLevel hh
 
+        val _ = dbgmsg (fn _ => "fork at level " ^ Int.toString level)
+
         (* This only works if the chosen SOME/NONE representation is a single objptr *)
         val ghhr = ref (NONE : 'b result ref HH.t option)
         val join = new ()
 
         fun g' () =
           let
-            val result = ref Waiting (* only to guarantee that it's boxed... *)
-            val ghh = HH.setReturnValue (HH.get (), result)
-            val _ = HH.appendChild (hh, ghh, level)
+            val result = Finished (g ()) handle e => Raised e
+            (* We only use `ref` to guarantee the value gets boxed! *)
+            val ghh = HH.setReturnValue (HH.get (), ref result)
             val _ = ghhr := SOME ghh
-            val _ = result := (Finished (g ()) handle e => Raised e)
             (* not necessary to set dead in private-deques, but still have to
              * in order to play nice with the current runtime implementation *)
             val _ = HH.setDead ghh
@@ -169,25 +187,30 @@ struct
             ()
           end
 
-        val _ = push g'
+        val _ = push (g', hh, level)
         val _ = HH.setLevel (hh, level + 1)
 
         val a = f ()
+        val _ = dbgmsg (fn _ => "trying pop")
         val b =
-          if popDiscard ()
-          then g ()
-          else ( sync join
-               ; case !ghhr of
-                   NONE => raise ForkJoin
-                 | SOME ghh =>
-                     case !(HH.mergeIntoParentAndGetReturnValue ghh) of
-                       Finished b => b
-                     | Raised e => raise e
-                     | Waiting => raise ForkJoin
-               )
+          if popDiscard () then
+            g ()
+          else
+            ( dbgmsg (fn _ => "suspending")
+            ; sync join
+            ; case !ghhr of
+                NONE => raise ForkJoin
+              | SOME ghh =>
+                  case !(HH.mergeIntoParentAndGetReturnValue ghh) of
+                    Finished b => b
+                  | Raised e => raise e
+            )
 
+        (* moves chunks from level+1 to level *)
         val _ = HH.promoteChunks hh
         val _ = HH.setLevel (hh, level)
+
+        val _ = dbgmsg (fn _ => "finish fork at level " ^ Int.toString level)
       in
         (a, b)
       end
@@ -198,8 +221,9 @@ struct
    * ------------------------- WORKER-LOCAL SETUP -------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  fun init myId =
+  fun sched rootTask () =
     let
+      val myId = myWorkerId ()
       val myQueue = Queue.new myId
       val myRand = SimpleRandom.rand myId
       val myRequestCell = requestCell myId
@@ -217,7 +241,7 @@ struct
             if friend = NO_REQUEST then ()
             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
             else ( myRequestCell := NO_REQUEST
-                 ; let val mail = Queue.popTop myQueue
+                 ; let val mail = Queue.popBack myQueue
                    in Mailboxes.sendMail mailboxes (friend, mail)
                    end
                  )
@@ -225,12 +249,14 @@ struct
         ; setStatus (myId, not (Queue.empty myQueue))
         )
 
-      fun push t (*(t, v)*) =
-        Queue.pushBot (t (*(t, v)*), myQueue)
+      fun push x =
+        Queue.pushFront (x, myQueue)
         before communicate ()
 
       fun popDiscard () =
-        Queue.popBotDiscard myQueue
+        (case Queue.popFront myQueue of
+          NONE => false
+        | SOME _ => true)
         before communicate ()
 
       (* ------------------------------------------------------------------- *)
@@ -285,11 +311,14 @@ struct
         let
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
-          val task = request () (* loop until work is found... *)
+          val _ = dbgmsg (fn _ => "finding work")
+          val (task, phh, level) = request () (* loop until work is found... *)
+          val _ = dbgmsg (fn _ => "got work")
           val _ = unblockRequests ()
 
-          (* TODO: use HH, make thread in new HH, return to global heap, ... *)
           val hh = HH.new ()
+          val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
+          val _ = HH.appendChild (phh, hh, level)
           val _ = useHH hh
           val taskThread = Thread.new (fn _ =>
             ( useHH hh
@@ -302,38 +331,40 @@ struct
 
       and returnFromExecute (counter, cont) =
         if decrementHitsZero counter
-        then (communicate (); returnFromExecute (execute (!cont)))
+        then (communicate (); returnFromExecute (execute (valOf (!cont))))
         else acquireWork ()
 
+      (* ------------------------------------------------------------------- *)
+
+      val _ = arrayUpdate "pushFuncs" (pushFuncs, myId, push)
+      val _ = arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
+
     in
-      ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
-      ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
-      ; if myId <> 0 then ()
-        else arrayUpdate "schedThreads" (schedThreads, myId, Thread.new returnFromExecute)
-      ; acquireWork
-      )
+      case rootTask of
+        NONE => acquireWork ()
+      | SOME t =>
+          let
+            val roothh = HH.new ()
+            val _ = useHH roothh
+            val t' = Thread.prepend (t, fn _ => useHH roothh)
+            val _ = stopUseHH ()
+          in
+            returnFromExecute (execute t')
+          end
     end (* init *)
 
   (* ----------------------------------------------------------------------- *
    * --------------------------- INITIALIZATION ---------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  fun sched () =
-    let val acquireWork = init (myWorkerId ())
-    in acquireWork ()
-    end
-
-  val _ = MLton.Parallel.registerProcessorFunction sched
-  val _ = MLton.Parallel.initializeProcessors ()
-
+  val _ = MLton.Parallel.registerProcessorFunction (sched NONE)
   (* init sets up worker-local data and returns the acquireWork function. This
    * allows us to set up the acquire loop for the other workers. Since the
    * current worker is the "master" worker, we ignore the returned value (we
    * only need to make sure it executes its setup code *)
-  val _ = init (myWorkerId ())
+  val _ = MLton.Parallel.initializeProcessors ()
 
-  val roothh = HH.new ()
-  val _ = useHH roothh
+  val _ = Thread.switch (fn progk => runnable (Thread.new (sched (SOME progk))))
 
 end
 
