@@ -23,16 +23,17 @@ struct
     )
 
   val doDebugMsg = true
+
   val printLock : Word32.word ref = ref 0w0
   val _ = MLton.Parallel.Deprecated.lockInit printLock
   fun dbgmsg m =
     if not doDebugMsg then () else
     let
       val p = myWorkerId ()
+      val _ = MLton.Parallel.Deprecated.takeLock printLock
       val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
     in
-      ( MLton.Parallel.Deprecated.takeLock printLock
-      ; TextIO.output (TextIO.stdErr, msg)
+      ( TextIO.output (TextIO.stdErr, msg)
       ; TextIO.flushOut TextIO.stdErr
       ; MLton.Parallel.Deprecated.releaseLock printLock
       )
@@ -197,7 +198,9 @@ struct
             g ()
           else
             ( dbgmsg (fn _ => "suspending")
+            ; HM.enterGlobalHeap ()
             ; sync join
+            ; HM.exitGlobalHeap ()
             ; case !ghhr of
                 NONE => raise ForkJoin
               | SOME ghh =>
