@@ -7,6 +7,10 @@ structure Scheduler =
 struct
 
   structure Thread = MLton.Thread.Basic
+  fun threadSwitch t =
+    ( Thread.atomicBegin ()
+    ; Thread.switchTo t
+    )
 
   structure HM = MLton.HM
   structure HH = HM.HierarchicalHeap
@@ -23,7 +27,7 @@ struct
     ; OS.Process.exit OS.Process.failure
     )
 
-  val doDebugMsg = true
+  val doDebugMsg = false
 
   val printLock : Word32.word ref = ref 0w0
   val _ = MLton.Parallel.Deprecated.lockInit printLock
@@ -55,14 +59,7 @@ struct
   (* structure Queue = MkRingBuffer (val initialCapacity = 1024) *)
   structure Queue = ArrayQueue
 
-  type vertex = int ref * Thread.t
-  type task = (unit -> unit) * unit HH.t * int
-
-  (* fun dummyTask () = die (fn _ => "Error: dummy task")
-  val dummyThread = Thread.new dummyTask *)
-
-  (* fun runnable (k : unit Thread.t) = Thread.prepare (k, ()) *)
-  (* fun jumpTo (k : unit Thread.t) = Thread.switch (fn _ => runnable k) *)
+  fun newIncounter () = ref 2
 
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
@@ -80,18 +77,9 @@ struct
     ; HM.exitGlobalHeap ()
     )
 
-  (*fun increment (x : int ref) : unit =
-    ignore (faa (x, 1))*)
-
-
-  (* fun arraySub str (a, i) = Array.sub (a, i) handle e => (print ("Array.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e)
-  fun arrayUpdate str (a, i, x) = Array.update (a, i, x) handle e => (print ("Array.update (" ^ str ^ ", " ^ Int.toString i ^ ", ...)\n"); raise e)
-  fun vectorSub str (v, i) = Vector.sub (v, i) handle e => (print ("Vector.sub (" ^ str ^ ", " ^ Int.toString i ^ ")\n"); raise e) *)
-
-
-  fun arraySub str (a, i) = Array.sub (a, i)
-  fun arrayUpdate str (a, i, x) = Array.update (a, i, x)
-  fun vectorSub str (v, i) = Vector.sub (v, i)
+  fun arraySub (a, i) = Array.sub (a, i)
+  fun arrayUpdate (a, i, x) = Array.update (a, i, x)
+  fun vectorSub (v, i) = Vector.sub (v, i)
 
   (* A request is either NO_REQUEST, REQUEST_BLOCKED, or a processor id.
    * Workers request work by writing their own id into another worker's
@@ -100,46 +88,35 @@ struct
   val NO_REQUEST = ~1
   val REQUEST_BLOCKED = ~2
   val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
-  fun requestCell p = vectorSub "requestCells" (requestCells, p)
+  fun requestCell p = vectorSub (requestCells, p)
 
   (* Statuses are updated locally to indicate whether or not work is available
    * to be stolen. This allows idle workers to only request work from victims
    * who are unlikely to reject.
    * TODO: does padding statuses actually improve performance? *)
   val statuses = Array.array (P*16, false)
-  fun getStatus p = arraySub "statuses" (statuses, p*16)
-  fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
+  fun getStatus p = arraySub (statuses, p*16)
+  fun setStatus (p, s) = arrayUpdate (statuses, p*16, s)
 
-  val mailboxes : task option Mailboxes.t = Mailboxes.new NONE
+  val mailboxes : ((unit -> unit) * unit HH.t) option Mailboxes.t =
+    Mailboxes.new NONE
 
   (* val push : task -> unit
    * push onto the current work queue *)
   val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push"))
-  fun push x = arraySub "pushFuncs" (pushFuncs, myWorkerId ()) x
+  fun push x = arraySub (pushFuncs, myWorkerId ()) x
 
   (* val popDiscard : unit -> bool
    * Attempts to pop a task off the task queue. If it fails (because the queue
    * is empty) then the desired task must have been served to another worker. *)
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
-  fun popDiscard () = arraySub "popDiscardFuncs" (popDiscardFuncs, myWorkerId ()) ()
+  fun popDiscard () = arraySub (popDiscardFuncs, myWorkerId ()) ()
 
-  val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
-  fun communicate () = arraySub "communicateFuncs" (communicateFuncs, myWorkerId ()) ()
+  (* val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
+  fun communicate () = arraySub "communicateFuncs" (communicateFuncs, myWorkerId ()) () *)
 
-  val schedThreads = Array.array (P, Thread.current ())
-  fun schedThread () = arraySub "schedThreads" (schedThreads, myWorkerId ())
-  (* val sync : vertex -> unit
-   * `sync v` assigns the current continuation to v, decrements its counter,
-   * and executes v if the counter hits zero. *)
-  (* fun sync (counter, cont) =
-    Thread.switch (fn k =>
-      ( cont := SOME k (* this must happen before decrementing the counter! *)
-      ; dbgmsg (fn _ => "finished writing to cont")
-      ; Thread.prepare (schedThread (), (counter, cont))
-      )) *)
-
-  (* Create a new vertex (for join points) *)
-  (* fun new () = (ref 2, ref NONE) *)
+  val returnToScheds = Array.array (P, fn _ => die (fn _ => "Error: dummy returnToSched"))
+  fun returnToSched x = arraySub (returnToScheds, myWorkerId ()) x
 
   (* ----------------------------------------------------------------------- *
    * ------------------------------ FORK-JOIN ------------------------------ *
@@ -165,10 +142,9 @@ struct
 
         (* This only works if the chosen SOME/NONE representation is a single objptr *)
         val ghhr = ref (NONE : 'b result ref HH.t option)
-        val incounter = ref 2
+        val incounter = newIncounter ()
         val parentThread = Thread.current ()
 
-        val _ = dbgmsg (fn _ => "allocating right side")
         fun g' () =
           let
             val result = Finished (g ()) handle e => Raised e
@@ -179,9 +155,7 @@ struct
              * in order to play nice with the current runtime implementation *)
             val _ = HH.setDead ghh
           in
-            if decrementHitsZero incounter
-            then (communicate (); Thread.switchTo parentThread)
-            else Thread.switchTo (schedThread ())
+            returnToSched (incounter, parentThread)
           end
 
         val _ = dbgmsg (fn _ => "pushing")
@@ -189,18 +163,14 @@ struct
         val _ = push (g', hh, level)
         val _ = HH.setLevel (hh, level + 1)
 
-        val _ = dbgmsg (fn _ => "executing left side")
-
         val a = f ()
         val _ = dbgmsg (fn _ => "trying pop")
         val b =
           if popDiscard () then
-            (dbgmsg (fn _ => "executing right side"); g ())
+            g ()
           else
             ( dbgmsg (fn _ => "suspending")
-            ; if decrementHitsZero incounter
-              then ()
-              else Thread.switchTo (schedThread ())
+            ; returnToSched (incounter, parentThread)
             ; case !ghhr of
                 NONE => raise ForkJoin
               | SOME ghh =>
@@ -236,6 +206,8 @@ struct
       val myQueue = Queue.new myId
       val myRand = SimpleRandom.rand myId
       val myRequestCell = requestCell myId
+      val mySchedThread = Thread.current ()
+      val myRetArg = ref NONE
 
       (* this widget makes it possible to create new "user" threads by copying
        * the prototype thread and writing the piece of work which should be
@@ -264,9 +236,18 @@ struct
             if friend = NO_REQUEST then ()
             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
             else ( myRequestCell := NO_REQUEST
-                 ; let val mail = Queue.popBack myQueue
-                   in Mailboxes.sendMail mailboxes (friend, mail)
-                   end
+                 ; case Queue.popBack myQueue of
+                     NONE => Mailboxes.sendMail mailboxes (friend, NONE)
+                   | SOME (task, phh, level) =>
+                       let
+                         val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
+                         val _ = HM.enterGlobalHeap ()
+                         val chh = HH.new ()
+                         val _ = HH.appendChild (phh, chh, level)
+                         val _ = HM.exitGlobalHeap ()
+                       in
+                         Mailboxes.sendMail mailboxes (friend, SOME (task, chh))
+                       end
                  )
           end
         ; setStatus (myId, not (Queue.empty myQueue))
@@ -323,47 +304,51 @@ struct
 
       (* ------------------------------------------------------------------- *)
 
-      (* requires that thread t already knows to return to the scheduler when it suspends. *)
-      (* fun execute t =
-        Thread.switch (fn schedk =>
-          ( arrayUpdate "schedThreads" (schedThreads, myId, schedk)
-          ; runnable t
-          )) *)
-
       fun acquireWork () : unit =
         let
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
           val _ = dbgmsg (fn _ => "finding work")
-          val (task, phh, level) = request () (* loop until work is found... *)
+          val (task, hh) = request () (* loop until work is found... *)
           val _ = dbgmsg (fn _ => "got work")
           val _ = unblockRequests ()
 
-          val hh = HH.new ()
-          val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
-          val _ = HH.appendChild (phh, hh, level)
-          val _ = useHH hh
+          (* val _ = useHH hh *)
           val _ = myTodo := SOME (fn _ => (useHH hh; task ()))
           val taskThread = Thread.copy prototype
-          val _ = stopUseHH ()
-          val _ = Thread.switchTo taskThread
+          (* val _ = stopUseHH () *)
+          val _ = threadSwitch taskThread
         in
-          acquireWork ()
+          returnFromExecute ()
         end
+
+      and returnFromExecute () =
+        case !myRetArg of
+          NONE => die (fn _ => "Error: no ret arg upon return to scheduler")
+        | SOME (incounter, cont) =>
+            ( myRetArg := NONE
+            ; if decrementHitsZero incounter
+              then (communicate (); threadSwitch cont; returnFromExecute ())
+              else acquireWork ()
+            )
+
+      fun returnToSched (c, k) =
+        ( myRetArg := SOME (c, k)
+        ; threadSwitch mySchedThread
+        )
 
       (* ------------------------------------------------------------------- *)
 
-      val _ = arrayUpdate "pushFuncs" (pushFuncs, myId, push)
-      val _ = arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
-      val _ = arrayUpdate "communicateFuncs" (communicateFuncs, myId, communicate)
-      val _ = arrayUpdate "schedThreads" (schedThreads, myId, Thread.current ())
+      val _ = arrayUpdate (pushFuncs, myId, push)
+      val _ = arrayUpdate (popDiscardFuncs, myId, popDiscard)
+      val _ = arrayUpdate (returnToScheds, myId, returnToSched)
 
       val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init")
 
     in
       case rootTask of
         NONE => acquireWork ()
-      | SOME t => (Thread.atomicBegin (); Thread.switchTo t; acquireWork ())
+      | SOME t => (threadSwitch t; returnFromExecute ())
     end
 
   (* ----------------------------------------------------------------------- *
@@ -375,20 +360,18 @@ struct
 
   val executeMain = ref false
   val rootHH = HH.new ()
-  val _ = useHH rootHH
   val _ = dbgmsg (fn _ => "copying current")
   val _ = Thread.copyCurrent ()
 
   (* this manages to hijack the "original" program thread as the scheduler
-   * thread, while the copied thread (which was copied INTO the rootHH)
-   * is used to execute the actual program. *)
+   * thread, while the copied thread is used to execute the actual program. *)
   val _ =
     if !executeMain then ()
     else let
            val _ = dbgmsg (fn _ => "copy savedPre into hh")
            (* val _ = useHH rootHH *)
            val t = SOME (Thread.copy (Thread.savedPre ()))
-           val _ = stopUseHH ()
+           (* val _ = stopUseHH () *)
          in
            ( executeMain := true
            ; sched t ()
@@ -396,7 +379,8 @@ struct
            )
          end
 
-  val _ = dbgmsg (fn _ => "executing main; atomic state " ^ Word32.toString (Thread.atomicState ()))
+  val _ = dbgmsg (fn _ => "executing main")
+  val _ = useHH rootHH
 
 end
 
