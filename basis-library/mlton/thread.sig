@@ -23,6 +23,22 @@ signature MLTON_THREAD =
             type t
          end
 
+      structure Basic :
+        sig
+          type p (* prethread *)
+          type t (* primitive thread *)
+
+          val copyCurrent : unit -> unit
+          val current : unit -> t
+          val savedPre : unit -> p
+          val copy : p -> t
+          val switchTo : t -> unit
+
+          val atomicState : unit -> Word32.word
+          val atomicBegin : unit -> unit
+          val atomicEnd : unit -> unit
+        end
+
       type 'a t
 
       (* atomicSwitch f

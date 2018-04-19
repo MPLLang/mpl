@@ -51,6 +51,13 @@ structure Runnable =
       type t = unit t
    end
 
+structure Basic =
+  struct
+    open Prim
+    type p = preThread
+    type t = thread
+  end
+
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
    let
       val t =
