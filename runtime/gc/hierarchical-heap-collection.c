@@ -573,14 +573,17 @@ void forwardHHObjptr (GC_state s,
 
 #if ASSERT
         if (NULL == toChunkList) {
-            void* cursor;
-            for (cursor = args->hh->newLevelList;
-                 (NULL != cursor) &&
-                     (HM_getChunkListLevel(cursor) > opInfo.level);
-                 cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead) {
+            void* cursor = args->hh->newLevelList;
+            while ((NULL != cursor) && (HM_getChunkListLevel(cursor) > opInfo.level)) {
+                // this chunk must actually be a levelHead
+                assert(HM_getChunkInfo(cursor)->level != CHUNK_INVALID_LEVEL);
+                cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead;
             }
-            assert((NULL == cursor) ||
-                   (HM_getChunkListLevel(cursor) != opInfo.level));
+            ASSERTPRINT((NULL == cursor) || (HM_getChunkListLevel(cursor) != opInfo.level),
+              "opInfo.level == %d; cursor == %p; cursor->level == %d",
+              opInfo.level,
+              cursor,
+              NULL == cursor ? -1 : HM_getChunkListLevel(cursor));
         } else {
             assert(HM_getChunkListLevel(toChunkList) == opInfo.level);
 

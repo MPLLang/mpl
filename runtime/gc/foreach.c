@@ -209,7 +209,7 @@ pointer foreachObjptrInObject (GC_state s,
                  (uintptr_t)top, returnAddress);
       }
       frameLayout = getFrameLayoutFromReturnAddress (s, returnAddress);
-      frameOffsets = frameLayout->offsets;
+      frameOffsets = frameLayout->offsets; // index zero of this array is size
       top -= frameLayout->size;
       for (i = 0 ; i < frameOffsets[0] ; ++i) {
         if (DEBUG) {

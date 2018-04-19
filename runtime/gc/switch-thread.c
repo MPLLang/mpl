@@ -73,10 +73,10 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 #if ASSERT
     int priorOwner = __sync_val_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), -1, s->procNumber);
     if (priorOwner != -1) {
-    DIE("Proc %d failed to claim thread "FMTPTR" which is owned by proc %d",
-      s->procNumber,
-      (uintptr_t)getThreadCurrentObjptr(s),
-      priorOwner);
+      DIE("Proc %d failed to claim thread "FMTPTR" which is owned by proc %d",
+        s->procNumber,
+        (uintptr_t)getThreadCurrentObjptr(s),
+        priorOwner);
     }
 #endif
 

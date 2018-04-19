@@ -183,6 +183,36 @@ bool invariantForMutatorStack (GC_state s) {
 }
 
 #if ASSERT
+bool carefulInvariantForMutatorStack(GC_state s) {
+  GC_stack stack = getStackCurrent(s);
+  GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
+  GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
+
+  bool badfi = fi >= s->frameLayoutsLength;
+  int fsize = badfi ? -1 : s->frameLayouts[fi].size;
+
+  return !badfi && invariantForMutatorStack(s);
+}
+
+void displayStackInfo(GC_state s) {
+  GC_stack stack = getStackCurrent(s);
+  GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
+  GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
+
+  bool badfi = fi >= s->frameLayoutsLength;
+  int fsize = badfi ? -1 : s->frameLayouts[fi].size;
+
+  fprintf(stderr,
+    "stack bottom "FMTPTR" limit +%zu top +%zu; fi %lu; fsize %d\n",
+    (size_t)getStackBottom(s, stack),
+    (size_t)(getStackLimit(s, stack) - getStackBottom(s, stack)),
+    (size_t)(getStackTop(s, stack) - getStackBottom(s, stack)),
+    fi,
+    fsize);
+}
+#endif
+
+#if ASSERT
 bool invariantForMutator (GC_state s, bool frontier, bool stack) {
   if (DEBUG)
     displayGCState (s, stderr);
