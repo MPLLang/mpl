@@ -56,7 +56,7 @@ struct
   structure Queue = ArrayQueue
 
   type vertex = int ref * unit Thread.t option ref
-  type task = (unit -> unit) * unit HH.t * int
+  type task = (unit -> unit) * unit HH.t
 
   fun dummyTask () = die (fn _ => "Error: dummy task")
   val dummyThread = Thread.new dummyTask
@@ -244,9 +244,18 @@ struct
             if friend = NO_REQUEST then ()
             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
             else ( myRequestCell := NO_REQUEST
-                 ; let val mail = Queue.popBack myQueue
-                   in Mailboxes.sendMail mailboxes (friend, mail)
-                   end
+                 ; case Queue.popBack myQueue of
+                     NONE => Mailboxes.sendMail mailboxes (friend, NONE)
+                   | SOME (task, phh, level) =>
+                       let
+                         val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
+                         val _ = HM.enterGlobalHeap ()
+                         val chh = HH.new ()
+                         val _ = HH.appendChild (phh, chh, level)
+                         val _ = HM.exitGlobalHeap ()
+                       in
+                         Mailboxes.sendMail mailboxes (friend, SOME (task, chh))
+                       end
                  )
           end
         ; setStatus (myId, not (Queue.empty myQueue))
@@ -315,13 +324,10 @@ struct
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
           val _ = dbgmsg (fn _ => "finding work")
-          val (task, phh, level) = request () (* loop until work is found... *)
+          val (task, hh) = request () (* loop until work is found... *)
           val _ = dbgmsg (fn _ => "got work")
           val _ = unblockRequests ()
 
-          val hh = HH.new ()
-          val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
-          val _ = HH.appendChild (phh, hh, level)
           val _ = useHH hh
           val taskThread = Thread.new (fn _ =>
             ( useHH hh
