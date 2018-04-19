@@ -1,22 +1,23 @@
-MLTON=../build/bin/mlton-parmem
+MLTON=MLTON_JOBS=32 ../build/bin/mlton-parmem
 MLTRACE=../build/bin/mltrace
+FLAGS=
+
+.PHONY: tab tab.dbg fib fib.dbg fib.trc trace
 
 tab: tab.sml tab.mlb
-	$(MLTON) -output tab tab.mlb
+	$(MLTON) $(FLAGS) -output tab tab.mlb
 
 tab.dbg: tab.sml tab.mlb
-	$(MLTON) -debug true -debug-runtime true -output tab.dbg tab.mlb
+	$(MLTON) $(FLAGS) -debug true -debug-runtime true -output tab.dbg tab.mlb
 
 fib: fib.sml sources.mlb
-	$(MLTON) -output fib sources.mlb
+	$(MLTON) $(FLAGS) -output fib sources.mlb
 
 fib.dbg: fib.sml sources.mlb
-	$(MLTON) -debug true -debug-runtime true -output fib.dbg sources.mlb
+	$(MLTON) $(FLAGS) -debug true -debug-runtime true -output fib.dbg sources.mlb
 
 fib.trc: fib.sml sources.mlb
-	$(MLTON) -trace true -trace-runtime true -output fib.trc sources.mlb
-
-.PHONY: trace
+	$(MLTON) $(FLAGS) -trace true -trace-runtime true -output fib.trc sources.mlb
 
 trace: fib.trc
 	$(MLTRACE) record ./fib.trc @MLton number-processors 4 fixed-heap 2G --
