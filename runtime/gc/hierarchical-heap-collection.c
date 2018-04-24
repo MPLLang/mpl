@@ -225,6 +225,9 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.stacksCopied);
 
   /* forward thread itself */
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
+    "Trying to forward current thread %p",
+    s->currentThread);
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,

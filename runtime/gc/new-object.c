@@ -101,7 +101,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   thread = (GC_thread)(res + offsetofThread (s));
   thread->inGlobalHeapCounter = 0;
   thread->useHierarchicalHeap = FALSE;
-  thread->currentProcNum = -1; // TODO: define a constant INVALID_PROC_NUM... where should it go?
+  // thread->currentProcNum = -1; // TODO: define a constant INVALID_PROC_NUM... where should it go?
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
