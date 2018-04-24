@@ -160,8 +160,11 @@ struct
 
         val _ = dbgmsg (fn _ => "pushing")
 
-        val _ = push (g', hh, level)
+        (* Must set level before push! Otherwise, push can immediately trigger
+         * a send (and therefore an appendChild) where the level of the parent
+         * is equal to the stolenLevel of the child, which should never happen. *)
         val _ = HH.setLevel (hh, level + 1)
+        val _ = push (g', hh, level)
 
         val a = f ()
         val _ = dbgmsg (fn _ => "trying pop")
@@ -194,13 +197,12 @@ struct
    * ------------------------- WORKER-LOCAL SETUP -------------------------- *
    * ----------------------------------------------------------------------- *)
 
-
   (* We maintain a distinction between
    *   - "scheduler" threads, which never are migrated between processors and
    *   are used to acquire new work when the processor becomes idle, and
    *   - "user" threads, which run user code and are migrated between processors
    *)
-  fun sched rootTask () =
+  fun setupSchedLoop () =
     let
       val myId = myWorkerId ()
       val myQueue = Queue.new myId
@@ -346,20 +348,29 @@ struct
       val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init")
 
     in
-      case rootTask of
-        NONE => acquireWork ()
-      | SOME t => (threadSwitch t; returnFromExecute ())
+      if myId = 0 then returnFromExecute else acquireWork
     end
 
   (* ----------------------------------------------------------------------- *
    * --------------------------- INITIALIZATION ---------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  val _ = MLton.Parallel.registerProcessorFunction (sched NONE)
+  fun sched () =
+    let val acquireWork = setupSchedLoop ()
+    in acquireWork ()
+    end
+
+  val _ = MLton.Parallel.registerProcessorFunction sched
   val _ = MLton.Parallel.initializeProcessors ()
 
-  val executeMain = ref false
+  (* Initializes scheduler-local data for proc 0, including remembering the
+   * current thread as the "scheduler thread" for this worker. In order to
+   * keep "user" threads separate from "scheduler" threads, we need to copy
+   * the current thread and use the COPY as the main program thread. *)
+  val returnFromExecute = setupSchedLoop ()
+
   val rootHH = HH.new ()
+  val executeMain = ref false
   val _ = dbgmsg (fn _ => "copying current")
   val _ = Thread.copyCurrent ()
 
@@ -370,12 +381,12 @@ struct
     else let
            val _ = dbgmsg (fn _ => "copy savedPre into hh")
            (* val _ = useHH rootHH *)
-           val t = SOME (Thread.copy (Thread.savedPre ()))
+           val t = Thread.copy (Thread.savedPre ())
            (* val _ = stopUseHH () *)
          in
            ( executeMain := true
-           ; sched t ()
-           ; die (fn _ => "Error: main sched returned")
+           ; threadSwitch t
+           ; returnFromExecute ()
            )
          end
 
