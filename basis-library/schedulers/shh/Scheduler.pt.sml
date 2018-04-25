@@ -48,8 +48,8 @@ struct
    * ----------------------------------------------------------------------- *
    * ----------------------------------------------------------------------- *)
 
-  val vcas = MLton.Parallel.compareAndSwap
-  fun cas (r, old, new) = vcas r (old, new) = old
+  val vcas = MLton.Parallel.arrayCompareAndSwap
+  fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old)
 
   fun faa (r, d) = MLton.Parallel.fetchAndAdd r d
 
@@ -81,22 +81,27 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
+  (* SAM_NOTE: TODO: does padding statuses and requestCells actually improve
+   * performance? The intuition is that it avoids false sharing. *)
+  val padding = 16
+
   (* A request is either NO_REQUEST, REQUEST_BLOCKED, or a processor id.
    * Workers request work by writing their own id into another worker's
    * request cell. If a worker is idle, it blocks requests from other workers
    * by changing its own request cell to REQUEST_BLOCKED. *)
   val NO_REQUEST = ~1
   val REQUEST_BLOCKED = ~2
-  val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
-  fun requestCell p = vectorSub (requestCells, p)
+  val requestCells = Array.array (P*padding, NO_REQUEST)
+  fun getRequest p = arraySub (requestCells, p*padding)
+  fun setRequest (p, r) = arrayUpdate (requestCells, p*padding, r)
+  fun casRequest (p, r, r') = cas (requestCells, p*padding) (r, r')
 
   (* Statuses are updated locally to indicate whether or not work is available
    * to be stolen. This allows idle workers to only request work from victims
-   * who are unlikely to reject.
-   * TODO: does padding statuses actually improve performance? *)
-  val statuses = Array.array (P*16, false)
-  fun getStatus p = arraySub (statuses, p*16)
-  fun setStatus (p, s) = arrayUpdate (statuses, p*16, s)
+   * who are unlikely to reject. *)
+  val statuses = Array.array (P*padding, false)
+  fun getStatus p = arraySub (statuses, p*padding)
+  fun setStatus (p, s) = arrayUpdate (statuses, p*padding, s)
 
   val mailboxes : ((unit -> unit) * unit HH.t) option Mailboxes.t =
     Mailboxes.new NONE
@@ -207,7 +212,6 @@ struct
       val myId = myWorkerId ()
       val myQueue = Queue.new myId
       val myRand = SimpleRandom.rand myId
-      val myRequestCell = requestCell myId
       val mySchedThread = Thread.current ()
       val myRetArg = ref NONE
 
@@ -233,24 +237,28 @@ struct
 
       fun communicate () =
         ( let
-            val friend = !myRequestCell
+            val r = getRequest myId
           in
-            if friend = NO_REQUEST then ()
-            else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
-            else ( myRequestCell := NO_REQUEST
-                 ; case Queue.popBack myQueue of
-                     NONE => Mailboxes.sendMail mailboxes (friend, NONE)
-                   | SOME (task, phh, level) =>
-                       let
-                         val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
-                         val _ = HM.enterGlobalHeap ()
-                         val chh = HH.new ()
-                         val _ = HH.appendChild (phh, chh, level)
-                         val _ = HM.exitGlobalHeap ()
-                       in
-                         Mailboxes.sendMail mailboxes (friend, SOME (task, chh))
-                       end
-                 )
+            if r = NO_REQUEST then
+              ()
+            else if r = REQUEST_BLOCKED then
+              die (fn _ => "Error: serve while blocked")
+            else
+              (* r is a friendly processor id which is requesting work *)
+              ( setRequest (myId, NO_REQUEST)
+              ; case Queue.popBack myQueue of
+                  NONE => Mailboxes.sendMail mailboxes (r, NONE)
+                | SOME (task, phh, level) =>
+                    let
+                      val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
+                      val _ = HM.enterGlobalHeap ()
+                      val chh = HH.new ()
+                      val _ = HH.appendChild (phh, chh, level)
+                      val _ = HM.exitGlobalHeap ()
+                    in
+                      Mailboxes.sendMail mailboxes (r, SOME (task, chh))
+                    end
+              )
           end
         ; setStatus (myId, not (Queue.empty myQueue))
         )
@@ -278,26 +286,27 @@ struct
 
       fun blockRequests () =
         let
-          val friend = !myRequestCell
+          val r = getRequest myId
         in
-          if friend = NO_REQUEST then
-            if cas (myRequestCell, NO_REQUEST, REQUEST_BLOCKED) then ()
+          if r = NO_REQUEST then
+            if casRequest (myId, NO_REQUEST, REQUEST_BLOCKED) then ()
             else blockRequests () (* recurs at most once *)
-          else if friend = REQUEST_BLOCKED then die (fn _ => "Error: block while blocked")
+          else if r = REQUEST_BLOCKED then
+            die (fn _ => "Error: scheduler attempted to block while already blocked")
           else
-            ( myRequestCell := REQUEST_BLOCKED
-            ; Mailboxes.sendMail mailboxes (friend, NONE)
+            ( setRequest (myId, REQUEST_BLOCKED)
+            ; Mailboxes.sendMail mailboxes (r, NONE)
             )
         end
 
-      fun unblockRequests () = myRequestCell := NO_REQUEST
+      fun unblockRequests () = setRequest (myId, NO_REQUEST)
 
       fun request () =
         let
-          val victimId = randomOtherId ()
-          val hasWork = getStatus victimId
+          val friend = randomOtherId ()
+          val hasWork = getStatus friend
         in
-          if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
+          if not (hasWork andalso casRequest (friend, NO_REQUEST, myId))
           then (verifyStatus (); request ())
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
