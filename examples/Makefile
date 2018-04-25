@@ -3,7 +3,7 @@ MLTRACE=../build/bin/mltrace
 DBG=-keep g -debug true -debug-runtime true
 FLAGS=
 
-.PHONY: tab tab.dbg fib fib.dbg fib.trc trace
+.PHONY: tab tab.dbg fib fib.dbg fib.trc trace clean
 
 tab: tab.sml tab.mlb
 	$(MLTON) $(FLAGS) -output tab tab.mlb
@@ -23,3 +23,6 @@ fib.trc: fib.sml fib.mlb
 trace: fib.trc
 	$(MLTRACE) record ./fib.trc @MLton number-processors 4 fixed-heap 2G --
 	@echo "To visualize: $(MLTRACE) export <file>.trace.gz; $(MLTRACE) visu <file>.sqlite"
+
+clean:
+	rm -f tab tab.dbg fib fib.dbg fib.trc tab.*.c fib.*.c
