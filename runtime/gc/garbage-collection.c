@@ -7,6 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
+#include "hierarchical-heap.h"
+
 void minorGC (GC_state s) {
   minorCheneyCopyGC (s);
 
@@ -68,9 +70,17 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
              uintmaxToCommaString(getStackCurrent(s)->reserved),
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
-  assert (allocInOldGen ?
-          hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
-          hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
+#if ASSERT
+  if (HM_inGlobalHeap(s)) {
+    assert (allocInOldGen ?
+            hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
+            hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
+  } else {
+    struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+    assert(s->frontier == HM_HH_getFrontier(hh));
+    assert (HM_HH_getLimit(hh) - HM_HH_getFrontier(hh) >= sizeofStackWithMetaData (s, reserved));
+  }
+#endif
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
