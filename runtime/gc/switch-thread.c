@@ -49,7 +49,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     if (!HM_inGlobalHeap(s)) {
       /* save HH info for from-thread */
       /* copied from HM_enterGlobalHeap() */
-      HM_exitLocalHeap(s);
+      HM_exitLocalHeap(s); // remembers s->frontier in HH
 
       spinlock_lock(&(s->lock), Proc_processorNumber(s));
       s->frontier = s->globalFrontier;
@@ -64,7 +64,21 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
      */
 
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+// #if ASSERT
+//     // mark the current thread as no longer being executed
+//     getThreadCurrent(s)->currentProcNum = -1;
+// #endif
     switchToThread (s, pointerToObjptr(p, s->heap->start));
+
+// #if ASSERT
+//     int priorOwner = __sync_val_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), -1, s->procNumber);
+//     if (priorOwner != -1) {
+//       DIE("Proc %d failed to claim thread "FMTPTR" which is owned by proc %d",
+//         s->procNumber,
+//         (uintptr_t)getThreadCurrentObjptr(s),
+//         priorOwner);
+//     }
+// #endif
 
     if (!HM_inGlobalHeap(s)) {
       /* I need to switch to the HH for the to-thread */

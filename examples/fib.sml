@@ -10,5 +10,8 @@ fun fib n =
       x + y
     end
 
+val t0 = Time.now ()
 val result = fib 39
+val t1 = Time.now ()
 val _ = print (Int.toString result ^ "\n")
+val _ = print (LargeInt.toString (Time.toMilliseconds (Time.- (t1, t0))) ^ " ms\n")

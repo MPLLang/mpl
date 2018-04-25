@@ -20,6 +20,11 @@ void T_setCurrentThreadUseHierarchicalHeap(Bool use) {
 
   if (use) {
     s->heap->usingHierarchicalHeaps = TRUE;
+  } else {
+    if (thread->hierarchicalHeap != BOGUS_OBJPTR) {
+      HM_HH_objptrToStruct(s, thread->hierarchicalHeap)->thread = BOGUS_OBJPTR;
+      thread->hierarchicalHeap = BOGUS_OBJPTR;
+    }
   }
   thread->useHierarchicalHeap = use;
 }

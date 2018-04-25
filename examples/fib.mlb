@@ -3,5 +3,5 @@ local
   (*$(SML_LIB)/basis/schedulers/hierarchical-heap.mlb*)
   $(SML_LIB)/basis/schedulers/shh.mlb
 in
-  tab.sml
+  fib.sml
 end

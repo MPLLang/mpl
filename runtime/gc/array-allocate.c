@@ -156,7 +156,7 @@ pointer GC_arrayAllocate (GC_state s,
     /* used needs to be set because the mutator has changed s->stackTop. */
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
     getThreadCurrent(s)->exnStack = s->exnStack;
-    getThreadCurrent(s)->bytesNeeded = bytesRequested;
+    getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
     HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
 
     assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=

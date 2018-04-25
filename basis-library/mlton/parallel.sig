@@ -10,69 +10,69 @@ signature MLTON_PARALLEL =
      * Deprecated functions. Using these functions will print out a warning
      * message that they may be removed in a future release.
      *)
-    structure Deprecated:
-              sig
-                (**
-                 * Yields to the runtime
-                 *)
-                val yield: unit -> unit
+    structure Deprecated :
+      sig
+        (**
+         * Yields to the runtime
+         *)
+        val yield: unit -> unit
 
-                (**
-                 * Initializes a lock to the "unlocked" state
-                 *)
-                val lockInit: Word32.word ref -> unit;
+        (**
+         * Initializes a lock to the "unlocked" state
+         *)
+        val lockInit: Word32.word ref -> unit;
 
-                (**
-                 * Locks the lock.
-                 *
-                 * @attention Does not support recursive locking or any kind of
-                 * deadlock detection!
-                 *)
-                val takeLock: Word32.word ref -> unit;
+        (**
+         * Locks the lock.
+         *
+         * @attention Does not support recursive locking or any kind of
+         * deadlock detection!
+         *)
+        val takeLock: Word32.word ref -> unit;
 
-                (**
-                 * Unlocks the locks
-                 *
-                 * @attantion Does not enforce that the locking thread has to be
-                 * the unlocker!
-                 *)
-                val releaseLock: Word32.word ref -> unit;
-              end
+        (**
+         * Unlocks the locks
+         *
+         * @attantion Does not enforce that the locking thread has to be
+         * the unlocker!
+         *)
+        val releaseLock: Word32.word ref -> unit;
+      end
 
     (*
      * RAM_NOTE: Perhaps some of these should be in module-specific Unsafe
      * structures?
      *)
-    structure Unsafe:
-              sig
-                (**
-                 * Forces creation of a runtime thread object from a
-                 * MLton.Thread.
-                 *
-                 * @note See initPrimitive in thread.sml for more information.
-                 *)
-                val initPrimitiveThread:
-                    unit MLtonThread.t -> MLtonThread.Runnable.t
+    structure Unsafe :
+      sig
+        (**
+         * Forces creation of a runtime thread object from a
+         * MLton.Thread.
+         *
+         * @note See initPrimitive in thread.sml for more information.
+         *)
+        val initPrimitiveThread:
+            unit MLtonThread.t -> MLtonThread.Runnable.t
 
-                (**
-                 * Creates an uninitialized array of given size.
-                 *)
-                val arrayUninit: int -> 'a Array.array
+        (**
+         * Creates an uninitialized array of given size.
+         *)
+        val arrayUninit: int -> 'a Array.array
 
-                (**
-                 * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
-                 * of (old, new) at xs[i], returning the previous value stored
-                 * at xs[i]. This implementation does not check bounds on i.
-                 *)
-                val arrayCompareAndSwap : int array * int -> int * int -> int
+        (**
+         * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
+         * of (old, new) at xs[i], returning the previous value stored
+         * at xs[i]. This implementation does not check bounds on i.
+         *)
+        val arrayCompareAndSwap : int array * int -> int * int -> int
 
-                (**
-                 * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
-                 * returns the value of `xs[i]` before the add. This implementation
-                 * does not check bounds on i.
-                 *)
-                val arrayFetchAndAdd : int array * int -> int -> int
-              end
+        (**
+         * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
+         * returns the value of `xs[i]` before the add. This implementation
+         * does not check bounds on i.
+         *)
+        val arrayFetchAndAdd : int array * int -> int -> int
+      end
 
     exception Return
 

@@ -99,7 +99,7 @@ struct GC_state {
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
-  spinlock_t lock;
+  spinlock_t lock; // a global lock (shared across all procs)... WHAT DOES IT PROTECT?
   struct TracingContext *trace;
   struct TLSObjects tlsObjects;
 };

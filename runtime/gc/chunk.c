@@ -620,7 +620,10 @@ void HM_assertLevelListInvariants(const void* levelList,
 
     assert(CHUNK_INVALID_LEVEL != level);
     assert(level < previousLevel);
-    assert((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel));
+    ASSERTPRINT((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel),
+      "stealLevel %d; level %d",
+      stealLevel,
+      level);
     previousLevel = level;
 
     assert(hh == levelListHH);

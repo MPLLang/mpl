@@ -22,6 +22,8 @@ static inline bool invariantForMutatorFrontier (GC_state s);
 static inline bool invariantForMutatorStack (GC_state s);
 #if ASSERT
 static bool invariantForMutator (GC_state s, bool frontier, bool stack);
+bool carefulInvariantForMutatorStack(GC_state s);
+void displayStackInfo(GC_state s);
 #endif
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
