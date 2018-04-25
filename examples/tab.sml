@@ -1,4 +1,4 @@
-val size = 10000000
+val size = 100000000
 val grain = 65536
 
 datatype 'a tree = Leaf of 'a array | Node of int * 'a tree * 'a tree
@@ -38,5 +38,8 @@ fun hash i =
     Word64.toInt (v andb ((0w1 << 0w31) - 0w1))
   end
 
-val t = tab hash (0, size)
-val _ = print (Int.toString (nth t (size div 2)) ^ "\n")
+val t0 = Time.now ()
+val r = tab hash (0, size)
+val t1 = Time.now ()
+val _ = print (Int.toString (nth r (size div 2)) ^ "\n")
+val _ = print (LargeInt.toString (Time.toMilliseconds (Time.- (t1, t0))) ^ " ms\n")

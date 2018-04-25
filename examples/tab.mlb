@@ -1,7 +1,7 @@
 local
   $(SML_LIB)/basis/basis.mlb
   (*$(SML_LIB)/basis/schedulers/hierarchical-heap.mlb*)
-  $(SML_LIB)/basis/schedulers/shh.pt.mlb
+  $(SML_LIB)/basis/schedulers/shh.mlb
 in
   tab.sml
 end
