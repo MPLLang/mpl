@@ -95,9 +95,9 @@ void* HM_freeLevelListIterator(void* arg);
 static const void* getLevelHeadChunk(const void* chunk);
 #endif
 
-static inline void* chunkOf(void* p) {
-  pointer chunk = blockOf(p);
-  assert(HM_getChunkInfo(chunk)->magic == CHUNK_MAGIC);
+static inline GC_chunk chunkOf(pointer p) {
+  GC_chunk chunk = (GC_chunk)blockOf(p);
+  assert(chunk->magic == CHUNK_MAGIC);
   return chunk;
 }
 
@@ -105,10 +105,9 @@ static inline void* chunkOf(void* p) {
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
-  size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
-  void* chunk = GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
-  //void* chunk = ChunkPool_allocate(&totalSize);
+GC_chunk HM_allocateChunk(GC_chunk levelHeadChunk, size_t bytesRequested) {
+  size_t totalSize = bytesRequested + sizeof(struct GC_chunk);
+  GC_chunk chunk = (GC_chunk)GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
 
   if (NULL == chunk) {
     return NULL;
@@ -116,49 +115,44 @@ void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize) {
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  void* start = HM_getChunkStart(chunk);
-  size_t length = ((size_t)(chunk)) + totalSize - ((size_t)(start));
+  pointer start = HM_getChunkStart(chunk);
+  size_t length = ((size_t)chunk) + totalSize - ((size_t)start);
   memset(start, 0xAE, length);
 #endif
 
-  struct HM_ChunkInfo* chunkInfo = HM_getChunkInfo(chunk);
 #if ASSERT
-  chunkInfo->split.levelHead.nextHead = ((void*)(0xcafebabedeadbeef));
-  chunkInfo->split.levelHead.lastChunk = ((void*)(0xcafebabedeadbeef));
-  chunkInfo->split.levelHead.containingHH =
-      ((struct HM_HierarchicalHeap*)(0xcafebabedeadbeef));
-  chunkInfo->split.levelHead.toChunkList = ((void*)(0xcafebabedeadbeef));
+  chunk->split.levelHead.nextHead = ((GC_chunk)(0xcafebabedeadbeef));
+  chunk->split.levelHead.lastChunk = ((GC_chunk)(0xcafebabedeadbeef));
+  chunk->split.levelHead.containingHH = ((struct HM_HierarchicalHeap*)(0xcafebabedeadbeef));
+  chunk->split.levelHead.toChunkList = ((GC_chunk)(0xcafebabedeadbeef));
 #endif
 
-  chunkInfo->magic = CHUNK_MAGIC;
-  chunkInfo->frontier = HM_getChunkStart(chunk);
-  // chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
-  chunkInfo->limit = (void*)(((char*)chunk) + totalSize);
-  chunkInfo->level = CHUNK_INVALID_LEVEL;
-  chunkInfo->split.normal.levelHead = levelHeadChunk;
+  chunk->magic = CHUNK_MAGIC;
+  chunk->frontier = HM_getChunkStart(chunk);
+  chunk->limit = (pointer)chunk + totalSize;
+  chunk->level = CHUNK_INVALID_LEVEL;
+  chunk->split.normal.levelHead = levelHeadChunk;
 
   /* assert that it is initialized correctly */
-  assert(chunkInfo->limit != chunk);
+  assert(chunk->limit != chunk);
   assert(totalSize == HM_getChunkSize(chunk));
 
   /* insert into list and update levelHeadChunk */
-  chunkInfo->nextChunk = NULL;
-  if (NULL == HM_getChunkInfo(levelHeadChunk)->nextChunk) {
+  chunk->nextChunk = NULL;
+  if (NULL == levelHeadChunk->nextChunk) {
     /* empty list */
-    HM_getChunkInfo(levelHeadChunk)->nextChunk = chunk;
-    HM_getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
+    levelHeadChunk->nextChunk = chunk;
+    levelHeadChunk->split.levelHead.lastChunk = chunk;
   } else {
-    void* lastChunk =
-      HM_getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk;
-    HM_getChunkInfo(lastChunk)->nextChunk = chunk;
-    HM_getChunkInfo(levelHeadChunk)->split.levelHead.lastChunk = chunk;
+    levelHeadChunk->split.levelHead.lastChunk->nextChunk = chunk;
+    levelHeadChunk->split.levelHead.lastChunk = chunk;
   }
-  HM_getChunkInfo(levelHeadChunk)->split.levelHead.size += totalSize;
+  levelHeadChunk->split.levelHead.size += totalSize;
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk %p at level %u",
-      ((void*)(chunk)),
-      HM_getChunkInfo(levelHeadChunk)->level);
+      chunk,
+      levelHeadChunk->level);
 
   return chunk;
 }
@@ -167,9 +161,8 @@ void* HM_allocateLevelHeadChunk(void** levelList,
                                 size_t allocableSize,
                                 Word32 level,
                                 struct HM_HierarchicalHeap* hh) {
-  size_t totalSize = allocableSize + sizeof(struct HM_ChunkInfo);
-  void* chunk = GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
-  //void* chunk = ChunkPool_allocate(&totalSize);
+  size_t totalSize = allocableSize + sizeof(struct GC_chunk);
+  GC_chunk chunk = (GC_chunk)GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
 
   if (NULL == chunk) {
     return NULL;
@@ -177,28 +170,26 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  void* start = HM_getChunkStart(chunk);
-  size_t length = ((size_t)(chunk)) + totalSize - ((size_t)(start));
+  pointer start = HM_getChunkStart(chunk);
+  size_t length = ((size_t)chunk) + totalSize - ((size_t)start);
   memset(start, 0xAE, length);
 #endif
 
   /* setup chunk info */
-  struct HM_ChunkInfo* chunkInfo = HM_getChunkInfo(chunk);
-  chunkInfo->magic = CHUNK_MAGIC;
-  chunkInfo->frontier = HM_getChunkStart(chunk);
-  // chunkInfo->limit = ((void*)(((char*)(chunk)) + ChunkPool_chunkSize(chunk)));
-  chunkInfo->limit = (void*)(((char*)chunk) + totalSize);
-  chunkInfo->nextChunk = NULL;
-  chunkInfo->level = level;
-  chunkInfo->split.levelHead.nextHead = NULL;
-  chunkInfo->split.levelHead.lastChunk = chunk;
-  chunkInfo->split.levelHead.containingHH = hh;
-  chunkInfo->split.levelHead.toChunkList = NULL;
-  chunkInfo->split.levelHead.size = totalSize;
-  chunkInfo->split.levelHead.isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
+  chunk->magic = CHUNK_MAGIC;
+  chunk->frontier = HM_getChunkStart(chunk);
+  chunk->limit = (pointer)chunk + totalSize;
+  chunk->nextChunk = NULL;
+  chunk->level = level;
+  chunk->split.levelHead.nextHead = NULL;
+  chunk->split.levelHead.lastChunk = chunk;
+  chunk->split.levelHead.containingHH = hh;
+  chunk->split.levelHead.toChunkList = NULL;
+  chunk->split.levelHead.size = totalSize;
+  chunk->split.levelHead.isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
 
   /* assert that it is initialized correctly */
-  assert(chunkInfo->limit != chunk);
+  assert(chunk->limit != chunk);
   assert(totalSize == HM_getChunkSize(chunk));
 
   /* insert into level list */
@@ -209,33 +200,35 @@ void* HM_allocateLevelHeadChunk(void** levelList,
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk %p at level %u",
-      ((void*)(chunk)),
+      chunk,
       level);
 
   return chunk;
 }
 
 void HM_forwardHHObjptrsInChunkList(
-    GC_state s,
-    void *start,
-    ObjptrPredicateFunction predicate,
-    void* predicateArgs,
-    struct ForwardHHObjptrArgs* forwardHHObjptrArgs) {
-
-  void *chunk = chunkOf(start);
+  GC_state s,
+  pointer start,
+  ObjptrPredicateFunction predicate,
+  void* predicateArgs,
+  struct ForwardHHObjptrArgs* forwardHHObjptrArgs)
+{
+  GC_chunk chunk = chunkOf(start);
 
   pointer p = start;
   size_t i = 0;
 
   if (chunk == NULL) {
-      DIE("could not find chunk of %p", chunk);
+    DIE("could not find chunk of %p", chunk);
   }
 
-  for (;
-       NULL != chunk;
-       chunk = HM_getChunkInfo(chunk)->nextChunk, p = HM_getChunkStart(chunk)) {
-      /* Can I use foreachObjptrInRange() for this? */
-    while (p != HM_getChunkInfo(chunk)->frontier) {
+  while (NULL != chunk) {
+  // for (;
+  //      NULL != chunk;
+  //      chunk = chunk->nextChunk, p = HM_getChunkStart(chunk)) {
+
+    /* Can I use foreachObjptrInRange() for this? */
+    while (p != chunk->frontier) {
       p = advanceToObjectData(s, p);
 
       p = foreachObjptrInObject(s,
@@ -257,6 +250,9 @@ void HM_forwardHHObjptrsInChunkList(
            (EventInt)forwardHHObjptrArgs->bytesCopied,
            (EventInt)forwardHHObjptrArgs->objectsCopied,
            (EventInt)forwardHHObjptrArgs->stacksCopied);
+
+    chunk = chunk->nextChunk;
+    p = HM_getChunkStart(chunk); // just a pointer addition; safe even if chunk == NULL
   }
 }
 
@@ -334,8 +330,8 @@ Word64 HM_getChunkSize(const void* chunk) {
   return (((Word64)(HM_getChunkInfoConst(chunk)->limit)) - ((Word64)(chunk)));
 }
 
-void* HM_getChunkStart(void* chunk) {
-  return ((void*)(((char*)(chunk)) + sizeof(struct HM_ChunkInfo)));
+pointer HM_getChunkStart(GC_chunk chunk) {
+  return (pointer)chunk + sizeof(struct GC_chunk);
 }
 
 Word32 HM_getChunkListLevel(void* chunkList) {
@@ -715,7 +711,7 @@ void appendChunkList(void* destinationChunkList,
 void HM_assertChunkInvariants(const void* chunk,
                               const struct HM_HierarchicalHeap* hh,
                               const void* levelHeadChunk) {
-  const struct HM_ChunkInfo* chunkInfo = HM_getChunkInfoConst(chunk);
+  const GC_chunk chunkInfo = HM_getChunkInfoConst(chunk);
 
   assert(HM_getChunkStart(chunk) <= chunkInfo->frontier && chunkInfo->frontier <= chunkInfo->limit);
 
@@ -793,15 +789,15 @@ void* HM_freeLevelListIterator(void* arg) {
   return chunk;
 }
 
-struct HM_ChunkInfo* HM_getChunkInfo(void* chunk) {
-  return ((struct HM_ChunkInfo*)(chunk));
+GC_chunk HM_getChunkInfo(void* chunk) {
+  return ((GC_chunk)(chunk));
 }
 
-const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk) {
-  return ((const struct HM_ChunkInfo*)(chunk));
+const GC_chunk HM_getChunkInfoConst(const void* chunk) {
+  return ((const GC_chunk)(chunk));
 }
 
-struct HM_ChunkInfo *HM_getChunkHeadChunk(struct HM_ChunkInfo *ci) {
+GC_chunk HM_getChunkHeadChunk(GC_chunk ci) {
     assert (ci);
 
     if (ci->level == CHUNK_INVALID_LEVEL) {
@@ -812,7 +808,7 @@ struct HM_ChunkInfo *HM_getChunkHeadChunk(struct HM_ChunkInfo *ci) {
     return ci;
 }
 
-struct HM_ChunkInfo *HM_getObjptrLevelHeadChunk(GC_state s, objptr object) {
+GC_chunk HM_getObjptrLevelHeadChunk(GC_state s, objptr object) {
     struct HM_ObjptrInfo objInfo;
     HM_getObjptrInfo(s, object, &objInfo);
     return HM_getChunkHeadChunk(HM_getChunkInfo(objInfo.chunkList));

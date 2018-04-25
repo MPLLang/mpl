@@ -1,84 +1,86 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2018 Sam Westrick
+ * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
- */
-
-/**
- * @file chunk.h
- *
- * @author Ram Raghunathan
- *
- * @brief
- * Definition of the ChunkInfo object and management interface
  */
 
 #ifndef CHUNK_H_
 #define CHUNK_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
-/**
- * CHUNK_INVALID_LEVEL denotes an invalid level value for HM_ChunkInfo::level.
- */
+
 #define CHUNK_INVALID_LEVEL (~((Word32)(0)))
 
 #define CHUNK_MAGIC 0xcafedabbedfacade
 
-/**
- * @brief
- * Represents the information about the chunk
+/* Chunks are contiguous regions of memory for containing heap-allocated user
+ * (ML) objects. Metadata which is common across all objects within a chunk
+ * are stored in this struct, at the front of the chunk. Each chunk metadata
+ * struct is followed by a certain number
+ * of reserved bytes, ending at .limit.
+ * The reserved space up to .frontier contains user
+ * data which is traceable by the GC.
+ * Chunks are built from one or more contiguous blocks. The block size is
+ * fixed at runtime with the `block-size` runtime argument.
  *
- * This packed object is placed at the beginning of a chunk for easy access
- */
-struct HM_ChunkInfo {
+ * A CRUCIAL INVARIANT of chunks is that all constituent objects begin within
+ * the FIRST BLOCK of the chunk. This permits looking up
+ * the chunk metadata of any arbitrary objptr by masking the pointer.
+ *
+ * The heap hierarchy is built from chunks, which are organized into level
+ * lists using the .nextChunk field. Each level list has a "levelhead" chunk,
+ * which is the representative of that level, storing the depth of the level
+ * as well as pointers to other levelheads. Other than storing this data,
+ * levelheads are identical to normal chunks (e.g. they still store user
+ * objects in the reserved space up to .frontier). */
+struct GC_chunk {
 
-  /* magic number for checking... */
-  Word64 magic;
+  // common data for all chunks:
+  Word64 magic;       // for sanity checks; should always be equal to CHUNK_MAGIC
+  pointer frontier;   // end of allocations within this chunk
+  pointer limit;      // the end of this chunk
+  GC_chunk nextChunk; // linked list of chunks at the same level
 
-  /* common between all chunks */
-  void* frontier; /**< The end of the allocations in this chunk */
+  /* if != CHUNK_INVALID_LEVEL, then this chunk is a levelhead.
+   * otherwise, a normal chunk. */
+  Word32 level;
 
-  void* limit; /**< The limit of the chunk. */
-
-  void* nextChunk; /**< The next chunk in the heap's chunk list */
-
-  Word32 level; /**< The level of this chunk. If set to CHUNK_INVALID_LEVEL,
-                 * this chunk is not a level head and the level can be found by
-                 * following split::normal::levelHead fields. */
-
-  uint32_t padding; /**< Unused padding bytes to keep alignment */
+  // Unused padding bytes to keep alignment
+  uint32_t padding;
 
   union {
+
+    // Data for level-head chunks:
     struct {
-      void* nextHead; /**< The head chunk of the next level. This field
-                       * is set if level is <em>not</em>
-                       * CHUNK_INVALID_LEVEL */
-
-      void* lastChunk; /**< The last chunk in this level's list of chunks */
-
+      GC_chunk nextHead; // the head of the parent list (at depth level-1)
+      GC_chunk lastChunk; /**< The last chunk in this level's list of chunks */
       struct HM_HierarchicalHeap* containingHH; /**< The hierarchical heap
                                                  * containing this chunk */
-
       void* toChunkList; /**< The corresponding Chunk List in the to-LevelList
                           * during GC */
-
       Word64 size; /**< The size in number of bytes of this level, both
                       allocated and unallocated. */
-
       bool isInToSpace; /**< False if the corresponding Chunk List is in
                          * from-space, true if it is in to-space. */
-    } levelHead; /**< The struct containing information for level head chunks */
+    } levelHead;
 
+    /* Data for normal chunks is just a pointer towards the levelHead.
+     * This pointer is used like a parent pointer in a path-compressing tree,
+     * thus it might be necessary to follow the levelHead pointer multiple
+     * times to find the actual level-head chunk. */
     struct {
-      void* levelHead; /**< Linked list of chunks ending in the head chunk of the
-                        * level this chunk belongs to. This field is set if level
-                        * is set to CHUNK_INVALID_LEVEL */
-    } normal; /**< The struct containing information for normal chunks */
+      GC_chunk levelHead;
+    } normal;
+
   } split;
+
 } __attribute__((aligned(8)));
 
-COMPILE_TIME_ASSERT(HM_ChunkInfo__aligned,
-                    (sizeof(struct HM_ChunkInfo) % 8) == 0);
+typedef struct GC_chunk* GC_chunk;
+
+COMPILE_TIME_ASSERT(GC_chunk__aligned,
+                    (sizeof(struct GC_chunk) % 8) == 0);
 
 struct HM_ObjptrInfo {
   struct HM_HierarchicalHeap* hh;
@@ -87,25 +89,21 @@ struct HM_ObjptrInfo {
 };
 
 #else
-struct HM_ChunkInfo;
+
+struct GC_chunk;
+typedef struct GC_chunk* GC_chunk;
+
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static void* chunkOf(void* p);
 
-/**
- * This function allocates and initializes a chunk of at least allocableSize
- * allocable bytes.
- *
- * @param levelHeadChunk The head chunk of the level to insert this new chunk
- * into.
- * @param allocableSize The minimum number of allocable bytes in the chunk
- *
- * @return NULL if no chunk could be allocated, with chunkEnd undefined, or
- * chunk pointer otherwise with chunkEnd set to the end of the returned chunk.
- */
-void* HM_allocateChunk(void* levelHeadChunk, size_t allocableSize);
+/* Allocate and return a pointer to a new chunk in the list of the given
+ * levelHead, with the requirement that
+ *   chunk->limit - chunk->frontier <= bytesRequested
+ * Returns NULL if unable to find space for such a chunk. */
+GC_chunk HM_allocateChunk(GC_chunk levelHeadChunk, size_t bytesRequested);
 
 /**
  * This function allocates and initializes a level head chunk of at least
@@ -368,13 +366,13 @@ void HM_updateLevelListPointers(void* levelList,
  *
  * @return the ChunkInfo struct pointer
  */
-struct HM_ChunkInfo* HM_getChunkInfo(void* chunk);
+GC_chunk HM_getChunkInfo(void* chunk);
 
 /**
  * Same as HM_getChunkInfo() except for const-correctness. See HM_getChunkInfo()
  * for more details
  */
-const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk);
+const GC_chunk HM_getChunkInfoConst(const void* chunk);
 
 /**
  * Gets the head chunk for the given chunk info
@@ -382,7 +380,7 @@ const struct HM_ChunkInfo* HM_getChunkInfoConst(const void* chunk);
  * @param ci The chunk info to use
  * @param retVal Pointer to the head chunk of this chunk
  */
-struct HM_ChunkInfo *HM_getChunkHeadChunk(struct HM_ChunkInfo *ci);
+GC_chunk HM_getChunkHeadChunk(GC_chunk ci);
 
 /**
  * Gets the level head chunk for the given objptr
@@ -394,7 +392,7 @@ struct HM_ChunkInfo *HM_getChunkHeadChunk(struct HM_ChunkInfo *ci);
  * @param object The objptr to get the Hierarchical Heap for
  * @param retVal Pointer to the head chunk of this object's level.
  */
-struct HM_ChunkInfo *HM_getObjptrLevelHeadChunk(GC_state s, objptr object);
+GC_chunk HM_getObjptrLevelHeadChunk(GC_state s, objptr object);
 
 /**
  * Gets the HH for the given objptr

@@ -69,11 +69,11 @@ struct HM_HierarchicalHeap {
   Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
 
-  void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
+  void* levelList; /**< The list of level lists. See GC_chunk for more
                     * information */
 
   void* newLevelList; /**< The new list of level lists generated during a local
-                       * garbage collection. See HM_ChunkInfo for more
+                       * garbage collection. See GC_chunk for more
                        information */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally

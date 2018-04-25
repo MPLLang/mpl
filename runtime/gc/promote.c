@@ -5,10 +5,10 @@
  */
 
 pointer HM_Promote(GC_state s,
-                   struct HM_ChunkInfo *dst_chunk,
+                   GC_chunk dst_chunk,
                    pointer src) {
     dst_chunk = HM_getChunkHeadChunk(dst_chunk);
-    struct HM_ChunkInfo *src_chunk =
+    GC_chunk src_chunk =
         HM_getObjptrLevelHeadChunk(s, pointerToObjptr(src, s->heap->start));
     void *tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
     struct HM_HierarchicalHeap *dst_hh =
