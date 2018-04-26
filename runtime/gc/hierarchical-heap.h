@@ -17,6 +17,7 @@
 #ifndef HIERARCHICAL_HEAP_H_
 #define HIERARCHICAL_HEAP_H_
 
+#include "chunk.h"
 #include "rwlock.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
@@ -55,7 +56,7 @@ extern const char* HM_HHStateToString[];
  * it only has objptrs to objects on the same heap (i.e. the global heap).
  */
 struct HM_HierarchicalHeap {
-  void* lastAllocatedChunk; /**< The last allocated chunk */
+  HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
   rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
 
@@ -69,11 +70,11 @@ struct HM_HierarchicalHeap {
   Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
 
-  void* levelList; /**< The list of level lists. See GC_chunk for more
+  HM_chunk levelList; /**< The list of level lists. See HM_chunk for more
                     * information */
 
-  void* newLevelList; /**< The new list of level lists generated during a local
-                       * garbage collection. See GC_chunk for more
+  HM_chunk newLevelList; /**< The new list of level lists generated during a local
+                       * garbage collection. See HM_chunk for more
                        information */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally

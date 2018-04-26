@@ -4,16 +4,8 @@
  * See the file MLton-LICENSE for details.
  */
 
-// #if (defined (MLTON_GC_INTERNAL_TYPES))
-
-// struct Block_batchInfo {
-//   void* base;
-//   size_t len;
-// };
-
-// #define BATCH_INFO_PTR(p) ((struct Blocks_batchInfo*)((size_t)p - sizeof(struct Blocks_batchInfo)))
-
-// #endif /* defined MLTON_GC_INTERNAL_TYPES */
+#if (defined (MLTON_GC_INTERNAL_TYPES))
+#endif /* defined MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
@@ -30,7 +22,7 @@ static void initBlocks(struct Block_config* config) {
 }
 
 static inline pointer blockOf(pointer p) {
-  return (pointer)alignDown((size_t)p, Block_sizes.blockSize);
+  return (pointer)(uintptr_t)alignDown((size_t)p, Block_sizes.blockSize);
 }
 
 static inline bool inSameBlock(pointer p, pointer q) {
@@ -44,8 +36,8 @@ static pointer Block_allocRegion(size_t* bytesRequested) {
   size_t bs = Block_sizes.blockSize;
   size_t len = align(*bytesRequested, bs);
   *bytesRequested = len;
-  pointer base = (pointer) GC_mmapAnon(NULL, len + bs);
-  pointer p = (pointer) align((size_t)base, bs);
+  pointer base = (pointer)GC_mmapAnon(NULL, len + bs);
+  pointer p = (pointer)(uintptr_t)align((size_t)base, bs);
 
   assert(isAligned((size_t)p, bs));
   return p;
@@ -66,7 +58,7 @@ pointer GC_getBlocks(GC_state s, size_t* bytesRequested) {
 
   assert(s->freeBlocks != NULL);
   assert(s->freeBlocksLength >= align(requested, Block_sizes.blockSize));
-  assert(isAligned(s->freeBlocks, Block_sizes.blockSize));
+  assert(isAligned((size_t)s->freeBlocks, Block_sizes.blockSize));
 
   size_t len = align(requested, Block_sizes.blockSize);
   *bytesRequested = len;

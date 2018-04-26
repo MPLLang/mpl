@@ -7,6 +7,6 @@
 #ifndef PROMOTE_H
 #define PROMOTE_H
 
-pointer HM_Promote(GC_state s, GC_chunk dst_chunk, pointer src);
+pointer HM_Promote(GC_state s, HM_chunk dst_chunk, pointer src);
 
 #endif  /* PROMOTE_H */

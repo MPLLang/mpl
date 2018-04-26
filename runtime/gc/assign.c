@@ -285,7 +285,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Locking from level %u of %p to level %u below %p",
-        HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
+        HM_getChunkHeadChunk(src_info.chunkList)->level,
         (void *)objptrToPointer(src, s->heap->start),
         dst_info.level + 1,
         (void *)objptrToPointer(dst, s->heap->start));
@@ -337,7 +337,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
      * entanglement. */
     pointer src_repl = objptrToPointer(src, s->heap->start);
     if (dst_info.level < src_info.level) {
-        src_repl = HM_Promote(s, HM_getChunkInfo(dst_info.chunkList), src_repl);
+        src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
     }
 
     /* Perform the write. */
@@ -346,11 +346,11 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     /* Unlock the heaps from the true replica of dst to src. */
     assert(hh != NULL);
     LOG(LM_HH_PROMOTION, LL_DEBUG,
-	"Unlocking from level %u of %p to level %u of %p",
-	dst_info.level,
-	(void *)objptrToPointer(dst, s->heap->start),
-	HM_getChunkHeadChunk(HM_getChunkInfo(src_info.chunkList))->level,
-	(void *)objptrToPointer(src, s->heap->start));
+      "Unlocking from level %u of %p to level %u of %p",
+      dst_info.level,
+      (void *)objptrToPointer(dst, s->heap->start),
+      HM_getChunkHeadChunk(src_info.chunkList)->level,
+      (void *)objptrToPointer(src, s->heap->start));
     args.for_locking = false;
     args.prev_hh = NULL;
     HM_foreachHHDown(s,

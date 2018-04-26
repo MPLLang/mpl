@@ -383,12 +383,12 @@ void HM_HH_display (
            "\tparentHH = "FMTOBJPTR"\n"
            "\tnextChildHH = "FMTOBJPTR"\n"
            "\tchildHHList= "FMTOBJPTR"\n",
-           hh->lastAllocatedChunk,
+           (void*)hh->lastAllocatedChunk,
            lockStatus,
            hh->level,
            hh->stealLevel,
            hh->id,
-           hh->levelList,
+           (void*)hh->levelList,
            hh->parentHH,
            hh->nextChildHH,
            hh->childHHList);
@@ -512,9 +512,9 @@ bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
 #if ASSERT
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
   // return ChunkPool_pointerInChunkPool(candidatePointer);
-  return HM_getChunkInfo(blockOf(candidatePointer))->magic == CHUNK_MAGIC;
+  return chunkOf(candidatePointer)->magic == CHUNK_MAGIC;
 #else
-  DIE('HM_HH_objptrInHierarchicalHeap deprecated');
+  DIE("HM_HH_objptrInHierarchicalHeap deprecated");
 #endif
 }
 

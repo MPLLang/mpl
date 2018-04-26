@@ -48,7 +48,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   void* toChunkList);
+                   HM_chunk toChunkList);
 
 /**
  * Populates 'holes' with the current global heap holes from all processors.
@@ -227,7 +227,7 @@ void HM_HHC_collectLocal(void) {
   /* forward thread itself */
   LOG(LM_HH_COLLECTION, LL_DEBUG,
     "Trying to forward current thread %p",
-    s->currentThread);
+    (void*)s->currentThread);
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -572,32 +572,32 @@ void forwardHHObjptr (GC_state s,
 
     /* We copy the object to args->tgtChunkList during promotion, or preserve
      * the level of the object otherwise. */
-    void *toChunkList = args->tgtChunkList;
+    HM_chunk toChunkList = args->tgtChunkList;
 
     if (!inPromotion) {
         toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
 
 #if ASSERT
         if (NULL == toChunkList) {
-            void* cursor = args->hh->newLevelList;
+            HM_chunk cursor = args->hh->newLevelList;
             while ((NULL != cursor) && (HM_getChunkListLevel(cursor) > opInfo.level)) {
                 // this chunk must actually be a levelHead
-                assert(HM_getChunkInfo(cursor)->level != CHUNK_INVALID_LEVEL);
-                cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead;
+                assert(cursor->level != CHUNK_INVALID_LEVEL);
+                cursor = cursor->split.levelHead.nextHead;
             }
             ASSERTPRINT((NULL == cursor) || (HM_getChunkListLevel(cursor) != opInfo.level),
               "opInfo.level == %d; cursor == %p; cursor->level == %d",
               opInfo.level,
-              cursor,
+              (void*)cursor,
               NULL == cursor ? -1 : HM_getChunkListLevel(cursor));
         } else {
             assert(HM_getChunkListLevel(toChunkList) == opInfo.level);
 
-            void* cursor;
+            HM_chunk cursor;
             for (cursor = args->hh->newLevelList;
                  (NULL != cursor) &&
                      (HM_getChunkListLevel(cursor) > opInfo.level);
-                 cursor = HM_getChunkInfo(cursor)->split.levelHead.nextHead) {
+                 cursor = cursor->split.levelHead.nextHead) {
             }
             assert(toChunkList == cursor);
         }
@@ -611,7 +611,7 @@ void forwardHHObjptr (GC_state s,
             if (NULL == toChunkList) {
                 DIE("Ran out of space for Hierarchical Heap!");
             }
-            HM_getChunkInfo(toChunkList)->split.levelHead.isInToSpace = true;
+            toChunkList->split.levelHead.isInToSpace = true;
 
             /* update toChunkList for fast access later */
             HM_setChunkListToChunkList(opInfo.chunkList, toChunkList);
@@ -732,15 +732,15 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   void* toChunkList) {
+                   HM_chunk toChunkList) {
   assert (toChunkList);
   assert (copySize <= objectSize);
-  assert (HM_getChunkInfo(toChunkList)->level != CHUNK_INVALID_LEVEL);
+  assert (toChunkList->level != CHUNK_INVALID_LEVEL);
 
   /* get the chunk to allocate in */
-  void* chunk = HM_getChunkListLastChunk(toChunkList);
-  void* frontier = HM_getChunkFrontier(chunk);
-  void* limit = HM_getChunkLimit(chunk);
+  HM_chunk chunk = HM_getChunkListLastChunk(toChunkList);
+  pointer frontier = HM_getChunkFrontier(chunk);
+  pointer limit = HM_getChunkLimit(chunk);
 
   if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
       /* need to allocate a new chunk */
@@ -752,8 +752,8 @@ pointer copyObject(pointer p,
   }
 
   GC_memcpy(p, frontier, copySize);
-  void* newFrontier = ((void*)(((char*)(frontier)) + objectSize));
-  if (blockOf(newFrontier) != chunk) {
+  pointer newFrontier = frontier + objectSize;
+  if (blockOf(newFrontier) != (pointer)chunk) {
     chunk = HM_allocateChunk(toChunkList, 42); /* I just need to extend with a new chunk... size is arbitrary. */
     if (NULL == chunk) {
       die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
@@ -761,13 +761,13 @@ pointer copyObject(pointer p,
     newFrontier = HM_getChunkFrontier(chunk);
   }
   HM_updateChunkValues(chunk, newFrontier);
-  assert(chunkOf(newFrontier) == blockOf(newFrontier));
+  assert((pointer)chunkOf(newFrontier) == blockOf(newFrontier));
 
   return frontier;
 }
 
 void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
-  DIE('populateGlobalHeapHoles deprecated');
+  DIE("populateGlobalHeapHoles deprecated");
 
 //   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
 //     spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));

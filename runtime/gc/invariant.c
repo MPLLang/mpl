@@ -189,7 +189,6 @@ bool carefulInvariantForMutatorStack(GC_state s) {
   GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
 
   bool badfi = fi >= s->frameLayoutsLength;
-  int fsize = badfi ? -1 : s->frameLayouts[fi].size;
 
   return !badfi && invariantForMutatorStack(s);
 }
@@ -203,8 +202,8 @@ void displayStackInfo(GC_state s) {
   int fsize = badfi ? -1 : s->frameLayouts[fi].size;
 
   fprintf(stderr,
-    "stack bottom "FMTPTR" limit +%zu top +%zu; fi %lu; fsize %d\n",
-    (size_t)getStackBottom(s, stack),
+    "stack bottom "FMTPTR" limit +%zu top +%zu; fi %u; fsize %d\n",
+    getStackBottom(s, stack),
     (size_t)(getStackLimit(s, stack) - getStackBottom(s, stack)),
     (size_t)(getStackTop(s, stack) - getStackBottom(s, stack)),
     fi,
