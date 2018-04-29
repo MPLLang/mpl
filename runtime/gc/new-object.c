@@ -152,10 +152,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
-    assert((pointer)chunkOf(s->frontier) == blockOf(s->frontier));
+    assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   }
   stack = newStack (s, reserved, FALSE);
-  assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)chunkOf(s->frontier) == blockOf(s->frontier));
+  assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
@@ -195,6 +195,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_HH_offsetof(s)));
 
+  hh->freeList = NULL;
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
   hh->state = LIVE;

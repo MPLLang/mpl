@@ -61,7 +61,7 @@ struct HM_chunk {
       struct HM_HierarchicalHeap* containingHH; /**< The hierarchical heap
                                                  * containing this chunk */
       struct HM_chunk* toChunkList; /**< The corresponding Chunk List in the to-LevelList
-                              * during GC */
+                                     * during GC */
       Word64 size; /**< The size in number of bytes of this level, both
                       allocated and unallocated. */
       bool isInToSpace; /**< False if the corresponding Chunk List is in
@@ -100,7 +100,9 @@ typedef struct HM_chunk* HM_chunk;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static HM_chunk chunkOf(pointer p);
+/* Find the associated chunk metadata of a pointer which is known to point
+ * into the first block of a chunk. */
+static HM_chunk HM_getChunkOf(pointer p);
 
 /* Allocate and return a pointer to a new chunk in the list of the given
  * levelHead, with the requirement that

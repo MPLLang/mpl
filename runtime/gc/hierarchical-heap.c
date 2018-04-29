@@ -511,10 +511,10 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
 #if ASSERT
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
-  // return ChunkPool_pointerInChunkPool(candidatePointer);
-  return chunkOf(candidatePointer)->magic == CHUNK_MAGIC;
+  return HM_getChunkOf(candidatePointer)->magic == CHUNK_MAGIC;
 #else
   DIE("HM_HH_objptrInHierarchicalHeap deprecated");
+  return TRUE;
 #endif
 }
 

@@ -483,6 +483,8 @@ structure ObjectType =
 
                       val bytesMetaData =
                           Bits.toBytes (Control.Target.Size.metaData ())
+                      val bytesFreeList =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesLastAllocatedChunk =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesLock =
@@ -491,7 +493,7 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesLevel =
                           Bits.toBytes (Type.width Type.word32)
-                      val bytesLastSharedLevel =
+                      val bytesStealLevel =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesID =
                           Bits.toBytes (Type.width Type.word64)
@@ -523,20 +525,21 @@ structure ObjectType =
                               val op+ = Bytes.+
                           in
                               bytesMetaData +
+                              bytesFreeList +
                               bytesLastAllocatedChunk +
                               bytesLock +
                               bytesState +
                               bytesLevel +
-                              bytesLastSharedLevel +
+                              bytesStealLevel +
                               bytesID +
                               bytesLevelList +
                               bytesNewLevelList +
                               bytesLocallyCollectibleSize +
                               bytesLocallyCollectibleHeapSize +
                               bytesRetVal +
-			      bytesParentHH +
-			      bytesNextChildHH +
-			      bytesChildHHList +
+                              bytesParentHH +
+                              bytesNextChildHH +
+                              bytesChildHHList +
                               bytesThread
                           end
 
@@ -548,22 +551,25 @@ structure ObjectType =
                   end
           in
               Normal {hasIdentity = true,
-                      ty = Type.seq (Vector.fromList [padding,
-                                                      Type.cpointer (),
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word64,
-                                                      Type.cpointer (),
-                                                      Type.cpointer (),
-                                                      Type.word64,
-                                                      Type.word64,
-                                                      Type.cpointer (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.thread ()])}
+                      ty = Type.seq (Vector.fromList [
+                          padding,
+                          Type.cpointer (), (* freeList *)
+                          Type.cpointer (), (* lastAllocatedChunk *)
+                          Type.word32,      (* lock *)
+                          Type.word32,      (* state *)
+                          Type.word32,      (* level *)
+                          Type.word32,      (* stealLevel *)
+                          Type.word64,      (* id *)
+                          Type.cpointer (), (* levelList *)
+                          Type.cpointer (), (* newLevelList *)
+                          Type.word64,      (* locallyCollectibleSize *)
+                          Type.word64,      (* locallyCollectibleHeapSize *)
+                          Type.cpointer (), (* retVal *)
+                          Type.hierarchicalHeap (), (* parentHH *)
+                          Type.hierarchicalHeap (), (* nextChildHH *)
+                          Type.hierarchicalHeap (), (* childHHList *)
+                          Type.thread ()            (* thread *)
+                        ])}
           end
 
       (* Order in the following vector matters.  The basic pointer tycons must

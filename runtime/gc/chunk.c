@@ -96,7 +96,7 @@ void* HM_freeLevelListIterator(void* arg);
 static HM_chunk getLevelHeadChunk(HM_chunk chunk);
 #endif
 
-static inline HM_chunk chunkOf(pointer p) {
+static inline HM_chunk HM_getChunkOf(pointer p) {
   HM_chunk chunk = (HM_chunk)blockOf(p);
   assert(chunk->magic == CHUNK_MAGIC);
   return chunk;
@@ -158,10 +158,12 @@ HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
   return chunk;
 }
 
-HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
-                                   size_t allocableSize,
-                                   Word32 level,
-                                   struct HM_HierarchicalHeap* hh) {
+HM_chunk HM_allocateLevelHeadChunk(
+  HM_chunk* levelList,
+  size_t allocableSize,
+  Word32 level,
+  struct HM_HierarchicalHeap* hh)
+{
   size_t totalSize = allocableSize + sizeof(struct HM_chunk);
   HM_chunk chunk = (HM_chunk)GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
 
@@ -214,7 +216,7 @@ void HM_forwardHHObjptrsInChunkList(
   void* predicateArgs,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs)
 {
-  HM_chunk chunk = chunkOf(start);
+  HM_chunk chunk = HM_getChunkOf(start);
 
   pointer p = start;
   size_t i = 0;
@@ -299,6 +301,8 @@ void HM_forwardHHObjptrsInLevelList(
   forwardHHObjptrArgs->maxLevel = savedMaxLevel;
 }
 
+/* SAM_NOTE: TODO: Need to cycle this space back around to the end of the
+ * chunk list, to be re-used. */
 void HM_freeChunks(HM_chunk* levelList, Word32 minLevel) {
   struct FreeLevelListIteratorArgs iteratorArgs = {
     .levelList = levelList,
@@ -391,7 +395,7 @@ void HM_getObjptrInfo(GC_state s,
                       struct HM_ObjptrInfo* info) {
   assert(HM_HH_objptrInHierarchicalHeap(s, object));
 
-  HM_chunk chunk = chunkOf(objptrToPointer(object, s->heap->start));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, s->heap->start));
   assert(NULL != chunk);
 
   HM_chunk chunkList = chunk;
@@ -828,6 +832,9 @@ rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
 }
 
 bool HM_isObjptrInToSpace(GC_state s, objptr object) {
+  /* SAM_NOTE: why is this commented out? why are there two ways to check if
+   * an object is in the toSpace? Does promotion use one, while collection
+   * uses the other? */
   /* return HM_getObjptrLevelHeadChunk(s, object)->split.levelHead.isInToSpace; */
   return HM_getObjptrLevelHeadChunk(s, object)->split.levelHead.containingHH
     == COPY_OBJECT_HH_VALUE;
