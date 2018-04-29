@@ -51,17 +51,6 @@ pointer copyObject(pointer p,
                    HM_chunk toChunkList);
 
 /**
- * Populates 'holes' with the current global heap holes from all processors.
- *
- * @attention
- * Must be run within an enter/leave in order to ensure correctness.
- *
- * @param s The GC_state to use
- * @param holes The holes to populate.
- */
-void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes);
-
-/**
  * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
  * heap.
  *
@@ -364,6 +353,8 @@ void HM_HHC_collectLocal(void) {
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);
+
+  /* implicitly unsets isInToSpace for all new levelheads: */
   HM_mergeLevelList(&(hh->levelList), hh->newLevelList, hh, true);
 
   /* reset hh->newLevelList */
@@ -743,56 +734,22 @@ pointer copyObject(pointer p,
   pointer limit = HM_getChunkLimit(chunk);
 
   if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
-      /* need to allocate a new chunk */
-      chunk = HM_allocateChunk(toChunkList, objectSize);
-      if (NULL == chunk) {
-          die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-      }
-      frontier = HM_getChunkFrontier(chunk);
+    /* need to allocate a new chunk */
+    chunk = HM_allocateChunk(toChunkList, objectSize);
+    if (NULL == chunk) {
+      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+    }
+    frontier = HM_getChunkFrontier(chunk);
   }
 
   GC_memcpy(p, frontier, copySize);
   pointer newFrontier = frontier + objectSize;
   if (blockOf(newFrontier) != (pointer)chunk) {
-    chunk = HM_allocateChunk(toChunkList, 42); /* I just need to extend with a new chunk... size is arbitrary. */
-    if (NULL == chunk) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-    }
-    newFrontier = HM_getChunkFrontier(chunk);
+    newFrontier = HM_getChunkLimit(chunk);
   }
   HM_updateChunkValues(chunk, newFrontier);
-  assert((pointer)chunkOf(newFrontier) == blockOf(newFrontier));
 
   return frontier;
-}
-
-void populateGlobalHeapHoles(GC_state s, struct GlobalHeapHole* holes) {
-  DIE("populateGlobalHeapHoles deprecated");
-
-//   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-//     spinlock_lock(&(s->procStates[i].lock), Proc_processorNumber(s));
-
-//     pointer start = s->procStates[i].frontier;
-//     pointer end = s->procStates[i].limitPlusSlop + GC_GAP_SLOP;
-
-//     if (HM_HH_objptrInHierarchicalHeap(s, pointerToObjptr(start,
-//                                                           s->heap->start))) {
-// #if 0
-//       assert(HM_HH_objptrInHierarchicalHeap(s,
-//                                             pointerToObjptr(end,
-//                                                             s->heap->start)));
-// #endif
-
-//       /* use the saved global frontier */
-//       start = s->procStates[i].globalFrontier;
-//       end = s->procStates[i].globalLimitPlusSlop + GC_GAP_SLOP;
-//     }
-
-//     holes[i].start = start;
-//     holes[i].end = end;
-
-//     spinlock_unlock(&(s->procStates[i].lock));
-//   }
 }
 
 bool skipStackAndThreadObjptrPredicate(GC_state s,
