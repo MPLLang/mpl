@@ -127,6 +127,10 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh);
 
+/* append freeList onto the end of *parentFreeList, and update *parentFreeList
+ * accordingly. */
+void HM_mergeFreeList(HM_chunk *parentFreeList, HM_chunk freeList);
+
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which
  * should be inside a chunk.
@@ -175,7 +179,7 @@ void HM_forwardHHObjptrsInLevelList(
  * @param levelList The level list to free chunks from
  * @param minLevel The minimum level to free up to, inclusive
  */
-void HM_freeChunks(HM_chunk* levelList, Word32 minLevel);
+void HM_freeChunks(HM_chunk *levelList, HM_chunk *freeList, Word32 minLevel);
 
 /**
  * This function returns the frontier of the chunk

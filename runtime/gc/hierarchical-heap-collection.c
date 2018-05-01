@@ -349,7 +349,7 @@ void HM_HHC_collectLocal(void) {
 #endif
 
   /* free old chunks */
-  HM_freeChunks(&(hh->levelList), forwardHHObjptrArgs.minLevel);
+  HM_freeChunks(&(hh->levelList), &(hh->freeList), forwardHHObjptrArgs.minLevel);
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);

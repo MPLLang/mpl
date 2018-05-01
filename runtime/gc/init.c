@@ -166,13 +166,13 @@ int processAtMLton (GC_state s, int argc, char **argv,
               s->controls->summaryFile = file;
             }
           }
-        } else if (0 == strcmp (arg, "alloc-chunk")) {
+        } else if (0 == strcmp (arg, "global-heap-min-chunk")) {
           i++;
           if (i == argc)
-            die ("@MLton alloc-chunk missing argument.");
-          s->controls->allocChunkSize = stringToBytes (argv[i++]);
-          unless (GC_HEAP_LIMIT_SLOP < s->controls->allocChunkSize)
-            die ("@MLton alloc-chunk argument must be greater than slop.");
+            die ("@MLton global-heap-min-chunk missing argument.");
+          s->controls->globalHeapMinChunkSize = stringToBytes (argv[i++]);
+          unless (GC_HEAP_LIMIT_SLOP < s->controls->globalHeapMinChunkSize)
+            die ("@MLton global-heap-min-chunk argument must be greater than slop.");
         } else if (0 == strcmp (arg, "affinity-base")) {
           i++;
           if (i == argc)
@@ -354,12 +354,18 @@ int processAtMLton (GC_state s, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp(arg, "block-size")) {
+        } else if (0 == strcmp(arg, "min-chunk")) {
           i++;
           if (i == argc) {
-            die ("@MLton block-size missing argument.");
+            die ("@MLton min-chunk missing argument.");
           }
-          s->controls->blockConfig.blockSize = stringToBytes(argv[i++]);
+          s->controls->minChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "alloc-chunk")) {
+          i++;
+          if (i == argc) {
+            die ("@MLton alloc-chunk missing argument.");
+          }
+          s->controls->allocChunkSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
           if (i == argc) {
@@ -455,7 +461,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->messages = FALSE;
   s->controls->HMMessages = FALSE;
   s->controls->oldGenArraySize = 0x100000;
-  s->controls->allocChunkSize = 4096;
+  s->controls->globalHeapMinChunkSize = 4096;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
   s->controls->restrictAvailableSize = FALSE;
@@ -485,9 +491,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
-  size_t bs = 512ULL * 1024;
-  s->controls->blockConfig.blockSize = bs;
-  s->controls->blockConfig.batchSize = bs * 100;
+  size_t bs = 16ULL * 1024;
+  s->controls->minChunkSize = bs;
+  s->controls->allocChunkSize = 1024ULL * 1024 * 2;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
@@ -583,7 +589,13 @@ int GC_init (GC_state s, int argc, char **argv) {
     }
   }
 
-  initBlocks(&(s->controls->blockConfig));
+  unless (isAligned(s->controls->minChunkSize, s->sysvals.pageSize))
+    die ("min-chunk must be a multiple of the system page size, %zu", s->sysvals.pageSize);
+
+  unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
+    die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
+
+  initBlocks(s);
 
   return res;
 }

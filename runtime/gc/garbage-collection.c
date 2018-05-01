@@ -519,12 +519,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+  if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
     /*
      * first make sure that I hit the minimum if I am doing a global heap
      * allocation
      */
-    bytesRequested = s->controls->allocChunkSize;
+    bytesRequested = s->controls->globalHeapMinChunkSize;
   }
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;

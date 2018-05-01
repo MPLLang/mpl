@@ -243,6 +243,10 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
   hh->levelList = NULL;
 
+  /* merge free lists */
+  HM_mergeFreeList(&(parentHH->freeList), hh->freeList);
+  hh->freeList = NULL;
+
   LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
