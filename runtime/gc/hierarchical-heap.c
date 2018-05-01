@@ -464,6 +464,7 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
 }
 
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
+  assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 

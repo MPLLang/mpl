@@ -172,8 +172,10 @@ bool invariantForGC (GC_state s) {
 
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
-  return (thread->bytesNeeded
-          <= (size_t)(s->limitPlusSlop - s->frontier));
+  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
+      /*&& (HM_inGlobalHeap(s) ||
+            (inSameBlock(s->frontier, s->limitPlusSlop-1)
+            && ((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC))*/;
 }
 
 bool invariantForMutatorStack (GC_state s) {
