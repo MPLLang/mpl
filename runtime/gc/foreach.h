@@ -15,6 +15,9 @@ struct GlobalHeapHole {
 
 typedef bool (*ObjptrPredicateFunction) (GC_state s, pointer p, void* args);
 typedef void (*ForeachObjptrFunction) (GC_state s, objptr *opp, void* args);
+// typedef void (*ForeachObjectFunction) (GC_state s, pointer p, void* args);
+
+void printObjectsInRange(GC_state s, pointer front, pointer back);
 
 static inline void callIfIsObjptr (GC_state s,
                                    ForeachObjptrFunction f,

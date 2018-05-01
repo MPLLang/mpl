@@ -71,7 +71,56 @@ void foreachGlobalObjptr (GC_state s,
   }
 }
 
+struct objectInfo {
+  objptr op;
+  unsigned int objectTypeIndex;
+  GC_objectTypeTag tag;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  bool hasIdentity;
+};
 
+void printObjectInfo(GC_state s, struct objectInfo *args) {
+  printf("object %p index %u tag %s bytes %u ptrs %u identity %d\n",
+    (void *)args->op,
+    args->objectTypeIndex,
+    objectTypeTagToString(args->tag),
+    args->bytesNonObjptrs,
+    args->numObjptrs,
+    args->hasIdentity);
+}
+
+void printObjectsInRange(GC_state s,
+                         pointer front,
+                         pointer back) {
+  GC_header header;
+  struct objectInfo oi;
+
+  pointer p = front;
+  while (p < back) {
+    p = advanceToObjectData(s, p);
+    header = getHeader(p);
+    oi.objectTypeIndex = (header & TYPE_INDEX_MASK) >> TYPE_INDEX_SHIFT;
+    splitHeader(s, header, &(oi.tag), &(oi.hasIdentity), &(oi.bytesNonObjptrs), &(oi.numObjptrs));
+    oi.op = pointerToObjptr(p, s->heap->start);
+
+    if (NORMAL_TAG == oi.tag) {
+      p += oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE);
+    }
+    else if (ARRAY_TAG == oi.tag) {
+      p += getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+    }
+    else if (STACK_TAG == oi.tag) {
+      p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved;
+    }
+    else {
+      fprintf(stderr, "cannot handle tag %u", oi.tag);
+      return;
+    }
+
+    printObjectInfo(s, &oi);
+  }
+}
 
 /* foreachObjptrInObject (s, p, f, skipWeaks)
  *
