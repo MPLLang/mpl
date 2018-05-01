@@ -744,10 +744,14 @@ pointer copyObject(pointer p,
 
   GC_memcpy(p, frontier, copySize);
   pointer newFrontier = frontier + objectSize;
-  if (blockOf(newFrontier) != (pointer)chunk) {
-    newFrontier = HM_getChunkLimit(chunk);
-  }
   HM_updateChunkValues(chunk, newFrontier);
+  if (blockOf(newFrontier) != (pointer)chunk) {
+    /* size is arbitrary; just need a new chunk */
+    chunk = HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP);
+    if (NULL == chunk) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+  }
 
   return frontier;
 }
