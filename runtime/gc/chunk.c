@@ -106,20 +106,17 @@ static inline HM_chunk HM_getChunkOf(pointer p) {
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
-  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
-  HM_chunk chunk = (HM_chunk)GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
 
-  if (NULL == chunk) {
-    return NULL;
-  }
-
-#if ASSERT
-  /* clear out memory to quickly catch some memory safety errors */
-  pointer start = HM_getChunkStart(chunk);
-  size_t length = ((size_t)chunk) + totalSize - ((size_t)start);
-  memset(start, 0xAE, length);
-#endif
+/* Set up and return a pointer to a new chunk between start and end. Note that
+ * the returned pointer is equal to start, and thus each of
+ * {start, end, end - start} must be aligned on the block size. */
+HM_chunk HM_initializeChunk(ARG_USED_FOR_ASSERT GC_state s,
+                            pointer start,
+                            pointer end) {
+  assert(isAligned((size_t)start, s->controls->blockConfig.blockSize));
+  assert(isAligned((size_t)(end - start), s->controls->blockConfig.blockSize));
+  assert((size_t)(end - start) >= s->controls->blockConfig.blockSize);
+  HM_chunk chunk = (HM_chunk)start;
 
 #if ASSERT
   chunk->split.levelHead.nextHead = ((HM_chunk)(0xcafebabedeadbeef));
@@ -129,16 +126,83 @@ HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
 #endif
 
   chunk->magic = CHUNK_MAGIC;
-  chunk->frontier = HM_getChunkStart(chunk);
-  chunk->limit = (pointer)chunk + totalSize;
+  chunk->frontier = start + sizeof(struct HM_chunk);
+  chunk->limit = end;
   chunk->level = CHUNK_INVALID_LEVEL;
-  chunk->split.normal.levelHead = levelHeadChunk;
 
-  /* assert that it is initialized correctly */
-  assert(chunk->limit != (pointer)chunk);
-  assert(totalSize == HM_getChunkSize(chunk));
+#if ASSERT
+  /* clear out memory to quickly catch some memory safety errors */
+  memset(chunk->frontier, 0xAE, (size_t)(chunk->limit - chunk->frontier));
+#endif
+
+  return chunk;
+}
+
+/* Takes at least `bytesRequested` amount of space from victim *chunkp,
+ * returning a pointer to the resulting chunk and updating *chunkp appropriately.
+ * (chunkp is passed as argument to permit updating the owning freelist.)
+ * The victim chunk must be a normal empty chunk in a freelist.
+ *
+ * If the victim is large enough, this will be accomplished by splitting it into
+ * two chunks. Otherwise, this function will simply unlink the victim and return
+ * it. */
+HM_chunk HM_takeFromChunk(GC_state s, HM_chunk *chunkp, size_t bytesRequested) {
+  assert(chunkp != NULL);
+  HM_chunk chunk = *chunkp;
+  assert(chunk != NULL);
+  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
+
+  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
+  totalSize = align(totalSize, s->controls->blockConfig.blockSize);
+
+  pointer limit = chunk->limit;
+  pointer requestedSplitPoint = limit - totalSize;
+  if (requestedSplitPoint < chunk->frontier) {
+    /* can't split; have to take the whole chunk. */
+    *chunkp = chunk->nextChunk;
+    chunk->nextChunk = NULL;
+    return chunk;
+  }
+
+  /* This chunk is hogging too much space! Time to steal. */
+  chunk->limit = requestedSplitPoint;
+  return HM_initializeChunk(s, requestedSplitPoint, limit);
+}
+
+HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
+  struct HM_HierarchicalHeap *hh = getHierarchicalHeapCurrent(s);
+
+  HM_chunk *chunkp = &(hh->freeList);
+  HM_chunk chunk = *chunkp;
+  while (NULL != chunk && (size_t)(chunk->limit - chunk->frontier) < bytesRequested) {
+    chunkp = &(chunk->nextChunk);
+    chunk = *chunkp;
+  }
+
+  if (NULL == chunk) {
+    /* No sufficient free chunk was found, so need to allocate a new one. Also,
+     * need to amortize future allocations by populating the free list. */
+    size_t blockSize = s->controls->blockConfig.blockSize;
+    size_t batchSize = s->controls->blockConfig.batchSize;
+    size_t desiredSize = align(bytesRequested + batchSize, blockSize);
+    pointer start = (pointer)GC_mmapAnon(NULL, desiredSize + blockSize);
+    if (NULL == start) {
+      return NULL;
+    }
+    start = (pointer)align((size_t)start, blockSize);
+    *chunkp = HM_initializeChunk(s, start, start + desiredSize);
+  }
+
+  chunk = HM_takeFromChunk(s, chunkp, bytesRequested);
+  return chunk;
+}
+
+HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
+  assert(levelHeadChunk->level != CHUNK_INVALID_LEVEL);
+  HM_chunk chunk = HM_getFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
 
   /* insert into list and update levelHeadChunk */
+  chunk->split.normal.levelHead = levelHeadChunk;
   chunk->nextChunk = NULL;
   if (NULL == levelHeadChunk->nextChunk) {
     /* empty list */
@@ -148,7 +212,7 @@ HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
     levelHeadChunk->split.levelHead.lastChunk->nextChunk = chunk;
     levelHeadChunk->split.levelHead.lastChunk = chunk;
   }
-  levelHeadChunk->split.levelHead.size += totalSize;
+  levelHeadChunk->split.levelHead.size += (size_t)(chunk->limit - (pointer)chunk);
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk %p at level %u",
