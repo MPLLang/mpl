@@ -199,11 +199,17 @@ pointer GC_arrayAllocate (GC_state s,
     displayGCState (s, stderr);
   }
 
-  assert (ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
+#if ASSERT
+  if (!HM_inGlobalHeap(s)) {
+    assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+    assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+  }
+  assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
   /* Unfortunately, the invariant isn't quite true here, because
    * unless we did the GC, we never set s->currentThread->stack->used
    * to reflect what the mutator did with stackTop.
    */
+#endif
 
   if (allocInOldGen) {
     LEAVE1 (s, result);
