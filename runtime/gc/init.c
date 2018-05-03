@@ -366,6 +366,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
             die ("@MLton alloc-chunk missing argument.");
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
+          i++;
+          s->controls->mayUseAncestorChunk = FALSE;
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
           if (i == argc) {
@@ -494,6 +497,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   size_t bs = 16ULL * 1024;
   s->controls->minChunkSize = bs;
   s->controls->allocChunkSize = 1024ULL * 1024 * 2;
+
+  s->controls->mayUseAncestorChunk = TRUE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
