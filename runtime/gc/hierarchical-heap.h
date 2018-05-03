@@ -17,6 +17,7 @@
 #ifndef HIERARCHICAL_HEAP_H_
 #define HIERARCHICAL_HEAP_H_
 
+#include "chunk.h"
 #include "rwlock.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
@@ -40,6 +41,8 @@ extern const char* HM_HHStateToString[];
  * header ::
  * fwdptr (object-pointer) ::
  * padding ::
+ * freeList (struct HM_chunk*) ::
+ * lastAllocatedChunk (struct HM_chunk*) ::
  * lock (Int32) ::
  * state (enum HM_HHState/Int32) ::
  * level (Word32) ::
@@ -55,7 +58,9 @@ extern const char* HM_HHStateToString[];
  * it only has objptrs to objects on the same heap (i.e. the global heap).
  */
 struct HM_HierarchicalHeap {
-  void* lastAllocatedChunk; /**< The last allocated chunk */
+  HM_chunk freeList;  /* list of empty chunks locally available for use */
+
+  HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
   rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
 
@@ -69,11 +74,11 @@ struct HM_HierarchicalHeap {
   Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
 
-  void* levelList; /**< The list of level lists. See HM_ChunkInfo for more
+  HM_chunk levelList; /**< The list of level lists. See HM_chunk for more
                     * information */
 
-  void* newLevelList; /**< The new list of level lists generated during a local
-                       * garbage collection. See HM_ChunkInfo for more
+  HM_chunk newLevelList; /**< The new list of level lists generated during a local
+                       * garbage collection. See HM_chunk for more
                        information */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally
@@ -104,22 +109,24 @@ struct HM_HierarchicalHeap {
 } __attribute__((packed));
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
-                    sizeof(struct HM_HierarchicalHeap) ==
-                    sizeof(void*) +
-                    sizeof(Int32) +
-                    sizeof(Int32) +
-                    sizeof(Word32) +
-                    sizeof(Word32) +
-                    sizeof(Word64) +
-                    sizeof(void*) +
-                    sizeof(void*) +
-                    sizeof(Word64) +
-                    sizeof(Word64) +
-                    sizeof(pointer) +
-                    sizeof(objptr) +
-                    sizeof(objptr) +
-                    sizeof(objptr) +
-                    sizeof(objptr));
+  sizeof(struct HM_HierarchicalHeap) ==
+  sizeof(void*) +    // freeList
+  sizeof(void*) +    // lastAllocatedChunk
+  sizeof(Int32) +    // lock
+  sizeof(Int32) +    // state
+  sizeof(Word32) +   // level
+  sizeof(Word32) +   // stealLevel
+  sizeof(Word64) +   // id
+  sizeof(void*) +    // levelList
+  sizeof(void*) +    // newLevelList
+  sizeof(Word64) +   // locallyCollectibleSize
+  sizeof(Word64) +   // locallyCollectibleHeapSize
+  sizeof(pointer) +  // retVal
+  sizeof(objptr) +   // parentHH
+  sizeof(objptr) +   // nextChildHH
+  sizeof(objptr) +   // childHHList
+  sizeof(objptr)     // thread
+);
 
 /**
  * This value is an "invalid" level and used for HM_HierarchicalHeap

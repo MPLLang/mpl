@@ -5,12 +5,16 @@
  */
 
 pointer HM_Promote(GC_state s,
-                   struct HM_ChunkInfo *dst_chunk,
+                   HM_chunk dst_chunk,
                    pointer src) {
+    /* SAM_NOTE: this use of getChunkHeadChunk might be incorrect; need to
+     * follow pointers all the way to the levelHead? Adding an assert on the
+     * following line for sanity... */
     dst_chunk = HM_getChunkHeadChunk(dst_chunk);
-    struct HM_ChunkInfo *src_chunk =
+    assert (dst_chunk->level != CHUNK_INVALID_LEVEL);
+    HM_chunk src_chunk =
         HM_getObjptrLevelHeadChunk(s, pointerToObjptr(src, s->heap->start));
-    void *tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
+    HM_chunk tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
     struct HM_HierarchicalHeap *dst_hh =
         dst_chunk->split.levelHead.containingHH;
     bool needToUpdateLCS = false;
@@ -19,8 +23,7 @@ pointer HM_Promote(GC_state s,
     if (dst_chunk->level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
       assert (dst_hh == current_hh);
       needToUpdateLCS = true;
-      dst_hh->locallyCollectibleSize -=
-          HM_getChunkInfo(tgtChunkList)->split.levelHead.size;
+      dst_hh->locallyCollectibleSize -= tgtChunkList->split.levelHead.size;
     }
 
     LOG(LM_HH_PROMOTION, LL_INFO,
@@ -41,7 +44,7 @@ pointer HM_Promote(GC_state s,
         HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
         LOG(LM_HH_PROMOTION, LL_DEBUG,
             "Chunk %p at level %u in use, so appending new chunk",
-            dst_hh->lastAllocatedChunk,
+            (void*)dst_hh->lastAllocatedChunk,
             dst_chunk->level);
     }
 
@@ -67,7 +70,7 @@ pointer HM_Promote(GC_state s,
 
     LOG(LM_HH_PROMOTION, LL_DEBUG, "START src copy");
 
-    void *lastChunk = HM_getChunkListLastChunk(tgtChunkList);
+    HM_chunk lastChunk = HM_getChunkListLastChunk(tgtChunkList);
     pointer start = HM_getChunkFrontier(lastChunk);
 
     forwardHHObjptr(s, &srcobj, &forwardHHObjptrArgs);
@@ -99,12 +102,10 @@ pointer HM_Promote(GC_state s,
     dst_hh->newLevelList = NULL;
 
     assert (forwardHHObjptrArgs.tgtChunkList);
-    assert (!HM_getChunkInfo(forwardHHObjptrArgs.tgtChunkList)->
-            split.levelHead.toChunkList);
+    assert (!forwardHHObjptrArgs.tgtChunkList->split.levelHead.toChunkList);
 
     if (needToUpdateLCS) {
-        dst_hh->locallyCollectibleSize +=
-            HM_getChunkInfo(tgtChunkList)->split.levelHead.size;
+        dst_hh->locallyCollectibleSize += tgtChunkList->split.levelHead.size;
     }
 
     assertInvariants(s, dst_hh, LIVE);

@@ -13,8 +13,11 @@
  * Definition of the HierarchicalHeap collection interface
  */
 
+
 #ifndef HIERARCHICAL_HEAP_COLLECTION_H_
 #define HIERARCHICAL_HEAP_COLLECTION_H_
+
+#include "chunk.h"
 
 /* objptr* opp */
 
@@ -23,10 +26,10 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
-  void *tgtChunkList;           /* If not NULL, designates the chunk list where
-                                 * the object is to be copied. If NULL, the
-                                 * to-space chunk at the level of the object
-                                 * will be used. */
+  HM_chunk tgtChunkList;  /* If not NULL, designates the chunk list where
+                           * the object is to be copied. If NULL, the
+                           * to-space chunk at the level of the object
+                           * will be used. */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;

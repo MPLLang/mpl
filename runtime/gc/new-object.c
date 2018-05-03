@@ -96,46 +96,6 @@ GC_stack newStack (GC_state s,
   return stack;
 }
 
-/* return a pointer to a region of at least `bytes` bytes in size.
- * updates s->frontier appropriately. */
-// pointer allocateSpace(GC_state s, size_t bytes)
-// {
-//   assert(isAligned(bytes, s->alignment));
-//   assert(isFrontierAligned(s, s->frontier));
-
-//   if (HM_inGlobalHeap(s)) {
-//     ensureHasHeapBytesFreeAndOrInvariantForMutator(s, FALSE, FALSE, FALSE, 0, bytes);
-//     pointer frontier = s->frontier;
-//     s->frontier += bytes;
-//     assert(isFrontierAligned(s, s->frontier));
-//     return frontier;
-//   }
-
-//   /* Allocate in the HH */
-
-//   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
-
-//   // is this true? When can we guarantee consistency between frontier recorded
-//   // in HH vs s->frontier?
-//   assert(s->frontier == HM_HH_getFrontier(hh));
-
-//   assert(s->limitPlusSlop == HM_HH_getLimit(hh));
-
-//   if ((size_t)(s->limitPlusSlop - s->frontier) <= bytes) {
-//     pointer frontier = s->frontier;
-//     s->frontier += bytes;
-//     assert(isFrontierAligned(s, s->frontier));
-
-//     // this is probably not necessary -- when is consistency restored?
-//     HM_HH_updateValues(hh, s->frontier);
-//     return frontier;
-//   }
-
-//   // TODO: need to allocate a new chunk. If we have to ensure the current level
-//   // this is easy: just extend. But if we can take advantage of allocating
-//   // within
-// }
-
 GC_thread newThread (GC_state s, size_t reserved) {
   GC_stack stack;
   GC_thread thread;
@@ -152,10 +112,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                                         sizeofStackWithMetaData (s, reserved) +
                                         sizeofThread (s),
                                         FALSE);
-    assert(chunkOf(s->frontier) == blockOf(s->frontier));
+    assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   }
   stack = newStack (s, reserved, FALSE);
-  assert(isPointerInGlobalHeap(s, s->frontier) || chunkOf(s->frontier) == blockOf(s->frontier));
+  assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
@@ -195,6 +155,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_HH_offsetof(s)));
 
+  hh->freeList = NULL;
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
   hh->state = LIVE;

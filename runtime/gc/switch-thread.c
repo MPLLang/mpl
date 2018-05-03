@@ -101,7 +101,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     }
 
     endAtomic (s);
-    assert (invariantForMutatorFrontier(s));
+    assert (strongInvariantForMutatorFrontier(s));
     assert (invariantForMutatorStack(s));
     //LEAVE0 (s);
   } else {

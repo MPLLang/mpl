@@ -44,6 +44,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   bool emptyHH = FALSE;
   bool extend = FALSE;
   bool growStack = FALSE;
+  size_t stackBytes = 0;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
       "bytesRequested: %zu, hasHeapBytesFree: %zu",
@@ -67,7 +68,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (!invariantForMutatorStack(s)) {
     /* need to grow stack */
-    bytesRequested +=
+    stackBytes =
         sizeofStackWithMetaData(s,
                                 sizeofStackGrowReserved (s, getStackCurrent (s)));
     growStack = TRUE;
@@ -148,6 +149,19 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     setGCStateCurrentThreadAndStack (s);
   }
 
+  if (growStack) {
+    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+        "growing stack");
+    if ((size_t)(s->limitPlusSlop - s->frontier) < stackBytes) {
+      HM_HH_extend(hh, stackBytes);
+      s->frontier = HM_HH_getFrontier(hh);
+      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    }
+    growStackCurrent (s, FALSE);
+    setGCStateCurrentThreadAndStack (s);
+  }
+
   /* determine if I need to extend based on space or ensureCurrentLevel */
   if (emptyHH) {
     /* HH is empty, so definitely need to extend */
@@ -182,13 +196,13 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "  Level List:");
-        for (void* levelHead = hh->levelList;
+        for (HM_chunk levelHead = hh->levelList;
              NULL != levelHead;
-             levelHead = HM_getChunkInfo(levelHead)->split.levelHead.nextHead) {
+             levelHead = levelHead->split.levelHead.nextHead) {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
               "    level %"PRIu32" size %"PRIu64,
-              HM_getChunkInfo(levelHead)->level,
-              HM_getChunkInfo(levelHead)->split.levelHead.size);
+              levelHead->level,
+              levelHead->split.levelHead.size);
         }
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
@@ -211,13 +225,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  }
-
-  if (growStack) {
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "growing stack");
-    growStackCurrent (s, FALSE);
-    setGCStateCurrentThreadAndStack (s);
   }
 
   assert(invariantForMutatorFrontier (s));

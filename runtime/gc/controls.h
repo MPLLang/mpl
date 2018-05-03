@@ -78,13 +78,15 @@ struct GC_controls {
   bool messages; /* Print a message at the start and end of each gc. */
   bool HMMessages; /* print messages regarding heap management */
   size_t oldGenArraySize; /* Arrays larger are allocated in old gen, if possible. */
-  size_t allocChunkSize; /* Minimum size reserved for any allocation request. */
+  size_t globalHeapMinChunkSize; /* Minimum size reserved for any allocation request. */
+  size_t allocChunkSize;
+  size_t minChunkSize;
+  bool mayUseAncestorChunk;
   int32_t affinityBase; /* First processor to use when setting affinity */
   int32_t affinityStride; /* Number of processors between first and second */
   bool restrictAvailableSize; /* Use smaller heaps to improve space profiling accuracy */
   struct GC_ratios ratios;
   struct HM_HierarchicalHeapConfig hhConfig;
-  struct Block_config blockConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
   enum SummaryFormat summaryFormat;

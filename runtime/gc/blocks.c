@@ -4,33 +4,24 @@
  * See the file MLton-LICENSE for details.
  */
 
-// #if (defined (MLTON_GC_INTERNAL_TYPES))
-
-// struct Block_batchInfo {
-//   void* base;
-//   size_t len;
-// };
-
-// #define BATCH_INFO_PTR(p) ((struct Blocks_batchInfo*)((size_t)p - sizeof(struct Blocks_batchInfo)))
-
-// #endif /* defined MLTON_GC_INTERNAL_TYPES */
+#if (defined (MLTON_GC_INTERNAL_TYPES))
+#endif /* defined MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static struct Block_config Block_sizes;
+static size_t blockSize;
+static size_t batchSize;
 
-static void initBlocks(struct Block_config* config) {
-  assert(isAligned(config->blockSize, GC_MODEL_MINALIGN));
-  assert(config->blockSize >= GC_HEAP_LIMIT_SLOP);
-  if (!isAligned(config->batchSize, config->blockSize)) {
-    DIE("Error: batch size is not a multiple of the block size");
-  }
-  Block_sizes.blockSize = config->blockSize;
-  Block_sizes.batchSize = config->batchSize;
+static void initBlocks(GC_state s) {
+  assert(isAligned(s->controls->minChunkSize, GC_MODEL_MINALIGN));
+  assert(s->controls->minChunkSize >= GC_HEAP_LIMIT_SLOP);
+  assert(isAligned(s->controls->allocChunkSize, s->controls->minChunkSize));
+  blockSize = s->controls->minChunkSize;
+  batchSize = s->controls->allocChunkSize;
 }
 
 static inline pointer blockOf(pointer p) {
-  return (pointer)alignDown((size_t)p, Block_sizes.blockSize);
+  return (pointer)(uintptr_t)alignDown((size_t)p, blockSize);
 }
 
 static inline bool inSameBlock(pointer p, pointer q) {
@@ -40,40 +31,40 @@ static inline bool inSameBlock(pointer p, pointer q) {
 /* Allocate a region of size at least *bytesRequested, storing the resulting
  * usable size at *bytesRequested. The returned pointer is aligned at the
  * block size. */
-static pointer Block_allocRegion(size_t* bytesRequested) {
-  size_t bs = Block_sizes.blockSize;
-  size_t len = align(*bytesRequested, bs);
-  *bytesRequested = len;
-  pointer base = (pointer) GC_mmapAnon(NULL, len + bs);
-  pointer p = (pointer) align((size_t)base, bs);
+// static pointer Block_allocRegion(size_t* bytesRequested) {
+//   size_t bs = Block_sizes.blockSize;
+//   size_t len = align(*bytesRequested, bs);
+//   *bytesRequested = len;
+//   pointer base = (pointer)GC_mmapAnon(NULL, len + bs);
+//   pointer p = (pointer)(uintptr_t)align((size_t)base, bs);
 
-  assert(isAligned((size_t)p, bs));
-  return p;
-}
+//   assert(isAligned((size_t)p, bs));
+//   return p;
+// }
 
-pointer GC_getBlocks(GC_state s, size_t* bytesRequested) {
-  size_t requested = *bytesRequested;
+// pointer GC_getBlocks(GC_state s, size_t* bytesRequested) {
+//   size_t requested = *bytesRequested;
 
-  /* When a large allocation is requested, just mmap a batch for it directly */
-  if (requested > Block_sizes.batchSize) {
-    return Block_allocRegion(bytesRequested);
-  }
+//   /* When a large allocation is requested, just mmap a batch for it directly */
+//   if (requested > Block_sizes.batchSize) {
+//     return Block_allocRegion(bytesRequested);
+//   }
 
-  if (NULL == s->freeBlocks || s->freeBlocksLength < requested) {
-    s->freeBlocksLength = Block_sizes.batchSize;
-    s->freeBlocks = Block_allocRegion(&(s->freeBlocksLength));
-  }
+//   if (NULL == s->freeBlocks || s->freeBlocksLength < requested) {
+//     s->freeBlocksLength = Block_sizes.batchSize;
+//     s->freeBlocks = Block_allocRegion(&(s->freeBlocksLength));
+//   }
 
-  assert(s->freeBlocks != NULL);
-  assert(s->freeBlocksLength >= align(requested, Block_sizes.blockSize));
-  assert(isAligned(s->freeBlocks, Block_sizes.blockSize));
+//   assert(s->freeBlocks != NULL);
+//   assert(s->freeBlocksLength >= align(requested, Block_sizes.blockSize));
+//   assert(isAligned((size_t)s->freeBlocks, Block_sizes.blockSize));
 
-  size_t len = align(requested, Block_sizes.blockSize);
-  *bytesRequested = len;
-  pointer p = s->freeBlocks;
-  s->freeBlocks += len;
-  s->freeBlocksLength -= len;
-  return p;
-}
+//   size_t len = align(requested, Block_sizes.blockSize);
+//   *bytesRequested = len;
+//   pointer p = s->freeBlocks;
+//   s->freeBlocks += len;
+//   s->freeBlocksLength -= len;
+//   return p;
+// }
 
 #endif /* defined (MLTON_GC_INTERNAL_FUNCS) */

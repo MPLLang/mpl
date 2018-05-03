@@ -78,7 +78,7 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
   } else {
     struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
     assert(s->frontier == HM_HH_getFrontier(hh));
-    assert (HM_HH_getLimit(hh) - HM_HH_getFrontier(hh) >= sizeofStackWithMetaData (s, reserved));
+    assert ((uintptr_t)HM_HH_getLimit(hh) - (uintptr_t)HM_HH_getFrontier(hh) >= sizeofStackWithMetaData (s, reserved));
   }
 #endif
   stack = newStack (s, reserved, allocInOldGen);
@@ -519,12 +519,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+  if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
     /*
      * first make sure that I hit the minimum if I am doing a global heap
      * allocation
      */
-    bytesRequested = s->controls->allocChunkSize;
+    bytesRequested = s->controls->globalHeapMinChunkSize;
   }
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;

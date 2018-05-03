@@ -243,6 +243,10 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
   hh->levelList = NULL;
 
+  /* merge free lists */
+  HM_mergeFreeList(&(parentHH->freeList), hh->freeList);
+  hh->freeList = NULL;
+
   LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
       "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
       ((void*)(parentHH)),
@@ -323,6 +327,7 @@ void HM_HH_setDead(pointer hhPointer) {
   hh->state = DEAD;
 }
 
+/* SAM_NOTE: TODO: hijack this function with ensureBytesFree */
 void HM_HH_setLevel(pointer hhPointer, size_t level) {
   GC_state s = pthread_getspecific (gcstate_key);
 
@@ -330,7 +335,29 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   hh->level = level;
-  // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+
+  if (!(s->controls->mayUseAncestorChunk)) {
+    Word32 allocLevel = HM_getHighestLevel(hh->levelList);
+    assert(getLevelHeadChunk(hh->lastAllocatedChunk)->level == allocLevel);
+    assert(allocLevel <= level);
+    if (allocLevel != level) {
+      HM_HH_updateValues(hh, s->frontier);
+      HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+      s->frontier = HM_HH_getFrontier(hh);
+      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    }
+
+    /* This is an alternative implementation which might have slightly higher
+     * overhead. */
+    // getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+    // getThreadCurrent(s)->exnStack = s->exnStack;
+    // getThreadCurrent(s)->bytesNeeded = 0;
+    // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+  }
+
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
 pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {
@@ -383,12 +410,12 @@ void HM_HH_display (
            "\tparentHH = "FMTOBJPTR"\n"
            "\tnextChildHH = "FMTOBJPTR"\n"
            "\tchildHHList= "FMTOBJPTR"\n",
-           hh->lastAllocatedChunk,
+           (void*)hh->lastAllocatedChunk,
            lockStatus,
            hh->level,
            hh->stealLevel,
            hh->id,
-           hh->levelList,
+           (void*)hh->levelList,
            hh->parentHH,
            hh->nextChildHH,
            hh->childHHList);
@@ -464,6 +491,7 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
 }
 
 void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
+  assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
 
@@ -511,10 +539,10 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
 bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
 #if ASSERT
   pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
-  // return ChunkPool_pointerInChunkPool(candidatePointer);
-  return HM_getChunkInfo(blockOf(candidatePointer))->magic == CHUNK_MAGIC;
+  return HM_getChunkOf(candidatePointer)->magic == CHUNK_MAGIC;
 #else
-  DIE('HM_HH_objptrInHierarchicalHeap deprecated');
+  DIE("HM_HH_objptrInHierarchicalHeap deprecated");
+  return TRUE;
 #endif
 }
 
