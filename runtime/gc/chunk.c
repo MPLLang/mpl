@@ -190,7 +190,11 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       return NULL;
     }
     start = (pointer)align((size_t)start, blockSize);
-    *chunkp = HM_initializeChunk(s, start, start + desiredSize);
+    chunk = HM_initializeChunk(s, start, start + desiredSize);
+    /* put it at the front of the list */
+    chunkp = &(hh->freeList);
+    chunk->nextChunk = *chunkp;
+    *chunkp = chunk;
   }
 
   chunk = HM_takeFromChunk(s, chunkp, bytesRequested);
