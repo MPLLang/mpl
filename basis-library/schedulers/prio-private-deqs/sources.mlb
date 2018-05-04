@@ -43,12 +43,15 @@ local
     queue/doubly-linked-list.sml
     queue/heavy-insert-dll-queue.sml
 
-    scheduler.sml
+    scheduler-cancel.sml
+    (* scheduler.sml *)
 
-    thread.sig
+    thread-cancel.sig
+    (* thread.sig *)
 
 (*    MLSDL/srcSML/MLTon/SDLFuncs/SDLFuncs.sml *)
     io/io.sml
 in
-    thread.sml
+    thread-fast.sml
+    (* thread.sml *)
 end

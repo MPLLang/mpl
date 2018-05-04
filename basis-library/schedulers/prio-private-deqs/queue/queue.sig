@@ -8,6 +8,8 @@ sig
 
     exception Full
 
+    val taskOfHand : hand -> task
+
     val empty : unit -> t
     val isEmpty : t -> bool
     (* Create a new queue from a task set. *)
@@ -30,5 +32,7 @@ sig
     val split : t -> task_set option
 
     val tryRemove : t * hand -> bool
+
+    val app : (task * hand -> unit) -> t -> unit
 
 end

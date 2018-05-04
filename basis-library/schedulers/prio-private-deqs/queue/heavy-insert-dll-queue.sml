@@ -17,6 +17,8 @@ struct
   type t = task DLL.t
   type hand = task DLL.hand
 
+  fun taskOfHand h = DLL.taskOfHand h
+
   fun fromSet s =
     let val q = DLL.new ()
     in foldl (fn (x, _) => ignore (DLL.pushBack (x, q))) () s;
@@ -79,7 +81,10 @@ struct
     if DLL.isInList h then
       (DLL.remove (q, h); true)
     else
-      false
+        false
+
+  fun app f q =
+      DLL.foldlh (fn (x, h, _) => (f (x, h); ())) () q
 end
 
 (*structure Q = HeavyInsertDLLQueue (struct type t = int fun depth x = x end)*)

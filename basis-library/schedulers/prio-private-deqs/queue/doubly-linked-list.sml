@@ -12,6 +12,8 @@ struct
   (* front, back *)
   type 'a t = 'a node ref * 'a node ref
 
+  fun taskOfHand (_, t, _, _) = t
+
   fun new () = (ref Leaf, ref Leaf)
 
   fun isEmpty (ref Leaf, _) = true
@@ -103,25 +105,30 @@ struct
       Node (_, x, _, _) => SOME x
     | Leaf => NONE
 
-  fun foldl f b (front, _) =
+  fun foldlh f b (front, _) =
     let
       fun leftToRight b r =
         case !r of
-          Node (_, x, r', _) => leftToRight (f (x, b)) r'
+          Node (h as (_, x, r', _)) => leftToRight (f (x, h, b)) r'
         | Leaf => b
     in
       leftToRight b front 
     end
 
-  fun foldr f b (_, back) =
+  fun foldrh f b (_, back) =
     let
       fun rightToLeft b l =
         case !l of
-          Node (l', x, _, _) => rightToLeft (f (x, b)) l'
+          Node (h as (l', x, _, _)) => rightToLeft (f (x, h, b)) l'
         | Leaf => b
     in
       rightToLeft b back
     end
+
+  fun foldl f b q =
+      foldlh (fn (x, _, r) => f (x, r)) b q
+  fun foldr f b q =
+      foldrh (fn (x, _, r) => f (x, r)) b q
 
   fun length dll =
     foldl (fn (_, c) => c + 1) 0 dll
