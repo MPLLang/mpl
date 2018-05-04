@@ -223,6 +223,11 @@ Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_arrayLength i, Int64 v) {
   return __sync_fetch_and_add (((Int64*)p)+i, v);
 }
 
+union doubleBin {
+  Real64 d;
+  Int64 i;
+} doubleBin;
+
 // compareAndSwap implementations
 
 Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
@@ -241,6 +246,14 @@ Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
   return __sync_val_compare_and_swap ((Int64 *)p, old, new);
 }
 
+Real64 Parallel_compareAndSwapR64 (pointer p, Real64 old, Real64 new) {
+  union doubleBin o, n, r;
+  o.d = old;
+  n.d = new;
+  r.i = __sync_val_compare_and_swap (((Int64*)p), o.i, n.i);
+  return r.d;
+}
+
 // arrayCompareAndSwap implementations
 
 Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_arrayLength i, Int8 old, Int8 new) {
@@ -257,6 +270,14 @@ Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_arrayLength i, Int32 old, In
 
 Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, Int64 new) {
   return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
+}
+
+Real64 Parallel_arrayCompareAndSwapR64 (Pointer p, GC_arrayLength i, Real64 old, Real64 new) {
+  union doubleBin o, n, r;
+  o.d = old;
+  n.d = new;
+  r.i = __sync_val_compare_and_swap (((Int64*)p)+i, o.i, n.i);
+  return r.d;
 }
 
 void Parallel_block_sig (int sig) {

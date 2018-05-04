@@ -31,10 +31,12 @@ PRIVATE Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new);
 PRIVATE Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new);
 PRIVATE Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new);
 PRIVATE Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new);
+PRIVATE Real64 Parallel_compareAndSwapR64 (pointer p, double old, double new);
 
 PRIVATE Int8 Parallel_arrayCompareAndSwap8 (Pointer, GC_arrayLength, Int8, Int8);
 PRIVATE Int16 Parallel_arrayCompareAndSwap16 (Pointer, GC_arrayLength, Int16, Int16);
 PRIVATE Int32 Parallel_arrayCompareAndSwap32 (Pointer, GC_arrayLength, Int32, Int32);
 PRIVATE Int64 Parallel_arrayCompareAndSwap64 (Pointer, GC_arrayLength, Int64, Int64);
+PRIVATE Real64 Parallel_arrayCompareAndSwapR64 (Pointer, GC_arrayLength, double, Real64);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

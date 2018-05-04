@@ -125,6 +125,20 @@ structure MLtonParallel:> MLTON_PARALLEL =
           I.f (r, old, new)
     end
 
+    fun realCompareAndSwap r (old, new) =
+        let val f = _import "Parallel_compareAndSwapR64" impure private: real ref * real * real -> real;
+        in
+            f (r, old, new)
+        end
+
+    fun realArrayCompareAndSwap (xs, i) (old, new) =
+        let val f = _import "Parallel_arrayCompareAndSwapR64" impure private: real array * SeqIndex.int * real * real -> real;
+        in
+            if i < 0 orelse i >= Array.length xs
+            then raise Subscript
+            else f (xs, SeqIndex.fromInt i, old, new)
+        end
+
     fun arrayCompareAndSwap (xs, i) (old, new) =
       if i < 0 orelse i >= Array.length xs
       then raise Subscript

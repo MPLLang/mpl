@@ -111,11 +111,24 @@ signature MLTON_PARALLEL =
     val compareAndSwap : int ref -> int * int -> int
 
     (**
+     * `realCompareAndSwap r (old, new)` atomically does `r := new`, but only if
+     * `!r = old`. Returns the value of `!r` before the swap.
+     *)
+    val realCompareAndSwap : real ref -> real * real -> real
+
+    (**
      * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
      * of (old, new) at xs[i], returning the previous value stored at xs[i].
      * If i is out of bounds, it raises Subscript.
      *)
     val arrayCompareAndSwap : int array * int -> int * int -> int
+
+    (**
+     * `realArrayCompareAndSwap (xs, i) (old, new)` performs a CAS
+     * of (old, new) at xs[i], returning the previous value stored at xs[i].
+     * If i is out of bounds, it raises Subscript.
+     *)
+    val realArrayCompareAndSwap : real array * int -> real * real -> real
 
     (**
      * `fetchAndAdd r d` atomically does `r := !r + d` and returns the value of
