@@ -107,6 +107,10 @@ static inline HM_chunk HM_getChunkOf(pointer p) {
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+inline bool HM_isLevelHeadChunk(HM_chunk chunk) {
+  return chunk->level != CHUNK_INVALID_LEVEL;
+}
+
 /* Set up and return a pointer to a new chunk between start and end. Note that
  * the returned pointer is equal to start, and thus each of
  * {start, end, end - start} must be aligned on the block size. */
@@ -202,7 +206,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
 }
 
 HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
-  assert(levelHeadChunk->level != CHUNK_INVALID_LEVEL);
+  assert(HM_isLevelHeadChunk(levelHeadChunk));
   HM_chunk chunk = HM_getFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
 
   if (NULL == chunk) {
@@ -413,7 +417,7 @@ pointer HM_getChunkStart(HM_chunk chunk) {
 }
 
 Word32 HM_getChunkListLevel(HM_chunk levelHead) {
-  assert(CHUNK_INVALID_LEVEL != levelHead->level);
+  assert(HM_isLevelHeadChunk(levelHead));
   return levelHead->level;
 }
 
@@ -422,13 +426,13 @@ HM_chunk HM_getChunkListLastChunk(HM_chunk levelHead) {
     return NULL;
   }
 
-  assert(CHUNK_INVALID_LEVEL != levelHead->level);
+  assert(HM_isLevelHeadChunk(levelHead));
   return levelHead->split.levelHead.lastChunk;
 }
 
 HM_chunk HM_getChunkListToChunkList(HM_chunk levelHead) {
   assert(NULL != levelHead);
-  assert(CHUNK_INVALID_LEVEL != levelHead->level);
+  assert(HM_isLevelHeadChunk(levelHead));
 
   return levelHead->split.levelHead.toChunkList;
 }
@@ -455,7 +459,7 @@ Word64 HM_getLevelSize(HM_chunk levelList, Word32 level) {
 
 void HM_setChunkListToChunkList(HM_chunk levelHead, HM_chunk toChunkList) {
   assert(NULL != levelHead);
-  assert(CHUNK_INVALID_LEVEL != levelHead->level);
+  assert(HM_isLevelHeadChunk(levelHead));
 
   levelHead->split.levelHead.toChunkList = toChunkList;
   LOG(LM_CHUNK, LL_DEBUGMORE,
@@ -473,13 +477,9 @@ void HM_getObjptrInfo(GC_state s,
   assert(NULL != chunk);
 
   HM_chunk chunkList = chunk;
-  while (chunkList != NULL && chunkList->level == CHUNK_INVALID_LEVEL) {
+  while (chunkList != NULL && !HM_isLevelHeadChunk(chunkList)) {
     chunkList = chunkList->split.normal.levelHead;
   }
-  // for(chunkList = chunk;
-  //     (NULL != chunkList) &&
-  //                 (CHUNK_INVALID_LEVEL == HM_getChunkInfo(chunkList)->level);
-  //     chunkList = HM_getChunkInfo(chunkList)->split.normal.levelHead) { }
 
   if (NULL == chunkList) {
     DIE("Couldn't get objptrinfo for %p",
@@ -489,7 +489,7 @@ void HM_getObjptrInfo(GC_state s,
   /* now that I have the chunkList, path compress */
   void* parentChunk = NULL;
   while (chunkList != chunk) {
-    assert(CHUNK_INVALID_LEVEL == chunk->level);
+    assert(!HM_isLevelHeadChunk(chunk));
 
     parentChunk = chunk->split.normal.levelHead;
     chunk->split.normal.levelHead = chunkList;
@@ -506,7 +506,7 @@ Word32 HM_getHighestLevel(HM_chunk levelHead) {
     return CHUNK_INVALID_LEVEL;
   }
 
-  ASSERTPRINT(CHUNK_INVALID_LEVEL != levelHead->level,
+  ASSERTPRINT(HM_isLevelHeadChunk(levelHead),
               "Chunk %p is not a level head chunk!",
               (void*)levelHead);
   return levelHead->level;
@@ -533,8 +533,8 @@ void HM_mergeLevelList(
     while ((NULL != cursor1) && (NULL != cursor2)) {
       size_t level1 = cursor1->level;
       size_t level2 = cursor2->level;
-      assert(CHUNK_INVALID_LEVEL != level1);
-      assert(CHUNK_INVALID_LEVEL != level2);
+      assert(HM_isLevelHeadChunk(cursor1));
+      assert(HM_isLevelHeadChunk(cursor2));
 
       if (level1 > level2) {
         /* append the first list */
@@ -637,9 +637,9 @@ void HM_promoteChunks(HM_chunk* levelList, size_t level) {
                 ((*cursor)->level > level);
 
        cursor = &((*cursor)->split.levelHead.nextHead)) {
-    assert(CHUNK_INVALID_LEVEL != (*cursor)->level);
+    assert(HM_isLevelHeadChunk(*cursor));
   }
-  assert(CHUNK_INVALID_LEVEL != (*cursor)->level);
+  assert(HM_isLevelHeadChunk(*cursor));
 
   assert(NULL != *cursor);
   if ((*cursor)->level < level) {
@@ -703,7 +703,7 @@ void HM_assertLevelListInvariants(HM_chunk levelList,
 
     assert(chunkList->split.levelHead.isInToSpace == inToSpace);
 
-    assert(CHUNK_INVALID_LEVEL != level);
+    assert(HM_isLevelHeadChunk(chunkList));
     assert(level < previousLevel);
     ASSERTPRINT((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel),
       "stealLevel %d; level %d",
@@ -757,8 +757,8 @@ void appendChunkList(HM_chunk destinationChunkList,
       ((void*)(destinationChunkList)));
 
   assert (NULL != destinationChunkList);
-  assert(CHUNK_INVALID_LEVEL != destinationChunkList->level);
-  assert(CHUNK_INVALID_LEVEL != chunkList->level);
+  assert(HM_isLevelHeadChunk(destinationChunkList));
+  assert(HM_isLevelHeadChunk(chunkList));
 
   if (NULL == chunkList) {
     /* nothing to append */
@@ -799,11 +799,11 @@ void HM_assertChunkInvariants(HM_chunk chunk,
 
   if (chunk == levelHeadChunk) {
     /* this is the level head chunk */
-    assert(CHUNK_INVALID_LEVEL != chunk->level);
+    assert(HM_isLevelHeadChunk(chunk));
     assert(hh == chunk->split.levelHead.containingHH);
   } else {
     /* this is a normal chunk */
-    assert(CHUNK_INVALID_LEVEL == chunk->level);
+    assert(!HM_isLevelHeadChunk(chunk));
   }
 
   assert(levelHeadChunk == getLevelHeadChunk(chunk));
@@ -844,7 +844,7 @@ void* HM_freeLevelListIterator(void* arg) {
     }
 
     /* we should be at a levelHead */
-    assert(state->chunkList->level != CHUNK_INVALID_LEVEL);
+    assert(HM_isLevelHeadChunk(state->chunkList));
 
     /* this chunk list will be freed, so unlink and advance level list */
     *(state->levelList) = state->chunkList->split.levelHead.nextHead;
@@ -870,23 +870,15 @@ void* HM_freeLevelListIterator(void* arg) {
   return chunk;
 }
 
-// HM_chunk HM_getChunkInfo(void* chunk) {
-//   return ((HM_chunk)(chunk));
-// }
+HM_chunk HM_getChunkHeadChunk(HM_chunk chunk) {
+  assert(NULL != chunk);
 
-// const HM_chunk HM_getChunkInfoConst(const void* chunk) {
-//   return ((const HM_chunk)(chunk));
-// }
-
-HM_chunk HM_getChunkHeadChunk(HM_chunk ci) {
-  assert (ci);
-
-  if (ci->level == CHUNK_INVALID_LEVEL) {
-    ci = ci->split.normal.levelHead;
+  if (!HM_isLevelHeadChunk(chunk)) {
+    chunk = chunk->split.normal.levelHead;
   }
-  assert(ci->level != CHUNK_INVALID_LEVEL);
+  assert(HM_isLevelHeadChunk(chunk));
 
-  return ci;
+  return chunk;
 }
 
 HM_chunk HM_getObjptrLevelHeadChunk(GC_state s, objptr object) {
@@ -916,13 +908,16 @@ bool HM_isObjptrInToSpace(GC_state s, objptr object) {
 
 #if ASSERT
 HM_chunk getLevelHeadChunk(HM_chunk chunk) {
-  HM_chunk cursor;
-  for (cursor = chunk;
-       (NULL != cursor) &&
-                CHUNK_INVALID_LEVEL == cursor->level;
-       cursor = cursor->split.normal.levelHead) {
+  HM_chunk cursor = chunk;
+  while ((NULL != cursor) && !HM_isLevelHeadChunk(cursor)) {
+    cursor = cursor->split.normal.levelHead;
   }
+  // for (cursor = chunk;
+  //      (NULL != cursor) && (!HM_isLevelHeadChunk(cursor));
+  //      cursor = cursor->split.normal.levelHead) {
+  // }
   assert(NULL != cursor);
+  assert(HM_isLevelHeadChunk(cursor));
 
   return cursor;
 }

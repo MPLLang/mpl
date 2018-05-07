@@ -127,6 +127,8 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh);
 
+bool HM_isLevelHeadChunk(HM_chunk chunk);
+
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */
 void HM_mergeFreeList(HM_chunk *parentFreeList, HM_chunk freeList);

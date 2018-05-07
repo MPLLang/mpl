@@ -573,7 +573,7 @@ void forwardHHObjptr (GC_state s,
             HM_chunk cursor = args->hh->newLevelList;
             while ((NULL != cursor) && (HM_getChunkListLevel(cursor) > opInfo.level)) {
                 // this chunk must actually be a levelHead
-                assert(cursor->level != CHUNK_INVALID_LEVEL);
+                assert(HM_isLevelHeadChunk(cursor));
                 cursor = cursor->split.levelHead.nextHead;
             }
             ASSERTPRINT((NULL == cursor) || (HM_getChunkListLevel(cursor) != opInfo.level),
@@ -724,9 +724,9 @@ pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
                    HM_chunk toChunkList) {
-  assert (toChunkList);
-  assert (copySize <= objectSize);
-  assert (toChunkList->level != CHUNK_INVALID_LEVEL);
+  assert(toChunkList);
+  assert(copySize <= objectSize);
+  assert(HM_isLevelHeadChunk(toChunkList));
 
   /* get the chunk to allocate in */
   HM_chunk chunk = HM_getChunkListLastChunk(toChunkList);

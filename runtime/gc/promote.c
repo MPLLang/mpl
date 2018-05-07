@@ -11,7 +11,7 @@ pointer HM_Promote(GC_state s,
      * follow pointers all the way to the levelHead? Adding an assert on the
      * following line for sanity... */
     dst_chunk = HM_getChunkHeadChunk(dst_chunk);
-    assert (dst_chunk->level != CHUNK_INVALID_LEVEL);
+    assert(HM_isLevelHeadChunk(dst_chunk));
     HM_chunk src_chunk =
         HM_getObjptrLevelHeadChunk(s, pointerToObjptr(src, s->heap->start));
     HM_chunk tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
