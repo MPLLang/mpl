@@ -52,8 +52,10 @@ struct HM_chunk {
   // Word32 level;  /* the level of this chunk (if a levelhead), or
   //                 * CHUNK_INVALID_LEVEL for normal chunks */
 
+  bool mightContainMultipleObjects;
+
   // Unused padding bytes to keep alignment
-  // uint32_t padding;
+  uint32_t padding;
 
   union {
 
@@ -127,7 +129,13 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh);
 
+HM_chunk HM_splitChunk(GC_state s, HM_chunk chunk, size_t bytesRequested);
+
+void HM_unlinkChunk(HM_chunk chunk);
+
 bool HM_isLevelHeadChunk(HM_chunk chunk);
+
+HM_chunk HM_getLevelHeadPathCompress(HM_chunk chunk);
 
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */

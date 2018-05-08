@@ -74,32 +74,48 @@ pointer arrayAllocateInGlobal(GC_state s,
 pointer arrayAllocateInHH(GC_state s,
                           size_t arraySizeAligned,
                           size_t ensureBytesFree) {
+  assert(ensureBytesFree <= s->controls->minChunkSize - sizeof(struct HM_chunk));
+  size_t arrayChunkBytes = align(arraySizeAligned, s->controls->minChunkSize);
   size_t bytesRequested = arraySizeAligned + ensureBytesFree;
+  bool giveWholeChunk = arraySizeAligned >= s->controls->minChunkSize / 2;
+  if (giveWholeChunk) {
+    bytesRequested = arrayChunkBytes + s->controls->minChunkSize;
+  }
 
-  /* RAM_NOTE: This should be wrapped in a function */
-  /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  /* ensure free bytes at the most up-to-date level */
   HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
+  struct HM_HierarchicalHeap *hh = HM_HH_getCurrent(s);
 
   assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=
          bytesRequested);
 
-  /*
-   * at this point, the current chunk has enough space, and is at the right
-   * level
-   */
+  if (giveWholeChunk) {
+    /* split the large chunk so that we have space for the array at the end;
+     * this guarantees that the single chunk holding the array is not a
+     * level-head which makes it easy to move it during a GC */
+    HM_chunk arrayChunk = HM_splitChunk(s, hh->lastAllocatedChunk, arrayChunkBytes);
+    assert(!HM_isLevelHeadChunk(arrayChunk));
+    pointer result = arrayChunk->frontier;
+    arrayChunk->frontier += arraySizeAligned;
+    arrayChunk->mightContainMultipleObjects = FALSE;
 
-  pointer frontier = s->frontier;
-  pointer newFrontier = frontier + arraySizeAligned;
+    assert(s->frontier == HM_HH_getFrontier(hh));
+    s->limitPlusSlop = HM_HH_getLimit(hh);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    return result;
+  }
+
+  pointer result = s->frontier;
+  pointer newFrontier = result + arraySizeAligned;
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
-  if (!inSameBlock(frontier, s->limitPlusSlop-1 /*s->frontier + ensureBytesFree - 1*/)) {
+  if (!inSameBlock(result, s->limitPlusSlop - 1)) {
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
-    struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
     HM_HH_updateValues(hh, s->frontier);
     HM_HH_extend(hh, ensureBytesFree);
     s->frontier = HM_HH_getFrontier(hh);
@@ -107,7 +123,7 @@ pointer arrayAllocateInHH(GC_state s,
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
-  return frontier;
+  return result;
 }
 
 pointer GC_arrayAllocate (GC_state s,

@@ -336,6 +336,7 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
 
   hh->level = level;
 
+  /* SAM_NOTE: TODO: This still appears to be broken; debugging needed. */
   if (!(s->controls->mayUseAncestorChunk)) {
     Word32 allocLevel = HM_getHighestLevel(hh->levelList);
     assert(getLevelHeadChunk(hh->lastAllocatedChunk)->split.levelHead.level == allocLevel);

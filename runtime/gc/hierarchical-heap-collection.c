@@ -618,6 +618,35 @@ void forwardHHObjptr (GC_state s,
         opInfo.level,
         (void *)toChunkList);
 
+    /* SAM_NOTE: TODO: get this spaghetti code out of here. */
+    if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
+      // assert(FALSE);
+      /* This chunk contains *only* this object, so no need to copy. Instead,
+       * just move the chunk. */
+      assert(!hasFwdPtr(p));
+      HM_chunk chunk = HM_getChunkOf(p);
+      HM_unlinkChunk(chunk);
+      /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
+       * previous last chunk, resulting in unnecessary fragmentation. This can
+       * be avoided by not relying upon using the toChunkList...lastChunk to
+       * allocate the next object, similiar to how hh->lastAllocatedChunk
+       * doesn't need to be at the end of its chunk list. */
+      chunk->split.normal.levelHead = toChunkList;
+      chunk->nextChunk = NULL;
+      chunk->prevChunk = toChunkList->split.levelHead.lastChunk;
+      toChunkList->split.levelHead.lastChunk->nextChunk = chunk;
+      toChunkList->split.levelHead.lastChunk = chunk;
+      toChunkList->split.levelHead.size += HM_getChunkSize(chunk);
+      if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
+        DIE("Ran out of space for Hierarchical Heap!");
+      }
+      LOG(LM_HH_COLLECTION, LL_INFO,
+        "Moved single-object chunk %p of size %zu",
+        chunk,
+        HM_getChunkSize(chunk));
+      return;
+    }
+
     pointer copyPointer = copyObject(p - metaDataBytes,
                                      objectBytes,
                                      copyBytes,
