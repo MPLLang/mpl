@@ -133,7 +133,8 @@ HM_chunk HM_initializeChunk(ARG_USED_FOR_ASSERT GC_state s,
   chunk->frontier = start + sizeof(struct HM_chunk);
   chunk->limit = end;
   chunk->nextChunk = NULL;
-  chunk->prevChunk = NULL;
+  chunk->prevChunk = (HM_chunk)(0xfeeb1efab1edd00d);
+  chunk->mightContainMultipleObjects = TRUE;
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
@@ -169,7 +170,7 @@ HM_chunk HM_takeFromChunk(GC_state s, HM_chunk *chunkp, size_t bytesRequested) {
       chunk->nextChunk->prevChunk = chunk->prevChunk;
     }
     chunk->nextChunk = NULL;
-    chunk->prevChunk = NULL;
+    chunk->prevChunk = (HM_chunk)(0xfeeb1efab1edbeef);
     return chunk;
   }
 
@@ -178,15 +179,59 @@ HM_chunk HM_takeFromChunk(GC_state s, HM_chunk *chunkp, size_t bytesRequested) {
   return HM_initializeChunk(s, requestedSplitPoint, limit);
 }
 
+HM_chunk HM_splitChunk(GC_state s, HM_chunk chunk, size_t bytesRequested) {
+  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
+
+  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
+  totalSize = align(totalSize, s->controls->minChunkSize);
+
+  pointer limit = chunk->limit;
+  pointer splitPoint = limit - totalSize;
+  assert(splitPoint >= chunk->frontier);
+
+  chunk->limit = splitPoint;
+  HM_chunk result = HM_initializeChunk(s, splitPoint, limit);
+
+  result->nextChunk = chunk->nextChunk;
+  result->prevChunk = chunk;
+  chunk->nextChunk = result;
+  if (NULL != result->nextChunk) {
+    result->nextChunk->prevChunk = result;
+  }
+
+  // HM_chunk levelHead = chunk;
+  // while (!HM_isLevelHeadChunk(levelHead)) {
+  //   levelHead = levelHead->split.normal.levelHead;
+  // }
+  HM_chunk levelHead = HM_getLevelHeadPathCompress(chunk);
+
+  result->split.normal.levelHead = levelHead;
+  if (chunk == levelHead->split.levelHead.lastChunk) {
+    levelHead->split.levelHead.lastChunk = result;
+  }
+
+// #if ASSERT
+//   HM_assertChunkListInvariants(levelHead, getHierarchicalHeapCurrent(s));
+// #endif
+
+  return result;
+}
+
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   struct HM_HierarchicalHeap *hh = getHierarchicalHeapCurrent(s);
 
   HM_chunk *chunkp = &(hh->freeList);
   HM_chunk chunk = *chunkp;
+  int skipped = 0;
   while (NULL != chunk && (size_t)(chunk->limit - chunk->frontier) < bytesRequested) {
     chunkp = &(chunk->nextChunk);
     chunk = *chunkp;
+    skipped++;
   }
+  LOG(LM_CHUNK, LL_INFO,
+    "Skipped over %d free chunks looking for %zu bytes",
+    skipped,
+    bytesRequested);
 
   if (NULL == chunk) {
     /* No sufficient free chunk was found, so need to allocate a new one. Also,
@@ -207,6 +252,9 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       chunk->nextChunk->prevChunk = chunk;
     }
     *chunkp = chunk;
+    LOG(LM_CHUNK, LL_INFO,
+      "Mapped a new region of size %zu",
+      desiredSize + blockSize);
   }
 
   chunk = HM_takeFromChunk(s, chunkp, bytesRequested);
@@ -235,7 +283,7 @@ HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested) {
     levelHeadChunk->split.levelHead.lastChunk->nextChunk = chunk;
     levelHeadChunk->split.levelHead.lastChunk = chunk;
   }
-  levelHeadChunk->split.levelHead.size += (size_t)(chunk->limit - (pointer)chunk);
+  levelHeadChunk->split.levelHead.size += HM_getChunkSize(chunk);
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk %p at level %u",
@@ -251,8 +299,6 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh)
 {
-  // size_t totalSize = allocableSize + sizeof(struct HM_chunk);
-  // HM_chunk chunk = (HM_chunk)GC_getBlocks(pthread_getspecific(gcstate_key), &totalSize);
   HM_chunk chunk = HM_getFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
 
   if (NULL == chunk) {
@@ -285,6 +331,44 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
       level);
 
   return chunk;
+}
+
+void HM_unlinkChunk(HM_chunk chunk) {
+  assert(!HM_isLevelHeadChunk(chunk));
+
+  chunk->prevChunk->nextChunk = chunk->nextChunk;
+  if (NULL != chunk->nextChunk) {
+    chunk->nextChunk->prevChunk = chunk->prevChunk;
+  }
+
+  // HM_chunk levelHead = chunk;
+  // while (!HM_isLevelHeadChunk(levelHead)) {
+  //   levelHead = levelHead->split.normal.levelHead;
+  // }
+  HM_chunk levelHead = HM_getLevelHeadPathCompress(chunk);
+
+  assert(!levelHead->split.levelHead.isInToSpace);
+  assert(levelHead->split.levelHead.containingHH != COPY_OBJECT_HH_VALUE);
+  levelHead->split.levelHead.size -= HM_getChunkSize(chunk);
+  levelHead->split.levelHead.containingHH->locallyCollectibleSize -= HM_getChunkSize(chunk);
+  if (levelHead->split.levelHead.lastChunk == chunk) {
+    levelHead->split.levelHead.lastChunk = chunk->prevChunk;
+  }
+
+  /* SAM_NOTE: EXTREMELY SUBTLE: This is only correct if no other chunk
+   * in the same list uses this chunk as a levelHead proxy. That is, this chunk
+   * MUST BE A LEAF in the path-compressing tree. At the moment, this is
+   * guaranteed by only ever unlinking single-object chunks, which are also
+   * guaranteed to never be levelHeads (a chunk will only be used as a proxy
+   * levelHead if it was, at some point in the past, a levelhead). */
+  chunk->split.normal.levelHead = NULL;
+  chunk->prevChunk = (HM_chunk)(0xfeeb1efab1edbabe);
+  chunk->nextChunk = NULL;
+
+#if ASSERT
+  HM_assertChunkListInvariants(levelHead, levelHead->split.levelHead.containingHH);
+#endif
+
 }
 
 /* SAM_NOTE: TODO: put levelHeads at the front of the freelists so that we can
@@ -346,7 +430,9 @@ void HM_forwardHHObjptrsInChunkList(
            (EventInt)forwardHHObjptrArgs->stacksCopied);
 
     chunk = chunk->nextChunk;
-    p = HM_getChunkStart(chunk); // just a pointer addition; safe even if chunk == NULL
+    if (chunk != NULL) {
+      p = HM_getChunkStart(chunk);
+    }
   }
 }
 
@@ -405,10 +491,12 @@ void HM_freeChunks(HM_chunk *levelList, HM_chunk *freeList, Word32 minLevel) {
   for (HM_chunk chunk = HM_freeLevelListIterator(&iteratorArgs);
        NULL != chunk;
        chunk = HM_freeLevelListIterator(&iteratorArgs)) {
+    /* SAM_NOTE: TODO: get rid of this spaghetti code. */
     chunk->split.levelHead.level = CHUNK_INVALID_LEVEL;
     chunk->frontier = (pointer)chunk + sizeof(struct HM_chunk);
     chunk->prevChunk = NULL;
     chunk->nextChunk = *freeList;
+    chunk->mightContainMultipleObjects = TRUE;
     if (NULL != chunk->nextChunk) {
       chunk->nextChunk->prevChunk = chunk;
     }
@@ -490,6 +578,26 @@ void HM_setChunkListToChunkList(HM_chunk levelHead, HM_chunk toChunkList) {
       (void*)toChunkList);
 }
 
+HM_chunk HM_getLevelHeadPathCompress(HM_chunk chunk) {
+  HM_chunk levelHead = chunk;
+  while (!HM_isLevelHeadChunk(levelHead)) {
+    levelHead = levelHead->split.normal.levelHead;
+    assert(levelHead != NULL && levelHead->magic == CHUNK_MAGIC);
+    /* We should never see a single-object chunk along the way. */
+    assert(levelHead->mightContainMultipleObjects);
+  }
+
+  HM_chunk parentChunk;
+  while (chunk != levelHead) {
+    assert(!HM_isLevelHeadChunk(chunk));
+    parentChunk = chunk->split.normal.levelHead;
+    chunk->split.normal.levelHead = levelHead;
+    chunk = parentChunk;
+  }
+
+  return levelHead;
+}
+
 void HM_getObjptrInfo(GC_state s,
                       objptr object,
                       struct HM_ObjptrInfo* info) {
@@ -498,25 +606,27 @@ void HM_getObjptrInfo(GC_state s,
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, s->heap->start));
   assert(NULL != chunk);
 
-  HM_chunk chunkList = chunk;
-  while (chunkList != NULL && !HM_isLevelHeadChunk(chunkList)) {
-    chunkList = chunkList->split.normal.levelHead;
-  }
+  HM_chunk chunkList = HM_getLevelHeadPathCompress(chunk);
 
-  if (NULL == chunkList) {
-    DIE("Couldn't get objptrinfo for %p",
-        ((void*)(object)));
-  }
+  // HM_chunk chunkList = chunk;
+  // while (chunkList != NULL && !HM_isLevelHeadChunk(chunkList)) {
+  //   chunkList = chunkList->split.normal.levelHead;
+  // }
 
-  /* now that I have the chunkList, path compress */
-  void* parentChunk = NULL;
-  while (chunkList != chunk) {
-    assert(!HM_isLevelHeadChunk(chunk));
+  // if (NULL == chunkList) {
+  //   DIE("Couldn't get objptrinfo for %p",
+  //       ((void*)(object)));
+  // }
 
-    parentChunk = chunk->split.normal.levelHead;
-    chunk->split.normal.levelHead = chunkList;
-    chunk = parentChunk;
-  }
+  // /* now that I have the chunkList, path compress */
+  // void* parentChunk = NULL;
+  // while (chunkList != chunk) {
+  //   assert(!HM_isLevelHeadChunk(chunk));
+
+  //   parentChunk = chunk->split.normal.levelHead;
+  //   chunk->split.normal.levelHead = chunkList;
+  //   chunk = parentChunk;
+  // }
 
   assert(HM_isLevelHeadChunk(chunkList));
   info->hh = chunkList->split.levelHead.containingHH;
@@ -939,6 +1049,8 @@ HM_chunk getLevelHeadChunk(HM_chunk chunk) {
   HM_chunk cursor = chunk;
   while ((NULL != cursor) && !HM_isLevelHeadChunk(cursor)) {
     cursor = cursor->split.normal.levelHead;
+    assert(NULL != cursor);
+    assert(cursor->mightContainMultipleObjects);
   }
   // for (cursor = chunk;
   //      (NULL != cursor) && (!HM_isLevelHeadChunk(cursor));
