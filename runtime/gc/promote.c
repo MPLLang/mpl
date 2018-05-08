@@ -20,7 +20,7 @@ pointer HM_Promote(GC_state s,
     bool needToUpdateLCS = false;
 
     struct HM_HierarchicalHeap *current_hh = getHierarchicalHeapCurrent(s);
-    if (dst_chunk->level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
+    if (dst_chunk->split.levelHead.level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
       assert (dst_hh == current_hh);
       needToUpdateLCS = true;
       dst_hh->locallyCollectibleSize -= tgtChunkList->split.levelHead.size;
@@ -45,13 +45,13 @@ pointer HM_Promote(GC_state s,
         LOG(LM_HH_PROMOTION, LL_DEBUG,
             "Chunk %p at level %u in use, so appending new chunk",
             (void*)dst_hh->lastAllocatedChunk,
-            dst_chunk->level);
+            dst_chunk->split.levelHead.level);
     }
 
     struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
         .hh = dst_hh,
-        .minLevel = dst_chunk->level + 1,
-        .maxLevel = src_chunk->level,
+        .minLevel = dst_chunk->split.levelHead.level + 1,
+        .maxLevel = src_chunk->split.levelHead.level,
         .tgtChunkList = tgtChunkList,
         .bytesCopied = 0,
         .objectsCopied = 0,

@@ -96,7 +96,7 @@ pointer arrayAllocateInHH(GC_state s,
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
-  if (!inSameBlock(frontier, s->frontier + ensureBytesFree - 1)) {
+  if (!inSameBlock(frontier, s->limitPlusSlop-1 /*s->frontier + ensureBytesFree - 1*/)) {
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
     struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
@@ -201,7 +201,7 @@ pointer GC_arrayAllocate (GC_state s,
 
 #if ASSERT
   if (!HM_inGlobalHeap(s)) {
-    assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+    assert((s->frontier == s->limitPlusSlop) || inSameBlock(s->frontier, s->limitPlusSlop-1));
     assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
   }
   assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));

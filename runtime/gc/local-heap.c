@@ -201,7 +201,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
              levelHead = levelHead->split.levelHead.nextHead) {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
               "    level %"PRIu32" size %"PRIu64,
-              levelHead->level,
+              levelHead->split.levelHead.level,
               levelHead->split.levelHead.size);
         }
 

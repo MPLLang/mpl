@@ -285,7 +285,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Locking from level %u of %p to level %u below %p",
-        HM_getChunkHeadChunk(src_info.chunkList)->level,
+        HM_getChunkHeadChunk(src_info.chunkList)->split.levelHead.level,
         (void *)objptrToPointer(src, s->heap->start),
         dst_info.level + 1,
         (void *)objptrToPointer(dst, s->heap->start));
@@ -349,7 +349,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
       "Unlocking from level %u of %p to level %u of %p",
       dst_info.level,
       (void *)objptrToPointer(dst, s->heap->start),
-      HM_getChunkHeadChunk(src_info.chunkList)->level,
+      HM_getChunkHeadChunk(src_info.chunkList)->split.levelHead.level,
       (void *)objptrToPointer(src, s->heap->start));
     args.for_locking = false;
     args.prev_hh = NULL;
