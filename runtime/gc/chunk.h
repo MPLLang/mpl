@@ -44,36 +44,36 @@ struct HM_chunk {
   pointer frontier; // end of allocations within this chunk
   pointer limit;    // the end of this chunk
 
-  struct HM_chunk* nextChunk; // linked list of chunks at the same level
+  /* doubly linked list of chunks at this level.
+   * when prevChunk == NULL, this chunk is a levelHead */
+  struct HM_chunk *nextChunk;
+  struct HM_chunk *prevChunk;
 
-  Word32 level;  /* the level of this chunk (if a levelhead), or
-                  * CHUNK_INVALID_LEVEL for normal chunks */
+  // Word32 level;  /* the level of this chunk (if a levelhead), or
+  //                 * CHUNK_INVALID_LEVEL for normal chunks */
 
   // Unused padding bytes to keep alignment
-  uint32_t padding;
+  // uint32_t padding;
 
   union {
 
     // Data for level-head chunks:
     struct {
-      struct HM_chunk* nextHead; // the head of the parent list (at depth level-1)
-      struct HM_chunk* lastChunk; /**< The last chunk in this level's list of chunks */
-      struct HM_HierarchicalHeap* containingHH; /**< The hierarchical heap
-                                                 * containing this chunk */
-      struct HM_chunk* toChunkList; /**< The corresponding Chunk List in the to-LevelList
-                                     * during GC */
-      Word64 size; /**< The size in number of bytes of this level, both
-                      allocated and unallocated. */
-      bool isInToSpace; /**< False if the corresponding Chunk List is in
-                         * from-space, true if it is in to-space. */
+      struct HM_chunk *nextHead; // the head of the parent list (at depth level-1)
+      struct HM_chunk *lastChunk; // The last chunk in this level
+      struct HM_HierarchicalHeap *containingHH;
+      struct HM_chunk *toChunkList; // the corresponding chunklist in the to-space during a GC
+      Word64 size; // size (bytes) of this level, both allocated and unallocated
+      bool isInToSpace;
+      Word32 level;
     } levelHead;
 
     /* Data for normal chunks is just a pointer towards the levelHead.
-     * This pointer is used like a parent pointer in a path-compressing tree,
+     * This pointer is a parent pointer in a path-compressing tree,
      * thus it might be necessary to follow the levelHead pointer multiple
      * times to find the actual level-head chunk. */
     struct {
-      struct HM_chunk* levelHead;
+      struct HM_chunk *levelHead;
     } normal;
 
   } split;
@@ -126,6 +126,8 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
                                    size_t allocableSize,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh);
+
+bool HM_isLevelHeadChunk(HM_chunk chunk);
 
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */
