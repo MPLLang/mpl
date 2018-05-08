@@ -34,7 +34,7 @@ type 'a t =
 fun run (fr, bag) f () =
     ( writeResult fr f;
       (case Bag.dump bag of
-           NONE => raise Thread
+           NONE => (print "bag\n"; raise Thread)
          | SOME l => List.app (ignore o push) l);
       returnToSched ()
     )
@@ -56,7 +56,7 @@ fun spawn f r' =
         val hand = (if P.pe (r, r') then push else insert) (r', task)
         val c = Task.cancellable task
     in
-        {result = fr, prio = r, bag = bag, hand = hand, cancel = c, thunk = f}
+        {result = fr, prio = r', bag = bag, hand = hand, cancel = c, thunk = f}
     end
 
 fun poll ({result, bag, ...} : 'a t) =
@@ -64,11 +64,11 @@ fun poll ({result, bag, ...} : 'a t) =
     else case !result of
              Finished (x, _) => SOME x
            | Raised (e, _) => raise e
-           | Waiting => raise Thread
+           | Waiting => (print "poll\n"; raise Thread)
 
 fun sync {result, prio, bag, hand, cancel, thunk} =
     let val c = if Cancellable.isCancelled cancel then
-                    raise Thread
+                    (print "cancelled\n"; raise Thread)
                 else
                     ()
         val p = processorNumber ()
@@ -80,7 +80,7 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
                     (* execute the thunk locally *)
                     (writeResult result thunk;
                      (case Bag.dump bag of
-                          NONE => raise Thread
+                          NONE => (print "bag2\n"; raise Thread)
                         | SOME l => List.app (ignore o push) l))
                 else
                     (* have to block on it *)
@@ -101,7 +101,7 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
         case !result of
             Finished (x, d') => (setDepth (p, Int.max (d, d') + 1); x)
           | Raised (e, d') => (setDepth (p, Int.max (d, d') + 1); raise e)
-          | Waiting => raise Thread
+          | Waiting => (print "sync\n"; raise Thread)
     end
 
 fun fork (f, g) =
