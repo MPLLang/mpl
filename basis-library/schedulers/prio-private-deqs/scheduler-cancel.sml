@@ -159,7 +159,7 @@ fun log l f =
 (*** Constants ***)
 val switchInterval = Tm.fromMicroseconds 10000
 (*val dealInterval = Tm.fromMicroseconds 100*)
-val dIf = 100.0
+val dIf = 300.0
 val interruptInterval = Tm.fromMicroseconds 5000
 
 
