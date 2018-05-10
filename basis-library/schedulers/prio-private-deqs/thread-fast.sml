@@ -31,13 +31,17 @@ type 'a t =
        thunk  : unit -> 'a
      }
 
-fun run (fr, bag) f () =
-    ( writeResult fr f;
-      (case Bag.dump bag of
-           NONE => raise Thread
-         | SOME l => List.app (ignore o push) l);
-      returnToSched ()
-    )
+fun run (r, fr, bag) f () =
+    let fun wake (r', t) =
+            ((if P.pe (r, r') then push else insert) (r', t);
+             ())
+    in
+        writeResult fr f;
+        (case Bag.dump bag of
+             NONE => raise Thread
+           | SOME l => List.app (ignore o insert) l);
+        returnToSched ()
+    end
 
 fun spawn f r' =
     (*
@@ -52,7 +56,7 @@ fun spawn f r' =
         val r = curPrio p
         val fr = ref Waiting
         val bag = Bag.new ()
-        val task = newTask (Task.Thunk (run (fr, bag) f))
+        val task = newTask (Task.Thunk (run (r', fr, bag) f))
         val hand = (if P.pe (r, r') then push else insert) (r', task)
         val c = Task.cancellable task
     in
@@ -73,15 +77,19 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
                     ()
         val p = processorNumber ()
         val r = curPrio p
+        fun wake (r', t) =
+            ((if P.pe (r, r') then push else insert) (r', t);
+             ())
         val _ = if P.ple (r, prio) then ()
                 else
                     raise IncompatiblePriorities
-        val _ = if tryRemove (prio, hand) then
+        val _ = if Bag.isDumped bag then ()
+                else if tryRemove (prio, hand) then
                     (* execute the thunk locally *)
                     (writeResult result thunk;
                      (case Bag.dump bag of
                           NONE => raise Thread
-                        | SOME l => List.app (ignore o push) l))
+                        | SOME l => List.app wake l))
                 else
                     (* have to block on it *)
                     let fun f rt =
@@ -93,8 +101,7 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
                                  * add the task *)
                                 ignore (push rt)
                     in
-                        if Bag.isDumped bag then ()
-                        else suspend f
+                        suspend f
                     end
         val d = getDepth p
     in
