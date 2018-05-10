@@ -122,7 +122,12 @@ void Proc_beginCriticalSection (GC_state s) {
      * round
      */
     /* RAM_NOTE: This really should be a condition variable */
-    while ((!Proc_criticalTicketActive) || (Proc_criticalTicket != myTicket)) {}
+    while ((!Proc_criticalTicketActive) || (Proc_criticalTicket != myTicket))
+      {if (GC_CheckForTerminationRequest(s)) {
+	    GC_TerminateThread(s);
+	  }
+      }
+
   }
   else {
     Proc_syncCount = 1;
