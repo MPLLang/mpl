@@ -75,6 +75,8 @@ static void HM_assertChunkInvariants(HM_chunk chunk,
 static void HM_assertChunkListInvariants(HM_chunk chunkList,
                                          const struct HM_HierarchicalHeap* hh);
 
+static void HM_assertFreeListInvariants(HM_chunk freeList);
+
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
  * from a level list
@@ -258,6 +260,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   }
 
   chunk = HM_takeFromChunk(s, chunkp, bytesRequested);
+  HM_assertFreeListInvariants(hh->freeList);
   return chunk;
 }
 
@@ -377,14 +380,20 @@ void HM_mergeFreeList(HM_chunk *parentFreeList, HM_chunk freeList) {
   if (NULL == freeList) {
     return;
   }
-  HM_chunk *chunkp = parentFreeList;
-  HM_chunk chunk = *chunkp;
-  while (chunk != NULL) {
-    chunkp = &(chunk->nextChunk);
-    chunk = *chunkp;
+
+  if (NULL == *parentFreeList) {
+    *parentFreeList = freeList;
+    return;
   }
-  *chunkp = freeList;
+
+  HM_chunk chunk = *parentFreeList;
+  while (chunk->nextChunk != NULL) {
+    chunk = chunk->nextChunk;
+  }
+  chunk->nextChunk = freeList;
   freeList->prevChunk = chunk;
+
+  HM_assertFreeListInvariants(*parentFreeList);
 }
 
 void HM_forwardHHObjptrsInChunkList(
@@ -502,6 +511,7 @@ void HM_freeChunks(HM_chunk *levelList, HM_chunk *freeList, Word32 minLevel) {
     }
     *freeList = chunk;
   }
+  HM_assertFreeListInvariants(*freeList);
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "END FreeChunks levelList = %p, minLevel = %u",
       (void*)iteratorArgs.levelList,
@@ -966,6 +976,26 @@ void HM_assertChunkListInvariants(HM_chunk chunkList,
   ((void)(hh));
 }
 #endif /* ASSERT */
+
+#if ASSERT
+void HM_assertFreeListInvariants(HM_chunk freeList) {
+  HM_chunk chunk = freeList;
+  while (chunk != NULL) {
+    assert(chunk->magic == CHUNK_MAGIC);
+    assert(chunk->frontier == (pointer)chunk + sizeof(struct HM_chunk));
+    assert(chunk->limit >= chunk->frontier);
+    assert(chunk->mightContainMultipleObjects == TRUE);
+    if (chunk->nextChunk != NULL) {
+      assert(chunk->nextChunk->prevChunk == chunk);
+    }
+    chunk = chunk->nextChunk;
+  }
+}
+#else
+void HM_assertFreeListInvariants(HM_chunk freeList) {
+  ((void)freeList);
+}
+#endif
 
 void* HM_freeLevelListIterator(void* arg) {
   struct FreeLevelListIteratorArgs* state =

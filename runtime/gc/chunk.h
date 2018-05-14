@@ -49,8 +49,9 @@ struct HM_chunk {
   struct HM_chunk *nextChunk;
   struct HM_chunk *prevChunk;
 
-  // Word32 level;  /* the level of this chunk (if a levelhead), or
-  //                 * CHUNK_INVALID_LEVEL for normal chunks */
+  /* previous and next chunks which are physically adjacent, for coalescing. */
+  // struct HM_chunk *nextAdjacent;
+  // struct HM_chunk *prevAdjacent;
 
   bool mightContainMultipleObjects;
 
