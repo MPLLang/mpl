@@ -29,7 +29,7 @@ static pointer Assignable_findLockedTrueReplica(
         goto fast_path;
     }
 
-    assert(HM_HH_objptrInHierarchicalHeap(s, o));
+    assertObjptrInHH(o);
 
     /* If the object has no forwarding pointer, we try to be smart before
      * calling the general locking code. */
@@ -76,7 +76,7 @@ static objptr Assignable_findLockedTrueReplicaSlow(
   bool for_reading, bool keep_intermediate_levels_locked) {
     assert (s);
     assert (o);
-    assert (HM_HH_objptrInHierarchicalHeap(s, o));
+    assertObjptrInHH(o);
 
     struct HM_HierarchicalHeap *hh, *new_hh;
     objptr o_orig = o;
@@ -101,7 +101,7 @@ static objptr Assignable_findLockedTrueReplicaSlow(
          * by other threads, doing things in this order works. */
 
         o = getFwdPtr(objptrToPointer(o, s->heap->start));
-        assert (HM_HH_objptrInHierarchicalHeap(s, o));
+        assertObjptrInHH(o);
 
         new_hh = HM_getObjptrHH(s, o);
 
@@ -239,7 +239,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
      * when writing to the deque, but we only print a warning for now. */
     if (isObjptrInGlobalHeap(s, dst)) {
         if (isObjptr(src) && !isObjptrInGlobalHeap(s, src)) {
-            assert(HM_HH_objptrInHierarchicalHeap(s, src));
+            assertObjptrInHH(src);
             assert (BOGUS_OBJPTR != s->wsQueue);
             pointer queuep = objptrToPointer(s->wsQueue, s->heap->start);
             objptr afterlastp = pointerToObjptr(getArrayAfterLastp(s, queuep),
@@ -266,7 +266,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
         goto end;
     }
 
-    assert(HM_HH_objptrInHierarchicalHeap(s, dst));
+    assertObjptrInHH(dst);
 
     /* Pointer from the hierarchical heap to the global heap cannot trigger
      * promotions. Just find the true replica. */
@@ -278,14 +278,14 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
         goto end;
     }
 
-    assert(HM_HH_objptrInHierarchicalHeap(s, src));
+    assertObjptrInHH(src);
 
     HM_getObjptrInfo(s, src, &src_info);
     HM_getObjptrInfo(s, dst, &dst_info);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Locking from level %u of %p to level %u below %p",
-        HM_getChunkHeadChunk(src_info.chunkList)->split.levelHead.level,
+        src_info.chunkList->level,
         (void *)objptrToPointer(src, s->heap->start),
         dst_info.level + 1,
         (void *)objptrToPointer(dst, s->heap->start));
@@ -349,7 +349,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
       "Unlocking from level %u of %p to level %u of %p",
       dst_info.level,
       (void *)objptrToPointer(dst, s->heap->start),
-      HM_getChunkHeadChunk(src_info.chunkList)->split.levelHead.level,
+      src_info.chunkList->level,
       (void *)objptrToPointer(src, s->heap->start));
     args.for_locking = false;
     args.prev_hh = NULL;

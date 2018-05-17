@@ -26,7 +26,7 @@ struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
   Word32 minLevel;
   Word32 maxLevel;
-  HM_chunk tgtChunkList;  /* If not NULL, designates the chunk list where
+  HM_chunkList tgtChunkList;  /* If not NULL, designates the chunk list where
                            * the object is to be copied. If NULL, the
                            * to-space chunk at the level of the object
                            * will be used. */

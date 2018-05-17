@@ -5,32 +5,31 @@
  */
 
 pointer HM_Promote(GC_state s,
-                   HM_chunk dst_chunk,
+                   HM_chunkList dst_list,
                    pointer src) {
     /* SAM_NOTE: this use of getChunkHeadChunk might be incorrect; need to
      * follow pointers all the way to the levelHead? Adding an assert on the
      * following line for sanity... */
-    dst_chunk = HM_getChunkHeadChunk(dst_chunk);
-    assert(HM_isLevelHeadChunk(dst_chunk));
-    HM_chunk src_chunk =
-        HM_getObjptrLevelHeadChunk(s, pointerToObjptr(src, s->heap->start));
-    HM_chunk tgtChunkList = HM_getChunkHeadChunk(dst_chunk);
-    struct HM_HierarchicalHeap *dst_hh =
-        dst_chunk->split.levelHead.containingHH;
+    // HM_chunkList dst_list = HM_getChunkList(dst_chunk);
+    // assert(HM_isLevelHeadChunk(dst_list));
+    HM_chunkList src_chunk =
+      HM_getLevelHeadPathCompress(HM_getChunkOf(src));
+    HM_chunkList tgtChunkList = dst_list;
+    struct HM_HierarchicalHeap *dst_hh = dst_list->containingHH;
     bool needToUpdateLCS = false;
 
     struct HM_HierarchicalHeap *current_hh = getHierarchicalHeapCurrent(s);
-    if (dst_chunk->split.levelHead.level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
+    if (dst_list->level >= HM_HH_getLowestPrivateLevel(s, current_hh)) {
       assert (dst_hh == current_hh);
       needToUpdateLCS = true;
-      dst_hh->locallyCollectibleSize -= tgtChunkList->split.levelHead.size;
+      dst_hh->locallyCollectibleSize -= tgtChunkList->size;
     }
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "Promoting src %p to chunk list %p",
-        (void *)src, (void *)dst_chunk);
+        (void *)src, (void *)dst_list);
 
-    Trace2(EVENT_PROMOTION_ENTER, (EventInt)src, (EventInt)dst_chunk);
+    Trace2(EVENT_PROMOTION_ENTER, (EventInt)src, (EventInt)dst_list);
     TraceResetCopy(); /* Reset copy events. */
 
     /* AG_NOTE is this needed? */
@@ -45,13 +44,13 @@ pointer HM_Promote(GC_state s,
         LOG(LM_HH_PROMOTION, LL_DEBUG,
             "Chunk %p at level %u in use, so appending new chunk",
             (void*)dst_hh->lastAllocatedChunk,
-            dst_chunk->split.levelHead.level);
+            dst_list->level);
     }
 
     struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
         .hh = dst_hh,
-        .minLevel = dst_chunk->split.levelHead.level + 1,
-        .maxLevel = src_chunk->split.levelHead.level,
+        .minLevel = dst_list->level + 1,
+        .maxLevel = src_chunk->level,
         .tgtChunkList = tgtChunkList,
         .bytesCopied = 0,
         .objectsCopied = 0,
@@ -62,7 +61,7 @@ pointer HM_Promote(GC_state s,
         "promoting %p to chunk %p:\n"
         "  scope is %u -> %u\n",
         (void *)src,
-        (void *)dst_chunk,
+        (void *)dst_list,
         forwardHHObjptrArgs.minLevel,
         forwardHHObjptrArgs.maxLevel);
 
@@ -102,10 +101,10 @@ pointer HM_Promote(GC_state s,
     dst_hh->newLevelList = NULL;
 
     assert (forwardHHObjptrArgs.tgtChunkList);
-    assert (!forwardHHObjptrArgs.tgtChunkList->split.levelHead.toChunkList);
+    assert (!forwardHHObjptrArgs.tgtChunkList->toChunkList);
 
     if (needToUpdateLCS) {
-        dst_hh->locallyCollectibleSize += tgtChunkList->split.levelHead.size;
+        dst_hh->locallyCollectibleSize += tgtChunkList->size;
     }
 
     assertInvariants(s, dst_hh, LIVE);

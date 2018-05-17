@@ -48,7 +48,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunk toChunkList);
+                   HM_chunkList toChunkList);
 
 /**
  * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
@@ -456,7 +456,7 @@ void forwardHHObjptr (GC_state s,
   }
 
   // if it's not in the global heap, then it must be in the HH
-  assert(HM_HH_objptrInHierarchicalHeap(s, op));
+  assertObjptrInHH(op);
 
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
@@ -563,18 +563,18 @@ void forwardHHObjptr (GC_state s,
 
     /* We copy the object to args->tgtChunkList during promotion, or preserve
      * the level of the object otherwise. */
-    HM_chunk toChunkList = args->tgtChunkList;
+    HM_chunkList toChunkList = args->tgtChunkList;
 
     if (!inPromotion) {
         toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
 
 #if ASSERT
         if (NULL == toChunkList) {
-            HM_chunk cursor = args->hh->newLevelList;
+            HM_chunkList cursor = args->hh->newLevelList;
             while ((NULL != cursor) && (HM_getChunkListLevel(cursor) > opInfo.level)) {
                 // this chunk must actually be a levelHead
-                assert(HM_isLevelHeadChunk(cursor));
-                cursor = cursor->split.levelHead.nextHead;
+                assert(HM_isLevelHead(cursor));
+                cursor = cursor->nextHead;
             }
             ASSERTPRINT((NULL == cursor) || (HM_getChunkListLevel(cursor) != opInfo.level),
               "opInfo.level == %d; cursor == %p; cursor->level == %d",
@@ -584,25 +584,26 @@ void forwardHHObjptr (GC_state s,
         } else {
             assert(HM_getChunkListLevel(toChunkList) == opInfo.level);
 
-            HM_chunk cursor;
+            HM_chunkList cursor;
             for (cursor = args->hh->newLevelList;
                  (NULL != cursor) &&
                      (HM_getChunkListLevel(cursor) > opInfo.level);
-                 cursor = cursor->split.levelHead.nextHead) {
+                 cursor = cursor->nextHead) {
             }
             assert(toChunkList == cursor);
         }
 #endif
         if (toChunkList == NULL) {
             /* Level does not exist, so create it */
-            toChunkList = HM_allocateLevelHeadChunk(&(args->hh->newLevelList),
+            HM_chunk chunk = HM_allocateLevelHeadChunk(&(args->hh->newLevelList),
                                                     objectBytes,
                                                     opInfo.level,
                                                     COPY_OBJECT_HH_VALUE);
+            toChunkList = HM_getLevelHeadPathCompress(chunk);
             if (NULL == toChunkList) {
                 DIE("Ran out of space for Hierarchical Heap!");
             }
-            toChunkList->split.levelHead.isInToSpace = true;
+            toChunkList->isInToSpace = true;
 
             /* update toChunkList for fast access later */
             HM_setChunkListToChunkList(opInfo.chunkList, toChunkList);
@@ -631,18 +632,19 @@ void forwardHHObjptr (GC_state s,
        * be avoided by not relying upon using the toChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
-      chunk->split.normal.levelHead = toChunkList;
+      assert(toChunkList != NULL);
+      chunk->levelHead = toChunkList;
       chunk->nextChunk = NULL;
-      chunk->prevChunk = toChunkList->split.levelHead.lastChunk;
-      toChunkList->split.levelHead.lastChunk->nextChunk = chunk;
-      toChunkList->split.levelHead.lastChunk = chunk;
-      toChunkList->split.levelHead.size += HM_getChunkSize(chunk);
+      chunk->prevChunk = toChunkList->lastChunk;
+      toChunkList->lastChunk->nextChunk = chunk;
+      toChunkList->lastChunk = chunk;
+      toChunkList->size += HM_getChunkSize(chunk);
       if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       LOG(LM_HH_COLLECTION, LL_INFO,
         "Moved single-object chunk %p of size %zu",
-        chunk,
+        (void*)chunk,
         HM_getChunkSize(chunk));
       return;
     }
@@ -752,10 +754,10 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunk toChunkList) {
+                   HM_chunkList toChunkList) {
   assert(toChunkList);
   assert(copySize <= objectSize);
-  assert(HM_isLevelHeadChunk(toChunkList));
+  assert(HM_isLevelHead(toChunkList));
 
   /* get the chunk to allocate in */
   HM_chunk chunk = HM_getChunkListLastChunk(toChunkList);

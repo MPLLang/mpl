@@ -39,8 +39,9 @@ static inline void assertIsObjptrReachable (GC_state s,
   /* silence compiler warning */
   ((void)(ignored));
 
-  assert (isObjptrInFromSpace (s, *opp) ||
-          HM_HH_objptrInHierarchicalHeap(s, *opp));
+  if (!isObjptrInFromSpace(s, *opp)) {
+    assertObjptrInHH(*opp);
+  }
 
   if (!isObjptrInFromSpace (s, *opp) &&
       isObjptrInGlobalHeap(s, *opp)) {

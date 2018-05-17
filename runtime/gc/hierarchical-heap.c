@@ -339,7 +339,7 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   /* SAM_NOTE: TODO: This still appears to be broken; debugging needed. */
   if (!(s->controls->mayUseAncestorChunk)) {
     Word32 allocLevel = HM_getHighestLevel(hh->levelList);
-    assert(getLevelHeadChunk(hh->lastAllocatedChunk)->split.levelHead.level == allocLevel);
+    assert(getLevelHead(hh->lastAllocatedChunk)->level == allocLevel);
     assert(allocLevel <= level);
     if (allocLevel != level) {
       HM_HH_updateValues(hh, s->frontier);
@@ -441,7 +441,7 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   lockWriterHH(hh);
 
   Word32 level = HM_getHighestLevel(hh->levelList);
-  void* chunk;
+  HM_chunk chunk;
 
   assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
 
@@ -533,18 +533,6 @@ void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
         oldLCHS,
         hh->locallyCollectibleHeapSize);
   }
-}
-
-/* RAM_NOTE: should this be moved to local-heap.h? */
-#pragma warning "THIS SHOULD ONLY BE USED IN POSITIVE ASSERTS, I.E. assert(HM_HH_objptrInHierarchicalHeap(s, op)"
-bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
-#if ASSERT
-  pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
-  return HM_getChunkOf(candidatePointer)->magic == CHUNK_MAGIC;
-#else
-  DIE("HM_HH_objptrInHierarchicalHeap deprecated");
-  return TRUE;
-#endif
 }
 
 struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr) {

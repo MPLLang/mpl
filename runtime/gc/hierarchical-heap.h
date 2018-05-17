@@ -74,11 +74,11 @@ struct HM_HierarchicalHeap {
   Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
 
-  HM_chunk levelList; /**< The list of level lists. See HM_chunk for more
+  HM_chunkList levelList; /**< The list of level lists. See HM_chunkList for more
                     * information */
 
-  HM_chunk newLevelList; /**< The new list of level lists generated during a local
-                       * garbage collection. See HM_chunk for more
+  HM_chunkList newLevelList; /**< The new list of level lists generated during a local
+                       * garbage collection. See HM_chunkList for more
                        information */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally
@@ -368,17 +368,6 @@ double HM_HH_getLCRatio(const struct HM_HierarchicalHeap* hh);
  * @param hh The hierarchical heap to maybe resize.
  */
 void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh);
-
-/**
- * Checks if 'candidateObjptr' belongs to the hierarchical heap space.
- *
- * @param s The GC_state to use
- * @param candidateObjptr The objptr to test
- *
- * @return TRUE if 'candidateObjptr' belongs to the hierarchical heap space,
- * FALSE otherwise
- */
-bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr);
 
 /**
  * This function converts a hierarchical heap objptr to the struct

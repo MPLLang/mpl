@@ -19,6 +19,8 @@ struct ForwardHHObjptrArgs;
 
 #define CHUNK_MAGIC 0xcafedabbedfacade
 
+struct HM_chunkList;
+
 /* Chunks are contiguous regions of memory for containing heap-allocated user
  * (ML) objects. Metadata which is common across all objects within a chunk
  * are stored in this struct, at the front of the chunk. Each chunk metadata
@@ -46,62 +48,80 @@ struct HM_chunk {
 
   /* doubly linked list of chunks at this level.
    * when prevChunk == NULL, this chunk is a levelHead */
-  struct HM_chunk *nextChunk;
-  struct HM_chunk *prevChunk;
+  struct HM_chunk * nextChunk;
+  struct HM_chunk * prevChunk;
 
-  /* previous and next chunks which are physically adjacent, for coalescing. */
-  // struct HM_chunk *nextAdjacent;
-  // struct HM_chunk *prevAdjacent;
+  struct HM_chunkList * levelHead;
 
   bool mightContainMultipleObjects;
 
   // Unused padding bytes to keep alignment
   uint32_t padding;
 
-  union {
+  // union {
 
-    // Data for level-head chunks:
-    struct {
-      struct HM_chunk *nextHead; // the head of the parent list (at depth level-1)
-      struct HM_chunk *lastChunk; // The last chunk in this level
-      struct HM_HierarchicalHeap *containingHH;
-      struct HM_chunk *toChunkList; // the corresponding chunklist in the to-space during a GC
-      Word64 size; // size (bytes) of this level, both allocated and unallocated
-      bool isInToSpace;
-      Word32 level;
-    } levelHead;
+  //   // Data for level-head chunks:
+  //   struct {
+  //     struct HM_chunk *nextHead; // the head of the parent list (at depth level-1)
+  //     struct HM_chunk *lastChunk; // The last chunk in this level
+  //     struct HM_HierarchicalHeap *containingHH;
+  //     struct HM_chunk *toChunkList; // the corresponding chunklist in the to-space during a GC
+  //     Word64 size; // size (bytes) of this level, both allocated and unallocated
+  //     bool isInToSpace;
+  //     Word32 level;
+  //   } levelHead;
 
-    /* Data for normal chunks is just a pointer towards the levelHead.
-     * This pointer is a parent pointer in a path-compressing tree,
-     * thus it might be necessary to follow the levelHead pointer multiple
-     * times to find the actual level-head chunk. */
-    struct {
-      struct HM_chunk *levelHead;
-    } normal;
+  //   /* Data for normal chunks is just a pointer towards the levelHead.
+  //    * This pointer is a parent pointer in a path-compressing tree,
+  //    * thus it might be necessary to follow the levelHead pointer multiple
+  //    * times to find the actual level-head chunk. */
+  //   struct {
+  //     struct HM_chunk *levelHead;
+  //   } normal;
 
-  } split;
+  // } split;
 
 } __attribute__((aligned(8)));
 
-typedef struct HM_chunk* HM_chunk;
+
+struct HM_chunkList {
+  struct HM_chunk * firstChunk;
+  struct HM_chunk * lastChunk;
+  struct HM_chunkList * parent;
+  struct HM_chunkList * nextHead;
+  struct HM_HierarchicalHeap * containingHH;
+  struct HM_chunkList * toChunkList; // the corresponding chunklist in the to-space during a GC
+  Word64 size; // size (bytes) of this level, both allocated and unallocated
+  bool isInToSpace;
+  Word32 level;
+
+  size_t refCount; // number of chunks with a reference to this record
+};
+
+typedef struct HM_chunk * HM_chunk;
+typedef struct HM_chunkList * HM_chunkList;
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
                     (sizeof(struct HM_chunk) % 8) == 0);
 
 struct HM_ObjptrInfo {
   struct HM_HierarchicalHeap* hh;
-  HM_chunk chunkList;
+  HM_chunkList chunkList;
   Word32 level;
 };
 
 #else
 
 struct HM_chunk;
-typedef struct HM_chunk* HM_chunk;
+struct HM_chunkList;
+typedef struct HM_chunk * HM_chunk;
+typedef struct HM_chunkList * HM_chunkList;
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+void assertObjptrInHH(objptr op);
 
 /* Find the associated chunk metadata of a pointer which is known to point
  * into the first block of a chunk. */
@@ -111,7 +131,7 @@ static HM_chunk HM_getChunkOf(pointer p);
  * levelHead, with the requirement that
  *   chunk->limit - chunk->frontier <= bytesRequested
  * Returns NULL if unable to find space for such a chunk. */
-HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested);
+HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
 /**
  * This function allocates and initializes a level head chunk of at least
@@ -125,10 +145,10 @@ HM_chunk HM_allocateChunk(HM_chunk levelHeadChunk, size_t bytesRequested);
  * @return NULL if no chunk could be allocated, with chunkEnd undefined, or
  * chunk pointer otherwise with chunkEnd set to the end of the returned chunk.
  */
-HM_chunk HM_allocateLevelHeadChunk(HM_chunk* levelList,
-                                   size_t allocableSize,
-                                   Word32 level,
-                                   struct HM_HierarchicalHeap* hh);
+HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
+                                       size_t allocableSize,
+                                       Word32 level,
+                                       struct HM_HierarchicalHeap* hh);
 
 HM_chunk HM_splitChunk(GC_state s, HM_chunk chunk, size_t bytesRequested);
 
@@ -136,7 +156,9 @@ void HM_unlinkChunk(HM_chunk chunk);
 
 bool HM_isLevelHeadChunk(HM_chunk chunk);
 
-HM_chunk HM_getLevelHeadPathCompress(HM_chunk chunk);
+bool HM_isLevelHead(HM_chunkList list);
+
+HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk);
 
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */
@@ -178,7 +200,7 @@ void HM_forwardHHObjptrsInChunkList(
  */
 void HM_forwardHHObjptrsInLevelList(
   GC_state s,
-  HM_chunk* levelList,
+  HM_chunkList* levelList,
   ObjptrPredicateFunction predicate,
   void* predicateArgs,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs,
@@ -190,7 +212,7 @@ void HM_forwardHHObjptrsInLevelList(
  * @param levelList The level list to free chunks from
  * @param minLevel The minimum level to free up to, inclusive
  */
-void HM_freeChunks(HM_chunk *levelList, HM_chunk *freeList, Word32 minLevel);
+void HM_freeChunks(HM_chunkList * levelList, HM_chunk * freeList, Word32 minLevel);
 
 /**
  * This function returns the frontier of the chunk
@@ -237,7 +259,7 @@ pointer HM_getChunkStart(HM_chunk chunk);
  *
  * @return The level of the chunkList
  */
-Word32 HM_getChunkListLevel(HM_chunk chunk);
+Word32 HM_getChunkListLevel(HM_chunkList chunk);
 
 /**
  * This function gets the last chunk in a list
@@ -246,7 +268,7 @@ Word32 HM_getChunkListLevel(HM_chunk chunk);
  *
  * @return the last chunk, or NULL if the list is empty
  */
-HM_chunk HM_getChunkListLastChunk(HM_chunk chunkList);
+HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 
 /**
  * This function returns the to-ChunkList corresponding to the specified
@@ -256,7 +278,7 @@ HM_chunk HM_getChunkListLastChunk(HM_chunk chunkList);
  *
  * @return NULL if no to-ChunkList has been set, the to-ChunkList otherwise.
  */
-HM_chunk HM_getChunkListToChunkList(HM_chunk chunkList);
+HM_chunkList HM_getChunkListToChunkList(HM_chunkList chunkList);
 
 /**
  * This function returns the size in bytes of the specified level in a level
@@ -268,7 +290,7 @@ HM_chunk HM_getChunkListToChunkList(HM_chunk chunkList);
  * @return 0 if the level does not exist in the level list, or the size of the
  * level in bytes otherwise.
  */
-Word64 HM_getLevelSize(HM_chunk levelList, Word32 level);
+Word64 HM_getLevelSize(HM_chunkList levelList, Word32 level);
 
 /**
  * This function sets the to-ChunkList corresponding to the specified ChunkList
@@ -277,7 +299,7 @@ Word64 HM_getLevelSize(HM_chunk levelList, Word32 level);
  * @param chunkList The ChunkList to set the to-ChunkList for.
  * @param toChunkList The ChunkList set the to-ChunkList to.
  */
-void HM_setChunkListToChunkList(HM_chunk chunkList, HM_chunk toChunkList);
+void HM_setChunkListToChunkList(HM_chunkList chunkList, HM_chunkList toChunkList);
 
 /**
  * Gets the info for the given objptr
@@ -299,7 +321,7 @@ void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
  * @return CHUNK_INVALID_LEVEL if levelList is empty, the highest level
  * otherwise
  */
-Word32 HM_getHighestLevel(HM_chunk levelList);
+Word32 HM_getHighestLevel(HM_chunkList levelList);
 
 /**
  * Merges 'levelList' into 'destinationLevelList'.
@@ -316,8 +338,8 @@ Word32 HM_getHighestLevel(HM_chunk levelList);
  * @param hh The HH containing the destination level list.
  * @param resetToFromSpace if true, reset the whole level list to to-space
  */
-void HM_mergeLevelList(HM_chunk* destinationLevelList,
-                       HM_chunk levelList,
+void HM_mergeLevelList(HM_chunkList* destinationLevelList,
+                       HM_chunkList levelList,
                        struct HM_HierarchicalHeap * const hh,
                        bool resetToFromSpace);
 
@@ -328,7 +350,7 @@ void HM_mergeLevelList(HM_chunk* destinationLevelList,
  * @param levelList the level list to operate on
  * @param level The level to promotechunks*
  */
-void HM_promoteChunks(HM_chunk* levelList, size_t level);
+void HM_promoteChunks(HM_chunkList* levelList, size_t level);
 
 /**
  * This function asserts that a chunk resides in a level list
@@ -340,7 +362,7 @@ void HM_promoteChunks(HM_chunk* levelList, size_t level);
  * @param levelList the levelList to check residency within.
  * @param chunk the chunk to search for.
  */
-void HM_assertChunkInLevelList(HM_chunk levelList, HM_chunk chunk);
+void HM_assertChunkInLevelList(HM_chunkList levelList, HM_chunk chunk);
 
 /**
  * This function asserts the level list invariants
@@ -355,7 +377,7 @@ void HM_assertChunkInLevelList(HM_chunk levelList, HM_chunk chunk);
  * @param inToSpace If true, check that all the chunks are in to-space,
                     otherwise they should all be from-space.
  */
-void HM_assertLevelListInvariants(HM_chunk levelList,
+void HM_assertLevelListInvariants(HM_chunkList levelList,
                                   const struct HM_HierarchicalHeap* hh,
                                   Word32 stealLevel,
                                   bool inToSpace);
@@ -376,43 +398,11 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier);
  * @param levelList The level list to update
  * @param hh The hierarchical heap to update to
  */
-void HM_updateLevelListPointers(HM_chunk levelList,
+void HM_updateLevelListPointers(HM_chunkList levelList,
                                 struct HM_HierarchicalHeap* hh);
 
-/**
- * This function retrieves the ChunkInfo object from a chunk
- *
- * @param chunk The chunk to retrieve the object from
- *
- * @return the ChunkInfo struct pointer
- */
-// HM_chunk HM_getChunkInfo(void* chunk);
+HM_chunkList HM_getChunkList(HM_chunk chunk);
 
-/**
- * Same as HM_getChunkInfo() except for const-correctness. See HM_getChunkInfo()
- * for more details
- */
-// const HM_chunk HM_getChunkInfoConst(const void* chunk);
-
-/**
- * Gets the head chunk for the given chunk info
- *
- * @param ci The chunk info to use
- * @param retVal Pointer to the head chunk of this chunk
- */
-HM_chunk HM_getChunkHeadChunk(HM_chunk ci);
-
-/**
- * Gets the level head chunk for the given objptr
- *
- * @attention
- * object <em>must</em> be within the allocated hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap for
- * @param retVal Pointer to the head chunk of this object's level.
- */
-HM_chunk HM_getObjptrLevelHeadChunk(GC_state s, objptr object);
 
 /**
  * Gets the HH for the given objptr
