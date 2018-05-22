@@ -78,7 +78,7 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
   } else {
     struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
     assert(s->frontier == HM_HH_getFrontier(hh));
-    assert ((uintptr_t)HM_HH_getLimit(hh) - (uintptr_t)HM_HH_getFrontier(hh) >= sizeofStackWithMetaData (s, reserved));
+    assert ((size_t)(HM_HH_getLimit(hh) - HM_HH_getFrontier(hh)) >= sizeofStackWithMetaData (s, reserved));
   }
 #endif
   stack = newStack (s, reserved, allocInOldGen);

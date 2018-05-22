@@ -80,6 +80,7 @@ struct objectInfo {
   bool hasIdentity;
 };
 
+void printObjectInfo(GC_state s, struct objectInfo *args);
 void printObjectInfo(GC_state s, struct objectInfo *args) {
   printf("object %p index %u tag %s bytes %u ptrs %u identity %d\n",
     (void *)args->op,

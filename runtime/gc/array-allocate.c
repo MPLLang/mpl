@@ -32,6 +32,17 @@ static inline pointer arrayInitialize(ARG_USED_FOR_ASSERT GC_state s,
                                       uint16_t bytesNonObjptrs,
                                       uint16_t numObjptrs);
 
+pointer arrayAllocateInOldGen(GC_state s,
+                              size_t arraySizeAligned,
+                              size_t ensureBytesFree);
+
+pointer arrayAllocateInGlobal(GC_state s,
+                              size_t arraySizeAligned,
+                              size_t ensureBytesFree);
+
+pointer arrayAllocateInHH(GC_state s,
+                          size_t arraySizeAligned,
+                          size_t ensureBytesFree);
 /************************/
 /* Function Definitions */
 /************************/
@@ -96,8 +107,7 @@ pointer arrayAllocateInHH(GC_state s,
     /* split the large chunk so that we have space for the array at the end;
      * this guarantees that the single chunk holding the array is not a
      * level-head which makes it easy to move it during a GC */
-    HM_chunk arrayChunk = HM_splitChunk(s, hh->lastAllocatedChunk, arrayChunkBytes);
-    assert(!HM_isLevelHeadChunk(arrayChunk));
+    HM_chunk arrayChunk = HM_splitChunk(hh->lastAllocatedChunk, arrayChunkBytes);
     pointer result = arrayChunk->frontier;
     arrayChunk->frontier += arraySizeAligned;
     arrayChunk->mightContainMultipleObjects = FALSE;

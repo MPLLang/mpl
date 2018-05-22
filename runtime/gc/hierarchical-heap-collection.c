@@ -632,13 +632,14 @@ void forwardHHObjptr (GC_state s,
        * be avoided by not relying upon using the toChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
-      assert(toChunkList != NULL);
-      chunk->levelHead = toChunkList;
-      chunk->nextChunk = NULL;
-      chunk->prevChunk = toChunkList->lastChunk;
-      toChunkList->lastChunk->nextChunk = chunk;
-      toChunkList->lastChunk = chunk;
-      toChunkList->size += HM_getChunkSize(chunk);
+      HM_appendChunk(toChunkList, chunk);
+      // assert(toChunkList != NULL);
+      // chunk->levelHead = toChunkList;
+      // chunk->nextChunk = NULL;
+      // chunk->prevChunk = toChunkList->lastChunk;
+      // toChunkList->lastChunk->nextChunk = chunk;
+      // toChunkList->lastChunk = chunk;
+      // toChunkList->size += HM_getChunkSize(chunk);
       if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }

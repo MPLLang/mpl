@@ -11,9 +11,7 @@ pointer HM_Promote(GC_state s,
      * follow pointers all the way to the levelHead? Adding an assert on the
      * following line for sanity... */
     // HM_chunkList dst_list = HM_getChunkList(dst_chunk);
-    // assert(HM_isLevelHeadChunk(dst_list));
-    HM_chunkList src_chunk =
-      HM_getLevelHeadPathCompress(HM_getChunkOf(src));
+    HM_chunkList src_chunk = HM_getLevelHeadPathCompress(HM_getChunkOf(src));
     HM_chunkList tgtChunkList = dst_list;
     struct HM_HierarchicalHeap *dst_hh = dst_list->containingHH;
     bool needToUpdateLCS = false;
@@ -38,13 +36,17 @@ pointer HM_Promote(GC_state s,
 
     assert (!dst_hh->newLevelList);
 
-    if (dst_hh->lastAllocatedChunk == HM_getChunkListLastChunk(tgtChunkList)) {
-        /* chunk in use, so append a new one to it */
-        HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
-        LOG(LM_HH_PROMOTION, LL_DEBUG,
-            "Chunk %p at level %u in use, so appending new chunk",
-            (void*)dst_hh->lastAllocatedChunk,
-            dst_list->level);
+    // SAM_NOTE: TODO: I think this is broken. We need clearer invariants for
+    // identifying intermediate valid states of an HH.
+    HM_chunk tgtChunk = HM_getChunkListLastChunk(tgtChunkList);
+    if (dst_hh->lastAllocatedChunk == tgtChunk ||
+        !tgtChunk->mightContainMultipleObjects ||
+        !inSameBlock((pointer)tgtChunk, tgtChunk->frontier)) {
+      HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
+      LOG(LM_HH_PROMOTION, LL_DEBUG,
+          "Chunk %p at level %u can't be used, so appending new chunk",
+          (void*)HM_getChunkListLastChunk(tgtChunkList),
+          tgtChunkList->level);
     }
 
     struct ForwardHHObjptrArgs forwardHHObjptrArgs = {

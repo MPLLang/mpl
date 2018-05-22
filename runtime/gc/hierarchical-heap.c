@@ -491,7 +491,7 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
   }
 }
 
-void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
+pointer HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
 }
@@ -508,7 +508,7 @@ Word32 HM_HH_getLowestPrivateLevel(GC_state s,
   }
 }
 
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
+pointer HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
   return HM_getChunkLimit(hh->lastAllocatedChunk);
 }
 

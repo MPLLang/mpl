@@ -329,7 +329,7 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
  *
  * @return the frontier of the currently active chunk.
  */
-void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
+pointer HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
 
 /*
  * Returns the lowest private level
@@ -349,7 +349,7 @@ Word32 HM_HH_getLowestPrivateLevel(GC_state s,
  *
  * @return the heap limit
  */
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
+pointer HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Returns the current lchs/lcs ratio

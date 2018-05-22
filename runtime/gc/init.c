@@ -600,7 +600,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
     die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
 
-  initBlocks(s);
+  HM_configChunks(s);
 
   return res;
 }

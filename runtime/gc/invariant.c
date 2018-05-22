@@ -176,6 +176,7 @@ bool invariantForMutatorFrontier (GC_state s) {
   return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier));
 }
 
+#if ASSERT
 bool strongInvariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
@@ -183,6 +184,7 @@ bool strongInvariantForMutatorFrontier (GC_state s) {
             (inSameBlock(s->frontier, s->limitPlusSlop-1)
             && ((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC));
 }
+#endif
 
 bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
@@ -210,8 +212,8 @@ void displayStackInfo(GC_state s) {
   int fsize = badfi ? -1 : s->frameLayouts[fi].size;
 
   fprintf(stderr,
-    "stack bottom "FMTPTR" limit +%zu top +%zu; fi %u; fsize %d\n",
-    getStackBottom(s, stack),
+    "stack bottom %p limit +%zu top +%zu; fi %u; fsize %d\n",
+    (void*)getStackBottom(s, stack),
     (size_t)(getStackLimit(s, stack) - getStackBottom(s, stack)),
     (size_t)(getStackTop(s, stack) - getStackBottom(s, stack)),
     fi,
