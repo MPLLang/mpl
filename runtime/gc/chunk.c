@@ -59,8 +59,6 @@ static HM_chunkList getLevelHead(HM_chunk chunk);
 static void HM_assertChunkListInvariants(HM_chunkList chunkList,
                                          const struct HM_HierarchicalHeap* hh);
 
-static void HM_assertFreeListInvariants(HM_chunk freeList);
-
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
  * from a level list
@@ -961,26 +959,6 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList,
   ((void)(hh));
 }
 #endif /* ASSERT */
-
-#if ASSERT
-void HM_assertFreeListInvariants(HM_chunk freeList) {
-  HM_chunk chunk = freeList;
-  while (chunk != NULL) {
-    assert(chunk->magic == CHUNK_MAGIC);
-    assert(chunk->frontier == (pointer)chunk + sizeof(struct HM_chunk));
-    assert(chunk->limit >= chunk->frontier);
-    assert(chunk->mightContainMultipleObjects == TRUE);
-    if (chunk->nextChunk != NULL) {
-      assert(chunk->nextChunk->prevChunk == chunk);
-    }
-    chunk = chunk->nextChunk;
-  }
-}
-#else
-void HM_assertFreeListInvariants(HM_chunk freeList) {
-  ((void)freeList);
-}
-#endif
 
 struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
   struct HM_ObjptrInfo objInfo;
