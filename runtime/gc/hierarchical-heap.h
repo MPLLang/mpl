@@ -58,7 +58,7 @@ extern const char* HM_HHStateToString[];
  * it only has objptrs to objects on the same heap (i.e. the global heap).
  */
 struct HM_HierarchicalHeap {
-  HM_chunk freeList;  /* list of empty chunks locally available for use */
+  HM_chunkList freeList;  /* list of empty chunks locally available for use */
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 

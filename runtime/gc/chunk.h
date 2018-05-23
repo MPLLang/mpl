@@ -156,13 +156,21 @@ void HM_prependChunk(HM_chunkList levelHead, HM_chunk chunk);
 void HM_appendChunk(HM_chunkList levelHead, HM_chunk chunk);
 void HM_unlinkChunk(HM_chunk chunk);
 
+/* Requires: chunk->limit - chunk->frontier >= bytesRequested
+ * Requires: chunk is in a valid chunk list
+ *
+ * Attempts to split chunk into two, so that the result chunk contains at
+ * least the requested number of bytes
+ *   BEFORE: ... <-> chunk <-> ...
+ *   AFTER:  ... <-> chunk <-> result <-> ...
+ * if chunk cannot be split as such, returns NULL. */
 HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested);
 
 HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk);
 
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */
-void HM_mergeFreeList(HM_chunk *parentFreeList, HM_chunk freeList);
+void HM_mergeFreeList(HM_chunkList parentFreeList, HM_chunkList freeList);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which
@@ -212,7 +220,7 @@ void HM_forwardHHObjptrsInLevelList(
  * @param levelList The level list to free chunks from
  * @param minLevel The minimum level to free up to, inclusive
  */
-void HM_freeChunks(HM_chunkList * levelList, HM_chunk * freeList, Word32 minLevel);
+void HM_freeChunks(HM_chunkList * levelList, HM_chunkList freeList, Word32 minLevel);
 
 /**
  * This function returns the frontier of the chunk

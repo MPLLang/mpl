@@ -239,12 +239,12 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   parentHH->locallyCollectibleSize += sizeDelta;
   parentHH->locallyCollectibleHeapSize += 2 * sizeDelta;
 
-  /* merge level lists */
   HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH, false);
   hh->levelList = NULL;
 
-  /* merge free lists */
-  HM_mergeFreeList(&(parentHH->freeList), hh->freeList);
+  // SAM_NOTE: incorrect to free hh->freeList here, due to path-compressing
+  // list lookup.
+  HM_mergeFreeList(parentHH->freeList, hh->freeList);
   hh->freeList = NULL;
 
   LOG(LM_HIERARCHICAL_HEAP, LL_INFO,

@@ -108,6 +108,7 @@ pointer arrayAllocateInHH(GC_state s,
      * this guarantees that the single chunk holding the array is not a
      * level-head which makes it easy to move it during a GC */
     HM_chunk arrayChunk = HM_splitChunk(hh->lastAllocatedChunk, arrayChunkBytes);
+    assert(arrayChunk != NULL);
     pointer result = arrayChunk->frontier;
     arrayChunk->frontier += arraySizeAligned;
     arrayChunk->mightContainMultipleObjects = FALSE;
@@ -227,8 +228,10 @@ pointer GC_arrayAllocate (GC_state s,
 
 #if ASSERT
   if (!HM_inGlobalHeap(s)) {
-    assert((s->frontier == s->limitPlusSlop) || inSameBlock(s->frontier, s->limitPlusSlop-1));
-    assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+    if (s->frontier != s->limitPlusSlop) {
+      assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+      assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+    }
   }
   assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
   /* Unfortunately, the invariant isn't quite true here, because

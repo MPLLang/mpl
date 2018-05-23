@@ -349,7 +349,7 @@ void HM_HHC_collectLocal(void) {
 #endif
 
   /* free old chunks */
-  HM_freeChunks(&(hh->levelList), &(hh->freeList), forwardHHObjptrArgs.minLevel);
+  HM_freeChunks(&(hh->levelList), hh->freeList, forwardHHObjptrArgs.minLevel);
 
   /* merge newLevelList back in */
   HM_updateLevelListPointers(hh->newLevelList, hh);
@@ -627,19 +627,13 @@ void forwardHHObjptr (GC_state s,
       assert(!hasFwdPtr(p));
       HM_chunk chunk = HM_getChunkOf(p);
       HM_unlinkChunk(chunk);
+      opInfo.hh->locallyCollectibleSize -= HM_getChunkSize(chunk);
       /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
        * previous last chunk, resulting in unnecessary fragmentation. This can
        * be avoided by not relying upon using the toChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
       HM_appendChunk(toChunkList, chunk);
-      // assert(toChunkList != NULL);
-      // chunk->levelHead = toChunkList;
-      // chunk->nextChunk = NULL;
-      // chunk->prevChunk = toChunkList->lastChunk;
-      // toChunkList->lastChunk->nextChunk = chunk;
-      // toChunkList->lastChunk = chunk;
-      // toChunkList->size += HM_getChunkSize(chunk);
       if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }

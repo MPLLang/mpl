@@ -157,52 +157,20 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   return chunk;
 }
 
-/* Takes at least `bytesRequested` amount of space from victim *chunkp,
- * returning a pointer to the resulting chunk and updating *chunkp appropriately.
- * (chunkp is passed as argument to permit updating the owning freelist.)
- * The victim chunk must be a normal empty chunk in a freelist.
- *
- * If the victim is large enough, this will be accomplished by splitting it into
- * two chunks. Otherwise, this function will simply unlink the victim and return
- * it. */
-HM_chunk HM_takeFromChunk(HM_chunk * chunkp, size_t bytesRequested);
-HM_chunk HM_takeFromChunk(HM_chunk * chunkp, size_t bytesRequested) {
-  assert(chunkp != NULL);
-  HM_chunk chunk = *chunkp;
-  assert(chunk != NULL);
-  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
-
-  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
-  totalSize = align(totalSize, HM_BLOCK_SIZE);
-
-  pointer limit = chunk->limit;
-  pointer requestedSplitPoint = limit - totalSize;
-  if (requestedSplitPoint < chunk->frontier) {
-    /* can't split; have to take the whole chunk. */
-    *chunkp = chunk->nextChunk;
-    if (NULL != chunk->nextChunk) {
-      chunk->nextChunk->prevChunk = chunk->prevChunk;
-    }
-    chunk->nextChunk = NULL;
-    chunk->prevChunk = NULL;
-    chunk->levelHead = NULL;
-    return chunk;
-  }
-
-  /* This chunk is hogging too much space! Time to steal. */
-  chunk->limit = requestedSplitPoint;
-  return HM_initializeChunk(requestedSplitPoint, limit);
-}
-
 HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
+  assert(!HM_isUnlinked(chunk));
 
   size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
   totalSize = align(totalSize, HM_BLOCK_SIZE);
 
   pointer limit = chunk->limit;
   pointer splitPoint = limit - totalSize;
-  assert(splitPoint >= chunk->frontier);
+
+  if (splitPoint < chunk->frontier) {
+    // not enough space to split this chunk
+    return NULL;
+  }
 
   HM_chunkList levelHead = HM_getLevelHeadPathCompress(chunk);
 
@@ -230,16 +198,14 @@ HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
 
 HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  HM_chunk *chunkp = &(hh->freeList);
-  HM_chunk chunk = *chunkp;
-  int skipped = 0;
+  HM_chunk chunk = hh->freeList->firstChunk;
+  size_t skipped = 0;
   while (NULL != chunk && (size_t)(chunk->limit - chunk->frontier) < bytesRequested) {
-    chunkp = &(chunk->nextChunk);
-    chunk = *chunkp;
+    chunk = chunk->nextChunk;
     skipped++;
   }
   LOG(LM_CHUNK, LL_INFO,
-    "Skipped over %d free chunks looking for %zu bytes",
+    "Skipped over %zu free chunks looking for %zu bytes",
     skipped,
     bytesRequested);
 
@@ -255,20 +221,21 @@ HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested) 
     start = (pointer)(uintptr_t)align((size_t)start, bs);
     chunk = HM_initializeChunk(start, start + desiredSize);
     /* put it at the front of the list */
-    chunkp = &(hh->freeList);
-    chunk->nextChunk = *chunkp;
-    if (NULL != chunk->nextChunk) {
-      chunk->nextChunk->prevChunk = chunk;
-    }
-    *chunkp = chunk;
+    HM_prependChunk(hh->freeList, chunk);
     LOG(LM_CHUNK, LL_INFO,
       "Mapped a new region of size %zu",
       desiredSize + bs);
   }
 
-  chunk = HM_takeFromChunk(chunkp, bytesRequested);
-  HM_assertFreeListInvariants(hh->freeList);
-  return chunk;
+  HM_chunk result = HM_splitChunk(chunk, bytesRequested);
+  if (result == NULL) {
+    result = chunk;
+  }
+  HM_unlinkChunk(result);
+  assert(result->frontier == HM_getChunkStart(result));
+  assert(result->mightContainMultipleObjects);
+  HM_assertChunkListInvariants(hh->freeList, hh);
+  return result;
 }
 
 HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
@@ -340,19 +307,21 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
 void HM_unlinkChunk(HM_chunk chunk) {
   HM_chunkList levelHead = HM_getLevelHeadPathCompress(chunk);
 
-  chunk->prevChunk->nextChunk = chunk->nextChunk;
-  if (NULL != chunk->nextChunk) {
+  if (NULL == chunk->prevChunk) {
+    assert(levelHead->firstChunk == chunk);
+    levelHead->firstChunk = chunk->nextChunk;
+  } else {
+    chunk->prevChunk->nextChunk = chunk->nextChunk;
+  }
+
+  if (NULL == chunk->nextChunk) {
+    assert(levelHead->lastChunk == chunk);
+    levelHead->lastChunk = chunk->prevChunk;
+  } else {
     chunk->nextChunk->prevChunk = chunk->prevChunk;
   }
 
-  assert(!levelHead->isInToSpace);
-  assert(levelHead->containingHH != COPY_OBJECT_HH_VALUE);
   levelHead->size -= HM_getChunkSize(chunk);
-  // SAM_NOTE: TODO: this function should not be responsible for updating containingHH
-  levelHead->containingHH->locallyCollectibleSize -= HM_getChunkSize(chunk);
-  if (levelHead->lastChunk == chunk) {
-    levelHead->lastChunk = chunk->prevChunk;
-  }
 
   chunk->levelHead = NULL;
   chunk->prevChunk = NULL;
@@ -365,26 +334,11 @@ void HM_unlinkChunk(HM_chunk chunk) {
   assert(HM_isUnlinked(chunk));
 }
 
-/* SAM_NOTE: TODO: put levelHeads at the front of the freelists so that we can
- * implement this in constant time (using lastChunk field) */
-void HM_mergeFreeList(HM_chunk *parentFreeList, HM_chunk freeList) {
-  if (NULL == freeList) {
-    return;
-  }
+void HM_mergeFreeList(HM_chunkList parentFreeList, HM_chunkList freeList) {
 
-  if (NULL == *parentFreeList) {
-    *parentFreeList = freeList;
-    return;
-  }
+  appendChunkList(parentFreeList, freeList, 0xfeeb1efab1edbabe);
 
-  HM_chunk chunk = *parentFreeList;
-  while (chunk->nextChunk != NULL) {
-    chunk = chunk->nextChunk;
-  }
-  chunk->nextChunk = freeList;
-  freeList->prevChunk = chunk;
-
-  HM_assertFreeListInvariants(*parentFreeList);
+  // HM_assertFreeListInvariants(*parentFreeList);
 }
 
 void HM_forwardHHObjptrsInChunkList(
@@ -480,12 +434,7 @@ void HM_forwardHHObjptrsInLevelList(
   forwardHHObjptrArgs->maxLevel = savedMaxLevel;
 }
 
-void HM_freeChunks(HM_chunkList * levelList, HM_chunk * freeList, Word32 minLevel) {
-  // struct FreeLevelListIteratorArgs iteratorArgs = {
-  //   .levelList = levelList,
-  //   .chunkList = NULL,
-  //   .minLevel = minLevel
-  // };
+void HM_freeChunks(HM_chunkList * levelList, HM_chunkList freeList, Word32 minLevel) {
 
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "START FreeChunks levelList = %p, minLevel = %u",
@@ -495,47 +444,26 @@ void HM_freeChunks(HM_chunkList * levelList, HM_chunk * freeList, Word32 minLeve
   HM_chunkList list = *levelList;
   while (list != NULL && list->level >= minLevel) {
     HM_chunk chunk = list->firstChunk;
-    if (NULL == chunk) {
-      list = list->nextHead;
-      continue;
-    }
-    list->firstChunk = chunk->nextChunk;
-    // list->firstChunk->prevChunk = NULL;
-
-    chunk->frontier = (pointer)chunk + sizeof(struct HM_chunk);
-    chunk->prevChunk = NULL;
-    chunk->nextChunk = *freeList;
-    chunk->mightContainMultipleObjects = TRUE;
-    if (NULL != chunk->nextChunk) {
-      chunk->nextChunk->prevChunk = chunk;
-    }
-    *freeList = chunk;
-
+    while (NULL != chunk) {
+      HM_chunk next = chunk->nextChunk;
+      HM_unlinkChunk(chunk);
+      HM_prependChunk(freeList, chunk);
+      chunk->frontier = HM_getChunkStart(chunk);
+      chunk->mightContainMultipleObjects = TRUE;
 #if ASSERT
-    /* clear out memory to quickly catch some memory safety errors */
-    pointer start = HM_getChunkStart(chunk);
-    size_t length = (size_t)(chunk->limit - start);
-    memset(start, 0xBF, length);
+      /* clear out memory to quickly catch some memory safety errors */
+      pointer start = HM_getChunkStart(chunk);
+      size_t length = (size_t)(chunk->limit - start);
+      memset(start, 0xBF, length);
 #endif
+      chunk = next;
+    }
+    list = list->nextHead;
   }
 
   *levelList = list;
 
-  // for (HM_chunk chunk = HM_freeLevelListIterator(&iteratorArgs);
-  //      NULL != chunk;
-  //      chunk = HM_freeLevelListIterator(&iteratorArgs)) {
-  //   /* SAM_NOTE: TODO: get rid of this spaghetti code. */
-  //   chunk->frontier = (pointer)chunk + sizeof(struct HM_chunk);
-  //   chunk->prevChunk = NULL;
-  //   chunk->nextChunk = *freeList;
-  //   chunk->mightContainMultipleObjects = TRUE;
-  //   if (NULL != chunk->nextChunk) {
-  //     chunk->nextChunk->prevChunk = chunk;
-  //   }
-  //   *freeList = chunk;
-  // }
-
-  HM_assertFreeListInvariants(*freeList);
+  HM_assertChunkListInvariants(freeList, freeList->containingHH);
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "END FreeChunks levelList = %p, minLevel = %u",
       (void*)levelList,
@@ -911,7 +839,7 @@ void appendChunkList(HM_chunkList destinationChunkList,
       ((void*)(chunkList)),
       ((void*)(destinationChunkList)));
 
-  assert (NULL != destinationChunkList);
+  assert(NULL != destinationChunkList);
   assert(HM_isLevelHead(destinationChunkList));
   assert(HM_isLevelHead(chunkList));
 
