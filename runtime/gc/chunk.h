@@ -50,6 +50,9 @@ struct HM_chunk {
   HM_chunk nextChunk;
   HM_chunk prevChunk;
 
+  HM_chunk nextAdjacent;
+  HM_chunk prevAdjacent;
+
   HM_chunkList levelHead;
 
   bool mightContainMultipleObjects;
@@ -166,7 +169,13 @@ void HM_unlinkChunk(HM_chunk chunk);
  * if chunk cannot be split as such, returns NULL. */
 HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested);
 
+void HM_coalesceChunks(HM_chunk left, HM_chunk right);
+
 HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk);
+
+/* Lookup the levelhead for this chunk, but don't path compress. This is useful
+ * for looking up the levelhead of a chunk which might not be locally owned */
+HM_chunkList HM_getLevelHead(HM_chunk chunk);
 
 /* append freeList onto the end of *parentFreeList, and update *parentFreeList
  * accordingly. */
@@ -220,7 +229,7 @@ void HM_forwardHHObjptrsInLevelList(
  * @param levelList The level list to free chunks from
  * @param minLevel The minimum level to free up to, inclusive
  */
-void HM_freeChunks(HM_chunkList * levelList, HM_chunkList freeList, Word32 minLevel);
+void HM_freeChunks(HM_chunkList * levelList, HM_chunkList freeList, Word32 minLevel, bool coalesce);
 
 /**
  * This function returns the frontier of the chunk
