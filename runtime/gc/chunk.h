@@ -150,12 +150,13 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh);
 
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level);
+
 void HM_prependChunk(HM_chunkList levelHead, HM_chunk chunk);
 void HM_appendChunk(HM_chunkList levelHead, HM_chunk chunk);
+void HM_unlinkChunk(HM_chunk chunk);
 
 HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested);
-
-void HM_unlinkChunk(HM_chunk chunk);
 
 HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk);
 

@@ -106,6 +106,9 @@ void HM_prependChunk(HM_chunkList levelHead, HM_chunk chunk) {
   if (levelHead->firstChunk != NULL) {
     levelHead->firstChunk->prevChunk = chunk;
   }
+  if (levelHead->lastChunk == NULL) {
+    levelHead->lastChunk = chunk;
+  }
   levelHead->firstChunk = chunk;
   levelHead->size += HM_getChunkSize(chunk);
 }
@@ -118,6 +121,9 @@ void HM_appendChunk(HM_chunkList levelHead, HM_chunk chunk) {
   chunk->prevChunk = levelHead->lastChunk;
   if (levelHead->lastChunk != NULL) {
     levelHead->lastChunk->nextChunk = chunk;
+  }
+  if (levelHead->firstChunk == NULL) {
+    levelHead->firstChunk = chunk;
   }
   levelHead->lastChunk = chunk;
   levelHead->size += HM_getChunkSize(chunk);
@@ -178,7 +184,8 @@ HM_chunk HM_takeFromChunk(HM_chunk * chunkp, size_t bytesRequested) {
       chunk->nextChunk->prevChunk = chunk->prevChunk;
     }
     chunk->nextChunk = NULL;
-    chunk->prevChunk = (HM_chunk)(0xfeeb1efab1edbeef);
+    chunk->prevChunk = NULL;
+    chunk->levelHead = NULL;
     return chunk;
   }
 
@@ -273,15 +280,7 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
     return NULL;
   }
 
-  /* insert into list and update levelHead */
-  chunk->levelHead = levelHead;
-  chunk->nextChunk = NULL;
-  chunk->prevChunk = levelHead->lastChunk;
-  if (NULL != levelHead->lastChunk) {
-    levelHead->lastChunk->nextChunk = chunk;
-  }
-  levelHead->lastChunk = chunk;
-  levelHead->size += HM_getChunkSize(chunk);
+  HM_appendChunk(levelHead, chunk);
 
   LOG(LM_CHUNK, LL_DEBUG,
       "Allocate chunk %p at level %u",
@@ -289,6 +288,24 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
       levelHead->level);
 
   return chunk;
+}
+
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
+
+  // SAM_NOTE: replace with custom arena allocation if a performance bottleneck
+  HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
+
+  list->firstChunk = NULL;
+  list->lastChunk = NULL;
+  list->parent = list;
+  list->nextHead = NULL;
+  list->containingHH = hh;
+  list->toChunkList = NULL;
+  list->size = 0;
+  list->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
+  list->level = level;
+
+  return list;
 }
 
 HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
@@ -303,23 +320,8 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
     return NULL;
   }
 
-  chunk->nextChunk = NULL;
-  chunk->prevChunk = NULL;
-
-  // SAM_NOTE: TODO: replace with arena allocation if this becomes a
-  // performance bottleneck
-  HM_chunkList levelHead = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
-
-  chunk->levelHead = levelHead;
-  levelHead->firstChunk = chunk;
-  levelHead->lastChunk = chunk;
-  levelHead->parent = levelHead;
-  levelHead->nextHead = NULL;
-  levelHead->containingHH = hh;
-  levelHead->toChunkList = NULL;
-  levelHead->size = (size_t)(chunk->limit - (pointer)chunk);
-  levelHead->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
-  levelHead->level = level;
+  HM_chunkList levelHead = HM_newChunkList(hh, level);
+  HM_appendChunk(levelHead, chunk);
 
   /* insert into level list */
   HM_mergeLevelList(levelList,
@@ -346,6 +348,7 @@ void HM_unlinkChunk(HM_chunk chunk) {
   assert(!levelHead->isInToSpace);
   assert(levelHead->containingHH != COPY_OBJECT_HH_VALUE);
   levelHead->size -= HM_getChunkSize(chunk);
+  // SAM_NOTE: TODO: this function should not be responsible for updating containingHH
   levelHead->containingHH->locallyCollectibleSize -= HM_getChunkSize(chunk);
   if (levelHead->lastChunk == chunk) {
     levelHead->lastChunk = chunk->prevChunk;
@@ -359,6 +362,7 @@ void HM_unlinkChunk(HM_chunk chunk) {
   HM_assertChunkListInvariants(levelHead, levelHead->containingHH);
 #endif
 
+  assert(HM_isUnlinked(chunk));
 }
 
 /* SAM_NOTE: TODO: put levelHeads at the front of the freelists so that we can
@@ -953,14 +957,15 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList,
   assert(HM_isLevelHead(chunkList));
   Word64 size = 0;
   HM_chunk chunk = chunkList->firstChunk;
-  while (NULL != chunk->nextChunk) {
-    assert(chunk->nextChunk->prevChunk == chunk);
+  while (NULL != chunk) {
     HM_assertChunkInvariants(chunk, chunkList);
     size += HM_getChunkSize(chunk);
+    if (chunk->nextChunk == NULL) {
+      break;
+    }
+    assert(chunk->nextChunk->prevChunk == chunk);
     chunk = chunk->nextChunk;
   }
-  HM_assertChunkInvariants(chunk, chunkList);
-  size += HM_getChunkSize(chunk);
 
   assert(chunkList->containingHH == hh);
   assert(chunkList->size == size);
