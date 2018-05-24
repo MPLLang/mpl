@@ -884,46 +884,48 @@ HM_chunkList getLevelHead(HM_chunk chunk) {
 }
 #endif
 
-void appendChunkList(HM_chunkList destinationChunkList,
-                     HM_chunkList chunkList,
+void appendChunkList(HM_chunkList list1,
+                     HM_chunkList list2,
                      ARG_USED_FOR_ASSERT size_t sentinel) {
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "Appending %p into %p",
-      ((void*)(chunkList)),
-      ((void*)(destinationChunkList)));
+      ((void*)(list2)),
+      ((void*)(list1)));
 
-  assert(NULL != destinationChunkList);
-  assert(HM_isLevelHead(destinationChunkList));
-  assert(HM_isLevelHead(chunkList));
+  assert(NULL != list1);
+  assert(HM_isLevelHead(list1));
+  assert(HM_isLevelHead(list2));
 
-  if (NULL == chunkList) {
+  if (NULL == list2) {
     /* nothing to append */
     return;
   }
 
-  /* append list */
-  HM_chunk lastDestinationChunk = HM_getChunkListLastChunk(destinationChunkList);
-  assert(NULL == lastDestinationChunk->nextChunk);
-  lastDestinationChunk->nextChunk = chunkList->firstChunk;
+  if (list1->lastChunk == NULL) {
+    assert(list1->firstChunk == NULL);
+    list1->firstChunk = list2->firstChunk;
+  } else {
+    assert(list1->lastChunk->nextChunk == NULL);
+    list1->lastChunk->nextChunk = list2->firstChunk;
+  }
 
-  /* update level head chunk */
-  HM_chunk lastChunk = HM_getChunkListLastChunk(chunkList);
-  destinationChunkList->lastChunk = lastChunk;
-  destinationChunkList->size += chunkList->size;
+  if (list2->firstChunk != NULL) {
+    list2->firstChunk->prevChunk = list1->lastChunk;
+  }
 
-  /* demote chunkList's level head chunk */
+  list1->lastChunk = list2->lastChunk;
+  list1->size += list2->size;
+  list2->parent = list1;
+
 #if ASSERT
-  chunkList->nextHead = ((void*)(sentinel));
-  chunkList->lastChunk = ((void*)(sentinel));
-  chunkList->containingHH = ((struct HM_HierarchicalHeap*)(sentinel));
-  chunkList->toChunkList = ((void*)(sentinel));
+  list2->nextHead = ((void*)(sentinel));
+  list2->lastChunk = ((void*)(sentinel));
+  list2->containingHH = ((struct HM_HierarchicalHeap*)(sentinel));
+  list2->toChunkList = ((void*)(sentinel));
 #endif
 
-  chunkList->firstChunk->prevChunk = lastDestinationChunk;
-  chunkList->parent = destinationChunkList;
-
-  HM_assertChunkListInvariants(destinationChunkList,
-                               destinationChunkList->containingHH);
+  HM_assertChunkListInvariants(list1,
+                               list1->containingHH);
 }
 
 #if ASSERT
