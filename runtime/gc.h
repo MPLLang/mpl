@@ -29,7 +29,6 @@ typedef GC_state GCState_t;
 
 #include "gc/tls-objects.h"
 #include "gc/align.h"
-#include "gc/blocks.h"
 #include "gc/model.h"
 #include "gc/pointer.h"
 #include "gc/objptr.h"

@@ -155,7 +155,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_HH_offsetof(s)));
 
-  hh->freeList = NULL;
+  hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
   hh->state = LIVE;

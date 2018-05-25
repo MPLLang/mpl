@@ -11,6 +11,12 @@ tab: tab.sml tab.mlb
 tab.dbg: tab.sml tab.mlb
 	$(MLTON) $(FLAGS) $(DBG) -output tab.dbg tab.mlb
 
+prom: prom.sml prom.mlb
+	$(MLTON) $(FLAGS) -output prom prom.mlb
+
+prom.dbg: prom.sml prom.mlb
+	$(MLTON) $(FLAGS) $(DBG) -output prom.dbg prom.mlb
+
 fib: fib.sml fib.mlb
 	$(MLTON) $(FLAGS) -output fib fib.mlb
 

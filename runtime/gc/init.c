@@ -427,6 +427,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->traceBufferSize = stringToInt(argv[i++]);
+        } else if (0 == strcmp(arg, "free-list-coalesce")) {
+          i++;
+          s->controls->freeListCoalesce = TRUE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -499,6 +502,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 1024ULL * 1024 * 2;
 
   s->controls->mayUseAncestorChunk = TRUE;
+  s->controls->freeListCoalesce = FALSE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
@@ -600,7 +604,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
     die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
 
-  initBlocks(s);
+  HM_configChunks(s);
 
   return res;
 }
