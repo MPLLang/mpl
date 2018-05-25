@@ -111,6 +111,8 @@ static inline bool inSameBlock(pointer p, pointer q) {
 static inline HM_chunk HM_getChunkOf(pointer p) {
   HM_chunk chunk = (HM_chunk)blockOf(p);
   assert(chunk->magic == CHUNK_MAGIC); // sanity check
+  assert((pointer)chunk + sizeof(struct HM_chunk) <= p);
+  assert(p <= chunk->limit);
   return chunk;
 }
 

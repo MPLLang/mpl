@@ -384,7 +384,16 @@ void HM_forwardHHObjptrsInChunkList(
   void* predicateArgs,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs)
 {
-  HM_chunk chunk = HM_getChunkOf(start);
+  HM_chunk chunk;
+  if (blockOf(start) == start) {
+    /* `start` is on the boundary of a chunk! The actual chunk which "contains"
+     * this pointer is therefore the previous chunk. */
+    chunk = HM_getChunkOf(start-1);
+    assert(start == chunk->limit);
+    assert(chunk->frontier == chunk->limit);
+  } else {
+    chunk = HM_getChunkOf(start);
+  }
 
   pointer p = start;
   size_t i = 0;
@@ -397,6 +406,7 @@ void HM_forwardHHObjptrsInChunkList(
 
     /* Can I use foreachObjptrInRange() for this? */
     while (p != chunk->frontier) {
+      assert(p < chunk->frontier);
       p = advanceToObjectData(s, p);
 
       p = foreachObjptrInObject(s,

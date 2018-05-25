@@ -7,10 +7,7 @@
 pointer HM_Promote(GC_state s,
                    HM_chunkList dst_list,
                    pointer src) {
-    /* SAM_NOTE: this use of getChunkHeadChunk might be incorrect; need to
-     * follow pointers all the way to the levelHead? Adding an assert on the
-     * following line for sanity... */
-    // HM_chunkList dst_list = HM_getChunkList(dst_chunk);
+    assert(HM_isLevelHead(dst_list));
     HM_chunkList src_chunk = HM_getLevelHeadPathCompress(HM_getChunkOf(src));
     HM_chunkList tgtChunkList = dst_list;
     struct HM_HierarchicalHeap *dst_hh = dst_list->containingHH;
@@ -42,11 +39,17 @@ pointer HM_Promote(GC_state s,
     if (dst_hh->lastAllocatedChunk == tgtChunk ||
         !tgtChunk->mightContainMultipleObjects ||
         !inSameBlock((pointer)tgtChunk, tgtChunk->frontier)) {
-      HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
       LOG(LM_HH_PROMOTION, LL_DEBUG,
-          "Chunk %p at level %u can't be used, so appending new chunk",
+          "Appending a new chunk. Chunk %p at level %u can't be used because:\n"
+          "  in use? %s\n"
+          "  single-object chunk? %s\n"
+          "  variable-sized chunk? %s",
           (void*)HM_getChunkListLastChunk(tgtChunkList),
-          tgtChunkList->level);
+          tgtChunkList->level,
+          dst_hh->lastAllocatedChunk == tgtChunk ? "yes" : "no",
+          !tgtChunk->mightContainMultipleObjects ? "yes" : "no",
+          !inSameBlock((pointer)tgtChunk, tgtChunk->frontier) ? "yes" : "no");
+      HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
     }
 
     struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
@@ -71,14 +74,15 @@ pointer HM_Promote(GC_state s,
 
     LOG(LM_HH_PROMOTION, LL_DEBUG, "START src copy");
 
-    HM_chunk lastChunk = HM_getChunkListLastChunk(tgtChunkList);
-    pointer start = HM_getChunkFrontier(lastChunk);
-
     forwardHHObjptr(s, &srcobj, &forwardHHObjptrArgs);
 
-    if (lastChunk != HM_getChunkListLastChunk(tgtChunkList)) {
-        start = HM_getChunkStart(HM_getChunkListLastChunk(tgtChunkList));
-    }
+    pointer start = foreachObjptrInObject(s,
+                                          objptrToPointer(srcobj, s->heap->start),
+                                          FALSE,
+                                          trueObjptrPredicate,
+                                          NULL,
+                                          forwardHHObjptr,
+                                          &forwardHHObjptrArgs);
 
     LOG(LM_HH_PROMOTION, LL_DEBUG, "START copy loop at %p", (void *)start);
 

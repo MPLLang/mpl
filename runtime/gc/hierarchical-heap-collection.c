@@ -619,11 +619,13 @@ void forwardHHObjptr (GC_state s,
         opInfo.level,
         (void *)toChunkList);
 
-    /* SAM_NOTE: TODO: get this spaghetti code out of here. */
+    /* SAM_NOTE: TODO: get this spaghetti code out of here.
+     * TODO: does this work with promotion? */
     if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
       // assert(FALSE);
       /* This chunk contains *only* this object, so no need to copy. Instead,
        * just move the chunk. */
+      assert(!inPromotion);
       assert(!hasFwdPtr(p));
       HM_chunk chunk = HM_getChunkOf(p);
       HM_unlinkChunk(chunk);
