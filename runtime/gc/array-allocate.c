@@ -107,6 +107,8 @@ pointer arrayAllocateInHH(GC_state s,
     /* split the large chunk so that we have space for the array at the end;
      * this guarantees that the single chunk holding the array is not a
      * level-head which makes it easy to move it during a GC */
+    assert(hh->lastAllocatedChunk->frontier == s->frontier);
+    assert(hh->lastAllocatedChunk->limit == s->limitPlusSlop);
     HM_chunk arrayChunk = HM_splitChunk(hh->lastAllocatedChunk, arrayChunkBytes);
     assert(arrayChunk != NULL);
     pointer result = arrayChunk->frontier;
