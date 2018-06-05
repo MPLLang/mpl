@@ -178,23 +178,15 @@ void HM_coalesceChunks(HM_chunk left, HM_chunk right) {
 // #endif
 }
 
-HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
-  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
-  assert(!HM_isUnlinked(chunk));
-
-  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
-  totalSize = align(totalSize, HM_BLOCK_SIZE);
-
-  pointer limit = chunk->limit;
-  pointer splitPoint = limit - totalSize;
-
-  if (splitPoint < chunk->frontier) {
-    // not enough space to split this chunk
-    return NULL;
-  }
+HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint);
+HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
+  assert(chunk->frontier <= splitPoint);
+  assert(splitPoint + sizeof(struct HM_chunk) <= chunk->limit);
+  assert(isAligned((uintptr_t)splitPoint, HM_BLOCK_SIZE));
 
   HM_chunkList levelHead = HM_getLevelHeadPathCompress(chunk);
 
+  pointer limit = chunk->limit;
   chunk->limit = splitPoint;
   HM_chunk result = HM_initializeChunk(splitPoint, limit);
   result->levelHead = levelHead;
@@ -234,7 +226,101 @@ HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
   return result;
 }
 
+HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
+  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
+  assert(!HM_isUnlinked(chunk));
+
+  size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
+  totalSize = align(totalSize, HM_BLOCK_SIZE);
+
+  pointer limit = chunk->limit;
+  pointer splitPoint = limit - totalSize;
+
+  if (splitPoint < chunk->frontier) {
+    // not enough space to split this chunk
+    return NULL;
+  }
+
+  return splitChunkAt(chunk, splitPoint);
+}
+
+HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested);
+HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested) {
+  assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
+  assert(!HM_isUnlinked(chunk));
+
+  pointer splitPoint = (pointer)(uintptr_t)align((uintptr_t)(chunk->frontier + bytesRequested), HM_BLOCK_SIZE);
+
+  if (splitPoint == chunk->limit) {
+    // not enough space to split this chunk
+    return NULL;
+  }
+
+  return splitChunkAt(chunk, (pointer)splitPoint);
+}
+
+HM_chunk mmapNewChunk(size_t chunkWidth);
+HM_chunk mmapNewChunk(size_t chunkWidth) {
+  assert(isAligned(chunkWidth, HM_BLOCK_SIZE));
+  size_t bs = HM_BLOCK_SIZE;
+  pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
+  if (NULL == start) {
+    return NULL;
+  }
+  start = (pointer)(uintptr_t)align((size_t)start, bs);
+  HM_chunk result = HM_initializeChunk(start, start + chunkWidth);
+
+  LOG(LM_CHUNK, LL_INFO,
+    "Mapped a new region of size %zu",
+    chunkWidth + bs);
+
+  return result;
+}
+
 HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
+// HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
+//   HM_chunkList freeList = hh->freeList;
+//   HM_chunk chunk = freeList->firstChunk;
+//   size_t releasedBytes = 0;
+//   while (chunk != NULL) {
+//     HM_chunk next = chunk->nextChunk;
+//     if ((size_t)(chunk->limit - chunk->frontier >= bytesRequested)) {
+//       break;
+//     } else {
+//       HM_unlinkChunk(chunk);
+//       if (NULL != chunk->prevAdjacent) chunk->prevAdjacent->nextAdjacent = NULL;
+//       if (NULL != chunk->nextAdjacent) chunk->nextAdjacent->prevAdjacent = NULL;
+//       size_t chunkWidth = (size_t)(chunk->limit - (pointer)chunk);
+//       GC_release(chunk, chunkWidth);
+//       releasedBytes += chunkWidth;
+//     }
+//     chunk = next;
+//   }
+
+//   if (NULL != chunk) {
+//     /* found a suitable chunk in the freeList. now handle defragmenting the
+//      * freelist. */
+//     if (releasedBytes > 0) {
+//       HM_appendChunk(freeList, mmapNewChunk(max(releasedBytes, HM_ALLOC_SIZE)));
+//     }
+//   } else {
+//     size_t bs = HM_BLOCK_SIZE;
+//     size_t desiredSize = align(bytesRequested + sizeof(struct HM_chunk), bs);
+//     chunk = mmapNewChunk(desiredSize + HM_ALLOC_SIZE);
+//     HM_appendChunk(freeList, chunk);
+//   }
+
+//   HM_chunk result = HM_splitChunk(chunk, bytesRequested);
+//   if (result == NULL) {
+//     result = chunk;
+//   }
+//   HM_unlinkChunk(result);
+//   assert(result->frontier == HM_getChunkStart(result));
+//   assert(result->mightContainMultipleObjects);
+//   HM_assertChunkListInvariants(hh->freeList, hh);
+//   return result;
+// }
+
 HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   HM_chunk chunk = hh->freeList->firstChunk;
   size_t skipped = 0;
@@ -251,34 +337,38 @@ HM_chunk HM_getFreeChunk(struct HM_HierarchicalHeap* hh, size_t bytesRequested) 
     /* No sufficient free chunk was found, so need to allocate a new one. Also,
      * need to amortize future allocations by populating the free list. */
     size_t bs = HM_BLOCK_SIZE;
-    size_t desiredSize = align(bytesRequested + HM_ALLOC_SIZE, bs);
-    pointer start = (pointer)GC_mmapAnon(NULL, desiredSize + bs);
-    if (NULL == start) {
-      return NULL;
-    }
-    start = (pointer)(uintptr_t)align((size_t)start, bs);
-    chunk = HM_initializeChunk(start, start + desiredSize);
+    chunk = mmapNewChunk(align(bytesRequested + HM_ALLOC_SIZE, bs));
     HM_prependChunk(hh->freeList, chunk);
-    LOG(LM_CHUNK, LL_INFO,
-      "Mapped a new region of size %zu",
-      desiredSize + bs);
   }
 
-  HM_chunk result = HM_splitChunk(chunk, bytesRequested);
-  if (result == NULL) {
-    result = chunk;
-  }
-  HM_unlinkChunk(result);
-  assert(result->frontier == HM_getChunkStart(result));
-  assert(result->mightContainMultipleObjects);
+  HM_splitChunkFront(chunk, bytesRequested);
+  HM_unlinkChunk(chunk);
+  assert(chunk->frontier == HM_getChunkStart(chunk));
+  assert(chunk->mightContainMultipleObjects);
   HM_assertChunkListInvariants(hh->freeList, hh);
-  return result;
+  return chunk;
+}
+
+HM_chunk HM_getGCStateFreeChunk(GC_state s, size_t bytesRequested);
+HM_chunk HM_getGCStateFreeChunk(GC_state s, size_t bytesRequested) {
+  HM_chunk chunk = s->freeChunks->firstChunk;
+  if (chunk == NULL || (size_t)(chunk->limit - chunk->frontier) < bytesRequested) {
+    size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
+    size_t allocSize = max(bytesNeeded, s->nextChunkAllocSize);
+    s->nextChunkAllocSize = 2 * allocSize;
+    chunk = mmapNewChunk(allocSize);
+    HM_prependChunk(s->freeChunks, chunk);
+  }
+
+  HM_splitChunkFront(chunk, bytesRequested);
+  HM_unlinkChunk(chunk);
+  return chunk;
 }
 
 HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   assert(HM_isLevelHead(levelHead));
-  // SAM_NOTE: can't use hh here, because it might just be a sentinel value :( :( :( :(
-  HM_chunk chunk = HM_getFreeChunk(getHierarchicalHeapCurrent(pthread_getspecific(gcstate_key)), bytesRequested);
+  HM_chunk chunk = HM_getGCStateFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
+  // HM_chunk chunk = HM_getFreeChunk(getHierarchicalHeapCurrent(pthread_getspecific(gcstate_key)), bytesRequested);
 
   if (NULL == chunk) {
     return NULL;
@@ -317,8 +407,8 @@ HM_chunk HM_allocateLevelHeadChunk(HM_chunkList * levelList,
                                    Word32 level,
                                    struct HM_HierarchicalHeap* hh)
 {
-  // SAM_NOTE: can't use hh here, because it might just be a sentinel value :( :( :( :(
-  HM_chunk chunk = HM_getFreeChunk(getHierarchicalHeapCurrent(pthread_getspecific(gcstate_key)), bytesRequested);
+  HM_chunk chunk = HM_getGCStateFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
+  // HM_chunk chunk = HM_getFreeChunk(getHierarchicalHeapCurrent(pthread_getspecific(gcstate_key)), bytesRequested);
 
   if (NULL == chunk) {
     return NULL;
@@ -491,6 +581,7 @@ void HM_freeChunks(HM_chunkList* levelList, HM_chunkList freeList, Word32 minLev
     HM_chunk chunk = list->firstChunk;
     while (NULL != chunk) {
       HM_chunk next = chunk->nextChunk;
+      /*
       HM_unlinkChunk(chunk);
       chunk->frontier = HM_getChunkStart(chunk);
       chunk->mightContainMultipleObjects = TRUE;
@@ -507,6 +598,7 @@ void HM_freeChunks(HM_chunkList* levelList, HM_chunkList freeList, Word32 minLev
         }
       }
       HM_prependChunk(freeList, chunk);
+      */
 #if ASSERT
       /* clear out memory to quickly catch some memory safety errors */
       pointer start = HM_getChunkStart(chunk);
@@ -517,6 +609,12 @@ void HM_freeChunks(HM_chunkList* levelList, HM_chunkList freeList, Word32 minLev
     }
     list = list->nextHead;
   }
+
+  // size_t count = 0;
+  // for (HM_chunk chunk = freeList->firstChunk; chunk != NULL; chunk = chunk->nextChunk) {
+  //   count++;
+  // }
+  // printf("After freeing: %zu chunks in freelist\n", count);
 
   *levelList = list;
 

@@ -337,25 +337,25 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
   hh->level = level;
 
   /* SAM_NOTE: TODO: This still appears to be broken; debugging needed. */
-  if (!(s->controls->mayUseAncestorChunk)) {
-    Word32 allocLevel = HM_getHighestLevel(hh->levelList);
-    assert(getLevelHead(hh->lastAllocatedChunk)->level == allocLevel);
-    assert(allocLevel <= level);
-    if (allocLevel != level) {
-      HM_HH_updateValues(hh, s->frontier);
-      HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
-      s->frontier = HM_HH_getFrontier(hh);
-      s->limitPlusSlop = HM_HH_getLimit(hh);
-      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-    }
+  // if (!(s->controls->mayUseAncestorChunk)) {
+  //   Word32 allocLevel = HM_getHighestLevel(hh->levelList);
+  //   assert(getLevelHead(hh->lastAllocatedChunk)->level == allocLevel);
+  //   assert(allocLevel <= level);
+  //   if (allocLevel != level) {
+  //     HM_HH_updateValues(hh, s->frontier);
+  //     HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+  //     s->frontier = HM_HH_getFrontier(hh);
+  //     s->limitPlusSlop = HM_HH_getLimit(hh);
+  //     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  //   }
 
-    /* This is an alternative implementation which might have slightly higher
-     * overhead. */
-    // getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-    // getThreadCurrent(s)->exnStack = s->exnStack;
-    // getThreadCurrent(s)->bytesNeeded = 0;
-    // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
-  }
+  //   /* This is an alternative implementation which might have slightly higher
+  //    * overhead. */
+  //   // getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  //   // getThreadCurrent(s)->exnStack = s->exnStack;
+  //   // getThreadCurrent(s)->bytesNeeded = 0;
+  //   // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+  // }
 
   assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
   assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);

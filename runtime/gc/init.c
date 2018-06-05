@@ -515,9 +515,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;
 
-  s->freeBlocks = NULL;
-  s->freeBlocksLength = 0;
-
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
   initHeap (s, s->heap);
 
@@ -606,6 +603,9 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   HM_configChunks(s);
 
+  s->freeChunks = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->nextChunkAllocSize = s->controls->allocChunkSize;
+
   return res;
 }
 
@@ -644,8 +644,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueLock = BOGUS_OBJPTR;
-  d->freeBlocks = NULL;
-  d->freeBlocksLength = 0;
+  d->freeChunks = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->globalFrontier = NULL;
   d->globalLimitPlusSlop = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;
