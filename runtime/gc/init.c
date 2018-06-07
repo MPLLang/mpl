@@ -497,9 +497,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
-  size_t bs = 16ULL * 1024;
-  s->controls->minChunkSize = bs;
-  s->controls->allocChunkSize = 1024ULL * 1024 * 2;
+  s->controls->minChunkSize = GC_pageSize ();
+  s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
   s->controls->freeListCoalesce = FALSE;
