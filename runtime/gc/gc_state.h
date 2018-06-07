@@ -43,7 +43,8 @@ struct GC_state {
   struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
-  struct HM_chunkList* freeChunks;
+  struct HM_chunkList* freeListSmall;
+  struct HM_chunkList* freeListLarge;
   size_t nextChunkAllocSize;
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;

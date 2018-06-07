@@ -231,7 +231,7 @@ void HM_forwardHHObjptrsInLevelList(
  * @param levelList The level list to free chunks from
  * @param minLevel The minimum level to free up to, inclusive
  */
-void HM_freeChunks(HM_chunkList * levelList, HM_chunkList freeList, Word32 minLevel, bool coalesce);
+void HM_freeChunks(GC_state s, HM_chunkList * levelList, Word32 minLevel, bool coalesce);
 
 /**
  * This function returns the frontier of the chunk
