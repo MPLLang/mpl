@@ -65,6 +65,11 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
                                        pointer p,
                                        void* rawArgs);
 
+struct checkRememberedArgs {
+
+};
+void checkRememberedEntry(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
+
 /************************/
 /* Function Definitions */
 /************************/
@@ -277,6 +282,17 @@ void HM_HHC_collectLocal(void) {
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
+
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "START trace remembered set");
+
+  HM_foreachRememberedInLevelList(
+    s,
+    hh->levelList,
+    forwardHHObjptrArgs.minLevel,
+    checkRememberedEntry,
+    NULL);
+
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "END trace remembered set");
 
   /* do copy-collection */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -806,4 +822,24 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
   }
 
   return TRUE;
+}
+
+void checkRememberedEntry(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
+  struct checkRememberedArgs* args = (struct checkRememberedArgs*)rawArgs;
+  if (!Assignable_isMaster(s, dst)) {
+    /* promotion guarantees no reachable down-pointers. If the dst object was
+     * promoted, then any pre-existing down-pointers can be ignored. */
+    return;
+  }
+  objptr op = *((objptr*)dst + idx);
+  if (op != src) {
+    /* Another write to this location has since invalidated this particular
+     * remembered entry. */
+    return;
+  }
+  if (Assignable_isMaster(s, src)) {
+    /* SAM_NOTE: TODO: this will eventually copy src to the to-space, updating
+     * dst[idx] and producing a new remembered entry. */
+    DIE("Found a master object pointed to by a down-pointer");
+  }
 }

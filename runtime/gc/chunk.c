@@ -346,6 +346,7 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
   list->lastChunk = NULL;
   list->parent = list;
   list->nextHead = NULL;
+  list->rememberedSet = NULL;
   list->containingHH = hh;
   list->toChunkList = NULL;
   list->size = 0;
@@ -526,44 +527,54 @@ static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
   return chunk != NULL && HM_getLevelHead(chunk) == list;
 }
 
+void freeChunksInChunkList(HM_chunkList list, HM_chunkList freeList, bool coalesce);
+void freeChunksInChunkList(HM_chunkList list, HM_chunkList freeList, bool coalesce) {
+  assert(freeList != NULL);
+
+  if (NULL == list) {
+    return;
+  }
+
+  HM_chunk chunk = list->firstChunk;
+  while (NULL != chunk) {
+    HM_chunk next = chunk->nextChunk;
+    HM_unlinkChunk(chunk);
+    chunk->frontier = HM_getChunkStart(chunk);
+    chunk->mightContainMultipleObjects = TRUE;
+    if (coalesce) {
+      if (chunkIsInList(chunk->prevAdjacent, freeList)) {
+        assert(chunk->prevAdjacent->nextAdjacent == chunk);
+        HM_unlinkChunk(chunk->prevAdjacent);
+        chunk = chunk->prevAdjacent;
+        HM_coalesceChunks(chunk, chunk->nextAdjacent);
+      }
+      if (chunkIsInList(chunk->nextAdjacent, freeList)) {
+        HM_unlinkChunk(chunk->nextAdjacent);
+        HM_coalesceChunks(chunk, chunk->nextAdjacent);
+      }
+    }
+
+    HM_prependChunk(freeList, chunk);
+#if ASSERT
+    /* clear out memory to quickly catch some memory safety errors */
+    pointer start = HM_getChunkStart(chunk);
+    size_t length = (size_t)(chunk->limit - start);
+    memset(start, 0xBF, length);
+#endif
+    chunk = next;
+  }
+}
+
 void HM_freeChunks(GC_state s, HM_chunkList* levelList, Word32 minLevel, bool coalesce) {
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "START FreeChunks levelList = %p, minLevel = %u",
       ((void*)(levelList)),
       minLevel);
 
-  HM_chunkList freeListSmall = s->freeListSmall;
-
   HM_chunkList list = *levelList;
   while (list != NULL && list->level >= minLevel) {
-    HM_chunk chunk = list->firstChunk;
-    while (NULL != chunk) {
-      HM_chunk next = chunk->nextChunk;
-      HM_unlinkChunk(chunk);
-      chunk->frontier = HM_getChunkStart(chunk);
-      chunk->mightContainMultipleObjects = TRUE;
-      if (coalesce) {
-        if (chunkIsInList(chunk->prevAdjacent, freeListSmall)) {
-          assert(chunk->prevAdjacent->nextAdjacent == chunk);
-          HM_unlinkChunk(chunk->prevAdjacent);
-          chunk = chunk->prevAdjacent;
-          HM_coalesceChunks(chunk, chunk->nextAdjacent);
-        }
-        if (chunkIsInList(chunk->nextAdjacent, freeListSmall)) {
-          HM_unlinkChunk(chunk->nextAdjacent);
-          HM_coalesceChunks(chunk, chunk->nextAdjacent);
-        }
-      }
-
-      HM_prependChunk(freeListSmall, chunk);
-#if ASSERT
-      /* clear out memory to quickly catch some memory safety errors */
-      pointer start = HM_getChunkStart(chunk);
-      size_t length = (size_t)(chunk->limit - start);
-      memset(start, 0xBF, length);
-#endif
-      chunk = next;
-    }
+    freeChunksInChunkList(list, s->freeListSmall, coalesce);
+    freeChunksInChunkList(list->rememberedSet, s->freeListSmall, coalesce);
     list = list->nextHead;
   }
 
@@ -982,8 +993,16 @@ void appendChunkList(HM_chunkList list1,
   list1->size += list2->size;
   list2->parent = list1;
 
+  if (list1->rememberedSet == NULL) {
+    list1->rememberedSet = list2->rememberedSet;
+  } else {
+    // recursive call will not recurse
+    appendChunkList(list1->rememberedSet, list2->rememberedSet, sentinel);
+  }
+
 #if ASSERT
   list2->nextHead = ((void*)(sentinel));
+  list2->rememberedSet = (void*)sentinel;
   list2->lastChunk = ((void*)(sentinel));
   list2->containingHH = ((struct HM_HierarchicalHeap*)(sentinel));
   list2->toChunkList = ((void*)(sentinel));

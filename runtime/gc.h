@@ -90,5 +90,6 @@ typedef GC_state GCState_t;
 #include "gc/assign.h"
 #include "gc/level.h"
 #include "gc/promote.h"
+#include "gc/remembered-set.h"
 
 #endif /* _MLTON_GC_H_ */

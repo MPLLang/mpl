@@ -69,6 +69,9 @@ struct HM_chunkList {
   HM_chunkList parent;
   HM_chunkList nextHead;
 
+  // potential down-pointers into this chunk list.
+  HM_chunkList rememberedSet;
+
   struct HM_HierarchicalHeap * containingHH;
   HM_chunkList toChunkList; // the corresponding chunklist in the to-space during a GC
   Word64 size; // size (bytes) of this level, both allocated and unallocated

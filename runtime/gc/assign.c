@@ -337,7 +337,8 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
      * entanglement. */
     pointer src_repl = objptrToPointer(src, s->heap->start);
     if (dst_info.level < src_info.level) {
-        src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
+      HM_remember(src_info.chunkList, pointerToObjptr(dst_repl, s->heap->start), index, src);
+      src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
     }
 
     /* Perform the write. */
