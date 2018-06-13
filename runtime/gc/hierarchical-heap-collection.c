@@ -65,10 +65,11 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
                                        pointer p,
                                        void* rawArgs);
 
-struct checkRememberedArgs {
+// struct checkRememberedArgs {
 
-};
-void checkRememberedEntry(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
+// };
+// void checkRememberedEntry(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
+void forwardRemembered(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
 
 /************************/
 /* Function Definitions */
@@ -289,8 +290,8 @@ void HM_HHC_collectLocal(void) {
     s,
     hh->levelList,
     forwardHHObjptrArgs.minLevel,
-    checkRememberedEntry,
-    NULL);
+    forwardRemembered,
+    &forwardHHObjptrArgs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END trace remembered set");
 
@@ -312,7 +313,7 @@ void HM_HHC_collectLocal(void) {
       &skipStackAndThreadObjptrPredicate,
       ((void*)(&ssatoPredicateArgs)),
       &forwardHHObjptrArgs,
-      false);
+      TRUE);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
@@ -581,6 +582,7 @@ void forwardHHObjptr (GC_state s,
      * the level of the object otherwise. */
     HM_chunkList toChunkList = args->tgtChunkList;
 
+    assert(!inPromotion);
     if (!inPromotion) {
         toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
 
@@ -824,11 +826,10 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
   return TRUE;
 }
 
-void checkRememberedEntry(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
-  struct checkRememberedArgs* args = (struct checkRememberedArgs*)rawArgs;
-  if (!Assignable_isMaster(s, dst)) {
-    /* promotion guarantees no reachable down-pointers. If the dst object was
-     * promoted, then any pre-existing down-pointers can be ignored. */
+void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
+  if (hasFwdPtr(objptrToPointer(dst, NULL))) {
+    /* dst has already been forwarded; if src needs to be forwarded too, it
+     * will be handled implicitly by the forwarding of dst. */
     return;
   }
   objptr op = *((objptr*)dst + idx);
@@ -837,9 +838,46 @@ void checkRememberedEntry(GC_state s, objptr dst, Int64 idx, objptr src, void* r
      * remembered entry. */
     return;
   }
-  if (Assignable_isMaster(s, src)) {
-    /* SAM_NOTE: TODO: this will eventually copy src to the to-space, updating
-     * dst[idx] and producing a new remembered entry. */
-    DIE("Found a master object pointed to by a down-pointer");
+
+  HM_chunkList srcList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
+  HM_chunkList dstList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+
+  // struct HM_ObjptrInfo dstInfo;
+  // struct HM_ObjptrInfo srcInfo;
+  // HM_getObjptrInfo(s, dst, &dstInfo);
+  // HM_getObjptrInfo(s, src, &srcInfo);
+
+  assert(dstList->level <= srcList->level);
+
+  if (dstList->level == srcList->level) {
+    /* levels have coincided due to joins, so ignore this entry. */
+    return;
   }
+
+  objptr src_copy = src;
+
+  forwardHHObjptr(s, &src_copy, rawArgs);
+  assert(NULL != srcList->toChunkList);
+  *((objptr*)dst + idx) = src_copy;
+  HM_remember(srcList->toChunkList, dst, idx, src_copy);
 }
+
+// void checkRememberedEntry(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
+//   struct checkRememberedArgs* args = (struct checkRememberedArgs*)rawArgs;
+//   if (!Assignable_isMaster(s, dst)) {
+//     /* promotion guarantees no reachable down-pointers. If the dst object was
+//      * promoted, then any pre-existing down-pointers can be ignored. */
+//     return;
+//   }
+//   objptr op = *((objptr*)dst + idx);
+//   if (op != src) {
+//     /* Another write to this location has since invalidated this particular
+//      * remembered entry. */
+//     return;
+//   }
+//   if (Assignable_isMaster(s, src)) {
+//     /* SAM_NOTE: TODO: this will eventually copy src to the to-space, updating
+//      * dst[idx] and producing a new remembered entry. */
+//     DIE("Found a master object pointed to by a down-pointer");
+//   }
+// }

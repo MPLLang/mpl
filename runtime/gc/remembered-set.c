@@ -17,6 +17,12 @@ void HM_remember(HM_chunkList list, objptr dst, Int64 idx, objptr src) {
   if (NULL == chunk || (size_t)(chunk->limit - chunk->frontier) < sizeof(struct HM_remembered)) {
     // size is arbitrary; just need a chunk.
     chunk = HM_allocateChunk(rememberedSet, sizeof(struct HM_remembered));
+    list->size += HM_getChunkSize(chunk);
+    GC_state s = pthread_getspecific(gcstate_key);
+    if (list->containingHH != COPY_OBJECT_HH_VALUE &&
+        list->level >= HM_HH_getLowestPrivateLevel(s, list->containingHH)) {
+      list->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
+    }
   }
 
   assert((size_t)(chunk->limit - chunk->frontier) >= sizeof(struct HM_remembered));

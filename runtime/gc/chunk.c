@@ -524,7 +524,10 @@ void HM_forwardHHObjptrsInLevelList(
 }
 
 static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
-  return chunk != NULL && HM_getLevelHead(chunk) == list;
+  assert(list != NULL);
+  return chunk != NULL &&
+         chunk->levelHead != NULL &&
+         HM_getLevelHead(chunk) == list;
 }
 
 void freeChunksInChunkList(HM_chunkList list, HM_chunkList freeList, bool coalesce);
@@ -662,8 +665,9 @@ void HM_setChunkListToChunkList(HM_chunkList levelHead, HM_chunkList toChunkList
 
 HM_chunkList HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
+  assert(chunk->levelHead != NULL);
   HM_chunkList cursor = chunk->levelHead;
-  while (cursor != NULL && cursor->parent != cursor) {
+  while (cursor->parent != cursor) {
     cursor = cursor->parent;
   }
   return cursor;
