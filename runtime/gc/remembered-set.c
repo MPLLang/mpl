@@ -46,15 +46,3 @@ void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRemembe
     chunk = chunk->nextChunk;
   }
 }
-
-void HM_foreachRememberedInLevelList(GC_state s, HM_chunkList levelList, Word32 minLevel, ForeachRememberedFunc f, void* fArgs) {
-  HM_chunkList levelHead = levelList;
-  assert(HM_isLevelHead(levelHead));
-
-  while (levelHead != NULL && levelHead->level >= minLevel) {
-    if (levelHead->rememberedSet != NULL) {
-      HM_foreachRemembered(s, levelHead->rememberedSet, f, fArgs);
-    }
-    levelHead = levelHead->nextHead;
-  }
-}

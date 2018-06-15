@@ -31,7 +31,7 @@ pointer HM_Promote(GC_state s,
     getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
     getThreadCurrent(s)->exnStack = s->exnStack;
 
-    assert (!dst_hh->newLevelList);
+    // assert (!dst_hh->newLevelList);
 
     // SAM_NOTE: TODO: I think this is broken. We need clearer invariants for
     // identifying intermediate valid states of an HH.
@@ -104,7 +104,7 @@ pointer HM_Promote(GC_state s,
        collectible level.
     */
 
-    dst_hh->newLevelList = NULL;
+    // dst_hh->newLevelList = NULL;
 
     assert (forwardHHObjptrArgs.tgtChunkList);
     assert (!forwardHHObjptrArgs.tgtChunkList->toChunkList);

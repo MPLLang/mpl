@@ -143,7 +143,7 @@ void HM_HHC_collectLocal(void) {
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
 
-  assert (!hh->newLevelList);
+  // assert (!hh->newLevelList);
 
   /* lock queue to prevent steals */
   if (!queueLockHeld) {
@@ -286,12 +286,15 @@ void HM_HHC_collectLocal(void) {
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START trace remembered set");
 
-  HM_foreachRememberedInLevelList(
-    s,
-    hh->levelList,
-    forwardHHObjptrArgs.minLevel,
-    forwardRemembered,
-    &forwardHHObjptrArgs);
+  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+    if (NULL != level->rememberedSet) {
+      HM_foreachRemembered(
+        s,
+        level->rememberedSet,
+        forwardRemembered,
+        &forwardHHObjptrArgs);
+    }
+  });
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END trace remembered set");
 
@@ -307,13 +310,18 @@ void HM_HHC_collectLocal(void) {
     .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
                                              s->heap->start)
   };
-  HM_forwardHHObjptrsInLevelList(
-      s,
-      &(hh->newLevelList),
-      &skipStackAndThreadObjptrPredicate,
-      ((void*)(&ssatoPredicateArgs)),
-      &forwardHHObjptrArgs,
-      TRUE);
+
+  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+    if (level->toChunkList != NULL && level->toChunkList->firstChunk != NULL) {
+      HM_forwardHHObjptrsInChunkList(
+        s,
+        HM_getChunkStart(level->toChunkList->firstChunk),
+        &skipStackAndThreadObjptrPredicate,
+        &ssatoPredicateArgs,
+        &forwardHHObjptrArgs);
+    }
+  });
+
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
@@ -365,42 +373,69 @@ void HM_HHC_collectLocal(void) {
   }
 #endif
 
-  /* free old chunks */
-  HM_freeChunks(s, &(hh->levelList), forwardHHObjptrArgs.minLevel, s->controls->freeListCoalesce);
+#if ASSERT
+  /* clear out memory to quickly catch some memory safety errors */
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+    HM_chunk chunk = level->firstChunk;
+    while (chunk != NULL) {
+      pointer start = HM_getChunkStart(chunk);
+      size_t length = (size_t)(chunk->limit - start);
+      memset(start, 0xBF, length);
+      chunk = chunk->nextChunk;
+    }
 
-  /* merge newLevelList back in */
-  HM_updateLevelListPointers(hh->newLevelList, hh);
+    if (NULL != level->rememberedSet) {
+      chunk = level->rememberedSet->firstChunk;
+      while (chunk != NULL) {
+        pointer start = HM_getChunkStart(chunk);
+        size_t length = (size_t)(chunk->limit - start);
+        memset(start, 0xBF, length);
+        chunk = chunk->nextChunk;
+      }
+    }
+  });
+#endif
 
-  /* implicitly unsets isInToSpace for all new levelheads: */
-  HM_mergeLevelList(&(hh->levelList), hh->newLevelList, hh, true);
+  /* Free old chunks and merge in new level list. */
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+    HM_chunkList remset = level->rememberedSet;
+    if (NULL != remset) {
+      level->size -= remset->size;
+      level->rememberedSet = NULL;
+      HM_appendChunkList(s->freeListSmall, remset);
+    }
 
-  /* reset hh->newLevelList */
-  hh->newLevelList = NULL;
+    HM_chunkList newLevel = NULL;
+    if (NULL != level->toChunkList) {
+      newLevel = level->toChunkList;
+      level->toChunkList = NULL;
+      newLevel->containingHH = hh;
+      newLevel->isInToSpace = FALSE;
+    }
+    HM_HH_LEVEL(hh, i) = newLevel;
+    HM_appendChunkList(s->freeListSmall, level);
+  });
 
   /*
    * RAM_NOTE: Really should get this off of forwardHHObjptrArgs instead of
    * summing up
    */
   /* update locally collectible size */
-  /* off-by-one loop to prevent underflow and infinite loop */
   hh->locallyCollectibleSize = 0;
-  Word32 level;
-  for (level = hh->level;
-       level > (HM_HH_getHighestStolenLevel(s, hh) + 1);
-       level--) {
-    hh->locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
-  }
-  hh->locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
+  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getHighestStolenLevel(s, hh)+1, hh->level+1, {
+    hh->locallyCollectibleSize += HM_getChunkListSize(level);
+  });
 
   /* update lastAllocatedChunk and associated */
-  void* lastChunk = HM_getChunkListLastChunk(hh->levelList);
-  if (NULL == lastChunk) {
-    /* empty lists, so reset hh */
-    hh->lastAllocatedChunk = NULL;
-  } else {
-    /* we have a last chunk */
-    hh->lastAllocatedChunk = lastChunk;
-  }
+  HM_chunk lastChunk = NULL;
+  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, hh->level+1, {
+    if (HM_getChunkListLastChunk(level) != NULL) {
+      lastChunk = HM_getChunkListLastChunk(level);
+      break;
+    }
+  });
+  hh->lastAllocatedChunk = lastChunk;
+  assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
 
   assertInvariants(s, hh, LIVE);
 
@@ -584,48 +619,21 @@ void forwardHHObjptr (GC_state s,
 
     assert(!inPromotion);
     if (!inPromotion) {
-        toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
+      toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
 
-#if ASSERT
-        if (NULL == toChunkList) {
-            HM_chunkList cursor = args->hh->newLevelList;
-            while ((NULL != cursor) && (HM_getChunkListLevel(cursor) > opInfo.level)) {
-                // this chunk must actually be a levelHead
-                assert(HM_isLevelHead(cursor));
-                cursor = cursor->nextHead;
-            }
-            ASSERTPRINT((NULL == cursor) || (HM_getChunkListLevel(cursor) != opInfo.level),
-              "opInfo.level == %d; cursor == %p; cursor->level == %d",
-              opInfo.level,
-              (void*)cursor,
-              NULL == cursor ? -1 : HM_getChunkListLevel(cursor));
-        } else {
-            assert(HM_getChunkListLevel(toChunkList) == opInfo.level);
-
-            HM_chunkList cursor;
-            for (cursor = args->hh->newLevelList;
-                 (NULL != cursor) &&
-                     (HM_getChunkListLevel(cursor) > opInfo.level);
-                 cursor = cursor->nextHead) {
-            }
-            assert(toChunkList == cursor);
+      if (toChunkList == NULL) {
+        /* Level does not exist, so create it */
+        toChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.level);
+        /* SAM_NOTE: TODO: This is inefficient, because the current object
+         * might be a large object that just needs to be logically moved. */
+        if (NULL == HM_allocateChunk(toChunkList, objectBytes)) {
+          DIE("Ran out of space for Hierarchical Heap!");
         }
-#endif
-        if (toChunkList == NULL) {
-            /* Level does not exist, so create it */
-            HM_chunk chunk = HM_allocateLevelHeadChunk(&(args->hh->newLevelList),
-                                                    objectBytes,
-                                                    opInfo.level,
-                                                    COPY_OBJECT_HH_VALUE);
-            toChunkList = HM_getLevelHeadPathCompress(chunk);
-            if (NULL == toChunkList) {
-                DIE("Ran out of space for Hierarchical Heap!");
-            }
-            toChunkList->isInToSpace = true;
+        toChunkList->isInToSpace = TRUE;
 
-            /* update toChunkList for fast access later */
-            HM_setChunkListToChunkList(opInfo.chunkList, toChunkList);
-        }
+        /* update toChunkList for fast access later */
+        HM_setChunkListToChunkList(opInfo.chunkList, toChunkList);
+      }
     }
 
     assert (!hasFwdPtr(p));
@@ -653,6 +661,9 @@ void forwardHHObjptr (GC_state s,
        * be avoided by not relying upon using the toChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
+      /* SAM_NOTE: if we know that the list always has at least one valid chunk
+       * in it, we can replace this with prepend and then avoid needing to
+       * allocate a fresh chunk on the end. */
       HM_appendChunk(toChunkList, chunk);
       if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
@@ -770,7 +781,7 @@ pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
                    HM_chunkList toChunkList) {
-  assert(toChunkList);
+  assert(NULL != toChunkList);
   assert(copySize <= objectSize);
   assert(HM_isLevelHead(toChunkList));
 
@@ -779,11 +790,15 @@ pointer copyObject(pointer p,
   pointer frontier = HM_getChunkFrontier(chunk);
   pointer limit = HM_getChunkLimit(chunk);
 
+  assert(frontier <= limit);
+  assert(frontier < (pointer)chunk + HM_BLOCK_SIZE ||
+         (frontier == (pointer)chunk + HM_BLOCK_SIZE && frontier == limit));
+
   if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
     /* need to allocate a new chunk */
     chunk = HM_allocateChunk(toChunkList, objectSize);
     if (NULL == chunk) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
+      DIE("Ran out of space for Hierarchical Heap!");
     }
     frontier = HM_getChunkFrontier(chunk);
   }
@@ -791,7 +806,8 @@ pointer copyObject(pointer p,
   GC_memcpy(p, frontier, copySize);
   pointer newFrontier = frontier + objectSize;
   HM_updateChunkValues(chunk, newFrontier);
-  if (blockOf(newFrontier) != (pointer)chunk) {
+  if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
+  // if (blockOf(newFrontier) != (pointer)chunk) {
     /* size is arbitrary; just need a new chunk */
     chunk = HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP);
     if (NULL == chunk) {

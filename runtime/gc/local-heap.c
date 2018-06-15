@@ -196,14 +196,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "  Level List:");
-        for (HM_chunkList levelHead = hh->levelList;
-             NULL != levelHead;
-             levelHead = levelHead->nextHead) {
+        FOR_LEVEL_DECREASING_IN_RANGE(levelHead, i, hh, 0, HM_MAX_NUM_LEVELS, {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
               "    level %"PRIu32" size %"PRIu64,
               levelHead->level,
               levelHead->size);
-        }
+        });
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "  Child HH List:");
