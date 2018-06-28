@@ -30,7 +30,6 @@ typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, Int64 idx, objptr 
 
 void HM_remember(HM_chunkList levelHead, objptr dst, Int64 index, objptr src);
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs);
-void HM_foreachRememberedInLevelList(GC_state s, HM_chunkList levelList, Word32 minLevel, ForeachRememberedFunc f, void* fArgs);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
 

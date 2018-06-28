@@ -155,15 +155,18 @@ pointer HM_newHierarchicalHeap (GC_state s) {
       ((struct HM_HierarchicalHeap*)(hhObject +
                                      HM_HH_offsetof(s)));
 
-  hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL(hh, i) = NULL;
+  }
+  // hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
   hh->state = LIVE;
   hh->level = 0;
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;
-  hh->levelList = NULL;
-  hh->newLevelList = NULL;
+  // hh->levelList = NULL;
+  // hh->newLevelList = NULL;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
   hh->retVal = NULL;
