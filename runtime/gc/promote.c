@@ -104,10 +104,7 @@ pointer HM_Promote(GC_state s,
        collectible level.
     */
 
-    // dst_hh->newLevelList = NULL;
-
     assert (forwardHHObjptrArgs.tgtChunkList);
-    assert (!forwardHHObjptrArgs.tgtChunkList->toChunkList);
 
     if (needToUpdateLCS) {
         dst_hh->locallyCollectibleSize += tgtChunkList->size;

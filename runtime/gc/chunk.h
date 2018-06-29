@@ -71,7 +71,6 @@ struct HM_chunkList {
   HM_chunk lastChunk;
 
   struct HM_HierarchicalHeap * containingHH;
-  HM_chunkList toChunkList; // the corresponding chunklist in the to-space during a GC
   Word64 size; // size (bytes) of this level, both allocated and unallocated
   bool isInToSpace;
 };
@@ -238,26 +237,7 @@ Word32 HM_getChunkListLevel(HM_chunkList chunk);
  */
 HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 
-/**
- * This function returns the to-ChunkList corresponding to the specified
- * ChunkList during garbage collection.
- *
- * @param chunkList The ChunkList to get the to-ChunkList for
- *
- * @return NULL if no to-ChunkList has been set, the to-ChunkList otherwise.
- */
-HM_chunkList HM_getChunkListToChunkList(HM_chunkList chunkList);
-
 Word64 HM_getChunkListSize(HM_chunkList levelHead);
-
-/**
- * This function sets the to-ChunkList corresponding to the specified ChunkList
- * during garbage collection.
- *
- * @param chunkList The ChunkList to set the to-ChunkList for.
- * @param toChunkList The ChunkList set the to-ChunkList to.
- */
-void HM_setChunkListToChunkList(HM_chunkList chunkList, HM_chunkList toChunkList);
 
 /**
  * Gets the info for the given objptr

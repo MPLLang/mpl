@@ -355,7 +355,6 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
   list->parent = list;
   list->rememberedSet = NULL;
   list->containingHH = hh;
-  list->toChunkList = NULL;
   list->size = 0;
   list->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
   list->level = level;
@@ -484,28 +483,10 @@ HM_chunk HM_getChunkListLastChunk(HM_chunkList levelHead) {
   return levelHead->lastChunk;
 }
 
-HM_chunkList HM_getChunkListToChunkList(HM_chunkList levelHead) {
-  assert(NULL != levelHead);
-  assert(HM_isLevelHead(levelHead));
-
-  return levelHead->toChunkList;
-}
-
 Word64 HM_getChunkListSize(HM_chunkList levelHead) {
   assert(levelHead != NULL);
   assert(HM_isLevelHead(levelHead));
   return levelHead->size;
-}
-
-void HM_setChunkListToChunkList(HM_chunkList levelHead, HM_chunkList toChunkList) {
-  assert(NULL != levelHead);
-  assert(HM_isLevelHead(levelHead));
-
-  levelHead->toChunkList = toChunkList;
-  LOG(LM_CHUNK, LL_DEBUGMORE,
-      "Set toChunkList of chunk %p to %p",
-      (void*)levelHead,
-      (void*)toChunkList);
 }
 
 HM_chunkList HM_getLevelHead(HM_chunk chunk) {
@@ -594,7 +575,6 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   list2->rememberedSet = NULL;
   list2->lastChunk = NULL;
   list2->containingHH = NULL;
-  assert(list2->toChunkList == NULL);
 #endif
 
   HM_assertChunkListInvariants(list1, list1->containingHH);

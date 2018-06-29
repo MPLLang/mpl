@@ -41,14 +41,14 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
  * @param p The pointer to copy
  * @param objectSize The size of the object
  * @param copySize The number of bytes to copy
- * @param toChunkList The ChunkList at which 'p' will be copied.
+ * @param tgtChunkList The ChunkList at which 'p' will be copied.
  *
  * @return pointer to the copied object
  */
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunkList toChunkList);
+                   HM_chunkList tgtChunkList);
 
 /**
  * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
@@ -65,10 +65,6 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
                                        pointer p,
                                        void* rawArgs);
 
-// struct checkRememberedArgs {
-
-// };
-// void checkRememberedEntry(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
 void forwardRemembered(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
 
 /************************/
@@ -143,8 +139,6 @@ void HM_HHC_collectLocal(void) {
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
 
-  // assert (!hh->newLevelList);
-
   /* lock queue to prevent steals */
   if (!queueLockHeld) {
     Parallel_lockTake(wsQueueLock);
@@ -154,12 +148,18 @@ void HM_HHC_collectLocal(void) {
   assertInvariants(s, hh, LIVE);
   assert(hh->thread == s->currentThread);
 
+  HM_chunkList toSpace[HM_MAX_NUM_LEVELS];
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    toSpace[i] = NULL;
+  }
+
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = HM_HH_getLowestPrivateLevel(s, hh),
     .maxLevel = hh->level,
-    .tgtChunkList = NULL,
+    .toLevel = HM_HH_INVALID_LEVEL,
+    .toSpace = (HM_chunkList*)toSpace,
     .bytesCopied = 0,
     .objectsCopied = 0,
     .stacksCopied = 0
@@ -311,16 +311,20 @@ void HM_HHC_collectLocal(void) {
                                              s->heap->start)
   };
 
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
-    if (level->toChunkList != NULL && level->toChunkList->firstChunk != NULL) {
+  /* off-by-one to prevent underflow */
+  Word32 depth = hh->level+1;
+  while (depth > forwardHHObjptrArgs.minLevel) {
+    depth--;
+    HM_chunkList toSpaceLevel = toSpace[depth];
+    if (NULL != toSpaceLevel && NULL != toSpaceLevel->firstChunk) {
       HM_forwardHHObjptrsInChunkList(
         s,
-        HM_getChunkStart(level->toChunkList->firstChunk),
+        HM_getChunkStart(toSpaceLevel->firstChunk),
         &skipStackAndThreadObjptrPredicate,
         &ssatoPredicateArgs,
         &forwardHHObjptrArgs);
     }
-  });
+  }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
@@ -396,7 +400,7 @@ void HM_HHC_collectLocal(void) {
   });
 #endif
 
-  /* Free old chunks and merge in new level list. */
+  /* Free old chunks */
   FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
     HM_chunkList remset = level->rememberedSet;
     if (NULL != remset) {
@@ -404,17 +408,22 @@ void HM_HHC_collectLocal(void) {
       level->rememberedSet = NULL;
       HM_appendChunkList(s->freeListSmall, remset);
     }
-
-    HM_chunkList newLevel = NULL;
-    if (NULL != level->toChunkList) {
-      newLevel = level->toChunkList;
-      level->toChunkList = NULL;
-      newLevel->containingHH = hh;
-      newLevel->isInToSpace = FALSE;
-    }
-    HM_HH_LEVEL(hh, i) = newLevel;
+    HM_HH_LEVEL(hh, i) = NULL;
     HM_appendChunkList(s->freeListSmall, level);
   });
+
+  /* merge in toSpace */
+  for (Word32 i = 0; i <= hh->level; i++) {
+    if (NULL == HM_HH_LEVEL(hh, i)) {
+      HM_HH_LEVEL(hh, i) = toSpace[i];
+      if (NULL != toSpace[i]) {
+        toSpace[i]->containingHH = hh;
+        toSpace[i]->isInToSpace = FALSE;
+      }
+    } else {
+      HM_appendChunkList(HM_HH_LEVEL(hh, i), toSpace[i]);
+    }
+  }
 
   /*
    * RAM_NOTE: Really should get this off of forwardHHObjptrArgs instead of
@@ -480,7 +489,7 @@ void forwardHHObjptr (GC_state s,
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, s->heap->start);
-  bool inPromotion = (args->tgtChunkList != NULL);
+  bool inPromotion = (args->toLevel != HM_HH_INVALID_LEVEL);
 
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -613,27 +622,19 @@ void forwardHHObjptr (GC_state s,
         break;
     }
 
-    /* We copy the object to args->tgtChunkList during promotion, or preserve
-     * the level of the object otherwise. */
-    HM_chunkList toChunkList = args->tgtChunkList;
+    HM_chunkList tgtChunkList = args->toSpace[opInfo.level];
 
     assert(!inPromotion);
-    if (!inPromotion) {
-      toChunkList = HM_getChunkListToChunkList(opInfo.chunkList);
-
-      if (toChunkList == NULL) {
-        /* Level does not exist, so create it */
-        toChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.level);
-        /* SAM_NOTE: TODO: This is inefficient, because the current object
-         * might be a large object that just needs to be logically moved. */
-        if (NULL == HM_allocateChunk(toChunkList, objectBytes)) {
-          DIE("Ran out of space for Hierarchical Heap!");
-        }
-        toChunkList->isInToSpace = TRUE;
-
-        /* update toChunkList for fast access later */
-        HM_setChunkListToChunkList(opInfo.chunkList, toChunkList);
+    if (tgtChunkList == NULL) {
+      /* Level does not exist, so create it */
+      tgtChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.level);
+      /* SAM_NOTE: TODO: This is inefficient, because the current object
+       * might be a large object that just needs to be logically moved. */
+      if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
+        DIE("Ran out of space for Hierarchical Heap!");
       }
+      tgtChunkList->isInToSpace = TRUE;
+      args->toSpace[opInfo.level] = tgtChunkList;
     }
 
     assert (!hasFwdPtr(p));
@@ -643,7 +644,7 @@ void forwardHHObjptr (GC_state s,
         (inPromotion ? "promotion" : "collection"),
         (void *)p,
         opInfo.level,
-        (void *)toChunkList);
+        (void *)tgtChunkList);
 
     /* SAM_NOTE: TODO: get this spaghetti code out of here.
      * TODO: does this work with promotion? */
@@ -658,14 +659,14 @@ void forwardHHObjptr (GC_state s,
       opInfo.hh->locallyCollectibleSize -= HM_getChunkSize(chunk);
       /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
        * previous last chunk, resulting in unnecessary fragmentation. This can
-       * be avoided by not relying upon using the toChunkList...lastChunk to
+       * be avoided by not relying upon using the tgtChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
       /* SAM_NOTE: if we know that the list always has at least one valid chunk
        * in it, we can replace this with prepend and then avoid needing to
        * allocate a fresh chunk on the end. */
-      HM_appendChunk(toChunkList, chunk);
-      if (!HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP)) {
+      HM_appendChunk(tgtChunkList, chunk);
+      if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       LOG(LM_HH_COLLECTION, LL_INFO,
@@ -678,7 +679,7 @@ void forwardHHObjptr (GC_state s,
     pointer copyPointer = copyObject(p - metaDataBytes,
                                      objectBytes,
                                      copyBytes,
-                                     toChunkList);
+                                     tgtChunkList);
 
     args->bytesCopied += copyBytes;
     args->objectsCopied++;
@@ -780,13 +781,13 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunkList toChunkList) {
-  assert(NULL != toChunkList);
+                   HM_chunkList tgtChunkList) {
+  assert(NULL != tgtChunkList);
   assert(copySize <= objectSize);
-  assert(HM_isLevelHead(toChunkList));
+  assert(HM_isLevelHead(tgtChunkList));
 
   /* get the chunk to allocate in */
-  HM_chunk chunk = HM_getChunkListLastChunk(toChunkList);
+  HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
   pointer frontier = HM_getChunkFrontier(chunk);
   pointer limit = HM_getChunkLimit(chunk);
 
@@ -796,7 +797,7 @@ pointer copyObject(pointer p,
 
   if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
     /* need to allocate a new chunk */
-    chunk = HM_allocateChunk(toChunkList, objectSize);
+    chunk = HM_allocateChunk(tgtChunkList, objectSize);
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
@@ -809,7 +810,7 @@ pointer copyObject(pointer p,
   if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
   // if (blockOf(newFrontier) != (pointer)chunk) {
     /* size is arbitrary; just need a new chunk */
-    chunk = HM_allocateChunk(toChunkList, GC_HEAP_LIMIT_SLOP);
+    chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
@@ -858,11 +859,6 @@ void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawA
   HM_chunkList srcList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
   HM_chunkList dstList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
 
-  // struct HM_ObjptrInfo dstInfo;
-  // struct HM_ObjptrInfo srcInfo;
-  // HM_getObjptrInfo(s, dst, &dstInfo);
-  // HM_getObjptrInfo(s, src, &srcInfo);
-
   assert(dstList->level <= srcList->level);
 
   if (dstList->level == srcList->level) {
@@ -873,27 +869,8 @@ void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawA
   objptr src_copy = src;
 
   forwardHHObjptr(s, &src_copy, rawArgs);
-  assert(NULL != srcList->toChunkList);
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
+  assert(NULL != args->toSpace[srcList->level]);
   *((objptr*)dst + idx) = src_copy;
-  HM_remember(srcList->toChunkList, dst, idx, src_copy);
+  HM_remember(args->toSpace[srcList->level], dst, idx, src_copy);
 }
-
-// void checkRememberedEntry(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
-//   struct checkRememberedArgs* args = (struct checkRememberedArgs*)rawArgs;
-//   if (!Assignable_isMaster(s, dst)) {
-//     /* promotion guarantees no reachable down-pointers. If the dst object was
-//      * promoted, then any pre-existing down-pointers can be ignored. */
-//     return;
-//   }
-//   objptr op = *((objptr*)dst + idx);
-//   if (op != src) {
-//     /* Another write to this location has since invalidated this particular
-//      * remembered entry. */
-//     return;
-//   }
-//   if (Assignable_isMaster(s, src)) {
-//     /* SAM_NOTE: TODO: this will eventually copy src to the to-space, updating
-//      * dst[idx] and producing a new remembered entry. */
-//     DIE("Found a master object pointed to by a down-pointer");
-//   }
-// }
