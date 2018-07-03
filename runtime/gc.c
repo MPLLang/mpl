@@ -41,6 +41,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/dfs-mark.c"
 #include "gc/termination.c"
 #include "gc/done.c"
+#include "gc/deferred-promote.c"
 #include "gc/enter_leave.c"
 #include "gc/foreach.c"
 #include "gc/forward.c"

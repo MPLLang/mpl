@@ -14,6 +14,7 @@
  */
 
 #include "hierarchical-heap-collection.h"
+#include "deferred-promote.h"
 
 /******************************/
 /* Static Function Prototypes */
@@ -64,8 +65,6 @@ struct SSATOPredicateArgs {
 bool skipStackAndThreadObjptrPredicate(GC_state s,
                                        pointer p,
                                        void* rawArgs);
-
-void forwardRemembered(GC_state s, objptr dst, Int64 index, objptr src, void* rawArgs);
 
 /************************/
 /* Function Definitions */
@@ -168,6 +167,8 @@ void HM_HHC_collectLocal(void) {
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
+
+  HM_deferredPromote(s, &forwardHHObjptrArgs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "collecting hh %p (SL: %u L: %u):\n"
@@ -283,18 +284,6 @@ void HM_HHC_collectLocal(void) {
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
-
-  LOG(LM_HH_COLLECTION, LL_DEBUG, "START trace remembered set");
-
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
-    HM_foreachRemembered(
-      s,
-      level->rememberedSet,
-      forwardRemembered,
-      &forwardHHObjptrArgs);
-  });
-
-  LOG(LM_HH_COLLECTION, LL_DEBUG, "END trace remembered set");
 
   /* do copy-collection */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -838,36 +827,4 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
   }
 
   return TRUE;
-}
-
-void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
-  if (hasFwdPtr(objptrToPointer(dst, NULL))) {
-    /* dst has already been forwarded; if src needs to be forwarded too, it
-     * will be handled implicitly by the forwarding of dst. */
-    return;
-  }
-  objptr op = *((objptr*)dst + idx);
-  if (op != src) {
-    /* Another write to this location has since invalidated this particular
-     * remembered entry. */
-    return;
-  }
-
-  HM_chunkList srcList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
-  HM_chunkList dstList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
-
-  assert(dstList->level <= srcList->level);
-
-  if (dstList->level == srcList->level) {
-    /* levels have coincided due to joins, so ignore this entry. */
-    return;
-  }
-
-  objptr src_copy = src;
-
-  forwardHHObjptr(s, &src_copy, rawArgs);
-  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(NULL != args->toSpace[srcList->level]);
-  *((objptr*)dst + idx) = src_copy;
-  HM_remember(args->toSpace[srcList->level], dst, idx, src_copy);
 }
