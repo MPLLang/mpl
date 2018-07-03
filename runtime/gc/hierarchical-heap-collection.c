@@ -287,13 +287,11 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START trace remembered set");
 
   FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
-    if (NULL != level->rememberedSet) {
-      HM_foreachRemembered(
-        s,
-        level->rememberedSet,
-        forwardRemembered,
-        &forwardHHObjptrArgs);
-    }
+    HM_foreachRemembered(
+      s,
+      level->rememberedSet,
+      forwardRemembered,
+      &forwardHHObjptrArgs);
   });
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END trace remembered set");
@@ -662,9 +660,8 @@ void forwardHHObjptr (GC_state s,
        * be avoided by not relying upon using the tgtChunkList...lastChunk to
        * allocate the next object, similiar to how hh->lastAllocatedChunk
        * doesn't need to be at the end of its chunk list. */
-      /* SAM_NOTE: if we know that the list always has at least one valid chunk
-       * in it, we can replace this with prepend and then avoid needing to
-       * allocate a fresh chunk on the end. */
+      /* SAM_NOTE: it is crucial that this is append and not prepend, because
+       * traversing the to-space executes left-to-right. */
       HM_appendChunk(tgtChunkList, chunk);
       if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");

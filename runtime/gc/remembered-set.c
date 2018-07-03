@@ -34,6 +34,10 @@ void HM_remember(HM_chunkList list, objptr dst, Int64 idx, objptr src) {
 }
 
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs) {
+  if (rememberedSet == NULL) {
+    return;
+  }
+
   HM_chunk chunk = rememberedSet->firstChunk;
   while (chunk != NULL) {
     pointer p = HM_getChunkStart(chunk);
