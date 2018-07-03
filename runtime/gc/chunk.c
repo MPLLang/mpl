@@ -426,6 +426,7 @@ void HM_forwardHHObjptrsInChunkList(
       assert(p < chunk->frontier);
       p = advanceToObjectData(s, p);
 
+      forwardHHObjptrArgs->containingObject = pointerToObjptr(p, NULL);
       p = foreachObjptrInObject(s,
                                 p,
                                 FALSE,
@@ -451,6 +452,8 @@ void HM_forwardHHObjptrsInChunkList(
       p = HM_getChunkStart(chunk);
     }
   }
+
+  forwardHHObjptrArgs->containingObject = BOGUS_OBJPTR;
 }
 
 pointer HM_getChunkFrontier(HM_chunk chunk) {
@@ -481,6 +484,15 @@ HM_chunk HM_getChunkListLastChunk(HM_chunkList levelHead) {
 
   assert(HM_isLevelHead(levelHead));
   return levelHead->lastChunk;
+}
+
+HM_chunk HM_getChunkListFirstChunk(HM_chunkList levelHead) {
+  if (NULL == levelHead) {
+    return NULL;
+  }
+
+  assert(HM_isLevelHead(levelHead));
+  return levelHead->firstChunk;
 }
 
 Word64 HM_getChunkListSize(HM_chunkList levelHead) {

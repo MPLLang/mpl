@@ -28,6 +28,9 @@ struct ForwardHHObjptrArgs {
   Word32 maxLevel;
   Word32 toLevel; /* if == HM_HH_INVALID_LEVEL, preserve level of the forwarded object */
   HM_chunkList* toSpace;
+  objptr containingObject; /* a hack to have a handle on the object which
+                            * contains the ptr being forwarded, for updating
+                            * remembered-sets where necessary */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;

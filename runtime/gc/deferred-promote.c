@@ -7,50 +7,105 @@
 #include "remembered-set.h"
 #include "hierarchical-heap-collection.h"
 
-void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs);
+void bucketIfValid(GC_state s, objptr dst, Int64 idx, objptr src, void* args);
+void promoteDownPtr(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs);
+
+/* ========================================================================= */
 
 void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START deferred promotion");
 
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, args->hh, args->minLevel, args->hh->level+1, {
+  /* First, bucket in-scope downptrs by the level of the downptr origin */
+  HM_chunkList downPtrs[HM_MAX_NUM_LEVELS];
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    downPtrs[i] = NULL;
+  }
+  FOR_LEVEL_IN_RANGE(level, i, args->hh, args->minLevel, args->maxLevel+1, {
     HM_foreachRemembered(
       s,
       level->rememberedSet,
-      forwardRemembered,
-      args);
+      bucketIfValid,
+      &(downPtrs[0]));
   });
+
+  /* Next, promote objects to the appropriate level, beginning at the root and
+   * working downwards towards to the leaf. Any resulting downptr that cannot
+   * be promoted yet (due to pointing to a shared object) is recorded in the
+   * appropriate remembered-set */
+  for (Word32 i = 0; i <= args->maxLevel; i++) {
+    /* remember where the roots begin, so we know where to scan from after
+     * promoting the roots */
+    pointer rootsBegin = NULL;
+    if (NULL != args->toSpace[i] && NULL != HM_getChunkListLastChunk(args->toSpace[i])) {
+      rootsBegin = HM_getChunkFrontier(HM_getChunkListLastChunk(args->toSpace[i]));
+    }
+
+    /* promote the roots, as indicated by the remembered downptrs */
+    args->toLevel = i;
+    HM_foreachRemembered(
+      s,
+      downPtrs[i],
+      promoteDownPtr,
+      args);
+
+    /* forward transitively reachable objects within local scope */
+    if (rootsBegin == NULL) {
+      rootsBegin = HM_getChunkStart(HM_getChunkListFirstChunk(args->toSpace[i]));
+    }
+    HM_forwardHHObjptrsInChunkList(
+      s,
+      rootsBegin,
+      trueObjptrPredicate,
+      NULL,
+      args);
+  }
+
+  /* Finally, free the chunks that we used as temporary storage for bucketing */
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_appendChunkList(s->freeListSmall, downPtrs[i]);
+  }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
 }
 
-void forwardRemembered(GC_state s, objptr dst, Int64 idx, objptr src, void* rawArgs) {
-  if (hasFwdPtr(objptrToPointer(dst, NULL))) {
+void bucketIfValid(GC_state s, objptr obj, objptr* dst, objptr src, void* arg) {
+  HM_chunkList* downPtrs = arg;
+  pointer objp = objptrToPointer(obj, NULL);
+  pointer srcp = objptrToPointer(src, NULL);
+
+  if (hasFwdPtr(objp)) {
     /* dst has already been forwarded; if src needs to be forwarded too, it
      * will be handled implicitly by the forwarding of dst. */
     return;
   }
-  objptr op = *((objptr*)dst + idx);
-  if (op != src) {
+  if (*dst != src) {
     /* Another write to this location has since invalidated this particular
      * remembered entry. */
     return;
   }
 
-  HM_chunkList srcList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
-  HM_chunkList dstList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+  Word32 objLevel = HM_getLevelHead(HM_getChunkOf(objp))->level;
+  Word32 srcLevel = HM_getLevelHead(HM_getChunkOf(srcp))->level;
 
-  assert(dstList->level <= srcList->level);
+  assert(objLevel <= srcLevel);
 
-  if (dstList->level == srcList->level) {
+  if (objLevel == srcLevel) {
     /* levels have coincided due to joins, so ignore this entry. */
     return;
   }
 
-  objptr src_copy = src;
+  if (downPtrs[objLevel] == NULL) {
+    downPtrs[objLevel] = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  }
 
-  forwardHHObjptr(s, &src_copy, rawArgs);
+  HM_remember(downPtrs[objLevel], NULL, obj, dst, src);
+}
+
+void promoteDownPtr(GC_state s, objptr obj, objptr* dst, objptr src, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(NULL != args->toSpace[srcList->level]);
-  *((objptr*)dst + idx) = src_copy;
-  HM_remember(args->toSpace[srcList->level], dst, idx, src_copy);
+  objptr src_copy = src;
+  forwardHHObjptr(s, &src_copy, rawArgs);
+  *dst = src_copy;
+  assert(HM_getLevelHead(HM_getChunkOf(objptrToPointer(src_copy, NULL)))->level ==
+         HM_getLevelHead(HM_getChunkOf(objptrToPointer(obj, NULL)))->level);
 }

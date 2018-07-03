@@ -4,33 +4,40 @@
  * See the file MLton-LICENSE for details.
  */
 
-void HM_remember(HM_chunkList list, objptr dst, Int64 idx, objptr src) {
-  assert(list != NULL);
-
-  HM_chunkList rememberedSet = list->rememberedSet;
-  if (NULL == rememberedSet) {
-    rememberedSet = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-    list->rememberedSet = rememberedSet;
-  }
-
-  HM_chunk chunk = HM_getChunkListLastChunk(rememberedSet);
+void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr obj, objptr* dst, objptr src) {
+  HM_chunk chunk = HM_getChunkListLastChunk(remset);
   if (NULL == chunk || (size_t)(chunk->limit - chunk->frontier) < sizeof(struct HM_remembered)) {
-    // size is arbitrary; just need a chunk.
-    chunk = HM_allocateChunk(rememberedSet, sizeof(struct HM_remembered));
-    list->size += HM_getChunkSize(chunk);
-    GC_state s = pthread_getspecific(gcstate_key);
-    if (list->containingHH != COPY_OBJECT_HH_VALUE &&
-        list->level >= HM_HH_getLowestPrivateLevel(s, list->containingHH)) {
-      list->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
+    chunk = HM_allocateChunk(remset, sizeof(struct HM_remembered));
+
+    if (levelHead != NULL) {
+      assert(levelHead->rememberedSet == remset);
+      levelHead->size += HM_getChunkSize(chunk);
+      GC_state s = pthread_getspecific(gcstate_key);
+      if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
+          levelHead->level >= HM_HH_getLowestPrivateLevel(s, levelHead->containingHH)) {
+        levelHead->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
+      }
     }
   }
 
   assert((size_t)(chunk->limit - chunk->frontier) >= sizeof(struct HM_remembered));
   struct HM_remembered* r = (struct HM_remembered*)chunk->frontier;
+  r->obj = obj;
   r->dst = dst;
-  r->idx = idx;
   r->src = src;
   chunk->frontier += sizeof(struct HM_remembered);
+}
+
+void HM_rememberAtLevel(HM_chunkList levelHead, objptr obj, objptr* dst, objptr src) {
+  assert(levelHead != NULL);
+
+  HM_chunkList rememberedSet = levelHead->rememberedSet;
+  if (NULL == rememberedSet) {
+    rememberedSet = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+    levelHead->rememberedSet = rememberedSet;
+  }
+
+  HM_remember(rememberedSet, levelHead, obj, dst, src);
 }
 
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs) {
@@ -44,7 +51,7 @@ void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRemembe
     pointer frontier = HM_getChunkFrontier(chunk);
     while (p < frontier) {
       struct HM_remembered* r = (struct HM_remembered*)p;
-      f(s, r->dst, r->idx, r->src, fArgs);
+      f(s, r->obj, r->dst, r->src, fArgs);
       p += sizeof(struct HM_remembered);
     }
     chunk = chunk->nextChunk;

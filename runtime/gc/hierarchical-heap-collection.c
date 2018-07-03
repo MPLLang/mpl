@@ -14,7 +14,8 @@
  */
 
 #include "hierarchical-heap-collection.h"
-#include "deferred-promote.h"
+// #include "deferred-promote.h"
+#include "preserve-downptrs.h"
 
 /******************************/
 /* Static Function Prototypes */
@@ -147,18 +148,14 @@ void HM_HHC_collectLocal(void) {
   assertInvariants(s, hh, LIVE);
   assert(hh->thread == s->currentThread);
 
-  HM_chunkList toSpace[HM_MAX_NUM_LEVELS];
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    toSpace[i] = NULL;
-  }
-
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = HM_HH_getLowestPrivateLevel(s, hh),
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
-    .toSpace = (HM_chunkList*)toSpace,
+    .toSpace = &(hh->levels[0]), /* Initially, promotion operates on the "from-space" */
+    .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
     .objectsCopied = 0,
     .stacksCopied = 0
@@ -168,7 +165,7 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  HM_deferredPromote(s, &forwardHHObjptrArgs);
+  // HM_deferredPromote(s, &forwardHHObjptrArgs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "collecting hh %p (SL: %u L: %u):\n"
@@ -183,6 +180,14 @@ void HM_HHC_collectLocal(void) {
       hh->locallyCollectibleSize);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
+
+  HM_chunkList toSpace[HM_MAX_NUM_LEVELS];
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    toSpace[i] = NULL;
+  }
+  forwardHHObjptrArgs.toSpace = &(toSpace[0]);
+
+  HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
 
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;

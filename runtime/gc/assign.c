@@ -344,17 +344,20 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
 
     /* Promote memory reachable from src to dst_repl when needed to avoid
      * entanglement. */
-    pointer src_repl = objptrToPointer(src, s->heap->start);
+    // pointer src_repl = objptrToPointer(src, s->heap->start);
+
+    objptr* field = (objptr*)dst_repl + index;
     // if (dst_info.level < src_info.level) {
     //   HM_remember(src_info.chunkList, pointerToObjptr(dst_repl, s->heap->start), index, src);
     //   // src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
     // }
     if (dstList->level < srcList->level) {
-      HM_remember(srcList, dst, index, src);
+      HM_rememberAtLevel(srcList, dst, field, src);
     }
 
     /* Perform the write. */
-    *((pointer *)dst_repl + index) = src_repl;
+    *field = src;
+    // *((pointer *)dst_repl + index) = src_repl;
 
     /* Unlock the heaps from the true replica of dst to src. */
     // assert(hh != NULL);

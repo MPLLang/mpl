@@ -236,6 +236,7 @@ Word32 HM_getChunkListLevel(HM_chunkList chunk);
  * @return the last chunk, or NULL if the list is empty
  */
 HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
+HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 Word64 HM_getChunkListSize(HM_chunkList levelHead);
 

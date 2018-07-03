@@ -10,25 +10,23 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* entries in a chunkList->rememberedSet
- * preferably, we wouldn't have to remember src. However then at a collection
- * we wouldn't be able to check if dst[idx] still points into the local heap
- * without a dangerous race.
- */
+/* Remembering *dst = src
+ * dst must be an internal pointer of obj */
 struct HM_remembered {
-  objptr dst;
-  Int64 idx;
+  objptr obj;
+  objptr* dst;
   objptr src;
 };
 
-typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, Int64 idx, objptr src, void* args);
+typedef void (*ForeachRememberedFunc)(GC_state s, objptr obj, objptr* dst, objptr src, void* args);
 
 #endif /* defined (MLTON_GC_INTERNAL_TYPES) */
 
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-void HM_remember(HM_chunkList levelHead, objptr dst, Int64 index, objptr src);
+void HM_remember(HM_chunkList rememberedSet, HM_chunkList levelHead, objptr obj, objptr* dst, objptr src);
+void HM_rememberAtLevel(HM_chunkList levelHead, objptr obj, objptr* dst, objptr src);
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
