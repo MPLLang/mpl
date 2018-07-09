@@ -475,6 +475,60 @@ void HM_HHC_collectLocal(void) {
       "END");
 }
 
+/* ========================================================================= */
+
+/* SAM_NOTE: TODO: DRY: this code is similar (but not identical) to
+ * forwardHHObjptr */
+objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
+  pointer p = objptrToPointer(op, s->heap->start);
+
+  assert(!hasFwdPtr(p));
+  assert(HM_isLevelHead(tgtChunkList));
+
+  if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
+    /* This chunk contains *only* this object, so no need to copy. Instead,
+     * just move the chunk. */
+    HM_chunk chunk = HM_getChunkOf(p);
+    HM_unlinkChunk(chunk);
+    HM_appendChunk(tgtChunkList, chunk);
+    /* SAM_NOTE: this is inefficient. unnecessary fragmentation. */
+    if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+    LOG(LM_HH_COLLECTION, LL_INFO,
+      "Moved single-object chunk %p of size %zu",
+      (void*)chunk,
+      HM_getChunkSize(chunk));
+    return op;
+  }
+
+  size_t metaDataBytes;
+  size_t objectBytes;
+  size_t copyBytes;
+
+  /* compute object size and bytes to be copied */
+  computeObjectCopyParameters(s,
+                              p,
+                              &objectBytes,
+                              &copyBytes,
+                              &metaDataBytes);
+
+  pointer copyPointer = copyObject(p - metaDataBytes,
+                                   objectBytes,
+                                   copyBytes,
+                                   tgtChunkList);
+
+  /* Store the forwarding pointer in the old object metadata. */
+  *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
+                                      s->heap->start);
+  assert (hasFwdPtr(p));
+
+  /* use the forwarding pointer */
+  return getFwdPtr(p);
+}
+
+/* ========================================================================= */
+
 void forwardHHObjptr (GC_state s,
                       objptr* opp,
                       void* rawArgs) {

@@ -721,6 +721,10 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
   return objInfo.hh;
 }
 
+Word32 HM_getObjptrLevel(objptr op) {
+  return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
+}
+
 rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
   return &HM_getObjptrHH(s, object)->lock;
 }

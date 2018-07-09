@@ -291,6 +291,8 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
  */
 rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
+Word32 HM_getObjptrLevel(objptr op);
+
 /**
  * Check whether the given objptr is in to-space
  *

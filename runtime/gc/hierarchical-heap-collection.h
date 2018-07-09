@@ -98,6 +98,9 @@ void HM_HHC_collectLocal(void);
  * @param args The struct ForwardHHObjptrArgs* for this call, cast as a void*
  */
 void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
+
+objptr relocateObject(GC_state s, objptr obj, HM_chunkList tgtChunkList);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */
