@@ -10,23 +10,23 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* Remembering *dst = src
- * dst must be an internal pointer of obj */
+/* Remembering *field = src
+ * field must be an internal pointer of dst */
 struct HM_remembered {
-  objptr obj;
-  objptr* dst;
+  objptr dst;
+  objptr* field;
   objptr src;
 };
 
-typedef void (*ForeachRememberedFunc)(GC_state s, objptr obj, objptr* dst, objptr src, void* args);
+typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
 #endif /* defined (MLTON_GC_INTERNAL_TYPES) */
 
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-void HM_remember(HM_chunkList rememberedSet, HM_chunkList levelHead, objptr obj, objptr* dst, objptr src);
-void HM_rememberAtLevel(HM_chunkList levelHead, objptr obj, objptr* dst, objptr src);
+void HM_remember(HM_chunkList rememberedSet, HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
+void HM_rememberAtLevel(HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
