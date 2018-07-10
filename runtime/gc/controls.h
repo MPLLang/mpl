@@ -81,6 +81,7 @@ struct GC_controls {
   size_t globalHeapMinChunkSize; /* Minimum size reserved for any allocation request. */
   size_t allocChunkSize;
   size_t minChunkSize;
+  bool deferredPromotion;
   bool freeListCoalesce;
   bool mayUseAncestorChunk;
   int32_t affinityBase; /* First processor to use when setting affinity */

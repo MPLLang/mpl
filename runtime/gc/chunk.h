@@ -174,11 +174,13 @@ HM_chunkList HM_getLevelHead(HM_chunk chunk);
  * @param the arguments to the predicate function.
  * @param forwardHHObjptrArgs the args to use for forwardHHObjptr()
  */
-void HM_forwardHHObjptrsInChunkList(
+static inline void HM_forwardHHObjptrsInChunkList(
   GC_state s,
+  HM_chunk chunk,
   pointer start,
   ObjptrPredicateFunction predicate,
   void* predicateArgs,
+  ForeachObjptrFunction forwardHHObjptrFunc,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
 
 /**

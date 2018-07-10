@@ -396,28 +396,19 @@ void HM_unlinkChunk(HM_chunk chunk) {
 
 void HM_forwardHHObjptrsInChunkList(
   GC_state s,
+  HM_chunk chunk,
   pointer start,
   ObjptrPredicateFunction predicate,
   void* predicateArgs,
+  ForeachObjptrFunction forwardHHObjptrFunc,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs)
 {
-  HM_chunk chunk;
-  if (blockOf(start) == start) {
-    /* `start` is on the boundary of a chunk! The actual chunk which "contains"
-     * this pointer is therefore the previous chunk. */
-    chunk = HM_getChunkOf(start-1);
-    assert(start == chunk->limit);
-    assert(chunk->frontier == chunk->limit);
-  } else {
-    chunk = HM_getChunkOf(start);
-  }
+  assert(NULL != chunk);
+  assert(HM_getChunkStart(chunk) <= start);
+  assert(start <= HM_getChunkFrontier(chunk));
 
   pointer p = start;
   size_t i = 0;
-
-  if (chunk == NULL) {
-    DIE("could not find chunk of %p", (void*)chunk);
-  }
 
   while (NULL != chunk) {
 
@@ -432,7 +423,7 @@ void HM_forwardHHObjptrsInChunkList(
                                 FALSE,
                                 predicate,
                                 predicateArgs,
-                                forwardHHObjptr,
+                                forwardHHObjptrFunc,
                                 forwardHHObjptrArgs);
       if ((i++ % 1024) == 0) {
         Trace3(EVENT_COPY,
@@ -616,6 +607,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
                                   Word32 stealLevel,
                                   bool inToSpace) {
+  ((void)(stealLevel));
   Word32 previousLevel = ~((Word32)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
@@ -629,10 +621,6 @@ void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
     assert(chunkList->isInToSpace == inToSpace);
 
     assert(level < previousLevel);
-    ASSERTPRINT((HM_HH_INVALID_LEVEL == stealLevel) || (level > stealLevel),
-      "stealLevel %d; level %d",
-      stealLevel,
-      level);
     previousLevel = level;
 
     HM_assertChunkListInvariants(chunkList, levelListHH);

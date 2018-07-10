@@ -427,9 +427,12 @@ int processAtMLton (GC_state s, int argc, char **argv,
           }
 
           s->controls->traceBufferSize = stringToInt(argv[i++]);
-        } else if (0 == strcmp(arg, "free-list-coalesce")) {
+        } else if (0 == strcmp(arg, "disable-coalesce")) {
           i++;
-          s->controls->freeListCoalesce = TRUE;
+          s->controls->freeListCoalesce = FALSE;
+        } else if (0 == strcmp(arg, "disable-promotion")) {
+          i++;
+          s->controls->deferredPromotion = FALSE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -501,7 +504,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
-  s->controls->freeListCoalesce = FALSE;
+  s->controls->freeListCoalesce = TRUE;
+  s->controls->deferredPromotion = TRUE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();

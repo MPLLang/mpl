@@ -154,7 +154,7 @@ void HM_HHC_collectLocal(void) {
     .minLevel = HM_HH_getLowestPrivateLevel(s, hh),
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
-    .toSpace = &(hh->levels[0]), /* Initially, promotion operates on the "from-space" */
+    .toSpace = NULL,
     .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
     .objectsCopied = 0,
@@ -165,7 +165,11 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  // HM_deferredPromote(s, &forwardHHObjptrArgs);
+  if (s->controls->deferredPromotion) {
+    Trace0(EVENT_PROMOTION_ENTER);
+    HM_deferredPromote(s, &forwardHHObjptrArgs);
+    Trace0(EVENT_PROMOTION_LEAVE);
+  }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "collecting hh %p (SL: %u L: %u):\n"
@@ -186,8 +190,11 @@ void HM_HHC_collectLocal(void) {
     toSpace[i] = NULL;
   }
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
+  forwardHHObjptrArgs.toLevel = HM_HH_INVALID_LEVEL;
 
-  HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
+  if (!s->controls->deferredPromotion) {
+    HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
+  }
 
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -311,9 +318,11 @@ void HM_HHC_collectLocal(void) {
     if (NULL != toSpaceLevel && NULL != toSpaceLevel->firstChunk) {
       HM_forwardHHObjptrsInChunkList(
         s,
+        toSpaceLevel->firstChunk,
         HM_getChunkStart(toSpaceLevel->firstChunk),
         &skipStackAndThreadObjptrPredicate,
         &ssatoPredicateArgs,
+        &forwardHHObjptr,
         &forwardHHObjptrArgs);
     }
   }
@@ -329,7 +338,7 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-  assertInvariants(s, hh, LIVE);
+  // assertInvariants(s, hh, LIVE);
 
   /*
    * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
@@ -835,12 +844,12 @@ pointer copyObject(pointer p,
   HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
   pointer frontier = HM_getChunkFrontier(chunk);
   pointer limit = HM_getChunkLimit(chunk);
-
   assert(frontier <= limit);
-  assert(frontier < (pointer)chunk + HM_BLOCK_SIZE ||
-         (frontier == (pointer)chunk + HM_BLOCK_SIZE && frontier == limit));
 
-  if (((size_t)(((char*)(limit)) - ((char*)(frontier)))) < objectSize) {
+  bool mustExtend = ((size_t)(limit - frontier) < objectSize) ||
+                    (frontier >= (pointer)chunk + HM_BLOCK_SIZE);
+
+  if (mustExtend) {
     /* need to allocate a new chunk */
     chunk = HM_allocateChunk(tgtChunkList, objectSize);
     if (NULL == chunk) {

@@ -19,8 +19,6 @@
 
 #include "chunk.h"
 
-/* objptr* opp */
-
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
@@ -28,9 +26,7 @@ struct ForwardHHObjptrArgs {
   Word32 maxLevel;
   Word32 toLevel; /* if == HM_HH_INVALID_LEVEL, preserve level of the forwarded object */
   HM_chunkList* toSpace;
-  objptr containingObject; /* a hack to have a handle on the object which
-                            * contains the ptr being forwarded, for updating
-                            * remembered-sets where necessary */
+  objptr containingObject; /* a hack to keep track of which object is currently being traced */
   size_t bytesCopied;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
