@@ -1,0 +1,8 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+  $(SML_LIB)/basis/schedulers/spoonhower.mlb
+  (* $(SML_LIB)/basis/schedulers/private-deqs.mlb *)
+in
+  tab.sml
+end
