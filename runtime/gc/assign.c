@@ -352,7 +352,15 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     //   // src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
     // }
     if (dstList->level < srcList->level) {
-      HM_rememberAtLevel(srcList, dst, field, src);
+      assert(getHierarchicalHeapCurrent(s) != NULL);
+      struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
+      Word32 level = HM_getObjptrLevel(src);
+      if (NULL == HM_HH_LEVEL(hh, level)) {
+        HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+      }
+      HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
+      // HM_rememberAtLevel(HM_HH_LEVEL(getHierarchicalHeapCurrent(s), srcList->level), dst, field, src);
+      // HM_rememberAtLevel(srcList, dst, field, src);
     }
 
     /* Perform the write. */

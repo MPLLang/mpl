@@ -14,12 +14,14 @@ void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr dst, objptr
       levelHead->size += HM_getChunkSize(chunk);
       GC_state s = pthread_getspecific(gcstate_key);
       if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
+          levelHead->containingHH != NULL &&
           levelHead->level >= HM_HH_getLowestPrivateLevel(s, levelHead->containingHH)) {
         levelHead->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
       }
     }
   }
 
+  assert(NULL != chunk);
   assert((size_t)(chunk->limit - chunk->frontier) >= sizeof(struct HM_remembered));
   struct HM_remembered* r = (struct HM_remembered*)chunk->frontier;
   r->dst = dst;

@@ -163,6 +163,8 @@ void HM_coalesceChunks(HM_chunk left, HM_chunk right) {
 
 HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint);
 HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
+  assert(HM_getChunkStart(chunk) <= chunk->frontier);
+  assert(chunk->frontier <= chunk->limit);
   assert(chunk->frontier <= splitPoint);
   assert(splitPoint + sizeof(struct HM_chunk) <= chunk->limit);
   assert(isAligned((uintptr_t)splitPoint, HM_BLOCK_SIZE));
@@ -211,6 +213,8 @@ HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
 }
 
 HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
+  assert(HM_getChunkStart(chunk) <= chunk->frontier);
+  assert(chunk->frontier <= chunk->limit);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
   assert(!HM_isUnlinked(chunk));
 
@@ -230,12 +234,18 @@ HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
 
 HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested);
 HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested) {
+  assert(HM_getChunkStart(chunk) <= chunk->frontier);
+  assert(chunk->frontier <= chunk->limit);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
   assert(!HM_isUnlinked(chunk));
 
   pointer splitPoint = (pointer)(uintptr_t)align((uintptr_t)(chunk->frontier + bytesRequested), HM_BLOCK_SIZE);
+  assert(chunk->frontier <= splitPoint);
+  assert(splitPoint <= chunk->limit);
+  assert((size_t)(splitPoint - chunk->frontier) >= bytesRequested);
+  assert(isAligned((uintptr_t)splitPoint, HM_BLOCK_SIZE));
 
-  if (splitPoint == chunk->limit) {
+  if (splitPoint + HM_BLOCK_SIZE > chunk->limit) {
     // not enough space to split this chunk
     return NULL;
   }
@@ -294,6 +304,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       }
       HM_prependChunk(s->freeListSmall, chunk);
     }
+    /* chunks in freeListSmall might have frontiers that haven't been reset */
+    chunk->frontier = HM_getChunkStart(chunk);
     if (chunkHasBytesFree(chunk, bytesRequested)) goto finish;
     HM_unlinkChunk(chunk);
     HM_appendChunk(s->freeListSmall, chunk);
@@ -302,6 +314,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   }
 
   chunk = s->freeListLarge->firstChunk;
+  /* chunks in freeListLarge should always have properly set frontiers */
+  assert(chunk == NULL || chunk->frontier == HM_getChunkStart(chunk));
   if (chunkHasBytesFree(chunk, bytesRequested)) goto finish;
 
   if (chunk != NULL) {
@@ -316,7 +330,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   HM_prependChunk(s->freeListLarge, chunk);
 
 finish:
-  chunk->frontier = HM_getChunkStart(chunk);
+  // chunk->frontier = HM_getChunkStart(chunk);
+  assert(chunk->frontier == HM_getChunkStart(chunk));
   chunk->mightContainMultipleObjects = TRUE;
   HM_splitChunkFront(chunk, bytesRequested);
   HM_unlinkChunk(chunk);
