@@ -18,4 +18,7 @@ functions (possibly in parallel) and returns their results.
     val fork : (unit -> 'a) * (unit -> 'b) -> ('a * 'b)
   end
 
-A few examples can be found in the examples/ directory.
+A few examples can be found in the examples/ directory. After compiling an
+executable, the number of processors can be chosen at runtime as follows:
+
+  ./<executable> @MLton number-processors <n> -- <args>

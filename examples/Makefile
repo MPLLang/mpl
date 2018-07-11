@@ -5,6 +5,8 @@ FLAGS=
 
 .PHONY: tab tab.dbg fib fib.dbg clean
 
+all: fib tab
+
 fib: fib.sml fib.mlb
 	$(MLTON) $(FLAGS) -output fib fib.mlb
 

@@ -1,0 +1,8 @@
+Compile:
+
+  make all
+
+Run with, e.g., 4 processors:
+
+  ./fib @MLton number-processors 4 --
+  ./tab @MLton number-processors 4 --
