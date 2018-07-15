@@ -367,7 +367,7 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
 
   list->firstChunk = NULL;
   list->lastChunk = NULL;
-  list->parent = list;
+  list->parent = NULL;
   list->rememberedSet = NULL;
   list->containingHH = hh;
   list->size = 0;
@@ -511,7 +511,7 @@ HM_chunkList HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
   HM_chunkList cursor = chunk->levelHead;
-  while (cursor->parent != cursor) {
+  while (cursor->parent != NULL) {
     cursor = cursor->parent;
   }
   return cursor;
@@ -520,6 +520,11 @@ HM_chunkList HM_getLevelHead(HM_chunk chunk) {
 HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
   HM_chunkList levelHead = HM_getLevelHead(chunk);
   assert(levelHead != NULL);
+
+  /* fast path */
+  if (chunk->levelHead == levelHead) {
+    return levelHead;
+  }
 
   HM_chunkList cursor = chunk->levelHead;
   chunk->levelHead = levelHead;
@@ -667,7 +672,7 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 HM_chunkList getLevelHead(HM_chunk chunk) {
   HM_chunkList cursor = chunk->levelHead;
   assert(NULL != cursor);
-  while (cursor->parent != cursor) {
+  while (cursor->parent != NULL) {
     cursor = cursor->parent;
     assert(NULL != cursor);
   }

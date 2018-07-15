@@ -43,6 +43,7 @@ struct ForwardHHObjptrArgs;
  * levelheads are identical to normal chunks (e.g. they still store user
  * objects in the reserved space up to .frontier). */
 struct HM_chunk {
+  HM_chunkList levelHead;
 
   pointer frontier; // end of allocations within this chunk
   pointer limit;    // the end of this chunk
@@ -53,7 +54,6 @@ struct HM_chunk {
   HM_chunk nextAdjacent;
   HM_chunk prevAdjacent;
 
-  HM_chunkList levelHead;
 
   bool mightContainMultipleObjects;
 
@@ -123,7 +123,7 @@ static inline bool HM_isUnlinked(HM_chunk chunk) {
 }
 
 static inline bool HM_isLevelHead(HM_chunkList list) {
-  return list->parent == list;
+  return list->parent == NULL;
 }
 
 // DECLARATIONS ==============================================================

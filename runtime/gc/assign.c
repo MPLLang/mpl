@@ -284,8 +284,8 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     assertObjptrInHH(src);
     assert(Assignable_isMaster(s, src));
 
-    HM_chunkList srcList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
-    HM_chunkList dstList = HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+    HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(src, NULL)));
+    HM_chunkList dstList = HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(dst, NULL)));
 
     // HM_getObjptrInfo(s, src, &src_info);
     // HM_getObjptrInfo(s, dst, &dst_info);
