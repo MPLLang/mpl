@@ -13,24 +13,6 @@ struct
 
   fun empty () = (ref ~1, ref (Waiting nil))
 
-  fun write ((r, v), a) = (lock r;
-      case !v
-       of Done _ => (unlock r; raise B.Parallel "two writes to sync var!")
-        | Waiting readers =>
-          let
-            val () = v := Done a
-            val () = unlock r
-          in
-            (* Add readers to the queue *)
-            app (fn k => B.resume (k, (true, a))) readers
-          end)
-
-  fun read (r, v) = (lock r;
-      case !v
-       of Done a => (unlock r; (false, a))
-        | Waiting readers => B.suspend (fn k => (v := Waiting (k::readers); unlock r)))
-
-(*  Old version with weak locks -- was causing bugs
   fun write ((r, v), a) =
       case !v
        of Done _ => raise B.Parallel "two writes to sync var!"
@@ -66,7 +48,6 @@ struct
               | Waiting readers =>
                 B.suspend (fn k => (v := Waiting (k::readers); unlock r))
           end
-*)
 
 (*
   fun read (r, v) =

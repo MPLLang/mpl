@@ -49,7 +49,7 @@ case "$1" in
 esac
 
 doitMLton () {
-    exec "$mlton" @MLton ram-slop 0.5 "${rargs[@]}" -- "$@"
+    exec "$mlton" @MLton ram-slop 0.4 "${rargs[@]}" -- "$@"
 }
 doitSMLNJ () {
     exec "$smlnj" @SMLload="$mlton_smlnj_heap" "$@"
@@ -143,4 +143,5 @@ doit "$lib" \
         -target-link-opt solaris '-lnsl -lsocket -lrt'           \
         -target-link-opt x86 '-m32'                              \
         -profile-exclude '\$\(SML_LIB\)'                         \
+        -mark-cards 'false'                                      \
         "$@"

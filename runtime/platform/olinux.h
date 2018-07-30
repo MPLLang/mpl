@@ -17,7 +17,6 @@
 #include <plpa.h>
 #include <poll.h>
 #include <pwd.h>
-#include <pthread.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -107,31 +106,12 @@ static inline char* ctermid(char* x) {
 #define FE_UPWARD       _FPU_RC_UP
 #endif
 
-#define set_cpu_affinity_x(num) do {                                      \
+#define set_cpu_affinity(num) do {                                      \
         plpa_cpu_set_t cpuset;                                          \
                                                                         \
         PLPA_CPU_ZERO (&cpuset);                                        \
         PLPA_CPU_SET (num, &cpuset);                                    \
-        fprintf (stderr, "Proc %d\n", num);				\
         if (plpa_sched_setaffinity (0, sizeof(cpuset), &cpuset)) {      \
                 fprintf (stderr, "Warning: unable to set CPU affinity\n"); \
         }                                                               \
       } while (0)
-
-/* 
-*/
-
-#define set_cpu_affinity(num) do {                                      \
-        cpu_set_t cpuset;                                          \
-                                                                        \
-        CPU_ZERO (&cpuset);                                        \
-        CPU_SET (num, &cpuset);                                    \
-	pthread_t thread; \
-	thread = pthread_self(); \
-     if (pthread_setaffinity_np(thread, sizeof(cpuset), &cpuset)) {      \
-                fprintf (stderr, "Warning: unable to set CPU affinity\n"); \
-        }                                                               \
-      } while (0)
-
-         
-          
