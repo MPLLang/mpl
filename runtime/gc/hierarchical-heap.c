@@ -209,27 +209,13 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
        cursor = &(HM_HH_objptrToStruct(s, *cursor)->nextChildHH)) {
   }
   assert(BOGUS_OBJPTR != *cursor);
+
+  Word32 oldHighestPrivateLevel = HM_HH_getHighestPrivateLevel(s, parentHH);
   *cursor = hh->nextChildHH;
+  Word32 newHighestPrivateLevel = HM_HH_getHighestPrivateLevel(s, parentHH);
+  assert(newHighestPrivateLevel < oldHighestPrivateLevel);
 
-  /* update lcs and lchs */
-  size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
-
-  Word64 sizeDelta = 0;
-  Word32 highestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
-  FOR_LEVEL_IN_RANGE(level, i, parentHH, highestStolenLevel+1, hh->stealLevel+1, {
-    sizeDelta += HM_getChunkListSize(level);
-  });
-
-  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
-      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
-      ((void*)(parentHH)),
-      parentHH->locallyCollectibleSize,
-      sizeDelta,
-      parentHH->locallyCollectibleSize + sizeDelta);
-  parentHH->locallyCollectibleSize += sizeDelta;
-  parentHH->locallyCollectibleHeapSize += 2 * sizeDelta;
-
-  /* merge levels */
+  /* Merge levels. */
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
     HM_chunkList mirrorLevel = HM_HH_LEVEL(parentHH, i);
     if (mirrorLevel == NULL) {
@@ -241,26 +227,21 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
-      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
-      ((void*)(parentHH)),
-      parentHH->locallyCollectibleSize,
-      hh->locallyCollectibleSize,
-      parentHH->locallyCollectibleSize + hh->locallyCollectibleSize);
-  parentHH->locallyCollectibleSize += hh->locallyCollectibleSize;
-  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
-      "merged hh %p into hh %p",
-      ((void*)(hh)),
-      ((void*)(parentHH)));
+  /* Add up the size of the immediate ancestors which are now unfrozen due to
+   * this merge. We need this quantity to adjust the LCHS below. */
+  Word64 unfrozenSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, parentHH, newHighestPrivateLevel, oldHighestPrivateLevel, {
+    unfrozenSize += HM_getChunkListSize(level);
+  });
 
-  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize;
+  /* Add up the rest of the now local data. */
+  Word64 childrenSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, parentHH, oldHighestPrivateLevel, parentHH->level+1, {
+    childrenSize += HM_getChunkListSize(level);
+  });
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" (ratio %.2f)",
-      ((void*)(parentHH)),
-      oldLCHS,
-      parentHH->locallyCollectibleHeapSize,
-      HM_HH_getLCRatio(parentHH));
+  parentHH->locallyCollectibleSize = childrenSize + unfrozenSize;
+  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
 
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */
@@ -502,6 +483,17 @@ Word32 HM_HH_getHighestStolenLevel(GC_state s,
   }
 }
 
+Word32 HM_HH_getHighestPrivateLevel(GC_state s, const struct HM_HierarchicalHeap* hh) {
+  struct HM_HierarchicalHeap* highestStolenHH =
+    HM_HH_objptrToStruct(s, hh->childHHList);
+
+  if (NULL == highestStolenHH) {
+    return 0;
+  } else {
+    return highestStolenHH->stealLevel+1;
+  }
+}
+
 pointer HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
   assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
   return HM_getChunkFrontier(hh->lastAllocatedChunk);
@@ -683,6 +675,11 @@ void assertInvariants(GC_state s,
   HM_assertLevelListInvariants(hh, hh->stealLevel, false);
 
   Word64 locallyCollectibleSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, hh, hh->level+1, HM_MAX_NUM_LEVELS, {
+    locallyCollectibleSize += HM_getChunkListSize(level);
+  });
+  // The levels past the recorded level should be empty
+  assert(0 == locallyCollectibleSize);
   FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getHighestStolenLevel(s, hh)+1, hh->level+1, {
     locallyCollectibleSize += HM_getChunkListSize(level);
   });

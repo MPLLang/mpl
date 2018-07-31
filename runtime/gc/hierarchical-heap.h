@@ -329,6 +329,9 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
 Word32 HM_HH_getHighestStolenLevel(GC_state s,
                                    const struct HM_HierarchicalHeap* hh);
 
+Word32 HM_HH_getHighestPrivateLevel(GC_state s,
+                                    const struct HM_HierarchicalHeap* hh);
+
 /**
  * Gets the frontier from a struct HM_HierarchicalHeap
  *
