@@ -82,11 +82,15 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
              ())
         val _ = if P.ple (r, prio) then ()
                 else
-                    raise IncompatiblePriorities
+                    (print ((Priority.toString r) ^ " </ " ^ (Priority.toString prio) ^ "\n");
+                    raise IncompatiblePriorities)
         val _ = if Bag.isDumped bag then ()
                 else if tryRemove (prio, hand) then
                     (* execute the thunk locally *)
-                    (writeResult result thunk;
+                    (* inherit the target thread's priority first *)
+                    (setPrio (p, prio);
+                     writeResult result thunk;
+                     setPrio (p, r);
                      (case Bag.dump bag of
                           NONE => raise Thread
                         | SOME l => List.app wake l))
@@ -133,6 +137,7 @@ structure IO = IO
 structure Basic =
 struct
 val init = init
+val initPriorities = initPriorities
 val finalizePriorities = finalizePriorities
 fun currentPrio () = curPrio (processorNumber ())
 val numberOfProcessors = numberOfProcessors

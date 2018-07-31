@@ -1,0 +1,13 @@
+structure Thread : THREAD =
+struct
+
+structure F = MLtonParallelFutureSuspend
+structure B = MLtonParallelBasic
+
+type 'a t = F.t
+
+fun spawn f prio = F.futurePrio prio f
+fun sync t = F.touch t
+fun fork (f, g) = ForkJoin.fork (f, g)
+
+end

@@ -1,0 +1,38 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+  end
+
+  priority/priority.sig
+  priority/priority.sml
+
+  workqueue.sig
+  basic.sig
+  syncvar.sig
+  forkjoin.sig
+  future.sig
+  mlx-sig.sml
+  mlx.sml
+  io.sig
+  thread.sig
+
+  ann "allowFFI true" in
+    internal.sml
+    wsworkqueue.sml
+    basic.sml
+    syncvar.sml
+    forkjoin.sml
+    future.sml
+    io.sml
+  end
+in
+  thread.sml
+end

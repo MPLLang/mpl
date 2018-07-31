@@ -30,7 +30,6 @@ struct
 
     fun count () = !numberOfPrios
 
-    fun eprint s = print s
     fun print _ = ()
 
     (* Functions must be called in this order:
@@ -124,6 +123,14 @@ struct
             ()
         end
 
+    fun check () : unit =
+        if not (!initialized) then raise Uninitialized
+        else if A2.nCols (!ltMat) <> !numberOfPrios
+        then raise (InvariantViolated "matrix dimension doesn't match no of priorities")
+        else
+            (dfs ();
+             warshall (0, 0, 0);
+             checked := true)
 
     fun new () : t =
         let val n = !numberOfPrios
@@ -144,17 +151,6 @@ struct
             else
                 (set p1 p2 true;
                  ())
-
-    fun check () : unit =
-        if not (!initialized) then raise Uninitialized
-        else if A2.nCols (!ltMat) <> !numberOfPrios
-        then raise (InvariantViolated "matrix dimension doesn't match no of priorities")
-        else
-            (V.app (fn p => new_lessthan p top_prio);
-             V.app (fn p => new_lessthan bot p);
-             dfs ();
-             warshall (0, 0, 0);
-             checked := true)
 
     fun toInt ((_, po, _): t) : int =
         ((count ()) - !po
@@ -192,7 +188,7 @@ struct
                 Vector.foldl (fn ((r, n), (a, l)) =>
                                  let val prob = Real./ (Real.fromInt n, sum)
                                  in
-                                     (a + prob, (r, 1.0 - a)::l)
+                                     (a + prob, (r, a + prob)::l)
                                  end)
                              (0.0, [])
                              raw

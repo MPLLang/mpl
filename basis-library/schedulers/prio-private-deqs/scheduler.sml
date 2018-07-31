@@ -567,7 +567,8 @@ fun returnToSched () =
         schedule p NONE
     end
 
-fun finalizePriorities () = P.init ()
+fun initPriorities () = P.init ()
+fun finalizePriorities () = P.check ()
 
 fun interruptHandler (p, k) =
     let (* val _ = log 4 (fn _ => "interrupt on " ^ (Int.toString p) ^ "\n") *)
@@ -589,7 +590,6 @@ fun prun () =
 fun init () =
     let val p = processorNumber ()
     in
-        P.check ();
         mailboxes := A.tabulate (numberOfProcessors * (P.count ()),
                                  fn _ => M.new ());
         queues := A.tabulate (numberOfProcessors * (P.count ()),

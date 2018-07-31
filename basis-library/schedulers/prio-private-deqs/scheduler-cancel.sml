@@ -92,12 +92,12 @@ fun pop (C { f, ...}) =
     f := (fn _ => ())
 
 fun push (C { f, ...}) qh =
-    f := (fn _ => ignore (Q.tryRemove qh))
-             (* if Q.tryRemove qh then
-                     ()
-                 else
-                     (print "not in list\n";
-                      raise (Cancel "not in list"))) *)
+    f := (fn _ => (* ignore (Q.tryRemove qh)) *)
+             if Q.tryRemove qh then
+                 ()
+             else
+                 (print "not in list\n";
+                  raise (Cancel "not in list")))
 
 fun isCancelled (C {cancelled, ...}) =
     !cancelled
@@ -272,6 +272,8 @@ fun queue (p, r) =
 
 fun curPrio p =
     A.sub (curprios, p)
+fun setPrio (p, r) =
+    A.update (curprios, p, r)
 
 fun getDepth p =
     A.sub (depth, p)
@@ -477,7 +479,7 @@ fun insertInt insched (r, t) =
                 (* handle Subscript => (log (~1) (fn _ => "306\n"); raise Match) *)
         val q = queue (p, r)
                 (* handle Subscript => (log (~1) (fn _ => "308\n"); raise Bind) *)
-                      (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
+        (* val _ = log 7 (fn _ => "pushing work at " ^ (P.toString r) ^ "\n") *)
         val _ = tryClearFlag (m, p, r)
         val h = Q.insert (q, t)
     in
@@ -571,7 +573,8 @@ fun newTask (w : Task.work) : Task.t =
 fun handleResumed p =
     let val ioq = A.sub (ioqueues, p)
         fun resume (t, r) =
-            ignore (insertInt true (r, t))
+            ((* print ("resume at " ^ (Priority.toString r) ^ "\n"); *)
+             ignore (insertInt true (r, t)))
         val ioq' = IOQ.process resume ioq
     in
         A.update (ioqueues, p, ioq')
@@ -592,7 +595,8 @@ fun pushCC (r', c, g) =
                 T.prepare (T.new g, (r, h))
             end
     in
-        A.update (curprios, p, r');
+        setPrio (p, r');
+        (* A.update (curprios, p, r'); *)
         setDepth (p, d + 1);
         C.workOn c;
         I.unblock p;
@@ -635,7 +639,10 @@ fun schedule p kt =
                                  NONE => NONE
                                | SOME tasks => (pushAll ((p, r), tasks);
                                                 Q.choose (queue (p, r))))
-                  | SOME x => SOME x
+                  | SOME x => (if Cancellable.isCancelled (Task.cancellable x)
+                               then (log ~1 (fn _ => "cancelled but not removed\n");
+                                     getWorkAt r)
+                               else SOME x)
             end
         fun iterGetWork r =
             case getWorkAt r of
@@ -674,7 +681,8 @@ fun schedule p kt =
             (* Do the work. It shouldn't return. *)
             (C.pop (Task.cancellable t);
              C.workOn (Task.cancellable t);
-             A.update (curprios, p, prio);
+             setPrio (p, prio);
+             (* A.update (curprios, p, prio); *)
              (* log 6 (fn _ => "found work at " ^ (P.toString prio) ^ "\n"); *)
              I.unblock p;
              workOnTask p t;
@@ -716,7 +724,8 @@ fun returnToSched () =
         schedule p NONE
     end
 
-fun finalizePriorities () = P.init ()
+fun initPriorities () = P.init ()
+fun finalizePriorities () = P.check ()
 
 fun interruptHandler (p, k) =
     let (* val _ = log 4 (fn _ => "interrupt on " ^ (Int.toString p) ^ "\n") *)
@@ -724,7 +733,8 @@ fun interruptHandler (p, k) =
         val _ = incrementCounter (newThreadCounter, p)
         val kt = case C.workingOn () of
                      SOME c => if C.isCancelled c then
-                                   NONE
+                                   (log ~1 (fn _ => "thread was cancelled\n");
+                                    NONE)
                                else
                                    SOME (Task.Thread k, d, c)
                    | NONE => NONE
@@ -744,7 +754,6 @@ fun prun () =
 fun init () =
     let val p = processorNumber ()
     in
-        P.check ();
         mailboxes := A.tabulate (numberOfProcessors * (P.count ()),
                                  fn _ => M.new ());
         queues := A.tabulate (numberOfProcessors * (P.count ()),
