@@ -100,6 +100,7 @@ structure IO = IO
 structure Basic =
 struct
 val init = init
+val initPriorities = initPriorities
 val finalizePriorities = finalizePriorities
 fun currentPrio () = curPrio (processorNumber ())
 val numberOfProcessors = numberOfProcessors
