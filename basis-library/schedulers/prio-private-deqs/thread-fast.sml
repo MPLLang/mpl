@@ -80,17 +80,17 @@ fun sync {result, prio, bag, hand, cancel, thunk} =
         fun wake (r', t) =
             ((if P.pe (r, r') then push else insert) (r', t);
              ())
-        val _ = if P.ple (r, prio) then ()
+	val _ = if P.ple (r, prio) then ()
                 else
                     (print ((Priority.toString r) ^ " </ " ^ (Priority.toString prio) ^ "\n");
                     raise IncompatiblePriorities)
         val _ = if Bag.isDumped bag then ()
-                else if tryRemove (prio, hand) then
+                else if P.pe (r, prio) andalso tryRemove (prio, hand) then
                     (* execute the thunk locally *)
                     (* inherit the target thread's priority first *)
-                    (setPrio (p, prio);
+                    ((* setPrio (p, prio); *)
                      writeResult result thunk;
-                     setPrio (p, r);
+                     (* setPrio (p, r); *)
                      (case Bag.dump bag of
                           NONE => raise Thread
                         | SOME l => List.app wake l))
