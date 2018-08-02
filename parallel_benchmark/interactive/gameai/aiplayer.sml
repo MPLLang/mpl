@@ -17,6 +17,8 @@ type t = { plays: int M.map ref,
 
 val frame = GTime.fromMinutes (1.0)
 
+fun print _ = ()
+
 fun moves (sp: M.sp) =
     let val talk = State.talk (M.state sp)
         val numslides = Talk.numslides talk

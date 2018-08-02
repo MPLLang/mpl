@@ -9,7 +9,7 @@ type committee = CP.com_player V.vector
 val _ = Basic.finalizePriorities ()
 val _ = Basic.init ()
 
-val frame = GTime.fromMinutes (1.0 / 60.0) (* (1.0 / (60.0 * 24.0)) *)
+val frame = GTime.fromMinutes (1.0 / (60.0 * 10.0)) (* (1.0 / (60.0 * 24.0)) *)
 
 fun loop (state: S.state)
          (student: SP.stu_player)
@@ -17,6 +17,7 @@ fun loop (state: S.state)
     =
     let val now = T.now ()
         val cpms = Vector.map (CP.move (state, now)) committee
+            (* Vector.map (fn c => (c, NONE)) committee *)
         val committee' = Vector.map #1 cpms
         val cmoves = Vector.map #2 cpms
         val (student', smove) = SP.move (state, now) student
@@ -47,7 +48,7 @@ fun init () =
         val state = State.init (50.0, 50.0) talk cinfos 1.0
     in
         GTime.init ();
-        GTime.setspeed 2.0;
+        GTime.setspeed 5.0;
         loop state student committee
     end
 

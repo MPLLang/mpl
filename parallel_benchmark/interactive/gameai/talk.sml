@@ -90,6 +90,8 @@ fun covered (t: talk) (n: int) =
         cov > 0.5
     end
 
+fun amtcovered (t: talk) (n: int) = #2 (V.sub (#slides t, n))
+
 fun slides (t: talk) =
     V.map #1 (#slides t)
 

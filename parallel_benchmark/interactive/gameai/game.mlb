@@ -27,6 +27,7 @@ complayer.sig
 stuplayer.sig
 aiplayer.sml
 complayer.sml
+ansi.sml
 stuplayer.sml
 
 game.sml
