@@ -188,12 +188,13 @@ int Assignable_isMaster (GC_state s, objptr o) {
 }
 
 objptr Assignable_get (GC_state s, objptr src, Int64 index) {
-    struct HM_HierarchicalHeap *hh;
+    // struct HM_HierarchicalHeap *hh;
     pointer src_repl, res;
 
-    src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh);
+    // src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh);
+    src_repl = objptrToPointer(src, NULL);
     res = *((pointer *)src_repl + index);
-    Assignable_unlockReplicaReader(s, hh);
+    // Assignable_unlockReplicaReader(s, hh);
 
     return pointerToObjptr(res, s->heap->start);
 }
@@ -224,15 +225,16 @@ void hhLockUnlock(struct HM_HierarchicalHeap *hh, void *arg) {
 }
 
 void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
-    struct HM_ObjptrInfo src_info, dst_info;
+    // struct HM_ObjptrInfo src_info, dst_info;
     pointer dst_repl;
 
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "Starting Assignable_set(dst = %p, src = %p)",
-        (void *)objptrToPointer(dst, s->heap->start),
-        (void *)objptrToPointer(src, s->heap->start));
+    // LOG(LM_HH_PROMOTION, LL_INFO,
+    //     "Starting Assignable_set(dst = %p, src = %p)",
+    //     (void *)objptrToPointer(dst, s->heap->start),
+    //     (void *)objptrToPointer(src, s->heap->start));
 
     assert(isObjptr(dst));
+    assert(Assignable_isMaster(s, dst));
 
     /* Assignments to objects in the global heap are not locked. Writing a
      * pointer in the hierarchical heap to the global heap should only permitted
@@ -271,36 +273,41 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     /* Pointer from the hierarchical heap to the global heap cannot trigger
      * promotions. Just find the true replica. */
     if (!isObjptr(src) || isObjptrInGlobalHeap(s, src)) {
-        struct HM_HierarchicalHeap *hh;
-        dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh);
+        // struct HM_HierarchicalHeap *hh;
+        // dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh);
+        dst_repl = objptrToPointer(dst, NULL);
         *((pointer *)dst_repl + index) = objptrToPointer(src, s->heap->start);
-        Assignable_unlockReplicaWriter(s, hh);
+        // Assignable_unlockReplicaWriter(s, hh);
         goto end;
     }
 
     assertObjptrInHH(src);
+    assert(Assignable_isMaster(s, src));
 
-    HM_getObjptrInfo(s, src, &src_info);
-    HM_getObjptrInfo(s, dst, &dst_info);
+    HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(src, NULL)));
+    HM_chunkList dstList = HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(dst, NULL)));
 
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "Locking from level %u of %p to level %u below %p",
-        src_info.chunkList->level,
-        (void *)objptrToPointer(src, s->heap->start),
-        dst_info.level + 1,
-        (void *)objptrToPointer(dst, s->heap->start));
+    // HM_getObjptrInfo(s, src, &src_info);
+    // HM_getObjptrInfo(s, dst, &dst_info);
+
+    // LOG(LM_HH_PROMOTION, LL_INFO,
+    //     "Locking from level %u of %p to level %u below %p",
+    //     src_info.chunkList->level,
+    //     (void *)objptrToPointer(src, s->heap->start),
+    //     dst_info.level + 1,
+    //     (void *)objptrToPointer(dst, s->heap->start));
 
     /* Take the writer lock on every level between src (included) and dst
      * (excluded). */
-    struct hhLockUnlock_args args = {
-      .for_locking = true,
-      .prev_hh = NULL,
-    };
-    HM_foreachHHUp(s,
-                   src_info.hh,
-                   dst_info.level + 1,
-                   hhLockUnlock,
-                   &args);
+    // struct hhLockUnlock_args args = {
+    //   .for_locking = true,
+    //   .prev_hh = NULL,
+    // };
+    // HM_foreachHHUp(s,
+    //                src_info.hh,
+    //                dst_info.level + 1,
+    //                hhLockUnlock,
+    //                &args);
 
     /* Find the true replica of the destination, locking intermediate levels
      * along the way.
@@ -308,60 +315,78 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
      * The 'hh' variable will hold a non-NULL hierarchical heap only if the fast
      * path of Assignable_findLockedTrueReplica() didn't trigger. We will use it
      * to know when we have something to unlock. */
-    struct HM_HierarchicalHeap *hh;
+    // struct HM_HierarchicalHeap *hh;
 
-    if (rwlock_is_locked_by_me_for_writing(&dst_info.hh->lock)) {
-      /* We first unlock the HH of dst, which might have been locked above if it
-       * is also the HH of src. Without this precaution.
-       * Assignable_findLockedTrueReplica() might try to lock it again and thus
-       * deadlock. */
-      LOG(LM_HH_PROMOTION, LL_INFO,
-          "Unlocking %p to avoid deadlock",
-          (void *)dst_info.hh);
-      unlockWriterHH(dst_info.hh);
-    }
+    // if (rwlock_is_locked_by_me_for_writing(&dst_info.hh->lock)) {
+    //   /* We first unlock the HH of dst, which might have been locked above if it
+    //    * is also the HH of src. Without this precaution.
+    //    * Assignable_findLockedTrueReplica() might try to lock it again and thus
+    //    * deadlock. */
+    //   LOG(LM_HH_PROMOTION, LL_INFO,
+    //       "Unlocking %p to avoid deadlock",
+    //       (void *)dst_info.hh);
+    //   unlockWriterHH(dst_info.hh);
+    // }
 
-    dst_repl =
-      objptrToPointer(Assignable_findLockedTrueReplicaSlow(s, dst, &hh, false, true),
-		      s->heap->start);
+    // dst_repl =
+    //   objptrToPointer(Assignable_findLockedTrueReplicaSlow(s, dst, &hh, false, true),
+		//       s->heap->start);
 
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "Found true replica %p of %p (hh %p)",
-        (void *)dst_repl,
-        (void *)objptrToPointer(dst, s->heap->start),
-        (void *)hh);
+    dst_repl = objptrToPointer(dst, NULL);
 
-    HM_getObjptrInfo(s, pointerToObjptr(dst_repl, s->heap->start), &dst_info);
+    // LOG(LM_HH_PROMOTION, LL_INFO,
+    //     "Found true replica %p of %p (hh %p)",
+    //     (void *)dst_repl,
+    //     (void *)objptrToPointer(dst, s->heap->start),
+    //     (void *)hh);
+
+    // HM_getObjptrInfo(s, pointerToObjptr(dst_repl, s->heap->start), &dst_info);
 
     /* Promote memory reachable from src to dst_repl when needed to avoid
      * entanglement. */
-    pointer src_repl = objptrToPointer(src, s->heap->start);
-    if (dst_info.level < src_info.level) {
-        src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
+    // pointer src_repl = objptrToPointer(src, s->heap->start);
+
+    objptr* field = (objptr*)dst_repl + index;
+    // if (dst_info.level < src_info.level) {
+    //   HM_remember(src_info.chunkList, pointerToObjptr(dst_repl, s->heap->start), index, src);
+    //   // src_repl = HM_Promote(s, dst_info.chunkList, src_repl);
+    // }
+    if (dstList->level < srcList->level) {
+      assert(getHierarchicalHeapCurrent(s) != NULL);
+      struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
+      Word32 level = HM_getObjptrLevel(src);
+      if (NULL == HM_HH_LEVEL(hh, level)) {
+        HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+      }
+      HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
+      // HM_rememberAtLevel(HM_HH_LEVEL(getHierarchicalHeapCurrent(s), srcList->level), dst, field, src);
+      // HM_rememberAtLevel(srcList, dst, field, src);
     }
 
     /* Perform the write. */
-    *((pointer *)dst_repl + index) = src_repl;
+    *field = src;
+    // *((pointer *)dst_repl + index) = src_repl;
 
     /* Unlock the heaps from the true replica of dst to src. */
-    assert(hh != NULL);
-    LOG(LM_HH_PROMOTION, LL_DEBUG,
-      "Unlocking from level %u of %p to level %u of %p",
-      dst_info.level,
-      (void *)objptrToPointer(dst, s->heap->start),
-      src_info.chunkList->level,
-      (void *)objptrToPointer(src, s->heap->start));
-    args.for_locking = false;
-    args.prev_hh = NULL;
-    HM_foreachHHDown(s,
-		     src_info.hh,
-		     dst_info.level,
-		     hhLockUnlock,
-		     &args);
+    // assert(hh != NULL);
+    // LOG(LM_HH_PROMOTION, LL_DEBUG,
+    //   "Unlocking from level %u of %p to level %u of %p",
+    //   dst_info.level,
+    //   (void *)objptrToPointer(dst, s->heap->start),
+    //   src_info.chunkList->level,
+    //   (void *)objptrToPointer(src, s->heap->start));
+    // args.for_locking = false;
+    // args.prev_hh = NULL;
+    // HM_foreachHHDown(s,
+		//      src_info.hh,
+		//      dst_info.level,
+		//      hhLockUnlock,
+		//      &args);
 
 end:
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "Ending Assignable_set(dst = %p, src = %p)",
-        (void *)objptrToPointer(dst, s->heap->start),
-        (void *)objptrToPointer(src, s->heap->start));
+    // LOG(LM_HH_PROMOTION, LL_INFO,
+    //     "Ending Assignable_set(dst = %p, src = %p)",
+    //     (void *)objptrToPointer(dst, s->heap->start),
+    //     (void *)objptrToPointer(src, s->heap->start));
+    return;
 }

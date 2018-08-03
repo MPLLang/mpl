@@ -376,11 +376,13 @@ static inline Objptr Ref_deref_P(CPointer s, Objptr src) {
     Objptr res;
 
     res = *IDX(Objptr, src, 0);
-    if (Assignable_isMaster(s, src)) {
-        return res;
-    }
+    // assert(Assignable_isMaster(s, src));
+    return res;
+    // if (Assignable_isMaster(s, src)) {
+    //     return res;
+    // }
 
-    return Assignable_get(s, src, 0);
+    // return Assignable_get(s, src, 0);
 }
 
 static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
@@ -389,12 +391,13 @@ static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
 
 #define RefAccessFunctionsForOpaqueData(suffix, type)                   \
     static inline type Ref_deref_##suffix (CPointer s, Objptr src) {    \
-        CPointer hh;                                                    \
-        CPointer src_repl;                                              \
+        /*CPointer hh;*/                                                    \
+        /*CPointer src_repl;*/                                              \
         type res;                                                       \
                                                                         \
         res = *IDX(type, src, 0);                                       \
-        if (Assignable_isMaster(s, src)) {                              \
+        return res;                                                     \
+        /*if (Assignable_isMaster(s, src)) {                              \
             return res;                                                 \
         }                                                               \
                                                                         \
@@ -402,22 +405,23 @@ static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
         res = *IDX(type, src_repl, 0);                                  \
         Assignable_unlockReplicaReader(s, hh);                          \
                                                                         \
-        return res;                                                     \
+        return res;*/                                                     \
     }                                                                   \
                                                                         \
     static inline void Ref_assign_##suffix (CPointer s,                 \
                                             Objptr dst, type src) {     \
-        CPointer hh;                                                    \
-        CPointer dst_repl;                                              \
+        /*CPointer hh;*/                                                    \
+        /*CPointer dst_repl;*/                                              \
                                                                         \
         *IDX(type, dst, 0) = src;                                       \
-        if (Assignable_isMaster(s, dst)) {                              \
+        return;                                                         \
+        /*if (Assignable_isMaster(s, dst)) {                              \
             return;                                                     \
         }                                                               \
                                                                         \
         dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
         *IDX(type, dst_repl, 0) = src;                                  \
-        Assignable_unlockReplicaWriter(s, hh);                          \
+        Assignable_unlockReplicaWriter(s, hh);*/                          \
     }
 
 RefAccessFunctionsForOpaqueData(Q,   Pointer)
@@ -440,11 +444,13 @@ static inline Objptr Array_sub_P(CPointer s, Objptr src, Int64 index) {
     Objptr res;
 
     res = *IDX(Objptr, src, index);
-    if (Assignable_isMaster(s, src)) {
-        return res;
-    }
+    // assert(Assignable_isMaster(s, src));
+    return res;
+    // if (Assignable_isMaster(s, src)) {
+    //     return res;
+    // }
 
-    return Assignable_get(s, src, index);
+    // return Assignable_get(s, src, index);
 }
 
 static inline void Array_update_P(
@@ -455,12 +461,13 @@ static inline void Array_update_P(
 #define ArrayAccessFunctionsForOpaqueData(suffix, type)                 \
   static inline type Array_sub_##suffix (                               \
     CPointer s, Objptr src, Int64 index) {                              \
-        CPointer hh;                                                    \
-        CPointer src_repl;                                              \
+        /*CPointer hh;*/                                                    \
+        /*CPointer src_repl;*/                                              \
         type res;                                                       \
                                                                         \
         res = *IDX(type, src, index);                                   \
-        if (Assignable_isMaster(s, src)) {                              \
+        return res;                                                     \
+        /*if (Assignable_isMaster(s, src)) {                              \
             return res;                                                 \
         }                                                               \
                                                                         \
@@ -468,24 +475,25 @@ static inline void Array_update_P(
         res = *IDX(type, src_repl, index);                              \
         Assignable_unlockReplicaReader(s, hh);                          \
                                                                         \
-        return res;                                                     \
+        return res;*/                                                     \
     }                                                                   \
                                                                         \
   static inline void Array_update_##suffix (CPointer s,                 \
                                             Objptr dst,                 \
                                             Int64 index,                \
                                             type src) {                 \
-        CPointer hh;                                                    \
-        CPointer dst_repl;                                              \
+        /*CPointer hh;*/                                                    \
+        /*CPointer dst_repl;*/                                              \
                                                                         \
         *IDX(type, dst, index) = src;                                   \
-        if (Assignable_isMaster(s, dst)) {                              \
+        return;                                                         \
+        /*if (Assignable_isMaster(s, dst)) {                              \
             return;                                                     \
         }                                                               \
                                                                         \
         dst_repl = Assignable_findLockedTrueReplicaWriter(s, dst, &hh); \
         *IDX(type, dst_repl, index) = src;                              \
-        Assignable_unlockReplicaWriter(s, hh);                          \
+        Assignable_unlockReplicaWriter(s, hh);*/                          \
     }
 
 ArrayAccessFunctionsForOpaqueData(Q,   Pointer)

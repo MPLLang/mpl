@@ -1,17 +1,8 @@
-/* Copyright (C) 2014,2015 Ram Raghunathan.
+/* Copyright (C) 2018 Sam Westrick
+ * Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
- */
-
-/**
- * @file hierarchical-heap.h
- *
- * @author Ram Raghunathan
- *
- * @brief
- * Definition of the HierarchicalHeap object and management interface. This
- * module belongs in the HeapManagement::HierarchicalHeap (HM_HH) namespace
  */
 
 #ifndef HIERARCHICAL_HEAP_H_
@@ -29,14 +20,11 @@ enum HM_HHState {
 
 extern const char* HM_HHStateToString[];
 
-/* RAM_NOTE: May need to be rearranged for cache efficiency */
-/* RAM_NOTE: Needs to be renamed to HM_HH_HierarchicalHeap */
-/**
- * @brief
- * Represents a "node" of the hierarchical heap and contains various data
- * about its contents and structure
- *
- * HierarchicalHeap objects are normal objects with the following layout:
+/* SAM_NOTE: WARNING: This cannot be changed without also changing
+ * mlton/backend/rep-type.fun */
+#define HM_MAX_NUM_LEVELS 64
+
+/* HierarchicalHeap objects are normal objects with the following layout:
  *
  * header ::
  * fwdptr (object-pointer) ::
@@ -58,7 +46,7 @@ extern const char* HM_HHStateToString[];
  * it only has objptrs to objects on the same heap (i.e. the global heap).
  */
 struct HM_HierarchicalHeap {
-  HM_chunkList freeList;  /* list of empty chunks locally available for use */
+  HM_chunkList levels[HM_MAX_NUM_LEVELS];
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
@@ -73,13 +61,6 @@ struct HM_HierarchicalHeap {
 
   Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
               * purposes */
-
-  HM_chunkList levelList; /**< The list of level lists. See HM_chunkList for more
-                    * information */
-
-  HM_chunkList newLevelList; /**< The new list of level lists generated during a local
-                       * garbage collection. See HM_chunkList for more
-                       information */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally
                                   * collectable heap. */
@@ -110,23 +91,49 @@ struct HM_HierarchicalHeap {
 
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
   sizeof(struct HM_HierarchicalHeap) ==
-  sizeof(void*) +    // freeList
-  sizeof(void*) +    // lastAllocatedChunk
-  sizeof(Int32) +    // lock
-  sizeof(Int32) +    // state
-  sizeof(Word32) +   // level
-  sizeof(Word32) +   // stealLevel
-  sizeof(Word64) +   // id
-  sizeof(void*) +    // levelList
-  sizeof(void*) +    // newLevelList
-  sizeof(Word64) +   // locallyCollectibleSize
-  sizeof(Word64) +   // locallyCollectibleHeapSize
-  sizeof(pointer) +  // retVal
-  sizeof(objptr) +   // parentHH
-  sizeof(objptr) +   // nextChildHH
-  sizeof(objptr) +   // childHHList
-  sizeof(objptr)     // thread
+  (sizeof(void*) * HM_MAX_NUM_LEVELS) +  // levels
+  // sizeof(void*) +                        // freeList
+  sizeof(void*) +                        // lastAllocatedChunk
+  sizeof(Int32) +                        // lock
+  sizeof(Int32) +                        // state
+  sizeof(Word32) +                       // level
+  sizeof(Word32) +                       // stealLevel
+  sizeof(Word64) +                       // id
+  // sizeof(void*) +                        // levelList
+  // sizeof(void*) +                        // newLevelList
+  sizeof(Word64) +                       // locallyCollectibleSize
+  sizeof(Word64) +                       // locallyCollectibleHeapSize
+  sizeof(pointer) +                      // retVal
+  sizeof(objptr) +                       // parentHH
+  sizeof(objptr) +                       // nextChildHH
+  sizeof(objptr) +                       // childHHList
+  sizeof(objptr)                         // thread
 );
+
+// l/r-value for ith level
+// #define HM_HH_LEVELS(hh) (&((hh)->levels))
+// #define HM_HH_LEVEL(hh, i) *(HM_HH_LEVELS(hh) + (i))
+
+#define HM_HH_LEVEL(hh, i) ((hh)->levels[i])
+
+/* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
+#define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
+  do {                                                   \
+    for (Word32 IDX = (LO); IDX < (HI); IDX++) {         \
+      HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);         \
+      if (LEVEL != NULL) { BODY }                        \
+    }                                                    \
+  } while (0)
+
+#define FOR_LEVEL_DECREASING_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
+  do {                                                              \
+    Word32 IDX = (HI);                                              \
+    while (IDX > (LO)) {                                            \
+      IDX--;                                                        \
+      HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);                    \
+      if (LEVEL != NULL) { BODY }                                   \
+    }                                                               \
+  } while (0)
 
 /**
  * This value is an "invalid" level and used for HM_HierarchicalHeap
@@ -321,6 +328,9 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
  */
 Word32 HM_HH_getHighestStolenLevel(GC_state s,
                                    const struct HM_HierarchicalHeap* hh);
+
+Word32 HM_HH_getHighestPrivateLevel(GC_state s,
+                                    const struct HM_HierarchicalHeap* hh);
 
 /**
  * Gets the frontier from a struct HM_HierarchicalHeap
