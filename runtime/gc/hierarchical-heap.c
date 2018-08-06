@@ -96,6 +96,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   childHH->nextChildHH = *cursorPointer;
   *cursorPointer = childHHObjptr;
 
+  HM_HH_LEVEL_CAPACITY(parentHH, stealLevel) = parentHH->locallyCollectibleHeapSize;
+
   if ((HM_HH_INVALID_LEVEL == oldHighestStolenLevel) ||
       (stealLevel > oldHighestStolenLevel)) {
     /* need to update lcs and lchs */
@@ -242,6 +244,15 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
 
   parentHH->locallyCollectibleSize = childrenSize + unfrozenSize;
   parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
+
+  if (!s->controls->oldHHGCPolicy &&
+      parentHH->locallyCollectibleHeapSize < HM_HH_LEVEL_CAPACITY(parentHH, oldHighestPrivateLevel-1)) {
+    // printf("After merge, LCHS = %ld, %.2f of old capacity\n",
+    //   parentHH->locallyCollectibleHeapSize,
+    //   ((double) parentHH->locallyCollectibleHeapSize) /
+    //   (double) HM_HH_LEVEL_CAPACITY(parentHH, oldHighestPrivateLevel-1));
+    parentHH->locallyCollectibleHeapSize = HM_HH_LEVEL_CAPACITY(parentHH, oldHighestPrivateLevel-1);
+  }
 
   assertInvariants(s, parentHH, LIVE);
   /* don't assert hh here as it should be thrown away! */

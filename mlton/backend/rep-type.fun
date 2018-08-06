@@ -490,6 +490,10 @@ structure ObjectType =
                           Bytes.fromInt
                             (HM_MAX_NUM_LEVELS *
                              Bytes.toInt (Bits.toBytes (Control.Target.Size.cpointer ())))
+                      val bytesCapacities =
+                          Bytes.fromInt
+                            (HM_MAX_NUM_LEVELS *
+                             Bytes.toInt (Bits.toBytes (Type.width Type.word32)))
                       (* val bytesFreeList = *)
                           (* Bits.toBytes (Control.Target.Size.cpointer ()) *)
                       val bytesLastAllocatedChunk =
@@ -533,6 +537,7 @@ structure ObjectType =
                           in
                               bytesMetaData +
                               bytesLevels +
+                              bytesCapacities +
                               (* bytesFreeList + *)
                               bytesLastAllocatedChunk +
                               bytesLock +
@@ -560,6 +565,8 @@ structure ObjectType =
 
               val typList =
                 List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.cpointer ()) (* levels *)
+                @
+                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.word64) (* capacities *)
                 @
                 [ (*Type.cpointer ()          (* freeList *)
                 ,*) Type.cpointer ()          (* lastAllocatedChunk *)

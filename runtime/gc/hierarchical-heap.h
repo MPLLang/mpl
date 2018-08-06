@@ -47,6 +47,7 @@ extern const char* HM_HHStateToString[];
  */
 struct HM_HierarchicalHeap {
   HM_chunkList levels[HM_MAX_NUM_LEVELS];
+  Word64 capacities[HM_MAX_NUM_LEVELS];
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
@@ -92,6 +93,7 @@ struct HM_HierarchicalHeap {
 COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
   sizeof(struct HM_HierarchicalHeap) ==
   (sizeof(void*) * HM_MAX_NUM_LEVELS) +  // levels
+  (sizeof(Word64) * HM_MAX_NUM_LEVELS) + // capacities
   // sizeof(void*) +                        // freeList
   sizeof(void*) +                        // lastAllocatedChunk
   sizeof(Int32) +                        // lock
@@ -115,6 +117,7 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
 // #define HM_HH_LEVEL(hh, i) *(HM_HH_LEVELS(hh) + (i))
 
 #define HM_HH_LEVEL(hh, i) ((hh)->levels[i])
+#define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->capacities[i])
 
 /* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
 #define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
