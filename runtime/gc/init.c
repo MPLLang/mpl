@@ -433,6 +433,9 @@ int processAtMLton (GC_state s, int argc, char **argv,
         } else if (0 == strcmp(arg, "disable-promotion")) {
           i++;
           s->controls->deferredPromotion = FALSE;
+        } else if (0 == strcmp(arg, "use-old-hh-gc-policy")) {
+          i++;
+          s->controls->oldHHGCPolicy = TRUE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -506,6 +509,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->mayUseAncestorChunk = TRUE;
   s->controls->freeListCoalesce = TRUE;
   s->controls->deferredPromotion = TRUE;
+  s->controls->oldHHGCPolicy = FALSE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();

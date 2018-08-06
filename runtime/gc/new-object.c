@@ -158,6 +158,9 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_HH_LEVEL(hh, i) = NULL;
   }
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_CAPACITY(hh, i) = 0;
+  }
   // hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
