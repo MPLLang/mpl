@@ -519,13 +519,15 @@ fun transform (program: Program.t): Program.t =
                              Vector {length = l', elt = e', ...}) =>
                                (unify (l, l'); unifySlot (e, e'))
                            | _ => Error.bug "Useless.primApp: Array_toVector")
-                   | Array_update => update ()
+                   (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                   | Array_update _ => update ()
                    | FFI _ =>
                         (Vector.foreach (args, deepMakeUseful);
                          deepMakeUseful result)
                    | MLton_equal => Vector.foreach (args, deepMakeUseful)
                    | MLton_hash => Vector.foreach (args, deepMakeUseful)
-                   | Ref_assign => coerce {from = arg 1, to = deref (arg 0)}
+                   (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                   | Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
                    | Ref_deref => return (deref (arg 0))
                    | Ref_ref => coerce {from = arg 0, to = deref result}
                    | Vector_length => return (vectorLength (arg 0))
@@ -828,8 +830,10 @@ fun transform (program: Program.t): Program.t =
                                       (Value.dearray (value (arg 0)))
                                    datatype z = datatype Prim.Name.t
                                 in case Prim.name prim of
-                                   Array_update => array ()
-                                 | Ref_assign =>
+                                 (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                                   Array_update _ => array ()
+                                 (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                                 | Ref_assign _ =>
                                       Value.isUseful
                                       (Value.deref (value (arg 0)))
                                  | Word8Array_updateWord _ => array ()

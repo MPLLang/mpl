@@ -181,10 +181,16 @@ structure CFunction =
               target = Direct target}
         end
 
-      fun refAssign {dst, src} =
+      fun refAssign {writeBarrier : bool} {dst, src} =
         let
            val cty = Type.toCType src
            val target = concat ["Ref_assign_", CType.name cty]
+
+           (* SAM_NOTE: dirty hack *)
+           val target =
+             if not writeBarrier andalso target = "Ref_assign_P"
+             then "Ref_assign_Q"
+             else target
         in
            T {args = Vector.new3 (Type.gcState(), dst, src),
               convention = Cdecl,
@@ -225,10 +231,16 @@ structure CFunction =
               target = Direct target}
         end
 
-      fun arrayUpdate {dst, offset, src} =
+      fun arrayUpdate {writeBarrier : bool} {dst, offset, src} =
         let
            val cty = Type.toCType src
            val target = concat ["Array_update_", CType.name cty]
+
+           (* SAM_NOTE: dirty hack *)
+           val target =
+             if not writeBarrier andalso target = "Array_update_P"
+             then "Array_update_Q"
+             else target
         in
            T {args = Vector.new4 (Type.gcState(), dst, offset, src),
               convention = Cdecl,
@@ -1317,7 +1329,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                      a 1),
                                                  func = func }
                                       end)
-                               | Array_update =>
+                               | Array_update writeBarrier =>
                                  (case toRtype (varType (arg 2)) of
                                      NONE => none ()
                                    | SOME t =>
@@ -1326,6 +1338,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                          val src = Operand.ty (a 2)
                                          val func =
                                              CFunction.arrayUpdate
+                                                writeBarrier
                                                 { dst = dst,
                                                   offset = offset,
                                                   src = src }
@@ -1607,15 +1620,17 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                      a 0),
                                                  func = func }
                                       end)
-                               | Ref_assign =>
+                               | Ref_assign writeBarrier =>
                                  (case toRtype (varType (arg 1)) of
                                      NONE => none ()
                                    | SOME t =>
                                      let val dst = Operand.ty (a 0)
                                          val src = Operand.ty (a 1)
                                          val func =
-                                             CFunction.refAssign { dst = dst,
-                                                                   src = src }
+                                             CFunction.refAssign
+                                                writeBarrier
+                                                { dst = dst,
+                                                  src = src }
                                      in
                                         ccall { args = Vector.new3 (GCState,
                                                                     a 0, a 1),
