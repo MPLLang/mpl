@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor AbstractValue (S: ABSTRACT_VALUE_STRUCTS): ABSTRACT_VALUE = 
+functor AbstractValue (S: ABSTRACT_VALUE_STRUCTS): ABSTRACT_VALUE =
 struct
 
 open S
@@ -94,8 +94,8 @@ structure LambdaNode:
          end
 
       val send =
-         Trace.trace2 
-         ("AbstractValue.LambdaNode.send", 
+         Trace.trace2
+         ("AbstractValue.LambdaNode.send",
           layout, Lambdas.layout, Unit.layout)
          send
 
@@ -148,10 +148,10 @@ structure LambdaNode:
 
 (*
       val unify =
-         Trace.trace2 
-         ("AbstractValue.LambdaNode.unify", layout, layout, Unit.layout) 
+         Trace.trace2
+         ("AbstractValue.LambdaNode.unify", layout, layout, Unit.layout)
          unify
-*)       
+*)
    end
 
 structure UnaryTycon =
@@ -310,7 +310,7 @@ fun deHierarchicalHeap v =
       | _ => Error.bug "AbstractValue.deHierarchicalHeap"
 
 fun lambda (l: Sxml.Lambda.t, t: Type.t): t =
-   new (Lambdas (LambdaNode.lambda l), t)       
+   new (Lambdas (LambdaNode.lambda l), t)
 
 fun unify (v, v') =
    if Dset.equals (v, v')
@@ -388,7 +388,7 @@ val {get = serialValue: Type.t -> t, ...} =
    Property.get (Type.plist, Property.initFun fromType)
 
 fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
-   let 
+   let
       fun result () = fromType resultTy
       fun typeError () =
          (Control.message
@@ -420,7 +420,8 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                 Array x => x
               | Type _ => result ()
               | _ => typeError ())
-       | Array_update =>
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Array_update _ =>
             let val (a, _, x) = threeArgs ()
             in (case dest a of
                    Array x' => coerce {from = x, to = x'} (* unify (x, x') *)
@@ -434,7 +435,8 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | Ref_assign =>
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of
                    Ref x' => coerce {from = x, to = x'} (* unify (x, x') *)
@@ -449,7 +451,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
        | Ref_ref =>
             let
                val r = result ()
-               val _ = 
+               val _ =
                   case dest r of
                      Ref x => coerce {from = oneArg (), to = x} (* unify (oneArg (), x) *)
                    | Type _ => ()

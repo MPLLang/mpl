@@ -225,6 +225,12 @@ structure HM =
         val registerQueueLock: Word32.word * Word32.word ref -> unit =
             _import "HM_HHC_registerQueueLock" runtime private:
             Word32.word * Word32.word ref -> unit;
+
+        val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit =
+            _prim "Array_update_noWriteBarrier" : 'a array * SeqIndex.int * 'a -> unit;
+
+        val refAssignNoBarrier : 'a ref * 'a -> unit =
+            _prim "Ref_assign_noWriteBarrier" : 'a ref * 'a -> unit;
     end
 
 structure Parallel =

@@ -39,7 +39,7 @@ datatype 'a t =
  | Array_length (* ssa to rssa *)
  | Array_sub (* backend *)
  | Array_toVector (* backend *)
- | Array_update (* backend *)
+ | Array_update of {writeBarrier : bool} (* backend *)
  | CPointer_add (* codegen *)
  | CPointer_diff (* codegen *)
  | CPointer_equal (* codegen *)
@@ -138,7 +138,7 @@ datatype 'a t =
  | Real_rndToWord of RealSize.t * WordSize.t * {signed: bool} (* codegen *)
  | Real_round of RealSize.t (* codegen *)
  | Real_sub of RealSize.t (* codegen *)
- | Ref_assign (* backend *)
+ | Ref_assign of {writeBarrier : bool} (* backend *)
  | Ref_deref (* backend *)
  | Ref_ref (* backend *)
  | String_toWord8Vector (* defunctorize *)
@@ -226,7 +226,8 @@ fun toString (n: 'a t): string =
        | Array_length => "Array_length"
        | Array_sub => "Array_sub"
        | Array_toVector => "Array_toVector"
-       | Array_update => "Array_update"
+       | Array_update {writeBarrier=true} => "Array_update"
+       | Array_update {writeBarrier=false} => "Array_update_noWriteBarrier"
        | CPointer_add => "CPointer_add"
        | CPointer_diff => "CPointer_diff"
        | CPointer_equal => "CPointer_equal"
@@ -308,7 +309,8 @@ fun toString (n: 'a t): string =
        | Real_rndToWord (s1, s2, sg) => rnd (realC, wordCS sg, s1, s2)
        | Real_round s => real (s, "round")
        | Real_sub s => real (s, "sub")
-       | Ref_assign => "Ref_assign"
+       | Ref_assign {writeBarrier=true} => "Ref_assign"
+       | Ref_assign {writeBarrier=false} => "Ref_assign_noWriteBarrier"
        | Ref_deref => "Ref_deref"
        | Ref_ref => "Ref_ref"
        | String_toWord8Vector => "String_toWord8Vector"
@@ -368,7 +370,7 @@ val equals: 'a t * 'a t -> bool =
     | (Array_length, Array_length) => true
     | (Array_sub, Array_sub) => true
     | (Array_toVector, Array_toVector) => true
-    | (Array_update, Array_update) => true
+    | (Array_update wb1, Array_update wb2) => wb1 = wb2
     | (CPointer_add, CPointer_add) => true
     | (CPointer_diff, CPointer_diff) => true
     | (CPointer_equal, CPointer_equal) => true
@@ -456,7 +458,7 @@ val equals: 'a t * 'a t -> bool =
          andalso sg = sg'
     | (Real_round s, Real_round s') => RealSize.equals (s, s')
     | (Real_sub s, Real_sub s') => RealSize.equals (s, s')
-    | (Ref_assign, Ref_assign) => true
+    | (Ref_assign wb1, Ref_assign wb2) => wb1 = wb2
     | (Ref_deref, Ref_deref) => true
     | (Ref_ref, Ref_ref) => true
     | (String_toWord8Vector, String_toWord8Vector) => true
@@ -532,7 +534,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_length => Array_length
     | Array_sub => Array_sub
     | Array_toVector => Array_toVector
-    | Array_update => Array_update
+    | Array_update wb => Array_update wb
     | CPointer_add => CPointer_add
     | CPointer_diff => CPointer_diff
     | CPointer_equal => CPointer_equal
@@ -615,7 +617,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Real_rndToWord z => Real_rndToWord z
     | Real_round z => Real_round z
     | Real_sub z => Real_sub z
-    | Ref_assign => Ref_assign
+    | Ref_assign wb => Ref_assign wb
     | Ref_deref => Ref_deref
     | Ref_ref => Ref_ref
     | String_toWord8Vector => String_toWord8Vector
@@ -670,7 +672,8 @@ val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
 val array = Array_array
 val arrayLength = Array_length
-val assign = Ref_assign
+(* SAM_NOTE: seems safe to assume a writeBarrier here. *)
+val assign = Ref_assign {writeBarrier=true}
 val bogus = MLton_bogus
 val bug = MLton_bug
 val cpointerAdd = CPointer_add
@@ -781,7 +784,7 @@ val kind: 'a t -> Kind.t =
        | Array_length => Functional
        | Array_sub => DependsOnState
        | Array_toVector => DependsOnState
-       | Array_update => SideEffect
+       | Array_update _ => SideEffect
        | CPointer_add => Functional
        | CPointer_diff => Functional
        | CPointer_equal => Functional
@@ -867,7 +870,7 @@ val kind: 'a t -> Kind.t =
        | Real_rndToWord _ => Functional
        | Real_round _ => DependsOnState (* depends on rounding mode *)
        | Real_sub _ => DependsOnState (* depends on rounding mode *)
-       | Ref_assign => SideEffect
+       | Ref_assign _ => SideEffect
        | Ref_deref => DependsOnState
        | Ref_ref => Moveable
        | String_toWord8Vector => Functional
@@ -992,7 +995,9 @@ in
        Array_length,
        Array_sub,
        Array_toVector,
-       Array_update,
+       (* SAM_NOTE: do I need to list both here? *)
+       Array_update {writeBarrier=true},
+       Array_update {writeBarrier=false},
        CPointer_add,
        CPointer_diff,
        CPointer_equal,
@@ -1040,7 +1045,9 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       Ref_assign,
+       (* SAM_NOTE: do I need to list both here? *)
+       Ref_assign {writeBarrier=true},
+       Ref_assign {writeBarrier=false},
        Ref_deref,
        Ref_ref,
        String_toWord8Vector,
@@ -1229,7 +1236,8 @@ fun 'a checkApp (prim: 'a t,
        | Array_length => oneTarg (fn t => (oneArg (array t), seqIndex))
        | Array_sub => oneTarg (fn t => (twoArgs (array t, seqIndex), t))
        | Array_toVector => oneTarg (fn t => (oneArg (array t), vector t))
-       | Array_update =>
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
        | CPointer_add =>
             noTargs (fn () => (twoArgs (cpointer, cptrdiff), cpointer))
@@ -1333,7 +1341,8 @@ fun 'a checkApp (prim: 'a t,
             noTargs (fn () => (oneArg (real s), word s'))
        | Real_round s => realUnary s
        | Real_sub s => realBinary s
-       | Ref_assign => oneTarg (fn t => (twoArgs (reff t, t), unit))
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
        | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
        | Ref_ref => oneTarg (fn t => (oneArg t, reff t))
        | Thread_atomicBegin => noTargs (fn () => (noArgs, unit))
@@ -1420,7 +1429,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_length => one (deArray (arg 0))
        | Array_sub => one (deArray (arg 0))
        | Array_toVector => one (deArray (arg 0))
-       | Array_update => one (deArray (arg 0))
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Array_update _ => one (deArray (arg 0))
        | CPointer_getObjptr => one result
        | CPointer_setObjptr => one (arg 2)
        | Exn_extra => one result
@@ -1435,7 +1445,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       | Ref_assign => one (deRef (arg 0))
+       (* SAM_NOTE: can just ignore the writeBarrier here? *)
+       | Ref_assign _ => one (deRef (arg 0))
        | Ref_deref => one (deRef (arg 0))
        | Ref_ref => one (deRef result)
        | Vector_length => one (deVector (arg 0))
@@ -2107,7 +2118,7 @@ fun ('a, 'b) layoutApp (p: 'a t,
        | Real_neg _ => one "-"
        | Real_qequal _ => two "?="
        | Real_sub _ => two "-"
-       | Ref_assign => two ":="
+       | Ref_assign _ => two ":="
        | Ref_deref => one "!"
        | Ref_ref => one "ref"
        | Vector_length => one "length"

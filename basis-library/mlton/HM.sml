@@ -56,4 +56,7 @@ structure MLtonHM:> MLTON_HM =
         val registerQueue: Word32.word * 'a array -> unit = PrimHM.registerQueue
         val registerQueueLock: Word32.word * Word32.word ref -> unit =
             PrimHM.registerQueueLock
+
+        val arrayUpdateNoBarrier = PrimHM.arrayUpdateNoBarrier
+        val refAssignNoBarrier = PrimHM.refAssignNoBarrier
     end

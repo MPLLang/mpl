@@ -19,7 +19,7 @@
  * they are global in order to avoid infinite loops.
  *)
 
-functor ConstantPropagation (S: SSA_TRANSFORM_STRUCTS) : SSA_TRANSFORM = 
+functor ConstantPropagation (S: SSA_TRANSFORM_STRUCTS) : SSA_TRANSFORM =
 struct
 
 open S
@@ -77,9 +77,9 @@ structure Value =
             fun equals (T {const = r, ...}, T {const = r', ...}) = r = r'
 
             val equals =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.equals", 
-                layout, layout, Bool.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.equals",
+                layout, layout, Bool.layout)
                equals
 
             val const = new o Const
@@ -96,9 +96,9 @@ structure Value =
                         ; coercedTo := [])
 
             val makeUnknown =
-               Trace.trace 
-               ("ConstantPropagation.Value.Const.makeUnknown", 
-                layout, Unit.layout) 
+               Trace.trace
+               ("ConstantPropagation.Value.Const.makeUnknown",
+                layout, Unit.layout)
                makeUnknown
 
             fun send (c: t, c': const): unit =
@@ -118,9 +118,9 @@ structure Value =
                end
 
             val send =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.send", 
-                layout, layoutConst, Unit.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.send",
+                layout, layoutConst, Unit.layout)
                send
 
             fun coerce {from = from as T {const, coercedTo}, to: t}: unit =
@@ -149,9 +149,9 @@ structure Value =
                 ; coerce {from = c', to = c})
 
             val unify =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.unify", 
-                layout, layout, Unit.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.unify",
+                layout, layout, Unit.layout)
                unify
          end
 
@@ -173,7 +173,7 @@ structure Value =
             fun new (a: 'a): 'a t = T {extra = a,
                                        global = ref NONE}
 
-            val equals: 'a t * 'a t -> bool = 
+            val equals: 'a t * 'a t -> bool =
                fn (n, n') => global n = global n'
          end
 
@@ -208,8 +208,8 @@ structure Value =
             fun unknown (): 'a t = new Place.Unknown
             fun here (a: 'a): 'a t = new (Place.One (One.new a))
 
-            val traceMakeUnknown = 
-               Trace.info 
+            val traceMakeUnknown =
+               Trace.info
                "ConstantPropagation.Value.Birth.makeUnknown"
 
             fun makeUnknown arg =
@@ -222,8 +222,8 @@ structure Value =
                          ; List.foreach (!coercedTo, makeUnknown)
                          ; coercedTo := [])) arg
 
-            val traceSend = 
-               Trace.info 
+            val traceSend =
+               Trace.info
                "ConstantPropagation.Value.Birth.send"
 
             fun send arg =
@@ -243,8 +243,8 @@ structure Value =
                    loop b
                 end) arg
 
-            val traceCoerce = 
-               Trace.info 
+            val traceCoerce =
+               Trace.info
                "ConstantPropagation.Value.Birth.coerce"
             fun coerce arg =
                Trace.traceInfo'
@@ -265,8 +265,8 @@ structure Value =
                        | Place.Undefined => push ()
                    end) arg
 
-            val traceUnify = 
-               Trace.info 
+            val traceUnify =
+               Trace.info
                "ConstantPropagation.Value.Birth.unify"
 
             fun unify arg =
@@ -346,9 +346,9 @@ structure Value =
       fun equals (T s, T s') = Set.equals (s, s')
 
       val equals =
-         Trace.trace2 
-         ("ConstantPropagation.Value.equals", 
-          layout, layout, Bool.layout) 
+         Trace.trace2
+         ("ConstantPropagation.Value.equals",
+          layout, layout, Bool.layout)
          equals
 
       val globalsInfo = Trace.info "ConstantPropagation.Value.globals"
@@ -398,7 +398,7 @@ structure Value =
                                      SOME (x, _) =>
                                         Yes
                                         (case !glob of
-                                            NONE => 
+                                            NONE =>
                                                let
                                                   val exp =
                                                      primApp
@@ -476,7 +476,7 @@ structure Value =
             val v =
                case c of
                   Sconst.WordVector v => v
-                | _ => Error.bug err 
+                | _ => Error.bug err
             val length = WordXVector.length v
             val eltTy = Type.word (WordXVector.elementSize v)
             val elt =
@@ -568,7 +568,7 @@ structure Value =
                fun loop (t: Type.t): t =
                   new
                   (case Type.dest t of
-                      Type.Array t => 
+                      Type.Array t =>
                          Array {birth = arrayBirth (),
                                 elt = loop t,
                                 length = loop (Type.word (WordSize.seqIndex ()))}
@@ -576,11 +576,11 @@ structure Value =
                     | Type.Ref t => Ref {arg = loop t,
                                          birth = refBirth ()}
                     | Type.Tuple ts => Tuple (Vector.map (ts, loop))
-                    | Type.Vector t => Vector 
+                    | Type.Vector t => Vector
                          {elt = loop t,
                           length = loop (Type.word (WordSize.seqIndex ()))}
                     | Type.Weak t => Weak (loop t)
-                    | _ => Const (const ()), 
+                    | _ => Const (const ()),
                    t)
             in loop
             end
@@ -600,7 +600,7 @@ structure Value =
       fun select {tuple, offset, resultType = _} =
          case value tuple of
             Tuple vs => Vector.sub (vs, offset)
-          | _ => Error.bug "ConstantPropagation.Value.select: non-tuple" 
+          | _ => Error.bug "ConstantPropagation.Value.select: non-tuple"
 
       fun unit () = tuple (Vector.new0 ())
    end
@@ -615,13 +615,13 @@ val traceSendConApp =
     Unit.layout)
 
 val traceSendConAppLoop =
-   Trace.trace 
-   ("ConstantPropagation.sendConAppLoop", 
+   Trace.trace
+   ("ConstantPropagation.sendConAppLoop",
     Value.Data.layout, Unit.layout)
 
 val traceMakeDataUnknown =
-   Trace.trace 
-   ("ConstantPropagation.makeDataUnknown", 
+   Trace.trace
+   ("ConstantPropagation.makeDataUnknown",
     Value.Data.layout, Unit.layout)
 
 (* ------------------------------------------------- *)
@@ -715,8 +715,8 @@ fun transform (program: Program.t): Program.t =
              if equals (from, to)
                 then ()
              else
-                let 
-                   fun error () = 
+                let
+                   fun error () =
                       Error.bug
                       (concat ["ConstantPropagation.Value.coerce: strange: from: ",
                                Layout.toString (Value.layout from),
@@ -756,7 +756,7 @@ fun transform (program: Program.t): Program.t =
             if Set.equals (s, s')
                then ()
             else
-               let 
+               let
                   val {value, ...} = Set.! s
                   val {value = value', ...} = Set.! s'
                in Set.union (s, s')
@@ -828,8 +828,8 @@ fun transform (program: Program.t): Program.t =
             let
                fun bear z =
                   case resultVar of
-                     SOME resultVar => if once resultVar 
-                                          andalso 
+                     SOME resultVar => if once resultVar
+                                          andalso
                                           Type.isSmall resultType
                                           then Birth.here z
                                        else Birth.unknown ()
@@ -855,8 +855,9 @@ fun transform (program: Program.t): Program.t =
                 | Array_length => arrayLength (arg 0)
                 | Array_sub => dearray (arg 0)
                 | Array_toVector => vectorFromArray (arg 0)
-                | Array_update => update (arg 0, arg 2)
-                | Ref_assign =>
+                (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                | Array_update _ => update (arg 0, arg 2)
+                | Ref_assign _ =>
                      (coerce {from = arg 1, to = deref (arg 0)}; unit ())
                 | Ref_deref => deref (arg 0)
                 | Ref_ref =>
@@ -925,7 +926,7 @@ fun transform (program: Program.t): Program.t =
          Control.diagnostics
          (fn display =>
           let open Layout
-          in 
+          in
              display (str "\n\nConstructors:")
              ; (Vector.foreach
                 (datatypes, fn Datatype.T {tycon, cons} =>
@@ -960,7 +961,7 @@ fun transform (program: Program.t): Program.t =
          in
             case var of
                NONE => keep ()
-             | SOME var => 
+             | SOME var =>
                   (case (Value.global (value var, newGlobal), exp) of
                       (NONE, _) => keep ()
                     | (SOME _, PrimApp {prim, ...}) =>
