@@ -1,0 +1,140 @@
+(* --------------- LOGGING CODE ------------- *)
+  val doLog = ref false
+  val INITIAL_LOG_SIZE = 1024
+  fun eventNow () = Int64.fromLarge (Time.toMicroseconds (Time.now ()))
+  val eventBuffers : Log.event Queue.t vector = Vector.tabulate (P, fn _ => Queue.new INITIAL_LOG_SIZE)
+  fun event (l : Log.label) =
+    if not (!doLog) then () else
+    let val p = myWorkerId ()
+        val e = (eventNow (), Int64.fromInt p, l)
+    in ignore (Queue.pushTop (Vector.sub (eventBuffers, p), e))
+    end
+  fun esToList es =
+    ( case Queue.peekTop es of
+        SOME (_, p, Log.EnterWait) => ignore (Queue.pushTop (es, (eventNow (), p, Log.ExitWait)))
+      | _ => ()
+    ; Queue.toList es
+    )
+  fun writeLog filepath =
+    let val es = Vector.foldr (fn (es, all) => esToList es @ all) [] eventBuffers
+    in Log.writeEvents (filepath, es)
+    end
+  fun log (filepath, f : unit -> 'a) =
+    let
+      val _ = doLog := true
+      val _ = event Log.EnterAlgo
+      val ts = Time.now ()
+      val x = f ()
+      val te = Time.now ()
+      val _ = event Log.ExitAlgo
+      val _ = doLog := false
+      val _ = writeLog filepath
+    in
+      (x, Time.toMilliseconds (Time.- (te, ts)))
+    end
+
+(* ----------- COMMAND LINE ------------- *)
+
+  val commError = "Error: -comm x[ms|us|ns]"
+  fun commArg str =
+    case LargeInt.fromString str of
+      NONE => die (fn _ => commError ^ "\n")
+    | SOME (x : LargeInt.int) =>
+        if LargeInt.< (x, 0) then die (fn _ => commError ^ " where x < 0\n") else
+        case String.extract(str, String.size str - 2, NONE) of
+          "ms" => FTime.fromMilliseconds x
+        | "us" => FTime.fromMicroseconds x
+        | "ns" => FTime.fromNanoseconds x
+        | _    => die (fn _ => commError ^ "\n")
+
+  (* After being social (communicating, checking mailbox, etc.), a worker
+   * must wait this long until it is allowed to be social again. *)
+  fun getCommDelay ("-comm" :: str :: _) = commArg str
+    | getCommDelay (_ :: l) = getCommDelay l
+    | getCommDelay nil = FTime.fromMicroseconds 100
+
+  val COMM_DELAY = getCommDelay (CommandLine.arguments ())
+
+  val dealError = "Error: -deal x[ms|us|ns]"
+  fun dealArg str =
+    case LargeInt.fromString str of
+      NONE => die (fn _ => dealError ^ "\n")
+    | SOME (x : LargeInt.int) =>
+        if LargeInt.< (x, 0) then die (fn _ => dealError ^ " where x < 0\n") else
+        case String.extract(str, String.size str - 2, NONE) of
+          "ms" => FTime.fromMilliseconds x
+        | "us" => FTime.fromMicroseconds x
+        | "ns" => FTime.fromNanoseconds x
+        | _    => die (fn _ => dealError ^ "\n")
+
+  (* After being social (communicating, checking mailbox, etc.), a worker
+   * must wait this long until it is allowed to be social again. *)
+  fun getDealDelay ("-deal" :: str :: _) = dealArg str
+    | getDealDelay (_ :: l) = getDealDelay l
+    | getDealDelay nil = FTime.fromMicroseconds 200
+
+  val DEAL_DELAY = getDealDelay (CommandLine.arguments ())
+
+(* ----------- OLD HEARTBEAT CODE --------------- *)
+
+val heartbeatError = "Error: -heartbeat x[ms|us|ns]"
+fun heartbeatArg str =
+  case LargeInt.fromString str of
+    NONE => die (fn _ => heartbeatError ^ "\n")
+  | SOME (x : LargeInt.int) =>
+      if LargeInt.< (x, 0) then die (fn _ => heartbeatError ^ " where x < 0\n") else
+      case String.extract(str, String.size str - 2, NONE) of
+        "ms" => SOME (FTime.fromMilliseconds x)
+      | "us" => SOME (FTime.fromMicroseconds x)
+      | "ns" => SOME (FTime.fromNanoseconds x)
+      | _    => die (fn _ => heartbeatError ^ "\n")
+
+fun getHeartbeatTime ("-heartbeat" :: str :: _) = heartbeatArg str
+  | getHeartbeatTime (_ :: l) = getHeartbeatTime l
+  | getHeartbeatTime nil = NONE
+
+fun heartbeatUpdateStatus () =
+  let val noWork = Queue.empty myVerts
+  in case (noWork, getStatus myId) of
+       (false, Unavailable) => setStatus (myId, Available)
+     | (true, Available) => setStatus (myId, Unavailable)
+     | _ => ()
+  end
+
+val updateStatus =
+  if Option.isSome HEARTBEAT
+  then heartbeatUpdateStatus
+  else standardUpdateStatus
+
+fun heartbeat () =
+  case Queue.popTop mySeeds of
+    NONE => ()
+  | SOME s => Queue.pushBot (promote s, myVerts)
+
+(* Hah, this is nice and jank *)
+fun :== ((x,y),z) = (x := z; y := z)
+infix 0 :==
+
+fun heartbeatCommunicate HEARTBEAT_DELAY = fn () =>
+  (*in if Time.< (Time.- (tnow, !myLastSocialTime), SOCIAL_DELAY) then ()*)
+     if !myLastSocialTime < SOCIAL_DELAY
+     then myLastSocialTime := !myLastSocialTime + 1
+     else ( if !(requestCell myId) = NO_REQUEST then ()
+            else let val m = Queue.popTop myVerts
+                 in ( setStatus (!(requestCell myId), Receiving m)
+                    ; requestCell myId := NO_REQUEST
+                    )
+                 end
+          ; if !myLastHeartbeatTime < HEARTBEAT_DELAY
+            then myLastHeartbeatTime := !myLastHeartbeatTime + 1
+            else ( heartbeat ()
+                 ; myLastHeartbeatTime := 0
+                 )
+          ; myLastSocialTime := 0
+          ; updateStatus ()
+          )
+
+val communicate =
+  case HEARTBEAT of
+    NONE => standardCommunicate
+  | SOME HEARTBEAT_DELAY => heartbeatCommunicate HEARTBEAT_DELAY
