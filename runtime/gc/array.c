@@ -13,7 +13,6 @@
  */
 GC_arrayLength* getArrayLengthp (pointer a) {
   return (GC_arrayLength*)(a
-                           - OBJPTR_SIZE
                            - GC_HEADER_SIZE
                            - GC_ARRAY_LENGTH_SIZE);
 }
@@ -36,7 +35,6 @@ uintmax_t GC_getArrayLength (pointer a) {
  */
 GC_arrayCounter* getArrayCounterp (pointer a) {
   return (GC_arrayCounter*)(a
-                            - OBJPTR_SIZE
                             - GC_HEADER_SIZE
                             - GC_ARRAY_LENGTH_SIZE
                             - GC_ARRAY_COUNTER_SIZE);

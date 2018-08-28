@@ -279,8 +279,8 @@ static pointer arrayInitialize(ARG_USED_FOR_ASSERT GC_state s,
   *((GC_header*)(frontier)) = header;
   frontier = frontier + GC_HEADER_SIZE;
 
-  *((objptr*)(frontier)) = BOGUS_OBJPTR;
-  frontier = frontier + OBJPTR_SIZE;
+  // *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  // frontier = frontier + OBJPTR_SIZE;
 
   pointer result = frontier;
   assert (isAligned ((size_t)result, s->alignment));

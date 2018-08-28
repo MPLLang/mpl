@@ -9,7 +9,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* Layout of intInfs.  
+/* Layout of intInfs.
  * Note, the value passed around is a pointer to the obj member.
  */
 struct GC_intInf_obj {
@@ -20,7 +20,7 @@ typedef struct GC_intInf {
   GC_arrayCounter counter;
   GC_arrayLength length;
   GC_header header;
-  objptr fwdptr;
+  // objptr fwdptr;
   struct GC_intInf_obj obj;
 } __attribute__ ((packed)) *GC_intInf;
 
@@ -29,7 +29,7 @@ COMPILE_TIME_ASSERT(GC_intInf__obj_packed,
                     sizeof(GC_arrayCounter)
                     + sizeof(GC_arrayLength)
                     + sizeof(GC_header)
-                    + sizeof(objptr));
+                    /*+ sizeof(objptr)*/);
 COMPILE_TIME_ASSERT(GC_intInf_obj__isneg_packed,
                     offsetof(struct GC_intInf_obj, isneg) ==
                     0);
@@ -41,7 +41,7 @@ COMPILE_TIME_ASSERT(GC_intInf_obj__limbs_packed,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-COMPILE_TIME_ASSERT(sizeof_mp_limb_t__is_four_or_eight, 
+COMPILE_TIME_ASSERT(sizeof_mp_limb_t__is_four_or_eight,
                     (sizeof(mp_limb_t) == 4 || sizeof(mp_limb_t) == 8));
 #define GC_INTINF_HEADER ( \
         CHAR_BIT * sizeof(mp_limb_t) == 32 ? \
@@ -59,7 +59,7 @@ COMPILE_TIME_ASSERT(sizeof_mp_limb_t__compat__sizeof_objptr,
         1 : (int)(sizeof(objptr) / sizeof(mp_limb_t)))
 
 PRIVATE void initIntInf (GC_state s);
-static inline void fillIntInfArg (GC_state s, objptr arg, __mpz_struct *res, 
+static inline void fillIntInfArg (GC_state s, objptr arg, __mpz_struct *res,
                                   mp_limb_t space[LIMBS_PER_OBJPTR + 1]);
 static inline void initIntInfRes (GC_state s, __mpz_struct *res, size_t bytes);
 static inline objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes);

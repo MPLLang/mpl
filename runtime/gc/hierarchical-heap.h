@@ -27,7 +27,6 @@ extern const char* HM_HHStateToString[];
 /* HierarchicalHeap objects are normal objects with the following layout:
  *
  * header ::
- * fwdptr (object-pointer) ::
  * padding ::
  * freeList (struct HM_chunk*) ::
  * lastAllocatedChunk (struct HM_chunk*) ::

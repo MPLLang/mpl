@@ -28,7 +28,6 @@ const char* objectTypeTagToString (GC_objectTypeTag tag) {
  */
 GC_header* getHeaderp (pointer p) {
   return (GC_header*)(p
-                      - OBJPTR_SIZE /* forward pointer */
                       - GC_HEADER_SIZE);
 }
 

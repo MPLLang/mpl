@@ -37,6 +37,8 @@ objptr* getFwdPtrp (pointer p) {
  * Returns the forwarding pointer for the object pointed to by p.
  */
 objptr getFwdPtr (pointer p) {
+  assert(hasFwdPtr(p));
+  assert(isObjptr(*(getFwdPtrp(p))));
   return *(getFwdPtrp(p));
 }
 
@@ -45,7 +47,7 @@ objptr getFwdPtr (pointer p) {
  * Returns true if the object pointed to by p has a valid forwarding pointer.
  */
 bool hasFwdPtr (pointer p) {
-  return (getFwdPtr (p) != BOGUS_OBJPTR);
+  return (0 == (getHeader(p) & GC_VALID_HEADER_MASK));
 }
 
 /* forward (s, opp)

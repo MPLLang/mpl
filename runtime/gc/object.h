@@ -88,7 +88,6 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Normal objects have the following layout:
  *
  * header ::
- * fwdptr (object-pointer) ::
  * (non heap-pointers)* ::
  * (heap pointers)*
  *
@@ -99,7 +98,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * Likewise, a primitive value may span multiple native words (e.g.,
  * Word64.word on an x86).
 */
-#define GC_NORMAL_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
+#define GC_NORMAL_METADATA_SIZE (GC_HEADER_SIZE)
 #define GC_GAP_SLOP (GC_NORMAL_METADATA_SIZE)
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
