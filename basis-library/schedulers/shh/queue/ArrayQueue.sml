@@ -11,10 +11,13 @@ struct
 
   fun arraySub (a, i) =
     Array.sub (a, i)
-    handle Subscript => raise ArrayQueue ("arraySub " ^ Int.toString i ^ "\n")
-  fun arrayUpdate (a, i, x) =
+    (* handle Subscript => raise ArrayQueue ("arraySub " ^ Int.toString i ^ "\n") *)
+  (* fun arrayUpdate (a, i, x) =
     Array.update (a, i, x)
-    handle Subscript => raise ArrayQueue ("arrayUpdate " ^ Int.toString i ^ "\n")
+    handle Subscript => raise ArrayQueue ("arrayUpdate " ^ Int.toString i ^ "\n") *)
+
+  (*val arraySub = Unsafe.Array.sub*)
+  val arrayUpdate = MLton.HM.arrayUpdateNoBarrier
 
   fun new p =
     let
