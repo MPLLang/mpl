@@ -7,11 +7,12 @@ structure Scheduler =
 struct
 
   val myYield  = _import "Parallel_myYield"  runtime private : unit -> unit;
-  val myYield2 = _import "Parallel_myYield2" runtime private : unit -> unit;
-  val myUsleep = _import "Parallel_myUsleep" runtime private : int  -> unit;
-  val myPrioDown = _import "Parallel_myPrioDown" runtime private : unit -> unit;
-  val myPrioUp = _import "Parallel_myPrioUp" runtime private : unit -> unit;
   val mySemWait = _import "Parallel_mySemWait" runtime private : int -> unit;
+  val myLLSleep = _import "Parallel_myLLSleep" runtime private : int -> int;
+  val myLLSignal = _import "Parallel_myLLSignal" runtime private : int -> unit;
+  val myLLWait = _import "Parallel_myLLWait" runtime private : int -> int;
+  val myLLLock = _import "Parallel_myLLLock" runtime private : int -> unit;
+  val myLLUnlock = _import "Parallel_myLLUnlock" runtime private : int -> unit;
 
   val myProbe  = _import "Parallel_myProbe" runtime private : unit -> unit;
 
@@ -192,7 +193,10 @@ struct
 
       fun push (t, v) =
         Queue.pushBot ((t, v), myQueue)
-        before communicate ()
+        before (
+          communicate ();
+          myLLSignal (myId)
+        )
 
       fun popDiscard () =
         Queue.popBotDiscard myQueue
@@ -205,8 +209,7 @@ struct
         else die (fn _ => "Error: status not set correctly\n")
 
       fun randomOtherId () =
-        (* let val other = SimpleRandom.boundedInt (0, P-1) myRand *)
-        let val other = SimpleRandom.boundedInt (0, 16-1) myRand
+        let val other = SimpleRandom.boundedInt (0, P-1) myRand
         in if other < myId then other else other+1
         end
 
@@ -226,29 +229,42 @@ struct
 
       fun unblockRequests () = myRequestCell := NO_REQUEST
 
-      val YIELD_CNT = 5
-      (* fun modY x = if x > YIELD_CNT then x - YIELD_CNT else x *)
-      (* fun modY x = x *)
+      val YIELD_CNT = 32
+      fun modY x = if x >= YIELD_CNT then x - YIELD_CNT else x
 
-      (* fun requestCnt (cnt) =
+      fun requestCnt (cnt) =
         let
           val _ = myProbe()
-          val victimId = randomOtherId ()
+          val victimId = 
+                if cnt < (YIELD_CNT-1) then
+                  randomOtherId()
+                else  (* cnt >= (YIELD_CNT-1) *)
+                  let
+                    val tgt = myLLSleep(myId)
+                    (* fun loop () = 
+                      let
+                        val tgt = myLLWait(myId)
+                      in if tgt = ~1 then loop ()
+                        else tgt
+                      end
+                    val _ = myLLLock(myId)
+                    val tgt = loop ()
+                    val _ = myLLUnlock(myId) *)
+                  in
+                    if tgt < 0 then randomOtherId() else tgt
+                  end
           val hasWork = getStatus victimId
         in
           if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
           then (verifyStatus (); 
-                (* (if cnt >= YIELD_CNT then myYield() else ()); *)
-                if (cnt mod YIELD_CNT) = 0 then myYield() else ();
-                requestCnt (cnt + 1))
+                requestCnt (modY(cnt+1)))
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus ();
-                          (if (cnt mod YIELD_CNT) = 0 then myYield() else ());
-                          requestCnt (cnt + 1))
+                          requestCnt (modY(cnt+1)))
                | SOME task => task
-        end *)
+        end
 
-      fun request () =
+      (* fun request () =
         let
           val _ = myProbe()
           val victimId = randomOtherId ()
@@ -256,46 +272,24 @@ struct
         in
           if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
           then (verifyStatus ();
-                myYield ();
-                request ())
-                (* requestCnt (1)) *)
+                (* myYield (); *)
+                (* request ()) *)
+                requestCnt (1))
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); 
-                          myYield ();
-                          request ())
-                          (* requestCnt (1)) *)
+                          (* myYield (); *)
+                          (* request ()) *)
+                          requestCnt (1))
                | SOME task => task
-        end
+        end *)
 
       (* ------------------------------------------------------------------- *)
-
-      (* fun acquireWork () =
-        ( setStatus (myId, false)
-        ; blockRequests ()
-        ; let 
-            val task = request ()
-          in ( unblockRequests ()
-             ; task ()
-             )
-          end
-        ) *)
       
       fun acquireWork () =
-        if myId >= 16 then 
-          let
-            fun loop () = (
-              print ("thread "^(Int.toString myId)^"is waiting...\n");
-              mySemWait (myId);
-              loop ()
-            )
-          in (
-            loop ();
-            acquireWork()
-        ) end else 
         ( setStatus (myId, false)
         ; blockRequests ()
         ; let 
-            val task = request ()
+            val task = requestCnt (0)
           in ( unblockRequests ()
              ; task ()
              )

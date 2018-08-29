@@ -8,17 +8,23 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static inline void enter (GC_state s);
-static inline void leave (GC_state s);
+/** YIFAN modified. 
+ *  wakeAll indicates whether the first thread will wake all sleep threads.
+ *  gcSleep indicates whether the first thread will help sleeping threads'
+ *    garbage collection. */
+static inline void enter (GC_state s, bool wakeAll, bool gcSleep);
+static inline void leave (GC_state s, bool wakeAll);
 
 /* RAM_NOTE: Condense out of macros? Also, some versions not used */
 
-#define ENTER0(s) do { enter (s); } while(0)
+#define ENTER0(s) do { enter (s, false, false); } while(0)
+// YIFAN added. Help sleeping threads' gc
+#define ENTER0_GC(s) do { enter (s, false, true); } while(0)
 #define ENTER1(s, p) do { objptr roots[1]; \
                           roots[0] = pointerToObjptr (p, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 1; \
-                          enter (s); \
+                          enter (s, false, false); \
                           p = objptrToPointer (roots[0], s->heap->start); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
@@ -28,7 +34,7 @@ static inline void leave (GC_state s);
                           roots[1] = pointerToObjptr (p2, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 2; \
-                          enter (s); \
+                          enter (s, false, false); \
                           p1 = objptrToPointer (roots[0], s->heap->start); \
                           p2 = objptrToPointer (roots[1], s->heap->start); \
                           s->roots = NULL; \
@@ -40,7 +46,7 @@ static inline void leave (GC_state s);
                           roots[2] = pointerToObjptr (p3, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 3; \
-                          enter (s); \
+                          enter (s, false, false); \
                           p1 = objptrToPointer (roots[0], s->heap->start); \
                           p2 = objptrToPointer (roots[1], s->heap->start); \
                           p3 = objptrToPointer (roots[2], s->heap->start); \
@@ -48,12 +54,12 @@ static inline void leave (GC_state s);
                           s->rootsLength = 0; \
                         } while(0)
 
-#define LEAVE0(s) do { leave (s); } while(0)
+#define LEAVE0(s) do { leave (s, false); } while(0)
 #define LEAVE1(s, p) do { objptr roots[1]; \
                           roots[0] = pointerToObjptr (p, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 1; \
-                          leave (s); \
+                          leave (s, false); \
                           p = objptrToPointer (roots[0], s->heap->start); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
@@ -63,7 +69,7 @@ static inline void leave (GC_state s);
                           roots[1] = pointerToObjptr (p2, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 2; \
-                          leave (s); \
+                          leave (s, false); \
                           p1 = objptrToPointer (roots[0], s->heap->start); \
                           p2 = objptrToPointer (roots[1], s->heap->start); \
                           s->roots = NULL; \
@@ -75,10 +81,23 @@ static inline void leave (GC_state s);
                           roots[2] = pointerToObjptr (p3, s->heap->start); \
                           s->roots = roots; \
                           s->rootsLength = 3; \
-                          leave (s); \
+                          leave (s, false); \
                           p1 = objptrToPointer (roots[0], s->heap->start); \
                           p2 = objptrToPointer (roots[1], s->heap->start); \
                           p3 = objptrToPointer (roots[2], s->heap->start); \
+                          s->roots = NULL; \
+                          s->rootsLength = 0; \
+                        } while(0)
+
+// YIFAN added. Only ENTER0 and LEAVE1 are used in sync
+#define ENTER0_ALL(s) do { enter (s, true, false); } while(0)
+
+#define LEAVE1_ALL(s, p) do { objptr roots[1]; \
+                          roots[0] = pointerToObjptr (p, s->heap->start); \
+                          s->roots = roots; \
+                          s->rootsLength = 1; \
+                          leave (s, true); \
+                          p = objptrToPointer (roots[0], s->heap->start); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)

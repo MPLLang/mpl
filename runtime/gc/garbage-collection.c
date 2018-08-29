@@ -442,7 +442,9 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
     if (isObjptr (getThreadCurrentObjptr(s)))
       getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
 
-    ENTER0 (s);
+    bool all = false;
+    if (all)  ENTER0_ALL (s);
+    else      ENTER0_GC  (s);
 
     /* Recheck invariants now that we hold the lock */
     if ((ensureStack and not invariantForMutatorStack (s))
@@ -455,7 +457,8 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
         fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n",
                  Proc_processorNumber (s));
 
-    LEAVE0 (s);
+    if (all)  LEAVE0_ALL (s);
+    else      LEAVE0     (s);
 
     /* trace post-collection occupancy */
     Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
@@ -536,4 +539,197 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
 pointer FFI_getArgs (GC_state s) {
   return s->ffiArgs;
+}
+
+//YIFAN added for sleep threads sync. Only can be called sequentially
+void ensureHasHeapBytesFreeAndOrInvariantForMutator_sleep_1st (GC_state s, bool forceGC,
+                                                     bool ensureFrontier,
+                                                     bool ensureStack,
+                                                     size_t oldGenBytesRequested,
+                                                     size_t nurseryBytesRequested) {
+  bool stackTopOk;
+  size_t stackBytesRequested;
+
+  /* To ensure the mutator frontier invariant, set the requested bytes
+     to include those needed by the thread.
+   */
+  if (ensureFrontier) {
+    nurseryBytesRequested += getThreadCurrent(s)->bytesNeeded;
+  }
+
+  /* SPOONHOWER_NOTE: (sort of) copied from performGC */
+  stackTopOk = (not ensureStack) or invariantForMutatorStack (s);
+  stackBytesRequested =
+    stackTopOk
+    ? 0
+    : sizeofStackWithMetaData (s, sizeofStackGrowReserved (s, getStackCurrent (s)));
+
+  /* try to satisfy (at least part of the) request locally */
+  maybeSatisfyAllocationRequestLocally (s, nurseryBytesRequested + stackBytesRequested);
+
+  if (not stackTopOk
+      and (hasHeapBytesFree (s, 0, stackBytesRequested))) {
+    if (DEBUG or s->controls->messages)
+      fprintf (stderr, "GC: growing stack locally... [%d]\n",
+               Proc_processorNumber (s));
+    growStackCurrent (s, FALSE);
+    setGCStateCurrentThreadAndStack (s);
+  }
+
+  if (DEBUG or s->controls->messages) {
+    fprintf (stderr, "GC: stackInvariant: %d,%d hasHeapBytesFree: %d inSection: %d force: %d [%d]\n",
+             ensureStack, ensureStack and invariantForMutatorStack (s),
+             hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested),
+             Proc_threadInSection (),
+             forceGC,
+             Proc_processorNumber (s));
+  }
+
+  /* trace pre-collection occupancy */
+  Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+         s->heap->frontier - s->heap->start);
+
+  s->nurseryBytesRequested = nurseryBytesRequested;
+  s->gcFlag = 
+     (/* check the stack of the current thread */
+      ((ensureStack and not invariantForMutatorStack (s))
+          and (s->syncReason = SYNC_STACK))
+      /* this subsumes invariantForMutatorFrontier */
+      or (not hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested)
+            and (s->syncReason = SYNC_HEAP))
+      /* another thread is waiting for exclusive access */
+      or Proc_threadInSection ()
+      /* we are forcing a major collection */
+      or (forceGC
+           and (s->syncReason = SYNC_FORCE)));
+  if (s->gcFlag) {
+    /* Copy the value here so other threads will see it (if we synchronize and
+       one of the other threads does the work). */
+    if (isObjptr (getThreadCurrentObjptr(s)))
+      getThreadCurrent(s)->bytesNeeded = nurseryBytesRequested;
+    // 2nd stage
+    HM_enterGlobalHeap_spec (s);
+    getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+    getThreadCurrent(s)->exnStack = s->exnStack;
+  }
+  else {
+    if (DEBUG or s->controls->messages)
+      fprintf (stderr, "GC: Skipping GC (invariants already hold / request satisfied locally). [%d]\n", Proc_processorNumber (s));
+
+    /* These are safe even without ENTER/LEAVE */
+    assert (isAligned (s->heap->size, s->sysvals.pageSize));
+    assert (isAligned ((size_t)s->heap->start, CARD_SIZE));
+    assert (isFrontierAligned (s, s->heap->start + s->heap->oldGenSize));
+    assert (isFrontierAligned (s, s->heap->nursery));
+    assert (isFrontierAligned (s, s->frontier));
+    assert (s->heap->start + s->heap->oldGenSize <= s->heap->nursery);
+    assert (s->heap->nursery <= s->heap->start + s->heap->availableSize);
+    assert (s->heap->nursery <= s->frontier or 0 == s->frontier);
+    assert (s->start <= s->frontier);
+    unless (0 == s->heap->size or 0 == s->frontier) {
+      assert (s->frontier <= s->limitPlusSlop);
+      assert (s->limit == s->limitPlusSlop - GC_HEAP_LIMIT_SLOP);
+      assert (hasHeapBytesFree (s, 0, 0));
+    }
+  }
+  assert (not ensureFrontier or invariantForMutatorFrontier(s));
+  assert (not ensureStack or invariantForMutatorStack(s));
+}
+
+void ensureHasHeapBytesFreeAndOrInvariantForMutator_sleep_2nd (GC_state s, bool forceGC,
+                                                     bool ensureFrontier,
+                                                     bool ensureStack,
+                                                     size_t oldGenBytesRequested,
+                                                     size_t nurseryBytesRequested) {
+  nurseryBytesRequested = s->nurseryBytesRequested;
+  if (s->gcFlag) {
+    // ENTER
+    beginAtomic (s);
+    assert(invariantForGC(s));
+
+    /* Recheck invariants now that we hold the lock */
+    if ((ensureStack and not invariantForMutatorStack (s))
+        or not hasHeapBytesFree (s, oldGenBytesRequested, nurseryBytesRequested)
+        or forceGC) {
+      performGC (s, oldGenBytesRequested, nurseryBytesRequested, forceGC, TRUE);
+    }
+    else
+      if (DEBUG or s->controls->messages)
+        fprintf (stderr, "GC: Skipping GC (inside of sync). [%d]\n",
+                 Proc_processorNumber (s));
+
+    // LEAVE
+    assert(invariantForMutator(s, FALSE, TRUE));
+    endAtomic (s);
+    s->syncReason = SYNC_NONE;
+    /** YIFAN: we will not exit Global heap here. We will do it after exiting critical
+     *  section, by the thread that do global array allocation */
+
+    /* trace post-collection occupancy */
+    Trace2(EVENT_HEAP_OCCUPANCY, s->heap->size,
+           s->heap->frontier - s->heap->start);
+  }
+}
+
+// YIFAN: just split GC_collect by ENTER and LEAVE to sync without sleeping threads
+void GC_collect_sleep_1st (GC_state s, size_t bytesRequested, bool force) {
+  Trace0(EVENT_RUNTIME_ENTER);
+
+  /* Exit as soon as termination is requested. */
+  if (GC_CheckForTerminationRequest(s)) {
+    GC_TerminateThread(s);
+  }
+
+  /* SPOONHOWER_NOTE: Used to be enter() here */
+  /* XXX copied from enter() */
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
+
+  bool inGlobalHeap = !getThreadCurrent(s)->useHierarchicalHeap ||
+                      HM_inGlobalHeap(s);
+
+  /* adjust bytesRequested */
+  /*
+   * When the mutator requests zero bytes, it may actually need as
+   * much as GC_HEAP_LIMIT_SLOP.
+   */
+  bytesRequested += GC_HEAP_LIMIT_SLOP;
+
+  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+    /*
+     * first make sure that I hit the minimum if I am doing a global heap
+     * allocation
+     */
+    bytesRequested = s->controls->allocChunkSize;
+  }
+
+  getThreadCurrent(s)->bytesNeeded = bytesRequested;
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
+
+  s->inGlobalHeap = inGlobalHeap;
+  s->bytesRequested = bytesRequested;
+
+  if (inGlobalHeap) {
+    ensureHasHeapBytesFreeAndOrInvariantForMutator_sleep_1st (s, force,
+                                                    TRUE, TRUE,
+                                                    0, 0);
+  } else {
+    HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
+    endAtomic (s);
+    Trace0(EVENT_RUNTIME_LEAVE);
+  }
+}
+
+void GC_collect_sleep_2nd (GC_state s, bool force) {
+  bool inGlobalHeap = s->inGlobalHeap;
+  size_t bytesRequested = s->bytesRequested;
+  if (inGlobalHeap) {
+    ensureHasHeapBytesFreeAndOrInvariantForMutator_sleep_2nd (s, force,
+                                                    TRUE, TRUE,
+                                                    0, 0);
+    endAtomic(s);
+    Trace0(EVENT_RUNTIME_LEAVE);
+  }
 }

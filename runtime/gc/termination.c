@@ -67,11 +67,23 @@ bool GC_TryToTerminate(GC_state s) {
 
   /* Wait for the other processors to terminate. */
   for (uint32_t p = 0; p < s->numberOfProcs; p++)
-    if (p != myself)
+    if (p != myself) {
+      if (s->procStates[p].mailSuspending) {
+        sem_post(&(s->procStates[p].mailSem));
+        pthread_cond_signal(&(s->procStates[p].mailCond));
+      }
+      if (s->procStates[p].llFlag == -1) {
+        // pthread_mutex_lock(&(s->procStates[p].llMutex));
+        s->procStates[p].llFlag = -2;
+        // pthread_mutex_unlock(&(s->procStates[p].llMutex));
+        pthread_cond_signal(&(s->procStates[p].llCond));
+      }
+
       if (pthread_join(s->procStates[p].self, NULL) != 0) {
         perror("pthread_join");
         exit(1);
       }
+    }
 
   return true;
 }

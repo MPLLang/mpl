@@ -1,12 +1,22 @@
 #include <pthread.h>
 #include <time.h>
 #include "platform.h"
+#include <unistd.h>
+#include <semaphore.h>
+#include <time.h>
+#include <math.h>
 
 /* num of holding thread or -1 if no one*/
 volatile int32_t *Parallel_mutexes;
+//YIFAN: stats for probing the work stealing scheduler
+static int waitCnt = 0;
+static int probe = 0;
 
 void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
+  //YIFAN: init the probe stats vars
+  waitCnt = 0;
+  probe = 0;
 
   if (!Proc_isInitialized (s)) {
     Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
@@ -256,4 +266,200 @@ Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_arrayLength i, Int32 old, In
 
 Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, Int64 new) {
   return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
+}
+
+// YIFAN: sched_yield() is linux system function.
+void Parallel_myYield (void) {
+  sched_yield();
+}
+
+// YIFAN: pthread_yield() is nonstandard, but present on several other systems besides linux
+// On linux, this function is implemented with sched_yield()
+// I believe this is the same as sched_yield(), or maybe a little slower because of the
+// calling of sched_yield() in linux.
+void Parallel_myYield2 (void) {
+  waitCnt++;
+  pthread_yield();
+}
+
+void Parallel_myUsleep (Int64 usec) {
+  usleep(usec);
+}
+
+
+// YIFAN: these functions utilized the pthread priority control functions
+// But unfortunately thread priority is meaningful only when we use non-
+// preempt schedule strategy, so they are useless most of the time.
+static void
+display_sched_attr(int policy, struct sched_param *param) {
+  printf("    policy=%s, priority=%d\n",
+         (policy == SCHED_FIFO) ? "SCHED_FIFO" : 
+         (policy == SCHED_RR) ? "SCHED_RR" : 
+         (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+          "???",
+         param->sched_priority);
+}
+
+void Parallel_myPrioDown (void) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  int policy;
+  struct sched_param param;
+  pthread_getschedparam(s->self, &policy, &param);
+  
+  // display_sched_attr(policy, &param);
+  
+  param.sched_priority -= 1;
+  pthread_setschedprio(s->self, param.sched_priority);
+}
+
+void Parallel_myPrioUp (void) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  int policy;
+  struct sched_param param;
+  pthread_getschedparam(s->self, &policy, &param);
+
+  // display_sched_attr(policy, &param);
+
+  param.sched_priority += 1;
+  pthread_setschedprio(s->self, param.sched_priority);
+}
+
+void Parallel_myMutexLock(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  pthread_mutex_lock(&(thd_state->mailMutex));
+}
+
+void Parallel_myMutexUnlock(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  pthread_mutex_unlock(&(thd_state->mailMutex));
+}
+
+void Parallel_myCondWait(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  waitCnt++; // stats the waiting for response times
+  thd_state->mailSuspending = true;
+  pthread_cond_wait(&(thd_state->mailCond), &(thd_state->mailMutex));
+  thd_state->mailSuspending = false;
+}
+
+void Parallel_myCondSignal(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  pthread_cond_signal(&(thd_state->mailCond));
+}
+
+void Parallel_myLLLock(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+  pthread_mutex_lock(&(thd_state->llMutex));
+  thd_state->llFlag = -1;
+}
+void Parallel_myLLUnlock(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+  thd_state->llFlag = -2;
+  pthread_mutex_unlock(&(thd_state->llMutex));
+}
+
+Int64 Parallel_myLLWait(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &(s->procStates[thd]);
+
+  pthread_cond_wait(&(thd_state->llCond), &(thd_state->llMutex));
+  return thd_state->llFlag;
+}
+
+Int64 Parallel_myLLSleep(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &(s->procStates[thd]);
+  pthread_mutex_lock(&(thd_state->llMutex));
+  thd_state->llFlag = -1;
+  while (thd_state->llFlag == -1) {
+    pthread_cond_wait(&(thd_state->llCond), &(thd_state->llMutex));
+  }
+  pthread_mutex_unlock(&(thd_state->llMutex));
+  return thd_state->llFlag;
+}
+
+void Parallel_myLLWake(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+  pthread_mutex_lock(&(thd_state->llMutex));
+  thd_state->llFlag = -2;
+  pthread_mutex_unlock(&(thd_state->llMutex));
+  pthread_cond_signal(&(thd_state->llCond));
+}
+
+void Parallel_mySemPost (Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  sem_post(&(thd_state->mailSem));
+}
+
+void Parallel_mySemWait(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  waitCnt++;
+  thd_state->mailSuspending = true;
+  sem_wait(&(thd_state->mailSem));
+  thd_state->mailSuspending = false;
+}
+
+void Parallel_myLLSignal(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &((s->procStates)[thd]);
+
+  int numProcs = s->numberOfProcs;
+  int h = ceil(sqrt(numProcs));
+
+  for (int i = 0; i < 4; i++) {
+    int chd;
+    switch (i) {
+    case 0:
+      chd = thd - 1;
+      break;
+    case 1:
+      chd = thd + 1;
+      break;
+    case 2:
+      chd = thd - h;
+      break;
+    case 3:
+    default:
+      chd = thd + h;
+      break;
+    }
+    chd = (chd >= numProcs) ? chd - numProcs : (chd < 0 ? chd + numProcs : chd);
+    GC_state chd_state = &(s->procStates[chd]);
+    pthread_mutex_lock(&(chd_state->llMutex));
+    if (chd_state->llFlag == -1) {
+      chd_state->llFlag = thd;
+      pthread_mutex_unlock(&(chd_state->llMutex));
+      pthread_cond_signal(&(chd_state->llCond));
+      break;
+    } else {
+      pthread_mutex_unlock(&(chd_state->llMutex));
+    }
+  }
+}
+
+void Parallel_myGetWaitCnt() {
+  printf("total wait cnt = %d\n", waitCnt);
+}
+
+void Parallel_myProbe() {
+  probe++;
+}
+
+void Parallel_myGetProbe() {
+  printf("total steal cnt = %d\n", probe);
 }

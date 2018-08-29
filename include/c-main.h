@@ -59,7 +59,7 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
                                                                         \
   /* Do not set CPU affinity when running on a single processor  */     \
-  if (s->numberOfProcs > 1) {                                           \
+  if (false) /* (s->numberOfProcs > 1) */ {                             \
       uint32_t num = Proc_processorNumber (s)                           \
           * s->controls->affinityStride                                 \
           + s->controls->affinityBase;                                  \
@@ -124,6 +124,16 @@ void MLton_threadFunc (void* arg) {                                     \
       memcpy (&gcState[0], &s, sizeof (struct GC_state));               \
       gcState[0].procStates = gcState;                                  \
       gcState[0].procNumber = 0;                                        \
+                                                                        \
+      pthread_mutex_init(&(gcState[0].mailMutex), 0);                   \
+      pthread_cond_init(&(gcState[0].mailCond), 0);                     \
+      sem_init(&(gcState[0].mailSem), 0, 0);                            \
+      gcState[0].mailSuspending = false;                                \
+                                                                        \
+      pthread_mutex_init(&(gcState[0].llMutex), 0);                     \
+      pthread_cond_init(&(gcState[0].llCond), 0);                       \
+      gcState[0].llFlag = -2;                                           \
+                                                                        \
       GC_lateInit (&gcState[0]);                                        \
     }                                                                   \
     /* Fill in per-processor data structures */                         \
@@ -131,6 +141,15 @@ void MLton_threadFunc (void* arg) {                                     \
       Duplicate (&gcState[procNo], &gcState[0]);                        \
       gcState[procNo].procStates = gcState;                             \
       gcState[procNo].procNumber = procNo;                              \
+                                                                        \
+      pthread_mutex_init(&(gcState[procNo].mailMutex), 0);              \
+      pthread_cond_init (&(gcState[procNo].mailCond ), 0);              \
+      sem_init(&(gcState[procNo].mailSem), 0, 0);                       \
+      gcState[procNo].mailSuspending = false;                           \
+                                                                        \
+      pthread_mutex_init(&(gcState[procNo].llMutex), 0);                \
+      pthread_cond_init(&(gcState[procNo].llCond), 0);                  \
+      gcState[procNo].llFlag = -2;                                      \
     }                                                                   \
     /* Set up tracing infrastructure */                                 \
     for (procNo = 0; procNo < gcState[0].numberOfProcs; procNo++)       \

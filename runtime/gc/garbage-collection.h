@@ -13,6 +13,9 @@
 /* Runtime Interface */
 /*********************/
 PRIVATE void GC_collect (GC_state s, size_t bytesRequested, bool force);
+//YIFAN added, for sleep threads
+PRIVATE void GC_collect_sleep_1st (GC_state s, size_t bytesRequested, bool force);
+PRIVATE void GC_collect_sleep_2nd (GC_state s, bool force);
 
 /* SPOONHOWER_NOTE: spoons should probably go somewhere else... or just get removed */
 /* RAM_NOTE: Is the return type correct? */

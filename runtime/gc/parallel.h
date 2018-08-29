@@ -37,4 +37,34 @@ PRIVATE Int16 Parallel_arrayCompareAndSwap16 (Pointer, GC_arrayLength, Int16, In
 PRIVATE Int32 Parallel_arrayCompareAndSwap32 (Pointer, GC_arrayLength, Int32, Int32);
 PRIVATE Int64 Parallel_arrayCompareAndSwap64 (Pointer, GC_arrayLength, Int64, Int64);
 
+// YIFAN: yield_all related implementations
+PRIVATE void Parallel_myYield (void);
+PRIVATE void Parallel_myYield2 (void);
+PRIVATE void Parallel_myUsleep (Int64 usec);
+
+// YIFAN: priority control related
+PRIVATE void Parallel_myPrioDown (void);
+PRIVATE void Parallel_myPrioUp   (void);
+
+// YIFAN: mail related functions. Reserved for 'yield_to'
+PRIVATE void Parallel_myMutexLock  (Int64 thd);
+PRIVATE void Parallel_myMutexUnlock(Int64 thd);
+PRIVATE void Parallel_myCondWait   (Int64 thd);
+PRIVATE void Parallel_myCondSignal (Int64 thd);
+
+PRIVATE void Parallel_mySemPost(Int64 thd);
+PRIVATE void Parallel_mySemWait(Int64 thd);
+
+// YIFAN: Lifeline dynamic threads sleep control
+PRIVATE void  Parallel_myLLLock    (Int64 thd);
+PRIVATE void  Parallel_myLLUnlock  (Int64 thd);
+PRIVATE Int64 Parallel_myLLWait    (Int64 thd);
+PRIVATE Int64 Parallel_myLLSleep   (Int64 thd);
+PRIVATE void  Parallel_myLLWake    (Int64 thd);
+PRIVATE void  Parallel_myLLSignal  (Int64 thd);
+
+// YIFAN: probe related
+PRIVATE void Parallel_myGetWaitCnt (void);
+PRIVATE void Parallel_myProbe (void);
+PRIVATE void Parallel_myGetProbe(void);
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

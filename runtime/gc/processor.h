@@ -40,8 +40,9 @@ void Proc_signalInitialization (GC_state s);
 bool Proc_isInitialized (GC_state s);
 
 /* Synchronize all processors */
-void Proc_beginCriticalSection (GC_state s);
-void Proc_endCriticalSection (GC_state s);
+//YIFAN changed. For synchronizations that needs all threads
+void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep);
+void Proc_endCriticalSection (GC_state s, bool wakeAll);
 bool Proc_threadInSection (void);
 
 /**

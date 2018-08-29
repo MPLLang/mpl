@@ -36,6 +36,11 @@ static inline pointer arrayInitialize(ARG_USED_FOR_ASSERT GC_state s,
 /* Function Definitions */
 /************************/
 
+static uint8_t setSleep1st = 0;
+static uint8_t setSleep2nd = 0;
+static uint8_t setSleep3rd = 0;
+static bool *thdStates;
+
 pointer GC_arrayAllocate (GC_state s,
                           size_t ensureBytesFree,
                           GC_arrayLength numElements,
@@ -88,6 +93,9 @@ pointer GC_arrayAllocate (GC_state s,
       uintmaxToCommaString(arraySizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
+  // YIFAN: control whether wake up all sleeping threads
+  bool all = false;
+
   if (HM_inGlobalHeap(s)) {
     /* Allocate in Global Heap */
 
@@ -97,7 +105,22 @@ pointer GC_arrayAllocate (GC_state s,
     if (holdLock) {
       /* Global alloc */
       s->syncReason = SYNC_OLD_GEN_ARRAY;
-      ENTER0 (s);
+
+      if (!all) ENTER0_GC  (s); // YIFAN: in ENTER_GC we will do the 1st stage work
+      else      ENTER0_ALL (s);
+
+      if (!all) {
+        if (setSleep2nd == 0) {
+          setSleep2nd = 1;
+          for (int i = 0; i < s->procNumber; i++) {
+            GC_state si = &(s->procStates[i]);
+            if (si->mailSuspending || si->llFlag == -1) {
+              GC_collect_sleep_2nd(si, 0);
+            }
+          }
+        }
+      }
+
       if (not hasHeapBytesFree (s, arraySizeAligned, ensureBytesFree)) {
         performGC (s, arraySizeAligned, ensureBytesFree, FALSE, TRUE);
       }
@@ -118,6 +141,15 @@ pointer GC_arrayAllocate (GC_state s,
       s->cumulativeStatistics->bytesAllocated += arraySizeAligned;
       /* NB LEAVE appears below since no heap invariant holds while the
          oldGenSize has been updated but the array remains uninitialized. */
+
+      if (!all) {
+        for (int i = s->procNumber+1; i < s->numberOfProcs; i++) {
+          GC_state si = &(s->procStates[i]);
+          if (si->mailSuspending || si->llFlag == -1) {
+            GC_collect_sleep_2nd(si, 0);
+          }
+        }
+      }
     } else {
       /* Local alloc */
       size_t bytesRequested;
@@ -195,8 +227,24 @@ pointer GC_arrayAllocate (GC_state s,
    */
 
   if (holdLock) {
-    LEAVE1 (s, result);
+    if (!all) {
+      if (!__sync_fetch_and_or(&setSleep3rd, 1)) {
+        for (int i = 0; i < s->numberOfProcs; i++) {
+          GC_state si = &(s->procStates[i]);
+          if ((si->mailSuspending || si->llFlag == -1) && si->gcFlag) {
+            si->gcFlag = false;
+            HM_exitGlobalHeap_spec(si);
+          }
+        }
+      }
+      LEAVE1 (s, result);
+    } else {
+      LEAVE1_ALL (s, result);
+    }
   }
+  __sync_fetch_and_and(&setSleep1st, 0);
+  __sync_fetch_and_and(&setSleep2nd, 0);
+  __sync_fetch_and_and(&setSleep3rd, 0);
 
   Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 

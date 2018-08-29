@@ -11,7 +11,7 @@
  * that the function is run in a critical section and check the GC
  * invariant.
  */
-void enter (GC_state s) {
+void enter (GC_state s, bool wakeAll, bool gcSleep) {
   /*
    * RAM_NOTE: Need to switch to make sure that s->{frontier,limit} etc. point
    * to global heap
@@ -22,7 +22,7 @@ void enter (GC_state s) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
-  Proc_beginCriticalSection(s);
+  Proc_beginCriticalSection(s, wakeAll, gcSleep);
   beginAtomic (s);
 
   if (DEBUG) {
@@ -62,7 +62,7 @@ void enter (GC_state s) {
   }
 }
 
-void leave (GC_state s) {
+void leave (GC_state s, bool wakeAll) {
   /* The mutator frontier invariant may not hold
    * for functions that don't ensureBytesFree.
    */
@@ -70,7 +70,8 @@ void leave (GC_state s) {
 
   endAtomic (s);
   s->syncReason = SYNC_NONE;
-  Proc_endCriticalSection(s);
+  Proc_endCriticalSection(s, wakeAll);
+  s->gcFlag = false;
 
   HM_exitGlobalHeap();
 }

@@ -80,6 +80,64 @@ void HM_exitGlobalHeap (void) {
   }
 }
 
+// YIFAN: specify thread s to enter global heap, useful when sync sleeping threads
+void HM_enterGlobalHeap_spec (GC_state s) {
+  if (NULL == s) {
+    /* initialization not finished, so nothing to do yet */
+    return;
+  }
+
+  GC_thread currentThread = getThreadCurrent (s);
+
+  if ((~((Word32)(0))) == currentThread->inGlobalHeapCounter) {
+    die(__FILE__ ":%d: currentThread->inGlobalHeapCounter about to overflow!",
+        __LINE__);
+  }
+  currentThread->inGlobalHeapCounter++;
+
+  if (!currentThread->useHierarchicalHeap) {
+    /* This thread is not to use hierarchical heaps, so it is a noop */
+    return;
+  }
+
+  if (1 == currentThread->inGlobalHeapCounter) {
+    assert (NULL != s->globalFrontier);
+    assert (NULL != s->globalLimitPlusSlop);
+    HM_exitLocalHeap (s);
+
+    spinlock_lock(&(s->lock), Proc_processorNumber(s));
+    s->frontier = s->globalFrontier;
+    s->limitPlusSlop = s->globalLimitPlusSlop;
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    spinlock_unlock(&(s->lock));
+  }
+}
+
+void HM_exitGlobalHeap_spec (GC_state s) {
+  if (NULL == s) {
+    /* initialization not finished, so nothing to do yet */
+    return;
+  }
+
+  GC_thread currentThread = getThreadCurrent (s);
+
+  assert (currentThread->inGlobalHeapCounter > 0);
+  currentThread->inGlobalHeapCounter--;
+
+  if (!currentThread->useHierarchicalHeap) {
+    /* This thread is not to use hierarchical heaps, so it is a noop */
+    return;
+  }
+
+  if (0 == currentThread->inGlobalHeapCounter) {
+    spinlock_lock(&(s->lock), Proc_processorNumber(s));
+    s->globalFrontier = s->frontier;
+    s->globalLimitPlusSlop = s->limitPlusSlop;
+    HM_enterLocalHeap (s);
+    spinlock_unlock(&(s->lock));
+  }
+}
+
 void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
   GC_state s = pthread_getspecific (gcstate_key);
   assert(NULL != s);

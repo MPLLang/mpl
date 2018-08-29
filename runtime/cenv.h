@@ -53,6 +53,7 @@
 #include <limits.h>
 #include <math.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdatomic.h>

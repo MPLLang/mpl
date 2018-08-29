@@ -88,7 +88,11 @@ bool Proc_isInitialized (GC_state s) {
   return Proc_initializedCount == s->numberOfProcs;
 }
 
-void Proc_beginCriticalSection (GC_state s) {
+volatile uint8_t notifyAll = 0;
+volatile int tot_cnt = 128; //YIFAN: for test
+volatile int firstWakeThd = 0;
+
+void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
   static pthread_mutex_t Proc_syncCountLock = PTHREAD_MUTEX_INITIALIZER;
   static struct rusage ru_sync;
 
@@ -105,15 +109,50 @@ void Proc_beginCriticalSection (GC_state s) {
       startTiming (RUSAGE_SELF, &ru_sync);
     }
 
-    if (mySyncCount == s->numberOfProcs) {
+    //YIFAN added
+    if (!__sync_fetch_and_or(&notifyAll, 1)) {
+      firstWakeThd = 0;
+      tot_cnt = s->numberOfProcs;
+      bool flag = !wakeAll;
+      for (int i = 0; i < s->numberOfProcs; i++) {
+        GC_state si = &(s->procStates[i]);
+        // printf("mailSuspend thd %d, status: %d, %d\n", i, si->mailSuspending, si->llFlag);
+        if (si->mailSuspending) {
+          if (wakeAll) {
+            // sem_post(&(s->procStates[i].mailSem));
+            pthread_cond_signal(&(si->mailCond));
+          } else {
+            tot_cnt --;
+          }
+        }
+        if (si->llFlag == -1) {
+          if (wakeAll) {
+            pthread_cond_signal(&(si->llCond));
+          } else {
+            tot_cnt--;
+          }
+        }
+        if (flag && !(si->mailSuspending) && !(si->llFlag == -1)) {
+          firstWakeThd = i;
+          flag = false;
+        }
+        if (si->mailSuspending || (si->llFlag == -1)) { // 1st stage work when allocating array globally
+          GC_collect_sleep_1st(si, 0, 1);
+        }
+      }
+    }
+
+    // if (mySyncCount == s->numberOfProcs) {
+    if (mySyncCount == tot_cnt) {
       /* We are the last to synchronize, so signal this */
       if (needGCTime (s)) {
         /* deal with the timers */
         stopTiming (RUSAGE_SELF, &ru_sync, &s->cumulativeStatistics->ru_sync);
         startTiming (RUSAGE_SELF, &ru_crit);
       }
-      Proc_criticalTicket = 0;
+      Proc_criticalTicket = firstWakeThd;
       Proc_criticalTicketActive = TRUE;
+      __sync_fetch_and_and(&notifyAll, 0); //reset lock var
     }
     pthread_mutex_unlock_safe(&Proc_syncCountLock);
 
@@ -131,11 +170,19 @@ void Proc_beginCriticalSection (GC_state s) {
   Trace0(EVENT_GSECTION_BEGIN_LEAVE);
 }
 
-void Proc_endCriticalSection (GC_state s) {
+void Proc_endCriticalSection (GC_state s, bool wakeAll) {
   Trace0(EVENT_GSECTION_END_ENTER);
   if (Proc_isInitialized (s)) {
     uint32_t myTicket = __sync_add_and_fetch (&Proc_criticalTicket, 1);
-    if (myTicket == s->numberOfProcs) {
+    if (!wakeAll) {
+      while (myTicket < s->numberOfProcs && (s->mailSuspending || s->procStates[myTicket].llFlag == -1)) {
+        myTicket = __sync_add_and_fetch(&Proc_criticalTicket, 1);
+      }
+      tot_cnt --;
+    }
+
+    bool flag = (!wakeAll && tot_cnt == 0) || (myTicket == s->numberOfProcs);
+    if (flag) {
       /* We are the last to finish, so allow everyone to leave */
 
       if (needGCTime (s)) {
@@ -218,6 +265,18 @@ bool Proc_BSP(GC_state s,
         /* first thread in this round, and need to keep track of sync time */
         startTiming (RUSAGE_SELF, &ru_sync);
       }
+    }
+  }
+
+  // YIFAN added
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    GC_state si = &(s->procStates[i]);
+    if (si->mailSuspending) {
+      pthread_cond_signal(&(si->mailCond));
+    }
+    if (si->llFlag == -1) {
+      si->llFlag = -2;
+      pthread_cond_signal(&(si->llCond));
     }
   }
 

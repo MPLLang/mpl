@@ -100,6 +100,20 @@ struct GC_state {
   spinlock_t lock;
   struct TracingContext *trace;
   struct TLSObjects tlsObjects;
+
+  //YIFAN added for yield_to
+  pthread_mutex_t mailMutex;
+  pthread_cond_t  mailCond;
+  sem_t           mailSem;
+  bool            mailSuspending;
+  pthread_mutex_t llMutex;
+  pthread_cond_t  llCond;
+  int64_t         llFlag; // -1 for sleep, -2 for random steal, non-neg for target victim
+  // YIFAN added for sync without sleeping threads
+  bool            gcFlag;
+  size_t          nurseryBytesRequested;
+  bool            inGlobalHeap;
+  size_t          bytesRequested;
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */

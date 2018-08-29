@@ -28,6 +28,10 @@ PRIVATE void HM_enterGlobalHeap (void);
  */
 PRIVATE void HM_exitGlobalHeap (void);
 
+//YIFAN added. Let specific s enter global heap. For sync without sleeping threads
+PRIVATE void HM_enterGlobalHeap_spec (GC_state s);
+PRIVATE void HM_exitGlobalHeap_spec (GC_state s);
+
 /**
  * This function unconditionally enters the global heap and exits the local heap
  *
