@@ -305,8 +305,9 @@ struct
         let
           val friend = randomOtherId ()
           val hasWork = getStatus friend
+          val available = (getRequest friend = NO_REQUEST)
         in
-          if not (hasWork andalso casRequest (friend, NO_REQUEST, myId))
+          if not (available andalso hasWork andalso casRequest (friend, NO_REQUEST, myId))
           then (verifyStatus (); request ())
           else case Mailboxes.getMail mailboxes myId of
                  NONE => (verifyStatus (); request ())
