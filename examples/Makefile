@@ -3,9 +3,12 @@ MLTRACE=../build/bin/mltrace
 DBG=-keep g -debug true -debug-runtime true
 FLAGS=
 
-.PHONY: tab tab.dbg fib fib.dbg clean
+.PHONY: tab tab.dbg fib fib.dbg fib-fut clean
 
-all: fib tab
+all: fib fib-fut tab
+
+fib-fut: fib-fut.sml fib-fut.mlb
+	$(MLTON) $(FLAGS) -output fib-fut fib-fut.mlb
 
 fib: fib.sml fib.mlb
 	$(MLTON) $(FLAGS) -output fib fib.mlb
