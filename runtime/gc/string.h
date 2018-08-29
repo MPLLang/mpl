@@ -9,7 +9,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/* Layout of strings.  
+/* Layout of strings.
  * Note, the value passed around is a pointer to the obj member.
  */
 struct GC_string8_obj {
@@ -19,7 +19,7 @@ typedef struct GC_string8 {
   GC_arrayCounter counter;
   GC_arrayLength length;
   GC_header header;
-  objptr fwdptr;
+  // objptr fwdptr;
   struct GC_string8_obj obj;
 } __attribute__ ((packed)) *GC_string8;
 
@@ -28,7 +28,7 @@ COMPILE_TIME_ASSERT(GC_string8__obj_packed,
                     sizeof(GC_arrayCounter)
                     + sizeof(GC_arrayLength)
                     + sizeof(GC_header)
-                    + sizeof(objptr));
+                    /*+ sizeof(objptr)*/);
 COMPILE_TIME_ASSERT(GC_string8_obj__chars_packed,
                     offsetof(struct GC_string8_obj, chars) ==
                     0);

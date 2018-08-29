@@ -13,7 +13,6 @@
  * Stack objects have the following layout:
  *
  * header ::
- * fwdptr (object-pointer) ::
  * markTop (native-pointer) ::
  * markIndex (word32) ::
  * reserved ::
@@ -50,7 +49,7 @@ typedef struct GC_stack {
    */
 } *GC_stack;
 
-#define GC_STACK_METADATA_SIZE (GC_HEADER_SIZE + OBJPTR_SIZE)
+#define GC_STACK_METADATA_SIZE (GC_HEADER_SIZE)
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 

@@ -56,10 +56,11 @@ pointer newObject (GC_state s,
   GC_profileAllocInc (s, bytesRequested);
   *((GC_header*)(frontier)) = header;
   frontier = frontier + GC_HEADER_SIZE;
-  *((objptr*)(frontier)) = BOGUS_OBJPTR;
-  frontier = frontier + OBJPTR_SIZE;
+  // *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  // frontier = frontier + OBJPTR_SIZE;
   result = frontier;
   assert (isAligned ((size_t)result, s->alignment));
+  assert (!hasFwdPtr(result));
   if (DEBUG)
     fprintf (stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX", %s)\n",
              (uintptr_t)result,

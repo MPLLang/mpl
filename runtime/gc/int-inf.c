@@ -213,7 +213,7 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
   bp->counter = (GC_arrayCounter)0;
   bp->length = (GC_arrayLength)(size + 1); /* +1 for isneg field */
   bp->header = GC_INTINF_HEADER;
-  bp->fwdptr = BOGUS_OBJPTR;
+  // bp->fwdptr = BOGUS_OBJPTR;
   return pointerToObjptr ((pointer)&bp->obj, s->heap->start);
 }
 
@@ -317,7 +317,7 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->counter = (GC_arrayCounter)0;
   sp->length = (GC_arrayLength)size;
   sp->header = GC_STRING8_HEADER;
-  sp->fwdptr = BOGUS_OBJPTR;
+  // sp->fwdptr = BOGUS_OBJPTR;
   return pointerToObjptr ((pointer)&sp->obj, s->heap->start);
 }
 
