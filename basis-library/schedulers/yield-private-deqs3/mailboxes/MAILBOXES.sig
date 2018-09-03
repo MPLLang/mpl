@@ -15,4 +15,5 @@ sig
 
   (* `sendMail ms (i, x)` sends x to the ith mailbox in ms *)
   val sendMail : 'a t -> (int * 'a) -> unit
+  val sendMailLockFree : 'a t -> (int * 'a) -> unit
 end

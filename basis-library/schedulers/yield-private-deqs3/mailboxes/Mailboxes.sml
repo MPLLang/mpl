@@ -48,7 +48,29 @@ struct
        )
     end *)
 
+  val YIELD_CNT = 1
+  fun modY x = if x >= YIELD_CNT then x - YIELD_CNT else x
+  
   fun getMail mailboxes p =
+    let
+      val {flag, mail} = Vector.sub (mailboxes, p)
+      fun loop i = 
+        if !flag = MAIL_RECEIVING
+        then (flag := MAIL_WAITING)
+        else 
+          let val _ = if i >= (YIELD_CNT-1) then myCondWait(p) else ()
+          in loop (modY(i+1))
+          end
+    in
+      (
+       myMutexLock  (p);
+       loop (0);
+       myMutexUnlock(p);
+       !mail
+      )
+    end
+
+  (* fun getMail mailboxes p =
     let
       val {flag, mail} = Vector.sub (mailboxes, p)
       fun loop () = 
@@ -56,8 +78,6 @@ struct
         then (flag := MAIL_WAITING)
         else (
           myCondWait(p);
-          (* mySemWait (p); *)
-          (* myYield2(); *)
           loop ()
         )
     in
@@ -67,7 +87,7 @@ struct
        myMutexUnlock(p);
        !mail
       )
-    end
+    end *)
 
   fun sendMail mailboxes (p, m) =
     let
@@ -77,8 +97,16 @@ struct
        ; if cas (flag, MAIL_WAITING, MAIL_RECEIVING) then (
           myMutexUnlock(p);
           myCondSignal (p)
-          (* mySemPost (p) *)
          )
+         else raise Mailboxes
+       )
+    end
+
+  fun sendMailLockFree mailboxes (p, m) =
+    let
+      val {flag, mail} = Vector.sub (mailboxes, p)
+    in ( mail := m
+       ; if cas (flag, MAIL_WAITING, MAIL_RECEIVING) then ()
          else raise Mailboxes
        )
     end

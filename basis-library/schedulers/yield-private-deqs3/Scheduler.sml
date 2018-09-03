@@ -7,12 +7,16 @@ structure Scheduler =
 struct
 
   val myYield  = _import "Parallel_myYield"  runtime private : unit -> unit;
-  val mySemWait = _import "Parallel_mySemWait" runtime private : int -> unit;
-  val myLLSleep = _import "Parallel_myLLSleep" runtime private : int -> int;
-  val myLLSignal = _import "Parallel_myLLSignal" runtime private : int -> unit;
-  val myLLWait = _import "Parallel_myLLWait" runtime private : int -> int;
-  val myLLLock = _import "Parallel_myLLLock" runtime private : int -> unit;
-  val myLLUnlock = _import "Parallel_myLLUnlock" runtime private : int -> unit;
+  (* val mySemWait = _import "Parallel_mySemWait" runtime private : int -> unit; *)
+
+  val myLLSleep      = _import "Parallel_myLLSleep"      runtime private : int -> int;
+  val myLLTimedSleep = _import "Parallel_myLLTimedSleep" runtime private : int * int -> int;
+  val myLLSignal     = _import "Parallel_myLLSignal"     runtime private : int -> unit;
+  val myLLFindChild  = _import "Parallel_myLLFindChild"  runtime private : int -> int;
+  val myLLSignalSpec = _import "Parallel_myLLSignalSpec" runtime private : int -> unit;
+  (* val myLLWait       = _import "Parallel_myLLWait"       runtime private : int -> int; *)
+  (* val myLLLock       = _import "Parallel_myLLLock"       runtime private : int -> unit; *)
+  (* val myLLUnlock     = _import "Parallel_myLLUnlock"     runtime private : int -> unit; *)
 
   val myProbe  = _import "Parallel_myProbe" runtime private : unit -> unit;
 
@@ -191,12 +195,28 @@ struct
         ; setStatus (myId, not (Queue.empty myQueue))
         )
 
+      (* derictly send mail to sleeping children *)
       fun push (t, v) =
-        Queue.pushBot ((t, v), myQueue)
-        before (
-          communicate ();
-          myLLSignal (myId)
-        )
+        let
+          val chld = myLLFindChild (myId)
+        in
+          if chld = ~1 then
+            Queue.pushBot ((t, v), myQueue)
+            before communicate ()
+          else
+            let
+              val _ = Queue.pushBot ((t, v), myQueue) (* push the task into the bottom of the deque *)
+              val mail = 
+                case Queue.popTop myQueue of (* give the top task to the selected child, this matters *)
+                  NONE => NONE
+                | SOME (task, v) =>
+                    SOME (fn () => (task (); returnToSched v))
+            in (Mailboxes.sendMailLockFree mailboxes (chld, mail); (* now the child must be sleeping, so we won't need locks here *)
+                myLLSignalSpec (chld); (* wake up the selected child *)
+                communicate ();
+                ())
+            end
+        end
 
       fun popDiscard () =
         Queue.popBotDiscard myQueue
@@ -232,7 +252,8 @@ struct
       val YIELD_CNT = 32
       fun modY x = if x >= YIELD_CNT then x - YIELD_CNT else x
 
-      fun requestCnt (cnt) =
+      (* old version that the waked up thread will steal from its parents *)
+      (* fun requestCnt (cnt) =
         let
           val _ = myProbe()
           val victimId = 
@@ -262,7 +283,33 @@ struct
                  NONE => (verifyStatus ();
                           requestCnt (modY(cnt+1)))
                | SOME task => task
-        end
+        end *)
+
+      fun requestCnt (cnt) =
+        if cnt >= (YIELD_CNT-1) then
+            let
+              val tgt = myLLSleep myId
+            in
+              if tgt < 0 then requestCnt (0)
+              else case Mailboxes.getMail mailboxes myId of
+                NONE => (verifyStatus ();
+                         requestCnt (0))
+              | SOME task => task
+            end
+        else
+          let
+            val _ = myProbe()
+            val victimId = randomOtherId()
+            val hasWork = getStatus victimId
+          in
+            if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
+            then (verifyStatus (); 
+                  requestCnt (modY(cnt+1)))
+            else  case Mailboxes.getMail mailboxes myId of
+                    NONE => (verifyStatus ();
+                            requestCnt (modY(cnt+1)))
+                  | SOME task => task
+          end
 
       (* fun request () =
         let
