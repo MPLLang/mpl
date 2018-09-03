@@ -3,7 +3,7 @@
 
 #define SETAFFINITY 0
 
-int p = 1; // 0 ~ 15 only when setting affinity
+int p = 15; // 0 ~ 15 only when setting affinity
 int w = 20;
 int W = 1000;
 
@@ -81,7 +81,9 @@ void *thread_func (void *args) {
   return NULL;
 }
 
-void Cycler_init() {
+void Cycler_init(Int64 _p) {
+  p = _p;
+
   thds  = (pthread_t *)       malloc (p * sizeof(pthread_t));
   ids   = (int *)             malloc (p * sizeof(int));
   states= (int *)             malloc (p * sizeof(int));
@@ -146,8 +148,8 @@ void* Cycler_main(void *foo) {
   clock_gettime(CLOCK_MONOTONIC, &start_time);
 
   while (stop == 0) {
-    // pi = p <= 1 ? 1 : (rand() % (p-1) + 1);
-    pi = p;
+    pi = p <= 1 ? 1 : (rand() % (p-1) + 1);
+    // pi = p;
     for (int i = 0; i < pi; i++) {
       pthread_mutex_lock(mtxs+i);
       states[i] = 1;
@@ -167,7 +169,11 @@ void* Cycler_main(void *foo) {
 }
 
 void Cycler_begin() {
-  pthread_create(&main_thd, NULL, Cycler_main, NULL);
+  if (p == 0) {
+    return;
+  } else {
+    pthread_create(&main_thd, NULL, Cycler_main, NULL);
+  }
 }
 
 void Cycler_report() {
