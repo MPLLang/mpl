@@ -60,8 +60,12 @@ PRIVATE void  Parallel_myLLLock    (Int64 thd);
 PRIVATE void  Parallel_myLLUnlock  (Int64 thd);
 PRIVATE Int64 Parallel_myLLWait    (Int64 thd);
 PRIVATE Int64 Parallel_myLLSleep   (Int64 thd);
+PRIVATE Int64 Parallel_myLLTimedSleep (Int64 thd, Int64 msec);
 PRIVATE void  Parallel_myLLWake    (Int64 thd);
 PRIVATE void  Parallel_myLLSignal  (Int64 thd);
+
+PRIVATE Int64 Parallel_myLLFindChild (Int64 thd);
+PRIVATE void  Parallel_myLLSignalSpec(Int64 thd);
 
 // YIFAN: probe related
 PRIVATE void Parallel_myGetWaitCnt (void);

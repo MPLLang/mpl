@@ -88,4 +88,7 @@ typedef GC_state GCState_t;
 #include "gc/local-heap.h"
 #include "gc/chunk.h"
 
+//YIFAN added for cycler
+#include "cycler.h"
+
 #endif /* _MLTON_GC_H_ */

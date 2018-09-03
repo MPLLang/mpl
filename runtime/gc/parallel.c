@@ -268,6 +268,24 @@ Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, In
   return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
 }
 
+// YIFAN: lockTestAndSet implementations
+
+Int8 Parallel_lockTestAndSet8 (Pointer p, Int8 new) {
+  return __sync_lock_test_and_set ((Int8*)p, new);
+}
+
+Int16 Parallel_lockTestAndSet16 (Pointer p, Int16 new) {
+  return __sync_lock_test_and_set ((Int16*)p, new);
+}
+
+Int32 Parallel_lockTestAndSet32 (Pointer p, Int32 new) {
+  return __sync_lock_test_and_set ((Int32*)p, new);
+}
+
+Int64 Parallel_lockTestAndSet64 (Pointer p, Int64 new) {
+  return __sync_lock_test_and_set ((Int64*)p, new);
+}
+
 // YIFAN: sched_yield() is linux system function.
 void Parallel_myYield (void) {
   sched_yield();
@@ -283,7 +301,16 @@ void Parallel_myYield2 (void) {
 }
 
 void Parallel_myUsleep (Int64 usec) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  pthread_mutex_lock(&(s->slpMutex));
+    // printf("t%d s!\n", s->procNumber);
+    s->sleeping = true;
+  pthread_mutex_unlock(&(s->slpMutex));
   usleep(usec);
+  pthread_mutex_lock(&(s->slpMutex));
+    s->sleeping = false;
+    // printf("t%d w u!\n", s->procNumber);
+  pthread_mutex_unlock(&(s->slpMutex));
 }
 
 
@@ -326,21 +353,21 @@ void Parallel_myPrioUp (void) {
 
 void Parallel_myMutexLock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
   pthread_mutex_lock(&(thd_state->mailMutex));
 }
 
 void Parallel_myMutexUnlock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
   pthread_mutex_unlock(&(thd_state->mailMutex));
 }
 
 void Parallel_myCondWait(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
   waitCnt++; // stats the waiting for response times
   thd_state->mailSuspending = true;
@@ -350,20 +377,37 @@ void Parallel_myCondWait(Int64 thd) {
 
 void Parallel_myCondSignal(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
   pthread_cond_signal(&(thd_state->mailCond));
 }
 
+void Parallel_mySemPost (Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &(s->procStates[thd]);
+
+  sem_post(&(thd_state->mailSem));
+}
+
+void Parallel_mySemWait(Int64 thd) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &(s->procStates[thd]);
+
+  waitCnt++;
+  thd_state->mailSuspending = true;
+  sem_wait(&(thd_state->mailSem));
+  thd_state->mailSuspending = false;
+}
+
 void Parallel_myLLLock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
   pthread_mutex_lock(&(thd_state->llMutex));
   thd_state->llFlag = -1;
 }
 void Parallel_myLLUnlock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
   thd_state->llFlag = -2;
   pthread_mutex_unlock(&(thd_state->llMutex));
 }
@@ -388,35 +432,86 @@ Int64 Parallel_myLLSleep(Int64 thd) {
   return thd_state->llFlag;
 }
 
+Int64 Parallel_myLLTimedSleep(Int64 thd, Int64 msec) {
+  static struct timespec ts;
+
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_state thd_state = &(s->procStates[thd]);
+  pthread_mutex_lock(&(thd_state->llMutex));
+  thd_state->llFlag = -1;
+  // while (thd_state->llFlag == -1) {
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += msec * (int)1e6;
+    if (ts.tv_nsec > (int)1e9) {
+      ts.tv_nsec -= (int)1e9;
+      ts.tv_sec += 1;
+    }
+    pthread_cond_timedwait(&(thd_state->llCond), &(thd_state->llMutex), &ts);
+  // }
+    if (thd_state->llFlag == -1) thd_state->llFlag = -2;
+  pthread_mutex_unlock(&(thd_state->llMutex));
+  return thd_state->llFlag;
+}
+
 void Parallel_myLLWake(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
   pthread_mutex_lock(&(thd_state->llMutex));
   thd_state->llFlag = -2;
   pthread_mutex_unlock(&(thd_state->llMutex));
   pthread_cond_signal(&(thd_state->llCond));
 }
 
-void Parallel_mySemPost (Int64 thd) {
+Int64 Parallel_myLLFindChild (Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
-  sem_post(&(thd_state->mailSem));
+  int numProcs = s->numberOfProcs;
+  int h = ceil(sqrt(numProcs));
+
+  int child = -1;
+  for (int i = 0; i < 4; i++) {
+    int chd;
+    switch (i) {
+    case 0:
+      chd = thd - 1;
+      break;
+    case 1:
+      chd = thd + 1;
+      break;
+    case 2:
+      chd = thd - h;
+      break;
+    case 3:
+    default:
+      chd = thd + h;
+      break;
+    }
+    chd = (chd >= numProcs) ? (chd - numProcs) : (chd < 0 ? chd + numProcs : chd);
+    GC_state chd_state = &(s->procStates[chd]);
+    pthread_mutex_lock(&(chd_state->llMutex));
+    if (chd_state->llFlag == -1) {
+      chd_state->llFlag = thd;
+      pthread_mutex_unlock(&(chd_state->llMutex));
+      child = chd;
+      break;
+    } else {
+      pthread_mutex_unlock(&(chd_state->llMutex));
+    }
+  }
+  return child;
 }
 
-void Parallel_mySemWait(Int64 thd) {
+void Parallel_myLLSignalSpec (Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
-  waitCnt++;
-  thd_state->mailSuspending = true;
-  sem_wait(&(thd_state->mailSem));
-  thd_state->mailSuspending = false;
+  pthread_cond_signal(&(thd_state->llCond));
 }
 
 void Parallel_myLLSignal(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &((s->procStates)[thd]);
+  GC_state thd_state = &(s->procStates[thd]);
 
   int numProcs = s->numberOfProcs;
   int h = ceil(sqrt(numProcs));

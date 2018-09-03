@@ -145,7 +145,7 @@ pointer GC_arrayAllocate (GC_state s,
       if (!all) {
         for (int i = s->procNumber+1; i < s->numberOfProcs; i++) {
           GC_state si = &(s->procStates[i]);
-          if (si->mailSuspending || si->llFlag == -1) {
+          if (si->mailSuspending || si->llFlag == -1 || si->sleeping) {
             GC_collect_sleep_2nd(si, 0);
           }
         }
@@ -228,15 +228,15 @@ pointer GC_arrayAllocate (GC_state s,
 
   if (holdLock) {
     if (!all) {
-      if (!__sync_fetch_and_or(&setSleep3rd, 1)) {
-        for (int i = 0; i < s->numberOfProcs; i++) {
-          GC_state si = &(s->procStates[i]);
-          if ((si->mailSuspending || si->llFlag == -1) && si->gcFlag) {
-            si->gcFlag = false;
-            HM_exitGlobalHeap_spec(si);
-          }
-        }
-      }
+      // if (!__sync_fetch_and_or(&setSleep3rd, 1)) {
+      //   for (int i = 0; i < s->numberOfProcs; i++) {
+      //     GC_state si = &(s->procStates[i]);
+      //     if ((si->mailSuspending || si->llFlag == -1 || si->sleeping) && si->gcFlag) {
+      //       si->gcFlag = false;
+      //       HM_exitGlobalHeap_spec(si);
+      //     }
+      //   }
+      // }
       LEAVE1 (s, result);
     } else {
       LEAVE1_ALL (s, result);

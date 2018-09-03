@@ -85,3 +85,6 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/translate.c"
 #include "gc/weak.c"
 #include "gc/world.c"
+
+// YIFAN added for cycler
+#include "cycler.c"
