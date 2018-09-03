@@ -8,7 +8,6 @@ struct
 
   val myYield  = _import "Parallel_myYield"  runtime private : unit -> unit;
   val myUsleep = _import "Parallel_myUsleep" runtime private : int  -> unit;
-  val myTimedSleep = _import "Parallel_myLLTimedSleep" runtime private : int * int -> int;
 
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
@@ -236,8 +235,6 @@ struct
           val _ = if cnt >= (YIELD_CNT-1) then 
                     (myUsleep (sleepPeriod myId);
                      sleepDouble myId)
-                    (* (myTimedSleep (myId, sleepPeriod myId);
-                     sleepDouble myId) *)
                   else ()
           val victimId = randomOtherId ()
           val hasWork = getStatus victimId

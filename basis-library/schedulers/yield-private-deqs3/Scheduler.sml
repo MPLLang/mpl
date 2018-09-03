@@ -91,6 +91,16 @@ struct
   fun getStatus p = arraySub "statuses" (statuses, p*16)
   fun setStatus (p, s) = arrayUpdate "statuses" (statuses, p*16, s)
 
+  (* For sleep doubling strategy. Double the sleep period every time the worker
+   * failed to steal tasks for serveral times. Reset the period when successful
+   * stealing *)
+  val INIT_PERIOD = 100
+  val MAX_PERIOD  = 20000
+  val sleepPeriods = Array.array (P,INIT_PERIOD)
+  fun sleepPeriod p = Unsafe.Array.sub (sleepPeriods, p)
+  fun sleepDouble p = Unsafe.Array.update (sleepPeriods, p, Int.min(2 * sleepPeriod p, MAX_PERIOD))
+  fun sleepReset  p = Unsafe.Array.update (sleepPeriods, p, INIT_PERIOD)
+
   val mailboxes : task option Mailboxes.t = Mailboxes.new NONE
 
   (* val push : task * vertex -> unit
@@ -288,7 +298,8 @@ struct
       fun requestCnt (cnt) =
         if cnt >= (YIELD_CNT-1) then
             let
-              val tgt = myLLSleep myId
+              val tgt = myLLTimedSleep (myId, sleepPeriod myId)
+              val _ = sleepDouble myId
             in
               if tgt < 0 then requestCnt (0)
               else case Mailboxes.getMail mailboxes myId of
@@ -305,10 +316,14 @@ struct
             if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
             then (verifyStatus (); 
                   requestCnt (modY(cnt+1)))
-            else  case Mailboxes.getMail mailboxes myId of
+            else
+              let val _ = sleepReset myId
+              in
+                case Mailboxes.getMail mailboxes myId of
                     NONE => (verifyStatus ();
                             requestCnt (modY(cnt+1)))
                   | SOME task => task
+              end
           end
 
       (* fun request () =

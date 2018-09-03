@@ -31,9 +31,9 @@ struct
   fun new d =
     Vector.tabulate (P, fn _ => {flag = ref MAIL_WAITING, mail = ref d})
 
-  val YIELD_CNT = 1
+  val YIELD_CNT = 32
   fun modY x = if x >= YIELD_CNT then x - YIELD_CNT else x
-  
+
   fun getMail mailboxes p victimRCell =
     let
       val {flag, mail} = Vector.sub (mailboxes, p)

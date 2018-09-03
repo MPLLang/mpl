@@ -1,0 +1,16 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+
+  FORK_JOIN.sig
+  queue/QUEUE.sig
+  mailboxes/RECALLMAILBOXES.sig
+
+  SimpleRandom.sml
+  queue/DoublyLinkedList.sml
+  mailboxes/RecallMailboxes.sml
+  RecallScheduler.sml
+in
+  structure ForkJoin
+end
