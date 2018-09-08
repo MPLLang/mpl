@@ -157,6 +157,11 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
 
+  if (isObjptrInGlobalHeap(s, src)) {
+    assert(!hasFwdPtr(srcp));
+    return;
+  }
+
   /* Similar to `promoteDownPtr`, it's possible that a previous promotion has
    * already relocated the src object */
   if (hasFwdPtr(srcp)) {
