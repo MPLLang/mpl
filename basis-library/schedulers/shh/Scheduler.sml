@@ -117,8 +117,8 @@ struct
   val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
   fun popDiscard () = arraySub (popDiscardFuncs, myWorkerId ()) ()
 
-  (* val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
-  fun communicate () = arraySub "communicateFuncs" (communicateFuncs, myWorkerId ()) () *)
+  val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
+  fun schedCommunicate () = arraySub (communicateFuncs, myWorkerId ()) ()
 
   val returnToScheds = Array.array (P, fn _ => die (fn _ => "Error: dummy returnToSched"))
   fun returnToSched x = arraySub (returnToScheds, myWorkerId ()) x
@@ -135,6 +135,8 @@ struct
     datatype 'a result =
       Finished of 'a
     | Raised of exn
+
+    val communicate = schedCommunicate
 
     (* Must be called from a "user" thread, which has an associated HH *)
     (* NOTE: ALL HH OBJECTS MUST RESIDE IN THE GLOBAL HEAP *)
@@ -353,6 +355,7 @@ struct
 
       val _ = arrayUpdate (pushFuncs, myId, push)
       val _ = arrayUpdate (popDiscardFuncs, myId, popDiscard)
+      val _ = arrayUpdate (communicateFuncs, myId, communicate)
       val _ = arrayUpdate (returnToScheds, myId, returnToSched)
 
       val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init")
