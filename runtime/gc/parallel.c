@@ -439,15 +439,20 @@ Int64 Parallel_myLLTimedSleep(Int64 thd, Int64 msec) {
   GC_state thd_state = &(s->procStates[thd]);
   pthread_mutex_lock(&(thd_state->llMutex));
   thd_state->llFlag = -1;
-  // while (thd_state->llFlag == -1) {
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_nsec += msec * (int)1e6;
-    if (ts.tv_nsec > (int)1e9) {
-      ts.tv_nsec -= (int)1e9;
-      ts.tv_sec += 1;
+
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_nsec += msec * (int)1e6;
+  while (ts.tv_nsec > (int)1e9) {
+    ts.tv_nsec -= (int)1e9;
+    ts.tv_sec += 1;
+  }
+
+  while (thd_state->llFlag == -1) {
+    int ret = pthread_cond_timedwait(&(thd_state->llCond), &(thd_state->llMutex), &ts);
+    if (ret == ETIMEDOUT) {
+      break;
     }
-    pthread_cond_timedwait(&(thd_state->llCond), &(thd_state->llMutex), &ts);
-  // }
+  }
     if (thd_state->llFlag == -1) thd_state->llFlag = -2;
   pthread_mutex_unlock(&(thd_state->llMutex));
   return thd_state->llFlag;
@@ -538,8 +543,8 @@ void Parallel_myLLSignal(Int64 thd) {
     pthread_mutex_lock(&(chd_state->llMutex));
     if (chd_state->llFlag == -1) {
       chd_state->llFlag = thd;
-      pthread_mutex_unlock(&(chd_state->llMutex));
       pthread_cond_signal(&(chd_state->llCond));
+      pthread_mutex_unlock(&(chd_state->llMutex));
       break;
     } else {
       pthread_mutex_unlock(&(chd_state->llMutex));

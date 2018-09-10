@@ -120,6 +120,7 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
       for (int i = 0; i < s->numberOfProcs; i++) {
         GC_state si = &(s->procStates[i]);
         pthread_mutex_lock(&(si->slpMutex));
+        pthread_mutex_lock(&(si->llMutex));
         if (si->mailSuspending) {
           if (wakeAll) {
             // sem_post(&(s->procStates[i].mailSem));
@@ -131,6 +132,7 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
         if (si->llFlag == -1) {
           if (wakeAll) {
             pthread_cond_signal(&(si->llCond));
+            pthread_mutex_unlock(&(si->llMutex));
           } else {
             tot_cnt--;
           }
@@ -153,6 +155,9 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
         if (!si->sleeping) {
           pthread_mutex_unlock (&(si->slpMutex));
         }
+        if(si->llFlag != -1) {
+          pthread_mutex_unlock (&(si->llMutex));
+        }
       }
       notifyAll = 3;
     }
@@ -167,7 +172,7 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
       }
       Proc_criticalTicket = firstWakeThd;
       Proc_criticalTicketActive = TRUE;
-      __sync_fetch_and_and(&notifyAll, 0); //reset lock var
+      // __sync_fetch_and_and(&notifyAll, 0); //reset lock var
       inCriticalSection = 1;
     }
     pthread_mutex_unlock_safe(&Proc_syncCountLock);
@@ -220,6 +225,9 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
             // we release lock here after sync to avoid threads' sleeping state changed during the sync
             pthread_mutex_unlock(&(si->slpMutex));
           }
+          if (si->llFlag == -1) {
+            pthread_mutex_unlock(&(si->llMutex));
+          }
         } 
       }
 
@@ -227,6 +235,7 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
       Proc_syncCount = Proc_SYNC_COUNT_INITIALIZER;
       Proc_criticalTicket = Proc_CRITICAL_TICKET_INITIALIZER;
       Proc_criticalTicketActive = Proc_CRITICAL_TICKET_ACTIVE_INITIALIZER;
+      __sync_fetch_and_and(&notifyAll, 0); //reset lock var
       __sync_synchronize ();
       inCriticalSection = 0;
     }
