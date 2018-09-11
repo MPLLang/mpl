@@ -112,9 +112,10 @@ pointer GC_arrayAllocate (GC_state s,
       if (!all) {
         if (setSleep2nd == 0) {
           setSleep2nd = 1;
-          for (int i = 0; i < s->procNumber; i++) {
+          for (int i = 0; i < s->numberOfProcs; i++) {
+            if (i == s->procNumber) { continue; }
             GC_state si = &(s->procStates[i]);
-            if (si->mailSuspending || si->llFlag == -1) {
+            if (si->llFlag == -1) {
               GC_collect_sleep_2nd(si, 0);
             }
           }
@@ -142,14 +143,6 @@ pointer GC_arrayAllocate (GC_state s,
       /* NB LEAVE appears below since no heap invariant holds while the
          oldGenSize has been updated but the array remains uninitialized. */
 
-      if (!all) {
-        for (int i = s->procNumber+1; i < s->numberOfProcs; i++) {
-          GC_state si = &(s->procStates[i]);
-          if (si->mailSuspending || si->llFlag == -1 || si->sleeping) {
-            GC_collect_sleep_2nd(si, 0);
-          }
-        }
-      }
     } else {
       /* Local alloc */
       size_t bytesRequested;
@@ -228,16 +221,7 @@ pointer GC_arrayAllocate (GC_state s,
 
   if (holdLock) {
     if (!all) {
-      // if (!__sync_fetch_and_or(&setSleep3rd, 1)) {
-      //   for (int i = 0; i < s->numberOfProcs; i++) {
-      //     GC_state si = &(s->procStates[i]);
-      //     if ((si->mailSuspending || si->llFlag == -1 || si->sleeping) && si->gcFlag) {
-      //       si->gcFlag = false;
-      //       HM_exitGlobalHeap_spec(si);
-      //     }
-      //   }
-      // }
-      LEAVE1 (s, result);
+      LEAVE1 (s, result); // 3rd stage work is moved to LEAVE
     } else {
       LEAVE1_ALL (s, result);
     }

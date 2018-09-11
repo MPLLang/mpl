@@ -301,16 +301,40 @@ void Parallel_myYield2 (void) {
 }
 
 void Parallel_myUsleep (Int64 usec) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  pthread_mutex_lock(&(s->slpMutex));
-    // printf("t%d s!\n", s->procNumber);
-    s->sleeping = true;
-  pthread_mutex_unlock(&(s->slpMutex));
-  usleep(usec);
-  pthread_mutex_lock(&(s->slpMutex));
-    s->sleeping = false;
-    // printf("t%d w u!\n", s->procNumber);
-  pthread_mutex_unlock(&(s->slpMutex));
+  bool useSleep = true;
+  if (useSleep) {
+    GC_state s = pthread_getspecific(gcstate_key);
+    pthread_mutex_lock(&(s->llMutex));
+      s->llFlag = -1;
+    pthread_mutex_unlock(&(s->llMutex));
+    usleep(usec);
+    pthread_mutex_lock(&(s->llMutex));
+      s->llFlag = -2;
+    pthread_mutex_unlock(&(s->llMutex));
+  } else {
+    static struct timespec ts;
+
+    GC_state s = pthread_getspecific(gcstate_key);
+    pthread_mutex_lock(&(s->llMutex));
+    s->llFlag = -1;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += usec * (int)1e3;
+    while (ts.tv_nsec > (int)1e9) {
+      ts.tv_nsec -= (int)1e9;
+      ts.tv_sec += 1;
+    }
+
+    while (s->llFlag == -1) {
+      int ret = pthread_cond_timedwait(&(s->llCond), &(s->llMutex), &ts);
+      if (ret == ETIMEDOUT) {
+        break;
+      }
+    }
+    
+    s->llFlag = -2;
+    pthread_mutex_unlock(&(s->llMutex));
+  }
 }
 
 
@@ -355,14 +379,14 @@ void Parallel_myMutexLock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_state thd_state = &(s->procStates[thd]);
 
-  pthread_mutex_lock(&(thd_state->mailMutex));
+  pthread_mutex_lock(&(thd_state->llMutex));
 }
 
 void Parallel_myMutexUnlock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_state thd_state = &(s->procStates[thd]);
 
-  pthread_mutex_unlock(&(thd_state->mailMutex));
+  pthread_mutex_unlock(&(thd_state->llMutex));
 }
 
 void Parallel_myCondWait(Int64 thd) {
@@ -370,34 +394,54 @@ void Parallel_myCondWait(Int64 thd) {
   GC_state thd_state = &(s->procStates[thd]);
 
   waitCnt++; // stats the waiting for response times
-  thd_state->mailSuspending = true;
-  pthread_cond_wait(&(thd_state->mailCond), &(thd_state->mailMutex));
-  thd_state->mailSuspending = false;
+  thd_state->llFlag = -1;
+  pthread_cond_wait(&(thd_state->llCond), &(thd_state->llMutex));
+  thd_state->llFlag = -2;
+}
+
+void Parallel_myMailLoop (Int64 *flag, Int64 waitCnt) {
+  static const int MAIL_WAITING   = 0;
+  static const int MAIL_RECEIVING = 1;
+
+  int cnt = 0;
+  GC_state s = pthread_getspecific(gcstate_key);
+  pthread_mutex_lock(&(s->llMutex));
+  s->llFlag = -1;
+  while (*flag != MAIL_RECEIVING) {
+    if (cnt >= waitCnt) {
+      pthread_cond_wait(&(s->llCond), &(s->llMutex));
+    } else {
+      cnt++;
+    }
+  }
+  *flag = MAIL_WAITING;
+  s->llFlag = -2;
+  pthread_mutex_unlock(&(s->llMutex));
 }
 
 void Parallel_myCondSignal(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_state thd_state = &(s->procStates[thd]);
 
-  pthread_cond_signal(&(thd_state->mailCond));
+  pthread_cond_signal(&(thd_state->llCond));
 }
 
-void Parallel_mySemPost (Int64 thd) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &(s->procStates[thd]);
+// void Parallel_mySemPost (Int64 thd) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   GC_state thd_state = &(s->procStates[thd]);
 
-  sem_post(&(thd_state->mailSem));
-}
+//   sem_post(&(thd_state->mailSem));
+// }
 
-void Parallel_mySemWait(Int64 thd) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  GC_state thd_state = &(s->procStates[thd]);
+// void Parallel_mySemWait(Int64 thd) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   GC_state thd_state = &(s->procStates[thd]);
 
-  waitCnt++;
-  thd_state->mailSuspending = true;
-  sem_wait(&(thd_state->mailSem));
-  thd_state->mailSuspending = false;
-}
+//   waitCnt++;
+//   thd_state->llFlag = -1;
+//   sem_wait(&(thd_state->mailSem));
+//   thd_state->llFlag = -2;
+// }
 
 void Parallel_myLLLock(Int64 thd) {
   GC_state s = pthread_getspecific(gcstate_key);

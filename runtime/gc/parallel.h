@@ -51,9 +51,7 @@ PRIVATE void Parallel_myMutexLock  (Int64 thd);
 PRIVATE void Parallel_myMutexUnlock(Int64 thd);
 PRIVATE void Parallel_myCondWait   (Int64 thd);
 PRIVATE void Parallel_myCondSignal (Int64 thd);
-
-PRIVATE void Parallel_mySemPost(Int64 thd);
-PRIVATE void Parallel_mySemWait(Int64 thd);
+PRIVATE void Parallel_myMailLoop   (Int64* flag, Int64 waitCnt);
 
 // YIFAN: Lifeline dynamic threads sleep control
 PRIVATE void  Parallel_myLLLock    (Int64 thd);

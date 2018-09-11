@@ -125,17 +125,9 @@ void MLton_threadFunc (void* arg) {                                     \
       gcState[0].procStates = gcState;                                  \
       gcState[0].procNumber = 0;                                        \
                                                                         \
-      pthread_mutex_init(&(gcState[0].mailMutex), 0);                   \
-      pthread_cond_init(&(gcState[0].mailCond), 0);                     \
-      sem_init(&(gcState[0].mailSem), 0, 0);                            \
-      gcState[0].mailSuspending = false;                                \
-                                                                        \
       pthread_mutex_init(&(gcState[0].llMutex), 0);                     \
       pthread_cond_init(&(gcState[0].llCond), 0);                       \
       gcState[0].llFlag = -2;                                           \
-                                                                        \
-      pthread_mutex_init(&(gcState[0].slpMutex), 0);                    \
-      gcState[0].sleeping = false;                                      \
                                                                         \
       GC_lateInit (&gcState[0]);                                        \
     }                                                                   \
@@ -145,17 +137,9 @@ void MLton_threadFunc (void* arg) {                                     \
       gcState[procNo].procStates = gcState;                             \
       gcState[procNo].procNumber = procNo;                              \
                                                                         \
-      pthread_mutex_init(&(gcState[procNo].mailMutex), 0);              \
-      pthread_cond_init (&(gcState[procNo].mailCond ), 0);              \
-      sem_init(&(gcState[procNo].mailSem), 0, 0);                       \
-      gcState[procNo].mailSuspending = false;                           \
-                                                                        \
       pthread_mutex_init(&(gcState[procNo].llMutex), 0);                \
       pthread_cond_init(&(gcState[procNo].llCond), 0);                  \
       gcState[procNo].llFlag = -2;                                      \
-                                                                        \
-      pthread_mutex_init(&(gcState[procNo].slpMutex), 0);               \
-      gcState[procNo].sleeping = false;                                 \
     }                                                                   \
     /* Set up tracing infrastructure */                                 \
     for (procNo = 0; procNo < gcState[0].numberOfProcs; procNo++)       \

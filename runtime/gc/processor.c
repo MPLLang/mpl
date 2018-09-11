@@ -119,16 +119,7 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
       bool flag = !wakeAll;
       for (int i = 0; i < s->numberOfProcs; i++) {
         GC_state si = &(s->procStates[i]);
-        pthread_mutex_lock(&(si->slpMutex));
         pthread_mutex_lock(&(si->llMutex));
-        if (si->mailSuspending) {
-          if (wakeAll) {
-            // sem_post(&(s->procStates[i].mailSem));
-            pthread_cond_signal(&(si->mailCond));
-          } else {
-            tot_cnt --;
-          }
-        }
         if (si->llFlag == -1) {
           if (wakeAll) {
             pthread_cond_signal(&(si->llCond));
@@ -137,23 +128,13 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
             tot_cnt--;
           }
         }
-        if (si->sleeping) {
-          if (wakeAll) { // we can do nothing but wait for the thread
-            pthread_mutex_unlock (&(si->slpMutex));
-          } else {
-            tot_cnt --;
-          }
-        }
-        if (flag && !(si->mailSuspending || si->llFlag == -1 || si->sleeping)) {
+        if (flag && si->llFlag != -1) {
           firstWakeThd = i;
           flag = false;
         }
-        if (si->mailSuspending || si->llFlag == -1 || si->sleeping) { // 1st stage work when allocating array globally
+        if (si->llFlag == -1) { // 1st stage work when allocating array globally
         // printf("mailSuspend thd %d, status: %d, %d, %d\n", i, si->mailSuspending, si->llFlag, si->sleeping);
           GC_collect_sleep_1st(si, 0, 1);
-        }
-        if (!si->sleeping) {
-          pthread_mutex_unlock (&(si->slpMutex));
         }
         if(si->llFlag != -1) {
           pthread_mutex_unlock (&(si->llMutex));
@@ -198,7 +179,7 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
     GC_state si = &(s->procStates[myTicket]);
 
     if (!wakeAll) {
-      while (myTicket < s->numberOfProcs && (si->mailSuspending || si->llFlag == -1 || si->sleeping)) {
+      while (myTicket < s->numberOfProcs && si->llFlag == -1) {
         myTicket = __sync_add_and_fetch(&Proc_criticalTicket, 1);
         si++;
       }
@@ -213,17 +194,13 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
         /* deal with timing */
         stopTiming (RUSAGE_SELF, &ru_crit, &s->cumulativeStatistics->ru_crit);
       }
-      
+
       if (!wakeAll) { // 3rd stage work. Port from global array allocation
         for (int i = 0; i < s->numberOfProcs; i++) {
           GC_state si = &(s->procStates[i]);
-          if ((si->mailSuspending || si->llFlag == -1 || si->sleeping) && si->gcFlag) {
+          if (si->llFlag == -1 && si->gcFlag) {
             si->gcFlag = false;
             HM_exitGlobalHeap_spec(si);
-          }
-          if (si->sleeping) {
-            // we release lock here after sync to avoid threads' sleeping state changed during the sync
-            pthread_mutex_unlock(&(si->slpMutex));
           }
           if (si->llFlag == -1) {
             pthread_mutex_unlock(&(si->llMutex));
@@ -314,13 +291,12 @@ bool Proc_BSP(GC_state s,
   // YIFAN added
   for (int i = 0; i < s->numberOfProcs; i++) {
     GC_state si = &(s->procStates[i]);
-    if (si->mailSuspending) {
-      pthread_cond_signal(&(si->mailCond));
-    }
+    pthread_mutex_lock(&(si->llMutex));
     if (si->llFlag == -1) {
       si->llFlag = -2;
       pthread_cond_signal(&(si->llCond));
     }
+    pthread_mutex_unlock(&(si->llMutex));
   }
 
   if (myBSPCount == s->numberOfProcs) {

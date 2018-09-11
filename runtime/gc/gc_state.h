@@ -101,17 +101,13 @@ struct GC_state {
   struct TracingContext *trace;
   struct TLSObjects tlsObjects;
 
-  //YIFAN added for yield_to
-  pthread_mutex_t mailMutex;
-  pthread_cond_t  mailCond;
-  sem_t           mailSem;
-  bool            mailSuspending;
+  //YIFAN added for lifeline
   pthread_mutex_t llMutex;
   pthread_cond_t  llCond;
   int64_t         llFlag; // -1 for sleep, -2 for random steal, non-neg for target victim
   // YIFAN added for sleep doubling
-  bool            sleeping;
-  pthread_mutex_t slpMutex;
+  // bool            sleeping;
+  // pthread_mutex_t slpMutex;
   // YIFAN added for sync without sleeping threads
   bool            gcFlag;
   size_t          nurseryBytesRequested;
