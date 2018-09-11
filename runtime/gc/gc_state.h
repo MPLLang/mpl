@@ -106,8 +106,8 @@ struct GC_state {
   pthread_cond_t  llCond;
   int64_t         llFlag; // -1 for sleep, -2 for random steal, non-neg for target victim
   // YIFAN added for sleep doubling
-  // bool            sleeping;
-  // pthread_mutex_t slpMutex;
+  pthread_mutex_t syncMutex;
+  pthread_cond_t  syncCond;
   // YIFAN added for sync without sleeping threads
   bool            gcFlag;
   size_t          nurseryBytesRequested;

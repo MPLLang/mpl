@@ -92,7 +92,7 @@ volatile uint8_t notifyAll = 0;
 volatile int tot_cnt = 128; //YIFAN: for test
 volatile int firstWakeThd = 0;
 
-volatile int inCriticalSection = 0;
+pthread_barrier_t endBarrier;
 
 void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
   static pthread_mutex_t Proc_syncCountLock = PTHREAD_MUTEX_INITIALIZER;
@@ -101,7 +101,8 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
   Trace0(EVENT_GSECTION_BEGIN_ENTER);
 
   if (Proc_isInitialized (s)) {
-    while (inCriticalSection) {}
+    while (Proc_criticalTicketActive == TRUE) {}
+
     uint32_t myTicket = Proc_processorNumber (s);
 
     pthread_mutex_lock_safe(&Proc_syncCountLock);
@@ -113,7 +114,7 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
     }
 
     //YIFAN added
-    if (!__sync_fetch_and_or(&notifyAll, 1)) {
+    if (notifyAll == 0) { notifyAll = 1;
       firstWakeThd = 0;
       tot_cnt = s->numberOfProcs;
       bool flag = !wakeAll;
@@ -126,24 +127,20 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
             pthread_mutex_unlock(&(si->llMutex));
           } else {
             tot_cnt--;
+            // 1st stage work when allocating array globally
+            // printf("mailSuspend thd %d, status: %d, %d, %d\n", i, si->mailSuspending, si->llFlag, si->sleeping);
+            GC_collect_sleep_1st(si, 0, 1);
+          }
+        } else {
+          pthread_mutex_unlock(&(si->llMutex));
+          if (flag) {
+            firstWakeThd = i;
+            flag = false;
           }
         }
-        if (flag && si->llFlag != -1) {
-          firstWakeThd = i;
-          flag = false;
-        }
-        if (si->llFlag == -1) { // 1st stage work when allocating array globally
-        // printf("mailSuspend thd %d, status: %d, %d, %d\n", i, si->mailSuspending, si->llFlag, si->sleeping);
-          GC_collect_sleep_1st(si, 0, 1);
-        }
-        if(si->llFlag != -1) {
-          pthread_mutex_unlock (&(si->llMutex));
-        }
       }
-      notifyAll = 3;
     }
 
-    while (notifyAll != 3) {}
     if (mySyncCount == tot_cnt) {
       /* We are the last to synchronize, so signal this */
       if (needGCTime (s)) {
@@ -151,10 +148,14 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
         stopTiming (RUSAGE_SELF, &ru_sync, &s->cumulativeStatistics->ru_sync);
         startTiming (RUSAGE_SELF, &ru_crit);
       }
+
+      pthread_mutex_lock(&(s->procStates[firstWakeThd].syncMutex));
       Proc_criticalTicket = firstWakeThd;
       Proc_criticalTicketActive = TRUE;
-      // __sync_fetch_and_and(&notifyAll, 0); //reset lock var
-      inCriticalSection = 1;
+      pthread_cond_signal(&(s->procStates[firstWakeThd].syncCond));
+      pthread_mutex_unlock(&(s->procStates[firstWakeThd].syncMutex));
+
+      // pthread_barrier_init(&endBarrier, NULL, tot_cnt);
     }
     pthread_mutex_unlock_safe(&Proc_syncCountLock);
 
@@ -163,7 +164,11 @@ void Proc_beginCriticalSection (GC_state s, bool wakeAll, bool gcSleep) {
      * round
      */
     /* RAM_NOTE: This really should be a condition variable */
-    while ((!Proc_criticalTicketActive) || (Proc_criticalTicket != myTicket)) {}
+    pthread_mutex_lock(&(s->syncMutex));
+    while ((!Proc_criticalTicketActive) || (Proc_criticalTicket != myTicket)) {
+      pthread_cond_wait(&(s->syncCond), &(s->syncMutex));
+    }
+    pthread_mutex_unlock(&(s->syncMutex));
   }
   else {
     Proc_syncCount = 1;
@@ -184,6 +189,9 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
         si++;
       }
       tot_cnt --;
+      if (myTicket < s->numberOfProcs) {
+        pthread_cond_signal(&si->syncCond);
+      }
     }
 
     bool flag = (!wakeAll && tot_cnt == 0) || (myTicket == s->numberOfProcs);
@@ -212,13 +220,16 @@ void Proc_endCriticalSection (GC_state s, bool wakeAll) {
       Proc_syncCount = Proc_SYNC_COUNT_INITIALIZER;
       Proc_criticalTicket = Proc_CRITICAL_TICKET_INITIALIZER;
       Proc_criticalTicketActive = Proc_CRITICAL_TICKET_ACTIVE_INITIALIZER;
-      __sync_fetch_and_and(&notifyAll, 0); //reset lock var
+      notifyAll = 0; //reset lock var
       __sync_synchronize ();
-      inCriticalSection = 0;
     }
 
     /* RAM_NOTE: This should also be a condition variable */
-    while (Proc_criticalTicketActive) {}
+    // if (wakeAll) {
+      while (Proc_criticalTicketActive) {}
+    // } else {
+    //   pthread_barrier_wait(&endBarrier);
+    // }
   }
   else {
     Proc_syncCount = 0;

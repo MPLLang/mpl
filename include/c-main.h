@@ -129,6 +129,9 @@ void MLton_threadFunc (void* arg) {                                     \
       pthread_cond_init(&(gcState[0].llCond), 0);                       \
       gcState[0].llFlag = -2;                                           \
                                                                         \
+      pthread_mutex_init(&(gcState[0].syncMutex), 0);                   \
+      pthread_cond_init(&(gcState[0].syncCond), 0);                     \
+                                                                        \
       GC_lateInit (&gcState[0]);                                        \
     }                                                                   \
     /* Fill in per-processor data structures */                         \
@@ -140,6 +143,9 @@ void MLton_threadFunc (void* arg) {                                     \
       pthread_mutex_init(&(gcState[procNo].llMutex), 0);                \
       pthread_cond_init(&(gcState[procNo].llCond), 0);                  \
       gcState[procNo].llFlag = -2;                                      \
+                                                                        \
+      pthread_mutex_init(&(gcState[procNo].syncMutex), 0);              \
+      pthread_cond_init(&(gcState[procNo].syncCond), 0);                \
     }                                                                   \
     /* Set up tracing infrastructure */                                 \
     for (procNo = 0; procNo < gcState[0].numberOfProcs; procNo++)       \
