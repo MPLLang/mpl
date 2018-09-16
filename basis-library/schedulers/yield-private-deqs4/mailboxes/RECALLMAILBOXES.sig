@@ -11,7 +11,7 @@ sig
   val new : 'a -> 'a t
 
   (* `getMail ms i` waits until the ith mailbox in ms receives mail *)
-  val getMail : 'a t -> int -> 'a
+  val getMail : 'a t -> int -> int ref -> bool * 'a
 
   (* `sendMail ms (i, x)` sends x to the ith mailbox in ms *)
   val sendMail : 'a t -> (int * 'a) -> unit

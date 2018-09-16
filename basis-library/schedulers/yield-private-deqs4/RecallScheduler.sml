@@ -10,6 +10,7 @@ struct
   (* val mySemWait = _import "Parallel_mySemWait" runtime private : int -> unit; *)
 
   val myLLSleep      = _import "Parallel_myLLSleep"      runtime private : int -> int;
+  val myLLTimedSleep = _import "Parallel_myLLTimedSleep" runtime private : int * int -> int;
   val myLLSignal     = _import "Parallel_myLLSignal"     runtime private : int -> unit;
   val myLLFindChild  = _import "Parallel_myLLFindChild"  runtime private : int -> int;
   val myLLSignalSpec = _import "Parallel_myLLSignalSpec" runtime private : int -> unit;
@@ -81,6 +82,7 @@ struct
    * by changing its own request cell to REQUEST_BLOCKED. *)
   val NO_REQUEST = ~1
   val REQUEST_BLOCKED = ~2
+  val PROCESSING = ~3
   val requestCells = Vector.tabulate (P, fn _ => ref NO_REQUEST)
   fun requestCell p = vectorSub "requestCells" (requestCells, p)
 
@@ -177,12 +179,12 @@ struct
 
       fun communicate () =
         ( let
-            val friend = !myRequestCell
+            val friend = lockTestAndSet (myRequestCell, PROCESSING)
+            (* val friend = !myRequestCell *)
           in
-            if friend = NO_REQUEST then ()
+            if friend = NO_REQUEST then (myRequestCell := NO_REQUEST)
             else if friend = REQUEST_BLOCKED then die (fn _ => "Error: serve while blocked")
-            else ( myRequestCell := NO_REQUEST
-                 ; let val mail =
+            else ( let val mail =
                          case Queue.popTop myQueue of
                            NONE => NONE
                          | SOME (task, v) =>
@@ -190,14 +192,15 @@ struct
                               * increment the counter at a steal. *)
                              SOME (fn () => (task (); returnToSched v))
                    in Mailboxes.sendMail mailboxes (friend, mail)
-                   end
+                   end;
+                   myRequestCell := NO_REQUEST
                  )
           end
         ; setStatus (myId, not (Queue.empty myQueue))
         )
 
       (* derictly send mail to sleeping children *)
-      (* fun push (t, v) =
+      fun push (t, v) =
         let
           val chld = myLLFindChild (myId)
         in
@@ -208,23 +211,16 @@ struct
             let
               val _ = Queue.pushBot ((t, v), myQueue) (* push the task into the bottom of the deque *)
               val mail = 
-                case Queue.popTop myQueue of (* give the top task to the selected child, this matters *)
+                case Queue.popTop myQueue of
                   NONE => NONE
                 | SOME (task, v) =>
                     SOME (fn () => (task (); returnToSched v))
-            in (Mailboxes.sendMailLockFree mailboxes (chld, mail); (* now the child must be sleeping, so we won't need locks here *)
-                myLLSignalSpec (chld); (* wake up the selected child *)
+            in (Mailboxes.sendMailLockFree mailboxes (chld, mail);
+                myLLSignalSpec (chld);
                 communicate ();
                 ())
             end
-        end *)
-
-      fun push (t, v) =
-        Queue.pushBot ((t, v), myQueue)
-        before (
-          myLLSignal (myId);
-          communicate ()
-        )
+        end
 
       fun popDiscard () =
         Queue.popBotDiscard myQueue
@@ -260,40 +256,26 @@ struct
       val YIELD_CNT = P
       fun modY x = if x >= YIELD_CNT then x - YIELD_CNT else x
 
-      (* old version that the waked up thread will steal from its parents *)
       fun requestCnt (cnt) =
-        let
-          val _ = myProbe()
-          val victimId = 
-                if cnt < (YIELD_CNT-1) then
-                  randomOtherId()
-                else  (* cnt >= (YIELD_CNT-1) *)
-                  let
-                    val tgt = myLLSleep(myId)
-                  in
-                    if tgt < 0 then randomOtherId() else tgt
-                  end
-          val hasWork = getStatus victimId
-        in
-          if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
-          then (verifyStatus (); 
-                requestCnt (modY(cnt+1)))
-          else case Mailboxes.getMail mailboxes myId of
-                 NONE => (verifyStatus ();
-                          requestCnt (modY(cnt+1)))
-               | SOME task => task
-        end
-
-      (* fun requestCnt (cnt) =
         if cnt >= (YIELD_CNT-1) then
             let
               val tgt = myLLSleep(myId)
             in
               if tgt < 0 then requestCnt (0)
-              else case Mailboxes.getMail mailboxes myId of
-                NONE => (verifyStatus ();
-                          requestCnt (0))
-              | SOME task => task
+              else
+                let
+                  val (recv, mail) = Mailboxes.getMail mailboxes myId (requestCell tgt)
+                in
+                  if recv then
+                    case mail of
+                      NONE => (verifyStatus ();
+                               requestCnt (0))
+                    | SOME task => task
+                  else (
+                    verifyStatus ();
+                    requestCnt (1)
+                  )
+                end
             end
         else
           let
@@ -304,18 +286,29 @@ struct
             if not (hasWork andalso cas (requestCell victimId, NO_REQUEST, myId))
             then (verifyStatus (); 
                   requestCnt (modY(cnt+1)))
-            else case Mailboxes.getMail mailboxes myId of
-              NONE => (verifyStatus ();
-                        requestCnt (modY(cnt+1)))
-            | SOME task => task
-          end *)
+            else
+              let
+                val (recv, mail) = Mailboxes.getMail mailboxes myId (requestCell victimId)
+              in
+                if recv then
+                  case mail of
+                    NONE => (verifyStatus ();
+                            requestCnt (modY(cnt+1)))
+                  | SOME task => task
+                else (
+                  verifyStatus ();
+                  requestCnt (modY(cnt+1))
+                )
+              end
+          end
 
       (* ------------------------------------------------------------------- *)
       
       fun acquireWork () =
         ( setStatus (myId, false)
         ; blockRequests ()
-        ; let val task = requestCnt (0)
+        ; let 
+            val task = requestCnt (0)
           in ( unblockRequests ()
              ; task ()
              )
