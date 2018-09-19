@@ -17,7 +17,9 @@ struct
     handle Subscript => raise ArrayQueue ("arrayUpdate " ^ Int.toString i ^ "\n") *)
 
   (*val arraySub = Unsafe.Array.sub*)
-  val arrayUpdate = MLton.HM.arrayUpdateNoBarrier
+  fun arrayUpdate (a, i, x) =
+    MLton.HM.arrayUpdateNoBarrier (a, Int64.fromInt i, x)
+  (*val arrayUpdate = MLton.HM.arrayUpdateNoBarrier*)
 
   fun new p =
     let
