@@ -159,6 +159,13 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
     growStackCurrent (s, FALSE);
+    /* SAM_NOTE: growing the stack can edit s->frontier, so we need to make sure
+     * the saved frontier in the hh is synced. */
+    /* SAM_NOTE: TODO: caching the frontier in so many different places is a
+     * major headache. We need a refactor. */
+    assert(!isPointerInGlobalHeap(s, s->frontier));
+    assert(HM_getChunkOf(s->frontier) == hh->lastAllocatedChunk);
+    HM_HH_updateValues(hh, s->frontier);
     setGCStateCurrentThreadAndStack (s);
   }
 
