@@ -340,11 +340,14 @@ finish:
 
 HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   assert(HM_isLevelHead(levelHead));
-  HM_chunk chunk = HM_getFreeChunk(pthread_getspecific(gcstate_key), bytesRequested);
+  GC_state s = pthread_getspecific(gcstate_key);
+  HM_chunk chunk = HM_getFreeChunk(s, bytesRequested);
 
   if (NULL == chunk) {
     return NULL;
   }
+
+  s->cumulativeStatistics->bytesAllocated += HM_getChunkSize(chunk);
 
   assert(chunk->frontier == HM_getChunkStart(chunk));
   assert(chunk->mightContainMultipleObjects);

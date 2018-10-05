@@ -376,6 +376,13 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
       s->limitPlusSlop = newHeapFrontier - GC_GAP_SLOP;
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
+      /* SAM_NOTE: once we start using hierarchical heaps, we never collect
+       * the global heap again. This helps us track how many bytes have been
+       * allocated in the global heap (e.g. by the scheduler) */
+      if (s->heap->usingHierarchicalHeaps) {
+        s->cumulativeStatistics->bytesAllocated += s->limitPlusSlop - s->frontier;
+      }
+
       return;
     }
     else {

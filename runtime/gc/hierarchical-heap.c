@@ -457,20 +457,6 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
     return FALSE;
   }
 
-  /* SAM_NOTE: TODO: This should just be
-   *   ...->bytesAllocated += HM_getChunkSize(chunk);
-   * The current implementation is ignoring chunk fragmentation. We need to
-   * decide what this statistic is meant to track. IMO chunk fragmentation
-   * should be included in an allocation statistic.*/
-  GC_state s = pthread_getspecific (gcstate_key);
-  if (NULL != hh->lastAllocatedChunk) {
-    void* lastAllocatedChunkFrontier = HM_getChunkFrontier(hh->lastAllocatedChunk);
-    void* lastAllocatedChunkStart = HM_getChunkStart(hh->lastAllocatedChunk);
-    s->cumulativeStatistics->bytesAllocated +=
-        ((size_t)(lastAllocatedChunkFrontier)) -
-        ((size_t)(lastAllocatedChunkStart));
-  }
-
   hh->lastAllocatedChunk = chunk;
   hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
