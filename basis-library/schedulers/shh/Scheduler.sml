@@ -96,6 +96,25 @@ struct
   fun setRequest (p, r) = arrayUpdate (requestCells, p*padding, r)
   fun casRequest (p, r, r') = cas (requestCells, p*padding) (r, r')
 
+  val idleTotals = Array.array (P, Time.zeroTime)
+  fun getIdleTime p = arraySub (idleTotals, p)
+  fun updateIdleTime (p, deltaTime) =
+    arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
+
+  val timerGrain = 256
+  fun startTimer myId = (myId, 0, Time.now ())
+  fun tickTimer (p, count, t) =
+    if count < timerGrain then (p, count+1, t) else
+    let
+      val t' = Time.now ()
+      val diff = Time.- (t', t)
+      val _ = updateIdleTime (p, diff)
+    in
+      (p, 0, t')
+    end
+  fun stopTimer (p, _, t) =
+    (tickTimer (p, timerGrain, t); ())
+
   (* Statuses are updated locally to indicate whether or not work is available
    * to be stolen. This allows idle workers to only request work from victims
    * who are unlikely to reject. *)
@@ -137,6 +156,7 @@ struct
     | Raised of exn
 
     val communicate = schedCommunicate
+    val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
     (* NOTE: ALL HH OBJECTS MUST RESIDE IN THE GLOBAL HEAP *)
@@ -303,29 +323,31 @@ struct
 
       fun unblockRequests () = setRequest (myId, NO_REQUEST)
 
-      fun request () =
+      fun request idleTimer =
         let
           val friend = randomOtherId ()
           val hasWork = getStatus friend
           val available = (getRequest friend = NO_REQUEST)
         in
           if not (available andalso hasWork andalso casRequest (friend, NO_REQUEST, myId))
-          then (verifyStatus (); request ())
+          then (verifyStatus (); request (tickTimer idleTimer))
           else case Mailboxes.getMail mailboxes myId of
-                 NONE => (verifyStatus (); request ())
-               | SOME m => m
+                 NONE => (verifyStatus (); request (tickTimer idleTimer))
+               | SOME m => (m, idleTimer)
         end
 
       (* ------------------------------------------------------------------- *)
 
       fun acquireWork () : unit =
         let
+          val idleTimer = startTimer myId
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
           val _ = dbgmsg (fn _ => "finding work")
-          val (task, hh) = request () (* loop until work is found... *)
+          val ((task, hh), idleTimer') = request idleTimer (* loop until work is found... *)
           val _ = dbgmsg (fn _ => "got work")
           val _ = unblockRequests ()
+          val _ = stopTimer idleTimer'
 
           (* val _ = useHH hh *)
           val _ = myTodo := SOME (fn _ => (useHH hh; task ()))
