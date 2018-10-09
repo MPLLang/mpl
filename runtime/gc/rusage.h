@@ -22,4 +22,10 @@ static inline uintmax_t rusageTime (struct rusage *ru);
 static inline void startTiming (int who, struct rusage *ru_start);
 static uintmax_t stopTiming (int who, struct rusage *ru_start, struct rusage *ru_gc);
 
+void timespec_now(struct timespec *x);
+/* compute dst = dst - x. requires that dst >= x. */
+void timespec_sub(struct timespec *dst, struct timespec *x);
+/* compute dst = dst + x */
+void timespec_add(struct timespec *dst, struct timespec *x);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

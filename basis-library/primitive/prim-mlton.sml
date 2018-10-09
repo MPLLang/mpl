@@ -145,6 +145,9 @@ structure GC =
          _import "GC_setControlsRusageMeasureGC" runtime private: bool -> unit;
       val setSummary = _import "GC_setControlsSummary" runtime private: bool -> unit;
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
+
+      val getLocalGCMillisecondsOfProc = _import "GC_getLocalGCMillisecondsOfProc" runtime private : Word32.word -> C_UIntmax.t;
+      val getPromoMillisecondsOfProc = _import "GC_getPromoMillisecondsOfProc" runtime private : Word32.word -> C_UIntmax.t;
    end
 
 structure HM =

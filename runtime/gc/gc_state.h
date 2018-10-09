@@ -139,6 +139,9 @@ PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
 
+PRIVATE uintmax_t GC_getLocalGCMillisecondsOfProc(uint32_t proc);
+PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc);
+
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
 PRIVATE void GC_setCallFromCHandlerThreads (pointer p);
 PRIVATE pointer GC_getCurrentThread (void);

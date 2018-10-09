@@ -26,5 +26,8 @@ signature MLTON_GC =
             val maxBytesLive: unit -> IntInf.int
             val maxHeapOccupancy: unit -> IntInf.int
             val maxChunkPoolOccupancy: unit -> IntInf.int
+
+            val localGCTimeOfProc : int -> Time.time
+            val promoTimeOfProc : int -> Time.time
          end
    end

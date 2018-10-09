@@ -61,6 +61,9 @@ struct GC_cumulativeStatistics {
   uintmax_t numMinorGCs;
   uintmax_t numHHLocalGCs;
 
+  struct timespec timeLocalGC;
+  struct timespec timeLocalPromo;
+
   struct rusage ru_gc; /* total resource usage in gc. */
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */
   struct rusage ru_gcMarkCompact; /* resource usage in major mark-compact gcs. */

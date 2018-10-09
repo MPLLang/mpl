@@ -99,6 +99,8 @@ void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
+  struct timespec startTime;
+  struct timespec stopTime;
   Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, s->heap->start);
   bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
@@ -121,9 +123,6 @@ void HM_HHC_collectLocal(void) {
   Trace0(EVENT_GC_ENTER);
   TraceResetCopy();
 
-  if (needGCTime(s)) {
-    startTiming (RUSAGE_THREAD, &ru_start);
-  }
   s->cumulativeStatistics->numHHLocalGCs++;
 
   /* used needs to be set because the mutator has changed s->stackTop. */
@@ -167,8 +166,23 @@ void HM_HHC_collectLocal(void) {
 
   if (s->controls->deferredPromotion) {
     Trace0(EVENT_PROMOTION_ENTER);
+    if (needGCTime(s)) {
+      timespec_now(&startTime);
+    }
+
     HM_deferredPromote(s, &forwardHHObjptrArgs);
+
+    if (needGCTime(s)) {
+      timespec_now(&stopTime);
+      timespec_sub(&stopTime, &startTime);
+      timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
+    }
     Trace0(EVENT_PROMOTION_LEAVE);
+  }
+
+  if (needGCTime(s)) {
+    startTiming (RUSAGE_THREAD, &ru_start);
+    timespec_now(&startTime);
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -475,6 +489,10 @@ void HM_HHC_collectLocal(void) {
      * big deal...
      */
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
+
+    timespec_now(&stopTime);
+    timespec_sub(&stopTime, &startTime);
+    timespec_add(&(s->cumulativeStatistics->timeLocalGC), &stopTime);
   }
 
   TraceResetCopy();

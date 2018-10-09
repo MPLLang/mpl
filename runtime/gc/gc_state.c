@@ -367,6 +367,18 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   return retVal;
 }
 
+uintmax_t GC_getLocalGCMillisecondsOfProc(uint32_t proc) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeLocalGC);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
+uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeLocalPromo);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
 void GC_setHashConsDuringGC (bool b) {
   GC_state s = pthread_getspecific (gcstate_key);
   s->hashConsDuringGC = b;

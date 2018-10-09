@@ -64,6 +64,12 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numMarkCompactGCs = 0;
   cumulativeStatistics->numMinorGCs = 0;
   cumulativeStatistics->numHHLocalGCs = 0;
+
+  cumulativeStatistics->timeLocalGC.tv_sec = 0;
+  cumulativeStatistics->timeLocalGC.tv_nsec = 0;
+  cumulativeStatistics->timeLocalPromo.tv_sec = 0;
+  cumulativeStatistics->timeLocalPromo.tv_nsec = 0;
+
   rusageZero (&cumulativeStatistics->ru_gc);
   rusageZero (&cumulativeStatistics->ru_gcCopying);
   rusageZero (&cumulativeStatistics->ru_gcMarkCompact);
