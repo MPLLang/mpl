@@ -146,7 +146,7 @@ struct
    * ------------------------------ FORK-JOIN ------------------------------ *
    * ------------------------------------------------------------------------*)
 
-  structure ForkJoin :> FORK_JOIN =
+  structure ForkJoin =
   struct
 
     exception ForkJoin
@@ -430,4 +430,30 @@ struct
 
 end
 
-structure ForkJoin :> FORK_JOIN = Scheduler.ForkJoin
+structure ForkJoin :> FORK_JOIN =
+struct
+  open Scheduler.ForkJoin
+
+  fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
+
+  fun parfor grain (i, j) f =
+    let val n = j - i
+    in if n <= grain
+       then for (i, j) f
+       else ( fork ( fn _ => parfor grain (i, i + n div 2) f
+                   , fn _ => parfor grain (i + n div 2, j) f
+                   )
+            ; ()
+            )
+    end
+
+  fun alloc n =
+    let
+      val a = ArrayExtra.Raw.alloc n
+      val _ =
+        if ArrayExtra.Raw.uninitIsNop a then ()
+        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
+    in
+      ArrayExtra.Raw.unsafeToArray a
+    end
+end

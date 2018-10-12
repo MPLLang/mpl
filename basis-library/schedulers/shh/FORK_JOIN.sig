@@ -5,4 +5,6 @@ sig
   val communicate : unit -> unit
 
   val getIdleTime : int -> Time.time
+
+  val alloc : int -> 'a array
 end
