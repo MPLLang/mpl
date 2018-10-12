@@ -32,24 +32,24 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
 
         val yield: unit -> unit =
-            (*msgWrapper1 ("yield", *)
+            (* msgWrapper1 ("yield", *)
                          _import "Parallel_yield" runtime private:
-                         unit -> unit;(*)*)
+                         unit -> unit;(* ) *)
 
         val lockInit: Word32.word ref -> unit =
-            (*msgWrapper1 ("lockInit", *)
+            (* msgWrapper1 ("lockInit", *)
                          _import "Parallel_lockInit" runtime private:
-                         Word32.word ref -> unit;(*)*)
+                         Word32.word ref -> unit;(* ) *)
 
         val takeLock: Word32.word ref -> unit =
-            (*msgWrapper1 ("takeLock", *)
+            (* msgWrapper1 ("takeLock", *)
                          _import "Parallel_lockTake" runtime private:
-                         Word32.word ref -> unit;(*)*)
+                         Word32.word ref -> unit;(* ) *)
 
         val releaseLock: Word32.word ref -> unit =
-            (*msgWrapper1 ("releaseLock", *)
+            (* msgWrapper1 ("releaseLock", *)
                          _import "Parallel_lockRelease" runtime private:
-                         Word32.word ref -> unit;(*) *)
+                         Word32.word ref -> unit;(* ) *)
       end
 
     structure Unsafe =
@@ -57,7 +57,7 @@ structure MLtonParallel:> MLTON_PARALLEL =
         val initPrimitiveThread: unit MLtonThread.t -> MLtonThread.Runnable.t =
             MLtonThread.initPrimitive
         val arrayUninit: int -> 'a Array.array =
-            Array.arrayUninit
+            Array.alloc
 
         (* ======================== arrayCompareAndSwap ==================== *)
 

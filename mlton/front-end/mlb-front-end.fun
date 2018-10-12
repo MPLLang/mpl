@@ -1,4 +1,4 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2015 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -52,6 +52,17 @@ fun lexAndParse (source: Source.t, ins: In.t) =
                Ast.Basdec.empty
             end
       val () = Ast.Basdec.checkSyntax result
+
+      (* Outputs AST to a file if Control.keepAST is true *)
+      val () =
+         if !Control.keepAST
+            then File.withAppend
+                 (concat [!Control.inputFile, ".ast"], fn outputStream =>
+                  (Out.outputl (outputStream, concat ["File: ", Source.name source]);
+                   Layout.output (Ast.Basdec.layout result, outputStream);
+                   Out.newline outputStream;
+                   Out.newline outputStream))
+            else ()
    in 
       result
    end

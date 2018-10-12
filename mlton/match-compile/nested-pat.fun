@@ -1,4 +1,5 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2015,2017 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -13,15 +14,17 @@ open S
 
 datatype t = T of {pat: node, ty: Type.t}
 and node =
-   Con of {arg: t option,
-           con: Con.t,
-           targs: Type.t vector}
+    Con of {arg: t option,
+            con: Con.t,
+            targs: Type.t vector}
   | Const of {const: Const.t,
               isChar: bool,
               isInt: bool}
   | Layered of Var.t * t
-  | Tuple of t vector
+  | Or of t vector
+  | Record of t SortedRecord.t
   | Var of Var.t
+  | Vector of t vector
   | Wild
 
 local
@@ -32,52 +35,97 @@ in
 end
 
 fun tuple ps =
-   if 1 = Vector.length ps
-      then Vector.sub (ps, 0)
-   else T {pat = Tuple ps,
-           ty = Type.tuple (Vector.map (ps, ty))}
+   T {pat = Record (SortedRecord.tuple ps),
+      ty = Type.tuple (Vector.map (ps, ty))}
 
-fun layout p =
+fun layout (p, isDelimited) =
    let
       open Layout
+      fun delimit t = if isDelimited then t else paren t
    in
       case node p of
          Con {arg, con, targs} =>
-            let
-               val z =
-                  Pretty.conApp {arg = Option.map (arg, layout),
-                                 con = Con.layout con,
-                                 targs = Vector.map (targs, Type.layout)}
-            in
-               if isSome arg then paren z else z
-            end
+            delimit (Pretty.conApp {arg = Option.map (arg, layoutF),
+                                    con = Con.layout con,
+                                    targs = Vector.map (targs, Type.layout)})
        | Const {const = c, ...} => Const.layout c
-       | Layered (x, p) => paren (seq [Var.layout x, str " as ", layout p])
-       | Tuple ps => tuple (Vector.toListMap (ps, layout))
+       | Layered (x, p) => delimit (seq [Var.layout x, str " as ", layoutT p])
+       | Or ps => paren (mayAlign (separateLeft (Vector.toListMap (ps, layoutT), "| ")))
+       | Record rps =>
+            SortedRecord.layout
+            {extra = "",
+             layoutElt = layoutT,
+             layoutTuple = fn ps => tuple (Vector.toListMap (ps, layoutT)),
+             record = rps,
+             separator = " = "}
        | Var x => Var.layout x
+       | Vector ps => vector (Vector.map (ps, layoutT))
        | Wild => str "_"
-end
+   end
+and layoutF p = layout (p, false)
+and layoutT p = layout (p, true)
+
+val layout = layoutT
 
 fun make (p, t) =
-   case p of
-      Tuple ps =>
-         if 1 = Vector.length ps
-            then Vector.sub (ps, 0)
-         else T {pat = p, ty = t}
-    | _ => T {pat = p, ty = t}
+   T {pat = p, ty = t}
+
+fun flatten p =
+   let
+      val ty = ty p
+      val make = fn p => make (p, ty)
+   in
+      case node p of
+         Con {arg, con, targs} =>
+            (case arg of
+                NONE => Vector.new1 p
+              | SOME arg => Vector.map (flatten arg, fn arg =>
+                                        make (Con {arg = SOME arg, con = con, targs = targs})))
+       | Const _ => Vector.new1 p
+       | Layered (x, p) => Vector.map (flatten p, fn p => make (Layered (x, p)))
+       | Or ps => Vector.concatV (Vector.map (ps, flatten))
+       | Record rps =>
+            let
+               val (fs, ps) = SortedRecord.unzip rps
+               val record = fn ps =>
+                  Record (SortedRecord.zip (fs, ps))
+            in
+               flattens (ps, make o record)
+            end
+       | Var _ => Vector.new1 p
+       | Vector ps => flattens (ps, make o Vector)
+       | Wild => Vector.new1 p
+   end
+and flattens (ps, make) =
+   let
+      val fpss =
+         Vector.foldr
+         (Vector.map (ps, flatten), [[]], fn (fps, fpss) =>
+          List.concat (Vector.toListMap (fps, fn fp =>
+                                         List.map (fpss, fn fps => fp :: fps))))
+   in
+      Vector.fromListMap (fpss, fn fps => make (Vector.fromList fps))
+   end
+
+val flatten =
+   Trace.trace ("NestedPat.flatten", layout, Vector.layout layout)
+   flatten
 
 fun isRefutable p =
    case node p of
-      Wild => false
-    | Var _ => false
+      Con _ => true
     | Const _ => true
-    | Con _ => true
-    | Tuple ps => Vector.exists (ps, isRefutable)
     | Layered (_, p) => isRefutable p
+    | Or ps => Vector.exists (ps, isRefutable)
+    | Record rps => SortedRecord.exists (rps, isRefutable)
+    | Var _ => false
+    | Vector _ => true
+    | Wild => false
 
-fun isVar p =
+fun isVarOrWild p =
    case node p of
       Var _ => true
+    | Wild => true
     | _ => false
 
 fun removeOthersReplace (p, {new, old}) =
@@ -99,11 +147,13 @@ fun removeOthersReplace (p, {new, old}) =
                            then Layered (new, p)
                         else node p
                      end
-                | Tuple ps => Tuple (Vector.map (ps, loop))
+                | Or ps => Or (Vector.map (ps, loop))
+                | Record rps => Record (SortedRecord.map (rps, loop))
                 | Var x =>
                      if Var.equals (x, old)
                         then Var new
                      else Wild
+                | Vector ps => Vector (Vector.map (ps, loop))
                 | Wild => Wild
          in
             T {pat = pat, ty = ty}
@@ -135,8 +185,10 @@ fun replaceTypes (p: t, f: Type.t -> Type.t): t =
                           targs = Vector.map (targs, f)}
                 | Const _ => pat
                 | Layered (x, p) => Layered (x, loop p)
-                | Tuple ps => Tuple (Vector.map (ps, loop))
+                | Or ps => Or (Vector.map (ps, loop))
+                | Record rps => Record (SortedRecord.map (rps, loop))
                 | Var _ => pat
+                | Vector ps => Vector (Vector.map (ps, loop))
                 | Wild => pat
          in
             T {pat = pat, ty = f ty}
@@ -149,14 +201,16 @@ fun varsAndTypes (p: t): (Var.t * Type.t) list =
    let
       fun loop (p: t, accum: (Var.t * Type.t) list) =
          case node p of
-            Wild => accum
+            Con {arg, ...} => (case arg of
+                                  NONE => accum
+                                | SOME p => loop (p, accum))
           | Const _ => accum
-          | Var x => (x, ty p) :: accum
-          | Tuple ps => Vector.fold (ps, accum, loop)
-          | Con {arg, ...} => (case arg of
-                                NONE => accum
-                              | SOME p => loop (p, accum))
           | Layered (x, p) => loop (p, (x, ty p) :: accum)
+          | Or ps => loop (Vector.first ps, accum)
+          | Record rps => SortedRecord.fold (rps, accum, loop)
+          | Var x => (x, ty p) :: accum
+          | Vector ps => Vector.fold (ps, accum, loop)
+          | Wild => accum
    in loop (p, [])
    end
 

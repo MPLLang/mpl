@@ -172,7 +172,7 @@ void processFiles(size_t filecount, FILE **files,
 
 void printEventKind(int kind) {
   if (kind > 0 && (size_t)kind < EventKindCount) {
-    printf(EventKindStrings[kind]);
+    printf("%s", EventKindStrings[kind]);
   } else {
     printf("USER(%d)", kind);
   }
