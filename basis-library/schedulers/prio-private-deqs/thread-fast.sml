@@ -8,6 +8,8 @@ structure Bag = ListBag
 exception Thread
 exception IncompatiblePriorities
 
+fun print s = TextIO.output (TextIO.stdErr, s)
+
 datatype 'a result =
          Waiting
          | Finished of 'a * int (* result, depth *)

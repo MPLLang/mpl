@@ -33,9 +33,9 @@ local
     mailbox/mailbox.sml
     interrupt/interrupt.sml
 
-    (*priority/priority.sml*)
+    priority/priority.sml
     (*priority/totprio.sml*)
-    priority/intprio.sml (* Totally ordered! *)
+    (* priority/intprio.sml *) (* Totally ordered! *)
     queue/potential.sml
     (*queue/heavy-split-binary-heap-queue.sml*)
     (*queue/hybrid-binary-heap-queue.sml*)
@@ -44,14 +44,14 @@ local
     queue/heavy-insert-dll-queue.sml
 
     scheduler-cancel.sml
-    (*scheduler.sml*)
+    (* scheduler.sml *)
 
     thread-cancel.sig
-    (*thread.sig*)
+    (* thread.sig *)
 
 (*    MLSDL/srcSML/MLTon/SDLFuncs/SDLFuncs.sml *)
     io/io.sml
 in
     thread-fast.sml
-    (*thread.sml*)
+    (* thread.sml *)
 end
