@@ -1,4 +1,4 @@
-(* Copyright (C) 2011 Matthew Fluet.
+(* Copyright (C) 2011,2015 Matthew Fluet.
  * Copyright (C) 1999-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -50,5 +50,7 @@ fun new file = T {file = ref file,
 fun newline (T {lineStart, lineNum, ...}, n) =
    (Int.inc lineNum
     ; lineStart := n)
+
+fun name (T {file, ...}) = !file
 
 end

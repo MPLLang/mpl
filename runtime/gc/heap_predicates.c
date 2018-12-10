@@ -17,6 +17,14 @@ bool isPointerInNursery (GC_state s, pointer p) {
           or (s->heap->nursery <= p and p < s->heap->frontier));
 }
 
+bool isPointerInGlobalHeap (GC_state s, pointer p) {
+  return (s->heap->start <= p && p < s->heap->start + s->heap->size);
+}
+
+bool isObjptrInGlobalHeap (GC_state s, objptr op) {
+  return isPointerInGlobalHeap(s, objptrToPointer(op, s->heap->start));
+}
+
 #if ASSERT
 bool isObjptrInOldGen (GC_state s, objptr op) {
   pointer p;

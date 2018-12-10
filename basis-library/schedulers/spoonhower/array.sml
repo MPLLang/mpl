@@ -10,7 +10,7 @@ struct
     let
       (* XXX check that maxSeq is large enough to ensure atomic writes *)
       val () = if maxSeq < 1 then raise B.Parallel "maxSeq must be at least 1" else ()
-      val a = ArrayExtra.arrayUninit size
+      val a = ArrayExtra.alloc size
       val () = F.reduce' maxSeq
                         (fn i => Array.update (a, i, f i))
                         size

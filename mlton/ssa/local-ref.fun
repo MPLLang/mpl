@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor LocalRef (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM = 
+functor LocalRef (S: SSA_TRANSFORM_STRUCTS): SSA_TRANSFORM =
 struct
 
 open S
@@ -36,14 +36,14 @@ structure GlobalInfo =
                    ("funcUses", FuncLattice.layout funcUses)]
         end
 
-    local 
+    local
       fun make f (T r) = f r
     in
       val isGlobalRef = make #isGlobalRef
       val funcUses = make #funcUses
     end
 
-    fun new isGlobalRef = T {isGlobalRef = isGlobalRef, 
+    fun new isGlobalRef = T {isGlobalRef = isGlobalRef,
                              funcUses = FuncLattice.new ()}
   end
 
@@ -61,11 +61,11 @@ structure VarInfo =
     datatype t = T of {reff: (Label.t * Type.t) option,
                        assigns: Label.t list ref,
                        derefs: Label.t list ref,
-                       locall: Local.t, 
+                       locall: Local.t,
                        threadCopyCurrent: {assign: bool ref,
                                            deref: bool ref}}
 
-    fun layout (T {reff, assigns, derefs, locall, 
+    fun layout (T {reff, assigns, derefs, locall,
                    threadCopyCurrent = {assign, deref, ...}, ...})
       = let open Layout
         in record [("reff", Option.layout (tuple2 (Label.layout, Type.layout)) reff),
@@ -76,7 +76,7 @@ structure VarInfo =
                                                  ("deref", Bool.layout (!deref))])]
         end
 
-    local 
+    local
       fun make f (T r) = f r
       fun make' f = (make f, ! o (make f))
     in
@@ -96,7 +96,7 @@ structure VarInfo =
       val (threadCopyCurrentDeref,threadCopyCurrentDeref') = make' #deref
     end
 
-    fun new reff: t = T {reff = reff, 
+    fun new reff: t = T {reff = reff,
                          assigns = ref [],
                          derefs = ref [],
                          locall = let
@@ -119,7 +119,7 @@ structure LabelInfo =
                        preds: Label.t list ref,
                        visited: bool ref}
 
-    local 
+    local
       fun make f (T r) = f r
       fun make' f = (make f, ! o (make f))
     in
@@ -146,7 +146,7 @@ fun transform (program: Program.t): Program.t =
       (* Compute multi *)
       val multi = Control.trace (Control.Detail, "multi") Multi.multi
       val {usesThreadsOrConts: bool,
-           funcIsMultiUsed: Func.t -> bool, 
+           funcIsMultiUsed: Func.t -> bool,
            labelDoesThreadCopyCurrent: Label.t -> bool, ...} = multi program
       (* Initialize globalInfo *)
       val {get = globalInfo: Var.t -> GlobalInfo.t,
@@ -157,7 +157,7 @@ fun transform (program: Program.t): Program.t =
       val _ =
          Vector.foreach
          (globals, fn Statement.T {var, exp, ...} =>
-          Option.app (var, fn var => 
+          Option.app (var, fn var =>
                       case exp of
                          PrimApp {prim, ...} =>
                             if Prim.isReff prim
@@ -166,9 +166,9 @@ fun transform (program: Program.t): Program.t =
                        | _ => ()))
       (* Compute funcUses *)
       fun addFunc f x =
-         let 
+         let
             val gi = globalInfo x
-         in 
+         in
             if GlobalInfo.isGlobalRef gi
                then ignore (FuncLattice.lowerBound (GlobalInfo.funcUses gi, f))
             else ()
@@ -186,7 +186,7 @@ fun transform (program: Program.t): Program.t =
                       then
                          ignore
                          (FuncLattice.<= (varFuncUses (valOf var),
-                                          varFuncUses (Vector.sub (args, 0))))
+                                          varFuncUses (Vector.first args)))
                    else default ()
               | _ => default ()
           end)
@@ -212,7 +212,7 @@ fun transform (program: Program.t): Program.t =
              display (str "\n\nGlobals:")
              ; (Vector.foreach
                 (globals, fn Statement.T {var, ...} =>
-                 Option.app 
+                 Option.app
                  (var, fn x =>
                   if GlobalInfo.isGlobalRef (globalInfo x)
                      then display (seq [Var.layout x,
@@ -232,7 +232,7 @@ fun transform (program: Program.t): Program.t =
            | SOME x =>
                 let
                    val GlobalInfo.T {isGlobalRef, funcUses} = globalInfo x
-                in 
+                in
                    if not isGlobalRef
                       then SOME s
                    else
@@ -251,13 +251,13 @@ fun transform (program: Program.t): Program.t =
       val shrink = shrinkFunction {globals = globals}
       (* varInfo *)
       val {get = varInfo: Var.t -> VarInfo.t,
-           set = setVarInfo, ...} 
+           set = setVarInfo, ...}
         = Property.getSetOnce
           (Var.plist, Property.initFun (fn _ => VarInfo.new NONE))
       fun nonLocal x = VarInfo.nonLocal (varInfo x)
       fun isLocal x = VarInfo.isLocal (varInfo x)
       (* labelInfo *)
-      val {get = labelInfo: Label.t -> LabelInfo.t, 
+      val {get = labelInfo: Label.t -> LabelInfo.t,
            set = setLabelInfo, ...}
         = Property.getSetOnce
           (Label.plist, Property.initRaise ("localRef.labelInfo", Label.layout))
@@ -274,7 +274,7 @@ fun transform (program: Program.t): Program.t =
                 in
                    display (seq [Func.layout name,
                                  str " LocalRefs: ",
-                                 List.layout 
+                                 List.layout
                                  (fn x =>
                                   seq [Var.layout x,
                                        str ": ",
@@ -303,7 +303,7 @@ fun transform (program: Program.t): Program.t =
                                         else s
                                      end
                                 fun rewriteReff ()
-                                   = case var 
+                                   = case var
                                    of NONE => s
                                  | SOME var => rewriteReffAssign var (arg 0)
                                 fun rewriteAssign () = rewriteReffAssign (arg 0) (arg 1)
@@ -326,7 +326,8 @@ fun transform (program: Program.t): Program.t =
                              in
                                 case Prim.name prim
                                    of Ref_ref => rewriteReff ()
-                                 | Ref_assign => rewriteAssign ()
+                                 (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                                 | Ref_assign _ => rewriteAssign ()
                                  | Ref_deref => rewriteDeref ()
                                  | _ => s
                              end
@@ -429,8 +430,9 @@ fun transform (program: Program.t): Program.t =
                          in
                            case Prim.name prim
                              of Ref_ref => (setReff (); default ())
-                              | Ref_assign => (setAssign (arg 0); 
-                                               nonLocal (arg 1))
+                              (* SAM_NOTE: can just ignore the writeBarrier here? *)
+                              | Ref_assign _ => (setAssign (arg 0);
+                                                 nonLocal (arg 1))
                               | Ref_deref => setDeref (arg 0)
                               | _ => default ()
                          end
@@ -479,7 +481,7 @@ fun transform (program: Program.t): Program.t =
                                                        (LabelInfo.preds' li, doit'))
                                       end
                                 in
-                                  List.foreach 
+                                  List.foreach
                                   (uses, fn l =>
                                    List.foreach
                                    (LabelInfo.preds' (labelInfo l), doit')) ;

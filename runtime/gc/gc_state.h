@@ -43,6 +43,9 @@ struct GC_state {
   struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
+  struct HM_chunkList* freeListSmall;
+  struct HM_chunkList* freeListLarge;
+  size_t nextChunkAllocSize;
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
   pointer globalLimitPlusSlop;
@@ -97,7 +100,7 @@ struct GC_state {
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
-  spinlock_t lock;
+  spinlock_t lock; // a global lock (shared across all procs)... WHAT DOES IT PROTECT?
   struct TracingContext *trace;
   struct TLSObjects tlsObjects;
 };
@@ -124,6 +127,7 @@ PRIVATE void GC_setAmOriginal (bool b);
 PRIVATE void GC_setControlsMessages (bool b);
 PRIVATE void GC_setControlsSummary (bool b);
 PRIVATE void GC_setControlsRusageMeasureGC (bool b);
+// SAM_NOTE: TODO: remove this and replace with blocks statistics
 PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
 PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void);
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
@@ -134,6 +138,9 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
 PRIVATE void GC_setHashConsDuringGC (bool b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
+
+PRIVATE uintmax_t GC_getLocalGCMillisecondsOfProc(uint32_t proc);
+PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (void);
 PRIVATE void GC_setCallFromCHandlerThreads (pointer p);

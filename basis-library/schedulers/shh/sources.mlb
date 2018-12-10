@@ -1,0 +1,25 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+  end
+
+  FORK_JOIN.sig
+  queue/QUEUE.sig
+  mailboxes/MAILBOXES.sig
+
+  SimpleRandom.sml
+  queue/ArrayQueue.sml
+  mailboxes/Mailboxes.sml
+  Scheduler.sml
+in
+  structure ForkJoin
+end

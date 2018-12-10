@@ -145,6 +145,9 @@ structure GC =
          _import "GC_setControlsRusageMeasureGC" runtime private: bool -> unit;
       val setSummary = _import "GC_setControlsSummary" runtime private: bool -> unit;
       val unpack = _import "GC_unpack" runtime private: unit-> unit;
+
+      val getLocalGCMillisecondsOfProc = _import "GC_getLocalGCMillisecondsOfProc" runtime private : Word32.word -> C_UIntmax.t;
+      val getPromoMillisecondsOfProc = _import "GC_getPromoMillisecondsOfProc" runtime private : Word32.word -> C_UIntmax.t;
    end
 
 structure HM =
@@ -225,6 +228,12 @@ structure HM =
         val registerQueueLock: Word32.word * Word32.word ref -> unit =
             _import "HM_HHC_registerQueueLock" runtime private:
             Word32.word * Word32.word ref -> unit;
+
+        val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit =
+            _prim "Array_update_noWriteBarrier" : 'a array * SeqIndex.int * 'a -> unit;
+
+        val refAssignNoBarrier : 'a ref * 'a -> unit =
+            _prim "Ref_assign_noWriteBarrier" : 'a ref * 'a -> unit;
     end
 
 structure Parallel =

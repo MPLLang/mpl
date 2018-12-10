@@ -43,6 +43,7 @@
 typedef struct GC_thread {
   Word32 inGlobalHeapCounter;
   Bool useHierarchicalHeap;
+  // int currentProcNum;
   size_t bytesNeeded;
   size_t exnStack;
   objptr stack;
@@ -51,12 +52,13 @@ typedef struct GC_thread {
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
-                    sizeof(Word32) +
-                    sizeof(Bool) +
-                    sizeof(size_t) +
-                    sizeof(size_t) +
-                    sizeof(objptr) +
-                    sizeof(objptr));
+                    sizeof(Word32) +  // inGlobalHeapCounter
+                    sizeof(Bool) +    // useHierarchicalHeap
+                    // sizeof(int) +     // currentProcNum
+                    sizeof(size_t) +  // bytesNeeded
+                    sizeof(size_t) +  // exnStack
+                    sizeof(objptr) +  // stack
+                    sizeof(objptr));  // hierarchicalHeap
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
 

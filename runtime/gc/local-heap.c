@@ -39,18 +39,21 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool forceGC,
                                          size_t bytesRequested,
                                          bool ensureCurrentLevel) {
+
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
   bool emptyHH = FALSE;
   bool extend = FALSE;
   bool growStack = FALSE;
+  size_t stackBytes = 0;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
       "bytesRequested: %zu, hasHeapBytesFree: %zu",
       bytesRequested,
       heapBytesFree);
 
-  /* trace pre-collection occupancy before doing anything */
-  Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+  // trace pre-collection occupancy before doing anything
+  // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+  // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
   if (Proc_threadInSection()) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
@@ -65,7 +68,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (!invariantForMutatorStack(s)) {
     /* need to grow stack */
-    bytesRequested +=
+    stackBytes =
         sizeofStackWithMetaData(s,
                                 sizeofStackGrowReserved (s, getStackCurrent (s)));
     growStack = TRUE;
@@ -106,13 +109,16 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         newAllocatedRatio,
         hh->locallyCollectibleHeapSize,
         hh->locallyCollectibleSize);
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
-        "%zu/%zu bytes allocated in Chunk Pool after collection",
-        ChunkPool_allocated(),
-        ChunkPool_size());
+
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
+    //     "%zu/%zu bytes allocated in Chunk Pool after collection",
+    //     ChunkPool_allocated(),
+    //     ChunkPool_size());
 
     /* trace post-collection occupancy */
-    Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     HM_HH_maybeResizeLCHS(s, hh);
 
@@ -140,6 +146,26 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
 
+    setGCStateCurrentThreadAndStack (s);
+  }
+
+  if (growStack) {
+    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+        "growing stack");
+    if ((size_t)(s->limitPlusSlop - s->frontier) < stackBytes) {
+      HM_HH_extend(hh, stackBytes);
+      s->frontier = HM_HH_getFrontier(hh);
+      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    }
+    growStackCurrent (s, FALSE);
+    /* SAM_NOTE: growing the stack can edit s->frontier, so we need to make sure
+     * the saved frontier in the hh is synced. */
+    /* SAM_NOTE: TODO: caching the frontier in so many different places is a
+     * major headache. We need a refactor. */
+    assert(!isPointerInGlobalHeap(s, s->frontier));
+    assert(HM_getChunkOf(s->frontier) == hh->lastAllocatedChunk);
+    HM_HH_updateValues(hh, s->frontier);
     setGCStateCurrentThreadAndStack (s);
   }
 
@@ -177,14 +203,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "  Level List:");
-        for (void* levelHead = hh->levelList;
-             NULL != levelHead;
-             levelHead = HM_getChunkInfo(levelHead)->split.levelHead.nextHead) {
+        FOR_LEVEL_DECREASING_IN_RANGE(levelHead, i, hh, 0, HM_MAX_NUM_LEVELS, {
           LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
               "    level %"PRIu32" size %"PRIu64,
-              HM_getChunkInfo(levelHead)->level,
-              HM_getChunkInfo(levelHead)->split.levelHead.size);
-        }
+              levelHead->level,
+              levelHead->size);
+        });
 
         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
             "  Child HH List:");
@@ -206,13 +230,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  }
-
-  if (growStack) {
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "growing stack");
-    growStackCurrent (s, FALSE);
-    setGCStateCurrentThreadAndStack (s);
   }
 
   assert(invariantForMutatorFrontier (s));

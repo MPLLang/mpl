@@ -232,7 +232,7 @@ void setGCStateCurrentHeap (GC_state s,
     }
 
     s->start = s->frontier = frontier;
-    s->limitPlusSlop = limit;
+    s->limitPlusSlop = s->start + GC_HEAP_LIMIT_SLOP;
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     /* RAM_NOTE: Probably not necessary, remove after confirmation */
     /* SPOONHOWER_NOTE: clearCardMap (?) */
@@ -281,8 +281,9 @@ void GC_setControlsRusageMeasureGC (bool b) {
   s->controls->rusageMeasureGC = b;
 }
 
+// SAM_NOTE: TODO: remove this and replace with blocks statistics
 size_t GC_getMaxChunkPoolOccupancy (void) {
-  return ChunkPool_maxAllocated ();
+  return 0;
 }
 
 size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void) {
@@ -364,6 +365,18 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   }
 
   return retVal;
+}
+
+uintmax_t GC_getLocalGCMillisecondsOfProc(uint32_t proc) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeLocalGC);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
+uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeLocalPromo);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
 }
 
 void GC_setHashConsDuringGC (bool b) {

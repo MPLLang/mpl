@@ -136,7 +136,11 @@ bool HM_inGlobalHeap (GC_state s) {
 
   GC_thread currentThread = getThreadCurrent (s);
 
-  return (!currentThread->useHierarchicalHeap ||
-          (0 != currentThread->inGlobalHeapCounter));
+  bool answer = (!currentThread->useHierarchicalHeap ||
+                  (0 != currentThread->inGlobalHeapCounter));
+
+  assert(!answer || (s->heap->start <= s->frontier && s->frontier <= s->heap->start + s->heap->size));
+
+  return answer;
 }
 #endif /* MLTON_GC_INTERNAL_FUNCS */

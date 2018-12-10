@@ -13,7 +13,6 @@
  * Weak objects have the following layout:
  *
  * header ::
- * fwdptr (object-pointer) ::
  * padding ::
  * link (native-pointer) ::
  * objptr (object-pointer)

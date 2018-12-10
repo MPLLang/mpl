@@ -1,4 +1,4 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2015 Matthew Fluet.
  * Copyright (C) 2004-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -24,26 +24,29 @@ signature C_FUNCTION =
          end
 
       structure Kind:
-	sig
-	    datatype t = 
-		     Functional
-		   | Impure
-		   | Runtime of {(* bytesNeeded = SOME i means that the i'th
-				  * argument to the function is a word that
-				  * specifies the number of bytes that must be
-				  * free in order for the C function to succeed.
-				  * Limit check insertion is responsible for
-				  * making sure that the bytesNeeded is available.
-				  *)
-				 bytesNeeded: int option, 
-				 ensuresBytesFree: bool,
-				 mayGC: bool,
-				 maySwitchThreads: bool,
-				 modifiesFrontier: bool,
-				 readsStackTop: bool,
-				 writesStackTop: bool}
-				   
-	    val runtimeDefault: t
+         sig
+            datatype t =
+               Impure
+             | Pure
+             | Runtime of {(* bytesNeeded = SOME i means that the i'th
+                            * argument to the function is a word that
+                            * specifies the number of bytes that must be
+                            * free in order for the C function to succeed.
+                            * Limit check insertion is responsible for
+                            * making sure that the bytesNeeded is available.
+                            *)
+                           bytesNeeded: int option,
+                           ensuresBytesFree: bool,
+                           mayGC: bool,
+                           maySwitchThreads: bool,
+                           modifiesFrontier: bool,
+                           readsStackTop: bool,
+                           writesStackTop: bool}
+
+            val impure: t
+            val pure: t
+            val reentrant: t
+            val runtimeDefault: t
 
 	    val layout: t -> Layout.t
 	    val toString: t -> string

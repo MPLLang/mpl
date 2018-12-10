@@ -39,11 +39,12 @@ static inline void assertIsObjptrReachable (GC_state s,
   /* silence compiler warning */
   ((void)(ignored));
 
-  assert (isObjptrInFromSpace (s, *opp) ||
-          HM_HH_objptrInHierarchicalHeap(s, *opp));
+  if (!isObjptrInFromSpace(s, *opp)) {
+    assertObjptrInHH(*opp);
+  }
 
   if (!isObjptrInFromSpace (s, *opp) &&
-      !HM_HH_objptrInHierarchicalHeap(s, *opp)) {
+      isObjptrInGlobalHeap(s, *opp)) {
     die ("gc.c: assertIsObjptrReachable "
          "opp = "FMTPTR"  "
          "*opp = "FMTOBJPTR"\n",
@@ -172,15 +173,53 @@ bool invariantForGC (GC_state s) {
 
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
-  return (thread->bytesNeeded
-          <= (size_t)(s->limitPlusSlop - s->frontier));
+  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier));
 }
+
+#if ASSERT
+bool strongInvariantForMutatorFrontier (GC_state s) {
+  GC_thread thread = getThreadCurrent(s);
+  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
+      && (HM_inGlobalHeap(s) ||
+            (inSameBlock(s->frontier, s->limitPlusSlop-1)
+            && ((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC));
+}
+#endif
 
 bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
   return (getStackTop (s, stack)
           <= getStackLimit (s, stack) + getStackTopFrameSize (s, stack));
 }
+
+#if ASSERT
+bool carefulInvariantForMutatorStack(GC_state s) {
+  GC_stack stack = getStackCurrent(s);
+  GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
+  GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
+
+  bool badfi = fi >= s->frameLayoutsLength;
+
+  return !badfi && invariantForMutatorStack(s);
+}
+
+void displayStackInfo(GC_state s) {
+  GC_stack stack = getStackCurrent(s);
+  GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
+  GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
+
+  bool badfi = fi >= s->frameLayoutsLength;
+  int fsize = badfi ? -1 : s->frameLayouts[fi].size;
+
+  fprintf(stderr,
+    "stack bottom %p limit +%zu top +%zu; fi %u; fsize %d\n",
+    (void*)getStackBottom(s, stack),
+    (size_t)(getStackLimit(s, stack) - getStackBottom(s, stack)),
+    (size_t)(getStackTop(s, stack) - getStackBottom(s, stack)),
+    fi,
+    fsize);
+}
+#endif
 
 #if ASSERT
 bool invariantForMutator (GC_state s, bool frontier, bool stack) {

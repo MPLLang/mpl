@@ -101,3 +101,37 @@ uintmax_t stopTiming (int who, struct rusage *ru_start, struct rusage *ru_acc) {
   rusagePlusMax (ru_acc, &ru_total, ru_acc);
   return rusageTime (&ru_total);
 }
+
+void timespec_now(struct timespec *x) {
+#if defined(CLOCK_MONOTONIC_RAW)
+  clock_gettime(CLOCK_MONOTONIC_RAW, x);
+#else
+  clock_gettime(CLOCK_MONOTONIC, x);
+#endif
+}
+
+void timespec_sub(struct timespec *x, struct timespec *y) {
+  assert(x->tv_sec >= y->tv_sec);
+
+  if (x->tv_nsec < y->tv_nsec) {
+    assert(x->tv_sec >= y->tv_sec + 1);
+    x->tv_sec -= 1;
+    x->tv_nsec += 1000000000L;
+  }
+
+  assert(x->tv_sec >= y->tv_sec);
+  assert(x->tv_nsec >= y->tv_nsec);
+
+  x->tv_sec -= y->tv_sec;
+  x->tv_nsec -= y->tv_nsec;
+}
+
+void timespec_add(struct timespec *x, struct timespec *y) {
+  x->tv_sec += y->tv_sec;
+  x->tv_nsec += y->tv_nsec;
+
+  if (x->tv_nsec >= 1000000000L) {
+    x->tv_sec += 1;
+    x->tv_nsec -= 1000000000L;
+  }
+}

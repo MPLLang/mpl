@@ -20,6 +20,11 @@ void T_setCurrentThreadUseHierarchicalHeap(Bool use) {
 
   if (use) {
     s->heap->usingHierarchicalHeaps = TRUE;
+  } else {
+    if (thread->hierarchicalHeap != BOGUS_OBJPTR) {
+      HM_HH_objptrToStruct(s, thread->hierarchicalHeap)->thread = BOGUS_OBJPTR;
+      thread->hierarchicalHeap = BOGUS_OBJPTR;
+    }
   }
   thread->useHierarchicalHeap = use;
 }
@@ -66,6 +71,7 @@ size_t sizeofThread (GC_state s) {
   return res;
 }
 
+// SAM_NOTE: padding for alignment.
 size_t offsetofThread (GC_state s) {
   return (sizeofThread (s)) - (GC_NORMAL_METADATA_SIZE + sizeof (struct GC_thread));
 }

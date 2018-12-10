@@ -42,6 +42,13 @@ structure MLtonGC =
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
                val numMarkCompactGCs = mkUIntmax getNumMarkCompactGCs
                val numMinorGCs = mkUIntmax getNumMinorGCs
+
+               fun localGCTimeOfProc p =
+                 Time.fromMilliseconds (C_UIntmax.toLargeInt
+                 (getLocalGCMillisecondsOfProc (Word32.fromInt p)))
+               fun promoTimeOfProc p =
+                 Time.fromMilliseconds (C_UIntmax.toLargeInt
+                 (getPromoMillisecondsOfProc (Word32.fromInt p)))
             end
          end
 

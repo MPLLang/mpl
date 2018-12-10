@@ -44,6 +44,8 @@ typedef struct GC_heap {
 
 static inline bool isPointerInOldGen (GC_state s, pointer p);
 static inline bool isPointerInNursery (GC_state s, pointer p);
+static inline bool isPointerInGlobalHeap (GC_state s, pointer p);
+static inline bool isObjptrInGlobalHeap (GC_state s, objptr p);
 #if ASSERT
 static inline bool isObjptrInOldGen (GC_state s, objptr op);
 #endif

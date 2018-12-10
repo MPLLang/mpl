@@ -151,7 +151,7 @@ structure Type =
 
       val seq: t vector -> t =
          fn ts =>
-         if 0 = Vector.length ts
+         if Vector.isEmpty ts
             then unit
          else
             let
@@ -187,7 +187,7 @@ structure Type =
 
       val sum: t vector -> t =
          fn ts =>
-         if 0 = Vector.length ts
+         if Vector.isEmpty ts
             then Error.bug "RepType.Type.sum: empty"
          else
             let
@@ -199,8 +199,8 @@ structure Type =
                        Objptr opts => SOME opts
                      | _ => NONE))
             in
-               if 0 = Vector.length opts
-                  then Vector.sub (ts, 0)
+               if Vector.isEmpty opts
+                  then Vector.first ts
                else
                   T {node = (Objptr (QuickSort.sortVector (opts, ObjptrTycon.<=))),
                      width = WordSize.bits (WordSize.objptr ())}
@@ -228,7 +228,7 @@ structure Type =
          case node t of
             Objptr opts =>
                if 1 = Vector.length opts
-                  then SOME (Vector.sub (opts, 0))
+                  then SOME (Vector.first opts)
                else NONE
           | _ => NONE
 
@@ -474,6 +474,9 @@ structure ObjectType =
       val hierarchicalHeap =
        fn () =>
           let
+              (* This must match runtime/gc/hierarchical_heap.h *)
+              val HM_MAX_NUM_LEVELS = 64
+
               val padding =
                   let
                       val align =
@@ -483,6 +486,16 @@ structure ObjectType =
 
                       val bytesMetaData =
                           Bits.toBytes (Control.Target.Size.metaData ())
+                      val bytesLevels =
+                          Bytes.fromInt
+                            (HM_MAX_NUM_LEVELS *
+                             Bytes.toInt (Bits.toBytes (Control.Target.Size.cpointer ())))
+                      val bytesCapacities =
+                          Bytes.fromInt
+                            (HM_MAX_NUM_LEVELS *
+                             Bytes.toInt (Bits.toBytes (Type.width Type.word32)))
+                      (* val bytesFreeList = *)
+                          (* Bits.toBytes (Control.Target.Size.cpointer ()) *)
                       val bytesLastAllocatedChunk =
                           Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesLock =
@@ -491,7 +504,7 @@ structure ObjectType =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesLevel =
                           Bits.toBytes (Type.width Type.word32)
-                      val bytesLastSharedLevel =
+                      val bytesStealLevel =
                           Bits.toBytes (Type.width Type.word32)
                       val bytesID =
                           Bits.toBytes (Type.width Type.word64)
@@ -499,10 +512,10 @@ structure ObjectType =
                        * RAM_NOTE: Not sure if I can use cpointer for both
                        * pointer and void*
                        *)
-                      val bytesLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesNewLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
+                      (* val bytesLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
+                      (* val bytesNewLevelList =
+                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
                       val bytesLocallyCollectibleSize =
                           Bits.toBytes (Type.width Type.word64)
                       val bytesLocallyCollectibleHeapSize =
@@ -523,20 +536,23 @@ structure ObjectType =
                               val op+ = Bytes.+
                           in
                               bytesMetaData +
+                              bytesLevels +
+                              bytesCapacities +
+                              (* bytesFreeList + *)
                               bytesLastAllocatedChunk +
                               bytesLock +
                               bytesState +
                               bytesLevel +
-                              bytesLastSharedLevel +
+                              bytesStealLevel +
                               bytesID +
-                              bytesLevelList +
-                              bytesNewLevelList +
+                              (* bytesLevelList + *)
+                              (* bytesNewLevelList + *)
                               bytesLocallyCollectibleSize +
                               bytesLocallyCollectibleHeapSize +
                               bytesRetVal +
-			      bytesParentHH +
-			      bytesNextChildHH +
-			      bytesChildHHList +
+                              bytesParentHH +
+                              bytesNextChildHH +
+                              bytesChildHHList +
                               bytesThread
                           end
 
@@ -546,24 +562,31 @@ structure ObjectType =
                   in
                       Type.bits (Bytes.toBits bytesPad)
                   end
+
+              val typList =
+                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.cpointer ()) (* levels *)
+                @
+                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.word64) (* capacities *)
+                @
+                [ (*Type.cpointer ()          (* freeList *)
+                ,*) Type.cpointer ()          (* lastAllocatedChunk *)
+                , Type.word32               (* lock *)
+                , Type.word32               (* state *)
+                , Type.word32               (* level *)
+                , Type.word32               (* stealLevel *)
+                , Type.word64               (* id *)
+                (* , Type.cpointer ()          (* levelList *) *)
+                (* , Type.cpointer ()          (* newLevelList *) *)
+                , Type.word64               (* locallyCollectibleSize *)
+                , Type.word64               (* locallyCollectibleHeapSize *)
+                , Type.cpointer ()          (* retVal *)
+                , Type.hierarchicalHeap ()  (* parentHH *)
+                , Type.hierarchicalHeap ()  (* nextChildHH *)
+                , Type.hierarchicalHeap ()  (* childHHList *)
+                , Type.thread ()            (* thread *)
+                ]
           in
-              Normal {hasIdentity = true,
-                      ty = Type.seq (Vector.fromList [padding,
-                                                      Type.cpointer (),
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word32,
-                                                      Type.word64,
-                                                      Type.cpointer (),
-                                                      Type.cpointer (),
-                                                      Type.word64,
-                                                      Type.word64,
-                                                      Type.cpointer (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.hierarchicalHeap (),
-                                                      Type.thread ()])}
+              Normal {hasIdentity = true, ty = Type.seq (Vector.fromList (padding :: typList))}
           end
 
       (* Order in the following vector matters.  The basic pointer tycons must
@@ -935,8 +958,8 @@ fun arrayOffsetIsOk {base, index, offset, tyconTy, result, scale} =
     | Objptr opts =>
          (equals (index, seqIndex ()))
          andalso (1 = Vector.length opts)
-         andalso (case tyconTy (Vector.sub (opts, 0)) of
-                     ObjectType.Array {elt, ...} =>
+         andalso (case tyconTy (Vector.first opts) of
+                     ObjectType.Array {elt, ...} => 
                         if equals (elt, word8)
                            then (* special case for PackWord operations *)
                                 (case node result of

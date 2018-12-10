@@ -7,6 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
+#include "hierarchical-heap.h"
+
 void minorGC (GC_state s) {
   minorCheneyCopyGC (s);
 
@@ -68,9 +70,17 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
              uintmaxToCommaString(getStackCurrent(s)->reserved),
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
-  assert (allocInOldGen ?
-          hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
-          hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
+#if ASSERT
+  if (HM_inGlobalHeap(s)) {
+    assert (allocInOldGen ?
+            hasHeapBytesFree (s, sizeofStackWithMetaData (s, reserved), 0) :
+            hasHeapBytesFree (s, 0, sizeofStackWithMetaData (s, reserved)));
+  } else {
+    struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+    assert(s->frontier == HM_HH_getFrontier(hh));
+    assert ((size_t)(HM_HH_getLimit(hh) - HM_HH_getFrontier(hh)) >= sizeofStackWithMetaData (s, reserved));
+  }
+#endif
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
@@ -366,6 +376,13 @@ static void maybeSatisfyAllocationRequestLocally (GC_state s,
       s->limitPlusSlop = newHeapFrontier - GC_GAP_SLOP;
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
+      /* SAM_NOTE: once we start using hierarchical heaps, we never collect
+       * the global heap again. This helps us track how many bytes have been
+       * allocated in the global heap (e.g. by the scheduler) */
+      if (s->heap->usingHierarchicalHeaps) {
+        s->cumulativeStatistics->bytesAllocated += s->limitPlusSlop - s->frontier;
+      }
+
       return;
     }
     else {
@@ -509,12 +526,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  if (inGlobalHeap && (bytesRequested < s->controls->allocChunkSize)) {
+  if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
     /*
      * first make sure that I hit the minimum if I am doing a global heap
      * allocation
      */
-    bytesRequested = s->controls->allocChunkSize;
+    bytesRequested = s->controls->globalHeapMinChunkSize;
   }
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;

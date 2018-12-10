@@ -220,16 +220,14 @@ val objptrSize : unit -> Bytes.t =
 val headerSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.header)
 val headerOffset : unit -> Bytes.t =
-   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
-                                            headerSize ())))
+   Promise.lazy (fn () => Bytes.~ (headerSize ()))
 
 (* see gc/array.h *)
 val arrayLengthSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.seqIndex)
 val arrayLengthOffset : unit -> Bytes.t =
-   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
-                                   Bytes.+ (headerSize (),
-                                            arrayLengthSize ()))))
+   Promise.lazy (fn () => Bytes.~ (Bytes.+ (headerSize (),
+                                            arrayLengthSize ())))
 
 (* see gc/object.h *)
 val metaDataSize : unit -> Bytes.t =
