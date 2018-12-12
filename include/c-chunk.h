@@ -186,6 +186,7 @@
                         fprintf (stderr, "%s:%d: Raise\n",                      \
                                         __FILE__, __LINE__);                    \
                 StackTop = StackBottom + ExnStack;                              \
+        /* SAM_NOTE: could do a fence here to make the exn bug more likely? */   \
                 Return();                                                       \
         } while (0)                                                             \
 

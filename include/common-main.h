@@ -63,6 +63,7 @@ PRIVATE Pointer gcStateAddress;
         s.sourceMaps.sourcesLength = cardof(sources);             \
         s.profiling.kind = pk;                                    \
         s.profiling.stack = ps;                                   \
+        s.globalObjptrNonRootLength = gnr;                        \
         s.globalObjptrNonRoot = (Pointer *) malloc (gnr * sizeof (Pointer));  \
         MLton_init (argc, argv, &s);                              \
 
@@ -105,7 +106,8 @@ void Duplicate (GC_state d, GC_state s) {
   d->profiling.kind = s->profiling.kind;
   d->profiling.stack = s->profiling.stack;
   d->profiling.isOn = s->profiling.isOn;
-  d->globalObjptrNonRoot = s->globalObjptrNonRoot;
+  d->globalObjptrNonRootLength = s->globalObjptrNonRootLength;
+  d->globalObjptrNonRoot = (Pointer *) malloc (s->globalObjptrNonRootLength * sizeof (Pointer));
   GC_duplicate (d, s);
 }
 

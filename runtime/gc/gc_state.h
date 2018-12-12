@@ -55,6 +55,7 @@ struct GC_state {
    * think so
    */
   Pointer *globalObjptrNonRoot;
+  uint32_t globalObjptrNonRootLength;
   /* Ordinary globals */
   objptr *globals;
   uint32_t globalsLength;
