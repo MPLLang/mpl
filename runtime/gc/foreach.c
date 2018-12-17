@@ -109,7 +109,8 @@ void printObjectsInRange(GC_state s,
       p += oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE);
     }
     else if (ARRAY_TAG == oi.tag) {
-      p += getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+      size_t dataBytes = getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+      p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
     }
     else if (STACK_TAG == oi.tag) {
       p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved;
