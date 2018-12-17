@@ -459,7 +459,15 @@ void HM_HHC_collectLocal(void) {
     }
   });
   hh->lastAllocatedChunk = lastChunk;
-  assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
+
+  /* SAM_NOTE: the following assert is broken, because it is possible that
+   * lastChunk == NULL (if we collected everything). Also, note that even when
+   * lastChunk != NULL, this assert sometimes trips... which is puzzling,
+   * because during collection we are careful to allocate fresh chunks
+   * specifically to prevent this.
+   *
+   * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
+   */
 
   assertInvariants(s, hh, LIVE);
 

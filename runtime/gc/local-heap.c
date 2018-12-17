@@ -41,8 +41,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
                                          bool ensureCurrentLevel) {
 
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
-  bool emptyHH = FALSE;
-  bool extend = FALSE;
+  // bool emptyHH = FALSE;
+  // bool extend = FALSE;
   bool growStack = FALSE;
   size_t stackBytes = 0;
 
@@ -139,25 +139,38 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       s->frontier = NULL;
       s->limitPlusSlop = NULL;
       s->limit = NULL;
-      emptyHH = TRUE;
+      // emptyHH = TRUE;
     } else {
-      s->frontier = HM_HH_getFrontier(hh);
-      s->limitPlusSlop = HM_HH_getLimit(hh);
+      /* SAM_NOTE: I don't use HM_HH_getFrontier/Limit here, because these have
+       * assertions for the chunk frontier invariant, which might be violated
+       * here. */
+      s->frontier = HM_getChunkFrontier(hh->lastAllocatedChunk);
+      s->limitPlusSlop = HM_getChunkLimit(hh->lastAllocatedChunk);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
 
+    /* Thread/stack may have been copied during GC, so need to update */
     setGCStateCurrentThreadAndStack (s);
   }
 
   if (growStack) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
-    if ((size_t)(s->limitPlusSlop - s->frontier) < stackBytes) {
-      HM_HH_extend(hh, stackBytes);
+    if (NULL == hh->lastAllocatedChunk ||
+        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
+        HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
+        (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
+    {
+      if (!HM_HH_extend(hh, stackBytes)) {
+        DIE("Ran out of space for Hierarchical Heap!");
+      }
       s->frontier = HM_HH_getFrontier(hh);
       s->limitPlusSlop = HM_HH_getLimit(hh);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
+    /* SAM_NOTE: growStackCurrent triggers a stack allocation which will
+     * guarantee chunk frontier invariants
+     */
     growStackCurrent (s, FALSE);
     /* SAM_NOTE: growing the stack can edit s->frontier, so we need to make sure
      * the saved frontier in the hh is synced. */
@@ -169,68 +182,86 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     setGCStateCurrentThreadAndStack (s);
   }
 
-  /* determine if I need to extend based on space or ensureCurrentLevel */
-  if (emptyHH) {
-    /* HH is empty, so definitely need to extend */
-    extend = TRUE;
-  } else if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
-      /* not enough space */
-      extend = TRUE;
-  } else if (ensureCurrentLevel) {
-    /* check if current allocation chunk at the current level */
-    struct HM_ObjptrInfo info;
-    HM_getObjptrInfo(s, pointerToObjptr(s->frontier, s->heap->start), &info);
-
-    assert(info.level <= hh->level);
-    if (info.level < hh->level) {
-      /* need to extend to force current level */
-      LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-          "extending due to ensureCurrentLevel frontier level = %u hh level = "
-          "%u",
-          info.level,
-          hh->level);
-      extend = TRUE;
-    }
-  }
-
-  if (extend) {
-    /* Need to extend */
+  /* Determine if we need to extend to accommodate bytesRequested (and possibly
+   * ensureCurrentLevel */
+  if (NULL == hh->lastAllocatedChunk ||
+      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
+      HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
+      (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
+  {
     if (!HM_HH_extend(hh, bytesRequested)) {
-      if (LOG_ENABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
-        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-            "Ran out of space for HH %p:",
-            ((void*)(hh)));
-
-        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-            "  Level List:");
-        FOR_LEVEL_DECREASING_IN_RANGE(levelHead, i, hh, 0, HM_MAX_NUM_LEVELS, {
-          LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-              "    level %"PRIu32" size %"PRIu64,
-              levelHead->level,
-              levelHead->size);
-        });
-
-        LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-            "  Child HH List:");
-        for (struct HM_HierarchicalHeap* hhCursor = HM_HH_objptrToStruct(s, hh->childHHList);
-             NULL != hhCursor;
-             hhCursor = HM_HH_objptrToStruct(s, hhCursor->nextChildHH)) {
-          LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-              "    %p state %s level %"PRIu32" stealLevel %"PRIu32" LCS %"PRIu64,
-              ((void*)(hhCursor)),
-              HM_HHStateToString[hhCursor->state],
-              hhCursor->level,
-              hhCursor->stealLevel,
-              hhCursor->locallyCollectibleSize);
-        }
-      }
       DIE("Ran out of space for Hierarchical Heap!");
     }
-
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
+
+  /* determine if I need to extend based on space or ensureCurrentLevel */
+  // if (emptyHH) {
+  //   /* HH is empty, so definitely need to extend */
+  //   extend = TRUE;
+  // } else if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
+  //   /* not enough space */
+  //   extend = TRUE;
+  // } else if (HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE) {
+  //   /* last chunk is not suitable for allocation */
+  //   extend = TRUE;
+  // } else if (ensureCurrentLevel) {
+  //   /* check if current allocation chunk at the current level */
+  //   struct HM_ObjptrInfo info;
+  //   HM_getObjptrInfo(s, pointerToObjptr(s->frontier, s->heap->start), &info);
+
+  //   assert(info.level <= hh->level);
+  //   if (info.level < hh->level) {
+  //     /* need to extend to force current level */
+  //     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+  //         "extending due to ensureCurrentLevel frontier level = %u hh level = "
+  //         "%u",
+  //         info.level,
+  //         hh->level);
+  //     extend = TRUE;
+  //   }
+  // }
+
+  // if (extend) {
+  //   /* Need to extend */
+  //   if (!HM_HH_extend(hh, bytesRequested)) {
+  //     if (LOG_ENABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
+  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+  //           "Ran out of space for HH %p:",
+  //           ((void*)(hh)));
+
+  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+  //           "  Level List:");
+  //       FOR_LEVEL_DECREASING_IN_RANGE(levelHead, i, hh, 0, HM_MAX_NUM_LEVELS, {
+  //         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+  //             "    level %"PRIu32" size %"PRIu64,
+  //             levelHead->level,
+  //             levelHead->size);
+  //       });
+
+  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+  //           "  Child HH List:");
+  //       for (struct HM_HierarchicalHeap* hhCursor = HM_HH_objptrToStruct(s, hh->childHHList);
+  //            NULL != hhCursor;
+  //            hhCursor = HM_HH_objptrToStruct(s, hhCursor->nextChildHH)) {
+  //         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
+  //             "    %p state %s level %"PRIu32" stealLevel %"PRIu32" LCS %"PRIu64,
+  //             ((void*)(hhCursor)),
+  //             HM_HHStateToString[hhCursor->state],
+  //             hhCursor->level,
+  //             hhCursor->stealLevel,
+  //             hhCursor->locallyCollectibleSize);
+  //       }
+  //     }
+  //     DIE("Ran out of space for Hierarchical Heap!");
+  //   }
+
+  //   s->frontier = HM_HH_getFrontier(hh);
+  //   s->limitPlusSlop = HM_HH_getLimit(hh);
+  //   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  // }
 
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
