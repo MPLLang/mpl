@@ -15,70 +15,70 @@ static inline void leave (GC_state s);
 
 #define ENTER0(s) do { enter (s); } while(0)
 #define ENTER1(s, p) do { objptr roots[1]; \
-                          roots[0] = pointerToObjptr (p, s->heap->start); \
+                          roots[0] = pointerToObjptr (p, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 1; \
                           enter (s); \
-                          p = objptrToPointer (roots[0], s->heap->start); \
+                          p = objptrToPointer (roots[0], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)
 #define ENTER2(s, p1, p2) do { objptr roots[2];                           \
-                          roots[0] = pointerToObjptr (p1, s->heap->start); \
-                          roots[1] = pointerToObjptr (p2, s->heap->start); \
+                          roots[0] = pointerToObjptr (p1, NULL); \
+                          roots[1] = pointerToObjptr (p2, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 2; \
                           enter (s); \
-                          p1 = objptrToPointer (roots[0], s->heap->start); \
-                          p2 = objptrToPointer (roots[1], s->heap->start); \
+                          p1 = objptrToPointer (roots[0], NULL); \
+                          p2 = objptrToPointer (roots[1], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)
 #define ENTER3(s, p1, p2, p3) do { objptr roots[3];                        \
-                          roots[0] = pointerToObjptr (p1, s->heap->start); \
-                          roots[1] = pointerToObjptr (p2, s->heap->start); \
-                          roots[2] = pointerToObjptr (p3, s->heap->start); \
+                          roots[0] = pointerToObjptr (p1, NULL); \
+                          roots[1] = pointerToObjptr (p2, NULL); \
+                          roots[2] = pointerToObjptr (p3, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 3; \
                           enter (s); \
-                          p1 = objptrToPointer (roots[0], s->heap->start); \
-                          p2 = objptrToPointer (roots[1], s->heap->start); \
-                          p3 = objptrToPointer (roots[2], s->heap->start); \
+                          p1 = objptrToPointer (roots[0], NULL); \
+                          p2 = objptrToPointer (roots[1], NULL); \
+                          p3 = objptrToPointer (roots[2], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)
 
 #define LEAVE0(s) do { leave (s); } while(0)
 #define LEAVE1(s, p) do { objptr roots[1]; \
-                          roots[0] = pointerToObjptr (p, s->heap->start); \
+                          roots[0] = pointerToObjptr (p, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 1; \
                           leave (s); \
-                          p = objptrToPointer (roots[0], s->heap->start); \
+                          p = objptrToPointer (roots[0], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)
 #define LEAVE2(s, p1, p2) do { objptr roots[2]; \
-                          roots[0] = pointerToObjptr (p1, s->heap->start); \
-                          roots[1] = pointerToObjptr (p2, s->heap->start); \
+                          roots[0] = pointerToObjptr (p1, NULL); \
+                          roots[1] = pointerToObjptr (p2, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 2; \
                           leave (s); \
-                          p1 = objptrToPointer (roots[0], s->heap->start); \
-                          p2 = objptrToPointer (roots[1], s->heap->start); \
+                          p1 = objptrToPointer (roots[0], NULL); \
+                          p2 = objptrToPointer (roots[1], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)
 #define LEAVE3(s, p1, p2, p3) do { objptr roots[3];                        \
-                          roots[0] = pointerToObjptr (p1, s->heap->start); \
-                          roots[1] = pointerToObjptr (p2, s->heap->start); \
-                          roots[2] = pointerToObjptr (p3, s->heap->start); \
+                          roots[0] = pointerToObjptr (p1, NULL); \
+                          roots[1] = pointerToObjptr (p2, NULL); \
+                          roots[2] = pointerToObjptr (p3, NULL); \
                           s->roots = roots; \
                           s->rootsLength = 3; \
                           leave (s); \
-                          p1 = objptrToPointer (roots[0], s->heap->start); \
-                          p2 = objptrToPointer (roots[1], s->heap->start); \
-                          p3 = objptrToPointer (roots[2], s->heap->start); \
+                          p1 = objptrToPointer (roots[0], NULL); \
+                          p2 = objptrToPointer (roots[1], NULL); \
+                          p3 = objptrToPointer (roots[2], NULL); \
                           s->roots = NULL; \
                           s->rootsLength = 0; \
                         } while(0)

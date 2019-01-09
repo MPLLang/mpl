@@ -93,7 +93,7 @@ size_t dfsMarkByModeCustom (GC_state s, pointer root,
 
   LOG(LM_DFS_MARK, LL_DEBUG, "descend(%p)@%d", ((void*)(root)), __LINE__);
   if (isPointerMarkedByMode (root, mode) ||
-      !descendHook(s, descendHookArgs, pointerToObjptr(root, s->heap->start))) {
+      !descendHook(s, descendHookArgs, pointerToObjptr(root, NULL))) {
     /* Object has already been marked or should not be descended into. */
     if (DEBUG_DFS_MARK) {
       fprintf(stderr,
@@ -134,15 +134,15 @@ markNext:
   assert (nextHeaderp == getHeaderp (next));
   assert (nextHeader == getHeader (next));
   // assert (*(pointer*) todo == next);
-  assert (fetchObjptrToPointer (todo, s->heap->start) == next);
+  assert (fetchObjptrToPointer (todo, NULL) == next);
   headerp = nextHeaderp;
   header = nextHeader;
   // *(pointer*)todo = prev;
-  storeObjptrFromPointer (todo, prev, s->heap->start);
+  storeObjptrFromPointer (todo, prev, NULL);
   prev = cur;
   cur = next;
   LOG(LM_DFS_MARK, LL_DEBUG, "descend(%p)@%d", ((void*)(cur)), __LINE__);
-  if (!descendHook(s, descendHookArgs, pointerToObjptr(cur, s->heap->start))) {
+  if (!descendHook(s, descendHookArgs, pointerToObjptr(cur, NULL))) {
     // should not descend into this object, so pop back
     if (DEBUG_DFS_MARK) {
       fprintf (stderr,
@@ -202,7 +202,7 @@ markInNormal:
     }
     assert (objptrIndex < numObjptrs);
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap->start);
+    next = fetchObjptrToPointer (todo, NULL);
     if (not isPointer (next)) {
 markNextInNormal:
       assert (objptrIndex < numObjptrs);
@@ -292,7 +292,7 @@ markInArray:
     assert (objptrIndex < numObjptrs);
     assert (todo == indexArrayAtObjptrIndex (s, cur, arrayIndex, objptrIndex));
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap->start);
+    next = fetchObjptrToPointer (todo, NULL);
     if (not (isPointer(next))) {
 markNextInArray:
       assert (arrayIndex < getArrayLength (cur));
@@ -357,7 +357,7 @@ markInFrame:
     }
     todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
     // next = *(pointer*)todo;
-    next = fetchObjptrToPointer (todo, s->heap->start);
+    next = fetchObjptrToPointer (todo, NULL);
     if (DEBUG_DFS_MARK) {
       fprintf (stderr,
                "[%d]     offset %u  todo "FMTPTR"  next = "FMTPTR"\n",
@@ -427,9 +427,9 @@ ret:
     objptrIndex = (header & COUNTER_MASK) >> COUNTER_SHIFT;
     todo += objptrIndex * OBJPTR_SIZE;
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap->start);
+    prev = fetchObjptrToPointer (todo, NULL);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap->start);
+    storeObjptrFromPointer (todo, next, NULL);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
@@ -451,9 +451,9 @@ ret:
     objptrIndex = (header & COUNTER_MASK) >> COUNTER_SHIFT;
     todo += bytesNonObjptrs + objptrIndex * OBJPTR_SIZE;
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap->start);
+    prev = fetchObjptrToPointer (todo, NULL);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap->start);
+    storeObjptrFromPointer (todo, next, NULL);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     /* Call the ascendHook now that we are done with 'cur' */
@@ -478,9 +478,9 @@ ret:
     frameOffsets = frameLayout->offsets;
     todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
     // prev = *(pointer*)todo;
-    prev = fetchObjptrToPointer (todo, s->heap->start);
+    prev = fetchObjptrToPointer (todo, NULL);
     // *(pointer*)todo = next;
-    storeObjptrFromPointer (todo, next, s->heap->start);
+    storeObjptrFromPointer (todo, next, NULL);
     if (shouldHashCons)
       markIntergenerationalPointer (s, (pointer*)todo);
     /* Call the ascendHook now that we are done with 'cur' */
@@ -521,7 +521,7 @@ void dfsMarkWithHashConsWithLinkWeaks (GC_state s, objptr *opp, void* ignored) {
   /* silence compiler warning */
   ((void)(ignored));
 
-  p = objptrToPointer (*opp, s->heap->start);
+  p = objptrToPointer (*opp, NULL);
   dfsMarkByMode (s, p, MARK_MODE, TRUE, TRUE);
 }
 
@@ -533,7 +533,7 @@ void dfsMarkWithoutHashConsWithLinkWeaks (GC_state s,
   /* silence compiler warning */
   ((void)(ignored));
 
-  p = objptrToPointer (*opp, s->heap->start);
+  p = objptrToPointer (*opp, NULL);
   dfsMarkByMode (s, p, MARK_MODE, FALSE, TRUE);
 }
 

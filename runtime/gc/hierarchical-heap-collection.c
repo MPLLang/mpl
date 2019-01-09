@@ -76,10 +76,10 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
 
   assert(processor < s->numberOfProcs);
   assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
-                                                  s->heap->start)));
+                                                  NULL)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
-                                                      s->heap->start);
+                                                      NULL);
 }
 
 void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
@@ -87,10 +87,10 @@ void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
 
   assert(processor < s->numberOfProcs);
   assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
-                                                  s->heap->start)));
+                                                  NULL)));
 
   s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
-                                                          s->heap->start);
+                                                          NULL);
 }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
@@ -101,7 +101,7 @@ void HM_HHC_collectLocal(void) {
   struct rusage ru_start;
   struct timespec startTime;
   struct timespec stopTime;
-  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, s->heap->start);
+  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, NULL);
   bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
 
@@ -214,7 +214,7 @@ void HM_HHC_collectLocal(void) {
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
-                                        s->heap->start),
+                                        NULL),
                         FALSE,
                         trueObjptrPredicate,
                         NULL,
@@ -232,7 +232,7 @@ void HM_HHC_collectLocal(void) {
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(getThreadCurrentObjptr(s),
-                                        s->heap->start),
+                                        NULL),
                         FALSE,
                         trueObjptrPredicate,
                         NULL,
@@ -282,7 +282,7 @@ void HM_HHC_collectLocal(void) {
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
                         objptrToPointer(s->wsQueue,
-                                        s->heap->start),
+                                        NULL),
                         FALSE,
                         trueObjptrPredicate,
                         NULL,
@@ -298,7 +298,7 @@ void HM_HHC_collectLocal(void) {
 
   /* forward retVal pointer if necessary */
   if (NULL != hh->retVal) {
-    objptr root = pointerToObjptr(hh->retVal, s->heap->start);
+    objptr root = pointerToObjptr(hh->retVal, NULL);
 
     oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
     forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
@@ -306,7 +306,7 @@ void HM_HHC_collectLocal(void) {
       "Copied %"PRIu64" objects from hh->retVal",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
 
-    hh->retVal = objptrToPointer(root, s->heap->start);
+    hh->retVal = objptrToPointer(root, NULL);
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
@@ -319,9 +319,9 @@ void HM_HHC_collectLocal(void) {
    */
   struct SSATOPredicateArgs ssatoPredicateArgs = {
     .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
-                                            s->heap->start),
+                                            NULL),
     .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
-                                             s->heap->start)
+                                             NULL)
   };
 
   /* off-by-one to prevent underflow */
@@ -515,7 +515,7 @@ void HM_HHC_collectLocal(void) {
 /* SAM_NOTE: TODO: DRY: this code is similar (but not identical) to
  * forwardHHObjptr */
 objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
-  pointer p = objptrToPointer(op, s->heap->start);
+  pointer p = objptrToPointer(op, NULL);
 
   assert(!hasFwdPtr(p));
   assert(HM_isLevelHead(tgtChunkList));
@@ -555,7 +555,7 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
 
   /* Store the forwarding pointer in the old object metadata. */
   *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
-                                      s->heap->start);
+                                      NULL);
   assert (hasFwdPtr(p));
 
   /* use the forwarding pointer */
@@ -569,7 +569,7 @@ void forwardHHObjptr (GC_state s,
                       void* rawArgs) {
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
-  pointer p = objptrToPointer (op, s->heap->start);
+  pointer p = objptrToPointer (op, NULL);
   bool inPromotion = (args->toLevel != HM_HH_INVALID_LEVEL);
 
   if (DEBUG_DETAILED) {
@@ -625,7 +625,7 @@ void forwardHHObjptr (GC_state s,
           args->minLevel,
           args->maxLevel);
       LOCAL_USED_FOR_ASSERT objptr oppop =
-        pointerToObjptr((pointer)opp, s->heap->start);
+        pointerToObjptr((pointer)opp, NULL);
       assert ((inPromotion && HM_isObjptrInToSpace(s, oppop))
               || HM_objptrIsAboveHH(s, p, args->hh));
       return;
@@ -650,7 +650,7 @@ void forwardHHObjptr (GC_state s,
   p = HM_followForwardPointerUntilNullOrBelowLevel(s,
                                                    p,
                                                    args->minLevel);
-  op = pointerToObjptr(p, s->heap->start);
+  op = pointerToObjptr(p, NULL);
   HM_getObjptrInfo(s, op, &opInfo);
 
   if (HM_isObjptrInToSpace(s, op)) {
@@ -768,7 +768,7 @@ void forwardHHObjptr (GC_state s,
 
     /* Store the forwarding pointer in the old object metadata. */
     *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
-                                        s->heap->start);
+                                        NULL);
     assert (hasFwdPtr(p));
 
     /* use the forwarding pointer */

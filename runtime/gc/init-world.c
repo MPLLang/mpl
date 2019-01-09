@@ -98,7 +98,7 @@ void initVectors(GC_state s) {
     frontier = frontier + GC_HEADER_SIZE;
     // *((objptr*)(frontier)) = BOGUS_OBJPTR;
     // frontier = frontier + OBJPTR_SIZE;
-    s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, s->heap->start);
+    s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, NULL);
     if (DEBUG_DETAILED)
       fprintf (stderr, "allocated vector at "FMTPTR"\n",
                (uintptr_t)(s->globals[inits[i].globalIndex]));
@@ -172,5 +172,5 @@ void duplicateWorld (GC_state d, GC_state s) {
 
   /* Allocation handled in setGCStateCurrentHeap when called from initWorld */
 
-  switchToThread (d, pointerToObjptr((pointer)thread - offsetofThread (d), d->heap->start));
+  switchToThread (d, pointerToObjptr((pointer)thread - offsetofThread (d), NULL));
 }

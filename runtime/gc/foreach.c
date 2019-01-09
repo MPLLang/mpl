@@ -103,7 +103,7 @@ void printObjectsInRange(GC_state s,
     header = getHeader(p);
     oi.objectTypeIndex = (header & TYPE_INDEX_MASK) >> TYPE_INDEX_SHIFT;
     splitHeader(s, header, &(oi.tag), &(oi.hasIdentity), &(oi.bytesNonObjptrs), &(oi.numObjptrs));
-    oi.op = pointerToObjptr(p, s->heap->start);
+    oi.op = pointerToObjptr(p, NULL);
 
     if (NORMAL_TAG == oi.tag) {
       p += oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE);

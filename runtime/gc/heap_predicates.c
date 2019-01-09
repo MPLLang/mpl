@@ -57,7 +57,7 @@ bool isObjptrInOldGen (GC_state s, objptr op) {
   pointer p;
   if (not (isObjptr(op)))
     return TRUE;
-  p = objptrToPointer (op, s->heap->start);
+  p = objptrToPointer (op, NULL);
   return isPointerInOldGen (s, p);
 }
 #endif
@@ -66,7 +66,7 @@ bool isObjptrInNursery (GC_state s, objptr op) {
   pointer p;
   if (not (isObjptr(op)))
     return TRUE;
-  p = objptrToPointer (op, s->heap->start);
+  p = objptrToPointer (op, NULL);
   return isPointerInNursery (s, p);
 }
 

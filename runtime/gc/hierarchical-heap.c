@@ -63,11 +63,11 @@ void HM_HH_appendChild(pointer parentHHPointer,
                        Word32 stealLevel) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
+  objptr parentHHObjptr = pointerToObjptr (parentHHPointer, NULL);
   struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s,
                                                               parentHHObjptr);
 
-  objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
+  objptr childHHObjptr = pointerToObjptr (childHHPointer, NULL);
   struct HM_HierarchicalHeap* childHH = HM_HH_objptrToStruct(s, childHHObjptr);
 
   lockWriterHH(childHH);
@@ -142,7 +142,7 @@ void HM_HH_appendChild(pointer parentHHPointer,
 size_t HM_HH_getLevel(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   return hh->level;
@@ -151,7 +151,7 @@ size_t HM_HH_getLevel(pointer hhPointer) {
 size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   return HM_HH_getLowestPrivateLevel(s, hh);
@@ -160,7 +160,7 @@ size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer) {
 void HM_HH_mergeIntoParent(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -187,7 +187,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   assert(getHierarchicalHeapCurrent(s) == parentHH);
 
   /* can only merge from the thread that owns the parent hierarchical heap! */
-  assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap());
+  assert(objptrToPointer(hh->parentHH, NULL) == GC_getCurrentHierarchicalHeap());
 
   lockWriterHH(hh);
   lockWriterHH(parentHH);
@@ -272,12 +272,12 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
 pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
 #if ASSERT
   assert(NULL != hh->retVal);
-  objptr retValObjptr = pointerToObjptr(hh->retVal, s->heap->start);
+  objptr retValObjptr = pointerToObjptr(hh->retVal, NULL);
   struct HM_ObjptrInfo retValInfo;
   HM_getObjptrInfo(s, retValObjptr, &retValInfo);
   assert(hh == retValInfo.hh);
@@ -291,7 +291,7 @@ pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
 void HM_HH_promoteChunks(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   lockWriterHH(hh);
@@ -319,7 +319,7 @@ void HM_HH_promoteChunks(pointer hhPointer) {
 void HM_HH_setDead(pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   hh->state = DEAD;
@@ -329,7 +329,7 @@ void HM_HH_setDead(pointer hhPointer) {
 void HM_HH_setLevel(pointer hhPointer, size_t level) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
   hh->level = level;
@@ -366,12 +366,12 @@ void HM_HH_setLevel(pointer hhPointer, size_t level) {
 pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {
   GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
 #if ASSERT
   assert(NULL != retVal);
-  objptr retValObjptr = pointerToObjptr(retVal, s->heap->start);
+  objptr retValObjptr = pointerToObjptr(retVal, NULL);
   struct HM_ObjptrInfo retValInfo;
   HM_getObjptrInfo(s, retValObjptr, &retValInfo);
   assert(hh == retValInfo.hh);
@@ -540,7 +540,7 @@ struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr) {
     return NULL;
   }
 
-  pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
+  pointer hhPointer = objptrToPointer (hhObjptr, NULL);
   return ((struct HM_HierarchicalHeap*)(hhPointer +
                                         HM_HH_offsetof(s)));
 }

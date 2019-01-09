@@ -25,7 +25,7 @@ static inline GC_intInf toBignum (GC_state s, objptr arg) {
   GC_intInf bp;
 
   assert (not isSmall(arg));
-  bp = (GC_intInf)(objptrToPointer(arg, s->heap->start)
+  bp = (GC_intInf)(objptrToPointer(arg, NULL)
                    - (offsetof(struct GC_intInf, obj)
                       + offsetof(struct GC_intInf_obj, isneg)));
   if (DEBUG_INT_INF)
@@ -214,7 +214,7 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
   bp->length = (GC_arrayLength)(size + 1); /* +1 for isneg field */
   bp->header = GC_INTINF_HEADER;
   // bp->fwdptr = BOGUS_OBJPTR;
-  return pointerToObjptr ((pointer)&bp->obj, s->heap->start);
+  return pointerToObjptr ((pointer)&bp->obj, NULL);
 }
 
 objptr IntInf_binop (GC_state s,
@@ -318,7 +318,7 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->length = (GC_arrayLength)size;
   sp->header = GC_STRING8_HEADER;
   // sp->fwdptr = BOGUS_OBJPTR;
-  return pointerToObjptr ((pointer)&sp->obj, s->heap->start);
+  return pointerToObjptr ((pointer)&sp->obj, NULL);
 }
 
 /*

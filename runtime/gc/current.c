@@ -20,7 +20,7 @@ objptr getStackCurrentObjptr (GC_state s) {
 }
 
 GC_stack getStackCurrent (GC_state s) {
-  pointer p = objptrToPointer(getStackCurrentObjptr(s), s->heap->start);
+  pointer p = objptrToPointer(getStackCurrentObjptr(s), NULL);
   return (GC_stack)p;
 }
 

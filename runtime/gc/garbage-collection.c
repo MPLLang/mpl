@@ -83,8 +83,8 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
 #endif
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
-  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
-  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), s->heap->start));
+  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, NULL);
+  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), NULL));
 }
 
 void enterGC (GC_state s) {
