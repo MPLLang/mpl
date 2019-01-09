@@ -105,13 +105,21 @@ static inline bool inSameBlock(pointer p, pointer q) {
   return blockOf(p) == blockOf(q);
 }
 
+static inline bool inFirstBlockOfChunk(HM_chunk chunk, pointer p) {
+  return p < (pointer)chunk + HM_BLOCK_SIZE;
+}
+
 /* Find the associated chunk metadata of a pointer which is known to point
  * into the first block of a chunk. */
 static inline HM_chunk HM_getChunkOf(pointer p) {
   HM_chunk chunk = (HM_chunk)blockOf(p);
   assert(chunk->magic == CHUNK_MAGIC); // sanity check
   assert((pointer)chunk + sizeof(struct HM_chunk) <= p);
-  assert(p <= chunk->limit);
+
+  /* Must be strictly less than the limit; a pointer at the limit would be
+   * considered a pointer into the next physically adjacent chunk */
+  assert(p < chunk->limit);
+
   return chunk;
 }
 

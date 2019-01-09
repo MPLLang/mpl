@@ -47,8 +47,9 @@ struct GC_state {
   struct HM_chunkList* freeListLarge;
   size_t nextChunkAllocSize;
   struct GC_generationalMaps generationalMaps;
-  pointer globalFrontier;
-  pointer globalLimitPlusSlop;
+  struct HM_chunkList* globalHeap;
+  // pointer globalFrontier;
+  // pointer globalLimitPlusSlop;
   /* RAM_NOTE: Not sure if this is used anymore... */
   /*
    * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
@@ -60,7 +61,7 @@ struct GC_state {
   objptr *globals;
   uint32_t globalsLength;
   bool hashConsDuringGC;
-  struct GC_heap *heap;
+  // struct GC_heap *heap;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
@@ -86,7 +87,7 @@ struct GC_state {
                        */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
-  struct GC_heap *secondaryHeap; /* Used for major copying collection. */
+  // struct GC_heap *secondaryHeap; /* Used for major copying collection. */
   objptr signalHandlerThread; /* Handler for signals (in heap). */
   struct GC_signalsInfo signalsInfo;
   struct GC_sourceMaps sourceMaps;

@@ -42,15 +42,12 @@ void HM_enterGlobalHeap (void) {
   }
 
   if (1 == currentThread->inGlobalHeapCounter) {
-    assert (NULL != s->globalFrontier);
-    assert (NULL != s->globalLimitPlusSlop);
-    HM_exitLocalHeap (s);
-
-    spinlock_lock(&(s->lock), Proc_processorNumber(s));
-    s->frontier = s->globalFrontier;
-    s->limitPlusSlop = s->globalLimitPlusSlop;
+    HM_exitLocalHeap(s);
+    HM_chunk chunk = HM_getChunkListLastChunk(s->globalHeap);
+    assert(chunk != NULL);
+    s->frontier = HM_getChunkFrontier(chunk);
+    s->limitPlusSlop = HM_getChunkLimit(chunk);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-    spinlock_unlock(&(s->lock));
   }
 }
 
@@ -72,60 +69,58 @@ void HM_exitGlobalHeap (void) {
   }
 
   if (0 == currentThread->inGlobalHeapCounter) {
-    spinlock_lock(&(s->lock), Proc_processorNumber(s));
-    s->globalFrontier = s->frontier;
-    s->globalLimitPlusSlop = s->limitPlusSlop;
-    HM_enterLocalHeap (s);
-    spinlock_unlock(&(s->lock));
+    HM_chunk chunk = HM_getChunkListLastChunk(s->globalHeap);
+    HM_updateChunkValues(chunk, s->frontier);
+    HM_enterLocalHeap(s);
   }
 }
 
-void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  assert(NULL != s);
-  assert(NULL != s->globalFrontier);
-  assert(NULL != s->globalLimitPlusSlop);
+// void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
+//   GC_state s = pthread_getspecific (gcstate_key);
+//   assert(NULL != s);
+//   assert(NULL != s->globalFrontier);
+//   assert(NULL != s->globalLimitPlusSlop);
 
-  /* update frontier and limit */
-  HM_exitLocalHeap (s);
-  s->frontier = s->globalFrontier;
-  s->limitPlusSlop = s->globalLimitPlusSlop;
-  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+//   /* update frontier and limit */
+//   HM_exitLocalHeap (s);
+//   s->frontier = s->globalFrontier;
+//   s->limitPlusSlop = s->globalLimitPlusSlop;
+//   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
-  /* restore inGlobalHeapCounter */
-  getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
-  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-      "inGlobalHeapCounter = %d",
-      inGlobalHeapCounter);
-}
+//   /* restore inGlobalHeapCounter */
+//   getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
+//   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+//       "inGlobalHeapCounter = %d",
+//       inGlobalHeapCounter);
+// }
 
-Word32 HM_explicitExitGlobalHeap(void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+// Word32 HM_explicitExitGlobalHeap(void) {
+//   GC_state s = pthread_getspecific (gcstate_key);
 
-  assert(NULL != s);
-  assert(HM_inGlobalHeap(s));
+//   assert(NULL != s);
+//   assert(HM_inGlobalHeap(s));
 
-  /* update frontier and limit */
-  s->globalFrontier = s->frontier;
-  s->globalLimitPlusSlop = s->limitPlusSlop;
-  HM_enterLocalHeap (s);
+//   /* update frontier and limit */
+//   s->globalFrontier = s->frontier;
+//   s->globalLimitPlusSlop = s->limitPlusSlop;
+//   HM_enterLocalHeap (s);
 
-  /* set inGlobalHeapCounter to zero */
-  GC_thread thread = getThreadCurrent(s);
-  Word32 retVal = thread->inGlobalHeapCounter;
-  thread->inGlobalHeapCounter = 0;
+//   /* set inGlobalHeapCounter to zero */
+//   GC_thread thread = getThreadCurrent(s);
+//   Word32 retVal = thread->inGlobalHeapCounter;
+//   thread->inGlobalHeapCounter = 0;
 
-  if (0 == retVal) {
-    DIE("Attempted to exit while GHC is zero!");
-  }
+//   if (0 == retVal) {
+//     DIE("Attempted to exit while GHC is zero!");
+//   }
 
-  LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-      "inGlobalHeapCounter = %d",
-      retVal);
+//   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
+//       "inGlobalHeapCounter = %d",
+//       retVal);
 
-  /* return the old inGlobalHeapCounter */
-  return retVal;
-}
+//   /* return the old inGlobalHeapCounter */
+//   return retVal;
+// }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -139,7 +134,14 @@ bool HM_inGlobalHeap (GC_state s) {
   bool answer = (!currentThread->useHierarchicalHeap ||
                   (0 != currentThread->inGlobalHeapCounter));
 
-  assert(!answer || (s->heap->start <= s->frontier && s->frontier <= s->heap->start + s->heap->size));
+#if ASSERT
+  if (answer) {
+    HM_chunk chunk = HM_getChunkListLastChunk(s->globalHeap);
+    assert(chunk != NULL);
+    assert(HM_getChunkStart(chunk) <= s->frontier);
+    assert(inFirstBlockOfChunk(chunk, s->frontier));
+  }
+#endif
 
   return answer;
 }

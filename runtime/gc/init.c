@@ -627,6 +627,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
+  // global heap objects at level 0
+  s->globalHeap = HM_newChunkList(NULL, 0);
+
   return res;
 }
 

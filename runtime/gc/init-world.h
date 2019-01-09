@@ -10,7 +10,7 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 /* GC_init uses the array of struct intInfInits in s at program start
- * to allocate intInfs.  
+ * to allocate intInfs.
  * The globalIndex'th entry of the globals array in s is set to the
  * IntInf.int whose value corresponds to the mlstr string.
  *

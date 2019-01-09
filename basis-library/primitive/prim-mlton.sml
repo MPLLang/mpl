@@ -213,13 +213,13 @@ structure HM =
         val exitGlobalHeap: unit -> unit =
             _import "HM_exitGlobalHeap" runtime private: unit -> unit;
 
-        val explicitEnterGlobalHeap: Word32.word -> unit =
+        (* val explicitEnterGlobalHeap: Word32.word -> unit =
             _import "HM_explicitEnterGlobalHeap" runtime private:
             Word32.word -> unit;
 
         val explicitExitGlobalHeap: unit -> Word32.word =
             _import "HM_explicitExitGlobalHeap" runtime private:
-            unit -> Word32.word;
+            unit -> Word32.word; *)
 
         val registerQueue: Word32.word * 'a array -> unit =
             _import "HM_HHC_registerQueue" runtime private:

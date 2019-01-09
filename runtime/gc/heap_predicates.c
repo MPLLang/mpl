@@ -1,4 +1,5 @@
-/* Copyright (C) 2012 Matthew Fluet.
+/* Copyright (C) 2019 Sam Westrick
+ * Copyright (C) 2012 Matthew Fluet.
  * Copyright (C) 2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -7,22 +8,48 @@
  */
 
 bool isPointerInOldGen (GC_state s, pointer p) {
+  assert(s->heap != NULL);
   return (not (isPointer (p))
           or (s->heap->start <= p
               and p < s->heap->start + s->heap->oldGenSize));
 }
 
 bool isPointerInNursery (GC_state s, pointer p) {
+  assert(s->heap != NULL);
   return (not (isPointer (p))
           or (s->heap->nursery <= p and p < s->heap->frontier));
 }
 
-bool isPointerInGlobalHeap (GC_state s, pointer p) {
-  return (s->heap->start <= p && p < s->heap->start + s->heap->size);
+bool isPointerInGlobalHeap(GC_state s, pointer p) {
+  HM_chunkList list = HM_getLevelHead(HM_getChunkOf(p));
+  assert(list != NULL);
+  bool result = (0 == HM_getChunkListLevel(list));
+
+#if ASSERT
+  if (result) {
+    /* Make sure that the list which contains this pointer is one of the global
+     * heap lists. */
+    bool foundIt = FALSE;
+    for (int i = 0; i < s->numberOfProcs; i++) {
+      if (list == s->procStates[i].globalHeap) {
+        foundIt = TRUE;
+        break;
+      }
+    }
+    assert(foundIt);
+  } else {
+    /* Is this correct? want to assert that if it's not in the global heap,
+     * then it must be in the heap hierarchy. */
+    assert(list->containingHH != NULL);
+    assert(HM_HH_LEVEL(list->containingHH, HM_getChunkListLevel(list)) == list);
+  }
+#endif
+
+  return result;
 }
 
-bool isObjptrInGlobalHeap (GC_state s, objptr op) {
-  return isPointerInGlobalHeap(s, objptrToPointer(op, s->heap->start));
+bool isObjptrInGlobalHeap(GC_state s, objptr op) {
+  return isPointerInGlobalHeap(s, objptrToPointer(op, NULL));
 }
 
 #if ASSERT

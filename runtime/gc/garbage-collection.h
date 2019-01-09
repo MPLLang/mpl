@@ -32,11 +32,13 @@ static void performGC (GC_state s,
                        bool forceMajor,
                        bool mayResize);
 static size_t fillGap (pointer start, pointer end);
-static void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s,
-                                                            bool forceGC,
-                                                            bool ensureFrontier,
-                                                            bool ensureStack,
-                                                            size_t oldGenBytesRequested,
-                                                            size_t nurseryBytesRequested);
+static void ensureStackInvariantInGlobal(GC_state s);
+static void ensureBytesFreeInGlobal(GC_state s, size_t bytesRequested);
+// static void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s,
+//                                                             bool forceGC,
+//                                                             bool ensureFrontier,
+//                                                             bool ensureStack,
+//                                                             size_t oldGenBytesRequested,
+//                                                             size_t nurseryBytesRequested);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

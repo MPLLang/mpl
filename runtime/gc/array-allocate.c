@@ -47,6 +47,7 @@ pointer arrayAllocateInHH(GC_state s,
 /* Function Definitions */
 /************************/
 
+/* SAM_NOTE: deprecate and remove this function. */
 pointer arrayAllocateInOldGen(GC_state s,
                               size_t arraySizeAligned,
                               size_t ensureBytesFree) {
@@ -67,18 +68,27 @@ pointer arrayAllocateInOldGen(GC_state s,
 pointer arrayAllocateInGlobal(GC_state s,
                               size_t arraySizeAligned,
                               size_t ensureBytesFree) {
-  size_t bytesRequested = arraySizeAligned + ensureBytesFree;
-  if (not hasHeapBytesFree (s, 0, bytesRequested)) {
-    /* Local alloc may still require getting the lock, but we will release
-       it before initialization. */
-    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE,
-                                                    0, bytesRequested);
-  }
-  assert (hasHeapBytesFree (s, 0, bytesRequested));
+  ensureBytesFreeInGlobal(s, arraySizeAligned);
   pointer frontier = s->frontier;
   pointer newFrontier = frontier + arraySizeAligned;
-  assert (isFrontierAligned (s, newFrontier));
-  s->frontier = newFrontier;
+  assert(isFrontierAligned(s, newFrontier));
+
+  HM_chunk current = HM_getChunkOf(frontier);
+  assert(current == HM_getChunkListLastChunk(s->globalHeap));
+
+  if (inFirstBlockOfChunk(current, newFrontier) &&
+      s->limitPlusSlop - newFrontier >= ensureBytesFree) {
+    s->frontier = newFrontier;
+  } else {
+    HM_updateChunkValues(current, newFrontier);
+    HM_chunk newChunk = HM_allocateChunk(s->globalHeap, ensureBytesFree);
+    s->frontier = HM_getChunkFrontier(newChunk);
+    s->limitPlusSlop = HM_getChunkLimit(newChunk);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  }
+
+  assert(isFrontierAligned(s, s->frontier));
+  assert(s->limitPlusSlop - s->frontier >= ensureBytesFree);
   return frontier;
 }
 
@@ -149,7 +159,6 @@ pointer GC_arrayAllocate (GC_state s,
   uint16_t numObjptrs;
   pointer frontier;
   pointer result;
-  bool allocInOldGen = FALSE;
 
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
 
@@ -193,16 +202,7 @@ pointer GC_arrayAllocate (GC_state s,
       uintmaxToCommaString(ensureBytesFree));
 
   if (HM_inGlobalHeap(s)) {
-    allocInOldGen = arraySizeAligned >= s->controls->oldGenArraySize;
-    if (allocInOldGen) {
-      s->syncReason = SYNC_OLD_GEN_ARRAY;
-      ENTER0 (s);
-      /* NB LEAVE appears below since no heap invariant holds while the
-       * oldGenSize has been updated but the array remains uninitialized. */
-      frontier = arrayAllocateInOldGen(s, arraySizeAligned, ensureBytesFree);
-    } else {
-      frontier = arrayAllocateInGlobal(s, arraySizeAligned, ensureBytesFree);
-    }
+    frontier = arrayAllocateInGlobal(s, arraySizeAligned, ensureBytesFree);
   } else {
     assert(!HM_inGlobalHeap(s));
     frontier = arrayAllocateInHH(s, arraySizeAligned, ensureBytesFree);
@@ -241,10 +241,6 @@ pointer GC_arrayAllocate (GC_state s,
    * to reflect what the mutator did with stackTop.
    */
 #endif
-
-  if (allocInOldGen) {
-    LEAVE1 (s, result);
-  }
 
   Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 

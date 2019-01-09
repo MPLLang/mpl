@@ -93,9 +93,8 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     if (HM_inGlobalHeap(s)) {
-      ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
-                                                      TRUE, TRUE,
-                                                      0, 0);
+      ensureStackInvariantInGlobal(s);
+      ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
     } else {
       HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
     }
