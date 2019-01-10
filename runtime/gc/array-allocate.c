@@ -229,7 +229,11 @@ pointer GC_arrayAllocate (GC_state s,
   }
 
 #if ASSERT
-  if (!HM_inGlobalHeap(s)) {
+  if (HM_inGlobalHeap(s)) {
+    HM_chunk current = HM_getChunkListLastChunk(s->globalHeap);
+    assert(inFirstBlockOfChunk(current, s->frontier));
+    assert(s->limitPlusSlop == HM_getChunkLimit(current));
+  } else {
     if (s->frontier != s->limitPlusSlop) {
       assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
       assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);

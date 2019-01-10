@@ -38,10 +38,7 @@ bool isPointerInGlobalHeap(GC_state s, pointer p) {
     }
     assert(foundIt);
   } else {
-    /* Is this correct? want to assert that if it's not in the global heap,
-     * then it must be in the heap hierarchy. */
     assert(list->containingHH != NULL);
-    assert(HM_HH_LEVEL(list->containingHH, HM_getChunkListLevel(list)) == list);
   }
 #endif
 

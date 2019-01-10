@@ -51,11 +51,11 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
       /* copied from HM_enterGlobalHeap() */
       HM_exitLocalHeap(s); // remembers s->frontier in HH
 
-      spinlock_lock(&(s->lock), Proc_processorNumber(s));
-      s->frontier = s->globalFrontier;
-      s->limitPlusSlop = s->globalLimitPlusSlop;
+      HM_chunk globalHeapChunk = HM_getChunkListLastChunk(s->globalHeap);
+      assert(globalHeapChunk != NULL);
+      s->frontier = HM_getChunkFrontier(globalHeapChunk);
+      s->limitPlusSlop = HM_getChunkLimit(globalHeapChunk);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-      spinlock_unlock(&(s->lock));
     }
 
     /*
@@ -83,11 +83,9 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     if (!HM_inGlobalHeap(s)) {
       /* I need to switch to the HH for the to-thread */
       /* copied from HM_exitGlobalHeap() */
-      spinlock_lock(&(s->lock), Proc_processorNumber(s));
-      s->globalFrontier = s->frontier;
-      s->globalLimitPlusSlop = s->limitPlusSlop;
-      HM_enterLocalHeap (s);
-      spinlock_unlock(&(s->lock));
+      HM_chunk currentChunk = HM_getChunkListLastChunk(s->globalHeap);
+      HM_updateChunkValues(currentChunk, s->frontier);
+      HM_enterLocalHeap(s);
     }
 
     s->atomicState--;
@@ -96,6 +94,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
       ensureStackInvariantInGlobal(s);
       ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
     } else {
+      /* SAM_NOTE: Shouldn't this be getThreadCurrent(s)->bytesNeeded? */
       HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
     }
 

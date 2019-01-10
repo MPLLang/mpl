@@ -152,7 +152,7 @@ void initWorld(GC_state s) {
   s->cumulativeStatistics->bytesAllocated += HM_getChunkListSize(s->globalHeap);
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 
-  thread = newThread(s, sizeofStackInitialReserved(s));
+  GC_thread thread = newThread(s, sizeofStackInitialReserved(s));
   switchToThread(s, pointerToObjptr((pointer)thread - offsetofThread(s), NULL));
 }
 
@@ -162,7 +162,7 @@ void duplicateWorld (GC_state d, GC_state s) {
   d->lastMajorStatistics->bytesLive = 0;
 
   /* Use the original to allocate */
-  thread = newThread (s, sizeofStackInitialReserved (s));
+  thread = newThread(s, sizeofStackInitialReserved(s));
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;
@@ -170,7 +170,10 @@ void duplicateWorld (GC_state d, GC_state s) {
   d->secondaryHeap = s->secondaryHeap;
   d->generationalMaps = s->generationalMaps;
 
-  /* Allocation handled in setGCStateCurrentHeap when called from initWorld */
+  HM_chunk chunk = HM_allocateChunk(d->globalHeap, GC_HEAP_LIMIT_SLOP);
+  d->frontier = HM_getChunkFrontier(chunk);
+  d->limitPlusSlop = HM_getChunkLimit(chunk);
+  d->limit = d->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   switchToThread (d, pointerToObjptr((pointer)thread - offsetofThread (d), NULL));
 }

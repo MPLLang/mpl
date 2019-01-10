@@ -512,7 +512,7 @@ void ensureStackInvariantInGlobal(GC_state s) {
   size_t bytesNeeded =
     sizeofStackWithMetaData(s, sizeofStackGrowReserved(s, getStackCurrent(s)));
 
-  simpleEnsureBytesFree(s, bytesNeeded);
+  ensureBytesFreeInGlobal(s, bytesNeeded);
   growStackCurrent(s, FALSE);
   HM_updateChunkValues(HM_getChunkListLastChunk(s->globalHeap), s->frontier);
   setGCStateCurrentThreadAndStack(s);
@@ -575,7 +575,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
     ensureStackInvariantInGlobal(s);
     /* SAM_NOTE: for now, ignoring forcing collection in global heap.
      * TODO: global collections? */
-    ensureBytesFreeInGlobal(getThreadCurrent(s)->bytesNeeded);
+    ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
   } else {
     /* SAM_NOTE: shouldn't this be
      *   getThreadCurrent(s)->bytesNeeded
