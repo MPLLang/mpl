@@ -31,7 +31,6 @@ pointer newObject (GC_state s,
   assert(s->limitPlusSlop - s->frontier >= bytesRequested);
 
   frontier = s->frontier;
-  s->frontier += bytesRequested;
 
   /* If the allocation crosses a block boundary, then we have to allocate a new
    * chunk to preserve the chunk/block invariant that the front of every object
@@ -43,6 +42,7 @@ pointer newObject (GC_state s,
   if (HM_inGlobalHeap(s)) {
     HM_chunk current = HM_getChunkOf(frontier);
     assert(current == HM_getChunkListLastChunk(s->globalHeap));
+    s->frontier += bytesRequested; // this has to come after HM_inGlobalHeap
     if (!inFirstBlockOfChunk(current, s->frontier)) {
       HM_updateChunkValues(current, s->frontier);
       // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
@@ -52,6 +52,7 @@ pointer newObject (GC_state s,
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
   } else {
+    s->frontier += bytesRequested;
     if (!inSameBlock(frontier, s->frontier)) {
       /* force a new chunk to be created so that no new objects lie after this
        * array, which crossed a block boundary. */

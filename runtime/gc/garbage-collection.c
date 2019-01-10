@@ -560,13 +560,15 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
-    /*
-     * first make sure that I hit the minimum if I am doing a global heap
-     * allocation
-     */
-    bytesRequested = s->controls->globalHeapMinChunkSize;
-  }
+  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->minChunkSize);
+
+  // if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
+  //   /*
+  //    * first make sure that I hit the minimum if I am doing a global heap
+  //    * allocation
+  //    */
+  //   bytesRequested = s->controls->globalHeapMinChunkSize;
+  // }
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
