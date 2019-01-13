@@ -142,7 +142,7 @@ void HM_HHC_collectLocal(void) {
   if (!queueLockHeld) {
     Parallel_lockTake(wsQueueLock);
   }
-  lockWriterHH(hh);
+  // lockWriterHH(hh);
 
   assertInvariants(s, hh, LIVE);
   assert(hh->thread == s->currentThread);
@@ -473,7 +473,7 @@ void HM_HHC_collectLocal(void) {
 
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */
-  unlockWriterHH(hh);
+  // unlockWriterHH(hh);
   if (!queueLockHeld) {
     Parallel_lockRelease(wsQueueLock);
   }

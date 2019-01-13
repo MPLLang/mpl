@@ -13,23 +13,23 @@
 
 #include "hierarchical-heap.h"
 
-PRIVATE pointer Assignable_findLockedTrueReplicaReader(
-  GC_state, objptr, struct HM_HierarchicalHeap **
-  );
+// PRIVATE pointer Assignable_findLockedTrueReplicaReader(
+//   GC_state, objptr, struct HM_HierarchicalHeap **
+//   );
 
-PRIVATE pointer Assignable_findLockedTrueReplicaWriter(
-  GC_state, objptr, struct HM_HierarchicalHeap **
-  );
+// PRIVATE pointer Assignable_findLockedTrueReplicaWriter(
+//   GC_state, objptr, struct HM_HierarchicalHeap **
+//   );
 
-PRIVATE void Assignable_unlockReplicaReader(
-  GC_state, struct HM_HierarchicalHeap *
-  );
+// PRIVATE void Assignable_unlockReplicaReader(
+//   GC_state, struct HM_HierarchicalHeap *
+//   );
 
-PRIVATE void Assignable_unlockReplicaWriter(
-  GC_state, struct HM_HierarchicalHeap *
-  );
+// PRIVATE void Assignable_unlockReplicaWriter(
+//   GC_state, struct HM_HierarchicalHeap *
+//   );
 
-PRIVATE int Assignable_isMaster(GC_state s, objptr o);
+// PRIVATE int Assignable_isMaster(GC_state s, objptr o);
 
 PRIVATE objptr Assignable_get(
   GC_state s, objptr src, Int64 index

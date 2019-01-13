@@ -182,7 +182,8 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   }
   // hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
   hh->lastAllocatedChunk = NULL;
-  rwlock_init(&hh->lock);
+  hh->ignoreThis = 15210;
+  // rwlock_init(&hh->lock);
   hh->state = LIVE;
   hh->level = 1; // level 0 is reserved for global heap
   hh->stealLevel = HM_HH_INVALID_LEVEL;

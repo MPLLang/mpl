@@ -70,8 +70,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   objptr childHHObjptr = pointerToObjptr (childHHPointer, NULL);
   struct HM_HierarchicalHeap* childHH = HM_HH_objptrToStruct(s, childHHObjptr);
 
-  lockWriterHH(childHH);
-  lockWriterHH(parentHH);
+  // lockWriterHH(childHH);
+  // lockWriterHH(parentHH);
 
   assertInvariants(s, parentHH, LIVE);
   Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
@@ -135,8 +135,8 @@ void HM_HH_appendChild(pointer parentHHPointer,
   assertInvariants(s, parentHH, LIVE);
   assertInvariants(s, childHH, LIVE);
 
-  unlockWriterHH(parentHH);
-  unlockWriterHH(childHH);
+  // unlockWriterHH(parentHH);
+  // unlockWriterHH(childHH);
 }
 
 size_t HM_HH_getLevel(pointer hhPointer) {
@@ -189,8 +189,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   /* can only merge from the thread that owns the parent hierarchical heap! */
   assert(objptrToPointer(hh->parentHH, NULL) == GC_getCurrentHierarchicalHeap());
 
-  lockWriterHH(hh);
-  lockWriterHH(parentHH);
+  // lockWriterHH(hh);
+  // lockWriterHH(parentHH);
 
   assertInvariants(s, parentHH, LIVE);
   assertInvariants(s, hh, DEAD);
@@ -265,8 +265,8 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
          parentHH->locallyCollectibleSize,
          s->controls->hhConfig.allocatedRatio);
 
-  unlockWriterHH(parentHH);
-  unlockWriterHH(hh);
+  // unlockWriterHH(parentHH);
+  // unlockWriterHH(hh);
 }
 
 pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
@@ -294,7 +294,7 @@ void HM_HH_promoteChunks(pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
 
-  lockWriterHH(hh);
+  // lockWriterHH(hh);
 
   HM_chunkList level = HM_HH_LEVEL(hh, hh->level);
   if (level != NULL) {
@@ -313,7 +313,7 @@ void HM_HH_promoteChunks(pointer hhPointer) {
 
   assertInvariants(s, hh, LIVE);
 
-  unlockWriterHH(hh);
+  // unlockWriterHH(hh);
 }
 
 void HM_HH_setDead(pointer hhPointer) {
@@ -388,20 +388,21 @@ void HM_HH_display (
     FILE* stream) {
   const char *lockStatus;
 
-  switch (rwlock_status(&hh->lock)) {
-  case RWLOCK_STATUS_NOBODY:
-    lockStatus = "NOBODY";
-    break;
-  case RWLOCK_STATUS_READERS:
-    lockStatus = "READERS";
-    break;
-  case RWLOCK_STATUS_WRITER:
-    lockStatus = "WRITER";
-    break;
-  default:
-    lockStatus = "???";
-    break;
-  }
+  // switch (rwlock_status(&hh->lock)) {
+  // case RWLOCK_STATUS_NOBODY:
+  //   lockStatus = "NOBODY";
+  //   break;
+  // case RWLOCK_STATUS_READERS:
+  //   lockStatus = "READERS";
+  //   break;
+  // case RWLOCK_STATUS_WRITER:
+  //   lockStatus = "WRITER";
+  //   break;
+  // default:
+  //   lockStatus = "???";
+  //   break;
+  // }
+  lockStatus = "???";
 
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
@@ -442,7 +443,7 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
  * copyObject
  */
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  lockWriterHH(hh);
+  // lockWriterHH(hh);
 
   HM_chunkList levelHead = HM_HH_LEVEL(hh, hh->level);
   if (NULL == levelHead) {
@@ -453,14 +454,14 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   HM_chunk chunk = HM_allocateChunk(levelHead, bytesRequested);
 
   if (NULL == chunk) {
-    unlockWriterHH(hh);
+    // unlockWriterHH(hh);
     return FALSE;
   }
 
   hh->lastAllocatedChunk = chunk;
   hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
-  unlockWriterHH(hh);
+  // unlockWriterHH(hh);
   return TRUE;
 }
 
@@ -719,46 +720,46 @@ void assertInvariants(GC_state s,
 }
 #endif /* ASSERT */
 
-void lockWriterHH(struct HM_HierarchicalHeap* hh) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Locking writer HH %p",
-      (void *)hh);
-  rwlock_writer_lock(s, &hh->lock);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Locked writer HH %p",
-      (void *)hh);
-}
+// void lockWriterHH(struct HM_HierarchicalHeap* hh) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Locking writer HH %p",
+//       (void *)hh);
+//   rwlock_writer_lock(s, &hh->lock);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Locked writer HH %p",
+//       (void *)hh);
+// }
 
-void unlockWriterHH(struct HM_HierarchicalHeap* hh) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Unlocking writer HH %p",
-      (void *)hh);
-  rwlock_writer_unlock(s, &hh->lock);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Unlocked writer HH %p",
-      (void *)hh);
-}
+// void unlockWriterHH(struct HM_HierarchicalHeap* hh) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Unlocking writer HH %p",
+//       (void *)hh);
+//   rwlock_writer_unlock(s, &hh->lock);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Unlocked writer HH %p",
+//       (void *)hh);
+// }
 
-void lockReaderHH(struct HM_HierarchicalHeap* hh) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Locking reader HH %p",
-      (void *)hh);
-  rwlock_reader_lock(s, &hh->lock);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Locked reader HH %p",
-      (void *)hh);
-}
+// void lockReaderHH(struct HM_HierarchicalHeap* hh) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Locking reader HH %p",
+//       (void *)hh);
+//   rwlock_reader_lock(s, &hh->lock);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Locked reader HH %p",
+//       (void *)hh);
+// }
 
-void unlockReaderHH(struct HM_HierarchicalHeap* hh) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Unlocking reader HH %p",
-      (void *)hh);
-  rwlock_reader_unlock(s, &hh->lock);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Unlocked reader HH %p",
-      (void *)hh);
-}
+// void unlockReaderHH(struct HM_HierarchicalHeap* hh) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Unlocking reader HH %p",
+//       (void *)hh);
+//   rwlock_reader_unlock(s, &hh->lock);
+//   LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+//       "Unlocked reader HH %p",
+//       (void *)hh);
+// }
