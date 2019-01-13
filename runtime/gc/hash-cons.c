@@ -283,12 +283,12 @@ done:
 void shareObjptr (GC_state s, objptr *opp) {
   pointer p;
 
-  p = objptrToPointer (*opp, s->heap->start);
+  p = objptrToPointer (*opp, NULL);
   if (DEBUG_SHARE)
     fprintf (stderr, "shareObjptr  opp = "FMTPTR"  *opp = "FMTOBJPTR"\n",
              (uintptr_t)opp, *opp);
   p = hashConsPointer (s, p, FALSE);
-  *opp = pointerToObjptr (p, s->heap->start);
+  *opp = pointerToObjptr (p, NULL);
   markIntergenerationalObjptr (s, opp);
 }
 

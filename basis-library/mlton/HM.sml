@@ -48,10 +48,10 @@ structure MLtonHM:> MLTON_HM =
 
         val enterGlobalHeap: unit -> unit = PrimHM.enterGlobalHeap
         val exitGlobalHeap: unit -> unit = PrimHM.exitGlobalHeap
-        val explicitEnterGlobalHeap: Word32.word -> unit =
-            PrimHM.explicitEnterGlobalHeap
-        val explicitExitGlobalHeap: unit -> Word32.word =
-            PrimHM.explicitExitGlobalHeap
+        (* val explicitEnterGlobalHeap: Word32.word -> unit =
+            PrimHM.explicitEnterGlobalHeap *)
+        (* val explicitExitGlobalHeap: unit -> Word32.word =
+            PrimHM.explicitExitGlobalHeap *)
 
         val registerQueue: Word32.word * 'a array -> unit = PrimHM.registerQueue
         val registerQueueLock: Word32.word * Word32.word ref -> unit =

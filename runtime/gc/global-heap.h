@@ -37,7 +37,7 @@ PRIVATE void HM_exitGlobalHeap (void);
  *
  * @param inGlobalHeapCounter The counter to set for this enterGlobalHeap() call
  */
-PRIVATE void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter);
+// PRIVATE void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter);
 
 /**
  * This function unconditionally exits the global heap and enters the local heap
@@ -48,7 +48,7 @@ PRIVATE void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter);
  *
  * @return The former inGlobalHeapCounter
  */
-PRIVATE Word32 HM_explicitExitGlobalHeap(void);
+// PRIVATE Word32 HM_explicitExitGlobalHeap(void);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

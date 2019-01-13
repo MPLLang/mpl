@@ -92,7 +92,7 @@ pointer HM_followForwardPointerUntilNullOrBelowLevel(GC_state s,
     LOCAL_USED_FOR_ASSERT pointer orig = p;
 
 #if ASSERT
-    HM_getObjptrInfo(s, pointerToObjptr(p, s->heap->start), &info);
+    HM_getObjptrInfo(s, pointerToObjptr(p, NULL), &info);
     assert (info.level != CHUNK_INVALID_LEVEL);
     if (info.level < minLevel) {
         DIE("pointer %p is already at level %d < %d\n",
@@ -113,7 +113,7 @@ pointer HM_followForwardPointerUntilNullOrBelowLevel(GC_state s,
         if (info.level < minLevel) {
             break;
         }
-        p = objptrToPointer(next, s->heap->start);
+        p = objptrToPointer(next, NULL);
     }
 
     LOG(LM_HH_PROMOTION, LL_DEBUG,
@@ -132,7 +132,7 @@ bool HM_objptrIsAboveHH(GC_state s,
   uint16_t bytesNonObjptrs;
   uint16_t numObjptrs;
 
-  HM_getObjptrInfo(s, pointerToObjptr(p, s->heap->start), &info);
+  HM_getObjptrInfo(s, pointerToObjptr(p, NULL), &info);
   header = getHeader(p);
   splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 

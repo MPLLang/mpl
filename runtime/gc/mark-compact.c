@@ -53,8 +53,8 @@ void threadInternalObjptr (GC_state s, objptr *opp, void* ignored) {
   /* silence compiler warning */
   ((void)(ignored));
 
-  opop = pointerToObjptr ((pointer)opp, s->heap->start);
-  p = objptrToPointer (*opp, s->heap->start);
+  opop = pointerToObjptr ((pointer)opp, NULL);
+  p = objptrToPointer (*opp, NULL);
   if (FALSE)
     fprintf (stderr,
              "threadInternal opp = "FMTPTR"  p = "FMTPTR"  header = "FMTHDR"\n",
@@ -76,7 +76,7 @@ void updateWeaksForMarkCompact (GC_state s) {
 
     if (DEBUG_WEAK)
       fprintf (stderr, "updateWeaksForMarkCompact  w = "FMTPTR"  ", (uintptr_t)w);
-    p = objptrToPointer(w->objptr, s->heap->start);
+    p = objptrToPointer(w->objptr, NULL);
     /* If it's unmarked, clear the weak pointer. */
     if (isPointerMarked(p)) {
       if (DEBUG_WEAK)
@@ -204,13 +204,13 @@ thread:
      * pointers.
      */
     new = p - gap;
-    newObjptr = pointerToObjptr (new, s->heap->start);
+    newObjptr = pointerToObjptr (new, NULL);
     do {
       pointer cur;
       objptr curObjptr;
 
       copyForThreadInternal ((pointer)(&curObjptr), (pointer)headerp);
-      cur = objptrToPointer (curObjptr, s->heap->start);
+      cur = objptrToPointer (curObjptr, NULL);
 
       copyForThreadInternal ((pointer)headerp, cur);
       *((objptr*)cur) = newObjptr;
@@ -334,13 +334,13 @@ unmark:
      * backward pointers to it.  Then unmark it.
      */
     new = p - gap;
-    newObjptr = pointerToObjptr (new, s->heap->start);
+    newObjptr = pointerToObjptr (new, NULL);
     do {
       pointer cur;
       objptr curObjptr;
 
       copyForThreadInternal ((pointer)(&curObjptr), (pointer)headerp);
-      cur = objptrToPointer (curObjptr, s->heap->start);
+      cur = objptrToPointer (curObjptr, NULL);
 
       copyForThreadInternal ((pointer)headerp, cur);
       *((objptr*)cur) = newObjptr;

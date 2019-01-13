@@ -11,9 +11,9 @@ void switchToThread (GC_state s, objptr op) {
     GC_thread thread;
     GC_stack stack;
 
-    thread = (GC_thread)(objptrToPointer (op, s->heap->start)
+    thread = (GC_thread)(objptrToPointer (op, NULL)
                          + offsetofThread (s));
-    stack = (GC_stack)(objptrToPointer (thread->stack, s->heap->start));
+    stack = (GC_stack)(objptrToPointer (thread->stack, NULL));
 
     fprintf (stderr, "switchToThread ("FMTOBJPTR")  used = %"PRIuMAX
              "  reserved = %"PRIuMAX"\n",
@@ -25,7 +25,7 @@ void switchToThread (GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), s->heap->start);
+  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), NULL);
   LOG (LM_THREAD, LL_DEBUG,
        "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
        ((uintptr_t)(currentP)),
@@ -51,11 +51,11 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
       /* copied from HM_enterGlobalHeap() */
       HM_exitLocalHeap(s); // remembers s->frontier in HH
 
-      spinlock_lock(&(s->lock), Proc_processorNumber(s));
-      s->frontier = s->globalFrontier;
-      s->limitPlusSlop = s->globalLimitPlusSlop;
+      HM_chunk globalHeapChunk = HM_getChunkListLastChunk(s->globalHeap);
+      assert(globalHeapChunk != NULL);
+      s->frontier = HM_getChunkFrontier(globalHeapChunk);
+      s->limitPlusSlop = HM_getChunkLimit(globalHeapChunk);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-      spinlock_unlock(&(s->lock));
     }
 
     /*
@@ -68,7 +68,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 //     // mark the current thread as no longer being executed
 //     getThreadCurrent(s)->currentProcNum = -1;
 // #endif
-    switchToThread (s, pointerToObjptr(p, s->heap->start));
+    switchToThread (s, pointerToObjptr(p, NULL));
 
 // #if ASSERT
 //     int priorOwner = __sync_val_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), -1, s->procNumber);
@@ -83,20 +83,18 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     if (!HM_inGlobalHeap(s)) {
       /* I need to switch to the HH for the to-thread */
       /* copied from HM_exitGlobalHeap() */
-      spinlock_lock(&(s->lock), Proc_processorNumber(s));
-      s->globalFrontier = s->frontier;
-      s->globalLimitPlusSlop = s->limitPlusSlop;
-      HM_enterLocalHeap (s);
-      spinlock_unlock(&(s->lock));
+      HM_chunk currentChunk = HM_getChunkListLastChunk(s->globalHeap);
+      HM_updateChunkValues(currentChunk, s->frontier);
+      HM_enterLocalHeap(s);
     }
 
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     if (HM_inGlobalHeap(s)) {
-      ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE,
-                                                      TRUE, TRUE,
-                                                      0, 0);
+      ensureStackInvariantInGlobal(s);
+      ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
     } else {
+      /* SAM_NOTE: Shouldn't this be getThreadCurrent(s)->bytesNeeded? */
       HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
     }
 
@@ -113,7 +111,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     beginAtomic (s);
     /* END: enter(s); */
     getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-    switchToThread (s, pointerToObjptr(p, s->heap->start));
+    switchToThread (s, pointerToObjptr(p, NULL));
     s->atomicState--;
     switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
     /* BEGIN: ensureInvariantForMutator */

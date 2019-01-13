@@ -20,7 +20,7 @@ void updateWeaksForCheneyCopy (GC_state s) {
 
     if (DEBUG_WEAK)
       fprintf (stderr, "updateWeaksForCheneyCopy  w = "FMTPTR"  ", (uintptr_t)w);
-    p = objptrToPointer (w->objptr, s->heap->start);
+    p = objptrToPointer (w->objptr, NULL);
     if (hasFwdPtr(p)) {
       if (DEBUG_WEAK)
         fprintf (stderr, "forwarded from "FMTOBJPTR" to "FMTOBJPTR"\n",

@@ -47,8 +47,9 @@ struct GC_state {
   struct HM_chunkList* freeListLarge;
   size_t nextChunkAllocSize;
   struct GC_generationalMaps generationalMaps;
-  pointer globalFrontier;
-  pointer globalLimitPlusSlop;
+  struct HM_chunkList* globalHeap;
+  // pointer globalFrontier;
+  // pointer globalLimitPlusSlop;
   /* RAM_NOTE: Not sure if this is used anymore... */
   /*
    * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I

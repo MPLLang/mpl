@@ -547,7 +547,7 @@ void HM_getObjptrInfo(GC_state s,
                       struct HM_ObjptrInfo* info) {
   assertObjptrInHH(object);
 
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, s->heap->start));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
   assert(NULL != chunk);
 
   HM_chunkList chunkList = HM_getLevelHeadPathCompress(chunk);
@@ -745,7 +745,7 @@ bool HM_isObjptrInToSpace(GC_state s, objptr object) {
    * an object is in the toSpace? Does promotion use one, while collection
    * uses the other? */
   /* return HM_getObjptrLevelHeadChunk(s, object)->split.levelHead.isInToSpace; */
-  HM_chunk c = HM_getChunkOf(objptrToPointer(object, s->heap->start));
+  HM_chunk c = HM_getChunkOf(objptrToPointer(object, NULL));
   return HM_getLevelHeadPathCompress(c)->containingHH == COPY_OBJECT_HH_VALUE;
 }
 

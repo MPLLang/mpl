@@ -62,7 +62,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
   ((void)(ignored));
 
   op = *opp;
-  p = objptrToPointer (op, s->heap->start);
+  p = objptrToPointer (op, NULL);
   if (DEBUG_DETAILED)
     fprintf (stderr,
              "forwardObjptr  opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR"\n",
@@ -188,7 +188,7 @@ void forwardObjptrIfInNursery (GC_state s, objptr *opp, void* ignored) {
   ((void)(ignored));
 
   op = *opp;
-  p = objptrToPointer (op, s->heap->start);
+  p = objptrToPointer (op, NULL);
   if (p < s->heap->nursery)
     return;
   if (DEBUG_GENERATIONAL)

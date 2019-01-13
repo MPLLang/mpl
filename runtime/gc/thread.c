@@ -45,7 +45,7 @@ void displayThread (GC_state s,
           ((uintmax_t)(thread->inGlobalHeapCounter)),
           thread->stack,
           thread->hierarchicalHeap);
-  displayStack (s, (GC_stack)(objptrToPointer (thread->stack, s->heap->start)),
+  displayStack (s, (GC_stack)(objptrToPointer (thread->stack, NULL)),
                 stream);
   /* RAM_NOTE: displayHH! */
 }
@@ -81,7 +81,7 @@ static inline GC_thread threadObjptrToStruct(GC_state s, objptr threadObjptr) {
     return NULL;
   }
 
-  pointer threadPointer = objptrToPointer (threadObjptr, s->heap->start);
+  pointer threadPointer = objptrToPointer (threadObjptr, NULL);
   return ((GC_thread)(threadPointer + offsetofThread(s)));
 }
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

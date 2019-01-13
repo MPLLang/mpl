@@ -70,14 +70,14 @@ pointer HM_Promote(GC_state s,
         forwardHHObjptrArgs.minLevel,
         forwardHHObjptrArgs.maxLevel);
 
-    objptr srcobj = pointerToObjptr(src, s->heap->start);
+    objptr srcobj = pointerToObjptr(src, NULL);
 
     LOG(LM_HH_PROMOTION, LL_DEBUG, "START src copy");
 
     forwardHHObjptr(s, &srcobj, &forwardHHObjptrArgs);
 
     pointer start = foreachObjptrInObject(s,
-                                          objptrToPointer(srcobj, s->heap->start),
+                                          objptrToPointer(srcobj, NULL),
                                           FALSE,
                                           trueObjptrPredicate,
                                           NULL,
@@ -119,7 +119,7 @@ pointer HM_Promote(GC_state s,
     TraceResetCopy();
     Trace0(EVENT_PROMOTION_LEAVE);
 
-    pointer res = objptrToPointer(srcobj, s->heap->start);
+    pointer res = objptrToPointer(srcobj, NULL);
 
     LOG(LM_HH_PROMOTION, LL_DEBUG,
         "Promoted src %p to replica %p",

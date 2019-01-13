@@ -516,7 +516,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
-  s->controls->minChunkSize = GC_pageSize ();
+  s->controls->minChunkSize = 2 * GC_pageSize ();
   s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
@@ -531,8 +531,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->wsQueue = BOGUS_OBJPTR;
   s->wsQueueLock = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
-  s->globalFrontier = NULL;
-  s->globalLimitPlusSlop = NULL;
+  // s->globalFrontier = NULL;
+  // s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;
 
   s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
@@ -627,6 +627,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
+  // global heap objects at level 0
+  s->globalHeap = HM_newChunkList(NULL, 0);
+
   return res;
 }
 
@@ -668,8 +671,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->nextChunkAllocSize = s->nextChunkAllocSize;
-  d->globalFrontier = NULL;
-  d->globalLimitPlusSlop = NULL;
+  // d->globalFrontier = NULL;
+  // d->globalLimitPlusSlop = NULL;
   d->hashConsDuringGC = s->hashConsDuringGC;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
@@ -700,6 +703,8 @@ void GC_duplicate (GC_state d, GC_state s) {
 
   // SPOONHOWER_NOTE: better duplicate
   //initProfiling (d);
+
+  d->globalHeap = HM_newChunkList(NULL, 0);
 
   // Multi-processor support is incompatible with saved-worlds
   assert (d->amOriginal);

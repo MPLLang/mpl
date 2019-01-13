@@ -12,7 +12,7 @@ void displayGCState (GC_state s, FILE *stream) {
            "GC state\n");
 
   fprintf (stream, "\tcurrentThread = "FMTOBJPTR"\n", s->currentThread);
-  displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, s->heap->start)
+  displayThread (s, (GC_thread)(objptrToPointer (s->currentThread, NULL)
                                 + offsetofThread (s)),
                  stream);
 
@@ -391,7 +391,7 @@ size_t GC_getLastMajorStatisticsBytesLive (void) {
 
 pointer GC_getCallFromCHandlerThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  pointer p = objptrToPointer (s->callFromCHandlerThread, s->heap->start);
+  pointer p = objptrToPointer (s->callFromCHandlerThread, NULL);
   return p;
 }
 
@@ -405,7 +405,7 @@ void GC_setCallFromCHandlerThreads (pointer p) {
 
 pointer GC_getCurrentThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  pointer p = objptrToPointer (s->currentThread, s->heap->start);
+  pointer p = objptrToPointer (s->currentThread, NULL);
   return p;
 }
 
@@ -416,7 +416,7 @@ pointer GC_getCurrentHierarchicalHeap (void) {
 
   pointer retVal;
   if (BOGUS_OBJPTR != t->hierarchicalHeap) {
-    retVal = objptrToPointer (t->hierarchicalHeap, s->heap->start);
+    retVal = objptrToPointer (t->hierarchicalHeap, NULL);
   } else {
     /* create a new hierarchical heap to return */
     retVal = HM_newHierarchicalHeap(s);
@@ -428,7 +428,7 @@ pointer GC_getCurrentHierarchicalHeap (void) {
 
 void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
+  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
   objptr threadObjptr = getThreadCurrentObjptr(s);
   GC_thread thread = threadObjptrToStruct(s, threadObjptr);
 
@@ -446,7 +446,7 @@ pointer GC_getSavedThread (void) {
   pointer p;
 
   assert(s->savedThread != BOGUS_OBJPTR);
-  p = objptrToPointer (s->savedThread, s->heap->start);
+  p = objptrToPointer (s->savedThread, NULL);
   s->savedThread = BOGUS_OBJPTR;
   return p;
 }
@@ -456,7 +456,7 @@ void GC_setSavedThread (pointer p) {
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
-  op = pointerToObjptr (p, s->heap->start);
+  op = pointerToObjptr (p, NULL);
   s->savedThread = op;
 }
 

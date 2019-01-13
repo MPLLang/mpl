@@ -83,8 +83,8 @@ void growStackCurrent (GC_state s, bool allocInOldGen) {
 #endif
   stack = newStack (s, reserved, allocInOldGen);
   copyStack (s, getStackCurrent(s), stack);
-  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, s->heap->start);
-  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), s->heap->start));
+  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, NULL);
+  markCard (s, objptrToPointer (getThreadCurrentObjptr(s), NULL));
 }
 
 void enterGC (GC_state s) {
@@ -503,6 +503,40 @@ void ensureHasHeapBytesFreeAndOrInvariantForMutator (GC_state s, bool forceGC,
   assert (not ensureStack or invariantForMutatorStack(s));
 }
 
+void ensureStackInvariantInGlobal(GC_state s) {
+  assert(HM_inGlobalHeap(s));
+
+  if (invariantForMutatorStack(s))
+    return;
+
+  size_t bytesNeeded =
+    sizeofStackWithMetaData(s, sizeofStackGrowReserved(s, getStackCurrent(s)));
+
+  ensureBytesFreeInGlobal(s, bytesNeeded);
+  growStackCurrent(s, FALSE);
+  HM_updateChunkValues(HM_getChunkListLastChunk(s->globalHeap), s->frontier);
+  setGCStateCurrentThreadAndStack(s);
+
+  assert(invariantForMutatorStack(s));
+}
+
+void ensureBytesFreeInGlobal(GC_state s, size_t bytesRequested) {
+  assert(HM_inGlobalHeap(s));
+
+  size_t heapBytesFree = s->limitPlusSlop - s->frontier;
+
+  if (heapBytesFree < bytesRequested) {
+    HM_chunk current = HM_getChunkListLastChunk(s->globalHeap);
+    HM_updateChunkValues(current, s->frontier);
+    HM_chunk newChunk = HM_allocateChunk(s->globalHeap, bytesRequested);
+    s->frontier = HM_getChunkFrontier(newChunk);
+    s->limitPlusSlop = HM_getChunkLimit(newChunk);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  }
+
+  assert(s->limitPlusSlop - s->frontier >= bytesRequested);
+}
+
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   Trace0(EVENT_RUNTIME_ENTER);
 
@@ -526,26 +560,32 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
-    /*
-     * first make sure that I hit the minimum if I am doing a global heap
-     * allocation
-     */
-    bytesRequested = s->controls->globalHeapMinChunkSize;
-  }
+  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->minChunkSize);
+
+  // if (inGlobalHeap && (bytesRequested < s->controls->globalHeapMinChunkSize)) {
+  //   /*
+  //    * first make sure that I hit the minimum if I am doing a global heap
+  //    * allocation
+  //    */
+  //   bytesRequested = s->controls->globalHeapMinChunkSize;
+  // }
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
 
   if (inGlobalHeap) {
-    ensureHasHeapBytesFreeAndOrInvariantForMutator (s, force,
-                                                    TRUE, TRUE,
-                                                    0, 0);
+    ensureStackInvariantInGlobal(s);
+    /* SAM_NOTE: for now, ignoring forcing collection in global heap.
+     * TODO: global collections? */
+    ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
   } else {
+    /* SAM_NOTE: shouldn't this be
+     *   getThreadCurrent(s)->bytesNeeded
+     * instead of bytesRequested? */
     HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
   }
 
-  endAtomic (s);
+  endAtomic(s);
 
   Trace0(EVENT_RUNTIME_LEAVE);
 }

@@ -20,38 +20,52 @@ pointer newObject (GC_state s,
   pointer frontier;
   pointer result;
 
-  assert (isAligned (bytesRequested, s->alignment));
-  assert (allocInOldGen
-          ? hasHeapBytesFree (s, bytesRequested, 0)
-          : hasHeapBytesFree (s, 0, bytesRequested));
-  if (allocInOldGen) {
-    /* NB you must have exclusive access to the runtime state
-       if you are allocating in the older generation! */
-    assert(HM_inGlobalHeap(s));
-    frontier = s->heap->start + s->heap->oldGenSize;
-    s->heap->oldGenSize += bytesRequested;
-    s->cumulativeStatistics->bytesAllocated += bytesRequested;
+  /* SAM_NOTE: old gen has been removed entirely now.
+   * TODO: remove this argument */
+  assert(!allocInOldGen);
+
+  assert(isAligned(bytesRequested, s->alignment));
+  // assert (allocInOldGen
+  //         ? hasHeapBytesFree (s, bytesRequested, 0)
+  //         : hasHeapBytesFree (s, 0, bytesRequested));
+  assert(s->limitPlusSlop - s->frontier >= bytesRequested);
+
+  frontier = s->frontier;
+
+  /* If the allocation crosses a block boundary, then we have to allocate a new
+   * chunk to preserve the chunk/block invariant that the front of every object
+   * begins in the first block of a chunk. */
+  /* SAM_NOTE: this could be inefficient if the next allocation happens to be
+   * a large object. */
+  /* SAM_NOTE: TODO: unify these two branches (they do almost exactly the
+   * same thing) */
+  if (HM_inGlobalHeap(s)) {
+    HM_chunk current = HM_getChunkOf(frontier);
+    assert(current == HM_getChunkListLastChunk(s->globalHeap));
+    s->frontier += bytesRequested; // this has to come after HM_inGlobalHeap
+    if (!inFirstBlockOfChunk(current, s->frontier)) {
+      HM_updateChunkValues(current, s->frontier);
+      // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
+      HM_chunk newChunk = HM_allocateChunk(s->globalHeap, GC_HEAP_LIMIT_SLOP);
+      s->frontier = HM_getChunkFrontier(newChunk);
+      s->limitPlusSlop = HM_getChunkLimit(newChunk);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    }
   } else {
-    if (DEBUG_DETAILED)
-      fprintf (stderr, "frontier changed from "FMTPTR" to "FMTPTR"\n",
-               (uintptr_t)s->frontier,
-               (uintptr_t)(s->frontier + bytesRequested));
-    frontier = s->frontier;
     s->frontier += bytesRequested;
-    if (!isPointerInGlobalHeap(s, s->frontier)) {
-      assert(!HM_inGlobalHeap(s));
-      if (!inSameBlock(frontier, s->frontier)) {
-        /* force a new chunk to be created so that no new objects lie after this
-         * array, which crossed a block boundary. */
-        struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
-        HM_HH_updateValues(hh, s->frontier);
-        HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
-        s->frontier = HM_HH_getFrontier(hh);
-        s->limitPlusSlop = HM_HH_getLimit(hh);
-        s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-      }
+    if (!inSameBlock(frontier, s->frontier)) {
+      /* force a new chunk to be created so that no new objects lie after this
+       * array, which crossed a block boundary. */
+      struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+      HM_HH_updateValues(hh, s->frontier);
+      // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
+      HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+      s->frontier = HM_HH_getFrontier(hh);
+      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
   }
+
   /* SPOONHOWER_NOTE: unprotected concurrent access */
   GC_profileAllocInc (s, bytesRequested);
   *((GC_header*)(frontier)) = header;
@@ -104,9 +118,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
 
   assert (isStackReservedAligned (s, reserved));
   if (HM_inGlobalHeap(s)) {
-    ensureHasHeapBytesFreeAndOrInvariantForMutator (
-        s, FALSE, FALSE, FALSE,
-        0, sizeofStackWithMetaData (s, reserved) + sizeofThread (s));
+    ensureBytesFreeInGlobal(s, sizeofStackWithMetaData(s, reserved) + sizeofThread(s));
+    // ensureHasHeapBytesFreeAndOrInvariantForMutator (
+    //     s, FALSE, FALSE, FALSE,
+    //     0, sizeofStackWithMetaData (s, reserved) + sizeofThread (s));
   } else {
     HM_ensureHierarchicalHeapAssurances(s,
                                         FALSE,
@@ -117,6 +132,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
   }
   stack = newStack (s, reserved, FALSE);
   assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
+  /* SAM_NOTE: this is broken? if the stack is just the right size to force the
+   * thread object to lie beyond the limit... */
   res = newObject (s, GC_THREAD_HEADER,
                    sizeofThread (s),
                    FALSE);
@@ -126,7 +143,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   // thread->currentProcNum = -1; // TODO: define a constant INVALID_PROC_NUM... where should it go?
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, s->heap->start);
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->hierarchicalHeap = BOGUS_OBJPTR;
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
@@ -142,12 +159,13 @@ GC_thread newThread (GC_state s, size_t reserved) {
 pointer HM_newHierarchicalHeap (GC_state s) {
   /* allocate the object */
   assert(HM_inGlobalHeap(s));
-  ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
-                                                 FALSE,
-                                                 FALSE,
-                                                 FALSE,
-                                                 0,
-                                                 HM_HH_sizeof(s));
+  ensureBytesFreeInGlobal(s, HM_HH_sizeof(s));
+  // ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
+  //                                                FALSE,
+  //                                                FALSE,
+  //                                                FALSE,
+  //                                                0,
+  //                                                HM_HH_sizeof(s));
   pointer hhObject = newObject (s,
                                 GC_HIERARCHICAL_HEAP_HEADER,
                                 HM_HH_sizeof(s),
@@ -166,7 +184,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   hh->lastAllocatedChunk = NULL;
   rwlock_init(&hh->lock);
   hh->state = LIVE;
-  hh->level = 0;
+  hh->level = 1; // level 0 is reserved for global heap
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;
   // hh->levelList = NULL;

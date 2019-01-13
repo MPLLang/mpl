@@ -103,13 +103,14 @@ void printObjectsInRange(GC_state s,
     header = getHeader(p);
     oi.objectTypeIndex = (header & TYPE_INDEX_MASK) >> TYPE_INDEX_SHIFT;
     splitHeader(s, header, &(oi.tag), &(oi.hasIdentity), &(oi.bytesNonObjptrs), &(oi.numObjptrs));
-    oi.op = pointerToObjptr(p, s->heap->start);
+    oi.op = pointerToObjptr(p, NULL);
 
     if (NORMAL_TAG == oi.tag) {
       p += oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE);
     }
     else if (ARRAY_TAG == oi.tag) {
-      p += getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+      size_t dataBytes = getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+      p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
     }
     else if (STACK_TAG == oi.tag) {
       p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved;

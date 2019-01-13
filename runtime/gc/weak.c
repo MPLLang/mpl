@@ -48,7 +48,7 @@ pointer GC_weakGet (GC_state s, pointer p) {
   pointer res;
 
   weak = (GC_weak)(p + offsetofWeak (s));
-  res = objptrToPointer(weak->objptr, s->heap->start);
+  res = objptrToPointer(weak->objptr, NULL);
   if (DEBUG_WEAK)
     fprintf (stderr, FMTPTR" = GC_weakGet ("FMTPTR") [%d]\n",
              (uintptr_t)res, (uintptr_t)p,
@@ -64,7 +64,7 @@ pointer GC_weakNew (GC_state s, GC_header header, pointer p) {
                    sizeofWeak (s),
                    FALSE);
   weak = (GC_weak)(res + offsetofWeak (s));
-  weak->objptr = pointerToObjptr(p, s->heap->start);
+  weak->objptr = pointerToObjptr(p, NULL);
   if (DEBUG_WEAK)
     fprintf (stderr, FMTPTR" = GC_weakNew ("FMTHDR", "FMTPTR") [%d]\n",
              (uintptr_t)res, header, (uintptr_t)p,
