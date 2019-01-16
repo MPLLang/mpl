@@ -1,17 +1,17 @@
-structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN = 
+structure MLtonParallelForkJoin :> MLTON_PARALLEL_FORKJOIN =
 struct
 
   structure B = MLtonParallelBasic
   structure V = MLtonParallelSyncVarCapture
 
-  datatype 'a result = 
+  datatype 'a result =
      Finished of 'a
    | Raised of exn
 
   fun fork (f, g) =
       let
         (* Used to hold the result of the right-hand side in the case where
-          that code is executed in parallel. *) 
+          that code is executed in parallel. *)
         val var = V.empty ()
         (* Closure used to run the right-hand side... but only in the case
           where that code is run in parallel. *)
@@ -87,5 +87,32 @@ struct
     in
       wrap 0 n ()
     end
+
+  fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
+
+  fun parfor grain (i, j) f =
+    let val n = j - i
+    in if n <= grain
+       then for (i, j) f
+       else ( fork ( fn _ => parfor grain (i, i + n div 2) f
+                   , fn _ => parfor grain (i + n div 2, j) f
+                   )
+            ; ()
+            )
+    end
+
+  fun alloc n =
+    let
+      val a = ArrayExtra.Raw.alloc n
+      val _ =
+        if ArrayExtra.Raw.uninitIsNop a then ()
+        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
+    in
+      ArrayExtra.Raw.unsafeToArray a
+    end
+
+  fun communicate () = ()
+
+  fun getIdleTime _ = Time.zeroTime
 
 end
