@@ -11,8 +11,8 @@
  * termination has been requested.
  */
 
-atomic_uint32_t *pleader(GC_state s);
-atomic_uint32_t *pleader(GC_state s) {
+uint32_t *pleader(GC_state s);
+uint32_t *pleader(GC_state s) {
   return &s->procStates[0].terminationLeader;
 }
 
@@ -28,7 +28,7 @@ bool GC_CheckForTerminationRequest(GC_state s) {
   if (s->procStates == NULL)
     return false;
 
-  uint32_t leader = atomic_load_explicit(pleader(s), memory_order_acquire);
+  uint32_t leader = atomicLoadU32(pleader(s));
   bool in_progress = leader != INVALID_PROCESSOR_NUMBER;
 
   if (in_progress)
@@ -69,7 +69,8 @@ bool GC_TryToTerminate(GC_state s) {
   /* If the CAS succeeds, we won the race and can tell the other threads to
    * terminate. Otherwise, another processor has won the race and will lead the
    * termination protocol. */
-  if (!atomic_compare_exchange_strong(pleader(s), &inval, myself))
+  // if (!atomic_compare_exchange_strong(pleader(s), &inval, myself))
+  if (!__sync_bool_compare_and_swap(pleader(s), inval, myself))
     return false;
 
   /* Force all processors to acknowledge termination. */

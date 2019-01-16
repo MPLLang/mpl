@@ -299,7 +299,7 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
  * @param object The objptr to get the Hierarchical Heap lock for
  * @param retVal Pointer to the rwlock of this object's HH.
  */
-rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
+// rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
 Word32 HM_getObjptrLevel(objptr op);
 

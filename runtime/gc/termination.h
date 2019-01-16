@@ -8,7 +8,7 @@
 #define INVALID_PROCESSOR_NUMBER UINT32_MAX
 
 /* AG_NOTE: probably not here */
-typedef _Atomic(uint32_t) atomic_uint32_t;
+//typedef _Atomic(uint32_t) atomic_uint32_t;
 
 /* This function terminates the current thread.
  */

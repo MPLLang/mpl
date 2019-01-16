@@ -9,7 +9,7 @@
 #define HIERARCHICAL_HEAP_H_
 
 #include "chunk.h"
-#include "rwlock.h"
+//#include "rwlock.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 enum HM_HHState {
@@ -50,7 +50,9 @@ struct HM_HierarchicalHeap {
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
-  rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
+  /* SAM_NOTE: TODO: this is a placeholder, for testing. Remove ASAP. */
+  Int32 ignoreThis;
+  // rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
 
   volatile enum HM_HHState state; /**< The state of this hierarchical heap */
 
@@ -447,28 +449,28 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
  *
  * @param hh the struct HM_HierarchicalHeap* to lock
  */
-void lockWriterHH(struct HM_HierarchicalHeap* hh);
+// void lockWriterHH(struct HM_HierarchicalHeap* hh);
 
 /**
  * Releases the writer lock on 'hh'
  *
  * @param hh the struct HM_HierarchicalHeap* to unlock
  */
-void unlockWriterHH(struct HM_HierarchicalHeap* hh);
+// void unlockWriterHH(struct HM_HierarchicalHeap* hh);
 
 /**
  * Gets the writer lock on 'hh'
  *
  * @param hh the struct HM_HierarchicalHeap* to lock
  */
-void lockReaderHH(struct HM_HierarchicalHeap* hh);
+// void lockReaderHH(struct HM_HierarchicalHeap* hh);
 
 /**
  * Releases the writer lock on 'hh'
  *
  * @param hh the struct HM_HierarchicalHeap* to unlock
  */
-void unlockReaderHH(struct HM_HierarchicalHeap* hh);
+// void unlockReaderHH(struct HM_HierarchicalHeap* hh);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

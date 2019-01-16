@@ -736,9 +736,9 @@ Word32 HM_getObjptrLevel(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
 }
 
-rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
-  return &HM_getObjptrHH(s, object)->lock;
-}
+// rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
+//   return &HM_getObjptrHH(s, object)->lock;
+// }
 
 bool HM_isObjptrInToSpace(GC_state s, objptr object) {
   /* SAM_NOTE: why is this commented out? why are there two ways to check if

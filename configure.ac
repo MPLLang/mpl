@@ -5,7 +5,7 @@ AC_PREREQ([2.69])
 
 # caveat: MLTON_VERSION might differ between the configuration and build 
 #         steps if autoreconf is not re-run at every build
-m4_define([MLTON_VERSION], m4_esyscmd([TZ=UTC git log -n1 --date=format-local:"%Y%m%d.%H%M%S" --pretty=format:"%cd-g%h$( [ "$(git status --porcelain 2> /dev/null)" ] && echo '-dirty')" 2> /dev/null || echo '????????']))
+m4_define([MLTON_VERSION], m4_esyscmd([TZ=UTC git log -n1 --date=format-local:"%Y%m%d.%H%M%S" --pretty=format:"%cd-g%h$( [ "$(git status --porcelain 2> /dev/null)" ] && echo '-dirty')" 2> /dev/null || echo -n '????????']))
 AC_INIT([MLton], [MLTON_VERSION], [mlton-devel@mlton.org])
 
 # if this file does not exist, `configure` was invoked in the wrong directory
