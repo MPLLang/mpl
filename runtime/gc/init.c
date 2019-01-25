@@ -516,7 +516,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
-  s->controls->minChunkSize = 2 * GC_pageSize ();
+  /* Not arbitrary; should be at least the page size and must also respect the
+   * limit check coalescing amount in the compiler. */
+  s->controls->minChunkSize = max(GC_pageSize(), 4096);
   s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
