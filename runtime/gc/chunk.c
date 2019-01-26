@@ -259,7 +259,7 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
   size_t bs = HM_BLOCK_SIZE;
   pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
   if (MAP_FAILED == start) {
-    DIE("Map failed in mmapNewChunk(%zu)", chunkWidth);
+    DIE("Out of memory. Unable to allocate new chunk of size %zu.", chunkWidth);
     return NULL;
   }
   start = (pointer)(uintptr_t)align((uintptr_t)start, bs);
@@ -344,6 +344,8 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   HM_chunk chunk = HM_getFreeChunk(s, bytesRequested);
 
   if (NULL == chunk) {
+    DIE("Out of memory. Unable to allocate chunk of size %zu.",
+        bytesRequested);
     return NULL;
   }
 
@@ -367,6 +369,11 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
 
   // SAM_NOTE: replace with custom arena allocation if a performance bottleneck
   HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
+
+  if (list == NULL) {
+    DIE("Out of memory. Unable to allocate new chunk list.");
+    return NULL;
+  }
 
   list->firstChunk = NULL;
   list->lastChunk = NULL;
