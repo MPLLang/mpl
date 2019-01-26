@@ -86,6 +86,7 @@ struct GC_controls {
   bool freeListCoalesce;
   bool mayUseAncestorChunk;
   bool oldHHGCPolicy;
+  bool setAffinity; /* whether or not to set processor affinity */
   int32_t affinityBase; /* First processor to use when setting affinity */
   int32_t affinityStride; /* Number of processors between first and second */
   bool restrictAvailableSize; /* Use smaller heaps to improve space profiling accuracy */

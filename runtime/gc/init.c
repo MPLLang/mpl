@@ -186,6 +186,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->controls->globalHeapMinChunkSize = stringToBytes (argv[i++]);
           unless (GC_HEAP_LIMIT_SLOP < s->controls->globalHeapMinChunkSize)
             die ("@MLton global-heap-min-chunk argument must be greater than slop.");
+        } else if (0 == strcmp (arg, "set-affinity")) {
+          i++;
+          s->controls->setAffinity = TRUE;
         } else if (0 == strcmp (arg, "affinity-base")) {
           i++;
           if (i == argc)
@@ -487,6 +490,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->HMMessages = FALSE;
   s->controls->oldGenArraySize = 0x100000;
   s->controls->globalHeapMinChunkSize = 4096;
+  s->controls->setAffinity = FALSE;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
   s->controls->restrictAvailableSize = FALSE;
