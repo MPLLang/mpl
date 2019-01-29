@@ -486,6 +486,8 @@ Word32 HM_HH_getHighestPrivateLevel(GC_state s, const struct HM_HierarchicalHeap
     HM_HH_objptrToStruct(s, hh->childHHList);
 
   if (NULL == highestStolenHH) {
+    /* SAM_NOTE: with incorporating the global heap into the hierarchy, this
+     * is incorrect? should be 1? */
     return 0;
   } else {
     return highestStolenHH->stealLevel+1;
@@ -672,12 +674,21 @@ void assertInvariants(GC_state s,
   }
   HM_assertLevelListInvariants(hh, hh->stealLevel, false);
 
+  /* Check that all chunk lists are levelHeads */
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_chunkList list = HM_HH_LEVEL(hh, i);
+    if (list != NULL) {
+      assert(HM_isLevelHead(list));
+    }
+  }
+
+  /* Check that the levels past the recorded level are empty */
   Word64 locallyCollectibleSize = 0;
   FOR_LEVEL_IN_RANGE(level, i, hh, hh->level+1, HM_MAX_NUM_LEVELS, {
     locallyCollectibleSize += HM_getChunkListSize(level);
   });
-  // The levels past the recorded level should be empty
   assert(0 == locallyCollectibleSize);
+
   FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getHighestStolenLevel(s, hh)+1, hh->level+1, {
     locallyCollectibleSize += HM_getChunkListSize(level);
   });

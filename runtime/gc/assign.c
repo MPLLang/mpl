@@ -258,3 +258,68 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
     HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
   }
 }
+
+#if ASSERT
+void assertObjptrDisentangledForMe(GC_state s, objptr op) {
+  if (HM_inGlobalHeap(s) || !isObjptr(op)) return;
+
+  /* Don't call HM_getChunkOf() here, because it does additional asserts that
+   * we don't want. */
+  HM_chunk objectChunk = (HM_chunk)blockOf(objptrToPointer(op, NULL));
+  objptr hhop = getHierarchicalHeapCurrentObjptr(s);
+  assert(isObjptr(hhop));
+  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhop);
+
+  /* Search all chunks in my own hierarchical heap. Off-by-one loop to
+   * prevent underflow. */
+  for (Word32 i = hh->level+1; i > 0; i--) {
+    HM_chunkList list = hh->levels[i-1];
+    if (list == NULL) continue;
+    for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
+         cursor != NULL;
+         cursor = cursor->nextChunk) {
+      if (cursor == objectChunk) return;
+    }
+  }
+
+  /* Search accessible chunks of each parent hh */
+  while (isObjptr(hh->parentHH)) {
+    struct HM_HierarchicalHeap* phh = HM_HH_objptrToStruct(s, hh->parentHH);
+    assert(hh->stealLevel != HM_HH_INVALID_LEVEL);
+    Word32 start = hh->stealLevel+1;
+    Word32 stop = (phh->stealLevel == HM_HH_INVALID_LEVEL ? 1 : phh->stealLevel+1);
+    /* off-by-one to prevent underflow. This executes the body for each
+     * stop <= i < start, but in decreasing order. */
+    for (Word32 i = start; i > stop; i--) {
+      HM_chunkList list = phh->levels[i-1];
+      if (list == NULL) continue;
+      for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
+           cursor != NULL;
+           cursor = cursor->nextChunk) {
+        if (cursor == objectChunk) return;
+      }
+    }
+    hh = phh;
+  }
+
+  /* Check that it's in the global heap. */
+  /* SAM_NOTE: This is concurrent access with other processor's manipulation
+   * of their own global heap chunks, but on x86 I believe it should be safe.
+   */
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    HM_chunkList list = s->procStates[i].globalHeap;
+    for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
+         cursor != NULL;
+         cursor = cursor->nextChunk) {
+      if (cursor == objectChunk) return;
+    }
+  }
+
+  /* None of my ancestors chunks contain this objptr */
+  DIE("entanglement detected: object "FMTOBJPTR" in chunk %p",
+      op,
+      (void*)objectChunk);
+
+  return;
+}
+#endif /* ASSERT */

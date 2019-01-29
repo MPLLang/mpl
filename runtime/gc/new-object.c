@@ -186,6 +186,7 @@ pointer HM_newHierarchicalHeap (GC_state s) {
   // rwlock_init(&hh->lock);
   hh->state = LIVE;
   hh->level = 1; // level 0 is reserved for global heap
+  /* SAM_NOTE: Now that global is in the hierarchy, should this be 0? */
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->id = 0;
   // hh->levelList = NULL;

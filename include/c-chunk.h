@@ -11,6 +11,7 @@
 
 #include <pthread.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "ml-types.h"
 #include "c-types.h"
@@ -373,17 +374,17 @@ extern void Assignable_unlockReplicaWriter(
 extern Objptr Assignable_get(CPointer, Objptr, Int64);
 extern void Assignable_set(CPointer, Objptr, Int64, Objptr);
 
+#if ASSERT
+extern void assertObjptrDisentangledForMe(CPointer, Objptr);
+#endif
+
 static inline Objptr Ref_deref_P(CPointer s, Objptr src) {
-    Objptr res;
-
-    res = *IDX(Objptr, src, 0);
-    // assert(Assignable_isMaster(s, src));
-    return res;
-    // if (Assignable_isMaster(s, src)) {
-    //     return res;
-    // }
-
-    // return Assignable_get(s, src, 0);
+  Objptr res;
+  res = *IDX(Objptr, src, 0);
+#if ASSERT
+  assertObjptrDisentangledForMe(s, res);
+#endif
+  return res;
 }
 
 static inline void Ref_assign_P(CPointer s, Objptr dst, Objptr src) {
@@ -442,16 +443,12 @@ RefAccessFunctionsForOpaqueData(R64, Real64_t)
 /* ------------------------------------------------- */
 
 static inline Objptr Array_sub_P(CPointer s, Objptr src, Int64 index) {
-    Objptr res;
-
-    res = *IDX(Objptr, src, index);
-    // assert(Assignable_isMaster(s, src));
-    return res;
-    // if (Assignable_isMaster(s, src)) {
-    //     return res;
-    // }
-
-    // return Assignable_get(s, src, index);
+  Objptr res;
+  res = *IDX(Objptr, src, index);
+#if ASSERT
+  assertObjptrDisentangledForMe(s, res);
+#endif
+  return res;
 }
 
 static inline void Array_update_P(
