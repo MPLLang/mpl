@@ -1032,17 +1032,23 @@ fun transform (Program.T {functions, handlesSignals, main, objectTypes}) =
          case !Control.limitCheck of
             PerBlock => (*insertPerBlock (f, handlesSignals)*)
               Error.bug "LimitCheck.transform: insertPerBlock not supported"
-
-            (* SAM_NOTE: I chose 512*7 because the smallest block size that we
-             * use is 4K, and each chunk has a chunk descriptor of some small
-             * size at the beginning of each chunk. To be correct, the chunk
-             * descriptor can be at most 512 bytes!
-             *
-             * TODO: This is a dirty hack. Ideally, at compile time, a block
-             * size should be chosen and we should pass the parameter:
-             *   blockSize - sizeOfChunkDescriptor
-             *)
-          | _ => insertCoalesce (f, Bytes.fromInt (512*7), handlesSignals)
+          | _ =>
+              let
+                (* SAM_NOTE: I chose 512*7 because the smallest block size that we
+                 * use is 4K, and each chunk has a chunk descriptor of some small
+                 * size at the beginning of each chunk. To be correct, the chunk
+                 * descriptor can be at most 512 bytes! The current runtime
+                 * uses chunk descriptors of size much smaller than 512 bytes.
+                 *
+                 * TODO: This is a dirty hack. Ideally, at compile time, a block
+                 * size should be chosen and we should pass the parameter:
+                 *   blockSize - sizeOfChunkDescriptor
+                 *)
+                val maxBytesAlloc =
+                  Bytes.- (Bytes.fromInt (512*7), Runtime.limitSlop)
+              in
+                insertCoalesce (f, maxBytesAlloc, handlesSignals)
+              end
 
       (* insert limit checks into all functions *)
       val functions = List.revMap (functions, insert)
