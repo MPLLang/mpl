@@ -550,8 +550,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic (s);
 
-  bool inGlobalHeap = !getThreadCurrent(s)->useHierarchicalHeap ||
-                      HM_inGlobalHeap(s);
+  bool inGlobalHeap =
+    getThreadCurrent(s)->hierarchicalHeap == NULL || HM_inGlobalHeap(s);
 
   /* adjust bytesRequested */
   /*

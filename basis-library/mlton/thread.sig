@@ -1,4 +1,5 @@
-(* Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Sam Westrick
+ * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a BSD-style license.
@@ -37,6 +38,30 @@ signature MLTON_THREAD =
           val atomicState : unit -> Word32.word
           val atomicBegin : unit -> unit
           val atomicEnd : unit -> unit
+        end
+
+      structure HierarchicalHeap :
+        sig
+          (* Give the specified thread its own heap; return false if it already
+           * has one. The specified thread must be inactive and must not
+           * already have an associated heap. *)
+          val newHeap : Basic.t -> unit
+
+          (* The level (depth) of a thread's heap in the hierarchy. *)
+          val getLevel : Basic.t -> int
+          val setLevel : Basic.t * int -> unit
+
+          (* `attachChild (parent, child, depth)`
+           * Requires that child is inactive and already has an associated heap.
+           * Implicitly sets child's level to begin allocating at depth+1. *)
+          val attachChild : Basic.t * Basic.t * int -> unit
+
+          (* Merge the heap of the deepest child of this thread. Requires that
+           * this child is inactive and has an associated heap. *)
+          val mergeDeepestChild : Basic.t -> unit
+
+          (* Move all chunks at the current level up one level. *)
+          val promoteChunks : Basic.t -> unit
         end
 
       type 'a t

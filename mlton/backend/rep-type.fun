@@ -428,16 +428,18 @@ structure ObjectType =
                           Bits.toBytes (Control.Target.Size.metaData ())
                       val bytesInGlobalHeapCounter =
                           Bits.toBytes (Type.width Type.word32)
+                      (*
                       val bytesUseHierarchicalHeap =
                           Bits.toBytes (Type.width Type.bool)
+                      *)
                       val bytesBytesNeeded =
                           Bits.toBytes (Control.Target.Size.csize ())
                       val bytesExnStack =
                           Bits.toBytes (Type.width (Type.exnStack ()))
+                      val bytesHierarchicalHeap =
+                          Bits.toBytes (Control.Target.Size.cpointer ())
                       val bytesStack =
                           Bits.toBytes (Type.width (Type.stack ()))
-                      val bytesHierarchicalHeap =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
 
                       val bytesObject =
                           let
@@ -446,11 +448,10 @@ structure ObjectType =
                           in
                               bytesMetaData +
                               bytesInGlobalHeapCounter +
-                              bytesUseHierarchicalHeap +
                               bytesBytesNeeded +
                               bytesExnStack +
-                              bytesStack +
-                              bytesHierarchicalHeap
+                              bytesHierarchicalHeap +
+                              bytesStack
                           end
 
                       val bytesTotal = Bytes.align (bytesObject,
@@ -464,17 +465,16 @@ structure ObjectType =
                       ty =
                       Type.seq (Vector.fromList [padding,
                                                  Type.word32,
-                                                 Type.bool,
                                                  Type.csize (),
                                                  Type.exnStack (),
-                                                 Type.stack (),
-                                                 Type.hierarchicalHeap ()])}
+                                                 Type.cpointer (),
+                                                 Type.stack ()])}
           end
 
       val hierarchicalHeap =
        fn () =>
           let
-              (* This must match runtime/gc/hierarchical_heap.h *)
+              (* SAM_NOTE: now deprecated. *)
               val HM_MAX_NUM_LEVELS = 64
 
               val padding =

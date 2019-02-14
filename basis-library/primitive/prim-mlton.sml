@@ -152,75 +152,6 @@ structure GC =
 
 structure HM =
     struct
-        structure HierarchicalHeap =
-            struct
-                type 'a t = 'a HM.HierarchicalHeap.t
-
-                val appendChildHeap: 'a t * 'b t * Word32.word -> unit =
-                    _import "HM_HH_appendChild" runtime private:
-                    'a t * 'b t * Word32.word -> unit;
-
-                val getHierarchicalHeap: unit -> unit t =
-                   _import "GC_getCurrentHierarchicalHeap" runtime private:
-                    unit -> unit t;
-
-                val getLevel: 'a t -> Word32.word =
-                    _import "HM_HH_getLevel" runtime private:
-                    'a t -> Word32.word;
-
-                val getLowestPrivateLevel: 'a t -> Word32.word =
-                    _import "HM_HH_getLowestPrivateLevelFFI" runtime private:
-                    'a t -> Word32.word;
-
-                val mergeIntoParentHeap: 'a t -> unit =
-                    _import "HM_HH_mergeIntoParent" runtime private:
-                    'a t -> unit;
-
-                val mergeIntoParentHeapAndGetReturnValue: 'a t -> 'a =
-                    _import "HM_HH_mergeIntoParentAndGetReturnValue" runtime private:
-                    'a t -> 'a;
-
-                val newHierarchicalHeap: unit -> 'a t =
-                    _prim "HierarchicalHeap_new": unit -> 'a t;
-
-                val promoteChunks: 'a t -> unit =
-                    _import "HM_HH_promoteChunks" runtime private: 'a t -> unit;
-
-                val setCurrentThreadUseHierarchicalHeap: bool -> unit =
-                    _import "T_setCurrentThreadUseHierarchicalHeap"
-                            runtime private: bool -> unit;
-
-                val setHierarchicalHeap: 'a t -> unit =
-                    _import "GC_setCurrentHierarchicalHeap" runtime private:
-                    'a t -> unit;
-
-                val setDead: 'a t -> unit =
-                    _import "HM_HH_setDead" runtime private:
-                    'a t -> unit;
-
-                val setLevel: 'a t * Word32.word -> unit =
-                    _import "HM_HH_setLevel" runtime private:
-                    'a t * Word32.word -> unit;
-
-                val setReturnValue: 'a t * 'b -> 'b t =
-                    _import "HM_HH_setReturnValue" runtime private:
-                    'a t * 'b -> 'b t;
-            end
-
-        val enterGlobalHeap: unit -> unit =
-            _import "HM_enterGlobalHeap" runtime private: unit -> unit;
-
-        val exitGlobalHeap: unit -> unit =
-            _import "HM_exitGlobalHeap" runtime private: unit -> unit;
-
-        (* val explicitEnterGlobalHeap: Word32.word -> unit =
-            _import "HM_explicitEnterGlobalHeap" runtime private:
-            Word32.word -> unit;
-
-        val explicitExitGlobalHeap: unit -> Word32.word =
-            _import "HM_explicitExitGlobalHeap" runtime private:
-            unit -> Word32.word; *)
-
         val registerQueue: Word32.word * 'a array -> unit =
             _import "HM_HHC_registerQueue" runtime private:
             Word32.word * 'a array -> unit;
@@ -453,6 +384,13 @@ structure Thread =
       val setSaved = _import "GC_setSavedThread" runtime private: thread -> unit;
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: unit -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
+
+      val newHeap = _import "GC_HH_newHeap" runtime private: thread -> unit;
+      val getLevel = _import "GC_HH_getLevel" runtime private: thread -> Word32.word;
+      val setLevel = _import "GC_HH_setLevel" runtime private: thread * Word32.word -> unit;
+      val attachChild = _import "GC_HH_attachChild" runtime private: thread * thread * Word32.word -> unit;
+      val mergeDeepestChild = _import "GC_HH_mergeDeepestChild" runtime private: thread -> unit;
+      val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
    end
 
 structure Weak =

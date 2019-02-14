@@ -168,8 +168,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
                        s->alignment));
 
     if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-      /* update level chunk head containingHH pointers */
-      HM_HH_updateLevelListPointers(getFwdPtr(p));
+      DIE("Found hierarchical heap object");
     }
   }
   *opp = getFwdPtr(p);

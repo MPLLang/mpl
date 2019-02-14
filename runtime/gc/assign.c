@@ -266,9 +266,8 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
   /* Don't call HM_getChunkOf() here, because it does additional asserts that
    * we don't want. */
   HM_chunk objectChunk = (HM_chunk)blockOf(objptrToPointer(op, NULL));
-  objptr hhop = getHierarchicalHeapCurrentObjptr(s);
-  assert(isObjptr(hhop));
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhop);
+  struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
+  assert(hh != NULL);
 
   /* Search all chunks in my own hierarchical heap. Off-by-one loop to
    * prevent underflow. */
@@ -283,8 +282,8 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
   }
 
   /* Search accessible chunks of each parent hh */
-  while (isObjptr(hh->parentHH)) {
-    struct HM_HierarchicalHeap* phh = HM_HH_objptrToStruct(s, hh->parentHH);
+  while (hh->parentHH != NULL) {
+    struct HM_HierarchicalHeap* phh = hh->parentHH;
     assert(hh->stealLevel != HM_HH_INVALID_LEVEL);
     Word32 start = hh->stealLevel+1;
     Word32 stop = (phh->stealLevel == HM_HH_INVALID_LEVEL ? 1 : phh->stealLevel+1);

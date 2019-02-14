@@ -139,12 +139,10 @@ GC_thread newThread (GC_state s, size_t reserved) {
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
   thread->inGlobalHeapCounter = 0;
-  thread->useHierarchicalHeap = FALSE;
-  // thread->currentProcNum = -1; // TODO: define a constant INVALID_PROC_NUM... where should it go?
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->hierarchicalHeap = BOGUS_OBJPTR;
+  thread->hierarchicalHeap = NULL;
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -157,53 +155,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
 }
 
 pointer HM_newHierarchicalHeap (GC_state s) {
-  /* allocate the object */
-  assert(HM_inGlobalHeap(s));
-  ensureBytesFreeInGlobal(s, HM_HH_sizeof(s));
-  // ensureHasHeapBytesFreeAndOrInvariantForMutator(s,
-  //                                                FALSE,
-  //                                                FALSE,
-  //                                                FALSE,
-  //                                                0,
-  //                                                HM_HH_sizeof(s));
-  pointer hhObject = newObject (s,
-                                GC_HIERARCHICAL_HEAP_HEADER,
-                                HM_HH_sizeof(s),
-                                FALSE);
-  struct HM_HierarchicalHeap* hh =
-      ((struct HM_HierarchicalHeap*)(hhObject +
-                                     HM_HH_offsetof(s)));
-
-  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_HH_LEVEL(hh, i) = NULL;
-  }
-  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_HH_LEVEL_CAPACITY(hh, i) = 0;
-  }
-  // hh->freeList = HM_newChunkList(hh, CHUNK_INVALID_LEVEL);
-  hh->lastAllocatedChunk = NULL;
-  hh->ignoreThis = 15210;
-  // rwlock_init(&hh->lock);
-  hh->state = LIVE;
-  hh->level = 1; // level 0 is reserved for global heap
-  /* SAM_NOTE: Now that global is in the hierarchy, should this be 0? */
-  hh->stealLevel = HM_HH_INVALID_LEVEL;
-  hh->id = 0;
-  // hh->levelList = NULL;
-  // hh->newLevelList = NULL;
-  hh->locallyCollectibleSize = 0;
-  hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
-  hh->retVal = NULL;
-  hh->parentHH = BOGUS_OBJPTR;
-  hh->nextChildHH = BOGUS_OBJPTR;
-  hh->childHHList = BOGUS_OBJPTR;
-  hh->thread = BOGUS_OBJPTR;
-
-  if (DEBUG_HEAP_MANAGEMENT) {
-    fprintf (stderr, "%p = newHierarchicalHeap ()\n", ((void*)(hh)));
-  }
-
-  return hhObject;
+  DIE("Calling deprecated HM_newHierarchicalHeap\n");
+  return NULL;
 }
 
 static inline void setFrontier (GC_state s, pointer p,

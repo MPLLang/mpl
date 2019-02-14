@@ -9,60 +9,21 @@
 #define HIERARCHICAL_HEAP_H_
 
 #include "chunk.h"
-//#include "rwlock.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
-enum HM_HHState {
-  LIVE = 0,
-  DEAD = 1,
-  MERGED = 2
-};
 
-extern const char* HM_HHStateToString[];
-
-/* SAM_NOTE: WARNING: This cannot be changed without also changing
- * mlton/backend/rep-type.fun */
 #define HM_MAX_NUM_LEVELS 64
 
-/* HierarchicalHeap objects are normal objects with the following layout:
- *
- * header ::
- * padding ::
- * freeList (struct HM_chunk*) ::
- * lastAllocatedChunk (struct HM_chunk*) ::
- * lock (Int32) ::
- * state (enum HM_HHState/Int32) ::
- * level (Word32) ::
- * stealLevel (Word32) ::
- * id (Word64) ::
- * chunkList (void*) ::
- * parentHH (objptr) ::
- * nextChildHH (objptr) ::
- * childHHList (objptr) ::
- * thread (objptr)
- *
- * There may be zero or more bytes of padding for alignment purposes. Note that
- * it only has objptrs to objects on the same heap (i.e. the global heap).
- */
 struct HM_HierarchicalHeap {
   HM_chunkList levels[HM_MAX_NUM_LEVELS];
   Word64 capacities[HM_MAX_NUM_LEVELS];
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
-  /* SAM_NOTE: TODO: this is a placeholder, for testing. Remove ASAP. */
-  Int32 ignoreThis;
-  // rwlock_t lock; /**< The rwlock for R/W access to the childHHList */
-
-  volatile enum HM_HHState state; /**< The state of this hierarchical heap */
-
   Word32 level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
   Word32 stealLevel; /**< The parent's level that I stole from */
-
-  Word64 id; /**< the ID of this HierarchicalHeap object, for visualization
-              * purposes */
 
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally
                                   * collectable heap. */
@@ -71,52 +32,21 @@ struct HM_HierarchicalHeap {
                                       * collectible heap size, used for
                                       * collection decisions */
 
-  /* RAM_NOTE: Should this be an objptr? */
-  pointer retVal; /**< Pointer to the return value of the computation associated
-                   * with this HM_HierarchicalHeap */
 
-
-  objptr parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
+  struct HM_HierarchicalHeap* parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
                     * if it is the first heap. */
 
-  objptr nextChildHH; /**< The next heap in the 'derivedHHList' of
+  struct HM_HierarchicalHeap* nextChildHH; /**< The next heap in the 'derivedHHList' of
                        * the 'parentHH'. This variable is the 'next'
                        * pointer for the intrusive linked list. */
 
-  objptr childHHList; /**< The list of heaps that are derived from this
+  struct HM_HierarchicalHeap* childHHList; /**< The list of heaps that are derived from this
                        * heap. All heaps in this list have their 'parentHH' set
                        * to this object. In addition, it is in descending order
                        * of 'stealLevel' */
-
-  objptr thread; /**< The thread associated with this hierarchical heap */
-} __attribute__((packed));
-
-COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
-  sizeof(struct HM_HierarchicalHeap) ==
-  (sizeof(void*) * HM_MAX_NUM_LEVELS) +  // levels
-  (sizeof(Word64) * HM_MAX_NUM_LEVELS) + // capacities
-  // sizeof(void*) +                        // freeList
-  sizeof(void*) +                        // lastAllocatedChunk
-  sizeof(Int32) +                        // lock
-  sizeof(Int32) +                        // state
-  sizeof(Word32) +                       // level
-  sizeof(Word32) +                       // stealLevel
-  sizeof(Word64) +                       // id
-  // sizeof(void*) +                        // levelList
-  // sizeof(void*) +                        // newLevelList
-  sizeof(Word64) +                       // locallyCollectibleSize
-  sizeof(Word64) +                       // locallyCollectibleHeapSize
-  sizeof(pointer) +                      // retVal
-  sizeof(objptr) +                       // parentHH
-  sizeof(objptr) +                       // nextChildHH
-  sizeof(objptr) +                       // childHHList
-  sizeof(objptr)                         // thread
-);
+};
 
 // l/r-value for ith level
-// #define HM_HH_LEVELS(hh) (&((hh)->levels))
-// #define HM_HH_LEVEL(hh, i) *(HM_HH_LEVELS(hh) + (i))
-
 #define HM_HH_LEVEL(hh, i) ((hh)->levels[i])
 #define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->capacities[i])
 
@@ -139,161 +69,30 @@ COMPILE_TIME_ASSERT(HM_HierarchicalHeap__packed,
     }                                                               \
   } while (0)
 
-/**
- * This value is an "invalid" level and used for HM_HierarchicalHeap
- * initialization
- */
 #define HM_HH_INVALID_LEVEL CHUNK_INVALID_LEVEL
 
-/**
- * This is the value of HM_HierarchicalHeap::lock when locked
- */
-#define HM_HH_LOCK_LOCKED ((Int32)(1))
-
-/**
- * This is the value of HM_HierarchicalHeap::lock when unlocked
- */
-#define HM_HH_LOCK_UNLOCKED ((Int32)(-1))
-
-/**
- * This is the initial value of HM_HierarchicalHeap::lock
- */
-#define HM_HH_LOCK_INITIALIZER HM_HH_LOCK_UNLOCKED
 #else
+
 struct HM_HierarchicalHeap;
+
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
-#if (defined (MLTON_GC_INTERNAL_BASIS))
-/**
- * Appends the derived hierarchical heap to the childHHList of the source
- * hierarchical heap and sets relationships appropriately.
- *
- * @attention
- * 'childHH' should be a newly created "orphan" HierarchicalHeap.
- *
- * @param parentHH The source struct HM_HierarchicalHeap
- * @param childHH The struct HM_HierarchicalHeap set to be derived off of
- * 'parentHH'.
- * @param stealLevel The level at the parent which the child has stolen off of.
- */
-PRIVATE void HM_HH_appendChild(pointer parentHHPointer,
-                               pointer childHHPointer,
-                               Word32 stealLevel);
-
-/**
- * Gets the current level from a struct HM_HierarchicalHeap
- *
- * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
- *
- * @return The level of the HM_HierarchicalHeap
- */
-PRIVATE size_t HM_HH_getLevel(pointer hhPointer);
-
-/**
- * FFI wrapper for HM_HH_getLowestPrivateLevel()
- *
- * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
- *
- * @return The lowest private level of the HM_HierarchicalHeap
- */
-PRIVATE size_t HM_HH_getLowestPrivateLevelFFI(pointer hhPointer);
-
-/**
- * Merges the specified hierarchical heap back into its source hierarchical
- * heap.
- *
- * @attention
- * The specified heap must already be fully merged (i.e. its childHHList should
- * be empty).
- *
- * @attention
- * Once this function completes, the passed-in heap should be considered used
- * and all references to it dropped.
- *
- * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
- */
-PRIVATE void HM_HH_mergeIntoParent(pointer hhPointer);
-
-/**
- * Merges the specified hierarchical heap back into its source hierarchical
- * heap.
- *
- * @attention
- * The specified heap must already be fully merged (i.e. its childHHList should
- * be empty).
- *
- * @attention
- * Once this function completes, the passed-in heap should be considered used
- * and all references to it dropped.
- *
- * @param hh The struct HM_HierarchicalHeap* to merge back into its source.
- *
- * @return The return value set on this HH.
- */
-PRIVATE pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer);
-
-/**
- * Promotes the chunks at the last level to the parent's level
- *
- * @param hhPointer The HM_HierarchicalHeap to modify
- */
-PRIVATE void HM_HH_promoteChunks(pointer hhPointer);
-
-/**
- * Sets the specified hierarchical heap to dead.
- *
- * @param hhPointer The pointer to the struct HM_HierarchicalHeap to set to
- * dead.
- */
-PRIVATE void HM_HH_setDead(pointer hhPointer);
-
-/**
- * Sets the current level in a struct HM_HierarchicalHeap
- *
- * @param hhPointer The pointer to the struct HM_HierarchicalHeap to use
- * @param level The level to set
- */
-PRIVATE void HM_HH_setLevel(pointer hhPointer, size_t level);
-
-/**
- * Sets the return value for the struct HM_HierarchicalHeap
- *
- * @attention
- * The return value <em>must</em> reside in the HH provided! Else, does not make
- * semantic sense.
- *
- * @note
- * This function returns the same hhPointer passed in. While seemingly not
- * necessary, it is required to satisfy the polymorphic typing on the SML side.
- *
- * @param hhPointer Pointer to the struct HM_HierarchicalHeap to set return
- * value of
- * @param retVal Pointer to the object to set as the return value. Must reside
- * in the HH specified.
- *
- * @return The struct HM_HierarchicalHeap passed in, to satisfy typing on the
- * SML side
- */
-PRIVATE pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal);
-#endif /* MLTON_GC_INTERNAL_BASIS */
-
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-/* RAM_NOTE: should take GC_state argument once I get that back in */
 
-/**
- * Pretty-prints the hierarchical heap structure
- *
- * @param hh The struct HM_HierarchicalHeap to print
- * @param stream The stream to print to
- */
-void HM_HH_display(const struct HM_HierarchicalHeap* hh, FILE* stream);
+struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
 
-/**
- * This function ensures that the heap is not empty and has enough space to
- * satisfy allocation requests
- *
- * @param hh The struct HM_HierarchicalHeap to modify
- */
+/* stealLevel is the level of the parent that will now become suspended due
+ * to this child. */
+void HM_HH_appendChild(GC_state s,
+                       struct HM_HierarchicalHeap* parentHH,
+                       struct HM_HierarchicalHeap* childHH,
+                       Word32 stealLevel);
+
+Word32 HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh);
+void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh);
+void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh);
+void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, Word32 level);
+void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);
 void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 
 /**
@@ -312,165 +111,14 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
  */
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 
-/**
- * Returns the current hierarchical heap in use
- *
- * @param s The GC_state to use
- *
- * @return hh The struct HM_HierarchicalHeap in use
- */
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
-
-/**
- * Returns the highest stolen level
- *
- * @param s The GC_state to use
- * @param hh The hierarchical heap to inspect
- *
- * @return HM_HH_INVALID_LEVEL if nothing was stolen, the highest stolen level
- * otherwise
- */
-Word32 HM_HH_getHighestStolenLevel(GC_state s,
-                                   const struct HM_HierarchicalHeap* hh);
-
-Word32 HM_HH_getHighestPrivateLevel(GC_state s,
-                                    const struct HM_HierarchicalHeap* hh);
-
-/**
- * Gets the frontier from a struct HM_HierarchicalHeap
- *
- * @param hh The struct HM_HierarchicalHeap to use
- *
- * @return the frontier of the currently active chunk.
- */
-pointer HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh);
-
-/*
- * Returns the lowest private level
- *
- * @param s The GC_state to use
- * @param hh The hierarchical heap to inspect
- *
- * @return the lowest private level
- */
-Word32 HM_HH_getLowestPrivateLevel(GC_state s,
-                                   const struct HM_HierarchicalHeap *hh);
-
-/**
- * Gets the heap limit from a struct HM_HierarchicalHeap
- *
- * @param hh The struct HM_HierarchicalHeap to use
- *
- * @return the heap limit
- */
-pointer HM_HH_getLimit(const struct HM_HierarchicalHeap* hh);
-
-/**
- * Returns the current lchs/lcs ratio
- *
- * @param hh The HH to get the ratio of
- *
- * @return The ratio.
- */
-double HM_HH_getLCRatio(const struct HM_HierarchicalHeap* hh);
-
-/**
- * Resizes the locally collectible heap size, if necessary, according the
- * initialization parameters.
- *
- * @param s The GC_state to get ratios off of.
- * @param hh The hierarchical heap to maybe resize.
- */
+Word32 HM_HH_getDeepestStolenLevel(GC_state s, struct HM_HierarchicalHeap* hh);
+Word32 HM_HH_getShallowestPrivateLevel(GC_state s, struct HM_HierarchicalHeap* hh);
+pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh);
+pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh);
+double HM_HH_getLCRatio(struct HM_HierarchicalHeap* hh);
 void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh);
-
-/**
- * This function converts a hierarchical heap objptr to the struct
- * HM_HierarchicalHeap*.
- *
- * @param s The GC_state to use
- * @param hhObjptr the objptr to convert
- *
- * @return the contained struct HM_HierarchicalHeap if hhObjptr is a valid
- * objptr, NULL otherwise
- */
-struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr);
-
-/**
- * Returns offset into object to get at the struct HM_HierarchicalHeap
- *
- * @note
- * Objects are passed to runtime functions immediately <em>after</em> the
- * header, so we only need to pass the padding to get to the struct.
- *
- * @param s The GC_state to get alignment off of for HM_sizeofHierarchicalHeap()
- *
- * @return The offset into the object to get to the struct HM_HierarchicalHeap
- */
-size_t HM_HH_offsetof(GC_state s);
-
-/**
- * Sets the associated thread for the specified struct HM_HierarchicalHeap.
- *
- * @param hh The HH to set the thread for.
- * @param threadObjptr The thread to set to.
- */
-void HM_HH_setThread(struct HM_HierarchicalHeap* hh, objptr threadObjptr);
-
-/**
- * Returns the sizeof the the struct HM_HierarchicalHeap in the heap including
- * header and padding
- *
- * @param s The GC_state to take alignment off of
- *
- * @return total size of the struct HM_HierarchicalHeap object
- */
-size_t HM_HH_sizeof(GC_state s);
-
-/**
- * Update pointers in the level list of the hierarchical heap passed in. This
- * should be called upon moving a hierarchical heap to ensure that all pointers
- * are forwarded.
- *
- * @param hhObjptr The objptr of the hierarchical heap to update
- */
-void HM_HH_updateLevelListPointers(objptr hhObjptr);
-
-/**
- * Updates the values in 'hh' to reflect mutator
- *
- * @param hh The struct HM_HierarchicalHeap to update
- * @param frontier The new frontier
- */
-void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
-                        void* frontier);
-
-/**
- * Gets the writer lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to lock
- */
-// void lockWriterHH(struct HM_HierarchicalHeap* hh);
-
-/**
- * Releases the writer lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to unlock
- */
-// void unlockWriterHH(struct HM_HierarchicalHeap* hh);
-
-/**
- * Gets the writer lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to lock
- */
-// void lockReaderHH(struct HM_HierarchicalHeap* hh);
-
-/**
- * Releases the writer lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to unlock
- */
-// void unlockReaderHH(struct HM_HierarchicalHeap* hh);
+void HM_HH_updateValues(struct HM_HierarchicalHeap* hh, pointer frontier);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

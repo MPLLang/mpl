@@ -13,7 +13,7 @@ struct
     )
 
   structure HM = MLton.HM
-  structure HH = HM.HierarchicalHeap
+  structure HH = MLton.Thread.HierarchicalHeap
 
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
@@ -64,19 +64,6 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  fun useHH (hh : unit HH.t) : unit =
-    ( HM.enterGlobalHeap ()
-    ; HH.set hh
-    ; HH.setUseHierarchicalHeap true
-    ; HM.exitGlobalHeap ()
-    )
-
-  fun stopUseHH (() : unit) : unit =
-    ( HM.enterGlobalHeap ()
-    ; HH.setUseHierarchicalHeap false (* also unsets the hh *)
-    ; HM.exitGlobalHeap ()
-    )
-
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
@@ -115,6 +102,10 @@ struct
   fun stopTimer (p, _, t) =
     (tickTimer (p, timerGrain, t); ())
 
+  (* fun startTimer _ = ()
+  fun tickTimer _ = ()
+  fun stopTimer _ = () *)
+
   (* Statuses are updated locally to indicate whether or not work is available
    * to be stolen. This allows idle workers to only request work from victims
    * who are unlikely to reject. *)
@@ -122,8 +113,14 @@ struct
   fun getStatus p = arraySub (statuses, p*padding)
   fun setStatus (p, s) = arrayUpdate (statuses, p*padding, s)
 
-  val mailboxes : ((unit -> unit) * unit HH.t) option Mailboxes.t =
+  val mailboxes : (unit -> unit) option Mailboxes.t =
     Mailboxes.new NONE
+
+  (* When each worker becomes idle, it "preps" a new thread that it plans to
+   * switch to as soon as it receives work. When work is dealt from worker A
+   * to worker B, worker A will attach B's prepped thread as a child of A's
+   * current hierarchical heap. *)
+  val preppedThreads = Array.array (P, NONE)
 
   (* val push : task -> unit
    * push onto the current work queue *)
@@ -149,73 +146,57 @@ struct
   structure ForkJoin =
   struct
 
-    exception ForkJoin
-
     datatype 'a result =
       Finished of 'a
     | Raised of exn
+
+    fun result f =
+      Finished (f ()) handle e => Raised e
+
+    fun extractResult r =
+      case r of
+        Finished x => x
+      | Raised e => raise e
 
     val communicate = schedCommunicate
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    (* NOTE: ALL HH OBJECTS MUST RESIDE IN THE GLOBAL HEAP *)
     fun fork (f : unit -> 'a, g : unit -> 'b) =
       let
-        val hh = HH.get ()
-        val level = HH.getLevel hh
+        val thread = Thread.current ()
+        val level = HH.getLevel thread
 
-        val _ = dbgmsg (fn _ => "fork at level " ^ Int.toString level)
-
-        (* This only works if the chosen SOME/NONE representation is a single objptr *)
-        val ghhr = ref (NONE : 'b result ref HH.t option)
+        val rightSide = ref (NONE : 'b result option)
         val incounter = newIncounter ()
-        val parentThread = Thread.current ()
 
         fun g' () =
-          let
-            val result = Finished (g ()) handle e => Raised e
-            (* We only use `ref` to guarantee the value gets boxed! *)
-            val ghh = HH.setReturnValue (HH.get (), ref result)
-            val _ = ghhr := SOME ghh
-            (* not necessary to set dead in private-deques, but still have to
-             * in order to play nice with the current runtime implementation *)
-            val _ = HH.setDead ghh
-          in
-            returnToSched (incounter, parentThread)
-          end
+          ( rightSide := SOME (result g)
+          ; returnToSched (incounter, thread)
+          )
 
-        val _ = dbgmsg (fn _ => "pushing")
+        val _ = push (g', level)
+        val _ = HH.setLevel (thread, level + 1)
 
-        (* Must set level before push! Otherwise, push can immediately trigger
-         * a send (and therefore an appendChild) where the level of the parent
-         * is equal to the stolenLevel of the child, which should never happen. *)
-        val _ = HH.setLevel (hh, level + 1)
-        val _ = push (g', hh, level)
+        val _ = communicate ()
+        val fr = result f
+        val _ = communicate ()
 
-        val a = f ()
-        val _ = dbgmsg (fn _ => "trying pop")
-        val b =
+        val gr =
           if popDiscard () then
-            g ()
+            result g
           else
-            ( dbgmsg (fn _ => "suspending")
-            ; returnToSched (incounter, parentThread)
-            ; case !ghhr of
-                NONE => raise ForkJoin
-              | SOME ghh =>
-                  case !(HH.mergeIntoParentAndGetReturnValue ghh) of
-                    Finished b => b
-                  | Raised e => raise e
+            ( returnToSched (incounter, thread)
+            ; HH.mergeDeepestChild thread
+            ; case !rightSide of
+                NONE => die (fn _ => "scheduler bug: join failed")
+              | SOME gr => gr
             )
 
-        (* moves chunks from level+1 to level *)
-        val _ = HH.promoteChunks hh
-        val _ = HH.setLevel (hh, level)
-
-        val _ = dbgmsg (fn _ => "finish fork at level " ^ Int.toString level)
+        val _ = HH.promoteChunks thread
+        val _ = HH.setLevel (thread, level)
       in
-        (a, b)
+        (extractResult fr, extractResult gr)
       end
 
   end
@@ -248,7 +229,7 @@ struct
         | SOME f =>
             ( myTodo := NONE
             ; f () handle e => MLton.Exn.topLevelHandler e
-            ; die (fn _ => "Scheduler: thread didn't exit properly")
+            ; die (fn _ => "scheduler bug: thread didn't exit properly")
             )
 
       (* the lock is not necessary for private deques, but need to do this to
@@ -264,21 +245,21 @@ struct
             if r = NO_REQUEST then
               ()
             else if r = REQUEST_BLOCKED then
-              die (fn _ => "Error: serve while blocked")
+              die (fn _ => "scheduler bug: serve while blocked")
             else
               (* r is a friendly processor id which is requesting work *)
               ( setRequest (myId, NO_REQUEST)
               ; case Queue.popBack myQueue of
                   NONE => Mailboxes.sendMail mailboxes (r, NONE)
-                | SOME (task, phh, level) =>
+                | SOME (task, level) =>
                     let
-                      val _ = dbgmsg (fn _ => "append child at level " ^ Int.toString level)
-                      val _ = HM.enterGlobalHeap ()
-                      val chh = HH.new ()
-                      val _ = HH.appendChild (phh, chh, level)
-                      val _ = HM.exitGlobalHeap ()
+                      val theirThread =
+                        case Array.sub (preppedThreads, r) of
+                          NONE => die (fn _ => "scheduler bug: missing prepped thread")
+                        | SOME t => t
                     in
-                      Mailboxes.sendMail mailboxes (r, SOME (task, chh))
+                      HH.attachChild (Thread.current (), theirThread, level);
+                      Mailboxes.sendMail mailboxes (r, SOME task)
                     end
               )
           end
@@ -287,19 +268,17 @@ struct
 
       fun push x =
         Queue.pushFront (x, myQueue)
-        before communicate ()
 
       fun popDiscard () =
-        (case Queue.popFront myQueue of
+        case Queue.popFront myQueue of
           NONE => false
-        | SOME _ => true)
-        before communicate ()
+        | SOME _ => true
 
       (* ------------------------------------------------------------------- *)
 
       fun verifyStatus () =
         if getStatus myId = false then ()
-        else die (fn _ => "Error: status not set correctly\n")
+        else die (fn _ => "scheduler bug: status not set correctly while idle")
 
       fun randomOtherId () =
         let val other = SimpleRandom.boundedInt (0, P-1) myRand
@@ -314,7 +293,7 @@ struct
             if casRequest (myId, NO_REQUEST, REQUEST_BLOCKED) then ()
             else blockRequests () (* recurs at most once *)
           else if r = REQUEST_BLOCKED then
-            die (fn _ => "Error: scheduler attempted to block while already blocked")
+            die (fn _ => "scheduler bug: attempted to block while already blocked")
           else
             ( setRequest (myId, REQUEST_BLOCKED)
             ; Mailboxes.sendMail mailboxes (r, NONE)
@@ -343,16 +322,25 @@ struct
           val idleTimer = startTimer myId
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
-          val _ = dbgmsg (fn _ => "finding work")
-          val ((task, hh), idleTimer') = request idleTimer (* loop until work is found... *)
-          val _ = dbgmsg (fn _ => "got work")
+
+          (* Prep a fresh thread and then look for work. The worker which
+           * satisfies our request will attach the prepped thread as a child
+           * in the heap hierarchy. Once we have received work, we retract
+           * the prepped thread so that we can then switch to it. *)
+          val taskThread = Thread.copy prototype
+          val _ = HH.newHeap taskThread
+          val _ = Array.update (preppedThreads, myId, SOME taskThread)
+          val (task, idleTimer') = request idleTimer
+          val _ = Array.update (preppedThreads, myId, NONE)
+
           val _ = unblockRequests ()
           val _ = stopTimer idleTimer'
 
-          (* val _ = useHH hh *)
-          val _ = myTodo := SOME (fn _ => (useHH hh; task ()))
-          val taskThread = Thread.copy prototype
-          (* val _ = stopUseHH () *)
+          (* The taskThread is a copy of this worker's prototype thread, which
+           * is set up to immediately check myTodo to look for a function to
+           * execute. So, by setting myTodo and then switching, we execute the
+           * given task. *)
+          val _ = myTodo := SOME task
           val _ = threadSwitch taskThread
         in
           returnFromExecute ()
@@ -360,7 +348,7 @@ struct
 
       and returnFromExecute () =
         case !myRetArg of
-          NONE => die (fn _ => "Error: no ret arg upon return to scheduler")
+          NONE => die (fn _ => "scheduler bug: no arg when returning to scheduler")
         | SOME (incounter, cont) =>
             ( myRetArg := NONE
             ; if decrementHitsZero incounter
@@ -380,7 +368,7 @@ struct
       val _ = arrayUpdate (communicateFuncs, myId, communicate)
       val _ = arrayUpdate (returnToScheds, myId, returnToSched)
 
-      val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init")
+      (* val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init") *)
 
     in
       if myId = 0 then returnFromExecute else acquireWork
@@ -401,32 +389,26 @@ struct
   (* Initializes scheduler-local data for proc 0, including remembering the
    * current thread as the "scheduler thread" for this worker. In order to
    * keep "user" threads separate from "scheduler" threads, we need to copy
-   * the current thread and use the COPY as the main program thread. *)
+   * the current thread and use the COPY as the main program thread, which
+   * happens below. *)
   val returnFromExecute = setupSchedLoop ()
 
-  val rootHH = HH.new ()
+  (* This manages to hijack the "original" program thread as the scheduler
+   * thread, while the copied thread is used to execute the actual program.
+   * Before switching to the copy, we give the copy a hierarchical heap. *)
   val executeMain = ref false
-  val _ = dbgmsg (fn _ => "copying current")
   val _ = Thread.copyCurrent ()
-
-  (* this manages to hijack the "original" program thread as the scheduler
-   * thread, while the copied thread is used to execute the actual program. *)
   val _ =
     if !executeMain then ()
     else let
-           val _ = dbgmsg (fn _ => "copy savedPre into hh")
-           (* val _ = useHH rootHH *)
            val t = Thread.copy (Thread.savedPre ())
-           (* val _ = stopUseHH () *)
          in
            ( executeMain := true
+           ; HH.newHeap t
            ; threadSwitch t
            ; returnFromExecute ()
            )
          end
-
-  val _ = dbgmsg (fn _ => "executing main")
-  val _ = useHH rootHH
 
 end
 

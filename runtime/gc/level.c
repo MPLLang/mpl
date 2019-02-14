@@ -24,7 +24,7 @@ struct HM_HierarchicalHeap *HM_foreachHHUp(GC_state s,
 
   for (;
        bottom && !inRangeOfHH(bottom, minLevel);
-       bottom = HM_HH_objptrToStruct(s, bottom->parentHH)) {
+       bottom = bottom->parentHH) {
     assert (minLevel <= bottom->stealLevel);
     function(bottom, arg);
   }
@@ -141,7 +141,7 @@ bool HM_objptrIsAboveHH(GC_state s,
 
   for (struct HM_HierarchicalHeap* cursor = info.hh;
        cursor != NULL;
-       cursor = HM_HH_objptrToStruct(s, cursor->parentHH)) {
+       cursor = cursor->parentHH) {
     if (cursor == hh) {
       LOG(LM_HH_COLLECTION, LL_INFO,
           "Pointer %p (h: %lx, t: %s BNO: %"PRIu16" NO: %"PRIu16")"
@@ -159,7 +159,7 @@ bool HM_objptrIsAboveHH(GC_state s,
 
   for (struct HM_HierarchicalHeap* cursor = hh;
        cursor != NULL;
-       cursor = HM_HH_objptrToStruct(s, cursor->parentHH)) {
+       cursor = cursor->parentHH) {
     if (cursor == info.hh) {
       return true;
     }

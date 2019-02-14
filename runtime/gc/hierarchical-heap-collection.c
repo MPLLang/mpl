@@ -144,13 +144,12 @@ void HM_HHC_collectLocal(void) {
   }
   // lockWriterHH(hh);
 
-  assertInvariants(s, hh, LIVE);
-  assert(hh->thread == s->currentThread);
+  assertInvariants(s, hh);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = HM_HH_getLowestPrivateLevel(s, hh),
+    .minLevel = HM_HH_getShallowestPrivateLevel(s, hh),
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
@@ -260,24 +259,6 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-
-#if ASSERT
-  /* forward thread from hh */
-  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  forwardHHObjptr(s, &(hh->thread), &forwardHHObjptrArgs);
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
-      "Copied thread from HH" : "Did not copy thread from HH");
-  Trace3(EVENT_COPY,
-	 forwardHHObjptrArgs.bytesCopied,
-	 forwardHHObjptrArgs.objectsCopied,
-	 forwardHHObjptrArgs.stacksCopied);
-  assert(hh->thread == s->currentThread);
-#else
-  /* update thread in hh */
-  hh->thread = s->currentThread;
-#endif
-
   /* forward contents of deque */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
@@ -295,19 +276,6 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.bytesCopied,
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
-
-  /* forward retVal pointer if necessary */
-  if (NULL != hh->retVal) {
-    objptr root = pointerToObjptr(hh->retVal, NULL);
-
-    oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-    forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "Copied %"PRIu64" objects from hh->retVal",
-      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-
-    hh->retVal = objptrToPointer(root, NULL);
-  }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -351,8 +319,6 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.bytesCopied,
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
-
-  // assertInvariants(s, hh, LIVE);
 
   /*
    * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
@@ -446,7 +412,7 @@ void HM_HHC_collectLocal(void) {
    */
   /* update locally collectible size */
   hh->locallyCollectibleSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getHighestStolenLevel(s, hh)+1, hh->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getShallowestPrivateLevel(s, hh), hh->level+1, {
     hh->locallyCollectibleSize += HM_getChunkListSize(level);
   });
 
@@ -469,7 +435,7 @@ void HM_HHC_collectLocal(void) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
-  assertInvariants(s, hh, LIVE);
+  assertInvariants(s, hh);
 
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */

@@ -36,7 +36,7 @@ void HM_enterGlobalHeap (void) {
   }
   currentThread->inGlobalHeapCounter++;
 
-  if (!currentThread->useHierarchicalHeap) {
+  if (currentThread->hierarchicalHeap == NULL) {
     /* This thread is not to use hierarchical heaps, so it is a noop */
     return;
   }
@@ -63,7 +63,7 @@ void HM_exitGlobalHeap (void) {
   assert (currentThread->inGlobalHeapCounter > 0);
   currentThread->inGlobalHeapCounter--;
 
-  if (!currentThread->useHierarchicalHeap) {
+  if (currentThread->hierarchicalHeap == NULL) {
     /* This thread is not to use hierarchical heaps, so it is a noop */
     return;
   }
@@ -75,52 +75,6 @@ void HM_exitGlobalHeap (void) {
   }
 }
 
-// void HM_explicitEnterGlobalHeap(Word32 inGlobalHeapCounter) {
-//   GC_state s = pthread_getspecific (gcstate_key);
-//   assert(NULL != s);
-//   assert(NULL != s->globalFrontier);
-//   assert(NULL != s->globalLimitPlusSlop);
-
-//   /* update frontier and limit */
-//   HM_exitLocalHeap (s);
-//   s->frontier = s->globalFrontier;
-//   s->limitPlusSlop = s->globalLimitPlusSlop;
-//   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-
-//   /* restore inGlobalHeapCounter */
-//   getThreadCurrent(s)->inGlobalHeapCounter = inGlobalHeapCounter;
-//   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-//       "inGlobalHeapCounter = %d",
-//       inGlobalHeapCounter);
-// }
-
-// Word32 HM_explicitExitGlobalHeap(void) {
-//   GC_state s = pthread_getspecific (gcstate_key);
-
-//   assert(NULL != s);
-//   assert(HM_inGlobalHeap(s));
-
-//   /* update frontier and limit */
-//   s->globalFrontier = s->frontier;
-//   s->globalLimitPlusSlop = s->limitPlusSlop;
-//   HM_enterLocalHeap (s);
-
-//   /* set inGlobalHeapCounter to zero */
-//   GC_thread thread = getThreadCurrent(s);
-//   Word32 retVal = thread->inGlobalHeapCounter;
-//   thread->inGlobalHeapCounter = 0;
-
-//   if (0 == retVal) {
-//     DIE("Attempted to exit while GHC is zero!");
-//   }
-
-//   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-//       "inGlobalHeapCounter = %d",
-//       retVal);
-
-//   /* return the old inGlobalHeapCounter */
-//   return retVal;
-// }
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -131,8 +85,9 @@ bool HM_inGlobalHeap (GC_state s) {
 
   GC_thread currentThread = getThreadCurrent (s);
 
-  bool answer = (!currentThread->useHierarchicalHeap ||
-                  (0 != currentThread->inGlobalHeapCounter));
+  bool answer =
+    (currentThread->hierarchicalHeap == NULL) ||
+    (0 != currentThread->inGlobalHeapCounter);
 
 #if ASSERT
   if (answer) {

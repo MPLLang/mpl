@@ -15,7 +15,7 @@ void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr dst, objptr
       GC_state s = pthread_getspecific(gcstate_key);
       if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
           levelHead->containingHH != NULL &&
-          levelHead->level >= HM_HH_getLowestPrivateLevel(s, levelHead->containingHH)) {
+          levelHead->level >= HM_HH_getShallowestPrivateLevel(s, levelHead->containingHH)) {
         levelHead->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
       }
     }

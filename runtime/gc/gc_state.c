@@ -405,40 +405,8 @@ void GC_setCallFromCHandlerThreads (pointer p) {
 
 pointer GC_getCurrentThread (void) {
   GC_state s = pthread_getspecific (gcstate_key);
-  pointer p = objptrToPointer (s->currentThread, NULL);
+  pointer p = objptrToPointer(s->currentThread, NULL);
   return p;
-}
-
-/* RAM_NOTE: These function should be moved to thread.c */
-pointer GC_getCurrentHierarchicalHeap (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  GC_thread t = getThreadCurrent(s);
-
-  pointer retVal;
-  if (BOGUS_OBJPTR != t->hierarchicalHeap) {
-    retVal = objptrToPointer (t->hierarchicalHeap, NULL);
-  } else {
-    /* create a new hierarchical heap to return */
-    retVal = HM_newHierarchicalHeap(s);
-    GC_setCurrentHierarchicalHeap(retVal);
-  }
-
-  return retVal;
-}
-
-void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  objptr hhObjptr = pointerToObjptr (hhPointer, NULL);
-  objptr threadObjptr = getThreadCurrentObjptr(s);
-  GC_thread thread = threadObjptrToStruct(s, threadObjptr);
-
-  thread->hierarchicalHeap = hhObjptr;
-  HM_HH_setThread(HM_HH_objptrToStruct(s, hhObjptr), threadObjptr);
-
-  LOG(LM_GC_STATE, LL_DEBUG,
-      "Set HH of thread %p to %p",
-      ((void*)(thread)),
-      ((void*)(hhObjptr)));
 }
 
 pointer GC_getSavedThread (void) {

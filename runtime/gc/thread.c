@@ -1,4 +1,5 @@
-/* Copyright (C) 2016 Matthew Fluet.
+/* Copyright (C) 2018-2019 Sam Westrick
+ * Copyright (C) 2016 Matthew Fluet.
  * Copyright (C) 2014-2015 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
@@ -9,25 +10,104 @@
  */
 
 #include "thread.h"
+#include "hierarchical-heap.h"
 
 /************************/
 /* Function definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-void T_setCurrentThreadUseHierarchicalHeap(Bool use) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  GC_thread thread = getThreadCurrent(s);
 
-  if (use) {
-    s->heap->usingHierarchicalHeaps = TRUE;
-  } else {
-    if (thread->hierarchicalHeap != BOGUS_OBJPTR) {
-      HM_HH_objptrToStruct(s, thread->hierarchicalHeap)->thread = BOGUS_OBJPTR;
-      thread->hierarchicalHeap = BOGUS_OBJPTR;
-    }
+void GC_HH_newHeap(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  objptr threadop = pointerToObjptr(threadp, NULL);
+  GC_thread thread = threadObjptrToStruct(s, threadop);
+
+#if ASSERT
+  assert(threadop != BOGUS_OBJPTR);
+  /* Make sure this is an inactive thread. */
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    assert(s->procStates[i].currentThread != threadop);
   }
-  thread->useHierarchicalHeap = use;
+#endif
+
+  if (thread->hierarchicalHeap != NULL) {
+    DIE("tried to assign hierarchical heap, but thread already has one");
+  }
+
+  thread->hierarchicalHeap = HM_HH_new(s);
 }
+
+Word32 GC_HH_getLevel(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  return HM_HH_getLevel(s, thread->hierarchicalHeap);
+}
+
+void GC_HH_setLevel(pointer threadp, Word32 level) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HH_setLevel(s, thread->hierarchicalHeap, level);
+}
+
+void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  objptr parentop = pointerToObjptr(parentp, NULL);
+  objptr childop = pointerToObjptr(childp, NULL);
+  GC_thread parent = threadObjptrToStruct(s, parentop);
+  GC_thread child = threadObjptrToStruct(s, childop);
+
+#if ASSERT
+  assert(parentop != BOGUS_OBJPTR);
+  assert(childop != BOGUS_OBJPTR);
+  /* Make sure child is an inactive thread. */
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    assert(s->procStates[i].currentThread != childop);
+  }
+  /* Make sure parent is either mine, or inactive */
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    if (i != s->procNumber)
+      assert(s->procStates[i].currentThread != parentop);
+  }
+#endif
+
+  HM_HH_appendChild(s, parent->hierarchicalHeap, child->hierarchicalHeap, level);
+}
+
+void GC_HH_mergeDeepestChild(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  objptr threadop = pointerToObjptr(threadp, NULL);
+  GC_thread thread = threadObjptrToStruct(s, threadop);
+
+#if ASSERT
+  assert(threadop != BOGUS_OBJPTR);
+  /* make sure thread is either mine or inactive */
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    if (i != s->procNumber)
+      assert(s->procStates[i].currentThread != threadop);
+  }
+#endif
+
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HH_mergeIntoParent(s, thread->hierarchicalHeap->childHHList);
+}
+
+void GC_HH_promoteChunks(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HH_promoteChunks(s, thread->hierarchicalHeap);
+}
+
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -37,20 +117,18 @@ void displayThread (GC_state s,
   fprintf(stream,
           "\t\texnStack = %"PRIuMAX"\n"
           "\t\tbytesNeeded = %"PRIuMAX"\n"
-          "\t\tinGlobalHeapCounter = %"PRIuMAX"\n"
-          "\t\tstack = "FMTOBJPTR"\n"
-          "\t\thierarchicalHeap = "FMTOBJPTR"\n",
+          "\t\thierarchicalHeap = %p\n"
+          "\t\tstack = "FMTOBJPTR"\n",
           (uintmax_t)thread->exnStack,
           (uintmax_t)thread->bytesNeeded,
-          ((uintmax_t)(thread->inGlobalHeapCounter)),
-          thread->stack,
-          thread->hierarchicalHeap);
+          (void*)thread->hierarchicalHeap,
+          thread->stack);
   displayStack (s, (GC_stack)(objptrToPointer (thread->stack, NULL)),
                 stream);
   /* RAM_NOTE: displayHH! */
 }
 
-size_t sizeofThread (GC_state s) {
+size_t sizeofThread(GC_state s) {
   size_t res;
 
   res = GC_NORMAL_METADATA_SIZE + sizeof (struct GC_thread);
