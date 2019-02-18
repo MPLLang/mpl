@@ -23,7 +23,7 @@ void HM_debugMessage (GC_state s, const char* format, ...) {
 }
 
 void HM_debugDisplayHierarchicalHeap(GC_state s,
-                                     const struct HM_HierarchicalHeap* hh) {
+                                     struct HM_HierarchicalHeap* hh) {
    if (DEBUG_HEAP_MANAGEMENT or s->controls->HMMessages) {
      HM_HH_display(hh, stderr);
    }

@@ -34,6 +34,6 @@ void HM_debugMessage(GC_state s, const char* format, ...)
  * @param hh The hierarchical heap to print
  */
 void HM_debugDisplayHierarchicalHeap(GC_state s,
-                                     const struct HM_HierarchicalHeap* hh);
+                                     struct HM_HierarchicalHeap* hh);
 
 #endif /* HEAP_UTILS_H_ */

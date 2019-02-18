@@ -265,15 +265,15 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
            "\tlastAllocatedChunk = %p\n"
            "\tlevel = %u\n"
            "\tstealLevel = %u\n"
-           "\tparentHH = "FMTOBJPTR"\n"
-           "\tnextChildHH = "FMTOBJPTR"\n"
-           "\tchildHHList= "FMTOBJPTR"\n",
+           "\tparentHH = %p\n"
+           "\tnextChildHH = %p\n"
+           "\tchildHHList= %p\n",
            (void*)hh->lastAllocatedChunk,
            hh->level,
            hh->stealLevel,
-           hh->parentHH,
-           hh->nextChildHH,
-           hh->childHHList);
+           (void*)hh->parentHH,
+           (void*)hh->nextChildHH,
+           (void*)hh->childHHList);
 }
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
