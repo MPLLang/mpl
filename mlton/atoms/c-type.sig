@@ -48,7 +48,6 @@ signature C_TYPE =
       val seqIndex: unit -> t
       val shiftArg: t
       val size: t -> Bytes.t
-      val hierarchicalHeap: t
       val thread: t
       val toString: t -> string
       val word: WordSize.t * {signed: bool} -> t

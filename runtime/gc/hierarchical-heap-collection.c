@@ -767,13 +767,6 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
     header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-        die(__FILE__ ":%d: "
-            "computeObjectCopyParameters() does not support"
-            " GC_HIERARCHICAL_HEAP_HEADER objects!",
-            __LINE__);
-    }
-
     /* Compute the space taken by the metadata and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
       if (WEAK_TAG == tag) {

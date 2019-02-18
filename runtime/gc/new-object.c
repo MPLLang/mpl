@@ -154,11 +154,6 @@ GC_thread newThread (GC_state s, size_t reserved) {
   return thread;
 }
 
-pointer HM_newHierarchicalHeap (GC_state s) {
-  DIE("Calling deprecated HM_newHierarchicalHeap\n");
-  return NULL;
-}
-
 static inline void setFrontier (GC_state s, pointer p,
                                 ARG_USED_FOR_ASSERT size_t bytes) {
   p = alignFrontier (s, p);

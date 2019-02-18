@@ -537,7 +537,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      Dexp.call {func = hashTyconFunc tycon,
                                 args = Vector.new2 (dst, dx),
                                 ty = Hash.stateTy}
-                | Type.HierarchicalHeap _ => stateful ()
                 | Type.IntInf =>
                      let
                         val sws = WordSize.smallIntInfWord ()

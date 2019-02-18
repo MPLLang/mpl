@@ -63,7 +63,6 @@ signature REP_TYPE =
       val exnStack: unit -> t
       val gcState: unit -> t
       val exists: t * (t -> bool) -> bool
-      val hierarchicalHeap: unit -> t
       val intInf: unit -> t
       val isCPointer: t -> bool
       val isObjptr: t -> bool

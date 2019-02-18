@@ -7,13 +7,13 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature ABSTRACT_VALUE_STRUCTS = 
+signature ABSTRACT_VALUE_STRUCTS =
    sig
       structure Sxml: SXML
       structure Ssa: SSA
    end
 
-signature ABSTRACT_VALUE = 
+signature ABSTRACT_VALUE =
    sig
       include ABSTRACT_VALUE_STRUCTS
 
@@ -49,7 +49,6 @@ signature ABSTRACT_VALUE =
       val coerce: {from: t, to: t} -> unit
       val ssaType: t -> Ssa.Type.t option ref
       val deArray: t -> t
-      val deHierarchicalHeap: t -> t
       val deRef: t -> t
       val deVector: t -> t
       val deWeak: t -> t
@@ -58,7 +57,7 @@ signature ABSTRACT_VALUE =
       val destroy: unit -> unit
       val equals: t * t -> bool
       val fromType: Sxml.Type.t -> t
-      val isEmpty: t -> bool (* no possible values correspond to me *) 
+      val isEmpty: t -> bool (* no possible values correspond to me *)
       val lambda: Sxml.Lambda.t * Sxml.Type.t (* The type of the lambda. *) -> t
       val layout: t -> Layout.t
       val primApply: {prim: Sxml.Type.t Sxml.Prim.t,
@@ -67,7 +66,7 @@ signature ABSTRACT_VALUE =
       val select: t * int -> t
       val serialValue: Sxml.Type.t -> t
       (* In tuple vs, there must be one argument that is not Type _. *)
-      val tuple: t vector -> t 
+      val tuple: t vector -> t
       val ty: t -> Sxml.Type.t
       val typeIsFirstOrder: Sxml.Type.t -> bool
       val unify: t * t -> unit

@@ -22,7 +22,6 @@ structure Type =
           Array of t
         | CPointer
         | Datatype of Tycon.t
-        | HierarchicalHeap of t
         | IntInf
         | Real of RealSize.t
         | Ref of t
@@ -58,7 +57,6 @@ structure Type =
       in
          val (_,deArray,_) = make (fn Array t => SOME t | _ => NONE)
          val (_,deDatatype,_) = make (fn Datatype tyc => SOME tyc | _ => NONE)
-         val (_,deHierarchicalHeap,_) = make (fn HierarchicalHeap t => SOME t | _ => NONE)
          val (_,deRef,_) = make (fn Ref t => SOME t | _ => NONE)
          val (deTupleOpt,deTuple,isTuple) = make (fn Tuple ts => SOME ts | _ => NONE)
          val (_,deVector,_) = make (fn Vector t => SOME t | _ => NONE)
@@ -71,7 +69,6 @@ structure Type =
             fn (Array t1, Array t2) => equals (t1, t2)
              | (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
-             | (HierarchicalHeap t1, HierarchicalHeap t2) => equals (t1, t2)
              | (IntInf, IntInf) => true
              | (Real s1, Real s2) => RealSize.equals (s1, s2)
              | (Ref t1, Ref t2) => equals (t1, t2)
@@ -109,7 +106,6 @@ structure Type =
             end
       in
          val array = make Array
-         val hierarchicalHeap = make HierarchicalHeap
          val reff = make Ref
          val vector = make Vector
          val weak = make Weak
@@ -179,7 +175,6 @@ structure Type =
                  Array t => seq [layout t, str " array"]
                | CPointer => str "pointer"
                | Datatype t => Tycon.layout t
-               | HierarchicalHeap t => seq [layout t, str " hierarchicalheap"]
                | IntInf => str "intInf"
                | Real s => str (concat ["real", RealSize.toString s])
                | Ref t => seq [layout t, str " ref"]
@@ -211,7 +206,6 @@ structure Type =
                             cpointer = cpointer,
                             equals = equals,
                             exn = unit,
-                            hierarchicalHeap = hierarchicalHeap,
                             intInf = intInf,
                             real = real,
                             reff = reff,
@@ -497,7 +491,7 @@ structure Statement =
          let
             val {get = global: Var.t -> Layout.t, set = setGlobal, ...} =
                Property.getSet (Var.plist, Property.initFun Var.layout)
-            val _ = 
+            val _ =
                Vector.foreach
                (v, fn T {var, exp, ...} =>
                 Option.app
@@ -511,7 +505,7 @@ structure Statement =
                           val dotsSize = String.size dots
                           val frontSize = 2 * (maxSize - dotsSize) div 3
                           val backSize = maxSize - dotsSize - frontSize
-                          val s = 
+                          val s =
                              if String.size s > maxSize
                                 then concat [String.prefix (s, frontSize),
                                              dots,
@@ -1829,7 +1823,6 @@ structure Program =
                           Array t => countType t
                         | CPointer => ()
                         | Datatype _ => ()
-                        | HierarchicalHeap t => countType t
                         | IntInf => ()
                         | Real _ => ()
                         | Ref t => countType t

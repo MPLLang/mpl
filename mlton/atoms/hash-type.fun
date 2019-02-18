@@ -223,7 +223,6 @@ fun checkPrimApp {args, prim, result, targs}: bool =
                               cpointer = cpointer,
                               equals = equals,
                               exn = exn,
-                              hierarchicalHeap = hierarchicalHeap,
                               intInf = intInf,
                               real = real,
                               reff = reff,

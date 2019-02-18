@@ -117,7 +117,6 @@ structure Type =
       and tree =
           CPointer
         | Datatype of Tycon.t
-        | HierarchicalHeap of t
         | IntInf
         | Object of {args: t Prod.t,
                      con: ObjectCon.t}
@@ -186,7 +185,6 @@ structure Type =
          val same: tree * tree -> bool =
             fn (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
-             | (HierarchicalHeap t1, HierarchicalHeap t2) => equals (t1, t2)
              | (IntInf, IntInf) => true
              | (Object {args = a1, con = c1}, Object {args = a2, con = c2}) =>
                   ObjectCon.equals (c1, c2)
@@ -225,10 +223,6 @@ structure Type =
       in
          val weak = make Weak
       end
-
-      fun hierarchicalHeap t =
-          lookup (Word.xorb (Tycon.hash Tycon.hierarchicalHeap, hash t),
-                  HierarchicalHeap t)
 
       val datatypee: Tycon.t -> t =
          fn t => lookup (Tycon.hash t, Datatype t)
@@ -325,7 +319,6 @@ structure Type =
               case dest t of
                  CPointer => str "cpointer"
                | Datatype t => Tycon.layout t
-               | HierarchicalHeap t => seq [layout t, str " hierarchicalHeap"]
                | IntInf => str "intInf"
                | Object {args, con} =>
                     if isUnit t
@@ -357,7 +350,6 @@ structure Type =
                        result = result,
                        typeOps = {deArray = deArray,
                                   deArrow = fn _ => raise BadPrimApp,
-                                  deHierarchicalHeap = fn _ => raise BadPrimApp,
                                   deRef = deRef,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
@@ -373,7 +365,6 @@ structure Type =
                                cpointer = cpointer,
                                equals = equals,
                                exn = unit,
-                               hierarchicalHeap = hierarchicalHeap,
                                intInf = intInf,
                                real = real,
                                reff = reff1,
@@ -476,10 +467,6 @@ structure Type =
                          Prod.allAreMutable arrp
                          andalso isBool result
                     | _ => false)
-             | HierarchicalHeap_new =>
-               noArgs (fn () => case dest result
-                                 of HierarchicalHeap _ => true
-                                  | _ => false)
              | _ => default ()
          end
    end
@@ -790,7 +777,7 @@ structure Statement =
          let
             val {get = global: Var.t -> Layout.t, set = setGlobal, ...} =
                Property.getSet (Var.plist, Property.initFun Var.layout)
-            val _ = 
+            val _ =
                Vector.foreach
                (v, fn s =>
                 case s of
@@ -806,7 +793,7 @@ structure Statement =
                                 val dotsSize = String.size dots
                                 val frontSize = 2 * (maxSize - dotsSize) div 3
                                 val backSize = maxSize - dotsSize - frontSize
-                                val s = 
+                                val s =
                                    if String.size s > maxSize
                                       then concat [String.prefix (s, frontSize),
                                                    dots,
@@ -2090,7 +2077,6 @@ structure Program =
                        case Type.dest t of
                           CPointer => ()
                         | Datatype _ => ()
-                        | HierarchicalHeap t => countType t
                         | IntInf => ()
                         | Object {args, ...} => Prod.foreach (args, countType)
                         | Real _ => ()

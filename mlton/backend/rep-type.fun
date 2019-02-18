@@ -109,9 +109,6 @@ structure Type =
 
       val compareRes = word WordSize.compareRes
 
-      val hierarchicalHeap: unit -> t =
-       fn () => objptr ObjptrTycon.hierarchicalHeap
-
       val objptrHeader: unit -> t = word o WordSize.objptrHeader
 
       val seqIndex: unit -> t = word o WordSize.seqIndex
@@ -428,10 +425,6 @@ structure ObjectType =
                           Bits.toBytes (Control.Target.Size.metaData ())
                       val bytesInGlobalHeapCounter =
                           Bits.toBytes (Type.width Type.word32)
-                      (*
-                      val bytesUseHierarchicalHeap =
-                          Bits.toBytes (Type.width Type.bool)
-                      *)
                       val bytesBytesNeeded =
                           Bits.toBytes (Control.Target.Size.csize ())
                       val bytesExnStack =
@@ -471,124 +464,6 @@ structure ObjectType =
                                                  Type.stack ()])}
           end
 
-      val hierarchicalHeap =
-       fn () =>
-          let
-              (* SAM_NOTE: now deprecated. *)
-              val HM_MAX_NUM_LEVELS = 64
-
-              val padding =
-                  let
-                      val align =
-                          case !Control.align of
-                              Control.Align4 => Bytes.fromInt 4
-                            | Control.Align8 => Bytes.fromInt 8
-
-                      val bytesMetaData =
-                          Bits.toBytes (Control.Target.Size.metaData ())
-                      val bytesLevels =
-                          Bytes.fromInt
-                            (HM_MAX_NUM_LEVELS *
-                             Bytes.toInt (Bits.toBytes (Control.Target.Size.cpointer ())))
-                      val bytesCapacities =
-                          Bytes.fromInt
-                            (HM_MAX_NUM_LEVELS *
-                             Bytes.toInt (Bits.toBytes (Type.width Type.word32)))
-                      (* val bytesFreeList = *)
-                          (* Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      val bytesLastAllocatedChunk =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesLock =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesState =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesLevel =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesStealLevel =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesID =
-                          Bits.toBytes (Type.width Type.word64)
-                      (*
-                       * RAM_NOTE: Not sure if I can use cpointer for both
-                       * pointer and void*
-                       *)
-                      (* val bytesLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      (* val bytesNewLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      val bytesLocallyCollectibleSize =
-                          Bits.toBytes (Type.width Type.word64)
-                      val bytesLocallyCollectibleHeapSize =
-                          Bits.toBytes (Type.width Type.word64)
-                      val bytesRetVal =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesParentHH =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesNextChildHH =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesChildHHList =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesThread =
-                          Bits.toBytes (Type.width (Type.thread ()))
-                      val bytesObject =
-                          let
-                              infix 6 +
-                              val op+ = Bytes.+
-                          in
-                              bytesMetaData +
-                              bytesLevels +
-                              bytesCapacities +
-                              (* bytesFreeList + *)
-                              bytesLastAllocatedChunk +
-                              bytesLock +
-                              bytesState +
-                              bytesLevel +
-                              bytesStealLevel +
-                              bytesID +
-                              (* bytesLevelList + *)
-                              (* bytesNewLevelList + *)
-                              bytesLocallyCollectibleSize +
-                              bytesLocallyCollectibleHeapSize +
-                              bytesRetVal +
-                              bytesParentHH +
-                              bytesNextChildHH +
-                              bytesChildHHList +
-                              bytesThread
-                          end
-
-                      val bytesTotal =
-                          Bytes.align (bytesObject, {alignment = align})
-                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
-                  in
-                      Type.bits (Bytes.toBits bytesPad)
-                  end
-
-              val typList =
-                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.cpointer ()) (* levels *)
-                @
-                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.word64) (* capacities *)
-                @
-                [ (*Type.cpointer ()          (* freeList *)
-                ,*) Type.cpointer ()          (* lastAllocatedChunk *)
-                , Type.word32               (* lock *)
-                , Type.word32               (* state *)
-                , Type.word32               (* level *)
-                , Type.word32               (* stealLevel *)
-                , Type.word64               (* id *)
-                (* , Type.cpointer ()          (* levelList *) *)
-                (* , Type.cpointer ()          (* newLevelList *) *)
-                , Type.word64               (* locallyCollectibleSize *)
-                , Type.word64               (* locallyCollectibleHeapSize *)
-                , Type.cpointer ()          (* retVal *)
-                , Type.hierarchicalHeap ()  (* parentHH *)
-                , Type.hierarchicalHeap ()  (* nextChildHH *)
-                , Type.hierarchicalHeap ()  (* childHHList *)
-                , Type.thread ()            (* thread *)
-                ]
-          in
-              Normal {hasIdentity = true, ty = Type.seq (Vector.fromList (padding :: typList))}
-          end
-
       (* Order in the following vector matters.  The basic pointer tycons must
        * correspond to the constants in gc/object.h.
        * STACK_TYPE_INDEX,
@@ -600,7 +475,6 @@ structure ObjectType =
        * WORD64_VECTOR_TYPE_INDEX.
        * FILL0_NORMAL_TYPE_INDEX,
        * FILL8_NORMAL_TYPE_INDEX,
-       * HIERARCHICAL_HEAP_INDEX
        *)
       val basic = fn () =>
          let
@@ -624,8 +498,7 @@ structure ObjectType =
              (ObjptrTycon.fill0Normal,
               Normal { hasIdentity = false, ty = Type.unit }),
              (ObjptrTycon.fill8Normal,
-              Normal { hasIdentity = false, ty = Type.word WordSize.word64 }),
-             (ObjptrTycon.hierarchicalHeap, hierarchicalHeap ())]
+              Normal { hasIdentity = false, ty = Type.word WordSize.word64 })]
          end
 
       local
@@ -959,7 +832,7 @@ fun arrayOffsetIsOk {base, index, offset, tyconTy, result, scale} =
          (equals (index, seqIndex ()))
          andalso (1 = Vector.length opts)
          andalso (case tyconTy (Vector.first opts) of
-                     ObjectType.Array {elt, ...} => 
+                     ObjectType.Array {elt, ...} =>
                         if equals (elt, word8)
                            then (* special case for PackWord operations *)
                                 (case node result of

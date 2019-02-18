@@ -121,7 +121,7 @@ structure Accum =
              else
                 let
                    val ss = Block.statements (Vector.first blocks)
-                   val vs = 
+                   val vs =
                       case Ssa.Statement.exp (Vector.last ss) of
                          Ssa.Exp.Tuple vs =>
                             if Vector.length vars = Vector.length vs
@@ -444,7 +444,6 @@ fun closureConvert
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
                 (Tycon.array, unary Type.array),
                 (Tycon.cpointer, nullary Type.cpointer),
-                (Tycon.hierarchicalHeap, unary Type.hierarchicalHeap),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
                 (Tycon.thread, nullary Type.thread),
@@ -798,7 +797,7 @@ fun closureConvert
                       if Vector.isEmpty decs
                          then (binds, ac)
                       else
-                         let 
+                         let
                             val {lambda, var, ...} = Vector.first decs
                             val info = lambdaInfo lambda
                             val tupleVar = Var.newString "tuple"
@@ -1073,7 +1072,6 @@ fun closureConvert
                                         result = ty,
                                         typeOps = {deArray = Type.deArray,
                                                    deArrow = fn _ => Error.bug "ClosureConvert.convertPrimExp: deArrow",
-                                                   deHierarchicalHeap = Type.deHierarchicalHeap,
                                                    deRef = Type.deRef,
                                                    deVector = Type.deVector,
                                                    deWeak = Type.deWeak}}),

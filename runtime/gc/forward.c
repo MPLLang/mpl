@@ -166,10 +166,6 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
     s->forwardState.back += size + skip;
     assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_METADATA_SIZE,
                        s->alignment));
-
-    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-      DIE("Found hierarchical heap object");
-    }
   }
   *opp = getFwdPtr(p);
   if (DEBUG_DETAILED)

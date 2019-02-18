@@ -225,7 +225,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                                                end);
                                                        setConRep (con, ConRep.FFI)
                                                    end))
-                             | Type.HierarchicalHeap t => deepSetFFI t
                              | Type.Ref t => deepSetFFI t
                              | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
                              | Type.Vector t => deepSetFFI t
@@ -317,7 +316,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                    | CPointer => ()
                    | Datatype tycon' =>
                         List.push (#dependents (tyconInfo tycon'), tycon)
-                   | HierarchicalHeap t => setTypeDependents t
                    | IntInf => ()
                    | Real _ => ()
                    | Ref t => setTypeDependents t
@@ -449,7 +447,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
             fun loop t =
                case Type.dest t of
                    Array _ => true
-                 | HierarchicalHeap t => loop t
                  | Ref t => loop t
                  | Tuple ts => Vector.exists (ts, loop)
                  | Vector _ => true
@@ -545,7 +542,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                        (case tyconReplacement tyc' of
                            NONE => Tycon.equals (tyc, tyc')
                          | SOME t => containsTycon t)
-                  | HierarchicalHeap t => containsTycon t
                   | Tuple ts => Vector.exists (ts, containsTycon)
                   | Ref t => containsTycon t
                   | Vector t => containsTycon t
@@ -607,7 +603,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            t
                         end
                    | NONE => t)
-            | HierarchicalHeap t => hierarchicalHeap (simplifyType t)
             | Ref t => reff (simplifyType t)
             | Tuple ts => Type.tuple (keepSimplifyTypes ts)
             | Vector t => vector (simplifyType t)

@@ -7,29 +7,6 @@
 
 signature MLTON_HM =
 sig
-  structure HierarchicalHeap :
-  sig
-    type 'a t
-
-    val new: unit -> unit t
-
-    val set: 'a t -> unit
-    val get: unit -> unit t
-
-    val setLevel: 'a t * int -> unit
-    val getLevel: 'a t -> int
-    val getLowestPrivateLevel: 'a t -> int
-
-    val appendChild: 'a t * 'b t * int -> unit
-    val setReturnValue: 'a t * 'b -> 'b t
-    val mergeIntoParentAndGetReturnValue: 'a t -> 'a
-    val promoteChunks: 'a t -> unit
-
-    val setDead: 'a t -> unit
-
-    val setUseHierarchicalHeap: bool -> unit
-  end
-
   (* val enterGlobalHeap: unit -> unit
   val exitGlobalHeap: unit -> unit *)
 

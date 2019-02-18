@@ -63,6 +63,5 @@ end
 
 val fill0Normal = new ()
 val fill8Normal = new ()
-val hierarchicalHeap = new ()
 
 end

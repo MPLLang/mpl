@@ -60,7 +60,6 @@ signature PRIM =
                               symbolScope: CFunction.SymbolScope.t } (* codegen *)
              | FFI_getArgs (* RAM_WARNING: Is this correct? *)
              | GC_collect (* to rssa (as runtime C fn) *)
-             | HierarchicalHeap_new (* ssa to rssa *)
              | IntInf_add (* to rssa (as runtime C fn) *)
              | IntInf_andb (* to rssa (as runtime C fn) *)
              | IntInf_arshift (* to rssa (as runtime C fn) *)
@@ -236,7 +235,6 @@ signature PRIM =
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,
                                       exn: 'a,
-                                      hierarchicalHeap: 'a -> 'a,
                                       intInf: 'a,
                                       real: RealSize.t -> 'a,
                                       reff: 'a -> 'a,
@@ -261,7 +259,6 @@ signature PRIM =
                                 result: 'b,
                                 typeOps: {deArray: 'b -> 'b,
                                           deArrow: 'b -> 'b * 'b,
-                                          deHierarchicalHeap: 'b -> 'b,
                                           deRef: 'b -> 'b,
                                           deVector: 'b -> 'b,
                                           deWeak: 'b -> 'b}} -> 'b vector

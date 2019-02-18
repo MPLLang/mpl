@@ -66,15 +66,6 @@ structure Char32 =
       type t = char32
       type char = t
    end
-
-structure HM =
-    struct
-        structure HierarchicalHeap =
-            struct
-                type 'a t = 'a hierarchicalHeap
-            end
-    end
-
 structure Int1 =
    struct
       type t = int1

@@ -310,12 +310,6 @@ fun deVector v =
     | Unify (_, v) => v
     | _ => Error.bug "AbstractValue.deVector"
 
-fun deHierarchicalHeap v =
-    case tree v of
-        Type t => fromType (Type.deHierarchicalHeap t)
-      | Unify (_, v) => v
-      | _ => Error.bug "AbstractValue.deHierarchicalHeap"
-
 fun lambda (l: Sxml.Lambda.t, t: Type.t): t =
    new (Lambdas (LambdaNode.lambda l), t)
 

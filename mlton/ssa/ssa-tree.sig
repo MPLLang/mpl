@@ -61,7 +61,6 @@ signature SSA_TREE =
                Array of t
              | CPointer
              | Datatype of Tycon.t
-             | HierarchicalHeap of t
              | IntInf
              | Real of RealSize.t
              | Ref of t
@@ -82,7 +81,6 @@ signature SSA_TREE =
             val dest: t -> dest
             val deArray: t -> t
             val deDatatype: t -> Tycon.t
-            val deHierarchicalHeap: t -> t
             val deRef: t -> t
             val deTuple: t -> t vector
             val deTupleOpt: t -> t vector option
@@ -92,7 +90,6 @@ signature SSA_TREE =
             val deWordOpt: t -> WordSize.t option
             val equals: t * t -> bool
             val hash: t -> word
-            val hierarchicalHeap: t -> t
             val intInf: t
             val isTuple: t -> bool
             val isUnit: t -> bool

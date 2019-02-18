@@ -794,8 +794,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                               case Type.dest t of
                                  CPointer => ()
                                | Datatype tc => Size.<= (tyconSize tc, s)
-                               (* RAM_NOTE: Not sure if correct *)
-                               | HierarchicalHeap _ => Size.makeTop s
                                | IntInf => Size.makeTop s
                                | Object {args, con, ...} =>
                                     if ObjectCon.isVector con
