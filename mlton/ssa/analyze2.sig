@@ -7,12 +7,12 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature ANALYZE2_STRUCTS = 
+signature ANALYZE2_STRUCTS =
    sig
       include SSA_TREE2
    end
 
-signature ANALYZE2 = 
+signature ANALYZE2 =
    sig
       include ANALYZE2_STRUCTS
 
@@ -44,7 +44,8 @@ signature ANALYZE2 =
                    resultType: Type.t} -> 'a,
           update: {base: 'a,
                    offset: int,
-                   value: 'a} -> unit,
+                   value: 'a,
+                   writeBarrier: bool} -> unit,
           useFromTypeOnBinds: bool}
          -> {func: Func.t -> {args: 'a vector,
                               raises: 'a vector option,

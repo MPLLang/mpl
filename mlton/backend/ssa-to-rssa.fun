@@ -1133,7 +1133,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                   in
                      case s of
                         S.Statement.Profile e => add (Statement.Profile e)
-                      | S.Statement.Update {base, offset, value} =>
+                      | S.Statement.Update {base, offset, value, writeBarrier} =>
                            (case toRtype (varType value) of
                                NONE => none ()
                              | SOME t =>
@@ -1145,6 +1145,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                          baseTy = varType (Base.object base),
                                          offset = offset,
                                          value = varOp value}
+                                     (* TODO HERE:
+                                      *   if writeBarrier, call into runtime
+                                      *   to do Assignable_set
+                                      *
+                                      *   change runtime write barrier to take
+                                      *   (objptr baseObject, objptr* dstField, objptr src)
+                                      *   where dstField is an internal pointer into
+                                      *   the base object.
+                                      *)
                                      val ss =
                                         if !Control.markCards
                                            andalso Type.isObjptr t
@@ -1378,6 +1387,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | Array_copyArray => simpleCCallWithGCState (CFunction.gcArrayCopy (Operand.ty (a 0), Operand.ty (a 2)))
                                | Array_copyVector => simpleCCallWithGCState (CFunction.gcArrayCopy (Operand.ty (a 0), Operand.ty (a 2)))
                                | Array_length => arrayOrVectorLength ()
+                               (*
                                | Array_sub =>
                                  (case toRtype ty of
                                       NONE => none ()
@@ -1414,6 +1424,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                  a 0, a 1, a 2),
                                              func = func }
                                      end)
+                               *)
                                | Array_toArray =>
                                     let
                                        val rawarr = a 0
@@ -1729,6 +1740,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                      (CFunction.weakCanGet
                                       {arg = Operand.ty (a 0)}),
                                      fn () => move (Operand.bool false))
+                               (*
                                | Ref_deref =>
                                  (case toRtype ty of
                                       NONE => none ()
@@ -1758,6 +1770,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                     a 0, a 1),
                                                 func = func }
                                      end)
+                               *)
                                | Weak_get =>
                                     ifIsWeakPointer
                                     (varType (arg 0),

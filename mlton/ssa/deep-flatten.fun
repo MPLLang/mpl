@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor DeepFlatten (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM = 
+functor DeepFlatten (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM =
 struct
 
 open S
@@ -286,7 +286,7 @@ structure Value =
                Ground t => Type.layout t
              | Object e =>
                   Equatable.layout
-                  (e, fn {args, con, flat, ...} => 
+                  (e, fn {args, con, flat, ...} =>
                    seq [str "Object ",
                         record [("args", Prod.layout (args, layout)),
                                 ("con", ObjectCon.layout con),
@@ -720,7 +720,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | MLton_size => dontFlatten ()
              | MLton_share => dontFlatten ()
              | Weak_get => deWeak (arg 0)
-             | Weak_new => 
+             | Weak_new =>
                   let val a = arg 0
                   in (Value.dontFlatten a; weak a)
                   end
@@ -743,7 +743,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Object e => Object.select (Equatable.value e, offset)
              | _ => Error.bug "DeepFlatten.select:"
          end
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier} =
          coerce {from = value,
                  to = select {base = base, offset = offset}}
       fun const c = typeValue (Type.ofConst c)
@@ -808,7 +808,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                     val args =
                        case ! (conValue con) of
                           NONE => args
-                        | SOME v => 
+                        | SOME v =>
                              case Type.dest (Value.finalType v) of
                                 Type.Object {args, ...} => args
                               | _ => Error.bug "DeepFlatten.datatypes: strange con"
@@ -940,7 +940,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                          in
                             case Value.deObject (varValue baseVar) of
                                NONE => simple ()
-                             | SOME obj => 
+                             | SOME obj =>
                                   let
                                      val Tree.T (info, children) =
                                         varTree baseVar
@@ -983,7 +983,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
             case s of
                Bind b => transformBind b
              | Profile _ => simple ()
-             | Update {base, offset, value} =>
+             | Update {base, offset, value, writeBarrier} =>
                   let
                      val baseVar =
                         case base of
@@ -992,7 +992,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                   in
                      case Value.deObject (varValue baseVar) of
                         NONE => simple ()
-                      | SOME object => 
+                      | SOME object =>
                            let
                               val ss = ref []
                               val child =
@@ -1003,7 +1003,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                  if not (TypeTree.isFlat child)
                                     then [Update {base = base,
                                                   offset = offset,
-                                                  value = replaceVar value}]
+                                                  value = replaceVar value,
+                                                  writeBarrier = writeBarrier}]
                                  else
                                     let
                                        val (vt, ss') =
@@ -1022,7 +1023,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                               List.push (us,
                                                          Update {base = base,
                                                                  offset = offset,
-                                                                 value = var})
+                                                                 value = var,
+                                                                 writeBarrier = writeBarrier})
                                            end)
                                     in
                                        !us

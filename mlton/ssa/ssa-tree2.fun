@@ -733,7 +733,8 @@ structure Statement =
        | Profile of ProfileExp.t
        | Update of {base: Var.t Base.t,
                     offset: int,
-                    value: Var.t}
+                    value: Var.t,
+                    writeBarrier: bool}
 
       fun layout' (s: t, layoutVar): Layout.t =
          let
@@ -755,7 +756,7 @@ structure Statement =
                                indent (Exp.layout' (exp, layoutVar), 2)]
                   end
              | Profile p => ProfileExp.layout p
-             | Update {base, offset, value} =>
+             | Update {base, offset, value, writeBarrier} =>
                   mayAlign [seq [Exp.layout' (Exp.Select {base = base,
                                                           offset = offset},
                                               layoutVar),
@@ -830,10 +831,11 @@ structure Statement =
                      ty = ty,
                      var = Option.map (var, def)}
           | Profile _ => s
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                Update {base = Base.map (base, use),
                        offset = offset,
-                       value = use value}
+                       value = use value,
+                       writeBarrier = writeBarrier}
 
       fun replaceUses (s, f) = replaceDefsUses (s, {def = fn x => x, use = f})
    end

@@ -123,7 +123,26 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                      datatype z = datatype Prim.Name.t
                    in
                       case Prim.name prim of
-                         Ref_ref =>
+                         Array_sub => sub ()
+                       | Array_update {writeBarrier} =>
+                            maybeBindUnit
+                            (S2.Statement.Update
+                             {base = Base.VectorSub {index = arg 1,
+                                                     vector = arg 0},
+                              offset = 0,
+                              value = arg 2,
+                              writeBarrier = writeBarrier})
+                       | Ref_assign {writeBarrier} =>
+                            maybeBindUnit
+                            (S2.Statement.Update
+                             {base = Base.Object (arg 0),
+                              offset = 0,
+                              value = arg 1,
+                              writeBarrier = writeBarrier})
+                       | Ref_deref =>
+                            simple (S2.Exp.Select {base = Base.Object (arg 0),
+                                                   offset = 0})
+                       | Ref_ref =>
                             simple (S2.Exp.Object {args = Vector.new1 (arg 0),
                                                    con = NONE})
                        | Vector_length =>
@@ -158,7 +177,8 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                          {base = Base.VectorSub {index = iVar,
                                                                  vector = aVar},
                                           offset = 0,
-                                          value = arg}
+                                          value = arg,
+                                          writeBarrier = false}
                                    in
                                       iStmt::uStmt::stmts
                                    end)

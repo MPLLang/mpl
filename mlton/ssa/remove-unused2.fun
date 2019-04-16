@@ -554,7 +554,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                            ; visitExp exp)
                   else maybeVisitVarExp (var, exp))
           | Profile _ => ()
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                let
                   datatype z = datatype Base.t
                   datatype z = datatype ObjectCon.t
@@ -1186,7 +1186,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                    | NONE => doit NONE
                end
           | Profile _ => SOME s
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                let
                   datatype z = datatype Base.t
                in
@@ -1222,7 +1222,8 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                                                     (Update
                                                      {base = Base.Object base,
                                                       offset = offset,
-                                                      value = value})
+                                                      value = value,
+                                                      writeBarrier = writeBarrier})
                                                  end
                                            else NONE
                                         end

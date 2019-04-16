@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor Analyze2 (S: ANALYZE2_STRUCTS): ANALYZE2 = 
+functor Analyze2 (S: ANALYZE2_STRUCTS): ANALYZE2 =
 struct
 
 open S
@@ -77,7 +77,7 @@ fun 'a analyze
                      case (raises, shouldRaises) of
                         (NONE, NONE) => ()
                       | (NONE, SOME _) => ()
-                      | (SOME _, NONE) => 
+                      | (SOME _, NONE) =>
                            Error.bug "Analyze2.loopTransfer (raise mismatch)"
                       | (SOME vs, SOME vs') => coerces ("call caller/raises", vs, vs')
                   datatype z = datatype Return.t
@@ -87,7 +87,7 @@ fun 'a analyze
                         if isSome returns orelse isSome raises
                            then Error.bug "Analyze2.loopTransfer (return mismatch at Dead)"
                         else ()
-                   | NonTail {cont, handler} => 
+                   | NonTail {cont, handler} =>
                         (Option.app (returns, fn vs =>
                                      coerces ("call non-tail/returns", vs, labelValues cont))
                          ; (case handler of
@@ -193,14 +193,14 @@ fun 'a analyze
                               args = values args,
                               resultType = resultType,
                               resultVar = resultVar}
-               in 
+               in
                   ()
                end)
         handle exn => Error.reraiseSuffix (exn, concat [" in ", Layout.toString (Transfer.layout t)])
       val loopTransfer =
          Trace.trace3
          ("Analyze2.loopTransfer",
-          Transfer.layout, 
+          Transfer.layout,
           Option.layout (Vector.layout layout),
           Option.layout (Vector.layout layout),
           Layout.ignore)
@@ -258,10 +258,11 @@ fun 'a analyze
                     else setValue (var, v))
                 end
           | Profile _ => ()
-          | Update {base, offset, value = v} =>
+          | Update {base, offset, value = v, writeBarrier} =>
              update {base = baseValue base,
                      offset = offset,
-                     value = value v})
+                     value = value v,
+                     writeBarrier = writeBarrier})
          handle exn => Error.reraiseSuffix (exn, concat [" in ", Layout.toString (Statement.layout s)])
       val loopStatement =
          Trace.trace ("Analyze2.loopStatement",
