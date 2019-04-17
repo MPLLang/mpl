@@ -477,7 +477,7 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
          case Type.dest base of
             Type.Object {args, ...} => Prod.elt (args, offset)
           | _ => Error.bug "Ssa2.TypeCheck2.select (non object)"
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier} =
          case Type.dest base of
             Type.Object {args, ...} =>
                let

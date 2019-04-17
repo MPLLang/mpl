@@ -456,7 +456,7 @@ extern void assertObjptrDisentangledForMe(CPointer, Objptr);
 //   Assignable_set(s, dst, index, src);
 // }
 
-static inline void GC_writeBarrier(CPointer s, Objptr obj, Objptr* dst, Objptr src) {
+static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {
   Assignable_writeBarrier(s, obj, dst, src);
 }
 

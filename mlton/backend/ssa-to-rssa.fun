@@ -1205,9 +1205,9 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                     else
                                       let
                                         (* SAM_NOTE: CHECK: are these arguments and types correct?? *)
-                                        val args = Vector.new4 (GCState, baseOp, dst, src)
+                                        val args = Vector.new4 (GCState, Base.object baseOp, dst, src)
                                         val func = CFunction.writeBarrier
-                                          {obj = baseTy,
+                                          {obj = Operand.ty (Base.object baseOp),
                                            dst = Operand.ty dst,
                                            src = Operand.ty src}
                                       in

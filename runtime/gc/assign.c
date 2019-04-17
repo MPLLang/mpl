@@ -187,17 +187,17 @@
 //     return !hasFwdPtr(objptrToPointer(o, NULL));
 // }
 
-objptr Assignable_get (GC_state s, objptr src, Int64 index) {
-    // struct HM_HierarchicalHeap *hh;
-    pointer src_repl, res;
+// objptr Assignable_get (GC_state s, objptr src, Int64 index) {
+//     // struct HM_HierarchicalHeap *hh;
+//     pointer src_repl, res;
 
-    // src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh);
-    src_repl = objptrToPointer(src, NULL);
-    res = *((pointer *)src_repl + index);
-    // Assignable_unlockReplicaReader(s, hh);
+//     // src_repl = Assignable_findLockedTrueReplicaReader(s, src, &hh);
+//     src_repl = objptrToPointer(src, NULL);
+//     res = *((pointer *)src_repl + index);
+//     // Assignable_unlockReplicaReader(s, hh);
 
-    return pointerToObjptr(res, NULL);
-}
+//     return pointerToObjptr(res, NULL);
+// }
 
 // struct hhLockUnlock_args {
 //   bool for_locking;

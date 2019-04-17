@@ -733,7 +733,7 @@ structure Select =
       val update =
          Trace.trace
          ("PackedRepresentation.Select.update",
-          layout o #1, List.layout Statement.layout)
+          layout o #1, fn {src, dst, ss} => List.layout Statement.layout (ss @ [Statement.Move {dst=dst, src=src}]))
          update
    end
 
