@@ -7,12 +7,12 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature MACHINE_STRUCTS = 
+signature MACHINE_STRUCTS =
    sig
       include ATOMS
    end
 
-signature MACHINE = 
+signature MACHINE =
    sig
       include MACHINE_STRUCTS
 
@@ -93,6 +93,7 @@ signature MACHINE =
              | StackOffset of StackOffset.t
              | StackTop
              | Word of WordX.t
+             | Address of t
 
             val equals: t * t -> bool
             val interfere: t * t -> bool

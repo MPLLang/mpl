@@ -733,6 +733,7 @@ fun output {program as Machine.Program.T {chunks,
              | StackOffset s => StackOffset.toString s
              | StackTop => "StackTop"
              | Word w => WordX.toC w
+             | Address z => addr (toString z)
       in
          val operandToString = toString
       end

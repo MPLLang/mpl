@@ -218,6 +218,7 @@ structure Operand =
        | StackOffset of StackOffset.t
        | StackTop
        | Word of WordX.t
+       | Address of t
 
     val ty =
        fn ArrayOffset {ty, ...} => ty
@@ -234,6 +235,7 @@ structure Operand =
         | StackOffset s => StackOffset.ty s
         | StackTop => Type.cpointer ()
         | Word w => Type.ofWordX w
+        | Address _ => Type.cpointer ()
 
     fun layout (z: t): Layout.t =
          let
@@ -268,6 +270,7 @@ structure Operand =
              | StackOffset so => StackOffset.layout so
              | StackTop => str "<StackTop>"
              | Word w => WordX.layout w
+             | Address z => seq [str "Address ", tuple [layout z]]
          end
 
     val toString = Layout.toString o layout
@@ -290,6 +293,7 @@ structure Operand =
            | (Register r, Register r') => Register.equals (r, r')
            | (StackOffset so, StackOffset so') => StackOffset.equals (so, so')
            | (Word w, Word w') => WordX.equals (w, w')
+           | (Address z, Address z') => equals (z, z')
            | _ => false
 
       val stackOffset = StackOffset o StackOffset.T
@@ -321,6 +325,7 @@ structure Operand =
           | Offset _ => true
           | Register _ => true
           | StackOffset _ => true
+          | Address _ => true (* SAM_NOTE: CHECK *)
           | _ => false
    end
 
@@ -1109,6 +1114,12 @@ structure Program =
                                           end)
                       | StackTop => true
                       | Word _ => true
+                      | Address z =>
+                          (checkOperand (z, alloc)
+                          ; case z of
+                              ArrayOffset _ => true
+                            | Offset _ => true
+                            | _ => false)
                in
                   Err.check ("operand", ok, fn () => Operand.layout x)
                end

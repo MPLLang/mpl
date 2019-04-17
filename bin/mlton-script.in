@@ -145,5 +145,4 @@ doit "$lib" \
         -target-link-opt x86 '-m32'                              \
         -profile-exclude '\$\(SML_LIB\)'                         \
         -mark-cards false                                        \
-        -disable-pass deepFlatten -disable-pass refFlatten       \
         "$@"

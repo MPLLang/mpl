@@ -53,6 +53,7 @@ structure Operand =
        | Runtime of GCField.t
        | Var of {var: Var.t,
                  ty: Type.t}
+       | Address of t
 
       val null = Const Const.null
 
@@ -83,10 +84,11 @@ structure Operand =
           | ObjptrTycon _ => Type.objptrHeader ()
           | Runtime z => Type.ofGCField z
           | Var {ty, ...} => ty
+          | Address _ => Type.cpointer ()
 
       fun layout (z: t): Layout.t =
          let
-            open Layout 
+            open Layout
          in
             case z of
                ArrayOffset {base, index, offset, scale, ty} =>
@@ -105,6 +107,7 @@ structure Operand =
              | ObjptrTycon opt => ObjptrTycon.layout opt
              | Runtime r => GCField.layout r
              | Var {var, ...} => Var.layout var
+             | Address z => seq [str "Address ", tuple [layout z]]
          end
 
       fun cast (z: t, t: Type.t): t =
@@ -120,6 +123,7 @@ structure Operand =
           | Offset _ => true
           | Runtime _ => true
           | Var _ => true
+          | Address _ => true (* SAM_NOTE: CHECK *)
           | _ => false
 
       fun 'a foldVars (z: t, a: 'a, f: Var.t * 'a -> 'a): 'a =
@@ -129,6 +133,7 @@ structure Operand =
           | Cast (z, _) => foldVars (z, a, f)
           | Offset {base, ...} => foldVars (base, a, f)
           | Var {var, ...} => f (var, a)
+          | Address z => foldVars (z, a, f)
           | _ => a
 
       fun replaceVar (z: t, f: Var.t -> t): t =
@@ -147,6 +152,7 @@ structure Operand =
                              offset = offset,
                              ty = ty}
                 | Var {var, ...} => f var
+                | Address t => Address (loop t)
                 | _ => z
          in
             loop z
@@ -300,7 +306,7 @@ structure Statement =
 
             val (src, srcTy, ssSrc, dstTy, finishDst) =
                case (Type.deReal srcTy, Type.deReal dstTy) of
-                  (NONE, NONE) => 
+                  (NONE, NONE) =>
                      (src, srcTy, [], dstTy, fn dst => (dst, []))
                 | (SOME rs, NONE) =>
                      let
@@ -345,9 +351,9 @@ structure Statement =
                        (Operand.Var {ty = tmpTy, var = tmp},
                         [PrimApp {args = Vector.new1 src,
                                   dst = SOME (tmp, tmpTy),
-                                  prim = (Prim.wordExtdToWord 
-                                          (WordSize.fromBits srcW, 
-                                           WordSize.fromBits dstW, 
+                                  prim = (Prim.wordExtdToWord
+                                          (WordSize.fromBits srcW,
+                                           WordSize.fromBits dstW,
                                            {signed = false}))}])
                     end
 
@@ -750,7 +756,7 @@ structure Function =
                    val _ =
                       Transfer.foreachLabel
                       (transfer, fn to =>
-                       (ignore o Graph.addEdge) 
+                       (ignore o Graph.addEdge)
                        (g, {from = from, to = labelNode to}))
                 in
                    ()
@@ -963,7 +969,7 @@ structure Program =
                         val _ = Array.update (visited, i, true)
                         val f = Vector.sub (functions, i)
                         val v' = v f
-                        val _ = Function.dfs 
+                        val _ = Function.dfs
                                 (f, fn Block.T {transfer, ...} =>
                                  (Transfer.foreachFunc (transfer, visit)
                                   ; fn () => ()))
@@ -1158,7 +1164,7 @@ structure Program =
 
       fun shrink (T {functions, handlesSignals, main, objectTypes}) =
          let
-            val p = 
+            val p =
                T {functions = List.revMap (functions, Function.shrink),
                   handlesSignals = handlesSignals,
                   main = Function.shrink main,
@@ -1224,7 +1230,7 @@ structure Program =
                let
                   val {name, start, blocks, ...} = Function.dest f
                   val {get = labelInfo: Label.t -> HandlerInfo.t,
-                       rem = remLabelInfo, 
+                       rem = remLabelInfo,
                        set = setLabelInfo} =
                      Property.getSetOnce
                      (Label.plist, Property.initRaise ("info", Label.layout))
@@ -1368,7 +1374,7 @@ structure Program =
                      (fn display =>
                       let
                          open Layout
-                         val _ = 
+                         val _ =
                             display (seq [str "checkHandlers ",
                                           Func.layout name])
                          val _ =
@@ -1547,6 +1553,12 @@ structure Program =
                        | ObjptrTycon _ => true
                        | Runtime _ => true
                        | Var {ty, var} => Type.isSubtype (varType var, ty)
+                       | Address z =>
+                           (checkOperand z
+                           ; case z of
+                               ArrayOffset _ => true
+                             | Offset _ => true
+                             | _ => false)
                 in
                    Err.check ("operand", ok, fn () => Operand.layout x)
                 end
@@ -1609,7 +1621,7 @@ structure Program =
                           | _ => false)
                    | SetSlotExnStack => true
                end
-            val statementOk = 
+            val statementOk =
                Trace.trace ("Rssa.statementOk",
                             Statement.layout,
                             Bool.layout)
@@ -1637,7 +1649,7 @@ structure Program =
                              returns: Type.t vector option): bool =
                case returns of
                   NONE => true
-                | SOME ts => 
+                | SOME ts =>
                      Vector.equals (formals, ts, fn ((_, t), t') =>
                                     Type.isSubtype (t', t))
             fun callIsOk {args, func, raises, return, returns} =
@@ -1801,7 +1813,7 @@ structure Program =
                                            val expects =
                                               #2 (Vector.first args)
                                         in
-                                           Type.isSubtype (return, expects) 
+                                           Type.isSubtype (return, expects)
                                            andalso
                                            CType.equals (Type.toCType return,
                                                          Type.toCType expects)
@@ -1827,7 +1839,7 @@ structure Program =
                                   Bool.layout)
                                  blockOk
 
-                  val _ = 
+                  val _ =
                      Vector.foreach
                      (blocks, fn b =>
                       check' (b, "block", blockOk, Block.layout))

@@ -229,6 +229,9 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   pointer dstp = objptrToPointer(dst, NULL);
   // objptr* field = (objptr*)dstp + index;
 
+  /* TODO:
+   * assert that field is actually inside dst obj!! */
+
   /* Go ahead and perform the write */
   // *field = src;
 

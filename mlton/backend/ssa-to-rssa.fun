@@ -1204,17 +1204,17 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                       adds (ss' @ [theMove])
                                     else
                                       let
-                                        (* SAM_NOTE: CHECK: are these arguments and types correct?? *)
-                                        val args = Vector.new4 (GCState, Base.object baseOp, dst, src)
+                                        (* SAM_NOTE: CHECK: are these arguments and types correct? *)
+                                        val args = Vector.new4 (GCState, Base.object baseOp, Operand.Address dst, src)
                                         val func = CFunction.writeBarrier
                                           {obj = Operand.ty (Base.object baseOp),
-                                           dst = Operand.ty dst,
+                                           dst = Operand.ty (Operand.Address dst),
                                            src = Operand.ty src}
                                       in
                                         split
-                                        (Vector.new0 (), Kind.CReturn {func = func}, ss,
+                                        (Vector.new0 (), Kind.CReturn {func = func}, theMove :: ss,
                                          fn l =>
-                                         (ss' @ [theMove],
+                                         (ss',
                                           Transfer.CCall {args = args,
                                                           func = func,
                                                           return = SOME l}))

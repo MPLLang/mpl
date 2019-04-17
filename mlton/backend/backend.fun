@@ -553,6 +553,7 @@ let
                     WordSize.objptrHeader ()))
              | Runtime f => runtimeOp f
              | Var {var, ...} => varOperand var
+             | Address z => M.Operand.Address (translateOperand z)
          end
       fun translateOperands ops = Vector.map (ops, translateOperand)
       fun genStatement (s: R.Statement.t,

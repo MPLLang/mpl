@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature RSSA_STRUCTS = 
+signature RSSA_STRUCTS =
    sig
       include ATOMS
 
@@ -28,7 +28,7 @@ signature RSSA_STRUCTS =
       sharing Scale = Type.Scale
    end
 
-signature RSSA = 
+signature RSSA =
    sig
       include RSSA_STRUCTS
 
@@ -60,6 +60,12 @@ signature RSSA =
              | Runtime of Runtime.GCField.t
              | Var of {ty: Type.t,
                        var: Var.t}
+               (* `Address` is used to create temporary internal pointers,
+                * to pass to the runtime write barrier. It is okay to take
+                * the address ONLY of Offsets and ArrayOffsets. The program
+                * should never "hold on to" an internal pointer. *)
+             | Address of t
+
 
             val bool: bool -> t
             val cast: t * Type.t -> t
@@ -132,7 +138,7 @@ signature RSSA =
                         return: Return.t}
              | Goto of {args: Operand.t vector,
                         dst: Label.t}
-             (* Raise implicitly raises to the caller.  
+             (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)
              | Raise of Operand.t vector
