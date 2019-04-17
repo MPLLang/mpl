@@ -224,13 +224,13 @@ objptr Assignable_get (GC_state s, objptr src, Int64 index) {
 //     }
 // }
 
-void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
+void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
-  objptr* field = (objptr*)dstp + index;
+  // objptr* field = (objptr*)dstp + index;
 
   /* Go ahead and perform the write */
-  *field = src;
+  // *field = src;
 
   /* If src does not reference an object, then no need to check for
    * down-pointers. */

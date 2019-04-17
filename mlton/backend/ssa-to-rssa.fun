@@ -170,7 +170,7 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_arrayCopy"}
 
-      fun refDeref {arg, return} =
+      (* fun refDeref {arg, return} =
         let
            val cty = Type.toCType return
            val target = concat ["Ref_deref_", CType.name cty]
@@ -269,7 +269,26 @@ structure CFunction =
               return = Type.unit,
               symbolScope = Private,
               target = Direct target}
-        end
+        end *)
+
+      fun writeBarrier {obj, dst, src} =
+        T {args = Vector.new4 (Type.gcState(), obj, dst, src),
+           convention = Cdecl,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = false,
+                                mayGC = false,
+                                maySwitchThreads = false,
+                                modifiesFrontier = false,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new4 (CType.gcState,
+                                     CType.objptr,
+                                     CType.cpointer,
+                                     CType.objptr),
+                        NONE),
+          return = Type.unit,
+          symbolScope = Private,
+          target = Direct "GC_writeBarrier"}
 
       val returnToC = fn () =>
          T {args = Vector.new0 (),
@@ -754,6 +773,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
    let
       val {diagnostic, genCase, object, objectTypes, select, toRtype, update} =
          PackedRepresentation.compute program
+
+      val updateGetDstSrc = update
+      fun update x =
+        let
+          val {dst, src, ss} = updateGetDstSrc x
+        in
+          ss @ [Move {dst=dst, src=src}]
+        end
+
       val objectTypes = Vector.concat [ObjectType.basic (), objectTypes]
       val () =
          Vector.foreachi
@@ -1130,42 +1158,6 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      fun add2 (s1, s2) = loop (i - 1, s1 :: s2 :: ss, t)
                      fun adds ss' = loop (i - 1, ss' @ ss, t)
                      val s = Vector.sub (statements, i)
-                  in
-                     case s of
-                        S.Statement.Profile e => add (Statement.Profile e)
-                      | S.Statement.Update {base, offset, value, writeBarrier} =>
-                           (case toRtype (varType value) of
-                               NONE => none ()
-                             | SOME t =>
-                                  let
-                                     val baseOp = Base.map (base, varOp)
-                                     val ss =
-                                        update
-                                        {base = baseOp,
-                                         baseTy = varType (Base.object base),
-                                         offset = offset,
-                                         value = varOp value}
-                                     (* TODO HERE:
-                                      *   if writeBarrier, call into runtime
-                                      *   to do Assignable_set
-                                      *
-                                      *   change runtime write barrier to take
-                                      *   (objptr baseObject, objptr* dstField, objptr src)
-                                      *   where dstField is an internal pointer into
-                                      *   the base object.
-                                      *)
-                                     val ss =
-                                        if !Control.markCards
-                                           andalso Type.isObjptr t
-                                           then
-                                              updateCard (Base.object baseOp)
-                                              @ ss
-                                        else ss
-                                  in
-                                     adds ss
-                                  end)
-                      | S.Statement.Bind {exp, ty, var} =>
-                  let
                      fun split (args, kind,
                                 ss: Statement.t list,
                                 make: Label.t -> Statement.t list * Transfer.t) =
@@ -1178,6 +1170,58 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                         in
                            loop (i - 1, ss, t)
                         end
+                  in
+                     case s of
+                        S.Statement.Profile e => add (Statement.Profile e)
+                      | S.Statement.Update {base, offset, value, writeBarrier} =>
+                           (case toRtype (varType value) of
+                               NONE => none ()
+                             | SOME t =>
+                                  let
+                                     val baseOp = Base.map (base, varOp)
+                                     val baseTy = varType (Base.object base)
+                                     val {dst, src, ss=ss'} =
+                                        updateGetDstSrc
+                                        {base = baseOp,
+                                         baseTy = baseTy,
+                                         offset = offset,
+                                         value = varOp value}
+                                     val theMove = Move {dst=dst, src=src}
+(*
+                                      val ss =
+                                        if !Control.markCards
+                                           andalso Type.isObjptr t
+                                           then
+                                              updateCard (Base.object baseOp)
+                                              @ ss
+                                        else ss
+                                  in
+                                     adds ss
+                                  end)
+*)
+                                  in
+                                    if not (writeBarrier andalso Type.isObjptr t) then
+                                      adds (ss' @ [theMove])
+                                    else
+                                      let
+                                        (* SAM_NOTE: CHECK: are these arguments and types correct?? *)
+                                        val args = Vector.new4 (GCState, baseOp, dst, src)
+                                        val func = CFunction.writeBarrier
+                                          {obj = baseTy,
+                                           dst = Operand.ty dst,
+                                           src = Operand.ty src}
+                                      in
+                                        split
+                                        (Vector.new0 (), Kind.CReturn {func = func}, ss,
+                                         fn l =>
+                                         (ss' @ [theMove],
+                                          Transfer.CCall {args = args,
+                                                          func = func,
+                                                          return = SOME l}))
+                                      end
+                                  end)
+                      | S.Statement.Bind {exp, ty, var} =>
+                  let
                      fun maybeMove (f: Type.t -> Operand.t) =
                         case toRtype ty of
                            NONE => none ()

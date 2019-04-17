@@ -696,7 +696,10 @@ structure Select =
 
       fun update (s: t, {base: Operand.t Base.t,
                          eltWidth: Bytes.t option,
-                         value: Operand.t}): Statement.t list =
+                         value: Operand.t}):
+            {dst : Operand.t,
+             src : Operand.t,
+             ss : Statement.t list} =
          case s of
             Indirect {offset, ty} =>
                let
@@ -706,7 +709,9 @@ structure Select =
                                      offset = offset,
                                      ty = ty}
                in
-                  ss @ [Move {dst = dst, src = value}]
+                  {dst = dst,
+                   src = value,
+                   ss = ss}
                end
           | IndirectUnpack {offset, rest, ty} =>
                let
@@ -719,7 +724,9 @@ structure Select =
                      Unpack.update (rest, {chunk = chunk,
                                            component = value})
                in
-                  ss @ ss' @ [Move {dst = chunk, src = newChunk}]
+                  {dst = chunk,
+                   src = newChunk,
+                   ss = ss @ ss'}
                end
           | _ => Error.bug "PackedRepresentation.Select.update: non-indirect"
 

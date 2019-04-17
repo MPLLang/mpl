@@ -31,12 +31,12 @@
 
 // PRIVATE int Assignable_isMaster(GC_state s, objptr o);
 
-PRIVATE objptr Assignable_get(
-  GC_state s, objptr src, Int64 index
-  );
+// PRIVATE objptr Assignable_get(
+//   GC_state s, objptr src, Int64 index
+//   );
 
-PRIVATE void Assignable_set(
-  GC_state s, objptr dst, Int64 index, objptr src
+PRIVATE void Assignable_writeBarrier(
+  GC_state s, objptr dst, objptr* field, objptr src
   );
 
 #if ASSERT
