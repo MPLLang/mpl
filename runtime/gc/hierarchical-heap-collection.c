@@ -1,4 +1,5 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2018-2019 Sam Westrick
+ * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -20,6 +21,9 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
+
+void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+
 /**
  * Compute the size of the object, how much of it has to be copied, as well as
  * how much metadata it has.
@@ -163,21 +167,21 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  if (s->controls->deferredPromotion) {
-    Trace0(EVENT_PROMOTION_ENTER);
-    if (needGCTime(s)) {
-      timespec_now(&startTime);
-    }
-
-    HM_deferredPromote(s, &forwardHHObjptrArgs);
-
-    if (needGCTime(s)) {
-      timespec_now(&stopTime);
-      timespec_sub(&stopTime, &startTime);
-      timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
-    }
-    Trace0(EVENT_PROMOTION_LEAVE);
+  // if (s->controls->deferredPromotion) {
+  Trace0(EVENT_PROMOTION_ENTER);
+  if (needGCTime(s)) {
+    timespec_now(&startTime);
   }
+
+  HM_chunkList globalDownPtrs = HM_deferredPromote(s, &forwardHHObjptrArgs);
+
+  if (needGCTime(s)) {
+    timespec_now(&stopTime);
+    timespec_sub(&stopTime, &startTime);
+    timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
+  }
+  Trace0(EVENT_PROMOTION_LEAVE);
+  // }
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
@@ -205,9 +209,9 @@ void HM_HHC_collectLocal(void) {
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toLevel = HM_HH_INVALID_LEVEL;
 
-  if (!s->controls->deferredPromotion) {
-    HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
-  }
+  // if (!s->controls->deferredPromotion) {
+  //   HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
+  // }
 
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -276,6 +280,14 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.bytesCopied,
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
+
+  /* preserve remaining down-pointers from global heap */
+  LOG(LM_HH_COLLECTION, LL_INFO,
+    "START forwarding %zu global down-pointers",
+    HM_numRemembered(globalDownPtrs));
+  HM_foreachRemembered(s, globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_INFO, "END forwarding global down-pointers");
+  HM_appendChunkList(s->freeListSmall, globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -526,6 +538,23 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
 
   /* use the forwarding pointer */
   return getFwdPtr(p);
+}
+
+/* ========================================================================= */
+
+void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
+  Word32 srcLevel = HM_getObjptrLevel(src);
+
+  assert(args->minLevel <= srcLevel);
+  assert(srcLevel <= args->maxLevel);
+  assert(args->toLevel == HM_HH_INVALID_LEVEL);
+
+  forwardHHObjptr(s, &src, rawArgs);
+  assert(NULL != args->toSpace[srcLevel]);
+
+  *field = src;
+  HM_rememberAtLevel(args->toSpace[srcLevel], dst, field, src);
 }
 
 /* ========================================================================= */

@@ -59,3 +59,21 @@ void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRemembe
     chunk = chunk->nextChunk;
   }
 }
+
+size_t HM_numRemembered(HM_chunkList rememberedSet) {
+  if (rememberedSet == NULL) return 0;
+
+  size_t count = 0;
+
+  HM_chunk chunk = rememberedSet->firstChunk;
+  while (chunk != NULL) {
+    pointer p = HM_getChunkStart(chunk);
+    pointer frontier = HM_getChunkFrontier(chunk);
+
+    count += (size_t)((frontier - p)) / sizeof(struct HM_remembered);
+
+    chunk = chunk->nextChunk;
+  }
+
+  return count;
+}

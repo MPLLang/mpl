@@ -49,25 +49,20 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
 
   HM_chunkList dstList = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
 
-  /* Objects in the global heap are handled specially during collections. */
-  /* SAM_NOTE: this is incorrect for any global heap object that is not
-   * special cased during collections! e.g. the top-level exn messagers */
-  bool dstInGlobalHeap = (0 == HM_getChunkListLevel(dstList));
-  if (dstInGlobalHeap)
-    return;
-
   pointer srcp = objptrToPointer(src, NULL);
   HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* This creates a down pointer; must be remembered. */
   if (dstList->level < srcList->level) {
-    assert(getHierarchicalHeapCurrent(s) != NULL);
-    struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
-    Word32 level = srcList->level;
-    if (NULL == HM_HH_LEVEL(hh, level)) {
-      HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+    if (dst != s->wsQueue) {
+      assert(getHierarchicalHeapCurrent(s) != NULL);
+      struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
+      Word32 level = srcList->level;
+      if (NULL == HM_HH_LEVEL(hh, level)) {
+        HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+      }
+      HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
     }
-    HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
   }
 }
 
