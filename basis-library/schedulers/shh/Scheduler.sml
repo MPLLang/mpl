@@ -113,14 +113,14 @@ struct
   fun getStatus p = arraySub (statuses, p*padding)
   fun setStatus (p, s) = arrayUpdate (statuses, p*padding, s)
 
-  val mailboxes : (unit -> unit) option Mailboxes.t =
+  val mailboxes : ((unit -> unit) * HH.t) option Mailboxes.t =
     Mailboxes.new NONE
 
   (* When each worker becomes idle, it "preps" a new thread that it plans to
    * switch to as soon as it receives work. When work is dealt from worker A
    * to worker B, worker A will attach B's prepped thread as a child of A's
    * current hierarchical heap. *)
-  val preppedThreads = Array.array (P, NONE)
+  (* val preppedThreads = Array.array (P, NONE) *)
 
   (* val push : task -> unit
    * push onto the current work queue *)
@@ -253,15 +253,10 @@ struct
                   NONE => Mailboxes.sendMail mailboxes (r, NONE)
                 | SOME (task, level) =>
                     let
-                      val theirThread =
-                        case Array.sub (preppedThreads, r) of
-                          NONE => die (fn _ => "scheduler bug: missing prepped thread")
-                        | SOME t => t
                       val ch = HH.newHeap ()
                     in
                       HH.attachChild (Thread.current (), ch, level);
-                      HH.attachHeap (theirThread, ch);
-                      Mailboxes.sendMail mailboxes (r, SOME task)
+                      Mailboxes.sendMail mailboxes (r, SOME (task, ch))
                     end
               )
           end
@@ -325,18 +320,17 @@ struct
           val _ = setStatus (myId, false)
           val _ = blockRequests ()
 
-          (* Prep a fresh thread and then look for work. The worker which
-           * satisfies our request will attach the prepped thread as a child
-           * in the heap hierarchy. Once we have received work, we retract
-           * the prepped thread so that we can then switch to it. *)
-          val taskThread = Thread.copy prototype
-          (* val _ = HH.newHeap taskThread *)
-          val _ = Array.update (preppedThreads, myId, SOME taskThread)
-          val (task, idleTimer') = request idleTimer
-          val _ = Array.update (preppedThreads, myId, NONE)
+          (* find work from another worker. Eventually we receive
+           *   - a task to execute
+           *   - a hierarchical heap to execute it in
+           *)
+          val ((task, hh), idleTimer') = request idleTimer
 
           val _ = unblockRequests ()
           val _ = stopTimer idleTimer'
+
+          val taskThread = Thread.copy prototype
+          val _ = HH.attachHeap (taskThread, hh);
 
           (* The taskThread is a copy of this worker's prototype thread, which
            * is set up to immediately check myTodo to look for a function to
