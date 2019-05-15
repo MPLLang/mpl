@@ -257,8 +257,10 @@ struct
                         case Array.sub (preppedThreads, r) of
                           NONE => die (fn _ => "scheduler bug: missing prepped thread")
                         | SOME t => t
+                      val ch = HH.newHeap ()
                     in
-                      HH.attachChild (Thread.current (), theirThread, level);
+                      HH.attachChild (Thread.current (), ch, level);
+                      HH.attachHeap (theirThread, ch);
                       Mailboxes.sendMail mailboxes (r, SOME task)
                     end
               )
@@ -328,7 +330,7 @@ struct
            * in the heap hierarchy. Once we have received work, we retract
            * the prepped thread so that we can then switch to it. *)
           val taskThread = Thread.copy prototype
-          val _ = HH.newHeap taskThread
+          (* val _ = HH.newHeap taskThread *)
           val _ = Array.update (preppedThreads, myId, SOME taskThread)
           val (task, idleTimer') = request idleTimer
           val _ = Array.update (preppedThreads, myId, NONE)
@@ -404,7 +406,7 @@ struct
            val t = Thread.copy (Thread.savedPre ())
          in
            ( executeMain := true
-           ; HH.newHeap t
+           ; HH.attachHeap (t, HH.newHeap ())
            ; threadSwitch t
            ; returnFromExecute ()
            )

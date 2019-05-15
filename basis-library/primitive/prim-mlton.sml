@@ -385,12 +385,17 @@ structure Thread =
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: unit -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
-      val newHeap = _import "GC_HH_newHeap" runtime private: thread -> unit;
+
+      (* val newHeap = _import "GC_HH_newHeap" runtime private: thread -> unit; *)
       val getLevel = _import "GC_HH_getLevel" runtime private: thread -> Word32.word;
       val setLevel = _import "GC_HH_setLevel" runtime private: thread * Word32.word -> unit;
-      val attachChild = _import "GC_HH_attachChild" runtime private: thread * thread * Word32.word -> unit;
+      (* val attachChild = _import "GC_HH_attachChild" runtime private: thread * thread * Word32.word -> unit; *)
       val mergeDeepestChild = _import "GC_HH_mergeDeepestChild" runtime private: thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+
+      val newHeap = _import "GC_HH_newHeap" runtime private: unit -> Pointer.t;
+      val attachChild = _import "GC_HH_attachChild" runtime private: thread * Pointer.t * Word32.word -> unit;
+      val attachHeap = _import "GC_HH_attachHeap" runtime private: thread * Pointer.t -> unit;
    end
 
 structure Weak =
