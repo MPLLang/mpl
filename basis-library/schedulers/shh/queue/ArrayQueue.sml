@@ -1,9 +1,9 @@
 structure ArrayQueue :> QUEUE =
 struct
-  exception ArrayQueue of string
-  val _ = MLton.Exn.addExnMessager (fn ArrayQueue s => SOME ("ArrayQueue \"" ^ s ^ "\"") | _ => NONE)
+  (* exception ArrayQueue of string *)
+  (* val _ = MLton.Exn.addExnMessager (fn ArrayQueue s => SOME ("ArrayQueue \"" ^ s ^ "\"") | _ => NONE) *)
 
-  val capacity = 256
+  val capacity = 128
   type 'a t = {data : 'a option array, start : int ref, frontier : int ref}
 
   (*fun arraySub x = Array.unsafeSub x
