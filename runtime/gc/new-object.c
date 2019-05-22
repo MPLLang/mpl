@@ -139,6 +139,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
                    FALSE);
   thread = (GC_thread)(res + offsetofThread (s));
   thread->inGlobalHeapCounter = 0;
+  /* a fresh thread is not currently being executed by any processor */
+  thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->stack = pointerToObjptr((pointer)stack, NULL);

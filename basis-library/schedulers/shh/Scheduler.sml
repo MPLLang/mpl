@@ -116,7 +116,7 @@ struct
     , request : int ref
     }
 
-  val workerPublicData = Vector.tabulate (P, fn _ =>
+  fun wpdInit p : worker_public_data =
     { mailbox =
         { hbox = ref dummyHeap
         , tbox = ref dummyTask
@@ -124,7 +124,9 @@ struct
         }
     , hasWork = ref false
     , request = ref REQUEST_NONE
-    })
+    }
+
+  val workerPublicData = Vector.tabulate (P, wpdInit)
 
   fun wpd p = vectorSub (workerPublicData, p)
 
@@ -195,6 +197,7 @@ struct
    * the prototype thread, which immediately pulls a task out of the
    * current worker's task-box and then executes it.
    *)
+
   local
     val amOriginal = ref true
   in
@@ -212,25 +215,77 @@ struct
   end
 
   (* ========================================================================
-   * SCHEDULER FUNCTIONS
+   * SCHEDULER LOCAL DATA
    *)
 
-  (* val push : task -> unit
-   * push onto the current work queue *)
-  val pushFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy push"))
-  fun push x = arraySub (pushFuncs, myWorkerId ()) x
+  type worker_local_data =
+    { queue : ((unit -> unit) * int) Queue.t
+    , schedThread : Thread.t option ref
+    }
 
-  (* val popDiscard : unit -> bool
-   * Attempts to pop a task off the task queue. If it fails (because the queue
-   * is empty) then the desired task must have been served to another worker. *)
-  val popDiscardFuncs = Array.array (P, fn _ => (die (fn _ => "Error: dummy popDiscard"); false))
-  fun popDiscard () = arraySub (popDiscardFuncs, myWorkerId ()) ()
+  fun wldInit p : worker_local_data =
+    { queue = Queue.new p
+    , schedThread = ref NONE
+    }
 
-  val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
-  fun schedCommunicate () = arraySub (communicateFuncs, myWorkerId ()) ()
+  val workerLocalData = Vector.tabulate (P, wldInit)
 
-  val returnToScheds = Array.array (P, fn _ => die (fn _ => "Error: dummy returnToSched"))
-  fun returnToSched x = arraySub (returnToScheds, myWorkerId ()) x
+  fun communicate () =
+    let
+      val myId = myWorkerId ()
+      val {queue=myQueue, ...} = vectorSub (workerLocalData, myId)
+      val r = getRequest myId
+
+      fun handleRequest () =
+        if r = REQUEST_NONE then
+          ()
+        else if r = REQUEST_BLOCKED then
+          die (fn _ => "scheduler bug: serve while blocked")
+        else
+          (* r is a friendly processor id which is requesting work *)
+          ( setRequest (myId, REQUEST_NONE)
+          ; case Queue.popBack myQueue of
+              NONE => setMailReject r
+            | SOME (task, level) =>
+                let
+                  val ch = HH.newHeap ()
+                in
+                  HH.attachChild (Thread.current (), ch, level);
+                  setHeapBox (r, ch);
+                  setTaskBox (r, SOME task);
+                  setMailReceiving r
+                end
+          )
+    in
+      handleRequest ();
+      setHasWork (myId, not (Queue.empty myQueue))
+    end
+
+  fun push x =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      Queue.pushFront (x, queue)
+    end
+
+  fun popDiscard () =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      case Queue.popFront queue of
+          NONE => false
+        | SOME _ => true
+    end
+
+  fun returnToSched () =
+    let
+      val myId = myWorkerId ()
+      val {schedThread, ...} = vectorSub (workerLocalData, myId)
+    in
+      threadSwitch (Option.valOf (!schedThread))
+    end
 
   (* ========================================================================
    * FORK JOIN
@@ -251,7 +306,7 @@ struct
         Finished x => x
       | Raised e => raise e
 
-    val communicate = schedCommunicate
+    val communicate = communicate
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
@@ -265,7 +320,11 @@ struct
 
         fun g' () =
           ( rightSide := SOME (result g)
-          ; returnToSched (incounter, thread)
+          ; communicate ()
+          ; if not (decrementHitsZero incounter) then
+              returnToSched ()
+            else
+              threadSwitch thread
           )
 
         val _ = push (g', level)
@@ -273,13 +332,12 @@ struct
 
         val _ = communicate ()
         val fr = result f
-        val _ = communicate ()
 
         val gr =
           if popDiscard () then
-            result g
+            (communicate (); result g)
           else
-            ( returnToSched (incounter, thread)
+            ( if decrementHitsZero incounter then () else returnToSched ()
             ; HH.mergeDeepestChild thread
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
@@ -306,51 +364,16 @@ struct
   fun setupSchedLoop () =
     let
       val myId = myWorkerId ()
-      val myQueue = Queue.new myId
       val myRand = SimpleRandom.rand myId
       val mySchedThread = Thread.current ()
-      val myRetArg = ref NONE
+      val {queue=myQueue, schedThread} = vectorSub (workerLocalData, myId)
+      val _ = schedThread := SOME mySchedThread
 
       (* the lock is not necessary for private deques, but need to do this to
        * play nice with runtime. *)
       val dummyLock : Word32.word ref = ref 0w0
       val _ = MLton.HM.registerQueueLock (Word32.fromInt myId, dummyLock)
       val _ = MLton.Parallel.Deprecated.lockInit dummyLock
-
-      fun communicate () =
-        ( let
-            val r = getRequest myId
-          in
-            if r = REQUEST_NONE then
-              ()
-            else if r = REQUEST_BLOCKED then
-              die (fn _ => "scheduler bug: serve while blocked")
-            else
-              (* r is a friendly processor id which is requesting work *)
-              ( setRequest (myId, REQUEST_NONE)
-              ; case Queue.popBack myQueue of
-                  NONE => setMailReject r
-                | SOME (task, level) =>
-                    let
-                      val ch = HH.newHeap ()
-                    in
-                      HH.attachChild (Thread.current (), ch, level);
-                      setHeapBox (r, ch);
-                      setTaskBox (r, SOME task);
-                      setMailReceiving r
-                    end
-              )
-          end
-        ; setHasWork (myId, not (Queue.empty myQueue))
-        )
-
-      fun push x =
-        Queue.pushFront (x, myQueue)
-
-      fun popDiscard () =
-        case Queue.popFront myQueue of
-          NONE => false
-        | SOME _ => true
 
       (* ------------------------------------------------------------------- *)
 
@@ -418,35 +441,11 @@ struct
           val _ = HH.attachHeap (taskThread, hh)
           val _ = threadSwitch taskThread
         in
-          returnFromExecute ()
+          acquireWork ()
         end
 
-      and returnFromExecute () =
-        case !myRetArg of
-          NONE => die (fn _ => "scheduler bug: no arg when returning to scheduler")
-        | SOME (incounter, cont) =>
-            ( myRetArg := NONE
-            ; if decrementHitsZero incounter
-              then (communicate (); threadSwitch cont; returnFromExecute ())
-              else acquireWork ()
-            )
-
-      fun returnToSched (c, k) =
-        ( myRetArg := SOME (c, k)
-        ; threadSwitch mySchedThread
-        )
-
-      (* ------------------------------------------------------------------- *)
-
-      val _ = arrayUpdate (pushFuncs, myId, push)
-      val _ = arrayUpdate (popDiscardFuncs, myId, popDiscard)
-      val _ = arrayUpdate (communicateFuncs, myId, communicate)
-      val _ = arrayUpdate (returnToScheds, myId, returnToSched)
-
-      (* val _ = dbgmsg (fn _ => "sched " ^ Int.toString myId ^ " finished init") *)
-
     in
-      if myId = 0 then returnFromExecute else acquireWork
+      acquireWork
     end
 
   (* ========================================================================
@@ -466,7 +465,7 @@ struct
    * keep "user" threads separate from "scheduler" threads, we need to copy
    * the current thread and use the COPY as the main program thread, which
    * happens below. *)
-  val returnFromExecute = setupSchedLoop ()
+  val acquireWork = setupSchedLoop ()
 
   (* This manages to hijack the "original" program thread as the scheduler
    * thread, while the copied thread is used to execute the actual program.
@@ -475,15 +474,16 @@ struct
   val _ = Thread.copyCurrent ()
   val _ =
     if !executeMain then ()
-    else let
-           val t = Thread.copy (Thread.savedPre ())
-         in
-           ( executeMain := true
-           ; HH.attachHeap (t, HH.newHeap ())
-           ; threadSwitch t
-           ; returnFromExecute ()
-           )
-         end
+    else
+      let
+        val t = Thread.copy (Thread.savedPre ())
+      in
+        ( executeMain := true
+        ; HH.attachHeap (t, HH.newHeap ())
+        ; threadSwitch t
+        ; acquireWork ()
+        )
+      end
 
 end
 

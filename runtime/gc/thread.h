@@ -38,6 +38,7 @@
  */
 typedef struct GC_thread {
   Word32 inGlobalHeapCounter;
+  int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
   size_t exnStack;
   struct HM_HierarchicalHeap* hierarchicalHeap;
@@ -47,6 +48,7 @@ typedef struct GC_thread {
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
                     sizeof(Word32) +  // inGlobalHeapCounter
+                    sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(void*) +   // hierarchicalHeap

@@ -7,12 +7,22 @@
  */
 
 void switchToThread (GC_state s, objptr op) {
+  GC_thread thread = (GC_thread)(objptrToPointer (op, NULL) + offsetofThread (s));
+
+  size_t terminateCheckCounter = 0;
+  while (thread->currentProcNum >= 0) {
+    /* spin while someone else is currently executing this thread */
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+    pthread_yield();
+  }
+  thread->currentProcNum = s->procNumber;
+
   if (DEBUG_THREADS) {
-    GC_thread thread;
+    // GC_thread thread;
     GC_stack stack;
 
-    thread = (GC_thread)(objptrToPointer (op, NULL)
-                         + offsetofThread (s));
+    // thread = (GC_thread)(objptrToPointer (op, NULL)
+    //                      + offsetofThread (s));
     stack = (GC_stack)(objptrToPointer (thread->stack, NULL));
 
     fprintf (stderr, "switchToThread ("FMTOBJPTR")  used = %"PRIuMAX
@@ -68,6 +78,15 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 //     // mark the current thread as no longer being executed
 //     getThreadCurrent(s)->currentProcNum = -1;
 // #endif
+
+    /* SAM_NOTE: CHECK: is it necessary to synchronize after the write to
+     * currentProcNum? I want this write to synchronize with the spinloop in
+     * switchToThread, above. */
+    getThreadCurrent(s)->currentProcNum = -1;
+    __sync_synchronize();
+    // bool success = __sync_bool_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), s->procNumber, -1);
+    // assert(success);
+
     switchToThread (s, pointerToObjptr(p, NULL));
 
 // #if ASSERT
