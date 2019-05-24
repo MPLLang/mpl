@@ -109,12 +109,18 @@ void HM_HHC_collectLocal(void) {
   bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
 
+  if (HM_HH_getShallowestPrivateLevel(s, hh) == 0) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
+    return;
+  }
+
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
     return;
   }
 
-  if (Parallel_alreadyLockedByMe(wsQueueLock)) {
+  if (s->wsQueueLock != BOGUS_OBJPTR &&
+      Parallel_alreadyLockedByMe(wsQueueLock)) {
     /* in a scheduler critical section, so cannot collect */
     LOG(LM_HH_COLLECTION, LL_DEBUG,
         "Queue locked by mutator/scheduler");
@@ -143,7 +149,8 @@ void HM_HHC_collectLocal(void) {
   HM_debugDisplayHierarchicalHeap(s, hh);
 
   /* lock queue to prevent steals */
-  if (!queueLockHeld) {
+  if (s->wsQueueLock != BOGUS_OBJPTR &&
+      !queueLockHeld) {
     Parallel_lockTake(wsQueueLock);
   }
   // lockWriterHH(hh);
@@ -452,7 +459,8 @@ void HM_HHC_collectLocal(void) {
   /* RAM_NOTE: This can be moved earlier? */
   /* unlock hh and queue */
   // unlockWriterHH(hh);
-  if (!queueLockHeld) {
+  if (s->wsQueueLock != BOGUS_OBJPTR &&
+      !queueLockHeld) {
     Parallel_lockRelease(wsQueueLock);
   }
 
