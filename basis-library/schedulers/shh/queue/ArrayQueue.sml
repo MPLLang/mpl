@@ -1,4 +1,4 @@
-structure ArrayQueue :> QUEUE =
+structure ArrayQueue : QUEUE =
 struct
   (* exception ArrayQueue of string *)
   (* val _ = MLton.Exn.addExnMessager (fn ArrayQueue s => SOME ("ArrayQueue \"" ^ s ^ "\"") | _ => NONE) *)
@@ -24,7 +24,7 @@ struct
   fun new p =
     let
       val data = Array.array (capacity, NONE)
-      val _ = MLton.HM.registerQueue (Word32.fromInt p, data)
+      (* val _ = MLton.HM.registerQueue (Word32.fromInt p, data) *)
     in
       { data = data
       , start = ref 1 (* start at 1 for silly optimization below *)

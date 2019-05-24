@@ -116,6 +116,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
   GC_thread thread;
   pointer res;
 
+  HM_enterGlobalHeap();
+
   assert (isStackReservedAligned (s, reserved));
   if (HM_inGlobalHeap(s)) {
     ensureBytesFreeInGlobal(s, sizeofStackWithMetaData(s, reserved) + sizeofThread(s));
@@ -152,6 +154,8 @@ GC_thread newThread (GC_state s, size_t reserved) {
       FMTPTR" = newThreadOfSize (%"PRIuMAX")",
       (uintptr_t)thread,
       (uintmax_t)reserved);
+
+  HM_exitGlobalHeap();
 
   return thread;
 }

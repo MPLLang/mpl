@@ -25,7 +25,8 @@ bool isPointerInGlobalHeap(GC_state s, pointer p) {
   assert(list != NULL);
   bool result = (0 == HM_getChunkListLevel(list));
 
-#if ASSERT
+// #if ASSERT
+#if 0
   if (result) {
     /* Make sure that the list which contains this pointer is one of the global
      * heap lists. */

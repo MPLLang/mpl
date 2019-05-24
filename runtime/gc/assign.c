@@ -55,13 +55,19 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   /* This creates a down pointer; must be remembered. */
   if (dstList->level < srcList->level) {
     if (dst != s->wsQueue) {
-      assert(getHierarchicalHeapCurrent(s) != NULL);
+      // assert(getHierarchicalHeapCurrent(s) != NULL);
       struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
-      Word32 level = srcList->level;
-      if (NULL == HM_HH_LEVEL(hh, level)) {
-        HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+      if (hh == NULL) {
+        LOG(LM_HH_PROMOTION, LL_WARNING,
+          "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
+          dst, src);
+      } else {
+        Word32 level = srcList->level;
+        if (NULL == HM_HH_LEVEL(hh, level)) {
+          HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+        }
+        HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
       }
-      HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
     }
   }
 }

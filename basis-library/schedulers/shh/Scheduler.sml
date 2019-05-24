@@ -369,6 +369,8 @@ struct
       val {queue=myQueue, schedThread} = vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
+      val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
+
       (* the lock is not necessary for private deques, but need to do this to
        * play nice with runtime. *)
       val dummyLock : Word32.word ref = ref 0w0
@@ -428,8 +430,9 @@ struct
           val _ = blockRequests ()
 
           (* find work from another worker. Eventually we receive
-           *   - a task to execute (taken out of the task box by the child thread)
            *   - a heap to execute it in (taken out of the heap box now)
+           *   - a task to execute (taken out of the task box by the child
+           *     thread, to avoid entanglement.)
            *)
           val idleTimer' = request idleTimer
           val hh = getHeapBox myId
@@ -453,36 +456,48 @@ struct
    *)
 
   fun sched () =
-    let val acquireWork = setupSchedLoop ()
-    in acquireWork ()
+    let
+      val acquireWork = setupSchedLoop ()
+    in
+      acquireWork ();
+      die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
-
   val _ = MLton.Parallel.registerProcessorFunction sched
+
+  val originalThread = Thread.current ()
+  val _ =
+    if HH.getLevel originalThread = 0 then ()
+    else die (fn _ => "scheduler bug: root level <> 0")
+  val _ = HH.setLevel (originalThread, 1)
+
+  (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
 
-  (* Initializes scheduler-local data for proc 0, including remembering the
-   * current thread as the "scheduler thread" for this worker. In order to
-   * keep "user" threads separate from "scheduler" threads, we need to copy
-   * the current thread and use the COPY as the main program thread, which
-   * happens below. *)
-  val acquireWork = setupSchedLoop ()
-
-  (* This manages to hijack the "original" program thread as the scheduler
-   * thread, while the copied thread is used to execute the actual program.
-   * Before switching to the copy, we give the copy a hierarchical heap. *)
-  val executeMain = ref false
+  (* Copy the current thread in order to create a scheduler thread.
+   * First, the `then` branch is executed by the original thread. Then we
+   * switch to the fresh scheduler thread, which executes the `else` branch.
+   * Finally, the scheduler switches back to the original thread, so that
+   * it can continue exiting the main program. *)
+  val amOriginal = ref true
   val _ = Thread.copyCurrent ()
   val _ =
-    if !executeMain then ()
+    if !amOriginal then
+      let
+        val schedThread = Thread.copy (Thread.savedPre ())
+        val schedHeap = HH.newHeap ()
+      in
+        HH.attachChild (originalThread, schedHeap, 0);
+        HH.attachHeap (schedThread, schedHeap);
+        amOriginal := false;
+        threadSwitch schedThread
+      end
     else
       let
-        val t = Thread.copy (Thread.savedPre ())
+        val acquireWork = setupSchedLoop ()
       in
-        ( executeMain := true
-        ; HH.attachHeap (t, HH.newHeap ())
-        ; threadSwitch t
-        ; acquireWork ()
-        )
+        threadSwitch originalThread;
+        acquireWork ();
+        die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end
 
 end

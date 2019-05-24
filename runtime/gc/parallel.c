@@ -5,6 +5,7 @@
 /* num of holding thread or -1 if no one*/
 volatile int32_t *Parallel_mutexes;
 
+// #pragma message "TODO attach heaps here"
 void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
@@ -14,6 +15,13 @@ void Parallel_init (void) {
     for (int proc = 0; proc < s->numberOfProcs; proc++) {
       Parallel_mutexes[proc] = -1;
     }
+
+    struct HM_HierarchicalHeap *phh = getHierarchicalHeapCurrent(s);
+    for (int proc = 1; proc < s->numberOfProcs; proc++) {
+      struct HM_HierarchicalHeap *chh = getHierarchicalHeapCurrent(&(s->procStates[proc]));
+      HM_HH_appendChild(s, phh, chh, 0);
+    }
+
     /* Now wake them up! */
     Proc_signalInitialization (s);
   }

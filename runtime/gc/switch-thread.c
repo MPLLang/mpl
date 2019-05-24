@@ -9,6 +9,8 @@
 void switchToThread (GC_state s, objptr op) {
   GC_thread thread = (GC_thread)(objptrToPointer (op, NULL) + offsetofThread (s));
 
+  // assert(thread->hierarchicalHeap != NULL);
+
   size_t terminateCheckCounter = 0;
   while (thread->currentProcNum >= 0) {
     /* spin while someone else is currently executing this thread */

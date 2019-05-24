@@ -79,8 +79,8 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
-                                                  NULL)));
+  // assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
+  //                                                 NULL)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
                                                       NULL);
@@ -90,8 +90,8 @@ void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
-                                                  NULL)));
+  // assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
+  //                                                 NULL)));
 
   s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
                                                           NULL);
