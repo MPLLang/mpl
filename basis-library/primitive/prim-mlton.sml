@@ -393,9 +393,9 @@ structure Thread =
       val mergeDeepestChild = _import "GC_HH_mergeDeepestChild" runtime private: thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
 
-      val newHeap = _import "GC_HH_newHeap" runtime private: unit -> Pointer.t;
-      val attachChild = _import "GC_HH_attachChild" runtime private: thread * Pointer.t * Word32.word -> unit;
-      val attachHeap = _import "GC_HH_attachHeap" runtime private: thread * Pointer.t -> unit;
+      (* val newHeap = _import "GC_HH_newHeap" runtime private: unit -> Pointer.t; *)
+      val attachChild = _import "GC_HH_attachChild" runtime private: thread * thread * Word32.word -> unit;
+      (* val attachHeap = _import "GC_HH_attachHeap" runtime private: thread * Pointer.t -> unit; *)
    end
 
 structure Weak =

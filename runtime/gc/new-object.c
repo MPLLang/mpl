@@ -116,7 +116,7 @@ GC_thread newThread (GC_state s, size_t reserved) {
   GC_thread thread;
   pointer res;
 
-  HM_enterGlobalHeap();
+  // HM_enterGlobalHeap();
 
   assert (isStackReservedAligned (s, reserved));
   if (HM_inGlobalHeap(s)) {
@@ -155,7 +155,43 @@ GC_thread newThread (GC_state s, size_t reserved) {
       (uintptr_t)thread,
       (uintmax_t)reserved);
 
-  HM_exitGlobalHeap();
+  // HM_exitGlobalHeap();
+
+  return thread;
+}
+
+GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
+  size_t stackSize = sizeofStackWithMetaData(s, reserved);
+  size_t threadSize = sizeofThread(s);
+  size_t totalSize = stackSize + threadSize;
+
+  struct HM_HierarchicalHeap *hh = HM_HH_new(s);
+  hh->level = level;
+  assert(HM_HH_getLevel(s, hh) == level);
+  HM_HH_extend(hh, totalSize);
+
+  pointer frontier = HM_HH_getFrontier(hh);
+
+  assert(HM_HH_getLimit(hh) - frontier >= totalSize);
+  assert(inFirstBlockOfChunk(HM_getChunkOf(frontier), frontier+totalSize));
+
+  *((GC_header*)(frontier)) = GC_THREAD_HEADER;
+  GC_thread thread = (GC_thread)(frontier + GC_HEADER_SIZE + offsetofThread(s));
+
+  *((GC_header*)(frontier + threadSize)) = GC_STACK_HEADER;
+  GC_stack stack = (GC_stack)(frontier + threadSize + GC_HEADER_SIZE);
+
+  stack->reserved = reserved;
+  stack->used = 0;
+
+  thread->inGlobalHeapCounter = 0;
+  thread->currentProcNum = -1;
+  thread->bytesNeeded = 0;
+  thread->exnStack = BOGUS_EXN_STACK;
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->hierarchicalHeap = hh;
+
+  HM_HH_updateValues(hh, frontier + totalSize);
 
   return thread;
 }

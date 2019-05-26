@@ -139,6 +139,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 }
 
 GC_thread initThreadAndHeap(GC_state s, Word32 level) {
+#if 0
   size_t stackSize = sizeofStackWithMetaData(s, sizeofStackInitialReserved(s));
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
@@ -167,8 +168,12 @@ GC_thread initThreadAndHeap(GC_state s, Word32 level) {
   thread->exnStack = BOGUS_EXN_STACK;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->hierarchicalHeap = hh;
+#endif
 
-  s->frontier = frontier + totalSize;
+  GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), level);
+  struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
+
+  s->frontier = HM_HH_getFrontier(hh);
   s->limitPlusSlop = HM_HH_getLimit(hh);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 

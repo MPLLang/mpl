@@ -60,22 +60,22 @@ void GC_HH_setLevel(pointer threadp, Word32 level) {
   HM_HH_setLevel(s, thread->hierarchicalHeap, level);
 }
 
-void GC_HH_attachChild(pointer parentp, pointer childhhp, Word32 level) {
+void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
   GC_state s = pthread_getspecific(gcstate_key);
   objptr parentop = pointerToObjptr(parentp, NULL);
-  // objptr childop = pointerToObjptr(childp, NULL);
+  objptr childop = pointerToObjptr(childp, NULL);
   GC_thread parent = threadObjptrToStruct(s, parentop);
-  // GC_thread child = threadObjptrToStruct(s, childop);
+  GC_thread child = threadObjptrToStruct(s, childop);
 
-  struct HM_HierarchicalHeap* childhh = (struct HM_HierarchicalHeap*)childhhp;
+  // struct HM_HierarchicalHeap* childhh = (struct HM_HierarchicalHeap*)childhhp;
 
 #if ASSERT
   assert(parentop != BOGUS_OBJPTR);
-  // assert(childop != BOGUS_OBJPTR);
+  assert(childop != BOGUS_OBJPTR);
   /* Make sure child is an inactive thread. */
-  // for (int i = 0; i < s->numberOfProcs; i++) {
-  //   assert(s->procStates[i].currentThread != childop);
-  // }
+  for (int i = 0; i < s->numberOfProcs; i++) {
+    assert(s->procStates[i].currentThread != childop);
+  }
   /* Make sure parent is either mine, or inactive */
   for (int i = 0; i < s->numberOfProcs; i++) {
     if (i != s->procNumber)
@@ -83,7 +83,7 @@ void GC_HH_attachChild(pointer parentp, pointer childhhp, Word32 level) {
   }
 #endif
 
-  HM_HH_appendChild(s, parent->hierarchicalHeap, childhh, level);
+  HM_HH_appendChild(s, parent->hierarchicalHeap, child->hierarchicalHeap, level);
 }
 
 void GC_HH_mergeDeepestChild(pointer threadp) {

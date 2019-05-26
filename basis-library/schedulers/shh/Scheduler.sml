@@ -103,12 +103,13 @@ struct
   val MAIL_RECEIVING = 1
   val MAIL_REJECT = 2
 
-  val dummyTask = NONE
-  val dummyHeap = MLton.Pointer.null
+  (* val dummyTask = NONE *)
+  (* val dummyHeap = MLton.Pointer.null *)
+  (* val dummyThread = NONE *)
 
   type worker_public_data =
     { mailbox :
-        { hbox : MLton.Pointer.t ref
+        { thbox : Thread.t option ref
         , tbox : (unit -> unit) option ref
         , flag : int ref
         }
@@ -118,8 +119,8 @@ struct
 
   fun wpdInit p : worker_public_data =
     { mailbox =
-        { hbox = ref dummyHeap
-        , tbox = ref dummyTask
+        { thbox = ref NONE
+        , tbox = ref NONE
         , flag = ref MAIL_WAITING
         }
     , hasWork = ref false
@@ -139,26 +140,27 @@ struct
 
   fun mailbox p = #mailbox (wpd p)
 
-  fun setHeapBox (p, h) = #hbox (mailbox p) := h
+  fun setThreadBox (p, h) =
+    #thbox (mailbox p) := SOME h
 
-  fun getHeapBox p =
+  fun getThreadBox p =
     let
-      val box = #hbox (mailbox p)
-      val h = !box
+      val box = #thbox (mailbox p)
+      val t = !box
     in
-      box := dummyHeap;
-      h
+      box := NONE;
+      t
     end
 
   fun setTaskBox (p, t) =
-    #tbox (mailbox p) := t
+    #tbox (mailbox p) := SOME t
 
   fun getTaskBox p =
     let
       val box = #tbox (mailbox p)
       val t = !box
     in
-      box := dummyTask;
+      box := NONE;
       t
     end
 
@@ -248,11 +250,12 @@ struct
               NONE => setMailReject r
             | SOME (task, level) =>
                 let
-                  val ch = HH.newHeap ()
+                  val taskThread = Thread.copy prototypeThread
+                  (* val ch = HH.newHeap () *)
                 in
-                  HH.attachChild (Thread.current (), ch, level);
-                  setHeapBox (r, ch);
-                  setTaskBox (r, SOME task);
+                  HH.attachChild (Thread.current (), taskThread, level);
+                  setThreadBox (r, taskThread);
+                  setTaskBox (r, task);
                   setMailReceiving r
                 end
           )
@@ -435,16 +438,17 @@ struct
            *     thread, to avoid entanglement.)
            *)
           val idleTimer' = request idleTimer
-          val hh = getHeapBox myId
+          val t = getThreadBox myId
 
           val _ = unblockRequests ()
           val _ = stopTimer idleTimer'
 
-          val taskThread = Thread.copy prototypeThread
-          val _ = HH.attachHeap (taskThread, hh)
-          val _ = threadSwitch taskThread
+          (* val taskThread = Thread.copy prototypeThread
+          val _ = HH.attachHeap (taskThread, hh) *)
         in
-          acquireWork ()
+          case t of
+            NONE => die (fn _ => "scheduler bug: thread box is empty")
+          | SOME taskThread => (threadSwitch taskThread; acquireWork ())
         end
 
     in
@@ -484,10 +488,10 @@ struct
     if !amOriginal then
       let
         val schedThread = Thread.copy (Thread.savedPre ())
-        val schedHeap = HH.newHeap ()
+        (* val schedHeap = HH.newHeap () *)
       in
-        HH.attachChild (originalThread, schedHeap, 0);
-        HH.attachHeap (schedThread, schedHeap);
+        HH.attachChild (originalThread, schedThread, 0);
+        (* HH.attachHeap (schedThread, schedHeap); *)
         amOriginal := false;
         threadSwitch schedThread
       end
