@@ -188,10 +188,8 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
   fprintf(out, " }");
 }
 
-void GC_done (GC_state s) {
+void GC_done(GC_state s) {
   GC_PthreadAtExit(s);
-  HM_enterGlobalHeap();
-  minorGC (s);
 
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {
@@ -215,6 +213,4 @@ void GC_done (GC_state s) {
       fprintf(s->controls->summaryFile, "\n");
     }
   }
-  releaseHeap(s, s->heap);
-  releaseHeap(s, s->secondaryHeap);
 }

@@ -27,14 +27,6 @@ void Parallel_init (void) {
   }
 }
 
-void Parallel_yield (void) {
-  if (Proc_threadInSection ()) {
-    GC_state s = pthread_getspecific (gcstate_key);
-    ENTER0 (s);
-    LEAVE0 (s);
-  }
-}
-
 /* lock = int* >= 0 if held or -1 if no one */
 
 void Parallel_lockInit (Pointer arg) {
@@ -60,12 +52,6 @@ void Parallel_lockTake (Pointer arg) {
           if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
               Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
               GC_TerminateThread(s);
-          }
-
-          if (Proc_threadInSection ()) {
-              ENTER1(s, arg);
-              LEAVE1(s, arg);
-              lock = ((spinlock_t*)(arg));
           }
       } while (!spinlock_trylock(lock, lockValue));
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
@@ -127,16 +113,6 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
       __sync_bool_compare_and_swap (mine, 1, 0);
       while (amLeft != *leftsTurn) {
         //__sync_synchronize ();
-        if (Proc_threadInSection ()) {
-          Pointer mine_ = (Pointer)mine,
-            other_ = (Pointer)other;
-          leftsTurn_ = (Pointer)leftsTurn;
-          ENTER3 (s, mine_, other_, leftsTurn_);
-          LEAVE3 (s, mine_, other_, leftsTurn_);
-          mine = (Bool *)mine_;
-          other = (Bool *)other_;
-          leftsTurn = (Bool *)leftsTurn_;
-        }
       }
       //*mine = 1;
       //if (__sync_lock_test_and_set (mine, 1)) {

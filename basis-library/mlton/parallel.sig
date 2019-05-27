@@ -13,11 +13,6 @@ signature MLTON_PARALLEL =
     structure Deprecated :
       sig
         (**
-         * Yields to the runtime
-         *)
-        val yield: unit -> unit
-
-        (**
          * Initializes a lock to the "unlocked" state
          *)
         val lockInit: Word32.word ref -> unit;

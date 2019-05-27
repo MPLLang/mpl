@@ -139,37 +139,6 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 }
 
 GC_thread initThreadAndHeap(GC_state s, Word32 level) {
-#if 0
-  size_t stackSize = sizeofStackWithMetaData(s, sizeofStackInitialReserved(s));
-  size_t threadSize = sizeofThread(s);
-  size_t totalSize = stackSize + threadSize;
-
-  struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  hh->level = level;
-  assert(HM_HH_getLevel(s, hh) == level);
-  HM_HH_extend(hh, totalSize);
-
-  pointer frontier = HM_HH_getFrontier(hh);
-
-  assert(HM_HH_getLimit(hh) - frontier >= totalSize);
-  assert(inFirstBlockOfChunk(HM_getChunkOf(frontier), frontier+totalSize));
-
-  *((GC_header*)(frontier)) = GC_STACK_HEADER;
-  GC_stack stack = (GC_stack)(frontier + GC_HEADER_SIZE);
-
-  *((GC_header*)(frontier + stackSize)) = GC_THREAD_HEADER;
-  GC_thread thread = (GC_thread)(frontier + stackSize + GC_HEADER_SIZE + offsetofThread(s));
-
-  stack->reserved = sizeofStackInitialReserved(s);
-  stack->used = 0;
-  thread->inGlobalHeapCounter = 0;
-  thread->currentProcNum = -1;
-  thread->bytesNeeded = 0;
-  thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->hierarchicalHeap = hh;
-#endif
-
   GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), level);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 
@@ -220,8 +189,6 @@ void initWorld(GC_state s) {
   // GC_profileAllocInc(s, HM_getChunkListSize(s->globalHeap));
   s->cumulativeStatistics->bytesAllocated += HM_getChunkListSize(HM_HH_LEVEL(hh, 0));
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
-
-  // switchToThread(s, pointerToObjptr((pointer)thread - offsetofThread(s), NULL));
 }
 
 void duplicateWorld (GC_state d, GC_state s) {
@@ -235,14 +202,4 @@ void duplicateWorld (GC_state d, GC_state s) {
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;
-  d->heap = s->heap;
-  d->secondaryHeap = s->secondaryHeap;
-  d->generationalMaps = s->generationalMaps;
-
-  // HM_chunk chunk = HM_allocateChunk(d->globalHeap, GC_HEAP_LIMIT_SLOP);
-  // d->frontier = HM_getChunkFrontier(chunk);
-  // d->limitPlusSlop = HM_getChunkLimit(chunk);
-  // d->limit = d->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-
-  // switchToThread (d, pointerToObjptr((pointer)thread - offsetofThread (d), NULL));
 }

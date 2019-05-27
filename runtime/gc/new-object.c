@@ -7,27 +7,18 @@
  * See the file MLton-LICENSE for details.
  */
 
-/* newObject (s, header, bytesRequested, allocInOldGen)
+/* newObject (s, header, bytesRequested)
  *
  * Allocate a new object in the heap.
  * bytesRequested includes the size of the header.
  */
-/* SPOONHOWER_NOTE: must hold the runtime lock if allocInOldGen is true! */
-pointer newObject (GC_state s,
-                   GC_header header,
-                   size_t bytesRequested,
-                   bool allocInOldGen) {
+pointer newObject(GC_state s,
+                  GC_header header,
+                  size_t bytesRequested) {
   pointer frontier;
   pointer result;
 
-  /* SAM_NOTE: old gen has been removed entirely now.
-   * TODO: remove this argument */
-  assert(!allocInOldGen);
-
   assert(isAligned(bytesRequested, s->alignment));
-  // assert (allocInOldGen
-  //         ? hasHeapBytesFree (s, bytesRequested, 0)
-  //         : hasHeapBytesFree (s, 0, bytesRequested));
   assert(s->limitPlusSlop - s->frontier >= bytesRequested);
 
   frontier = s->frontier;
@@ -59,33 +50,24 @@ pointer newObject (GC_state s,
   // *((objptr*)(frontier)) = BOGUS_OBJPTR;
   // frontier = frontier + OBJPTR_SIZE;
   result = frontier;
-  assert (isAligned ((size_t)result, s->alignment));
-  assert (!hasFwdPtr(result));
+  assert(isAligned((size_t)result, s->alignment));
+  assert(!hasFwdPtr(result));
   if (DEBUG)
-    fprintf (stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX", %s)\n",
-             (uintptr_t)result,
-             header,
-             (uintmax_t)bytesRequested,
-             boolToString (allocInOldGen));
+    fprintf(stderr, FMTPTR " = newObject ("FMTHDR", %"PRIuMAX")\n",
+            (uintptr_t)result,
+            header,
+            (uintmax_t)bytesRequested);
   return result;
 }
 
-GC_stack newStack (GC_state s,
-                   size_t reserved,
-                   bool allocInOldGen) {
+GC_stack newStack(GC_state s, size_t reserved) {
   GC_stack stack;
 
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
-  stack = (GC_stack)(newObject (s, GC_STACK_HEADER,
-                                sizeofStackWithMetaData (s, reserved),
-                                allocInOldGen));
-
-  if (!isPointerInGlobalHeap(s, (pointer)stack))
-    LOG(LM_ALLOCATION, LL_INFO,
-      "Allocated stack in HH at "FMTPTR"",
-      (uintptr_t)stack);
+  stack = (GC_stack)(newObject(s, GC_STACK_HEADER,
+                               sizeofStackWithMetaData(s, reserved)));
 
   stack->reserved = reserved;
   stack->used = 0;
@@ -97,29 +79,27 @@ GC_stack newStack (GC_state s,
   return stack;
 }
 
-GC_thread newThread (GC_state s, size_t reserved) {
+GC_thread newThread(GC_state s, size_t reserved) {
   GC_stack stack;
   GC_thread thread;
   pointer res;
 
-  assert (isStackReservedAligned (s, reserved));
+  assert(isStackReservedAligned (s, reserved));
   assert(!HM_inGlobalHeap(s));
 
   HM_ensureHierarchicalHeapAssurances(s,
                                       FALSE,
-                                      sizeofStackWithMetaData (s, reserved) +
-                                      sizeofThread (s),
+                                      sizeofStackWithMetaData(s, reserved) +
+                                      sizeofThread(s),
                                       FALSE);
   assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
 
-  stack = newStack (s, reserved, FALSE);
+  stack = newStack(s, reserved);
   assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   /* SAM_NOTE: this is broken? if the stack is just the right size to force the
    * thread object to lie beyond the limit... */
-  res = newObject (s, GC_THREAD_HEADER,
-                   sizeofThread (s),
-                   FALSE);
-  thread = (GC_thread)(res + offsetofThread (s));
+  res = newObject(s, GC_THREAD_HEADER, sizeofThread(s));
+  thread = (GC_thread)(res + offsetofThread(s));
   thread->inGlobalHeapCounter = 0;
   /* a fresh thread is not currently being executed by any processor */
   thread->currentProcNum = -1;

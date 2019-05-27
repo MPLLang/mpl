@@ -74,6 +74,64 @@ fun insertInFunction (f: Function.t): Function.t =
          : unit =
          let
             val collect = Label.newNoname ()
+            val collectReturn = Label.newNoname ()
+            val dontCollect = Label.newNoname ()
+            val res = Var.newNoname ()
+            val compare =
+               Vector.new1
+               (Statement.PrimApp
+                {args = (Vector.new2
+                         (Operand.Runtime Runtime.GCField.Limit,
+                          Operand.null)),
+                 dst = SOME (res, Type.bool),
+                 prim = Prim.cpointerEqual})
+            val compareTransfer =
+               Transfer.ifBool
+               (Operand.Var {var = res, ty = Type.bool},
+                {falsee = dontCollect,
+                 truee = collect})
+            val func = CFunction.gc {maySwitchThreads = true}
+            val _ =
+               extra :=
+               Block.T {args = args,
+                        kind = kind,
+                        label = label,
+                        statements = compare,
+                        transfer = compareTransfer}
+               :: (Block.T
+                   {args = Vector.new0 (),
+                    kind = Kind.Jump,
+                    label = collect,
+                    statements = Vector.new0 (),
+                    transfer =
+                    Transfer.CCall
+                    {args = Vector.new3 (Operand.GCState,
+                                         Operand.zero (WordSize.csize ()),
+                                         Operand.bool false),
+                     func = func,
+                     return = SOME collectReturn}})
+               :: (Block.T
+                   {args = Vector.new0 (),
+                    kind = Kind.CReturn {func = func},
+                    label = collectReturn,
+                    statements = Vector.new0 (),
+                    transfer =
+                    Transfer.Goto {dst = dontCollect,
+                                   args = Vector.new0 ()}})
+               :: Block.T {args = Vector.new0 (),
+                           kind = Kind.Jump,
+                           label = dontCollect,
+                           statements = statements,
+                           transfer = transfer}
+               :: !extra
+         in
+            ()
+         end
+(*
+      fun addSignalCheck (Block.T {args, kind, label, statements, transfer})
+         : unit =
+         let
+            val collect = Label.newNoname ()
             val collectZero = Label.newNoname ()
             val collectReturn = Label.newNoname ()
             val tisCCall = Label.newNoname ()
@@ -181,6 +239,7 @@ fun insertInFunction (f: Function.t): Function.t =
          in
             ()
          end
+*)
       (* Create extra blocks with signal checks for all blocks that are
        * loop headers.
        *)

@@ -3,7 +3,6 @@
 
 PRIVATE void Parallel_init (void);
 
-PRIVATE void Parallel_yield (void);
 PRIVATE void Parallel_lockInit (Pointer);
 PRIVATE void Parallel_lockTake (Pointer);
 PRIVATE void Parallel_lockRelease (Pointer);

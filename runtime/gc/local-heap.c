@@ -47,24 +47,13 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   size_t stackBytes = 0;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-      "bytesRequested: %zu, hasHeapBytesFree: %zu",
+      "bytesRequested: %zu, heapBytesFree: %zu",
       bytesRequested,
       heapBytesFree);
 
   // trace pre-collection occupancy before doing anything
   // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
   // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
-
-  if (Proc_threadInSection()) {
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "Entering Management Heap GC");
-    HM_enterGlobalHeap();
-    ENTER0(s);
-    LEAVE0(s);
-    HM_exitGlobalHeap();
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-        "Exiting Management Heap GC");
-  }
 
   if (!invariantForMutatorStack(s)) {
     /* need to grow stack */
@@ -153,6 +142,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     setGCStateCurrentThreadAndStack (s);
   }
 
+  /* SAM_NOTE: TODO: clean this shit up */
   if (growStack) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
@@ -171,7 +161,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     /* SAM_NOTE: growStackCurrent triggers a stack allocation which will
      * guarantee chunk frontier invariants
      */
-    growStackCurrent (s, FALSE);
+    growStackCurrent(s);
     /* SAM_NOTE: growing the stack can edit s->frontier, so we need to make sure
      * the saved frontier in the hh is synced. */
     /* SAM_NOTE: TODO: caching the frontier in so many different places is a
@@ -179,7 +169,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     // assert(!isPointerInGlobalHeap(s, s->frontier));
     assert(HM_getChunkOf(s->frontier) == hh->lastAllocatedChunk);
     HM_HH_updateValues(hh, s->frontier);
-    setGCStateCurrentThreadAndStack (s);
+    setGCStateCurrentThreadAndStack(s);
   }
 
   /* Determine if we need to extend to accommodate bytesRequested (and possibly
@@ -196,72 +186,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
-
-  /* determine if I need to extend based on space or ensureCurrentLevel */
-  // if (emptyHH) {
-  //   /* HH is empty, so definitely need to extend */
-  //   extend = TRUE;
-  // } else if (((size_t)(s->limitPlusSlop - s->frontier)) < bytesRequested) {
-  //   /* not enough space */
-  //   extend = TRUE;
-  // } else if (HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE) {
-  //   /* last chunk is not suitable for allocation */
-  //   extend = TRUE;
-  // } else if (ensureCurrentLevel) {
-  //   /* check if current allocation chunk at the current level */
-  //   struct HM_ObjptrInfo info;
-  //   HM_getObjptrInfo(s, pointerToObjptr(s->frontier, NULL), &info);
-
-  //   assert(info.level <= hh->level);
-  //   if (info.level < hh->level) {
-  //     /* need to extend to force current level */
-  //     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
-  //         "extending due to ensureCurrentLevel frontier level = %u hh level = "
-  //         "%u",
-  //         info.level,
-  //         hh->level);
-  //     extend = TRUE;
-  //   }
-  // }
-
-  // if (extend) {
-  //   /* Need to extend */
-  //   if (!HM_HH_extend(hh, bytesRequested)) {
-  //     if (LOG_ENABLED(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE)) {
-  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-  //           "Ran out of space for HH %p:",
-  //           ((void*)(hh)));
-
-  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-  //           "  Level List:");
-  //       FOR_LEVEL_DECREASING_IN_RANGE(levelHead, i, hh, 0, HM_MAX_NUM_LEVELS, {
-  //         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-  //             "    level %"PRIu32" size %"PRIu64,
-  //             levelHead->level,
-  //             levelHead->size);
-  //       });
-
-  //       LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-  //           "  Child HH List:");
-  //       for (struct HM_HierarchicalHeap* hhCursor = HM_HH_objptrToStruct(s, hh->childHHList);
-  //            NULL != hhCursor;
-  //            hhCursor = HM_HH_objptrToStruct(s, hhCursor->nextChildHH)) {
-  //         LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
-  //             "    %p state %s level %"PRIu32" stealLevel %"PRIu32" LCS %"PRIu64,
-  //             ((void*)(hhCursor)),
-  //             HM_HHStateToString[hhCursor->state],
-  //             hhCursor->level,
-  //             hhCursor->stealLevel,
-  //             hhCursor->locallyCollectibleSize);
-  //       }
-  //     }
-  //     DIE("Ran out of space for Hierarchical Heap!");
-  //   }
-
-  //   s->frontier = HM_HH_getFrontier(hh);
-  //   s->limitPlusSlop = HM_HH_getLimit(hh);
-  //   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  // }
 
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));

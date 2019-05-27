@@ -537,12 +537,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->wsQueue = BOGUS_OBJPTR;
   s->wsQueueLock = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
-  // s->globalFrontier = NULL;
-  // s->globalLimitPlusSlop = NULL;
-  s->hashConsDuringGC = FALSE;
-
-  s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
-  initHeap (s, s->heap);
 
   s->lastMajorStatistics = newLastMajorStatistics();
 
@@ -551,9 +545,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->roots = NULL;
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
-
-  s->secondaryHeap = (GC_heap) malloc (sizeof (struct GC_heap));
-  initHeap (s, s->secondaryHeap);
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -564,7 +555,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   sigemptyset (&s->signalsInfo.signalsPending);
   s->self = pthread_self();
   s->terminationLeader = INVALID_PROCESSOR_NUMBER;
-  s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
@@ -578,8 +568,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->worldFile = NULL;
   s->lock = SPINLOCK_INITIALIZER;
 
-  unless (isAligned (s->sysvals.pageSize, CARD_SIZE))
-    die ("Page size must be a multiple of card size.");
   L_setFile(stderr);
   processAtMLton (s, 0, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, 1, argc, argv, &s->worldFile);
@@ -648,16 +636,8 @@ void GC_lateInit (GC_state s) {
   initProfiling (s);
   if (s->amOriginal) {
     initWorld (s);
-    /* The mutator stack invariant doesn't hold,
-     * because the mutator has yet to run.
-     */
-    // spoons: can't assert because other threads are init'd
-    //assert (invariantForMutator (s, TRUE, FALSE));
   } else {
-    loadWorldFromFileName (s, s->worldFile);
-    if (s->profiling.isOn and s->profiling.stack)
-      foreachStackFrame (s, enterFrameForProfiling);
-    assert (invariantForMutator (s, TRUE, TRUE));
+    DIE("loading world from file unsupported");
   }
   s->amInGC = FALSE;
 }
@@ -677,9 +657,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->nextChunkAllocSize = s->nextChunkAllocSize;
-  // d->globalFrontier = NULL;
-  // d->globalLimitPlusSlop = NULL;
-  d->hashConsDuringGC = s->hashConsDuringGC;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
   d->roots = NULL;
@@ -694,7 +671,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   sigemptyset (&d->signalsInfo.signalsPending);
   d->self = s->self;
   d->terminationLeader = INVALID_PROCESSOR_NUMBER;
-  d->syncReason = SYNC_NONE;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;

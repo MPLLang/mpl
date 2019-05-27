@@ -40,17 +40,12 @@ struct GC_state {
   objptr wsQueueLock; /* The work-stealing queue lock for this processor */
   /* RAM_NOTE: Is this the right type? */
   pointer ffiArgs;
-  struct GC_forwardState forwardState;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
   uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
   struct HM_chunkList* freeListSmall;
   struct HM_chunkList* freeListLarge;
   size_t nextChunkAllocSize;
-  struct GC_generationalMaps generationalMaps;
   struct HM_chunkList* globalHeap;
-  // pointer globalFrontier;
-  // pointer globalLimitPlusSlop;
-  /* RAM_NOTE: Not sure if this is used anymore... */
   /*
    * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
    * think so
@@ -60,17 +55,15 @@ struct GC_state {
   /* Ordinary globals */
   objptr *globals;
   uint32_t globalsLength;
-  bool hashConsDuringGC;
-  struct GC_heap *heap;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
   uint32_t magic; /* The magic number for this executable. */
   uint32_t maxFrameSize;
+  /* SAM_NOTE: can remove this */
   bool mutatorMarksCards;
   /* The maximum amount of concurrency */
   uint32_t numberOfProcs;
-  GC_objectHashTable objectHashTable;
   GC_objectType objectTypes; /* Array of object types. */
   uint32_t objectTypesLength; /* Cardinality of objectTypes array. */
   int32_t procNumber;
@@ -87,7 +80,6 @@ struct GC_state {
                        */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
-  struct GC_heap *secondaryHeap; /* Used for major copying collection. */
   objptr signalHandlerThread; /* Handler for signals (in heap). */
   struct GC_signalsInfo signalsInfo;
   struct GC_sourceMaps sourceMaps;
@@ -95,9 +87,7 @@ struct GC_state {
   pointer start; /* Like heap.nursery but per processor.  nursery <= start <= frontier */
   pthread_t self; /* thread owning the GC_state */
   uint32_t terminationLeader;
-  int32_t syncReason;
   struct GC_sysvals sysvals;
-  struct GC_translateState translateState;
   struct GC_vectorInit *vectorInits;
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
@@ -115,10 +105,6 @@ static void displayGCState (GC_state s, FILE *stream);
 
 static inline size_t sizeofGCStateCurrentStackUsed (GC_state s);
 static inline void setGCStateCurrentThreadAndStack (GC_state s);
-static void setGCStateCurrentHeap (GC_state s,
-                                   size_t oldGenBytesRequested,
-                                   size_t nurseryBytesRequested,
-                                   bool duringInit);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

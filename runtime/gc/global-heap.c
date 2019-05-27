@@ -80,6 +80,7 @@ void HM_exitGlobalHeap (void) {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 bool HM_inGlobalHeap (GC_state s) {
   if (BOGUS_OBJPTR == getThreadCurrentObjptr(s)) {
+    assert(FALSE);
     return TRUE;
   }
 
@@ -91,6 +92,7 @@ bool HM_inGlobalHeap (GC_state s) {
 
 #if ASSERT
   if (answer) {
+    assert(FALSE);
     HM_chunk chunk = HM_getChunkListLastChunk(s->globalHeap);
     assert(chunk != NULL);
     assert(HM_getChunkStart(chunk) <= s->frontier);

@@ -56,14 +56,12 @@ pointer GC_weakGet (GC_state s, pointer p) {
   return res;
 }
 
-pointer GC_weakNew (GC_state s, GC_header header, pointer p) {
+pointer GC_weakNew(GC_state s, GC_header header, pointer p) {
   GC_weak weak;
   pointer res;
 
-  res = newObject (s, header,
-                   sizeofWeak (s),
-                   FALSE);
-  weak = (GC_weak)(res + offsetofWeak (s));
+  res = newObject (s, header, sizeofWeak(s));
+  weak = (GC_weak)(res + offsetofWeak(s));
   weak->objptr = pointerToObjptr(p, NULL);
   if (DEBUG_WEAK)
     fprintf (stderr, FMTPTR" = GC_weakNew ("FMTHDR", "FMTPTR") [%d]\n",

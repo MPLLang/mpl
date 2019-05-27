@@ -40,7 +40,7 @@ structure CoreML = CoreML (open Atoms
                                              expandOpaque = true,
                                              var = var}
 
-                                 fun layout t = 
+                                 fun layout t =
                                     #1 (layoutPretty
                                         (t, {expandOpaque = true,
                                              layoutPrettyTycon = Tycon.layout,
@@ -665,7 +665,7 @@ fun makeMachine ssa2 =
       machine
    end
 
-fun setupConstants() : unit = 
+fun setupConstants() : unit =
    (* Set GC_state offsets and sizes. *)
    let
       val _ =
@@ -679,7 +679,6 @@ fun setupConstants() : unit =
             Runtime.GCField.setOffsets
             {
              atomicState = get "atomicState_Offset",
-             cardMapAbsolute = get "generationalMaps.cardMapAbsolute_Offset",
              currentThread = get "currentThread_Offset",
              curSourceSeqsIndex = get "sourceMaps.curSourceSeqsIndex_Offset",
              exnStack = get "exnStack_Offset",
@@ -698,7 +697,6 @@ fun setupConstants() : unit =
             Runtime.GCField.setSizes
             {
              atomicState = get "atomicState_Size",
-             cardMapAbsolute = get "generationalMaps.cardMapAbsolute_Size",
              currentThread = get "currentThread_Size",
              curSourceSeqsIndex = get "sourceMaps.curSourceSeqsIndex_Size",
              exnStack = get "exnStack_Size",
@@ -843,7 +841,7 @@ fun genFromSXML (input: File.t): Machine.Program.t =
           thunk = (fn () => case
                      Parse.parseFile(ParseSxml.program, input)
                         of Result.Yes x => x
-                         | Result.No msg => (Control.error 
+                         | Result.No msg => (Control.error
                            (Region.bogus, Layout.str "Sxml Parse failed", Layout.str msg);
                             Control.checkForErrors("parse");
                             (* can't be reached *)
