@@ -9,7 +9,7 @@
 void switchToThread (GC_state s, objptr op) {
   GC_thread thread = (GC_thread)(objptrToPointer (op, NULL) + offsetofThread (s));
 
-  // assert(thread->hierarchicalHeap != NULL);
+  assert(thread->hierarchicalHeap != NULL);
 
   size_t terminateCheckCounter = 0;
   while (thread->currentProcNum >= 0) {
@@ -37,115 +37,57 @@ void switchToThread (GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
-  pointer currentP = objptrToPointer(getThreadCurrentObjptr(s), NULL);
-  LOG (LM_THREAD, LL_DEBUG,
-       "current = "FMTPTR", p = "FMTPTR", ensureBytesFree = %zu)",
-       ((uintptr_t)(currentP)),
-       ((uintptr_t)(p)),
-       ensureBytesFree);
+  objptr currop = getThreadCurrentObjptr(s);
+  // GC_thread currThread = threadObjptrToStruct(s, currop);
+  LOG(LM_THREAD, LL_DEBUG,
+    "GC_switchToThread current = %p, p = %p, ensureBytesFree = %zu",
+    (void*)objptrToPointer(currop, NULL),
+    (void*)p,
+    ensureBytesFree);
 
-  /* RAM_NOTE: Switch to other branch when I can */
-  if (TRUE) {
-    /* This branch is slower than the else branch, especially
-     * when debugging is turned on, because it does an invariant
-     * check on every thread switch.
-     * So, we'll stick with the else branch for now.
-     */
-    //ENTER1 (s, p);
-    /* SPOONHOWER_NOTE: copied from enter() */
-    /* used needs to be set because the mutator has changed s->stackTop. */
-    getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-    getThreadCurrent(s)->exnStack = s->exnStack;
-    beginAtomic (s);
+  //ENTER1 (s, p);
+  /* SPOONHOWER_NOTE: copied from enter() */
+  /* used needs to be set because the mutator has changed s->stackTop. */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
 
-    if (!HM_inGlobalHeap(s)) {
-      /* save HH info for from-thread */
-      /* copied from HM_enterGlobalHeap() */
-      HM_exitLocalHeap(s); // remembers s->frontier in HH
+  assert(!HM_inGlobalHeap(s));
+  HM_exitLocalHeap(s); // remembers s->frontier in HH
+  s->frontier = 0;
+  s->limitPlusSlop = 0;
+  s->limit = 0;
+  // HM_chunk globalHeapChunk = HM_getChunkListLastChunk(s->globalHeap);
+  // assert(globalHeapChunk != NULL);
+  // s->frontier = HM_getChunkFrontier(globalHeapChunk);
+  // s->limitPlusSlop = HM_getChunkLimit(globalHeapChunk);
+  // s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
-      HM_chunk globalHeapChunk = HM_getChunkListLastChunk(s->globalHeap);
-      assert(globalHeapChunk != NULL);
-      s->frontier = HM_getChunkFrontier(globalHeapChunk);
-      s->limitPlusSlop = HM_getChunkLimit(globalHeapChunk);
-      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-    }
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
 
-    /*
-     * at this point, the processor is in the global heap, but the thread is
-     * not.
-     */
+  /* SAM_NOTE: CHECK: is it necessary to synchronize after the write to
+   * currentProcNum? I want this write to synchronize with the spinloop in
+   * switchToThread, above. */
+  getThreadCurrent(s)->currentProcNum = -1;
+  __sync_synchronize();
 
-    getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-// #if ASSERT
-//     // mark the current thread as no longer being executed
-//     getThreadCurrent(s)->currentProcNum = -1;
-// #endif
+  switchToThread(s, pointerToObjptr(p, NULL));
 
-    /* SAM_NOTE: CHECK: is it necessary to synchronize after the write to
-     * currentProcNum? I want this write to synchronize with the spinloop in
-     * switchToThread, above. */
-    getThreadCurrent(s)->currentProcNum = -1;
-    __sync_synchronize();
-    // bool success = __sync_bool_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), s->procNumber, -1);
-    // assert(success);
+  assert(!HM_inGlobalHeap(s));
 
-    switchToThread (s, pointerToObjptr(p, NULL));
+  /* SAM_NOTE: this does an ensureNotEmpty, but really we should just ensure
+   * getThreadCurrent(s)->bytesNeeded? */
+  HM_enterLocalHeap(s);
 
-// #if ASSERT
-//     int priorOwner = __sync_val_compare_and_swap(&(getThreadCurrent(s)->currentProcNum), -1, s->procNumber);
-//     if (priorOwner != -1) {
-//       DIE("Proc %d failed to claim thread "FMTPTR" which is owned by proc %d",
-//         s->procNumber,
-//         (uintptr_t)getThreadCurrentObjptr(s),
-//         priorOwner);
-//     }
-// #endif
+  /* SAM_NOTE: TODO: do signal handlers work properly? */
+  s->atomicState--;
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
-    if (!HM_inGlobalHeap(s)) {
-      /* I need to switch to the HH for the to-thread */
-      /* copied from HM_exitGlobalHeap() */
-      HM_chunk currentChunk = HM_getChunkListLastChunk(s->globalHeap);
-      HM_updateChunkValues(currentChunk, s->frontier);
-      HM_enterLocalHeap(s);
-    }
+  /* SAM_NOTE: Shouldn't this be getThreadCurrent(s)->bytesNeeded? */
+  HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
 
-    s->atomicState--;
-    switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
-    if (HM_inGlobalHeap(s)) {
-      ensureStackInvariantInGlobal(s);
-      ensureBytesFreeInGlobal(s, getThreadCurrent(s)->bytesNeeded);
-    } else {
-      /* SAM_NOTE: Shouldn't this be getThreadCurrent(s)->bytesNeeded? */
-      HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
-    }
-
-    endAtomic (s);
-    assert (strongInvariantForMutatorFrontier(s));
-    assert (invariantForMutatorStack(s));
-    //LEAVE0 (s);
-  } else {
-    /* RAM_NOTE: Why? It looks exactly the same... */
-    assert (false and "unsafe in a multiprocessor context");
-    /* BEGIN: enter(s); */
-    getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-    getThreadCurrent(s)->exnStack = s->exnStack;
-    beginAtomic (s);
-    /* END: enter(s); */
-    getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-    switchToThread (s, pointerToObjptr(p, NULL));
-    s->atomicState--;
-    switchToSignalHandlerThreadIfNonAtomicAndSignalPending (s);
-    /* BEGIN: ensureInvariantForMutator */
-    if (not (invariantForMutatorFrontier(s))
-        or not (invariantForMutatorStack(s))) {
-      /* This GC will grow the stack, if necessary. */
-      performGC (s, 0, getThreadCurrent(s)->bytesNeeded, FALSE, TRUE);
-    }
-    /* END: ensureInvariantForMutator */
-    /* BEGIN: leave(s); */
-    endAtomic (s);
-    /* END: leave(s); */
-    assert (invariantForMutatorFrontier(s));
-    assert (invariantForMutatorStack(s));
-  }
+  endAtomic (s);
+  assert(strongInvariantForMutatorFrontier(s));
+  assert(invariantForMutatorStack(s));
+  //LEAVE0 (s);
 }
