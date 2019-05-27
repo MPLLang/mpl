@@ -136,7 +136,8 @@ pointer arrayAllocateInHH(GC_state s,
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
-  if (!inSameBlock(result, s->limitPlusSlop - 1)) {
+  assert(HM_getChunkOf(result) == hh->lastAllocatedChunk);
+  if (!inFirstBlockOfChunk(hh->lastAllocatedChunk, s->frontier)) {
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
     HM_HH_updateValues(hh, s->frontier);
