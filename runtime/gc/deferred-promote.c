@@ -54,7 +54,8 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       promoteDownPtr,
       args);
 
-    if (NULL == HM_HH_LEVEL(args->hh, i)) {
+    if (NULL == HM_HH_LEVEL(args->hh, i) ||
+        NULL == HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i))) {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
     }

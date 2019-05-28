@@ -591,9 +591,9 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 
   if (list2->firstChunk != NULL) {
     list2->firstChunk->prevChunk = list1->lastChunk;
+    list1->lastChunk = list2->lastChunk;
   }
 
-  list1->lastChunk = list2->lastChunk;
   list1->size += list2->size;
   list2->parent = list1;
 
