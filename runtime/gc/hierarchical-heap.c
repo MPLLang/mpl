@@ -125,14 +125,13 @@ void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic (s);
 
+  assert(threadAndHeapOkay(s));
+
   /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
    * level? */
-  if (getThreadCurrent(s)->hierarchicalHeap != NULL &&
-      !HM_inGlobalHeap(s)) {
-    HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
-  }
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
 
-  endAtomic (s);
+  endAtomic(s);
 
   assert(NULL != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = hh->parentHH;

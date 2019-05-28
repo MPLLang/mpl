@@ -621,9 +621,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
-  // global heap objects at level 0
-  s->globalHeap = HM_newChunkList(NULL, 0);
-
   return res;
 }
 
@@ -685,8 +682,6 @@ void GC_duplicate (GC_state d, GC_state s) {
 
   // SPOONHOWER_NOTE: better duplicate
   //initProfiling (d);
-
-  d->globalHeap = HM_newChunkList(NULL, 0);
 
   // Multi-processor support is incompatible with saved-worlds
   assert (d->amOriginal);

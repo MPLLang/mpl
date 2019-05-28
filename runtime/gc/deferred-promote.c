@@ -160,7 +160,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
 
-  if (isObjptrInGlobalHeap(s, src)) {
+  if (isObjptrInRootHeap(s, src)) {
     assert(!hasFwdPtr(srcp));
     return;
   }

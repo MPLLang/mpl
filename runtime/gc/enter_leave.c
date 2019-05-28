@@ -11,18 +11,13 @@
  * that the function is run in a critical section and check the GC
  * invariant.
  */
+/* SAM_NOTE: these are no longer used, but perhaps they should be.
+ * TODO: check that these work with the new runtime setup. */
 void enter (GC_state s) {
-  /*
-   * RAM_NOTE: Need to switch to make sure that s->{frontier,limit} etc. point
-   * to global heap
-   */
-  HM_enterGlobalHeap();
 
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-
-  // Proc_beginCriticalSection(s);
   beginAtomic (s);
 
   if (DEBUG) {
@@ -40,7 +35,4 @@ void leave (GC_state s) {
   assert(invariantForMutator(s, FALSE, TRUE));
 
   endAtomic (s);
-  // Proc_endCriticalSection(s);
-
-  HM_exitGlobalHeap();
 }

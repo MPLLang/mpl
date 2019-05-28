@@ -74,7 +74,8 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
 
 #if ASSERT
 void assertObjptrDisentangledForMe(GC_state s, objptr op) {
-  if (HM_inGlobalHeap(s) || !isObjptr(op)) return;
+  assert(threadAndHeapOkay(s));
+  if (!isObjptr(op)) return;
 
   /* Don't call HM_getChunkOf() here, because it does additional asserts that
    * we don't want. */
@@ -112,19 +113,6 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
       }
     }
     hh = phh;
-  }
-
-  /* Check that it's in the global heap. */
-  /* SAM_NOTE: This is concurrent access with other processor's manipulation
-   * of their own global heap chunks, but on x86 I believe it should be safe.
-   */
-  for (int i = 0; i < s->numberOfProcs; i++) {
-    HM_chunkList list = s->procStates[i].globalHeap;
-    for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
-         cursor != NULL;
-         cursor = cursor->nextChunk) {
-      if (cursor == objectChunk) return;
-    }
   }
 
   /* None of my ancestors chunks contain this objptr */

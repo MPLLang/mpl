@@ -28,7 +28,7 @@ pointer newObject(GC_state s,
    * begins in the first block of a chunk. */
   /* SAM_NOTE: this could be inefficient if the next allocation happens to be
    * a large object. */
-  assert(!HM_inGlobalHeap(s));
+  assert(threadAndHeapOkay(s));
   s->frontier += bytesRequested;
   if (!inFirstBlockOfChunk(HM_getChunkOf(frontier), s->frontier)) {
     /* force a new chunk to be created so that no new objects lie after this
@@ -84,8 +84,8 @@ GC_thread newThread(GC_state s, size_t reserved) {
   GC_thread thread;
   pointer res;
 
-  assert(isStackReservedAligned (s, reserved));
-  assert(!HM_inGlobalHeap(s));
+  assert(isStackReservedAligned(s, reserved));
+  assert(threadAndHeapOkay(s));
 
   HM_ensureHierarchicalHeapAssurances(s,
                                       FALSE,
@@ -95,7 +95,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
 
   stack = newStack(s, reserved);
-  assert(isPointerInGlobalHeap(s, s->frontier) || (pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
+  assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
   /* SAM_NOTE: this is broken? if the stack is just the right size to force the
    * thread object to lie beyond the limit... */
   res = newObject(s, GC_THREAD_HEADER, sizeofThread(s));

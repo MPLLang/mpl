@@ -45,7 +45,6 @@ struct GC_state {
   struct HM_chunkList* freeListSmall;
   struct HM_chunkList* freeListLarge;
   size_t nextChunkAllocSize;
-  struct HM_chunkList* globalHeap;
   /*
    * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
    * think so

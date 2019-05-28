@@ -16,7 +16,11 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static inline bool isPointerInGlobalHeap (GC_state s, pointer p);
-static inline bool isObjptrInGlobalHeap (GC_state s, objptr p);
+static inline bool isPointerInRootHeap(GC_state s, pointer p);
+static inline bool isObjptrInRootHeap(GC_state s, objptr p);
+
+#if ASSERT
+static inline bool threadAndHeapOkay(GC_state s);
+#endif
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

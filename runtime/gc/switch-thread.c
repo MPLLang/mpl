@@ -6,16 +6,18 @@
  * See the file MLton-LICENSE for details.
  */
 
-void switchToThread (GC_state s, objptr op) {
-  GC_thread thread = (GC_thread)(objptrToPointer (op, NULL) + offsetofThread (s));
+void switchToThread(GC_state s, objptr op) {
+  GC_thread thread = (GC_thread)(objptrToPointer(op, NULL) + offsetofThread(s));
 
   assert(thread->hierarchicalHeap != NULL);
 
   size_t terminateCheckCounter = 0;
-  while (thread->currentProcNum >= 0) {
-    /* spin while someone else is currently executing this thread */
+  while (atomicLoadS32(&(thread->currentProcNum)) >= 0) {
+    /* Spin while someone else is currently executing this thread. The
+     * termination checks happen rarely, and reset terminateCheckCounter to 0
+     * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    pthread_yield();
+    if (terminateCheckCounter == 0) pthread_yield();
   }
   thread->currentProcNum = s->procNumber;
 
@@ -50,41 +52,31 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  beginAtomic (s);
+  beginAtomic(s);
 
-  assert(!HM_inGlobalHeap(s));
-  HM_exitLocalHeap(s); // remembers s->frontier in HH
+  assert(threadAndHeapOkay(s));
+  struct HM_HierarchicalHeap *hh = getThreadCurrent(s)->hierarchicalHeap;
+  HM_HH_updateValues(hh, s->frontier);
   s->frontier = 0;
   s->limitPlusSlop = 0;
   s->limit = 0;
-  // HM_chunk globalHeapChunk = HM_getChunkListLastChunk(s->globalHeap);
-  // assert(globalHeapChunk != NULL);
-  // s->frontier = HM_getChunkFrontier(globalHeapChunk);
-  // s->limitPlusSlop = HM_getChunkLimit(globalHeapChunk);
-  // s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
 
-  /* SAM_NOTE: CHECK: is it necessary to synchronize after the write to
-   * currentProcNum? I want this write to synchronize with the spinloop in
-   * switchToThread, above. */
-  getThreadCurrent(s)->currentProcNum = -1;
-  __sync_synchronize();
+  /* SAM_NOTE: This write synchronizes with the spinloop in switchToThread (above) */
+  atomicStoreS32(&(getThreadCurrent(s)->currentProcNum), -1);
 
   switchToThread(s, pointerToObjptr(p, NULL));
-
-  assert(!HM_inGlobalHeap(s));
-
-  /* SAM_NOTE: this does an ensureNotEmpty, but really we should just ensure
-   * getThreadCurrent(s)->bytesNeeded? */
-  HM_enterLocalHeap(s);
-
   /* SAM_NOTE: TODO: do signal handlers work properly? */
   s->atomicState--;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
-  /* SAM_NOTE: Shouldn't this be getThreadCurrent(s)->bytesNeeded? */
-  HM_ensureHierarchicalHeapAssurances (s, FALSE, 0, FALSE);
+  assert(threadAndHeapOkay(s));
+  hh = getThreadCurrent(s)->hierarchicalHeap;
+  s->frontier = HM_HH_getFrontier(hh);
+  s->limitPlusSlop = HM_HH_getLimit(hh);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, getThreadCurrent(s)->bytesNeeded, FALSE);
 
   endAtomic (s);
   assert(strongInvariantForMutatorFrontier(s));

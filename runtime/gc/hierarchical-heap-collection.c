@@ -79,8 +79,6 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  // assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
-  //                                                 NULL)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
                                                       NULL);
@@ -90,8 +88,6 @@ void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  // assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
-  //                                                 NULL)));
 
   s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
                                                           NULL);
@@ -590,7 +586,7 @@ void forwardHHObjptr (GC_state s,
       op,
       (uintptr_t)p);
 
-  if (!isObjptr(op) || isObjptrInGlobalHeap(s, op)) {
+  if (!isObjptr(op) || isObjptrInRootHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",

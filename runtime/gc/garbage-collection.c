@@ -21,7 +21,7 @@ void growStackCurrent(GC_state s) {
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
 #if ASSERT
-  assert(!HM_inGlobalHeap(s));
+  assert(threadAndHeapOkay(s));
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   assert(s->frontier == HM_HH_getFrontier(hh));
   assert((size_t)(HM_HH_getLimit(hh) - HM_HH_getFrontier(hh)) >= sizeofStackWithMetaData(s, reserved));
@@ -45,7 +45,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   beginAtomic(s);
 
   assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(!HM_inGlobalHeap(s));
+  assert(threadAndHeapOkay(s));
 
   /* adjust bytesRequested */
   /*

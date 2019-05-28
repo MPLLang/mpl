@@ -167,8 +167,6 @@ void initWorld(GC_state s) {
   GC_thread thread = initThreadAndHeap(s, 0);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 
-  HM_allocateChunk(s->globalHeap, GC_HEAP_LIMIT_SLOP);
-
   /* Copy vectors into the heap, implicitly updating
    * s->{frontier,limit,limitPlusSlop} */
   initVectors(s, hh);
@@ -186,7 +184,6 @@ void initWorld(GC_state s) {
 
   /* SAM_NOTE: some of these statistics may be maintained incorrectly
    * elsewhere in the runtime. */
-  // GC_profileAllocInc(s, HM_getChunkListSize(s->globalHeap));
   s->cumulativeStatistics->bytesAllocated += HM_getChunkListSize(HM_HH_LEVEL(hh, 0));
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 }
@@ -197,8 +194,6 @@ void duplicateWorld (GC_state d, GC_state s) {
   GC_thread thread = initThreadAndHeap(d, 1);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
   HM_HH_maybeResizeLCHS(d, hh);
-
-  HM_allocateChunk(d->globalHeap, GC_HEAP_LIMIT_SLOP);
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;

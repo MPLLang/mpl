@@ -149,7 +149,7 @@ pointer GC_arrayAllocate (GC_state s,
       uintmaxToCommaString(arraySizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
-  assert(!HM_inGlobalHeap(s));
+  assert(threadAndHeapOkay(s));
   frontier = arrayAllocateInHH(s, arraySizeAligned, ensureBytesFree);
 
   result = arrayInitialize(s,
