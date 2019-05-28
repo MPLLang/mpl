@@ -535,7 +535,6 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
-  s->wsQueueLock = BOGUS_OBJPTR;
   s->ffiArgs = NULL;
 
   s->lastMajorStatistics = newLastMajorStatistics();
@@ -566,7 +565,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;
-  s->lock = SPINLOCK_INITIALIZER;
 
   L_setFile(stderr);
   processAtMLton (s, 0, s->atMLtonsLength, s->atMLtons, &s->worldFile);
@@ -650,7 +648,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
-  d->wsQueueLock = BOGUS_OBJPTR;
   d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->nextChunkAllocSize = s->nextChunkAllocSize;
@@ -684,9 +681,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   //initProfiling (d);
 
   // Multi-processor support is incompatible with saved-worlds
-  assert (d->amOriginal);
-  duplicateWorld (d, s);
-  d->lock = s->lock;
+  assert(d->amOriginal);
+  duplicateWorld(d, s);
   s->amInGC = FALSE;
 }
 

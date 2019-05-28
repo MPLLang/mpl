@@ -84,14 +84,6 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
                                                       NULL);
 }
 
-void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  assert(processor < s->numberOfProcs);
-
-  s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
-                                                          NULL);
-}
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -101,8 +93,6 @@ void HM_HHC_collectLocal(void) {
   struct rusage ru_start;
   struct timespec startTime;
   struct timespec stopTime;
-  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, NULL);
-  bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
 
   if (HM_HH_getShallowestPrivateLevel(s, hh) == 0) {
@@ -113,14 +103,6 @@ void HM_HHC_collectLocal(void) {
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
     return;
-  }
-
-  if (s->wsQueueLock != BOGUS_OBJPTR &&
-      Parallel_alreadyLockedByMe(wsQueueLock)) {
-    /* in a scheduler critical section, so cannot collect */
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
-        "Queue locked by mutator/scheduler");
-    queueLockHeld = TRUE;
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -143,13 +125,6 @@ void HM_HHC_collectLocal(void) {
                   processor,
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
-
-  /* lock queue to prevent steals */
-  if (s->wsQueueLock != BOGUS_OBJPTR &&
-      !queueLockHeld) {
-    Parallel_lockTake(wsQueueLock);
-  }
-  // lockWriterHH(hh);
 
   assertInvariants(s, hh);
 
@@ -451,14 +426,6 @@ void HM_HHC_collectLocal(void) {
    */
 
   assertInvariants(s, hh);
-
-  /* RAM_NOTE: This can be moved earlier? */
-  /* unlock hh and queue */
-  // unlockWriterHH(hh);
-  if (s->wsQueueLock != BOGUS_OBJPTR &&
-      !queueLockHeld) {
-    Parallel_lockRelease(wsQueueLock);
-  }
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "

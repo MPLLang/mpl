@@ -374,12 +374,6 @@ struct
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
 
-      (* the lock is not necessary for private deques, but need to do this to
-       * play nice with runtime. *)
-      val dummyLock : Word32.word ref = ref 0w0
-      val _ = MLton.HM.registerQueueLock (Word32.fromInt myId, dummyLock)
-      val _ = MLton.Parallel.Deprecated.lockInit dummyLock
-
       (* ------------------------------------------------------------------- *)
 
       fun verifyStatus () =

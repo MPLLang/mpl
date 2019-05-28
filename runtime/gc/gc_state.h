@@ -31,13 +31,11 @@ struct GC_state {
   uint32_t atomicState;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
   struct GC_callStackState callStackState;
-  bool canMinor; /* TRUE iff there is space for a minor gc. */
   struct GC_controls *controls;
   struct GC_globalCumulativeStatistics* globalCumulativeStatistics;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
-  objptr wsQueueLock; /* The work-stealing queue lock for this processor */
   /* RAM_NOTE: Is this the right type? */
   pointer ffiArgs;
   GC_frameLayout frameLayouts; /* Array of frame layouts. */
@@ -91,7 +89,6 @@ struct GC_state {
   uint32_t vectorInitsLength;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
-  spinlock_t lock; // a global lock (shared across all procs)... WHAT DOES IT PROTECT?
   struct TracingContext *trace;
   struct TLSObjects tlsObjects;
 };
