@@ -563,9 +563,6 @@ void forwardHHObjptr (GC_state s,
     return;
   }
 
-  // if it's not in the global heap, then it must be in the HH
-  assertObjptrInHH(op);
-
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
 

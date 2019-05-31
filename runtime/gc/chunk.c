@@ -52,16 +52,6 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList,
  */
 // void* HM_freeLevelListIterator(void* arg);
 
-#if ASSERT
-void assertObjptrInHH(objptr op) {
-  assert(HM_getChunkOf(objptrToPointer(op, NULL)));
-}
-#else
-void assertObjptrInHH(objptr op) {
-  ((void)op);
-}
-#endif
-
 /************************/
 /* Function Definitions */
 /************************/
@@ -552,8 +542,6 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
 void HM_getObjptrInfo(GC_state s,
                       objptr object,
                       struct HM_ObjptrInfo* info) {
-  assertObjptrInHH(object);
-
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
   assert(NULL != chunk);
 
