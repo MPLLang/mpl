@@ -117,12 +117,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->controls->ratios.copy = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.copy)
             die ("@MLton copy-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "fixed-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton fixed-heap missing argument.");
-          s->controls->fixedHeap = align (stringToBytes (argv[i++]),
-                                         2 * s->sysvals.pageSize);
         } else if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
@@ -179,13 +173,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
               s->controls->summaryFile = file;
             }
           }
-        } else if (0 == strcmp (arg, "global-heap-min-chunk")) {
-          i++;
-          if (i == argc)
-            die ("@MLton global-heap-min-chunk missing argument.");
-          s->controls->globalHeapMinChunkSize = stringToBytes (argv[i++]);
-          unless (GC_HEAP_LIMIT_SLOP < s->controls->globalHeapMinChunkSize)
-            die ("@MLton global-heap-min-chunk argument must be greater than slop.");
         } else if (0 == strcmp (arg, "set-affinity")) {
           i++;
           s->controls->setAffinity = TRUE;
@@ -199,9 +186,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc)
             die ("@MLton affinity-stride missing argument.");
           s->controls->affinityStride = stringToInt (argv[i++]);
-        } else if (0 == strcmp (arg, "restrict-available")) {
-          i++;
-          s->controls->restrictAvailableSize = TRUE;
         } else if (0 == strcmp (arg, "available-ratio")) {
           i++;
           if (i == argc)
@@ -280,17 +264,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->controls->ratios.markCompact = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.markCompact)
             die ("@MLton mark-compact-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "max-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton max-heap missing argument.");
-          s->controls->maxHeap = align (stringToBytes (argv[i++]),
-                                       2 * s->sysvals.pageSize);
-        } else if (0 == strcmp (arg, "may-page-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton may-page-heap missing argument.");
-          s->controls->mayPageHeap = stringToBool (argv[i++]);
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
@@ -481,19 +454,13 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->callFromCHandlerThread = BOGUS_OBJPTR;
 
   s->controls = (struct GC_controls *) malloc (sizeof (struct GC_controls));
-  s->controls->fixedHeap = 0;
-  s->controls->maxHeap = 0;
   s->controls->mayLoadWorld = TRUE;
-  s->controls->mayPageHeap = FALSE;
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
   s->controls->HMMessages = FALSE;
-  s->controls->oldGenArraySize = 0x100000;
-  s->controls->globalHeapMinChunkSize = 4096;
   s->controls->setAffinity = FALSE;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
-  s->controls->restrictAvailableSize = FALSE;
   s->controls->ratios.copy = 4.0f;
   s->controls->ratios.copyGenerational = 4.0f;
   s->controls->ratios.grow = 8.0f;
@@ -569,8 +536,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   L_setFile(stderr);
   processAtMLton (s, 0, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, 1, argc, argv, &s->worldFile);
-  if (s->controls->fixedHeap > 0 and s->controls->maxHeap > 0)
-    die ("Cannot use both fixed-heap and max-heap.");
   unless (s->controls->ratios.markCompact <= s->controls->ratios.copy
           and s->controls->ratios.copy <= s->controls->ratios.live)
     die ("Ratios must satisfy mark-compact-ratio <= copy-ratio <= live-ratio.");
