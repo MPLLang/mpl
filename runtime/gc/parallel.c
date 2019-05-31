@@ -2,20 +2,10 @@
 #include <time.h>
 #include "platform.h"
 
-/* num of holding thread or -1 if no one*/
-volatile int32_t *Parallel_mutexes;
-
-// #pragma message "TODO attach heaps here"
 void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   if (!Proc_isInitialized (s)) {
-    Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
-
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
-      Parallel_mutexes[proc] = -1;
-    }
-
     struct HM_HierarchicalHeap *phh = getHierarchicalHeapCurrent(s);
     for (int proc = 1; proc < s->numberOfProcs; proc++) {
       struct HM_HierarchicalHeap *chh = getHierarchicalHeapCurrent(&(s->procStates[proc]));
