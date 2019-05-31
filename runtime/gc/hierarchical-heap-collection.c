@@ -597,52 +597,17 @@ void forwardHHObjptr (GC_state s,
       return;
   }
 
-  /* We look for the top-most collectible replica (tmcr) of p present in the
-   * collection range, that is in [arg->maxLevel, arg->minLevel]. Depending on
-   * what we find, we might have to create a copy or not. There are three cases:
-   *
-   * 1/ The tmcr is in to-space. No copying is needed, the address of the tmcr
-   * is the new location of p.
-   *
-   * 2/ The tmcr is in from-space and has been forwarded. No copy is needed, the
-   * target of the tmcr's forwarding pointer (necessarily outside collection
-   * range) is the new location of p.
-   *
-   * 3/ The tmcr is in from-space and has no forwarding pointer. The tmcr must
-   * be copied in to-space; the resulting address is the new location of p.
-   */
-
-  /* find the top-most collectible replica */
-  p = HM_followForwardPointerUntilNullOrBelowLevel(s,
-                                                   p,
-                                                   args->minLevel);
-  op = pointerToObjptr(p, NULL);
-  HM_getObjptrInfo(s, op, &opInfo);
-
-  if (HM_isObjptrInToSpace(s, op)) {
-    /* just use p/op */
+  if (hasFwdPtr(p)) {
+    op = getFwdPtr(p);
     *opp = op;
-
-    if (DEBUG_DETAILED) {
-      fprintf (stderr, "  already FORWARDED\n");
-    }
-
-    /* objects in to-space should not themselves have forwarding pointers */
-    assert (!hasFwdPtr(p));
-    /* to-space should be copying */
-    assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
-    /* should not have copy-forwarded anything below 'args->minLevel'! */
-    assert (opInfo.level >= args->minLevel);
-  } else if (hasFwdPtr(p)) {
-    /* just use the forwarding pointer of p */
-    *opp = getFwdPtr(p);
-
-    /* should point outside collectible zone */
+    p = objptrToPointer(op, NULL);
 #if ASSERT
-    HM_getObjptrInfo(s, *opp, &opInfo);
-    assert (opInfo.level < args->minLevel);
+    assert(!hasFwdPtr(p));
+    assert(HM_isObjptrInToSpace(s, op));
+    assert(HM_getObjptrLevel(op) >= args->minLevel);
 #endif
   } else {
+    assert(!HM_isObjptrInToSpace(s, op));
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;
