@@ -103,21 +103,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         char *arg;
 
         arg = argv[i];
-        if (0 == strcmp (arg, "copy-generational-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton copy-generational-ratio missing argument.");
-          s->controls->ratios.copyGenerational = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.copyGenerational)
-            die ("@MLton copy-generational-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "copy-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton copy-ratio missing argument.");
-          s->controls->ratios.copy = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.copy)
-            die ("@MLton copy-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "gc-messages")) {
+        if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
         } else if (0 == strcmp (arg, "hm-messages")) {
@@ -186,35 +172,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc)
             die ("@MLton affinity-stride missing argument.");
           s->controls->affinityStride = stringToInt (argv[i++]);
-        } else if (0 == strcmp (arg, "available-ratio")) {
-          i++;
-          if (i == argc)
-            die ("@MLton available-ratio missing argument.");
-          s->controls->ratios.available = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.available)
-            die ("@MLton available-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "grow-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton grow-ratio missing argument.");
-          s->controls->ratios.grow = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.grow)
-            die ("@MLton grow-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "hash-cons")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton hash-cons missing argument.");
-          s->controls->ratios.hashCons = stringToFloat (argv[i++]);
-          unless (0.0 <= s->controls->ratios.hashCons
-                  and s->controls->ratios.hashCons <= 1.0)
-            die ("@MLton hash-cons argument must be between 0.0 and 1.0.");
-        } else if (0 == strcmp (arg, "live-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton live-ratio missing argument.");
-          s->controls->ratios.live = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.live)
-            die ("@MLton live-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -250,30 +207,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (!initLogLevels(levelString)) {
             die ("@MLton log-level invalid argument");
           }
-        } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton mark-compact-generational-ratio missing argument.");
-          s->controls->ratios.markCompactGenerational = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.markCompactGenerational)
-            die ("@MLton mark-compact-generational-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "mark-compact-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton mark-compact-ratio missing argument.");
-          s->controls->ratios.markCompact = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.markCompact)
-            die ("@MLton mark-compact-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp (arg, "nursery-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton nursery-ratio missing argument.");
-          s->controls->ratios.nursery = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.nursery)
-            die ("@MLton nursery-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "ram-slop")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
@@ -461,14 +397,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->setAffinity = FALSE;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
-  s->controls->ratios.copy = 4.0f;
-  s->controls->ratios.copyGenerational = 4.0f;
-  s->controls->ratios.grow = 8.0f;
-  s->controls->ratios.hashCons = 0.0f;
-  s->controls->ratios.live = 8.0f;
-  s->controls->ratios.markCompact = 1.04f;
-  s->controls->ratios.markCompactGenerational = 8.0f;
-  s->controls->ratios.nursery = 10.0f;
   s->controls->ratios.ramSlop = 0.5f;
   s->controls->ratios.stackCurrentGrow = 2.0f;
   s->controls->ratios.stackCurrentMaxReserved = 32.0f;
@@ -536,13 +464,15 @@ int GC_init (GC_state s, int argc, char **argv) {
   L_setFile(stderr);
   processAtMLton (s, 0, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, 1, argc, argv, &s->worldFile);
-  unless (s->controls->ratios.markCompact <= s->controls->ratios.copy
-          and s->controls->ratios.copy <= s->controls->ratios.live)
-    die ("Ratios must satisfy mark-compact-ratio <= copy-ratio <= live-ratio.");
   unless (s->controls->ratios.stackCurrentPermitReserved
           <= s->controls->ratios.stackCurrentMaxReserved)
     die ("Ratios must satisfy stack-current-permit-reserved <= stack-current-max-reserved.");
-  /* We align s->sysvals.ram by s->sysvals.pageSize so that we can
+
+  /* SAM_NOTE: no longer used, but seems like this code may be useful in the
+   * future, so I'm leaving it.
+   *
+   * OLD COMMNENT:
+   * We align s->sysvals.ram by s->sysvals.pageSize so that we can
    * test whether or not we we are using mark-compact by comparing
    * heap size to ram size.  If we didn't round, the size might be
    * slightly off.
