@@ -163,5 +163,4 @@ static inline void setFrontier (GC_state s, pointer p,
   s->cumulativeStatistics->bytesAllocated += (size_t)(p - s->frontier);
   s->frontier = p;
   assert (s->frontier <= s->limitPlusSlop);
-  assert (s->start <= s->frontier);
 }

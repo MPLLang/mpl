@@ -17,8 +17,8 @@ struct GC_state {
    * referenced, and having them at smaller offsets may decrease code
    * size and improve cache performance.
    */
-  pointer frontier; /* start <= frontier < limit */
-  pointer limit; /* limit = heap.start + heap.size */
+  pointer frontier;
+  pointer limit;
   pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */
   size_t exnStack;
@@ -81,7 +81,6 @@ struct GC_state {
   struct GC_signalsInfo signalsInfo;
   struct GC_sourceMaps sourceMaps;
   pointer stackBottom; /* Bottom of stack in current thread. */
-  pointer start; /* Like heap.nursery but per processor.  nursery <= start <= frontier */
   pthread_t self; /* thread owning the GC_state */
   uint32_t terminationLeader;
   struct GC_sysvals sysvals;

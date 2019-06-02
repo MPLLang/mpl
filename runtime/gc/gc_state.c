@@ -21,13 +21,11 @@ void displayGCState (GC_state s, FILE *stream) {
   fprintf (stream, "\theap\n");
 
   fprintf (stream,
-           "\tstart = "FMTPTR"\n"
            "\tfrontier = "FMTPTR"\n"
            "\tlimit = "FMTPTR"\n"
            "\tlimitPlusSlop = "FMTPTR"\n"
            "\tstackBottom = "FMTPTR"\n"
            "\tstackTop = "FMTPTR"\n",
-           (uintptr_t)s->start,
            (uintptr_t)s->frontier,
            (uintptr_t)s->limit,
            (uintptr_t)s->limitPlusSlop,
