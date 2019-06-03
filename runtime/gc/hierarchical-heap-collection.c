@@ -594,15 +594,21 @@ void forwardHHObjptr (GC_state s,
       return;
   }
 
+  assert(HM_getObjptrLevel(op) >= args->minLevel);
+
   if (hasFwdPtr(p)) {
     op = getFwdPtr(p);
     *opp = op;
     p = objptrToPointer(op, NULL);
-#if ASSERT
+
     assert(!hasFwdPtr(p));
     assert(HM_isObjptrInToSpace(s, op));
-    assert(HM_getObjptrLevel(op) >= args->minLevel);
-#endif
+
+  } else if (HM_isObjptrInToSpace(s, op)) {
+    /* do nothing; this could be a large object that had its chunk moved
+     * rather than copied */
+    assert(!hasFwdPtr(p));
+
   } else {
     assert(!HM_isObjptrInToSpace(s, op));
     /* forward the object */
