@@ -100,7 +100,6 @@ GC_thread newThread(GC_state s, size_t reserved) {
    * thread object to lie beyond the limit... */
   res = newObject(s, GC_THREAD_HEADER, sizeofThread(s));
   thread = (GC_thread)(res + offsetofThread(s));
-  thread->inGlobalHeapCounter = 0;
   /* a fresh thread is not currently being executed by any processor */
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
@@ -142,7 +141,6 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
   stack->reserved = reserved;
   stack->used = 0;
 
-  thread->inGlobalHeapCounter = 0;
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
