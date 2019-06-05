@@ -69,7 +69,7 @@ void HM_HH_appendChild(GC_state s,
   /* push child at front of parent's child list */
 #if ASSERT
   if (parentHH->childHHList != NULL) {
-    assert(parentHH->childHHList->stealLevel < stealLevel);
+    assert(parentHH->childHHList->stealLevel <= stealLevel);
   }
 #endif
   childHH->nextChildHH = parentHH->childHHList;
@@ -125,14 +125,13 @@ void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic (s);
 
+  assert(threadAndHeapOkay(s));
+
   /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
    * level? */
-  if (getThreadCurrent(s)->hierarchicalHeap != NULL &&
-      !HM_inGlobalHeap(s)) {
-    HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
-  }
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
 
-  endAtomic (s);
+  endAtomic(s);
 
   assert(NULL != hh->parentHH);
   struct HM_HierarchicalHeap* parentHH = hh->parentHH;
@@ -293,8 +292,7 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
     HM_HH_LEVEL_CAPACITY(hh, i) = 0;
   }
   hh->lastAllocatedChunk = NULL;
-  hh->level = 1; // level 0 is reserved for global heap
-  /* SAM_NOTE: Now that global is in the hierarchy, should this be 0? */
+  hh->level = 0;
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
@@ -486,7 +484,7 @@ void assertInvariants(GC_state s,
   for (struct HM_HierarchicalHeap* childHH = hh->childHHList;
        NULL != childHH;
        childHH = childHH->nextChildHH) {
-    assert(childHH->stealLevel < previousStealLevel);
+    assert(childHH->stealLevel <= previousStealLevel);
     previousStealLevel = childHH->stealLevel;
     assert(childHH->parentHH == hh);
   }

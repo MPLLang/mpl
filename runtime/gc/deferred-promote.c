@@ -54,7 +54,8 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       promoteDownPtr,
       args);
 
-    if (NULL == HM_HH_LEVEL(args->hh, i)) {
+    if (NULL == HM_HH_LEVEL(args->hh, i) ||
+        NULL == HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i))) {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
     }
@@ -160,7 +161,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
 
-  if (isObjptrInGlobalHeap(s, src)) {
+  if (isObjptrInRootHeap(s, src)) {
     assert(!hasFwdPtr(srcp));
     return;
   }

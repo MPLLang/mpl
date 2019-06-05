@@ -7,14 +7,6 @@
  * See the file MLton-LICENSE for details.
  */
 
-/******************************/
-/* Static Function Prototypes */
-/******************************/
-pointer nextValidPointer(pointer* end,
-                         GC_state s,
-                         pointer p,
-                         struct GlobalHeapHole* holes);
-
 /************************/
 /* Function Definitions */
 /************************/
@@ -51,7 +43,6 @@ void foreachGlobalObjptr (GC_state s,
       callIfIsObjptr (s, f, &s->procStates[proc].callFromCHandlerThread, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].currentThread, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].wsQueue, fArgs);
-      callIfIsObjptr (s, f, &s->procStates[proc].wsQueueLock, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].savedThread, fArgs);
       callIfIsObjptr (s, f, &s->procStates[proc].signalHandlerThread, fArgs);
 
@@ -65,7 +56,6 @@ void foreachGlobalObjptr (GC_state s,
     callIfIsObjptr (s, f, &s->callFromCHandlerThread, fArgs);
     callIfIsObjptr (s, f, &s->currentThread, fArgs);
     callIfIsObjptr (s, f, &s->wsQueue, fArgs);
-    callIfIsObjptr (s, f, &s->wsQueueLock, fArgs);
     callIfIsObjptr (s, f, &s->savedThread, fArgs);
     callIfIsObjptr (s, f, &s->signalHandlerThread, fArgs);
   }
@@ -283,69 +273,6 @@ DONE:
   return p;
 }
 
-/* foreachObjptrInRange (s, front, back, f, skipWeaks)
- *
- * Apply f to each pointer between front and *back, which should be a
- * contiguous sequence of objects, where front points at the beginning
- * of the first object and *back points just past the end of the last
- * object.  f may increase *back (for example, this is done by
- * forward).  foreachObjptrInRange returns a pointer to the end of
- * the last object it visits.
- *
- * If skipWeaks, then the object pointer in weak objects is skipped.
- */
-
-pointer foreachObjptrInRange (GC_state s,
-                              pointer front,
-                              pointer *back,
-                              bool skipWeaks,
-                              struct GlobalHeapHole* holes,
-                              ObjptrPredicateFunction predicate,
-                              void* pArgs,
-                              ForeachObjptrFunction f,
-                              void* fArgs) {
-  pointer b;
-  pointer end;
-
-  assert (isFrontierAligned (s, front));
-  if (DEBUG_DETAILED)
-    fprintf (stderr,
-             "foreachObjptrInRange  front = "FMTPTR"  *back = "FMTPTR"\n",
-             (uintptr_t)front, (uintptr_t)(*back));
-  b = *back;
-  if (NULL != holes) {
-    /* advance front until I am not in the middle of a per-proc nursery */
-    front = nextValidPointer(&end, s, front, holes);
-  }
-
-  assert (front <= b);
-  while (front < b) {
-    while (((NULL == holes) || (front < end)) && (front < b)) {
-      assert (isAligned ((size_t)front, GC_MODEL_MINALIGN));
-      if (DEBUG_DETAILED) {
-        fprintf (stderr,
-                 "  front = "FMTPTR"  *back = "FMTPTR"\n",
-                 (uintptr_t)front, (uintptr_t)(*back));
-      }
-      LOG(LM_FOREACH, LL_DEBUG,
-          "front = "FMTPTR"  *back = "FMTPTR,
-          (uintptr_t)front, (uintptr_t)(*back));
-
-      pointer p = advanceToObjectData (s, front);
-      assert (isAligned ((size_t)p, s->alignment));
-      front =
-          foreachObjptrInObject (s, p, skipWeaks, predicate, pArgs, f, fArgs);
-    }
-    b = *back;
-    if (NULL != holes) {
-      /* advance front until I am not in the middle of a per-proc nursery */
-      front = nextValidPointer(&end, s, front, holes);
-    }
-  }
-  return front;
-}
-
-
 /* Apply f to the frame index of each frame in the current thread's stack. */
 void foreachStackFrame (GC_state s, GC_foreachStackFrameFun f) {
   pointer bottom;
@@ -384,47 +311,4 @@ bool trueObjptrPredicate(GC_state s, pointer p, void* args) {
   ((void)(args));
 
   return TRUE;
-}
-
-/*******************************/
-/* Static Function Definitions */
-/*******************************/
-pointer nextValidPointer(pointer* end,
-                         GC_state s,
-                         pointer p,
-                         struct GlobalHeapHole* holes) {
-  pointer nextP = p;
-  bool modified;
-
-  /* find nextP */
-  do {
-    modified = FALSE;
-
-    /* can only be as many holes as processors */
-    for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-      if (nextP >= holes[i].start && nextP < holes[i].end) {
-        LOG(LM_FOREACH, LL_DEBUG,
-            "Skipping hole nextP = %p holeProc = %" PRIu32 " holeStart = %p "
-            "holeEnd = %p",
-            ((void*)(nextP)),
-            i,
-            ((void*)(holes[i].start)),
-            ((void*)(holes[i].end)));
-        nextP = holes[i].end;
-        modified = TRUE;
-      }
-    }
-  } while (modified);
-
-  /* find end */
-  *end = ((pointer)(UINTPTR_MAX));
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    pointer candidate = holes[i].start;
-
-    if ((nextP <= candidate) && (candidate < *end)) {
-      *end = candidate;
-    }
-  }
-
-  return nextP;
 }

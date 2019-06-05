@@ -18,7 +18,6 @@
  *
  * header ::
  * padding ::
- * inGlobalHeapCounter (Word32) ::
  * bytesNeeded (size_t) ::
  * exnStack (size_t) ::
  * hierarchicalHeap (c pointer)
@@ -37,7 +36,7 @@
  * normal object.
  */
 typedef struct GC_thread {
-  Word32 inGlobalHeapCounter;
+  int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
   size_t exnStack;
   struct HM_HierarchicalHeap* hierarchicalHeap;
@@ -46,7 +45,7 @@ typedef struct GC_thread {
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
-                    sizeof(Word32) +  // inGlobalHeapCounter
+                    sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(void*) +   // hierarchicalHeap
@@ -70,7 +69,8 @@ typedef struct GC_thread *GC_thread;
  */
 // PRIVATE void T_setCurrentThreadUseHierarchicalHeap(Bool use);
 
-PRIVATE void GC_HH_newHeap(pointer thread);
+PRIVATE Pointer GC_HH_newHeap(void);
+PRIVATE void GC_HH_attachHeap(pointer thread, pointer hh);
 PRIVATE Word32 GC_HH_getLevel(pointer thread);
 PRIVATE void GC_HH_setLevel(pointer thread, Word32 level);
 PRIVATE void GC_HH_attachChild(pointer parent, pointer child, Word32 level);

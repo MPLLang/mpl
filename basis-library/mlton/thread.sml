@@ -63,6 +63,10 @@ struct
   (* The prim operations are generally the same, except that we need to
    * convert to/from integers for a few of them. *)
   open Prim
+
+  type thread = Basic.t
+  type t = MLtonPointer.t
+
   fun getLevel t = Word32.toInt (Prim.getLevel t)
   fun setLevel (t, d) = Prim.setLevel (t, Word32.fromInt d)
   fun attachChild (p, c, d) = Prim.attachChild (p, c, Word32.fromInt d)

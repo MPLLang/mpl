@@ -30,12 +30,6 @@ structure MLtonParallel:> MLTON_PARALLEL =
                   f x)
             end
 
-
-        val yield: unit -> unit =
-            (* msgWrapper1 ("yield", *)
-                         _import "Parallel_yield" runtime private:
-                         unit -> unit;(* ) *)
-
         val lockInit: Word32.word ref -> unit =
             (* msgWrapper1 ("lockInit", *)
                          _import "Parallel_lockInit" runtime private:

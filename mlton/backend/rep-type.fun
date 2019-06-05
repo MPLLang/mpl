@@ -537,7 +537,6 @@ fun ofGCField (f: GCField.t): t =
    in
       case f of
          AtomicState => word32
-       | CardMapAbsolute => cpointer ()
        | CurrentThread => thread ()
        | CurSourceSeqsIndex => word32
        | ExnStack => exnStack ()

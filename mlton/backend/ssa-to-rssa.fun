@@ -636,31 +636,6 @@ structure Type =
           | SOME s => s
    end
 
-val cardSizeLog2 : IntInf.t = 8 (* must agree with CARD_SIZE_LOG2 in gc.c *)
-
-fun updateCard (addr: Operand.t): Statement.t list =
-   let
-      val index = Var.newNoname ()
-      (* CHECK; WordSize.objptr or WordSize.cpointer? *)
-      val sz = WordSize.objptr ()
-      val indexTy = Type.word sz
-      val cardElemSize = WordSize.fromBits Bits.inByte
-   in
-      [PrimApp {args = (Vector.new2
-                        (Operand.cast (addr, Type.bits (WordSize.bits sz)),
-                         Operand.word
-                         (WordX.fromIntInf (cardSizeLog2, WordSize.shiftArg)))),
-                dst = SOME (index, indexTy),
-                prim = Prim.wordRshift (sz, {signed = false})},
-       Move {dst = (ArrayOffset
-                    {base = Runtime GCField.CardMapAbsolute,
-                     index = Var {ty = indexTy, var = index},
-                     offset = Bytes.zero,
-                     scale = Scale.One,
-                     ty = Type.word cardElemSize}),
-             src = Operand.word (WordX.one cardElemSize)}]
-   end
-
 fun convertWordSize (ws: WordSize.t): WordSize.t =
    WordSize.roundUpToPrim ws
 

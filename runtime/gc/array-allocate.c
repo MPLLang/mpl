@@ -32,65 +32,12 @@ static inline pointer arrayInitialize(ARG_USED_FOR_ASSERT GC_state s,
                                       uint16_t bytesNonObjptrs,
                                       uint16_t numObjptrs);
 
-pointer arrayAllocateInOldGen(GC_state s,
-                              size_t arraySizeAligned,
-                              size_t ensureBytesFree);
-
-pointer arrayAllocateInGlobal(GC_state s,
-                              size_t arraySizeAligned,
-                              size_t ensureBytesFree);
-
 pointer arrayAllocateInHH(GC_state s,
                           size_t arraySizeAligned,
                           size_t ensureBytesFree);
 /************************/
 /* Function Definitions */
 /************************/
-
-/* SAM_NOTE: deprecate and remove this function. */
-pointer arrayAllocateInOldGen(GC_state s,
-                              size_t arraySizeAligned,
-                              size_t ensureBytesFree) {
-  if (not hasHeapBytesFree (s, arraySizeAligned, ensureBytesFree)) {
-    performGC (s, arraySizeAligned, ensureBytesFree, FALSE, TRUE);
-  }
-  assert (hasHeapBytesFree (s, arraySizeAligned, ensureBytesFree));
-  pointer frontier = s->heap->start + s->heap->oldGenSize;
-  assert (isFrontierAligned (s, frontier));
-
-  /* SPOONHOWER_NOTE: This must be updated while holding the lock! */
-  s->heap->oldGenSize += arraySizeAligned;
-  assert (s->heap->start + s->heap->oldGenSize <= s->heap->nursery);
-  s->cumulativeStatistics->bytesAllocated += arraySizeAligned;
-  return frontier;
-}
-
-pointer arrayAllocateInGlobal(GC_state s,
-                              size_t arraySizeAligned,
-                              size_t ensureBytesFree) {
-  ensureBytesFreeInGlobal(s, arraySizeAligned);
-  pointer frontier = s->frontier;
-  pointer newFrontier = frontier + arraySizeAligned;
-  assert(isFrontierAligned(s, newFrontier));
-
-  HM_chunk current = HM_getChunkOf(frontier);
-  assert(current == HM_getChunkListLastChunk(s->globalHeap));
-
-  if (inFirstBlockOfChunk(current, newFrontier) &&
-      s->limitPlusSlop - newFrontier >= ensureBytesFree) {
-    s->frontier = newFrontier;
-  } else {
-    HM_updateChunkValues(current, newFrontier);
-    HM_chunk newChunk = HM_allocateChunk(s->globalHeap, ensureBytesFree);
-    s->frontier = HM_getChunkFrontier(newChunk);
-    s->limitPlusSlop = HM_getChunkLimit(newChunk);
-    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  }
-
-  assert(isFrontierAligned(s, s->frontier));
-  assert(s->limitPlusSlop - s->frontier >= ensureBytesFree);
-  return frontier;
-}
 
 pointer arrayAllocateInHH(GC_state s,
                           size_t arraySizeAligned,
@@ -136,7 +83,8 @@ pointer arrayAllocateInHH(GC_state s,
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
-  if (!inSameBlock(result, s->limitPlusSlop - 1)) {
+  assert(HM_getChunkOf(result) == hh->lastAllocatedChunk);
+  if (!inFirstBlockOfChunk(hh->lastAllocatedChunk, s->frontier)) {
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
     HM_HH_updateValues(hh, s->frontier);
@@ -201,12 +149,8 @@ pointer GC_arrayAllocate (GC_state s,
       uintmaxToCommaString(arraySizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
-  if (HM_inGlobalHeap(s)) {
-    frontier = arrayAllocateInGlobal(s, arraySizeAligned, ensureBytesFree);
-  } else {
-    assert(!HM_inGlobalHeap(s));
-    frontier = arrayAllocateInHH(s, arraySizeAligned, ensureBytesFree);
-  }
+  assert(threadAndHeapOkay(s));
+  frontier = arrayAllocateInHH(s, arraySizeAligned, ensureBytesFree);
 
   result = arrayInitialize(s,
                            frontier,
@@ -229,15 +173,9 @@ pointer GC_arrayAllocate (GC_state s,
   }
 
 #if ASSERT
-  if (HM_inGlobalHeap(s)) {
-    HM_chunk current = HM_getChunkListLastChunk(s->globalHeap);
-    assert(inFirstBlockOfChunk(current, s->frontier));
-    assert(s->limitPlusSlop == HM_getChunkLimit(current));
-  } else {
-    if (s->frontier != s->limitPlusSlop) {
-      assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
-      assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
-    }
+  if (s->frontier != s->limitPlusSlop) {
+    assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+    assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
   }
   assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
   /* Unfortunately, the invariant isn't quite true here, because

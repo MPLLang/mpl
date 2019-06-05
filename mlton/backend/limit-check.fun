@@ -233,6 +233,75 @@ fun insertFunction (f: Function.t,
              fun insert (amount: Operand.t (* of type word *)) =
                 let
                    val collect = Label.newNoname ()
+                   val collectReturn = Label.newNoname ()
+                   val dontCollect = Label.newNoname ()
+                   val (dontCollect', collectReturnStatements, force) =
+                      case !Control.gcCheck of
+                         Control.First =>
+                            let
+                               val global = Var.newNoname ()
+                               val _ = List.push (extraGlobals, global)
+                               val global =
+                                  Operand.Var {var = global,
+                                               ty = Type.bool}
+                               val dontCollect' = Label.newNoname ()
+                               val _ =
+                                  List.push
+                                  (newBlocks,
+                                   Block.T
+                                   {args = Vector.new0 (),
+                                    kind = Kind.Jump,
+                                    label = dontCollect',
+                                    statements = Vector.new0 (),
+                                    transfer =
+                                    Transfer.ifBool
+                                    (global, {falsee = dontCollect,
+                                              truee = collect})})
+                            in
+                               (dontCollect',
+                                Vector.new1
+                                (Statement.Move {dst = global,
+                                                 src = Operand.bool false}),
+                                global)
+                            end
+                       | Control.Limit =>
+                            (dontCollect, Vector.new0 (), Operand.bool false)
+                       | Control.Every =>
+                            (collect, Vector.new0 (), Operand.bool true)
+                   val func = CFunction.gc {maySwitchThreads = handlesSignals}
+                   val _ =
+                      newBlocks :=
+                      Block.T {args = Vector.new0 (),
+                               kind = Kind.Jump,
+                               label = collect,
+                               statements = Vector.new0 (),
+                               transfer = (Transfer.CCall
+                                           {args = Vector.new3 (Operand.GCState,
+                                                                amount,
+                                                                force),
+                                            func = func,
+                                            return = SOME collectReturn})}
+                      :: (Block.T
+                          {args = Vector.new0 (),
+                           kind = Kind.CReturn {func = func},
+                           label = collectReturn,
+                           statements = collectReturnStatements,
+                           transfer = Transfer.Goto {dst = dontCollect,
+                                                     args = Vector.new0 ()}})
+                      :: Block.T {args = Vector.new0 (),
+                                  kind = Kind.Jump,
+                                  label = dontCollect,
+                                  statements = statements,
+                                  transfer = transfer}
+                      :: !newBlocks
+                in
+                   {collect = collect,
+                    dontCollect = dontCollect'}
+                end
+(*
+             fun insert (amount: Operand.t (* of type word *)) =
+                let
+                   val collect = Label.newNoname ()
                    val collectZero = Label.newNoname ()
                    val collectReturn = Label.newNoname ()
                    val tisCCall = Label.newNoname ()
@@ -350,6 +419,7 @@ fun insertFunction (f: Function.t,
                    {collect = collect,
                     dontCollect = dontCollect'}
                 end
+*)
              fun newBlock (isFirst, statements, transfer) =
                 let
                    val (args, kind, label) =

@@ -69,11 +69,6 @@ void lock_lock_explicit(lock_t *lock, bool check) {
     if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
         GC_TerminateThread(s);
     }
-
-    if (Proc_threadInSection ()) {
-        ENTER0(s);
-        LEAVE0(s);
-    }
   }
 }
 

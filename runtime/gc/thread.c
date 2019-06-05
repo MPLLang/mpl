@@ -17,7 +17,12 @@
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-void GC_HH_newHeap(pointer threadp) {
+pointer GC_HH_newHeap() {
+  GC_state s = pthread_getspecific(gcstate_key);
+  return (pointer)HM_HH_new(s);
+}
+
+void GC_HH_attachHeap(pointer threadp, pointer hhp) {
   GC_state s = pthread_getspecific(gcstate_key);
   objptr threadop = pointerToObjptr(threadp, NULL);
   GC_thread thread = threadObjptrToStruct(s, threadop);
@@ -34,7 +39,7 @@ void GC_HH_newHeap(pointer threadp) {
     DIE("tried to assign hierarchical heap, but thread already has one");
   }
 
-  thread->hierarchicalHeap = HM_HH_new(s);
+  thread->hierarchicalHeap = (struct HM_HierarchicalHeap *)hhp;
 }
 
 Word32 GC_HH_getLevel(pointer threadp) {
@@ -49,7 +54,7 @@ Word32 GC_HH_getLevel(pointer threadp) {
 void GC_HH_setLevel(pointer threadp, Word32 level) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-  
+
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
   HM_HH_setLevel(s, thread->hierarchicalHeap, level);
@@ -61,6 +66,8 @@ void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
   objptr childop = pointerToObjptr(childp, NULL);
   GC_thread parent = threadObjptrToStruct(s, parentop);
   GC_thread child = threadObjptrToStruct(s, childop);
+
+  // struct HM_HierarchicalHeap* childhh = (struct HM_HierarchicalHeap*)childhhp;
 
 #if ASSERT
   assert(parentop != BOGUS_OBJPTR);

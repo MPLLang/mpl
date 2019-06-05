@@ -52,16 +52,6 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList,
  */
 // void* HM_freeLevelListIterator(void* arg);
 
-#if ASSERT
-void assertObjptrInHH(objptr op) {
-  assert(HM_getChunkOf(objptrToPointer(op, NULL)));
-}
-#else
-void assertObjptrInHH(objptr op) {
-  ((void)op);
-}
-#endif
-
 /************************/
 /* Function Definitions */
 /************************/
@@ -552,8 +542,6 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
 void HM_getObjptrInfo(GC_state s,
                       objptr object,
                       struct HM_ObjptrInfo* info) {
-  assertObjptrInHH(object);
-
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
   assert(NULL != chunk);
 
@@ -591,9 +579,9 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 
   if (list2->firstChunk != NULL) {
     list2->firstChunk->prevChunk = list1->lastChunk;
+    list1->lastChunk = list2->lastChunk;
   }
 
-  list1->lastChunk = list2->lastChunk;
   list1->size += list2->size;
   list2->parent = list1;
 
@@ -742,10 +730,6 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
 Word32 HM_getObjptrLevel(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
 }
-
-// rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
-//   return &HM_getObjptrHH(s, object)->lock;
-// }
 
 bool HM_isObjptrInToSpace(GC_state s, objptr object) {
   /* SAM_NOTE: why is this commented out? why are there two ways to check if

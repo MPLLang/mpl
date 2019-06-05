@@ -79,23 +79,11 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
-                                                  NULL)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
                                                       NULL);
 }
 
-void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
-                                                  NULL)));
-
-  s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
-                                                          NULL);
-}
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -105,20 +93,16 @@ void HM_HHC_collectLocal(void) {
   struct rusage ru_start;
   struct timespec startTime;
   struct timespec stopTime;
-  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, NULL);
-  bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
+
+  if (HM_HH_getShallowestPrivateLevel(s, hh) == 0) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
+    return;
+  }
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
     return;
-  }
-
-  if (Parallel_alreadyLockedByMe(wsQueueLock)) {
-    /* in a scheduler critical section, so cannot collect */
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
-        "Queue locked by mutator/scheduler");
-    queueLockHeld = TRUE;
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -141,12 +125,6 @@ void HM_HHC_collectLocal(void) {
                   processor,
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
-
-  /* lock queue to prevent steals */
-  if (!queueLockHeld) {
-    Parallel_lockTake(wsQueueLock);
-  }
-  // lockWriterHH(hh);
 
   assertInvariants(s, hh);
 
@@ -449,13 +427,6 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
-  /* RAM_NOTE: This can be moved earlier? */
-  /* unlock hh and queue */
-  // unlockWriterHH(hh);
-  if (!queueLockHeld) {
-    Parallel_lockRelease(wsQueueLock);
-  }
-
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "
                   "HierarchicalHeap = %p\n",
@@ -582,7 +553,7 @@ void forwardHHObjptr (GC_state s,
       op,
       (uintptr_t)p);
 
-  if (!isObjptr(op) || isObjptrInGlobalHeap(s, op)) {
+  if (!isObjptr(op) || isObjptrInRootHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",
@@ -591,9 +562,6 @@ void forwardHHObjptr (GC_state s,
         (uintptr_t)p);
     return;
   }
-
-  // if it's not in the global heap, then it must be in the HH
-  assertObjptrInHH(op);
 
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
@@ -626,52 +594,23 @@ void forwardHHObjptr (GC_state s,
       return;
   }
 
-  /* We look for the top-most collectible replica (tmcr) of p present in the
-   * collection range, that is in [arg->maxLevel, arg->minLevel]. Depending on
-   * what we find, we might have to create a copy or not. There are three cases:
-   *
-   * 1/ The tmcr is in to-space. No copying is needed, the address of the tmcr
-   * is the new location of p.
-   *
-   * 2/ The tmcr is in from-space and has been forwarded. No copy is needed, the
-   * target of the tmcr's forwarding pointer (necessarily outside collection
-   * range) is the new location of p.
-   *
-   * 3/ The tmcr is in from-space and has no forwarding pointer. The tmcr must
-   * be copied in to-space; the resulting address is the new location of p.
-   */
+  assert(HM_getObjptrLevel(op) >= args->minLevel);
 
-  /* find the top-most collectible replica */
-  p = HM_followForwardPointerUntilNullOrBelowLevel(s,
-                                                   p,
-                                                   args->minLevel);
-  op = pointerToObjptr(p, NULL);
-  HM_getObjptrInfo(s, op, &opInfo);
-
-  if (HM_isObjptrInToSpace(s, op)) {
-    /* just use p/op */
+  if (hasFwdPtr(p)) {
+    op = getFwdPtr(p);
     *opp = op;
+    p = objptrToPointer(op, NULL);
 
-    if (DEBUG_DETAILED) {
-      fprintf (stderr, "  already FORWARDED\n");
-    }
+    assert(!hasFwdPtr(p));
+    assert(HM_isObjptrInToSpace(s, op));
 
-    /* objects in to-space should not themselves have forwarding pointers */
-    assert (!hasFwdPtr(p));
-    /* to-space should be copying */
-    assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
-    /* should not have copy-forwarded anything below 'args->minLevel'! */
-    assert (opInfo.level >= args->minLevel);
-  } else if (hasFwdPtr(p)) {
-    /* just use the forwarding pointer of p */
-    *opp = getFwdPtr(p);
+  } else if (HM_isObjptrInToSpace(s, op)) {
+    /* do nothing; this could be a large object that had its chunk moved
+     * rather than copied */
+    assert(!hasFwdPtr(p));
 
-    /* should point outside collectible zone */
-#if ASSERT
-    HM_getObjptrInfo(s, *opp, &opInfo);
-    assert (opInfo.level < args->minLevel);
-#endif
   } else {
+    assert(!HM_isObjptrInToSpace(s, op));
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;

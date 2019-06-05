@@ -14,11 +14,9 @@ local
 
   FORK_JOIN.sig
   queue/QUEUE.sig
-  mailboxes/MAILBOXES.sig
 
   SimpleRandom.sml
   queue/ArrayQueue.sml
-  mailboxes/Mailboxes.sml
   Scheduler.sml
 in
   structure ForkJoin

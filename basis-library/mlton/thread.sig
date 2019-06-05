@@ -42,26 +42,23 @@ signature MLTON_THREAD =
 
       structure HierarchicalHeap :
         sig
-          (* Give the specified thread its own heap; return false if it already
-           * has one. The specified thread must be inactive and must not
-           * already have an associated heap. *)
-          val newHeap : Basic.t -> unit
+          type thread = Basic.t
 
           (* The level (depth) of a thread's heap in the hierarchy. *)
-          val getLevel : Basic.t -> int
-          val setLevel : Basic.t * int -> unit
+          val getLevel : thread -> int
+          val setLevel : thread * int -> unit
 
           (* `attachChild (parent, child, depth)`
-           * Requires that child is inactive and already has an associated heap.
-           * Implicitly sets child's level to begin allocating at depth+1. *)
-          val attachChild : Basic.t * Basic.t * int -> unit
+           * Attach child heap and implicitly set child's level to begin
+           * allocating at depth+1. *)
+          val attachChild : thread * thread * int -> unit
 
           (* Merge the heap of the deepest child of this thread. Requires that
            * this child is inactive and has an associated heap. *)
-          val mergeDeepestChild : Basic.t -> unit
+          val mergeDeepestChild : thread -> unit
 
           (* Move all chunks at the current level up one level. *)
-          val promoteChunks : Basic.t -> unit
+          val promoteChunks : thread -> unit
         end
 
       type 'a t
