@@ -416,6 +416,12 @@ void HM_HHC_collectLocal(void) {
   });
   hh->lastAllocatedChunk = lastChunk;
 
+  if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
+    if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
+      DIE("Ran out of space for hierarchical heap!\n");
+    }
+  }
+
   /* SAM_NOTE: the following assert is broken, because it is possible that
    * lastChunk == NULL (if we collected everything). Also, note that even when
    * lastChunk != NULL, this assert sometimes trips... which is puzzling,
