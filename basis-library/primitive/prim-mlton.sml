@@ -171,6 +171,9 @@ structure Parallel =
 
       val processorNumber =
          _import "Parallel_processorNumber" impure private: unit -> Int32.int;
+
+      val compareAndSwap =
+        _prim "Ref_cas": 'a ref * 'a * 'a -> 'a;
    end
 
 structure Platform =

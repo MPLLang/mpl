@@ -341,6 +341,17 @@ MLTON_CODEGEN_MEMCPY(void * memcpy(void *, const void*, size_t);)
 /*                 References                        */
 /* ------------------------------------------------- */
 
+#define RefW8_cas(r, x, y) __sync_val_compare_and_swap((Word8*)r, x, y)
+#define RefW16_cas(r, x, y) __sync_val_compare_and_swap((Word16*)r, x, y)
+#define RefW32_cas(r, x, y) __sync_val_compare_and_swap((Word32*)r, x, y)
+#define RefW64_cas(r, x, y) __sync_val_compare_and_swap((Word64*)r, x, y)
+
+#define RefR32_cas(r, x, y) __sync_val_compare_and_swap((Real32*)r, x, y)
+#define RefR64_cas(r, x, y) __sync_val_compare_and_swap((Real64*)r, x, y)
+
+#define RefP_cas(r, x, y) __sync_val_compare_and_swap((Objptr*)r, x, y)
+#define RefQ_cas(r, x, y) __sync_val_compare_and_swap((CPointer*)r, x, y)
+
 extern void Assignable_writeBarrier(CPointer, Objptr, Objptr*, Objptr);
 
 static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {

@@ -493,6 +493,15 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                           Ref v => v
                         | Type _ => result ()
                         | _ => typeError ())
+       | Ref_cas _ =>
+            let
+              val (r, x, y) = threeArgs ()
+            in
+              (case dest r of
+                 Ref v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
+            end
        | Ref_ref =>
             let
                val r = result ()

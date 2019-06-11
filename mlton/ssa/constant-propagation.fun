@@ -959,6 +959,9 @@ fun transform (program: Program.t): Program.t =
                      in
                         r
                      end
+                | Ref_cas _ =>
+                    (coerce {from = arg 2, to = deref (arg 0)}
+                     ; deref (arg 0))
                 | Vector_length => vectorLength (arg 0)
                 | Vector_sub => devector (arg 0)
                 | Vector_vector => vector ()

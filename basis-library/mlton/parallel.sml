@@ -105,7 +105,7 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     (* ========================== compareAndSwap ========================== *)
 
-    local
+    (* local
        structure I =
           Int_ChooseInt
           (type 'a t = 'a ref * 'a * 'a -> 'a
@@ -117,7 +117,9 @@ structure MLtonParallel:> MLTON_PARALLEL =
     in
        fun compareAndSwap r (old, new) =
           I.f (r, old, new)
-    end
+    end *)
+
+    fun compareAndSwap r (old, new) = Prim.compareAndSwap (r, old, new)
 
     fun arrayCompareAndSwap (xs, i) (old, new) =
       if i < 0 orelse i >= Array.length xs

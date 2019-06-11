@@ -573,6 +573,11 @@ fun transform (program: Program.t): Program.t =
                    | Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
                    | Ref_deref => return (deref (arg 0))
                    | Ref_ref => coerce {from = arg 0, to = deref result}
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Ref_cas _ => (unify (arg 1, arg 2)
+                                   ; unify (arg 1, deref (arg 0))
+                                   ; unify (result, deref (arg 0)))
                    | Vector_length => return (vectorLength (arg 0))
                    | Vector_sub => (arg 1 dependsOn result
                                     ; return (devector (arg 0)))

@@ -715,6 +715,11 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                    * be flattened.
                    *)
                   dontFlatten ()
+
+             | Ref_cas _ =>
+                 (* no CAS on wide objects (probably not machine-supported) *)
+                 dontFlatten ()
+
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()

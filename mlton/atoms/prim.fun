@@ -144,6 +144,7 @@ datatype 'a t =
  | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
  | Ref_deref (* to ssa2 *)
  | Ref_ref (* to ssa2 *)
+ | Ref_cas of CType.t option (* codegen *)
  | String_toWord8Vector (* defunctorize *)
  | Thread_atomicBegin (* to rssa *)
  | Thread_atomicEnd (* to rssa *)
@@ -320,6 +321,8 @@ fun toString (n: 'a t): string =
        | Ref_assign {writeBarrier=false} => "Ref_assign_noWriteBarrier"
        | Ref_deref => "Ref_deref"
        | Ref_ref => "Ref_ref"
+       | Ref_cas NONE => "Ref_cas"
+       | Ref_cas (SOME ctype) => concat ["Ref", CType.name ctype, "_cas"]
        | String_toWord8Vector => "String_toWord8Vector"
        | Thread_atomicBegin => "Thread_atomicBegin"
        | Thread_atomicEnd => "Thread_atomicEnd"
@@ -485,6 +488,8 @@ val equals: 'a t * 'a t -> bool =
     | (Ref_assign wb1, Ref_assign wb2) => wb1 = wb2
     | (Ref_deref, Ref_deref) => true
     | (Ref_ref, Ref_ref) => true
+    | (Ref_cas NONE, Ref_cas NONE) => true
+    | (Ref_cas (SOME ctype1), Ref_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (String_toWord8Vector, String_toWord8Vector) => true
     | (Thread_atomicBegin, Thread_atomicBegin) => true
     | (Thread_atomicEnd, Thread_atomicEnd) => true
@@ -656,6 +661,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Real_sub z => Real_sub z
     | Ref_assign wb => Ref_assign wb
     | Ref_deref => Ref_deref
+    | Ref_cas ctyp => Ref_cas ctyp
     | Ref_ref => Ref_ref
     | String_toWord8Vector => String_toWord8Vector
     | Thread_atomicBegin => Thread_atomicBegin
@@ -716,6 +722,7 @@ val arrayUpdate = Array_update {writeBarrier=true}
 val assign = Ref_assign {writeBarrier=true}
 val bogus = MLton_bogus
 val bug = MLton_bug
+fun cas ctype = Ref_cas (SOME ctype)
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
@@ -916,6 +923,7 @@ val kind: 'a t -> Kind.t =
        | Ref_assign _ => SideEffect
        | Ref_deref => DependsOnState
        | Ref_ref => Moveable
+       | Ref_cas _ => SideEffect
        | String_toWord8Vector => Functional
        | Thread_atomicBegin => SideEffect
        | Thread_atomicEnd => SideEffect
@@ -1094,6 +1102,7 @@ in
        Ref_assign {writeBarrier=false},
        Ref_deref,
        Ref_ref,
+       Ref_cas NONE,
        String_toWord8Vector,
        Thread_atomicBegin,
        Thread_atomicEnd,
@@ -1116,6 +1125,7 @@ in
        WordVector_toIntInf,
        Word8Vector_toString,
        World_save]
+      @ List.map (CType.all, fn ctype => Ref_cas (SOME ctype))
       @ List.concat [List.concatMap (RealSize.all, reals),
                      List.concatMap (WordSize.prims, words)]
       @ let
@@ -1418,6 +1428,7 @@ fun 'a checkApp (prim: 'a t,
        | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
        | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
        | Ref_ref => oneTarg (fn t => (oneArg t, reff t))
+       | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
        | Thread_atomicBegin => noTargs (fn () => (noArgs, unit))
        | Thread_atomicEnd => noTargs (fn () => (noArgs, unit))
        | Thread_atomicState => noTargs (fn () => (noArgs, word32))
@@ -1525,6 +1536,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_deref => one (deRef (arg 0))
        | Ref_ref => one (deRef result)
+       | Ref_cas _ => one (deRef (arg 0))
        | Vector_length => one (deVector (arg 0))
        | Vector_sub => one (deVector (arg 0))
        | Vector_vector => one (deVector result)
@@ -2203,6 +2215,7 @@ fun ('a, 'b) layoutApp (p: 'a t,
        | Ref_assign _ => two ":="
        | Ref_deref => one "!"
        | Ref_ref => one "ref"
+       | Ref_cas _ => one "cas"
        | Vector_length => one "length"
        | Word_add _ => two "+"
        | Word_addCheck _ => two "+"

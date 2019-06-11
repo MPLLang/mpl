@@ -136,6 +136,7 @@ signature PRIM =
              | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
              | Ref_deref (* to ssa2 *)
              | Ref_ref (* to ssa2 *)
+             | Ref_cas of CType.t option (* codegen *)
              | String_toWord8Vector (* defunctorize *)
              | Thread_atomicBegin (* to rssa *)
              | Thread_atomicEnd (* to rssa *)
@@ -226,6 +227,7 @@ signature PRIM =
       val assign: 'a t
       val bogus: 'a t
       val bug: 'a t
+      val cas : CType.t -> 'a t
       val checkApp: 'a t * {args: 'a vector,
                             result: 'a,
                             targs: 'a vector,

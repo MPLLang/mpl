@@ -1256,7 +1256,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      datatype z = datatype Prim.Name.t
                            in
                               case Prim.name prim of
-                                 Array_alloc {raw} =>
+                                 Ref_cas NONE =>
+                                    (case toRtype ty of
+                                       NONE => none ()
+                                     | SOME rty => primApp (Prim.cas (Type.toCType rty)))
+                               | Array_alloc {raw} =>
                                     let
                                        val allocOpt = fn () =>
                                           let
