@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -49,12 +50,10 @@ structure Cache:
       type 'a t = (Stype.t vector * Word.t * 'a) HashSet.t
 
       local
-         val generator: Word.t = 0wx5555
          val base = Random.word ()
       in
          fun hash ts =
-            Vector.fold (ts, base, fn (t, w) =>
-                         Word.xorb (w * generator, Stype.hash t))
+            Hash.combine (base, Hash.vectorMap (ts, Stype.hash))
          fun equal (ts, ts') =
             Vector.equals (ts, ts', Stype.equals)
       end
@@ -307,8 +306,7 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
                   SprimExp.Case
                   {test = monoVarExp test,
                    cases = cases,
-                   default = Option.map (default, fn (e, r) =>
-                                         (monoExp e, r))}
+                   default = Option.map (default, monoExp)}
                end
           | XprimExp.ConApp {con, targs, arg} =>
                let val con = monoCon (con, targs)
@@ -418,19 +416,10 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
                 end
            | Xdec.Exception {con, arg} =>
                 let
-                   val con' =
-                      if Con.equals (con, Con.overflow)
-                         then
-                            (* We avoid renaming Overflow because the closure
-                             * converter needs to recognize it.  This is not
-                             * safe in general, but is OK in this case because
-                             * we know there is only one Overflow excon.
-                             *)
-                            con
-                      else Con.new con
+                   val con' = Con.new con
                    val _ = setCon (con, fn _ => con')
                 in
-                   fn () => 
+                   fn () =>
                    [Sdec.Exception {con = con',
                                     arg = monoTypeOpt arg}]
                 end) arg
@@ -441,8 +430,7 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
       val datatypes = finishDbs []
       val program =
          Sprogram.T {datatypes = Vector.fromList datatypes,
-                     body = body,
-                     overflow = NONE}
+                     body = body}
       val _ = Sprogram.clear program
       val _ = destroyCon ()
       val _ = destroyTycon ()

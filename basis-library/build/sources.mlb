@@ -1,8 +1,8 @@
-(* Copyright (C) 2013,2016 Matthew Fluet.
+(* Copyright (C) 2013,2016-2017 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -29,7 +29,8 @@ in
       ../config/bind/word-prim.sml
    in ann "forceUsed" in
       ../config/objptr/objptr-$(OBJPTR_REP).sml
-      ../config/metadata/metadata-$(METADATA_SIZE).sml
+      ../config/metadata/sequence-metadata-$(SEQUENCE_METADATA_SIZE).sml
+      ../config/metadata/normal-metadata-$(NORMAL_METADATA_SIZE).sml
       ../config/seqindex/seqindex-$(SEQINDEX_INT).sml
       $(LIB_MLTON_DIR)/targets/$(TARGET)/sml/c-types.sml
    end end

@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -80,7 +80,7 @@ in
             let
                val _ =
                   CharArray.update
-                  (buf, i, StringCvt.digitToChar (toInt (~? (rem (q, radix)))))
+                  (buf, i, StringCvt.digitToChar (toInt (~! (rem (q, radix)))))
                val q = quot (q, radix)
             in
                if q = zero
@@ -103,7 +103,7 @@ in
                else loop (q, Int.- (i, 1))
             end
       in
-         loop (if n < zero then n else ~? n, Int.- (maxNumDigits, 1))
+         loop (if n < zero then n else ~! n, Int.- (maxNumDigits, 1))
       end)
 end      
 
@@ -138,15 +138,15 @@ fun scan radix reader s =
                           | SOME (c, s') =>
                                case charToDigit c of
                                   NONE => SOME (zero, s)
-                                | SOME n => finishNum (s', ~? n)
+                                | SOME n => finishNum (s', ~! n)
                       else
                          case charToDigit c of
                             NONE => SOME (zero, s)
-                          | SOME n => finishNum (s', ~? n))
+                          | SOME n => finishNum (s', ~! n))
           | (SOME (c, s), _) =>
                case charToDigit c of
                   NONE => NONE
-                | SOME n => finishNum (s, ~? n)
+                | SOME n => finishNum (s, ~! n)
     fun negate s =
        case num s of
           NONE => NONE

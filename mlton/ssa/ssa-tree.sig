@@ -1,55 +1,18 @@
-(* Copyright (C) 2009,2017 Matthew Fluet.
+(* Copyright (C) 2009,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
-signature SSA_TREE_STRUCTS =
+signature SSA_TREE_STRUCTS = 
    sig
       include ATOMS
    end
 
-signature HANDLER =
-   sig
-      structure Label: LABEL
-
-      datatype t =
-         Caller
-       | Dead
-       | Handle of Label.t
-
-      val equals: t * t -> bool
-      val foldLabel: t * 'a * (Label.t * 'a -> 'a) -> 'a
-      val foreachLabel: t * (Label.t -> unit) -> unit
-      val layout: t -> Layout.t
-      val map: t * (Label.t -> Label.t) -> t
-   end
-
-signature RETURN =
-   sig
-      structure Label: LABEL
-
-      structure Handler: HANDLER
-      sharing Label = Handler.Label
-
-      datatype t =
-         Dead
-       | NonTail of {cont: Label.t,
-                     handler: Handler.t}
-       | Tail
-
-      val compose: t * t -> t
-      val foldLabel: t * 'a * (Label.t * 'a -> 'a) -> 'a
-      val foreachHandler: t * (Label.t -> unit) -> unit
-      val foreachLabel: t * (Label.t -> unit) -> unit
-      val layout: t -> Layout.t
-      val map: t * (Label.t -> Label.t) -> t
-   end
-
-signature SSA_TREE =
+signature SSA_TREE = 
    sig
       include SSA_TREE_STRUCTS
 
@@ -147,39 +110,14 @@ signature SSA_TREE =
             val var: t -> Var.t option
          end
 
-      structure Cases:
-         sig
-            datatype t =
-               Con of (Con.t * Label.t) vector
-             | Word of WordSize.t * (WordX.t * Label.t) vector
-
-            val forall: t * (Label.t -> bool) -> bool
-            val foreach: t * (Label.t -> unit) -> unit
-            val hd: t -> Label.t
-            val isEmpty: t -> bool
-            val length: t -> int
-            val map: t * (Label.t -> Label.t) -> t
-         end
-
-      structure Handler: HANDLER
-      sharing Handler.Label = Label
-
-      structure Return: RETURN
-      sharing Return.Handler = Handler
-
       structure Transfer:
          sig
             datatype t =
-               Arith of {args: Var.t vector,
-                         overflow: Label.t, (* Must be nullary. *)
-                         prim: Type.t Prim.t,
-                         success: Label.t, (* Must be unary. *)
-                         ty: Type.t} (* int or word *)
-             | Bug  (* MLton thought control couldn't reach here. *)
+               Bug  (* MLton thought control couldn't reach here. *)
              | Call of {args: Var.t vector,
                         func: Func.t,
                         return: Return.t}
-             | Case of {cases: Cases.t,
+             | Case of {cases: (Con.t, Label.t) Cases.t,
                         default: Label.t option, (* Must be nullary. *)
                         test: Var.t}
              | Goto of {args: Var.t vector,
@@ -191,7 +129,7 @@ signature SSA_TREE =
              | Return of Var.t vector
              | Runtime of {args: Var.t vector,
                            prim: Type.t Prim.t,
-                           return: Label.t} (* Must be nullary. *)
+                           return: Label.t}
 
             val equals: t * t -> bool
             val foreachFunc : t * (Func.t -> unit) -> unit
@@ -302,5 +240,7 @@ signature SSA_TREE =
             val layouts: t * (Layout.t -> unit) -> unit
             val layoutStats: t -> Layout.t
             val mainFunction: t -> Function.t
+            val parse: unit -> t Parse.t
+            val toFile: {style: Control.style, suffix: string, display: t Control.display}
          end
    end

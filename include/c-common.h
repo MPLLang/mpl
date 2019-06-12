@@ -1,8 +1,9 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -18,24 +19,11 @@
 /* A key whose value will be a unique integer per thread */
 extern C_Pthread_Key_t gcstate_key;
 
-struct cont {
-        void *nextChunk;
-        uintptr_t nextFun;
-};
-
-PRIVATE extern struct cont (*nextChunks []) (void);
-
 #define ChunkName(n) Chunk ## n
 
 #define DeclareChunk(n)                         \
-        PRIVATE struct cont ChunkName(n)(uintptr_t l_nextFun)
+        PRIVATE uintptr_t ChunkName(n)(CPointer gcState, CPointer stackTop, CPointer frontier, uintptr_t nextBlock)
 
 #define Chunkp(n) &(ChunkName(n))
-
-#define PrepFarJump(cont, n, l)                         \
-        do {                                            \
-                cont.nextChunk = (void*)ChunkName(n);   \
-                cont.nextFun = l;                       \
-        } while (0)
 
 #endif /* #ifndef _C_COMMON_H_ */

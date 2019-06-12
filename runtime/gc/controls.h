@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -77,7 +77,7 @@ struct GC_controls {
   bool mayProcessAtMLton;
   bool messages; /* Print a message at the start and end of each gc. */
   bool HMMessages; /* print messages regarding heap management */
-  size_t oldGenArraySize; /* Arrays larger are allocated in old gen, if possible. */
+  size_t oldGenSequenceSize; /* Sequences larger are allocated in old gen, if possible. */
   size_t allocChunkSize; /* Minimum size reserved for any allocation request. */
   int32_t affinityBase; /* First processor to use when setting affinity */
   int32_t affinityStride; /* Number of processors between first and second */

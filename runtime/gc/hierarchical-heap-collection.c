@@ -535,10 +535,10 @@ void forwardHHObjptr (GC_state s,
       metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       copyBytes = objectBytes;
-    } else if (ARRAY_TAG == tag) {
-      metaDataBytes = GC_ARRAY_METADATA_SIZE;
-      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
-                                           bytesNonObjptrs, numObjptrs);
+    } else if (SEQUENCE_TAG == tag) {
+      metaDataBytes = GC_SEQUENCE_METADATA_SIZE;
+      objectBytes = sizeofSequenceNoMetaData (s, getSequenceLength (p),
+                                              bytesNonObjptrs, numObjptrs);
       copyBytes = objectBytes;
     } else {
       /* Stack. */

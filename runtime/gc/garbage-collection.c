@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -246,20 +246,23 @@ size_t fillGap (pointer start, pointer end) {
   }
 
   if (DEBUG)
-    fprintf (stderr, "[GC: Filling gap between "FMTPTR" and "FMTPTR" (size = "FMTARRLEN").]\n",
+    fprintf (stderr, "[GC: Filling gap between "FMTPTR" and "FMTPTR" (size = "FMTSEQLEN").]\n",
              (uintptr_t)start, (uintptr_t)end, diff);
 
   if (start) {
-    if (diff >= GC_ARRAY_METADATA_SIZE) {
+    if (diff >= GC_SEQUENCE_METADATA_SIZE) {
       /* Counter */
-      *((GC_arrayCounter *)start) = 0;
-      start = start + GC_ARRAY_COUNTER_SIZE;
+      *((GC_sequenceCounter *)start) = 0;
+      start = start + GC_SEQUENCE_COUNTER_SIZE;
       /* Length */
-      *((GC_arrayLength *)start) = diff - GC_ARRAY_METADATA_SIZE;
-      start = start + GC_ARRAY_LENGTH_SIZE;
+      *((GC_sequenceLength *)start) = diff - GC_SEQUENCE_METADATA_SIZE;
+      start = start + GC_SEQUENCE_LENGTH_SIZE;
       /* Header */
       *((GC_header *)start) = GC_WORD8_VECTOR_HEADER;
       start = start + GC_HEADER_SIZE;
+      /* FwdPtr */
+      *((objptr *)start) = BOGUS_OBJPTR;
+      start = start + OBJPTR_SIZE;
     }
     else if (diff == GC_HEADER_SIZE) {
       *((GC_header *)start) = GC_HEADER_ONLY_HEADER;

@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2011,2017 Matthew Fluet.
+(* Copyright (C) 2009,2011,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -35,9 +35,6 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
          in
             fn x => setVarIndex (x, Counter.next c)
          end
-      (* Keep track of variables used as overflow variables. *)
-      val {get = overflowVar: Var.t -> bool, set = setOverflowVar, ...} =
-         Property.getSetOnce (Var.plist, Property.initConst false)
       (* Keep track of the replacements of variables. *)
       val {get = replace: Var.t -> Var.t option, set = setReplace, ...} =
          Property.getSetOnce (Var.plist, Property.initConst NONE)
@@ -104,31 +101,75 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
           | _ => e
 
       (* Keep a hash table of canonicalized Exps that are in scope. *)
-      val table: {hash: word, exp: Exp.t, var: Var.t} HashSet.t =
-         HashSet.new {hash = #hash}
-      fun lookup (var, exp, hash) =
-         HashSet.lookupOrInsert
-         (table, hash,
-          fn {exp = exp', ...} => Exp.equals (exp, exp'),
-          fn () => {exp = exp,
-                    hash = hash,
-                    var = var})
+      val table: (Exp.t, Var.t) HashTable.t =
+         HashTable.new {hash = Exp.hash, equals = Exp.equals}
+      fun lookup (var, exp) =
+         HashTable.lookupOrInsert
+         (table, exp, fn () => var)
+
+      fun doitStatements (statements, remove) =
+         Vector.keepAllMap
+         (statements,
+          fn Statement.T {var, ty, exp} =>
+          let
+             val exp = canon exp
+             fun keep () = SOME (Statement.T {var = var,
+                                              ty = ty,
+                                              exp = exp})
+          in
+             case var of
+                NONE => keep ()
+              | SOME var =>
+                   let
+                      val _ = setVarIndex var
+                      fun replace var' =
+                         (setReplace (var, SOME var'); NONE)
+                      fun doit () =
+                         let
+                            val var' = lookup (var, exp)
+                         in
+                            if Var.equals(var, var')
+                              then (List.push (remove, (exp, var'))
+                                    ; keep ())
+                              else replace var'
+                         end
+                   in
+                      case exp of
+                         PrimApp ({args, prim, ...}) =>
+                            let
+                               fun arg () = Vector.first args
+                               fun knownLength var' =
+                                  let
+                                     val _ = setLength (var, SOME var')
+                                  in
+                                     keep ()
+                                  end
+                               fun conv () =
+                                  case getLength (arg ()) of
+                                     NONE => keep ()
+                                   | SOME var' => knownLength var'
+                               fun length () =
+                                  case getLength (arg ()) of
+                                     NONE => doit ()
+                                   | SOME var' => replace var'
+                               datatype z = datatype Prim.Name.t
+                            in
+                               case Prim.name prim of
+                                  Array_alloc _ => knownLength (arg ())
+                                | Array_length => length ()
+                                | Array_toArray => conv ()
+                                | Array_toVector => conv ()
+                                | Vector_length => length ()
+                                | _ => if Prim.isFunctional prim
+                                          then doit ()
+                                       else keep ()
+                            end
+                       | _ => doit ()
+                   end
+          end)
 
       (* All of the globals are in scope, and never go out of scope. *)
-      (* The hash-cons'ing of globals in ConstantPropagation ensures
-       *  that each global is unique.
-       *)
-      val _ =
-         Vector.foreach
-         (globals, fn Statement.T {var, exp, ...} =>
-          let
-             val var = valOf var
-             val () = setVarIndex var
-             val exp = canon exp
-             val _ = lookup (var, exp, Exp.hash exp)
-          in
-             ()
-          end)
+      val globals = doitStatements (globals, ref [])
 
       fun doitTree tree =
          let
@@ -160,137 +201,24 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
                   val _ = List.foreach
                           (!add, fn (var, exp) =>
                            let
-                             val hash = Exp.hash exp
-                             val elem as {var = var', ...} = lookup (var, exp, hash)
+                             val var' = lookup (var, exp)
                              val _ = if Var.equals(var, var')
-                                       then List.push (remove, elem)
+                                       then List.push (remove, (exp, var'))
                                        else ()
                            in
                              ()
                            end)
                   val _ = diag "added"
-
                   val _ =
                      Vector.foreach
                      (args, fn (var, _) => setVarIndex var)
                   val statements =
-                     Vector.keepAllMap
-                     (statements,
-                      fn Statement.T {var, ty, exp} =>
-                      let
-                         val exp = canon exp
-                         fun keep () = SOME (Statement.T {var = var,
-                                                          ty = ty,
-                                                          exp = exp})
-                      in
-                         case var of
-                            NONE => keep ()
-                          | SOME var =>
-                               let
-                                  val _ = setVarIndex var
-                                  fun replace var' =
-                                     (setReplace (var, SOME var'); NONE)
-                                  fun doit () =
-                                     let
-                                        val hash = Exp.hash exp
-                                        val elem as {var = var', ...} =
-                                           lookup (var, exp, hash)
-                                     in
-                                        if Var.equals(var, var')
-                                          then (List.push (remove, elem)
-                                                ; keep ())
-                                          else replace var'
-                                     end
-                               in
-                                  case exp of
-                                     PrimApp ({args, prim, ...}) =>
-                                        let
-                                           fun arg () = Vector.first args
-                                           fun knownLength var' =
-                                              let
-                                                 val _ = setLength (var, SOME var')
-                                              in
-                                                 keep ()
-                                              end
-                                           fun conv () =
-                                              case getLength (arg ()) of
-                                                 NONE => keep ()
-                                               | SOME var' => knownLength var'
-                                           fun length () =
-                                              case getLength (arg ()) of
-                                                 NONE => doit ()
-                                               | SOME var' => replace var'
-                                           datatype z = datatype Prim.Name.t
-                                        in
-                                           case Prim.name prim of
-                                              Array_alloc _ => knownLength (arg ())
-                                            | Array_length => length ()
-                                            | Array_toArray => conv ()
-                                            | Array_toVector => conv ()
-                                            | Vector_length => length ()
-                                            | _ => if Prim.isFunctional prim
-                                                      then doit ()
-                                                   else keep ()
-                                        end
-                                   | _ => doit ()
-                               end
-                      end)
+                     doitStatements (statements, remove)
                   val _ = diag "statements"
                   val transfer = Transfer.replaceVar (transfer, canonVar)
                   val transfer =
                      case transfer of
-                        Arith {prim, args, overflow, success, ...} =>
-                           let
-                              val {args = succArgs,
-                                   inDeg = succInDeg,
-                                   add = succAdd, ...} =
-                                 labelInfo success
-                              val {inDeg = overInDeg,
-                                   add = overAdd, ...} =
-                                 labelInfo overflow
-                              val exp = canon (PrimApp {prim = prim,
-                                                        targs = Vector.new0 (),
-                                                        args = args})
-                              val hash = Exp.hash exp
-                           in
-                              case HashSet.peek
-                                   (table, hash,
-                                    fn {exp = exp', ...} => Exp.equals (exp, exp')) of
-                                 SOME {var, ...} =>
-                                    if overflowVar var
-                                       then Goto {dst = overflow,
-                                                  args = Vector.new0 ()}
-                                    else (if !succInDeg = 1
-                                             then let
-                                                     val (var', _) =
-                                                        Vector.first succArgs
-                                                  in
-                                                     setReplace (var', SOME var)
-                                                  end
-                                          else ()
-                                          ; Goto {dst = success,
-                                                  args = Vector.new1 var})
-                               | NONE => (if !succInDeg = 1
-                                             then let
-                                                     val (var, _) =
-                                                        Vector.first succArgs
-                                                  in
-                                                     List.push
-                                                     (succAdd, (var, exp))
-                                                  end
-                                          else () ;
-                                          if !overInDeg = 1
-                                             then let
-                                                     val var = Var.newNoname ()
-                                                     val _ = setOverflowVar (var, true)
-                                                  in
-                                                     List.push
-                                                     (overAdd, (var, exp))
-                                                  end
-                                          else () ;
-                                          transfer)
-                           end
-                      | Goto {dst, args} =>
+                        Goto {dst, args} =>
                            let
                               val {args = args', inDeg, ...} = labelInfo dst
                            in
@@ -315,15 +243,15 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
                            let open Layout
                            in
                               display (seq [str "remove: ",
-                                            List.layout (fn {var,exp,...} =>
+                                            List.layout (fn (exp, var) =>
                                                          seq [Var.layout var,
                                                               str ": ",
                                                               Exp.layout exp]) (!remove)])
                            end)
                   val _ = List.foreach
-                          (!remove, fn {var, hash, ...} =>
-                           HashSet.remove
-                           (table, hash, fn {var = var', ...} =>
+                          (!remove, fn (exp, var) =>
+                           HashTable.removeWhen
+                           (table, exp, fn var' =>
                             Var.equals (var, var')))
                   val _ = diag "removed"
                in

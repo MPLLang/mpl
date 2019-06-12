@@ -1,9 +1,9 @@
-/* Copyright (C) 2012,2016 Matthew Fluet.
+/* Copyright (C) 2012,2016,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -74,10 +74,10 @@ size_t dfsMarkByModeCustom (GC_state s, pointer root,
   uint32_t objptrIndex; /* The i'th pointer in the object (element) being marked. */
   GC_header nextHeader;
   GC_header* nextHeaderp;
-  GC_arrayCounter arrayIndex;
+  GC_sequenceCounter sequenceIndex;
   pointer top; /* The top of the next stack frame to mark. */
   GC_returnAddress returnAddress;
-  GC_frameLayout frameLayout;
+  GC_frameInfo frameInfo;
   GC_frameOffsets frameOffsets;
   uint32_t processor = Proc_processorNumber (s);
 
@@ -255,60 +255,59 @@ markNextInNormal:
       }
     }
     goto ret;
-  } else if (ARRAY_TAG == tag) {
-    /* When marking arrays:
-     *   arrayIndex is the index of the element to mark.
-     *   cur is the pointer to the array.
+  } else if (SEQUENCE_TAG == tag) {
+    /* When marking sequences:
+     *   sequenceIndex is the index of the element to mark.
+     *   cur is the pointer to the sequence.
      *   objptrIndex is the index of the pointer within the element
      *     (i.e. the i'th pointer is at index i).
      *   todo is the start of the element.
      */
     size +=
-      GC_ARRAY_METADATA_SIZE
-      + sizeofArrayNoMetaData (s, getArrayLength (cur), bytesNonObjptrs, numObjptrs);
-    if (0 == numObjptrs or 0 == getArrayLength (cur)) {
+      GC_SEQUENCE_METADATA_SIZE
+      + sizeofSequenceNoMetaData (s, getSequenceLength (cur), bytesNonObjptrs, numObjptrs);
+    if (0 == numObjptrs or 0 == getSequenceLength (cur)) {
       /* There is nothing to mark. */
-arrayDone:
+sequenceDone:
       if (shouldHashCons)
         cur = hashConsPointer (s, cur, TRUE);
       goto ret;
     }
     /* Begin marking first element. */
-    arrayIndex = 0;
+    sequenceIndex = 0;
     todo = cur;
-markArrayElt:
-    assert (arrayIndex < getArrayLength (cur));
+markSequenceElt:
+    assert (sequenceIndex < getSequenceLength (cur));
     objptrIndex = 0;
     /* Skip to the first pointer. */
     todo += bytesNonObjptrs;
-markInArray:
+markInSequence:
     if (DEBUG_DFS_MARK) {
-      fprintf (stderr, "[%d] markInArray arrayIndex = %"PRIxARRCTR" objptrIndex = %"PRIu32"\n",
-               processor,
-               arrayIndex, objptrIndex);
+      fprintf (stderr, "markInSequence sequenceIndex = %"PRIxSEQCTR" objptrIndex = %"PRIu32"\n",
+               sequenceIndex, objptrIndex);
       fflush(stderr);
     }
-    assert (arrayIndex < getArrayLength (cur));
+    assert (sequenceIndex < getSequenceLength (cur));
     assert (objptrIndex < numObjptrs);
-    assert (todo == indexArrayAtObjptrIndex (s, cur, arrayIndex, objptrIndex));
+    assert (todo == indexSequenceAtObjptrIndex (s, cur, sequenceIndex, objptrIndex));
     // next = *(pointer*)todo;
     next = fetchObjptrToPointer (todo, s->heap->start);
     if (not (isPointer(next))) {
-markNextInArray:
-      assert (arrayIndex < getArrayLength (cur));
+markNextInSequence:
+      assert (sequenceIndex < getSequenceLength (cur));
       assert (objptrIndex < numObjptrs);
-      assert (todo == indexArrayAtObjptrIndex (s, cur, arrayIndex, objptrIndex));
+      assert (todo == indexSequenceAtObjptrIndex (s, cur, sequenceIndex, objptrIndex));
       todo += OBJPTR_SIZE;
       objptrIndex++;
       if (objptrIndex < numObjptrs)
-        goto markInArray;
-      arrayIndex++;
-      if (arrayIndex < getArrayLength (cur))
-        goto markArrayElt;
+        goto markInSequence;
+      sequenceIndex++;
+      if (sequenceIndex < getSequenceLength (cur))
+        goto markSequenceElt;
       /* Done.  Clear out the counters and return. */
-      *getArrayCounterp (cur) = 0;
+      *getSequenceCounterp (cur) = 0;
       *headerp = header & ~COUNTER_MASK;
-      goto arrayDone;
+      goto sequenceDone;
     }
     nextHeaderp = getHeaderp (next);
     nextHeader = *nextHeaderp;
@@ -319,10 +318,10 @@ markNextInArray:
       LOG(LM_DFS_MARK, LL_DEBUG, "ascend(%p)@%d", ((void*)(todo)), __LINE__);
       /* Call the ascendHook since we will not be descending into 'next' */
       ascendHook(s, ascendHookArgs, ((objptr*)(todo)));
-      goto markNextInArray;
+      goto markNextInSequence;
     }
     /* Recur and mark next. */
-    *getArrayCounterp (cur) = arrayIndex;
+    *getSequenceCounterp (cur) = sequenceIndex;
     *headerp = (header & ~COUNTER_MASK) | (objptrIndex << COUNTER_SHIFT);
     goto markNext;
   } else {
@@ -347,15 +346,15 @@ markInStack:
       goto ret;
     objptrIndex = 0;
     returnAddress = *(GC_returnAddress*) (top - GC_RETURNADDRESS_SIZE);
-    frameLayout = getFrameLayoutFromReturnAddress (s, returnAddress);
-    frameOffsets = frameLayout->offsets;
+    frameInfo = getFrameInfoFromReturnAddress (s, returnAddress);
+    frameOffsets = frameInfo->offsets;
     ((GC_stack)cur)->markTop = top;
 markInFrame:
     if (objptrIndex == frameOffsets [0]) {
-      top -= frameLayout->size;
+      top -= frameInfo->size;
       goto markInStack;
     }
-    todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
+    todo = top - frameInfo->size + frameOffsets [objptrIndex + 1];
     // next = *(pointer*)todo;
     next = fetchObjptrToPointer (todo, s->heap->start);
     if (DEBUG_DFS_MARK) {
@@ -445,9 +444,9 @@ ret:
       fflush(stderr);
     }
     goto markNextInNormal;
-  } else if (ARRAY_TAG == tag) {
-    arrayIndex = getArrayCounter (cur);
-    todo = cur + arrayIndex * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+  } else if (SEQUENCE_TAG == tag) {
+    sequenceIndex = getSequenceCounter (cur);
+    todo = cur + sequenceIndex * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
     objptrIndex = (header & COUNTER_MASK) >> COUNTER_SHIFT;
     todo += bytesNonObjptrs + objptrIndex * OBJPTR_SIZE;
     // prev = *(pointer*)todo;
@@ -467,16 +466,16 @@ ret:
               *((void**)(todo)));
       fflush(stderr);
     }
-    goto markNextInArray;
+    goto markNextInSequence;
   } else {
     assert (STACK_TAG == tag);
     objptrIndex = ((GC_stack)cur)->markIndex;
     top = ((GC_stack)cur)->markTop;
     /* Invariant: top points just past a "return address". */
     returnAddress = *(GC_returnAddress*) (top - GC_RETURNADDRESS_SIZE);
-    frameLayout = getFrameLayoutFromReturnAddress (s, returnAddress);
-    frameOffsets = frameLayout->offsets;
-    todo = top - frameLayout->size + frameOffsets [objptrIndex + 1];
+    frameInfo = getFrameInfoFromReturnAddress (s, returnAddress);
+    frameOffsets = frameInfo->offsets;
+    todo = top - frameInfo->size + frameOffsets [objptrIndex + 1];
     // prev = *(pointer*)todo;
     prev = fetchObjptrToPointer (todo, s->heap->start);
     // *(pointer*)todo = next;

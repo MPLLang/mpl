@@ -1,9 +1,9 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -11,7 +11,6 @@ functor SignalCheck (S: RSSA_TRANSFORM_STRUCTS): RSSA_TRANSFORM =
 struct
 
 open S
-open Rssa
 
 structure CFunction =
    struct
@@ -60,7 +59,7 @@ fun insertInFunction (f: Function.t): Function.t =
           in
              if (case transfer of
                     Transfer.CCall {func, ...} =>
-                       CFunction.maySwitchThreads func
+                       CFunction.maySwitchThreadsFrom func
                   | _ => false)
                 then ()
              else
@@ -103,9 +102,10 @@ fun insertInFunction (f: Function.t): Function.t =
                 CFunction.T {args = Vector.new0 (),
                              convention = CFunction.Convention.Cdecl,
                              kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
-                                                            ensuresBytesFree = false,
+                                                            ensuresBytesFree = NONE,
 				                            mayGC = false,
-				                            maySwitchThreads = false,
+				                            maySwitchThreadsFrom = false,
+				                            maySwitchThreadsTo = false,
 				                            modifiesFrontier = false,
 				                            readsStackTop = false,
 				                            writesStackTop = false},
@@ -128,7 +128,7 @@ fun insertInFunction (f: Function.t): Function.t =
                     transfer =
                     Transfer.CCall
                     {args = Vector.new3 (Operand.GCState,
-                                         Operand.word (WordX.zero (WordSize.csize ())),
+                                         Operand.zero (WordSize.csize ()),
                                          Operand.bool false),
                      func = gcFunc,
                      return = SOME collectReturn}})
@@ -184,7 +184,7 @@ fun insertInFunction (f: Function.t): Function.t =
       (* Create extra blocks with signal checks for all blocks that are
        * loop headers.
        *)
-      fun loop (f: unit Forest.t) =
+      fun loop (f: int Forest.t) =
          let
             val {loops, ...} = Forest.dest f
          in
@@ -193,9 +193,8 @@ fun insertInFunction (f: Function.t): Function.t =
              let
                 val _ =
                    Vector.foreach
-                   (headers, fn n =>
+                   (headers, fn i =>
                     let
-                       val i = nodeIndex n
                        val _ = Array.update (isHeader, i, true)
                     in
                        addSignalCheck (Vector.sub (blocks, i))
@@ -215,7 +214,8 @@ fun insertInFunction (f: Function.t): Function.t =
                    statements = Vector.new0 (),
                    transfer = Transfer.Goto {args = Vector.new0 (),
                                              dst = start}})
-      val () = loop (Graph.loopForestSteensgaard (g, {root = labelNode start}))
+      val () = loop (Graph.loopForestSteensgaard
+                     (g, {root = labelNode start, nodeValue = nodeIndex}))
       val blocks =
          Vector.keepAllMap
          (blocks, fn b as Block.T {label, ...} =>
@@ -236,7 +236,7 @@ fun insertInFunction (f: Function.t): Function.t =
 
 fun transform p =
    let
-      val Program.T {functions, handlesSignals, main, objectTypes} = p
+      val Program.T {functions, handlesSignals, main, objectTypes, profileInfo} = p
    in
       if not handlesSignals
          then p
@@ -244,7 +244,8 @@ fun transform p =
          Program.T {functions = List.revMap (functions, insertInFunction),
                     handlesSignals = handlesSignals,
                     main = main,
-                    objectTypes = objectTypes}
+                    objectTypes = objectTypes,
+                    profileInfo = profileInfo}
    end
 
 end

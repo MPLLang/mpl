@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -26,10 +26,6 @@ signature DIRECT_EXP2 =
                       body: t} vector
             | Word of WordSize.t * (WordX.t * t) vector
 
-           val arith: {prim: Type.t Prim.t,
-                       args: t vector,
-                       overflow: t,
-                       ty: Type.t} -> t
            (* For now, call always uses Handler.None.  This means it should only
             * be used for functions that cannot raise.
             *)
