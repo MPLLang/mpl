@@ -105,20 +105,6 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     (* ========================== compareAndSwap ========================== *)
 
-    (* local
-       structure I =
-          Int_ChooseInt
-          (type 'a t = 'a ref * 'a * 'a -> 'a
-           val fInt8 = _import "Parallel_compareAndSwap8" impure private: Int8.t ref * Int8.int * Int8.int -> Int8.int;
-           val fInt16 = _import "Parallel_compareAndSwap16" impure private: Int16.t ref * Int16.int * Int16.int -> Int16.int;
-           val fInt32 = _import "Parallel_compareAndSwap32" impure private: Int32.t ref * Int32.int * Int32.int -> Int32.int;
-           val fInt64 = _import "Parallel_compareAndSwap64" impure private: Int64.t ref * Int64.int * Int64.int -> Int64.int;
-           val fIntInf = fn _ => raise Fail "MLton.Parallel.compareAndSwap: IntInf")
-    in
-       fun compareAndSwap r (old, new) =
-          I.f (r, old, new)
-    end *)
-
     fun compareAndSwap r (old, new) = Prim.compareAndSwap (r, old, new)
 
     fun arrayCompareAndSwap (xs, i) (old, new) =

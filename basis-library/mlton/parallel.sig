@@ -103,7 +103,7 @@ signature MLTON_PARALLEL =
      * `compareAndSwap r (old, new)` atomically does `r := new`, but only if
      * `!r = old`. Returns the value of `!r` before the swap.
      *)
-    val compareAndSwap : int ref -> int * int -> int
+    val compareAndSwap : 'a ref -> 'a * 'a -> 'a
 
     (**
      * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS

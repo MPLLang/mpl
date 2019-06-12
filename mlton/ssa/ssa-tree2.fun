@@ -165,13 +165,22 @@ structure Type =
 
       val isVector: t -> bool = isSome o deVectorOpt
 
-      val deRefOpt: t -> t option =
+      val deRef1Opt: t -> t option =
          fn t =>
          case dest t of
-             Object { args, ... } => SOME (Prod.elt (args, 0))
+             Object { args, con = Tuple } =>
+               if Prod.length args = 1 andalso Prod.allAreMutable args
+               then SOME (Prod.elt (args, 0))
+               else NONE
            | _ => NONE
 
-      val deRef: t -> t = valOf o deRefOpt
+      val deRef1 : t -> t =
+        fn t =>
+        case deRef1Opt t of
+          SOME t => t
+        | _ => Error.bug "SsaTree2.Type.deRef1"
+
+      (* val deRef: t -> t = valOf o deRefOpt *)
 
       val deWeakOpt: t -> t option =
          fn t =>
@@ -350,7 +359,7 @@ structure Type =
                        result = result,
                        typeOps = {deArray = deArray,
                                   deArrow = fn _ => raise BadPrimApp,
-                                  deRef = deRef,
+                                  deRef = deRef1,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
                in
