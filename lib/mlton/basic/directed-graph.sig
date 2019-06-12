@@ -2,7 +2,7 @@
  * Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -60,6 +60,8 @@ signature DIRECTED_GRAPH =
       val coerce: 'a t -> unit t * {edge: 'a Edge.t -> unit Edge.t,
                                     node: 'a Node.t -> unit Node.t}
       val dfs: 'a t * ('a, 'b, 'c, 'd, 'e) DfsParam.t -> 'b
+      val dfsForest: 'a t * {roots: 'a Node.t vector,
+                             nodeValue: 'a Node.t -> 'b} -> 'b Tree.t vector
       val dfsNodes: 'a t * 'a Node.t list * ('a, 'b, 'c, 'd, 'e) DfsParam.t -> 'b
       val dfsTree: 'a t * {root: 'a Node.t,
                            nodeValue: 'a Node.t -> 'b} -> 'b Tree.t
@@ -105,16 +107,20 @@ signature DIRECTED_GRAPH =
          sig 
             type 'a t
 
-            val dest: 'a t -> {loops: {headers: 'a Node.t vector,
+            val dest: 'a t -> {loops: {headers: 'a vector,
                                        child: 'a t} vector,
-                               notInLoop: 'a Node.t vector}
+                               notInLoop: 'a vector}
             val layoutDot:
-               'a t * {nodeName: 'a Node.t -> string,
+               'a t * {name: 'a -> string,
                        options: Dot.GraphOption.t list,
                        title: string}
                -> Layout.t
+
+            val map: 'a t * ('a -> 'b) -> 'b t
          end
-      val loopForestSteensgaard: 'a t * {root: 'a Node.t} -> 'a LoopForest.t
+      val loopForestSteensgaard:
+         'a t * {root: 'a Node.t, nodeValue: 'a Node.t -> 'b}
+         -> 'b LoopForest.t
       val new: unit -> 'a t
       val newNode: 'a t -> 'a Node.t
       val nodes: 'a t -> 'a Node.t list

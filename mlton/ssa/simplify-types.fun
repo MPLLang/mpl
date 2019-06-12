@@ -1,9 +1,9 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2018 Matthew Fluet.
  * Copyright (C) 1999-2005, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -14,7 +14,7 @@
  * This pass computes a "cardinality" of each datatype, which is an
  * abstraction of the number of values of the datatype.
  *   Zero means the datatype has no values (except for bottom).
- *   One means the datatype has one values (except for bottom).
+ *   One means the datatype has one value (except for bottom).
  *   Many means the datatype has many values.
  *
  * This pass removes all datatypes whose cardinality is Zero or One
@@ -28,7 +28,7 @@
  *   Useless: it never appears in a ConApp.
  *   Transparent: it is the only variant in its datatype
  *     and its argument type does not contain any uses of
- *       Tycon.array or Tycon.vector.
+ *     Tycon.array or Tycon.vector.
  *   Useful: otherwise
  * This pass also removes Useless and Transparent constructors.
  *
@@ -57,15 +57,74 @@ open S
 open Exp Transfer
 structure Cardinality =
    struct
-      datatype t = Zero | One | Many
+      structure L = ThreePointLattice(val bottom = "zero"
+                                      val mid = "one"
+                                      val top = "many")
+      open L
 
-      fun layout c =
-         Layout.str (case c of
-                        Zero => "zero"
-                      | One => "one"
-                      | Many => "many")
+      val isZero = isBottom
+      val newZero = new
+      val isOne = isMid
+      val makeOne = makeMid
+      val whenOne = whenMid
+      val makeMany = makeTop
+      val whenMany = whenTop
 
-      val equals: t * t -> bool = op =
+      local
+         fun mkNew (make: t -> unit) () =
+            let val c = newZero ()
+            in make c; c end
+      in
+         val newOne = mkNew makeOne
+         val newMany = mkNew makeMany
+      end
+
+      val one = newOne ()
+      val many = newMany ()
+
+      structure Card =
+         struct
+            datatype t = Zero | One | Many
+            fun toCard c =
+               if isZero c then Zero
+               else if isOne c then One
+               else Many
+            fun sum esc (c1, c2) =
+               case (toCard c1, c2) of
+                  (Zero, c2) => c2
+                | (c1, Zero) => c1
+                | _ => esc Many
+            fun prod esc (c1, c2) =
+               case (toCard c1, c2) of
+                  (Zero, _) => esc Zero
+                | (_, Zero) => esc Zero
+                | (One, One) => One
+                | _ => Many
+         end
+
+      local
+         fun make (f, id) cs =
+            let
+               val c' = newZero ()
+               fun doit () =
+                  case (Exn.withEscape
+                        (fn escape =>
+                         Vector.fold (cs, id, f escape))) of
+                     Card.Zero => ()
+                   | Card.One => makeOne c'
+                   | Card.Many => makeMany c'
+               val () =
+                  Vector.foreach
+                  (cs, fn c =>
+                   (whenOne (c, doit); whenMany (c, doit)))
+               val () = doit ()
+            in
+               c'
+            end
+      in
+         val sum = make (Card.sum, Card.Zero)
+         val prod = make (Card.prod, Card.One)
+      end
    end
 
 structure ConRep =
@@ -114,21 +173,30 @@ structure Result =
 
 fun transform (Program.T {datatypes, globals, functions, main}) =
    let
-      val {get = conInfo: Con.t -> {rep: ConRep.t ref,
-                                    args: Type.t vector},
+      val {get = conInfo: Con.t -> {args: Type.t vector,
+                                    cardinality: Cardinality.t,
+                                    rep: ConRep.t ref},
            set = setConInfo, ...} =
          Property.getSetOnce
          (Con.plist, Property.initRaise ("SimplifyTypes.conInfo", Con.layout))
       val conInfo =
          Trace.trace ("SimplifyTypes.conInfo",
                       Con.layout,
-                      fn {rep, args} =>
-                      Layout.record [("rep", ConRep.layout (!rep)),
-                                     ("args", Vector.layout Type.layout args)])
+                      fn {args, cardinality, rep} =>
+                      Layout.record [("args", Vector.layout Type.layout args),
+                                     ("cardinality", Cardinality.layout cardinality),
+                                     ("rep", ConRep.layout (!rep))])
          conInfo
-      val conRep = ! o #rep o conInfo
-      val conArgs = #args o conInfo
-      fun setConRep (con, r) = #rep (conInfo con) := r
+      local
+         fun make sel = sel o conInfo
+         fun make' sel = let val get = make sel
+                         in (! o get, fn (c, x) => get c := x)
+                         end
+      in
+         val conArgs = make #args
+         val conCardinality = make #cardinality
+         val (conRep, setConRep) = make' #rep
+      end
       val setConRep =
          Trace.trace2
          ("SimplifyTypes.setConRep", Con.layout, ConRep.layout, Unit.layout)
@@ -143,144 +211,182 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          Trace.trace
          ("SimplifyTypes.conIsFFI", Con.layout, Bool.layout)
          conIsFFI
-      (* Initialize conInfo *)
-      val _ =
-         Vector.foreach
-         (datatypes, fn Datatype.T {cons, ...} =>
-          Vector.foreach (cons, fn {con, args} =>
-                          setConInfo (con, {rep = ref ConRep.Useless,
-                                            args = args})))
-      val {get = tyconReplacement: Tycon.t -> Type.t option,
-           set = setTyconReplacement, ...} =
-         Property.getSet (Tycon.plist, Property.initConst NONE)
-      val setTyconReplacement = fn (c, t) => setTyconReplacement (c, SOME t)
-      val {get = tyconInfo: Tycon.t -> {
-                                        cardinality: Cardinality.t ref,
-                                        cons: {
-                                               con: Con.t,
-                                               args: Type.t vector
-                                               } vector ref,
+      val {get = tyconInfo: Tycon.t -> {cardinality: Cardinality.t,
+                                        ffi: unit -> unit,
                                         numCons: int ref,
-                                        (* tycons whose cardinality depends on mine *)
-                                        dependents: Tycon.t list ref,
-                                        isOnWorklist: bool ref
-                                        },
+                                        replacement: Type.t option ref},
            set = setTyconInfo, ...} =
          Property.getSetOnce
          (Tycon.plist, Property.initRaise ("SimplifyTypes.tyconInfo", Tycon.layout))
-
       local
-         fun make sel = (! o sel o tyconInfo,
-                         fn (t, x) => sel (tyconInfo t) := x)
+         fun make sel = sel o tyconInfo
+         fun make' sel = let val get = make sel
+                         in (! o get, fn (t, x) => get t := x)
+                         end
       in
-         val (tyconNumCons, setTyconNumCons) = make #numCons
-         val (tyconCardinality, _) = make #cardinality
+         val tyconCardinality = make #cardinality
+         val tyconFFI = make #ffi
+         val (tyconNumCons, setTyconNumCons) = make' #numCons
+         val (tyconReplacement, setTyconReplacement) = make' #replacement
       end
+      (* Initialize conInfo and typeInfo *)
       val _ =
          Vector.foreach
          (datatypes, fn Datatype.T {tycon, cons} =>
-          setTyconInfo (tycon, {
-                                cardinality = ref Cardinality.Zero,
-                                numCons = ref 0,
-                                cons = ref cons,
-                                dependents = ref [],
-                                isOnWorklist = ref false
-                                }))
-      (* Tentatively mark all constructors appearing in a ConApp or an FFI as
-       * Useful (some may later be marked as Transparent).
+          (setTyconInfo (tycon, {cardinality = Cardinality.newZero (),
+                                 ffi = (fn () =>
+                                        (Control.diagnostics
+                                         (fn display =>
+                                          let
+                                             open Layout
+                                          in
+                                             display (seq [str "  tycon: ",
+                                                           Tycon.layout tycon])
+                                          end);
+                                         Vector.foreach
+                                         (cons, fn {con, ...} =>
+                                          (Control.diagnostics
+                                           (fn display =>
+                                            let
+                                               open Layout
+                                            in
+                                               display (seq [str "    con: ",
+                                                             Con.layout con])
+                                            end);
+                                           setConRep (con, ConRep.FFI))))),
+                                 numCons = ref 0,
+                                 replacement = ref NONE});
+           Vector.foreach
+           (cons, fn {con, args} =>
+            setConInfo (con, {args = args,
+                              cardinality = Cardinality.newZero (),
+                              rep = ref ConRep.Useless}))))
+      (* Tentatively mark all constructors appearing in a ConApp or an FFI as Useful
+       * (some may later be marked as Useless or Transparent).
+       * Mark any tycons created by MLton_bogus as cardinality Many.
        *)
       val _ =
          let
+            fun setConRepUseful c = setConRep (c, ConRep.Useful)
             fun handleStatement (Statement.T {exp, ...}) =
-               case exp
-                of ConApp {con, ...} => if not (conIsFFI con)
-                                        then setConRep (con, ConRep.Useful)
-                                        else ()
-
-                 | PrimApp {prim, ...} =>
-                   let
-                       fun deepSetFFI t =
-                           case Type.dest t
-                            of Type.Array t => deepSetFFI t
-                             | Type.Datatype tycon =>
-                               (Control.diagnostics
-                                    (fn display =>
-                                        let
-                                            open Layout
-                                        in
-                                            display (seq [str "  tycon: ",
-                                                          Tycon.layout tycon])
-                                        end);
-                                Vector.foreach ((! o #cons o tyconInfo) tycon,
-                                                fn {con, ...} =>
-                                                   let
-                                                   in
-                                                       Control.diagnostics
-                                                           (fn display =>
-                                                               let
-                                                                   open Layout
-                                                               in
-                                                                   display (seq [str "    con: ",
-                                                                                 Con.layout con])
-                                                               end);
-                                                       setConRep (con, ConRep.FFI)
-                                                   end))
-                             | Type.HierarchicalHeap t => deepSetFFI t
-                             | Type.Ref t => deepSetFFI t
-                             | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
-                             | Type.Vector t => deepSetFFI t
-                             | Type.Weak t => deepSetFFI t
-                             | _ => ()
-
-                       open Prim.Name
-                   in
-                       case Prim.name prim
-                        of FFI cfunction =>
-                           (Control.diagnostics
-                                (fn display =>
-                                    let
-                                        open Layout
-                                    in
-                                        display (seq [str "deepSetFFI for ",
-                                                      str (CFunction.cPrototype cfunction)])
-                                    end);
-                            Vector.foreach (CFunction.args cfunction,
-                                            deepSetFFI);
-                            deepSetFFI (CFunction.return cfunction))
+               case exp of
+                  ConApp {con, ...} =>
+                     if not (conIsFFI con)
+                        then setConRep (con, ConRep.Useful)
+                        else ()
+                | PrimApp {prim, targs, ...} =>
+                     let
+                        fun deepSetFFI t =
+                           case Type.dest t of
+                              Type.Array t => deepSetFFI t
+                            | Type.Datatype tycon => tyconFFI tycon ()
+                            | Type.HierarchicalHeap t => deepSetFFI t
+                            | Type.Ref t => deepSetFFI t
+                            | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
+                            | Type.Vector t => deepSetFFI t
+                            | Type.Weak t => deepSetFFI t
+                            | _ => ()
+                     in
+                        case Prim.name prim of
+                           Prim.Name.FFI cfunction =>
+                              (Control.diagnostics
+                               (fn display =>
+                                let
+                                   open Layout
+                                in
+                                   display (seq [str "deepSetFFI for ",
+                                                 str (CFunction.cPrototype cfunction)])
+                                end);
+                               Vector.foreach (CFunction.args cfunction,
+                                               deepSetFFI);
+                               deepSetFFI (CFunction.return cfunction))
+                         | Prim.Name.MLton_bogus =>
+                              (case Type.dest (Vector.sub (targs, 0)) of
+                                  Type.Datatype tycon =>
+                                     Cardinality.makeMany (tyconCardinality tycon)
+                                | _ => ())
                          | _ => ()
-                   end
-                 | _ => ()
+                     end
+                | _ => ()
             (* Booleans are special because they are generated by primitives. *)
-            val _ =
-                List.foreach ([Con.truee, Con.falsee], fn c =>
-                                                          setConRep (c, ConRep.Useful))
+            val _ = setConRepUseful Con.truee
+            val _ = setConRepUseful Con.falsee
             val _ = Vector.foreach (globals, handleStatement)
             val _ = List.foreach
-                        (functions, fn f =>
-                                       Vector.foreach
-                                           (Function.blocks f, fn Block.T {statements, ...} =>
-                                                                  Vector.foreach (statements, handleStatement)))
+                    (functions, fn f =>
+                     Vector.foreach
+                     (Function.blocks f, fn Block.T {statements, ...} =>
+                      Vector.foreach (statements, handleStatement)))
          in ()
          end
-
+      (* Compute the type cardinalities with a fixed point
+       * over the Cardinality lattice.
+       *)
+      val {get = typeCardinality, destroy = destroyTypeCardinality} =
+         Property.destGet
+         (Type.plist,
+          Property.initRec
+          (fn (t, typeCardinality) =>
+           let
+              fun ptrCard t =
+                 (Cardinality.prod o Vector.new2)
+                 (typeCardinality t, Cardinality.many)
+              fun tupleCard ts =
+                 (Cardinality.prod o Vector.map)
+                 (ts, typeCardinality)
+              fun vecCard t =
+                 (Cardinality.sum o Vector.new2)
+                 (Cardinality.one,
+                  (Cardinality.prod o Vector.new2)
+                  (typeCardinality t, Cardinality.many))
+              datatype z = datatype Type.dest
+           in
+              case Type.dest t of
+                 Array _ => Cardinality.many
+               | CPointer => Cardinality.many
+               | Datatype tycon => tyconCardinality tycon
+               | HierarchicalHeap t => ptrCard t
+               | IntInf => Cardinality.many
+               | Real _ => Cardinality.many
+               | Ref t => ptrCard t
+               | Thread => Cardinality.many
+               | Tuple ts => tupleCard ts
+               | Vector t => vecCard t
+               | Weak t => ptrCard t
+               | Word _ => Cardinality.many
+           end))
       (* Remove useless constructors from datatypes.
        * Remove datatypes which have no cons.
+       * Lower-bound cardinality of cons by product of arguments.
+       * Lower-bound cardinality of tycons by sum of cons.
        *)
+      val origDatatypes = datatypes
       val datatypes =
          Vector.keepAllMap
          (datatypes, fn Datatype.T {tycon, cons} =>
           let
-              val cons = Vector.keepAll (cons, fn {con, ...} =>
-                                                  conIsUseful con orelse
-                                                  conIsFFI con)
+             val cons = Vector.keepAll (cons, fn {con, ...} =>
+                                        conIsUseful con
+                                        orelse conIsFFI con)
+             val _ =
+                Cardinality.<=
+                (Cardinality.sum
+                 (Vector.map (cons, conCardinality o #con)),
+                 tyconCardinality tycon)
+             val _ =
+                Vector.foreach
+                (cons, fn {con, args} =>
+                 Cardinality.<=
+                 (Cardinality.prod
+                  (Vector.map (args, typeCardinality)),
+                  conCardinality con))
           in
              if Vector.isEmpty cons
-                then (setTyconReplacement (tycon, Type.unit)
+                then (setTyconReplacement (tycon, SOME Type.unit)
                       ; NONE)
-             else (#cons (tyconInfo tycon) := cons
-                   ; SOME (Datatype.T {tycon = tycon, cons = cons}))
+             else SOME (Datatype.T {tycon = tycon, cons = cons})
           end)
-
+      (* diagnostic *)
       val _ = Control.diagnostics
                   (fn display =>
                       let
@@ -300,142 +406,25 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                                          str " ",
                                                          str (Bool.toString (conIsFFI con))]))))
                       end)
-
-      (* Build the dependents for each tycon. *)
-      val _ =
-         Vector.foreach
-         (datatypes, fn Datatype.T {tycon, cons} =>
-          let
-             datatype z = datatype Type.dest
-             val {get = setTypeDependents, destroy = destroyTypeDependents} =
-                Property.destGet
-                (Type.plist,
-                 Property.initRec
-                 (fn (t, setTypeDependents) =>
-                  case Type.dest t of
-                     Array t => setTypeDependents t
-                   | CPointer => ()
-                   | Datatype tycon' =>
-                        List.push (#dependents (tyconInfo tycon'), tycon)
-                   | HierarchicalHeap t => setTypeDependents t
-                   | IntInf => ()
-                   | Real _ => ()
-                   | Ref t => setTypeDependents t
-                   | Thread => ()
-                   | Tuple ts => Vector.foreach (ts, setTypeDependents)
-                   | Vector t => setTypeDependents t
-                   | Weak t => setTypeDependents t
-                   | Word _ => ()))
-             val _ =
-                Vector.foreach (cons, fn {args, ...} =>
-                                Vector.foreach (args, setTypeDependents))
-             val _ = destroyTypeDependents ()
-          in ()
-          end)
-      (* diagnostic *)
       val _ =
          Control.diagnostics
          (fn display =>
           let open Layout
-          in Vector.foreach
-             (datatypes, fn Datatype.T {tycon, ...} =>
-              display (seq [str "dependents of ",
-                            Tycon.layout tycon,
-                            str " = ",
-                            List.layout Tycon.layout
-                            (!(#dependents (tyconInfo tycon)))]))
-          end)
-
-      local open Type Cardinality
-      in
-         fun typeCardinality t =
-            case dest t of
-               Datatype tycon => tyconCardinality tycon
-             | Ref t => pointerCardinality t
-             | Tuple ts => tupleCardinality ts
-             | Weak t => pointerCardinality t
-             | _ => Many
-         and pointerCardinality (t: Type.t) =
-            case typeCardinality t of
-               Zero => Zero
-             | _ => Many
-         and tupleCardinality (ts: Type.t vector) =
-            Exn.withEscape
-            (fn escape =>
-             (Vector.foreach (ts, fn t =>
-                             let val c = typeCardinality t
-                             in case c of
-                                Many => escape Many
-                              | One => ()
-                              | Zero => escape Zero
-                             end)
-              ; One))
-      end
-      fun conCardinality {args, con = _} = tupleCardinality args
-      (* Compute the tycon cardinalities with a fixed point,
-       * initially assuming every datatype tycon cardinality is Zero.
-       *)
-      val _ =
-         let
-            (* list of datatype tycons whose cardinality has not yet stabilized *)
-            val worklist =
-               ref (Vector.fold
-                    (datatypes, [], fn (Datatype.T {tycon, ...}, ac) =>
-                     tycon :: ac))
-            fun loop () =
-               case !worklist of
-                  [] => ()
-                | tycon :: tycons =>
-                     (worklist := tycons
-                      ; let
-                           val {cons, cardinality, dependents, isOnWorklist,
-                                ...} = tyconInfo tycon
-                           val c =
-                              Exn.withEscape
-                              (fn escape =>
-                               let datatype z = datatype Cardinality.t
-                               in Vector.fold
-                                  (!cons, Zero, fn (c, ac) =>
-                                   case conCardinality c of
-                                      Many => escape Many
-                                    | One => (case ac of
-                                                 Many => Error.bug "SimplifyTypes.simplify: Many"
-                                               | One => escape Many
-                                               | Zero => One)
-                                    | Zero => ac)
-                               end)
-                        in isOnWorklist := false
-                           ; if Cardinality.equals (c, !cardinality)
-                                then ()
-                             else (cardinality := c
-                                   ; (List.foreach
-                                      (!dependents, fn tycon =>
-                                       let
-                                          val {isOnWorklist, ...} =
-                                             tyconInfo tycon
-                                       in if !isOnWorklist
-                                             then ()
-                                          else (isOnWorklist := true
-                                                ; List.push (worklist, tycon))
-                                       end)))
-                        end
-                      ; loop ())
-         in loop ()
-         end
-      (* diagnostic *)
-      val _ =
-         Control.diagnostics
-         (fn display =>
-          let open Layout
-          in Vector.foreach
-             (datatypes, fn Datatype.T {tycon, ...} =>
-              display (seq [str "cardinality of ",
-                            Tycon.layout tycon,
-                            str " = ",
-                            Cardinality.layout (tyconCardinality tycon)]))
+          in Vector.foreach 
+             (origDatatypes, fn Datatype.T {tycon, cons} =>
+              (display (seq [str "cardinality of ",
+                             Tycon.layout tycon,
+                             str " = ",
+                             Cardinality.layout (tyconCardinality tycon)]);
+               Vector.foreach
+               (cons, fn {con, ...} =>
+                (display (seq [str "cardinality of ",
+                               Con.layout con,
+                               str " = ",
+                               Cardinality.layout (conCardinality con)])))))
           end)
       fun transparent (tycon, con, args) =
-         (setTyconReplacement (tycon, Type.tuple args)
+         (setTyconReplacement (tycon, SOME (Type.tuple args))
           ; setConRep (con, ConRep.Transparent)
           ; setTyconNumCons (tycon, 1))
       (* "unary" is datatypes with one constructor whose rhs contains an
@@ -465,10 +454,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
              val cons =
                 Vector.keepAllMap
                 (cons, fn c as {con, ...} =>
-                 case conCardinality c of
-                    Cardinality.Zero => (setConRep (con, ConRep.Useless)
-                                         ; NONE)
-                  | _ => SOME c)
+                 if Cardinality.isZero (conCardinality con)
+                    then (setConRep (con, ConRep.Useless)
+                          ; NONE)
+                    else SOME c)
 
              val _ = Control.diagnostics
                          (fn display =>
@@ -483,7 +472,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                              end)
           in case Vector.length cons of
              0 => (setTyconNumCons (tycon, 0)
-                    ; setTyconReplacement (tycon, Type.unit)
+                    ; setTyconReplacement (tycon, SOME Type.unit)
                     ; (datatypes, unary))
            | 1 =>
                 let
@@ -602,7 +591,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      SOME t =>
                         let
                            val t = simplifyType t
-                           val _ = setTyconReplacement (tycon, t)
+                           val _ = setTyconReplacement (tycon, SOME t)
                         in
                            t
                         end
@@ -724,13 +713,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          simplifyExp
       fun simplifyTransfer (t : Transfer.t): Statement.t vector * Transfer.t =
          case t of
-            Arith {prim, args, overflow, success, ty} =>
-               (Vector.new0 (), Arith {prim = prim,
-                                       args = Vector.map (args, simplifyVar),
-                                       overflow = overflow,
-                                       success = success,
-                                       ty = ty})
-          | Bug => (Vector.new0 (), t)
+            Bug => (Vector.new0 (), t)
           | Call {func, args, return} =>
                (Vector.new0 (),
                 Call {func = func, return = return,
@@ -801,7 +784,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                          return = return})
       val simplifyTransfer =
          Trace.trace
-         ("SimplifyTypes.simplifyTransfer", Transfer.layout,
+         ("SimplifyTypes.simplifyTransfer",
+          Transfer.layout,
           Layout.tuple2 (Vector.layout Statement.layout, Transfer.layout))
          simplifyTransfer
       fun simplifyStatement (Statement.T {var, ty, exp}) =
@@ -824,6 +808,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                          Keep (Statement.T {var = var, ty = ty, exp = exp}))
             else Delete
          end
+      val simplifyStatement =
+         Trace.trace
+         ("SimplifyTypes.simplifyStatement",
+          Statement.layout,
+          Result.layout Statement.layout)
+         simplifyStatement
       fun simplifyBlock (Block.T {label, args, statements, transfer}) =
          let
             val args = simplifyFormals args
@@ -890,6 +880,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     globals = globals,
                     functions = functions,
                     main = main}
+      val _ = destroyTypeCardinality ()
       val _ = destroySimplifyType ()
       val _ = Program.clearTop program
    in

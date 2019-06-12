@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -17,8 +17,8 @@ struct GC_intInf_obj {
   mp_limb_t limbs[1];
 };
 typedef struct GC_intInf {
-  GC_arrayCounter counter;
-  GC_arrayLength length;
+  GC_sequenceCounter counter;
+  GC_sequenceLength length;
   GC_header header;
   objptr fwdptr;
   struct GC_intInf_obj obj;
@@ -26,8 +26,8 @@ typedef struct GC_intInf {
 
 COMPILE_TIME_ASSERT(GC_intInf__obj_packed,
                     offsetof(struct GC_intInf, obj) ==
-                    sizeof(GC_arrayCounter)
-                    + sizeof(GC_arrayLength)
+                    sizeof(GC_sequenceCounter)
+                    + sizeof(GC_sequenceLength)
                     + sizeof(GC_header)
                     + sizeof(objptr));
 COMPILE_TIME_ASSERT(GC_intInf_obj__isneg_packed,

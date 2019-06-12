@@ -2,7 +2,7 @@
  * Copyright (C) 2003-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -20,7 +20,7 @@ signature SOURCE_INFO =
       val equals: t * t -> bool
       val file: t -> File.t option
       val gc: t
-      val gcArrayAllocate: t
+      val gcSequenceAllocate: t
       val hash: t -> word
       val fromC: string -> t
       val function: {name: string list,

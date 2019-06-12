@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -62,6 +63,9 @@ structure Atoms =
       structure Ffi = Ffi (structure CFunction = CFunction
                            structure CType = CType)
 
+      structure Cases = Cases (structure WordSize = WordSize
+                               structure WordX = WordX)
+
       structure Prim = Prim (structure CFunction = CFunction
                              structure CType = CType
                              structure Con = Con
@@ -69,9 +73,14 @@ structure Atoms =
                              structure RealSize = RealSize
                              structure WordSize = WordSize)
 
+      structure Handler = Handler (structure Label = Label)
+      structure Return = Return (structure Label = Label
+                                 structure Handler = Handler)
+
       structure SourceInfo = SourceInfo ()
-      structure ProfileLabel = ProfileLabel ()
       structure ProfileExp = ProfileExp (structure SourceInfo = SourceInfo)
+      structure ProfileLabel = ProfileLabel ()
+      structure SourceMaps = SourceMaps (structure ProfileLabel = ProfileLabel)
    end
 
 open Atoms

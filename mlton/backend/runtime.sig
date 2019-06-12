@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2016 Matthew Fluet.
+(* Copyright (C) 2009,2016-2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -21,7 +21,7 @@ signature RUNTIME =
                AtomicState
              | CardMapAbsolute
              | CurrentThread
-             | CurSourceSeqsIndex
+             | CurSourceSeqIndex
              | ExnStack
              | FFIArgs
              | Frontier (* The place where the next object is allocated. *)
@@ -29,7 +29,6 @@ signature RUNTIME =
              | Limit (* frontier + heapSize - LIMIT_SLOP *)
              | LimitPlusSlop (* frontier + heapSize *)
              | MaxFrameSize
-             | ReturnToC
              | SignalIsPending
              | StackBottom
              | StackLimit (* Must have StackTop <= StackLimit *)
@@ -40,7 +39,7 @@ signature RUNTIME =
             val setOffsets: {atomicState: Bytes.t,
                              cardMapAbsolute: Bytes.t,
                              currentThread: Bytes.t,
-                             curSourceSeqsIndex: Bytes.t,
+                             curSourceSeqIndex: Bytes.t,
                              exnStack: Bytes.t,
                              ffiArgs: Bytes.t,
                              frontier: Bytes.t,
@@ -48,7 +47,6 @@ signature RUNTIME =
                              limit: Bytes.t,
                              limitPlusSlop: Bytes.t,
                              maxFrameSize: Bytes.t,
-                             returnToC: Bytes.t,
                              signalIsPending: Bytes.t,
                              stackBottom: Bytes.t,
                              stackLimit: Bytes.t,
@@ -56,7 +54,7 @@ signature RUNTIME =
             val setSizes: {atomicState: Bytes.t,
                            cardMapAbsolute: Bytes.t,
                            currentThread: Bytes.t,
-                           curSourceSeqsIndex: Bytes.t,
+                           curSourceSeqIndex: Bytes.t,
                            exnStack: Bytes.t,
                            ffiArgs: Bytes.t,
                            frontier: Bytes.t,
@@ -64,7 +62,6 @@ signature RUNTIME =
                            limit: Bytes.t,
                            limitPlusSlop: Bytes.t,
                            maxFrameSize: Bytes.t,
-                           returnToC: Bytes.t,
                            signalIsPending: Bytes.t,
                            stackBottom: Bytes.t,
                            stackLimit: Bytes.t,
@@ -75,28 +72,29 @@ signature RUNTIME =
       structure RObjectType:
          sig
             datatype t =
-               Array of {hasIdentity: bool,
-                         bytesNonObjptrs: Bytes.t,
-                         numObjptrs: int}
-             | Normal of {hasIdentity: bool,
+               Normal of {hasIdentity: bool,
                           bytesNonObjptrs: Bytes.t,
                           numObjptrs: int}
+             | Sequence of {hasIdentity: bool,
+                            bytesNonObjptrs: Bytes.t,
+                            numObjptrs: int}
              | Stack
              | Weak of {gone: bool}
              | HeaderOnly
              | Fill
          end
 
-      val arrayLengthOffset: unit -> Bytes.t
-      val arrayLengthSize: unit -> Bytes.t
+      val cpointerSize: unit -> Bytes.t
       val headerOffset: unit -> Bytes.t
       val headerSize: unit -> Bytes.t
       val headerToTypeIndex: word -> int
       val labelSize: unit -> Bytes.t
       val limitSlop: Bytes.t
       val maxFrameSize: Bytes.t
-      val metaDataSize: unit -> Bytes.t
-      val cpointerSize: unit -> Bytes.t
+      val normalMetaDataSize: unit -> Bytes.t
       val objptrSize: unit -> Bytes.t
+      val sequenceLengthOffset: unit -> Bytes.t
+      val sequenceLengthSize: unit -> Bytes.t
+      val sequenceMetaDataSize: unit -> Bytes.t
       val typeIndexToHeader: int -> word
    end

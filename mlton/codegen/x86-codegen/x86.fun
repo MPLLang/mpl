@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -356,10 +357,10 @@ struct
         open Layout
       in
         val rec layoutU
-          = fn Word w => WordX.layout w
+          = fn Word w => WordX.layout (w, {suffix = false})
              | Label l => Label.layout l
              | LabelPlusWord (l, w) 
-             => paren (seq [Label.layout l, str "+", WordX.layout w])
+             => paren (seq [Label.layout l, str "+", WordX.layout (w, {suffix = false})])
         and layout
           = fn T {immediate, ...} => layoutU immediate
       end
@@ -3589,13 +3590,13 @@ struct
   structure FrameInfo =
      struct
         datatype t = T of {size: int, 
-                           frameLayoutsIndex: int}
+                           frameInfosIndex: int}
 
-        fun toString (T {size, frameLayoutsIndex})
+        fun toString (T {size, frameInfosIndex})
            = concat ["{",
                      "size = ", Int.toString size, ", ",
-                     "frameLayoutsIndex = ", 
-                     Int.toString frameLayoutsIndex, "}"]
+                     "frameInfosIndex = ",
+                     Int.toString frameInfosIndex, "}"]
      end
 
   structure Entry =
@@ -3801,9 +3802,9 @@ struct
         | Return of {live: MemLocSet.t}
         | Raise of {live: MemLocSet.t}
         | CCall of {args: (Operand.t * Size.t) list,
-                    frameInfo: FrameInfo.t option,
                     func: RepType.t CFunction.t,
-                    return: Label.t option}
+                    return: {return: Label.t,
+                             size: int option} option}
 
       val toString
         = fn Goto {target}
@@ -3822,7 +3823,7 @@ struct
               (concat o Cases.mapToList)
               (cases,
                fn (w, target) => concat[" (",
-                                        WordX.toString w,
+                                        WordX.toString (w, {suffix = true}),
                                         " -> GOTO ",
                                         Label.toString target,
                                         ")"]) ^
@@ -3888,7 +3889,13 @@ struct
                       (List.map(args, fn (oper,_) => Operand.toString oper),
                        ", "),
                       ") <",
-                      Option.toString Label.toString return,
+                      Option.toString (fn {return, size} =>
+                                       concat ["(",
+                                               Label.toString return,
+                                               ", ",
+                                               Option.toString Int.toString size,
+                                               ")"])
+                                      return,
                       ">"]
 
       val uses_defs_kills
@@ -3918,7 +3925,7 @@ struct
            | CCall {return, ...} 
            => (case return of
                  NONE => []
-               | SOME l => [l])
+               | SOME {return, ...} => [return])
            | _ => []
 
       val live
@@ -3933,13 +3940,12 @@ struct
            => Switch {test = replacer {use = true, def = false} test,
                       cases = cases,
                       default = default}
-           | CCall {args, frameInfo, func, return}
+           | CCall {args, func, return}
            => CCall {args = List.map(args,
                                      fn (oper,size) => (replacer {use = true,
                                                                   def = false}
                                                                  oper,
                                                         size)),
-                     frameInfo = frameInfo,
                      func = func,
                      return = return}
            | transfer => transfer

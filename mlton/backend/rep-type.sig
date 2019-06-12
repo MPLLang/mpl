@@ -1,8 +1,8 @@
-(* Copyright (C) 2014,2017 Matthew Fluet.
+(* Copyright (C) 2014,2017,2019 Matthew Fluet.
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -15,7 +15,6 @@ signature REP_TYPE_STRUCTS =
       structure Prim: PRIM
       structure RealSize: REAL_SIZE
       structure Runtime: RUNTIME
-      structure Scale: SCALE
       structure WordSize: WORD_SIZE
       structure WordX: WORD_X
       structure WordXVector: WORD_X_VECTOR
@@ -35,12 +34,6 @@ signature REP_TYPE =
 
       val bogusWord: t -> WordX.t
       val align: t * Bytes.t -> Bytes.t
-      val arrayOffsetIsOk: {base: t,
-                            index: t,
-                            offset: Bytes.t,
-                            tyconTy: ObjptrTycon.t -> ObjectType.t,
-                            result: t,
-                            scale: Scale.t} -> bool
       val bits: Bits.t -> t
       val bool: t
       val bytes: t -> Bytes.t
@@ -85,6 +78,12 @@ signature REP_TYPE =
       val resize: t * Bits.t -> t
       val seq: t vector -> t
       val seqIndex: unit -> t
+      val sequenceOffsetIsOk: {base: t,
+                               index: t,
+                               offset: Bytes.t,
+                               tyconTy: ObjptrTycon.t -> ObjectType.t,
+                               result: t,
+                               scale: Scale.t} -> bool
       val shiftArg: t
       val string: unit -> t
       val sum: t vector -> t

@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -26,7 +26,7 @@ void initSignalStack (GC_state s) {
 #if NEEDS_SIGALTSTACK_EXEC
     prot = prot | PROT_EXEC;
 #endif
-    void *ss_sp = GC_mmapAnon_safe_protect (NULL, 2 * ss_size, prot, psize, psize);
+    void *ss_sp = GC_mmapAnonStack (NULL, 2 * ss_size, prot, psize, psize);
     altstack.ss_sp = (void*)((pointer)ss_sp + ss_size);
     altstack.ss_size = ss_size;
     altstack.ss_flags = 0;

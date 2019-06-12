@@ -1,9 +1,9 @@
-/* Copyright (C) 2012,2014 Matthew Fluet.
+/* Copyright (C) 2012,2014,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -41,8 +41,8 @@ struct GC_state {
   /* RAM_NOTE: Is this the right type? */
   pointer ffiArgs;
   struct GC_forwardState forwardState;
-  GC_frameLayout frameLayouts; /* Array of frame layouts. */
-  uint32_t frameLayoutsLength; /* Cardinality of frameLayouts array. */
+  GC_frameInfo frameInfos; /* Array of frame infos. */
+  uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
   pointer globalLimitPlusSlop;
@@ -73,7 +73,6 @@ struct GC_state {
   GC_state procStates;
   struct GC_profiling profiling;
   GC_frameIndex (*returnAddressToFrameIndex) (GC_returnAddress ra);
-  uint32_t returnToC;
   /* Roots that may be, for example, on the C call stack */
   objptr *roots;
   uint32_t rootsLength;

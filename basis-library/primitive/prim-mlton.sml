@@ -1,9 +1,9 @@
-(* Copyright (C) 2010-2011,2013-2014 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2014,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -15,6 +15,7 @@ open Primitive
 
 structure MLton = struct
 
+val bug = _prim "MLton_bug": String8.string -> unit;
 val eq = _prim "MLton_eq": 'a * 'a -> bool;
 val equal = _prim "MLton_equal": 'a * 'a -> bool;
 (* val deserialize = _prim "MLton_deserialize": Word8Vector.vector -> 'a ref; *)
@@ -22,7 +23,7 @@ val halt = _prim "MLton_halt": C_Status.t -> unit;
 val hash = _prim "MLton_hash": 'a -> Word32.word;
 (* val serialize = _prim "MLton_serialize": 'a ref -> Word8Vector.vector; *)
 val share = _prim "MLton_share": 'a -> unit;
-val size = _prim "MLton_size": 'a ref -> C_Size.t;
+val size = _prim "MLton_size": 'a -> C_Size.t;
 
 val installSignalHandler =
    _prim "MLton_installSignalHandler": unit -> unit;
@@ -246,6 +247,7 @@ structure Platform =
              | MIPS
              | PowerPC
              | PowerPC64
+             | RISCV
              | S390
              | Sparc
              | X86
@@ -262,6 +264,7 @@ structure Platform =
                 | "mips" => MIPS
                 | "powerpc" => PowerPC
                 | "powerpc64" => PowerPC64
+                | "riscv" => RISCV
                 | "s390" => S390
                 | "sparc" => Sparc
                 | "x86" => X86

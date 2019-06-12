@@ -1,8 +1,8 @@
-(* Copyright (C) 2014 Matthew Fluet.
+(* Copyright (C) 2014,2019 Matthew Fluet.
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -44,6 +44,7 @@ signature C_TYPE =
       val name: t -> string
       val layout: t -> Layout.t
       val objptr: t
+      val parse: t Parse.t
       val real: RealSize.t -> t
       val seqIndex: unit -> t
       val shiftArg: t

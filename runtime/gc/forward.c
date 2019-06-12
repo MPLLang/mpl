@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -80,23 +80,21 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
   if (not (hasFwdPtr(p))) { /* forward the object */
     size_t size, skip;
 
-    GC_header header;
     size_t metaDataBytes, objectBytes;
     GC_objectTypeTag tag;
     uint16_t bytesNonObjptrs, numObjptrs;
 
-    header = getHeader(p);
-    splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+    splitHeader(s, getHeader(p), &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
     /* Compute the space taken by the metadata and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
       metaDataBytes = GC_NORMAL_METADATA_SIZE;
       objectBytes = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       skip = 0;
-    } else if (ARRAY_TAG == tag) {
-      metaDataBytes = GC_ARRAY_METADATA_SIZE;
-      objectBytes = sizeofArrayNoMetaData (s, getArrayLength (p),
-                                           bytesNonObjptrs, numObjptrs);
+    } else if (SEQUENCE_TAG == tag) {
+      metaDataBytes = GC_SEQUENCE_METADATA_SIZE;
+      objectBytes = sizeofSequenceNoMetaData (s, getSequenceLength (p),
+                                              bytesNonObjptrs, numObjptrs);
       skip = 0;
     } else { /* Stack. */
       bool current;
@@ -158,8 +156,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
           fprintf (stderr, "not linking\n");
       }
     }
-
-    /* Store the forwarding pointer in the old object metadata. */
+    /* Store the forwarding pointer in the old object header. */
     *(getFwdPtrp(p)) = pointerToObjptr (s->forwardState.back + metaDataBytes,
                                         s->forwardState.toStart);
     assert (hasFwdPtr(p));
@@ -168,7 +165,7 @@ void forwardObjptr (GC_state s, objptr *opp, void* ignored) {
     assert (isAligned ((size_t)s->forwardState.back + GC_NORMAL_METADATA_SIZE,
                        s->alignment));
 
-    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
+    if (GC_HIERARCHICAL_HEAP_HEADER == getHeader(p)) {
       /* update level chunk head containingHH pointers */
       HM_HH_updateLevelListPointers(getFwdPtr(p));
     }

@@ -1,9 +1,9 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -66,7 +66,6 @@ functor LimitCheck (S: RSSA_TRANSFORM_STRUCTS): RSSA_TRANSFORM =
 struct
 
 open S
-open Rssa
 
 structure LimitCheck =
    struct
@@ -177,13 +176,14 @@ fun insertFunction (f: Function.t,
                      val cfunc =
                         CFunction.T {args = Vector.new0 (),
                                      convention = CFunction.Convention.Cdecl,
-				     kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
-								    ensuresBytesFree = false,
-								    mayGC = false,
-								    maySwitchThreads = false,
-								    modifiesFrontier = false,
-								    readsStackTop = false,
-								    writesStackTop = false},
+                                     kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
+                                                                    ensuresBytesFree = NONE,
+                                                                    mayGC = false,
+                                                                    maySwitchThreadsFrom = false,
+                                                                    maySwitchThreadsTo = false,
+                                                                    modifiesFrontier = false,
+                                                                    readsStackTop = false,
+                                                                    writesStackTop = false},
                                      prototype = (Vector.new0 (), NONE),
                                      return = Type.unit,
                                      symbolScope = CFunction.SymbolScope.Private,
@@ -210,22 +210,21 @@ fun insertFunction (f: Function.t,
              val transfer =
                 case transfer of
                    Transfer.CCall {args, func, return} =>
-                      (if CFunction.ensuresBytesFree func
-                          then
+                      (case CFunction.ensuresBytesFree func of
+                          NONE => transfer
+                        | SOME i =>
                              Transfer.CCall
-                             {args = (Vector.map
-                                      (args, fn z =>
-                                       case z of
-                                          Operand.EnsuresBytesFree =>
-                                             Operand.word
-                                             (WordX.fromIntInf
-                                              (Bytes.toIntInf
-                                               (ensureFree (valOf return)),
-                                               WordSize.csize ()))
-                                        | _ => z)),
+                             {args = Vector.mapi
+                                     (args, fn (j, arg) =>
+                                      if i = j
+                                         then Operand.word
+                                              (WordX.fromIntInf
+                                               (Bytes.toIntInf
+                                                (ensureFree (valOf return)),
+                                                WordSize.csize ()))
+                                         else arg),
                               func = func,
-                              return = return}
-                       else transfer)
+                              return = return})
                  | _ => transfer
              val stack = Label.equals (start, label)
              fun insert (amount: Operand.t (* of type word *)) =
@@ -276,9 +275,10 @@ fun insertFunction (f: Function.t,
                        CFunction.T {args = Vector.new0 (),
                                     convention = CFunction.Convention.Cdecl,
                                     kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
-                                                                   ensuresBytesFree = false,
+                                                                   ensuresBytesFree = NONE,
 				                                   mayGC = false,
-				                                   maySwitchThreads = false,
+				                                   maySwitchThreadsFrom = false,
+				                                   maySwitchThreadsTo = false,
 				                                   modifiesFrontier = false,
 				                                   readsStackTop = false,
 				                                   writesStackTop = false},
@@ -398,11 +398,10 @@ fun insertFunction (f: Function.t,
                    newBlock (maybeFirst, statements, transfer)
                 end
              fun maybeStack (): unit =
-                 if stack
+                if stack
                    then ignore (stackCheck
                                 (true,
-                                 insert (Operand.word
-                                         (WordX.zero (WordSize.csize ())))))
+                                 insert (Operand.zero (WordSize.csize ()))))
                 else
                    (* No limit check, just keep the block around. *)
                    List.push (newBlocks,
@@ -471,8 +470,7 @@ fun insertFunction (f: Function.t,
                                         Prim.cpointerLt,
                                         Operand.Runtime Limit,
                                         Operand.Runtime Frontier,
-                                        insert (Operand.word
-                                                (WordX.zero (WordSize.csize ()))))
+                                        insert (Operand.zero (WordSize.csize ())))
                  else
                     let
                        val bytes =
@@ -513,6 +511,7 @@ fun insertFunction (f: Function.t,
                     | _ =>
                          let
                             val bytes = Var.newNoname ()
+                            val test = Var.newNoname ()
                             val extraBytes =
                                let
                                   val extraBytes =
@@ -528,20 +527,28 @@ fun insertFunction (f: Function.t,
                              | SOME extraBytes =>
                                   (ignore o newBlock)
                                   (true,
-                                   Vector.new0 (),
-                                   Transfer.Arith
-                                   {args = Vector.new2 (Operand.word extraBytes,
-                                                        bytesNeeded),
-                                    dst = bytes,
-                                    overflow = heapCheckTooLarge (),
-                                    prim = Prim.wordAddCheck (WordSize.csize (),
-                                                              {signed = false}),
-                                    success = (heapCheck
-                                               (false,
-                                                Operand.Var
-                                                {var = bytes,
-                                                 ty = Type.csize ()})),
-                                    ty = Type.csize ()})
+                                   Vector.new2
+                                   (Statement.PrimApp
+                                    {args = Vector.new2
+                                            (Operand.word extraBytes,
+                                             bytesNeeded),
+                                     dst = SOME (bytes, Type.csize ()),
+                                     prim = Prim.wordAdd (WordSize.csize ())},
+                                    Statement.PrimApp
+                                    {args = Vector.new2
+                                            (Operand.word extraBytes,
+                                             bytesNeeded),
+                                     dst = SOME (test, Type.bool),
+                                     prim = Prim.wordAddCheckP
+                                            (WordSize.csize (),
+                                             {signed = false})}),
+                                   Transfer.ifBool
+                                   (Operand.Var {var = test, ty = Type.bool},
+                                    {falsee = heapCheck (false,
+                                                         Operand.Var
+                                                         {var = bytes,
+                                                          ty = Type.csize ()}),
+                                     truee = heapCheckTooLarge ()}))
                          end
                 end
           in
@@ -664,7 +671,7 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
                    Cont _ => true
                  | CReturn {func, ...} =>
                       CFunction.mayGC func
-                      andalso not (CFunction.ensuresBytesFree func)
+                      andalso not (Option.isSome (CFunction.ensuresBytesFree func))
                  | Handler => true
                  | Jump =>
                       (case transfer of
@@ -738,7 +745,7 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
             val classes = Array.array (n, ~1)
             fun indexClass i = Array.sub (classes, i)
             val c = Counter.new 0
-            fun setClass (f: unit Forest.t) =
+            fun setClass (f: unit Node.t Forest.t) =
                let
                   val {loops, notInLoop} = Forest.dest f
                   val class = Counter.next c
@@ -758,7 +765,8 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
                in
                   ()
                end
-            val _ = setClass (Graph.loopForestSteensgaard (g, {root = root}))
+            val _ = setClass (Graph.loopForestSteensgaard
+                              (g, {root = root, nodeValue = fn x => x}))
             val numClasses = Counter.value c
             datatype z = datatype Control.limitCheck
             val _ =
@@ -878,7 +886,7 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
       f
    end
 
-fun transform (Program.T {functions, handlesSignals, main, objectTypes}) =
+fun transform (Program.T {functions, handlesSignals, main, objectTypes, profileInfo}) =
    let
       val _ = Control.diagnostic (fn () => Layout.str "Limit Check maxPaths")
       datatype z = datatype Control.limitCheck
@@ -914,7 +922,8 @@ fun transform (Program.T {functions, handlesSignals, main, objectTypes}) =
       Program.T {functions = functions,
                  handlesSignals = handlesSignals,
                  main = main,
-                 objectTypes = objectTypes}
+                 objectTypes = objectTypes,
+                 profileInfo = profileInfo}
    end
 
 end

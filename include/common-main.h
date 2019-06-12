@@ -1,9 +1,9 @@
-/* Copyright (C) 2014 Matthew Fluet.
+/* Copyright (C) 2014,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -37,8 +37,8 @@ PRIVATE Pointer gcStateAddress;
         s.alignment = al;                                         \
         s.atMLtons = atMLtons;                                    \
         s.atMLtonsLength = cardof(atMLtons);                      \
-        s.frameLayouts = frameLayouts;                            \
-        s.frameLayoutsLength = cardof(frameLayouts);              \
+        s.frameInfos = frameInfos;                                \
+        s.frameInfosLength = cardof(frameInfos);                  \
         s.globals = (objptr*)globalObjptr;                        \
         s.globalsLength = cardof(globalObjptr);                   \
         s.loadGlobals = loadGlobals;                              \
@@ -51,10 +51,8 @@ PRIVATE Pointer gcStateAddress;
         s.saveGlobals = saveGlobals;                              \
         s.vectorInits = vectorInits;                              \
         s.vectorInitsLength = cardof(vectorInits);                \
-        s.sourceMaps.frameSources = frameSources;                 \
-        s.sourceMaps.frameSourcesLength = cardof(frameSources);   \
-        s.sourceMaps.sourceLabels = sourceLabels;                 \
-        s.sourceMaps.sourceLabelsLength = cardof(sourceLabels);   \
+        s.sourceMaps.profileLabelInfos = profileLabelInfos;       \
+        s.sourceMaps.profileLabelInfosLength = cardof(profileLabelInfos);   \
         s.sourceMaps.sourceNames = sourceNames;                   \
         s.sourceMaps.sourceNamesLength = cardof(sourceNames);     \
         s.sourceMaps.sourceSeqs = sourceSeqs;                     \
@@ -70,16 +68,14 @@ PRIVATE Pointer gcStateAddress;
 #define LIB_OPEN(x) LIB_PASTE(x, _open)
 #define LIB_CLOSE(x) LIB_PASTE(x, _close)
 
-static void MLton_callFromC ();
-
 /* RAM_NOTE: Should this be merged into gc/init.c:GC_duplicate? */
 void Duplicate (GC_state d, GC_state s) {
   // Initialize
   d->alignment = s->alignment;
   d->atMLtons = s->atMLtons;
   d->atMLtonsLength = s->atMLtonsLength;
-  d->frameLayouts = s->frameLayouts;
-  d->frameLayoutsLength = s->frameLayoutsLength;
+  d->frameInfos = s->frameInfos;
+  d->frameInfosLength = s->frameInfosLength;
   d->globals = s->globals;
   d->globalsLength = s->globalsLength;
   d->loadGlobals = s->loadGlobals;
@@ -92,10 +88,8 @@ void Duplicate (GC_state d, GC_state s) {
   d->saveGlobals = s->saveGlobals;
   d->vectorInits = s->vectorInits;
   d->vectorInitsLength = s->vectorInitsLength;
-  d->sourceMaps.frameSources = s->sourceMaps.frameSources;
-  d->sourceMaps.frameSourcesLength = s->sourceMaps.frameSourcesLength;
-  d->sourceMaps.sourceLabels = s->sourceMaps.sourceLabels;
-  d->sourceMaps.sourceLabelsLength = s->sourceMaps.sourceLabelsLength;
+  d->sourceMaps.profileLabelInfos = s->sourceMaps.profileLabelInfos;
+  d->sourceMaps.profileLabelInfosLength = s->sourceMaps.profileLabelInfosLength;
   d->sourceMaps.sourceNames = s->sourceMaps.sourceNames;
   d->sourceMaps.sourceNamesLength = s->sourceMaps.sourceNamesLength;
   d->sourceMaps.sourceSeqs = s->sourceMaps.sourceSeqs;

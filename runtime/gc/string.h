@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -16,8 +16,8 @@ struct GC_string8_obj {
   char chars[1];
 };
 typedef struct GC_string8 {
-  GC_arrayCounter counter;
-  GC_arrayLength length;
+  GC_sequenceCounter counter;
+  GC_sequenceLength length;
   GC_header header;
   objptr fwdptr;
   struct GC_string8_obj obj;
@@ -25,8 +25,8 @@ typedef struct GC_string8 {
 
 COMPILE_TIME_ASSERT(GC_string8__obj_packed,
                     offsetof(struct GC_string8, obj) ==
-                    sizeof(GC_arrayCounter)
-                    + sizeof(GC_arrayLength)
+                    sizeof(GC_sequenceCounter)
+                    + sizeof(GC_sequenceLength)
                     + sizeof(GC_header)
                     + sizeof(objptr));
 COMPILE_TIME_ASSERT(GC_string8_obj__chars_packed,

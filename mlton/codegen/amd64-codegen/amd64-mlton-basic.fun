@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -231,6 +231,14 @@ struct
                     class = Classes.StaticTemp}
   fun fpeqTempContentsOperand size
     = Operand.memloc (fpeqTempContents size)
+
+  val overflowCheckTemp = Label.fromString "overflowCheckTemp"
+  fun overflowCheckTempContents size
+    = makeContents {base = Immediate.label overflowCheckTemp,
+                    size = size,
+                    class = Classes.StaticTemp}
+  fun overflowCheckTempContentsOperand size
+    = Operand.memloc (overflowCheckTempContents size)
 
   local
      fun make prefix =

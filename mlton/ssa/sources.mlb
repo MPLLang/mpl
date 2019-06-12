@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -35,14 +36,6 @@ local
    shrink2.sig
    shrink.fun
    shrink2.fun
-   flat-lattice.sig
-   ann "forceUsed" in flat-lattice.fun end
-   n-point-lattice.sig
-   ann "forceUsed" in n-point-lattice.fun end
-   two-point-lattice.sig
-   two-point-lattice.fun
-   three-point-lattice.sig
-   ann "forceUsed" in three-point-lattice.fun end
    restore.sig
    restore.fun
 
@@ -59,6 +52,7 @@ local
    constant-propagation.fun
    contify.fun
    deep-flatten.fun
+   duplicate-globals.fun
    flatten.fun
    inline.sig
    inline.fun
@@ -82,6 +76,7 @@ local
    remove-unused2.fun
    share-zero-vec.fun
    simplify-types.fun
+   split-types.fun
    useless.fun
    zone.fun
    simplify.sig
@@ -95,12 +90,9 @@ local
    ssa-to-ssa2.sig
    ssa-to-ssa2.fun
 in
-   signature HANDLER
-   signature RETURN
    signature SSA
    signature SSA2
 
-   functor FlatLattice
    functor Ssa
    functor Ssa2
    functor SsaToSsa2
