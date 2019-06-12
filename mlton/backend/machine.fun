@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -11,24 +11,6 @@ functor Machine (S: MACHINE_STRUCTS): MACHINE =
 struct
 
 open S
-
-structure ObjptrTycon = ObjptrTycon ()
-structure Runtime = Runtime ()
-structure Scale = Scale ()
-structure RepType = RepType (structure CFunction = CFunction
-                             structure CType = CType
-                             structure Label = Label
-                             structure ObjptrTycon = ObjptrTycon
-                             structure Prim = Prim
-                             structure RealSize = RealSize
-                             structure Runtime = Runtime
-                             structure Scale = Scale
-                             structure WordSize = WordSize
-                             structure WordX = WordX
-                             structure WordXVector = WordXVector)
-structure ObjectType = RepType.ObjectType
-
-structure Type = RepType
 
 structure ChunkLabel = Id (val noname = "ChunkLabel")
 
@@ -103,10 +85,11 @@ structure Global =
          let
             open Layout
          in
-            seq [str "glob ",
-                 record [("index", Int.layout index),
-                         ("isRoot", Bool.layout isRoot),
-                         ("ty", Type.layout ty)]]
+            seq [str (concat ["G", Type.name ty,
+                              if isRoot then "" else "NR"]),
+                 paren (Int.layout index),
+                 str ": ",
+                 Type.layout ty]
          end
 
       local
@@ -197,12 +180,7 @@ structure StackOffset =
 structure Operand =
    struct
       datatype t =
-         ArrayOffset of {base: t,
-                         index: t,
-                         offset: Bytes.t,
-                         scale: Scale.t,
-                         ty: Type.t}
-       | Cast of t * Type.t
+         Cast of t * Type.t
        | Contents of {oper: t,
                       ty: Type.t}
        | Frontier
@@ -215,14 +193,18 @@ structure Operand =
                     ty: Type.t}
        | Register of Register.t
        | Real of RealX.t
+       | SequenceOffset of {base: t,
+                            index: t,
+                            offset: Bytes.t,
+                            scale: Scale.t,
+                            ty: Type.t}
        | StackOffset of StackOffset.t
        | StackTop
        | Word of WordX.t
        | Address of t
 
     val ty =
-       fn ArrayOffset {ty, ...} => ty
-        | Cast (_, ty) => ty
+       fn Cast (_, ty) => ty
         | Contents {ty, ...} => ty
         | Frontier => Type.cpointer ()
         | GCState => Type.gcState ()
@@ -232,6 +214,7 @@ structure Operand =
         | Offset {ty, ...} => ty
         | Real r => Type.real (RealX.size r)
         | Register r => Register.ty r
+        | SequenceOffset {ty, ...} => ty
         | StackOffset s => StackOffset.ty s
         | StackTop => Type.cpointer ()
         | Word w => Type.ofWordX w
@@ -246,12 +229,7 @@ structure Operand =
                else empty
          in
             case z of
-               ArrayOffset {base, index, offset, scale, ty} =>
-                  seq [str (concat ["X", Type.name ty, " "]),
-                       tuple [layout base, layout index, Scale.layout scale,
-                              Bytes.layout offset],
-                       constrain ty]
-             | Cast (z, ty) =>
+               Cast (z, ty) =>
                   seq [str "Cast ", tuple [layout z, Type.layout ty]]
              | Contents {oper, ty} =>
                   seq [str (concat ["C", Type.name ty, " "]),
@@ -265,21 +243,23 @@ structure Operand =
                   seq [str (concat ["O", Type.name ty, " "]),
                        tuple [layout base, Bytes.layout offset],
                        constrain ty]
-             | Real r => RealX.layout r
+             | Real r => RealX.layout (r, {suffix = true})
              | Register r => Register.layout r
+             | SequenceOffset {base, index, offset, scale, ty} =>
+                  seq [str (concat ["X", Type.name ty, " "]),
+                       tuple [layout base, layout index, Scale.layout scale,
+                              Bytes.layout offset],
+                       constrain ty]
              | StackOffset so => StackOffset.layout so
              | StackTop => str "<StackTop>"
-             | Word w => WordX.layout w
+             | Word w => WordX.layout (w, {suffix = true})
              | Address z => seq [str "Address ", tuple [layout z]]
          end
 
     val toString = Layout.toString o layout
 
     val rec equals =
-         fn (ArrayOffset {base = b, index = i, ...},
-             ArrayOffset {base = b', index = i', ...}) =>
-                equals (b, b') andalso equals (i, i')
-           | (Cast (z, t), Cast (z', t')) =>
+         fn (Cast (z, t), Cast (z', t')) =>
                 Type.equals (t, t') andalso equals (z, z')
            | (Contents {oper = z, ...}, Contents {oper = z', ...}) =>
                 equals (z, z')
@@ -291,6 +271,9 @@ structure Operand =
                 equals (b, b') andalso Bytes.equals (i, i')
            | (Real r, Real r') => RealX.equals (r, r')
            | (Register r, Register r') => Register.equals (r, r')
+           | (SequenceOffset {base = b, index = i, ...},
+              SequenceOffset {base = b', index = i', ...}) =>
+                equals (b, b') andalso equals (i, i')
            | (StackOffset so, StackOffset so') => StackOffset.equals (so, so')
            | (Word w, Word w') => WordX.equals (w, w')
            | (Address z, Address z') => equals (z, z')
@@ -305,25 +288,25 @@ structure Operand =
             case (read, write) of
                (Cast (z, _), _) => interfere (write, z)
              | (_, Cast (z, _)) => interfere (z, read)
-             | (ArrayOffset {base, index, ...}, _) =>
-                  inter base orelse inter index
              | (Contents {oper, ...}, _) => inter oper
              | (Global g, Global g') => Global.equals (g, g')
              | (Offset {base, ...}, _) => inter base
              | (Register r, Register r') => Register.equals (r, r')
+             | (SequenceOffset {base, index, ...}, _) =>
+                  inter base orelse inter index
              | (StackOffset so, StackOffset so') =>
                   StackOffset.interfere (so, so')
              | _ => false
          end
 
       val rec isLocation =
-         fn ArrayOffset _ => true
-          | Cast (z, _) => isLocation z
+         fn Cast (z, _) => isLocation z
           | Contents _ => true
           | GCState => true
           | Global _ => true
           | Offset _ => true
           | Register _ => true
+          | SequenceOffset _ => true
           | StackOffset _ => true
           | Address _ => true (* SAM_NOTE: CHECK *)
           | _ => false
@@ -391,7 +374,7 @@ structure Statement =
             datatype z = datatype Operand.t
             fun bytes (b: Bytes.t): Operand.t =
                Word (WordX.fromIntInf (Bytes.toIntInf b, WordSize.csize ()))
-            val bytesNonMetaData = Bytes.- (size, Runtime.metaDataSize ())
+            val bytesNonMetaData = Bytes.- (size, Runtime.normalMetaDataSize ())
          in
             Vector.new4
             ((* *(( GC_header* )frontier) = header; *)
@@ -434,17 +417,6 @@ structure Statement =
                                       NONE => a
                                     | SOME z => f (z, a))
           | _ => a
-   end
-
-structure FrameInfo =
-   struct
-      datatype t = T of {frameLayoutsIndex: int}
-
-      fun layout (T {frameLayoutsIndex, ...}) =
-         Layout.record [("frameLayoutsIndex", Int.layout frameLayoutsIndex)]
-
-      fun equals (T {frameLayoutsIndex = i}, T {frameLayoutsIndex = i'}) =
-         i = i'
    end
 
 structure Live =
@@ -499,15 +471,10 @@ structure Live =
 structure Transfer =
    struct
       datatype t =
-         Arith of {args: Operand.t vector,
-                   dst: Operand.t,
-                   overflow: Label.t,
-                   prim: Type.t Prim.t,
-                   success: Label.t}
-       | CCall of {args: Operand.t vector,
-                   frameInfo: FrameInfo.t option,
+         CCall of {args: Operand.t vector,
                    func: Type.t CFunction.t,
-                   return: Label.t option}
+                   return: {return: Label.t,
+                            size: Bytes.t option} option}
        | Call of {label: Label.t,
                   live: Live.t vector,
                   return: {return: Label.t,
@@ -523,20 +490,16 @@ structure Transfer =
             open Layout
          in
             case t of
-               Arith {prim, args, dst, overflow, success, ...} =>
-                  seq [str "Arith ",
-                       record [("prim", Prim.layout prim),
-                               ("args", Vector.layout Operand.layout args),
-                               ("dst", Operand.layout dst),
-                               ("overflow", Label.layout overflow),
-                               ("success", Label.layout success)]]
-             | CCall {args, frameInfo, func, return} =>
+               CCall {args, func, return} =>
                   seq [str "CCall ",
                        record
                        [("args", Vector.layout Operand.layout args),
-                        ("frameInfo", Option.layout FrameInfo.layout frameInfo),
                         ("func", CFunction.layout (func, Type.layout)),
-                        ("return", Option.layout Label.layout return)]]
+                        ("return", Option.layout
+                         (fn {return, size} =>
+                          record [("return", Label.layout return),
+                                  ("size", Option.layout Bytes.layout size)])
+                         return)]]
              | Call {label, live, return} =>
                   seq [str "Call ",
                        record [("label", Label.layout label),
@@ -556,18 +519,115 @@ structure Transfer =
 
        fun foldOperands (t, ac, f) =
          case t of
-            Arith {args, dst, ...} => Vector.fold (args, f (dst, ac), f)
-          | CCall {args, ...} => Vector.fold (args, ac, f)
+            CCall {args, ...} => Vector.fold (args, ac, f)
           | Switch s =>
                Switch.foldLabelUse
                (s, ac, {label = fn (_, a) => a,
                         use = f})
           | _ => ac
+   end
 
-       fun foldDefs (t, a, f) =
-         case t of
-            Arith {dst, ...} => f (dst, a)
-          | _ => a
+structure FrameOffsets =
+   struct
+      datatype t = T of {index: int,
+                         offsets: Bytes.t vector}
+
+      local
+         fun make f (T r) = f r
+      in
+         val index = make #index
+         val offsets = make #offsets
+      end
+
+      fun new {index, offsets} =
+         T {index = index, offsets = offsets}
+
+      fun equals (fo1, fo2) =
+         Int.equals (index fo1, index fo2)
+         andalso Vector.equals (offsets fo1, offsets fo2, Bytes.equals)
+
+      fun layout (T {index, offsets}) =
+         let
+            open Layout
+         in
+            record [("index", Int.layout index),
+                    ("offsets", Vector.layout Bytes.layout offsets)]
+         end
+
+      fun hash (T {index, offsets}) =
+         Hash.combine (Word.fromInt index, Hash.vectorMap (offsets, Bytes.hash))
+   end
+
+structure FrameInfo =
+   struct
+      structure Kind =
+         struct
+            datatype t = C_FRAME | ML_FRAME
+            fun equals (k1, k2) =
+               case (k1, k2) of
+                  (C_FRAME, C_FRAME) => true
+                | (ML_FRAME, ML_FRAME) => true
+                | _ => false
+            local
+               val newHash = Random.word
+               val c = newHash ()
+               val ml = newHash ()
+            in
+               fun hash k =
+                  case k of
+                     C_FRAME => c
+                   | ML_FRAME => ml
+            end
+            fun toString k =
+               case k of
+                  C_FRAME => "C_FRAME"
+                | ML_FRAME => "ML_FRAME"
+            val layout = Layout.str o toString
+         end
+
+      datatype t = T of {frameOffsets: FrameOffsets.t,
+                         index: int ref,
+                         kind: Kind.t,
+                         size: Bytes.t,
+                         sourceSeqIndex: int option}
+
+      local
+         fun make f (T r) = f r
+      in
+         val frameOffsets = make #frameOffsets
+         val indexRef = make #index
+         val kind = make #kind
+         val size = make #size
+         val sourceSeqIndex = make #sourceSeqIndex
+      end
+      val index = ! o indexRef
+      fun setIndex (fi, i) = indexRef fi := i
+      val offsets = FrameOffsets.offsets o frameOffsets
+
+      fun new {frameOffsets, index, kind, size, sourceSeqIndex} =
+         T {frameOffsets = frameOffsets,
+            index = ref index,
+            kind = kind,
+            size = size,
+            sourceSeqIndex = sourceSeqIndex}
+
+      fun equals (fi1, fi2) =
+         FrameOffsets.equals (frameOffsets fi1, frameOffsets fi2)
+         andalso Ref.equals (indexRef fi1, indexRef fi2)
+         andalso Kind.equals (kind fi1, kind fi2)
+         andalso Bytes.equals (size fi1, size fi2)
+         andalso Option.equals (sourceSeqIndex fi1, sourceSeqIndex fi2, Int.equals)
+
+      fun layout (T {frameOffsets, index, kind, size, sourceSeqIndex}) =
+         let
+            open Layout
+         in
+            record [("frameOffsets", FrameOffsets.layout frameOffsets),
+                    ("index", Ref.layout Int.layout index),
+                    ("kind", Kind.layout kind),
+                    ("size", Bytes.layout size),
+                    ("sourceSeqIndex", Option.layout Int.layout sourceSeqIndex)]
+         end
    end
 
 structure Kind =
@@ -578,7 +638,7 @@ structure Kind =
        | CReturn of {dst: Live.t option,
                      frameInfo: FrameInfo.t option,
                      func: Type.t CFunction.t}
-       | Func
+       | Func of {frameInfo: FrameInfo.t}
        | Handler of {frameInfo: FrameInfo.t,
                      handles: Live.t vector}
        | Jump
@@ -598,7 +658,10 @@ structure Kind =
                        [("dst", Option.layout Live.layout dst),
                         ("frameInfo", Option.layout FrameInfo.layout frameInfo),
                         ("func", CFunction.layout (func, Type.layout))]]
-             | Func => str "Func"
+             | Func {frameInfo} =>
+                  seq [str "Func ",
+                       record
+                       [("frameInfo", FrameInfo.layout frameInfo)]]
              | Handler {frameInfo, handles} =>
                   seq [str "Handler ",
                        record [("frameInfo", FrameInfo.layout frameInfo),
@@ -607,11 +670,20 @@ structure Kind =
              | Jump => str "Jump"
          end
 
+      fun isEntry (k: t): bool =
+         case k of
+            Cont _ => true
+          | CReturn {func, ...} => CFunction.maySwitchThreadsTo func
+          | Func _ => true
+          | Handler _ => true
+          | _ => false
+
       val frameInfoOpt =
          fn Cont {frameInfo, ...} => SOME frameInfo
           | CReturn {frameInfo, ...} => frameInfo
+          | Func {frameInfo, ...} => SOME frameInfo
           | Handler {frameInfo, ...} => SOME frameInfo
-          | _ => NONE
+          | Jump => NONE
    end
 
 structure Block =
@@ -656,7 +728,7 @@ structure Block =
 
       fun layouts (block, output' : Layout.t -> unit) = output' (layout block)
 
-      fun foldDefs (T {kind, statements, transfer, ...}, a, f) =
+      fun foldDefs (T {kind, statements, ...}, a, f) =
          let
             val a =
                case kind of
@@ -668,7 +740,6 @@ structure Block =
             val a =
                Vector.fold (statements, a, fn (s, a) =>
                             Statement.foldDefs (s, a, f))
-            val a = Transfer.foldDefs (transfer, a, f)
          in
             a
          end
@@ -680,154 +751,45 @@ structure Chunk =
                          chunkLabel: ChunkLabel.t,
                          regMax: CType.t -> int}
 
-      fun layouts (T {blocks, ...}, output : Layout.t -> unit) =
-         Vector.foreach (blocks, fn block => Block.layouts (block, output))
+      local
+         fun make sel (T r) = sel r
+               in
+         val chunkLabel = make #chunkLabel
+               end
+
+      fun layouts (T {blocks, chunkLabel, ...}, output' : Layout.t -> unit) =
+                let
+            open Layout
+          in
+            ((output' o seq) [str "Chunk ", ChunkLabel.layout chunkLabel]) ;
+            Vector.foreach (blocks, fn block => Block.layouts (block, output'))
+          end
 
       fun clear (T {blocks, ...}) =
          Vector.foreach (blocks, Block.clear)
    end
 
-structure ProfileInfo =
-   struct
-      datatype t =
-         T of {frameSources: int vector,
-               labels: {label: ProfileLabel.t,
-                        sourceSeqsIndex: int} vector,
-               names: string vector,
-               sourceSeqs: int vector vector,
-               sources: {nameIndex: int,
-                         successorsIndex: int} vector}
-
-      val empty = T {frameSources = Vector.new0 (),
-                     labels = Vector.new0 (),
-                     names = Vector.new0 (),
-                     sourceSeqs = Vector.new0 (),
-                     sources = Vector.new0 ()}
-
-      fun clear (T {labels, ...}) =
-         Vector.foreach (labels, ProfileLabel.clear o #label)
-
-      fun layout (T {frameSources, labels, names, sourceSeqs, sources}) =
-         Layout.record
-         [("frameSources", Vector.layout Int.layout frameSources),
-          ("labels",
-           Vector.layout (fn {label, sourceSeqsIndex} =>
-                          Layout.record
-                          [("label", ProfileLabel.layout label),
-                           ("sourceSeqsIndex",
-                            Int.layout sourceSeqsIndex)])
-           labels),
-          ("names", Vector.layout String.layout names),
-          ("sourceSeqs", Vector.layout (Vector.layout Int.layout) sourceSeqs),
-          ("sources",
-           Vector.layout (fn {nameIndex, successorsIndex} =>
-                          Layout.record [("nameIndex", Int.layout nameIndex),
-                                         ("successorsIndex",
-                                          Int.layout successorsIndex)])
-           sources)]
-
-      fun layouts (pi, output) = output (layout pi)
-
-      fun isOK (T {frameSources, labels, names, sourceSeqs, sources}): bool =
-         let
-            val namesLength = Vector.length names
-            val sourceSeqsLength = Vector.length sourceSeqs
-            val sourcesLength = Vector.length sources
-         in
-            !Control.profile = Control.ProfileNone
-            orelse
-            (Vector.forall (frameSources, fn i =>
-                            0 <= i andalso i < sourceSeqsLength)
-             andalso (Vector.forall
-                      (labels, fn {sourceSeqsIndex = i, ...} =>
-                       0 <= i andalso i < sourceSeqsLength))
-             andalso (Vector.forall
-                      (sourceSeqs, fn v =>
-                       Vector.forall
-                       (v, fn i => 0 <= i andalso i < sourcesLength)))
-             andalso (Vector.forall
-                      (sources, fn {nameIndex, successorsIndex} =>
-                       0 <= nameIndex
-                       andalso nameIndex < namesLength
-                       andalso 0 <= successorsIndex
-                       andalso successorsIndex < sourceSeqsLength)))
-         end
-
-       fun modify (T {frameSources, labels, names, sourceSeqs, sources})
-          : {newProfileLabel: ProfileLabel.t -> ProfileLabel.t,
-             delProfileLabel: ProfileLabel.t -> unit,
-             getProfileInfo: unit -> t} =
-          let
-             val {get: ProfileLabel.t -> int, set, ...} =
-                Property.getSet
-                (ProfileLabel.plist,
-                 Property.initRaise ("ProfileInfo.extend", ProfileLabel.layout))
-             val _ =
-                Vector.foreach
-                (labels, fn {label, sourceSeqsIndex} =>
-                 set (label, sourceSeqsIndex))
-             val new = ref []
-             fun newProfileLabel l =
-               let
-                  val i = get l
-                  val l' = ProfileLabel.new ()
-                  val _ = set (l', i)
-                  val _ = List.push (new, {label = l', sourceSeqsIndex = i})
-               in
-                  l'
-               end
-             fun delProfileLabel l = set (l, ~1)
-             fun getProfileInfo () =
-                let
-                   val labels = Vector.concat
-                                [labels, Vector.fromList (!new)]
-                   val labels = Vector.keepAll
-                                (labels, fn {label, ...} =>
-                                 get label <> ~1)
-                   val pi = T {frameSources = frameSources,
-                               labels = Vector.concat
-                                        [labels, Vector.fromList (!new)],
-                               names = names,
-                               sourceSeqs = sourceSeqs,
-                               sources = sources}
-                in
-                  Assert.assert ("Machine.getProfileInfo", fn () => isOK pi);
-                  pi
-                end
-          in
-             {newProfileLabel = newProfileLabel,
-              delProfileLabel = delProfileLabel,
-              getProfileInfo = getProfileInfo}
-          end
-   end
-
 structure Program =
    struct
       datatype t = T of {chunks: Chunk.t list,
-                         frameLayouts: {frameOffsetsIndex: int,
-                                        isC: bool,
-                                        size: Bytes.t} vector,
-                         frameOffsets: Bytes.t vector vector,
+                         frameInfos: FrameInfo.t vector,
+                         frameOffsets: FrameOffsets.t vector,
                          handlesSignals: bool,
                          main: {chunkLabel: ChunkLabel.t,
                                 label: Label.t},
                          maxFrameSize: Bytes.t,
                          objectTypes: ObjectType.t vector,
-                         profileInfo: ProfileInfo.t option,
                          reals: (Global.t * RealX.t) list,
+                         sourceMaps: SourceMaps.t option,
                          vectors: (Global.t * WordXVector.t) list}
 
-      fun clear (T {chunks, profileInfo, ...}) =
+      fun clear (T {chunks, sourceMaps, ...}) =
          (List.foreach (chunks, Chunk.clear)
-          ; Option.app (profileInfo, ProfileInfo.clear))
+          ; Option.app (sourceMaps, SourceMaps.clear))
 
-      fun frameSize (T {frameLayouts, ...},
-                     FrameInfo.T {frameLayoutsIndex, ...}) =
-         #size (Vector.sub (frameLayouts, frameLayoutsIndex))
-
-      fun layouts (T {chunks, frameLayouts, frameOffsets, handlesSignals,
+      fun layouts (T {chunks, frameInfos, frameOffsets, handlesSignals,
                       main = {label, ...},
-                      maxFrameSize, objectTypes, profileInfo, ...},
+                      maxFrameSize, objectTypes, sourceMaps, ...},
                    output': Layout.t -> unit) =
          let
             open Layout
@@ -837,24 +799,77 @@ structure Program =
                     [("handlesSignals", Bool.layout handlesSignals),
                      ("main", Label.layout label),
                      ("maxFrameSize", Bytes.layout maxFrameSize),
-                     ("frameOffsets",
-                      Vector.layout (Vector.layout Bytes.layout) frameOffsets),
-                     ("frameLayouts",
-                      Vector.layout (fn {frameOffsetsIndex, isC, size} =>
-                                     record [("frameOffsetsIndex",
-                                              Int.layout frameOffsetsIndex),
-                                             ("isC", Bool.layout isC),
-                                             ("size", Bytes.layout size)])
-                      frameLayouts)])
-            ; Option.app (profileInfo, fn pi =>
-                          (output (str "\nProfileInfo:")
-                           ; ProfileInfo.layouts (pi, output)))
+                     ("frameOffsets", Vector.layout FrameOffsets.layout frameOffsets),
+                     ("frameInfos", Vector.layout FrameInfo.layout frameInfos)])
+            ; Option.app (sourceMaps, fn pi =>
+                          (output (str "\nSourceMaps:")
+                           ; SourceMaps.layouts (pi, output)))
             ; output (str "\nObjectTypes:")
             ; Vector.foreachi (objectTypes, fn (i, ty) =>
                                output (seq [str "opt_", Int.layout i,
                                             str " = ", ObjectType.layout ty]))
             ; output (str "\n")
             ; List.foreach (chunks, fn chunk => Chunk.layouts (chunk, output))
+         end
+
+      val toFile = {display = Control.Layouts layouts, style = Control.ML, suffix = "machine"}
+
+      fun layoutStats (program as T {chunks, objectTypes, ...}) =
+         let
+            val numChunks = ref 0
+            val numBlocks = ref 0
+            val numStatements = ref 0
+            val _ =
+               List.foreach
+               (chunks, fn Chunk.T {blocks, ...} =>
+                (Int.inc numChunks
+                 ; Vector.foreach
+                   (blocks, fn Block.T {statements, ...} =>
+                    (Int.inc numBlocks
+                     ; numStatements := !numStatements + Vector.length statements))))
+            val numObjectTypes = Vector.length objectTypes
+            open Layout
+         in
+            align
+            [seq [Control.sizeMessage ("machine program", program)],
+             seq [str "num chunks in program = ", Int.layout (!numChunks)],
+             seq [str "num blocks in program = ", Int.layout (!numBlocks)],
+             seq [str "num statements in program = ", Int.layout (!numStatements)],
+             seq [str "num object types in program = ", Int.layout (numObjectTypes)]]
+         end
+
+      fun shuffle (T {chunks, frameInfos, frameOffsets,
+                      handlesSignals, main, maxFrameSize,
+                      objectTypes, reals, sourceMaps, vectors}) =
+         let
+            fun shuffle v =
+               let
+                  val a = Array.fromVector v
+                  val () = Array.shuffle a
+               in
+                  Array.toVector a
+               end
+            val chunks = Vector.fromList chunks
+            val chunks = shuffle chunks
+            val chunks =
+               Vector.map
+               (chunks, fn Chunk.T {blocks, chunkLabel, regMax} =>
+                Chunk.T
+                {blocks = shuffle blocks,
+                 chunkLabel = chunkLabel,
+                 regMax = regMax})
+            val chunks = Vector.toList chunks
+         in
+            T {chunks = chunks,
+               frameInfos = frameInfos,
+               frameOffsets = frameOffsets,
+               handlesSignals = handlesSignals,
+               main = main,
+               maxFrameSize = maxFrameSize,
+               objectTypes = objectTypes,
+               reals = reals,
+               sourceMaps = sourceMaps,
+               vectors = vectors}
          end
 
       structure Alloc =
@@ -892,10 +907,32 @@ structure Program =
          end
 
       fun typeCheck (program as
-                     T {chunks, frameLayouts, frameOffsets,
-                        maxFrameSize, objectTypes, profileInfo, reals,
+                     T {chunks, frameInfos, frameOffsets,
+                        maxFrameSize, objectTypes, sourceMaps, reals,
                         vectors, ...}) =
          let
+            val (checkProfileLabel, finishCheckProfileLabel) =
+               Err.check'
+               ("sourceMaps",
+                fn () =>
+                (case (!Control.profile, sourceMaps) of
+                    (Control.ProfileNone, NONE) => SOME (fn _ => false, fn () => ())
+                  | (_, NONE) => NONE
+                  | (Control.ProfileNone, SOME _) => NONE
+                  | (_, SOME sourceMaps) =>
+                       let
+                          val (checkProfileLabel, finishCheckProfileLabel) =
+                             SourceMaps.checkProfileLabel sourceMaps
+                       in
+                          if SourceMaps.check sourceMaps
+                             then SOME (checkProfileLabel,
+                                        fn () => Err.check
+                                                 ("sourceMaps (finishCheckProfileLabel)",
+                                                  finishCheckProfileLabel,
+                                                  fn () => SourceMaps.layout sourceMaps))
+                             else NONE
+                       end),
+                fn () => Option.layout SourceMaps.layout sourceMaps)
             val _ =
                if !Control.profile = Control.ProfileTimeLabel
                   then
@@ -904,7 +941,7 @@ structure Program =
                       Vector.foreach
                       (blocks, fn Block.T {kind, label, statements, ...} =>
                        if (case kind of
-                              Kind.Func => true
+                              Kind.Func _ => true
                             | _ => false)
                           orelse (0 < Vector.length statements
                                   andalso (case Vector.first statements of
@@ -914,62 +951,51 @@ structure Program =
                        else print (concat ["missing profile info: ",
                                            Label.toString label, "\n"])))
                else ()
-            val profileLabelIsOk =
-               case profileInfo of
-                  NONE =>
-                     if !Control.profile = Control.ProfileNone
-                        then fn _ => false
-                     else Error.bug
-                          "Machine.Program.typeCheck.profileLabelIsOk: profileInfo = NONE"
-                | SOME (ProfileInfo.T {frameSources,
-                                       labels = profileLabels, ...}) =>
-                     if !Control.profile = Control.ProfileNone
-                        orelse (Vector.length frameSources
-                                <> Vector.length frameLayouts)
-                        then Error.bug
-                             "Machine.Program.typeCheck.profileLabelIsOk: profileInfo = SOME"
-                     else
-                        let
-                           val {get = profileLabelCount, ...} =
-                              Property.get
-                              (ProfileLabel.plist,
-                               Property.initFun (fn _ => ref 0))
                            val _ =
-                              Vector.foreach
-                              (profileLabels, fn {label, ...} =>
+               Vector.foreachi
+               (frameOffsets, fn (i, fo) =>
                                let
-                                  val r = profileLabelCount label
+                   val index = FrameOffsets.index fo
+                   val offsets = FrameOffsets.offsets fo
                                in
-                                  if 0 = !r
-                                     then r := 1
-                                  else Error.bug
-                                       "Machine.Program.typeCheck.profileLabelIsOk: duplicate profile label"
+                   Err.check ("frameOffsets",
+                              fn () => (Int.equals (i, index)
+                                        andalso Vector.forall
+                                                (offsets, fn offset =>
+                                                 Bytes.< (offset, maxFrameSize))),
+                              fn () => FrameOffsets.layout fo)
                                end)
-                        in
-                           fn l =>
+            fun checkFrameOffsets fo =
                            let
-                              val r = profileLabelCount l
+                  val index = FrameOffsets.index fo
                            in
-                              if 1 = !r
-                                 then (r := 2; true)
-                              else false
-                           end
+                  FrameOffsets.equals (Vector.sub (frameOffsets, index), fo)
+                  handle Subscript => false
                         end
-            fun getFrameInfo (FrameInfo.T {frameLayoutsIndex, ...}) =
-               Vector.sub (frameLayouts, frameLayoutsIndex)
             val _ =
-               Vector.foreach
-               (frameLayouts, fn {frameOffsetsIndex, size, ...} =>
+               Vector.foreachi
+               (frameInfos, fn (i, fi) =>
+                let
+                   val index = FrameInfo.index fi
+                   val frameOffsets = FrameInfo.frameOffsets fi
+                   val size = FrameInfo.size fi
+                in
                 Err.check
-                ("frameLayouts",
-                 fn () => (0 <= frameOffsetsIndex
-                           andalso frameOffsetsIndex < Vector.length frameOffsets
+                   ("frameInfos",
+                    fn () => (Int.equals (i, index)
+                              andalso checkFrameOffsets frameOffsets
                            andalso Bytes.<= (size, maxFrameSize)
                            andalso Bytes.<= (size, Runtime.maxFrameSize)
                            andalso Bytes.isWord32Aligned size),
-                 fn () => Layout.record [("frameOffsetsIndex",
-                                          Int.layout frameOffsetsIndex),
-                                         ("size", Bytes.layout size)]))
+                    fn () => FrameInfo.layout fi)
+                end)
+            fun checkFrameInfo fi =
+               let
+                  val index = FrameInfo.index fi
+               in
+                  FrameInfo.equals (Vector.sub (frameInfos, index), fi)
+                  handle Subscript => false
+               end
             val _ =
                Vector.foreach
                (objectTypes, fn ty =>
@@ -993,7 +1019,7 @@ structure Program =
             val _ =
                globals ("real", reals,
                         fn (t, r) => Type.equals (t, Type.real (RealX.size r)),
-                        RealX.layout)
+                        fn r => RealX.layout (r, {suffix = true}))
             val _ =
                globals ("vector", vectors,
                         fn (t, v) =>
@@ -1033,18 +1059,7 @@ structure Program =
                   datatype z = datatype Operand.t
                   fun ok () =
                      case x of
-                        ArrayOffset {base, index, offset, scale, ty} =>
-                           (checkOperand (base, alloc)
-                            ; checkOperand (index, alloc)
-                            ; (Operand.isLocation base
-                               andalso
-                               (Type.arrayOffsetIsOk {base = Operand.ty base,
-                                                      index = Operand.ty index,
-                                                      offset = offset,
-                                                      tyconTy = tyconTy,
-                                                      result = ty,
-                                                      scale = scale})))
-                      | Cast (z, t) =>
+                        Cast (z, t) =>
                            (checkOperand (z, alloc)
                             ; (Type.castIsOk
                                {from = Operand.ty z,
@@ -1080,8 +1095,7 @@ structure Program =
                       | Real _ => true
                       | Register r => Alloc.doesDefine (alloc, Live.Register r)
                       | StackOffset (so as StackOffset.T {offset, ty, ...}) =>
-                           Bytes.<= (Bytes.+ (offset, Type.bytes ty),
-                                     maxFrameSize)
+                           Bytes.<= (Bytes.+ (offset, Type.bytes ty), maxFrameSize)
                            andalso Alloc.doesDefine (alloc, Live.StackOffset so)
                            andalso (case Type.deLabel ty of
                                        NONE => true
@@ -1091,8 +1105,7 @@ structure Program =
                                                 labelBlock l
                                              fun doit fi =
                                                 let
-                                                   val {size, ...} =
-                                                      getFrameInfo fi
+                                                   val size = FrameInfo.size fi
                                                 in
                                                    Bytes.equals
                                                    (size,
@@ -1107,18 +1120,30 @@ structure Program =
                                                    (case frameInfo of
                                                        NONE => true
                                                      | SOME fi => doit fi)
-                                              | Kind.Func => true
+                                              | Kind.Func {frameInfo, ...} =>
+                                                   doit frameInfo
                                               | Kind.Handler {frameInfo, ...} =>
                                                    doit frameInfo
                                               | Kind.Jump => true
                                           end)
+                      | SequenceOffset {base, index, offset, scale, ty} =>
+                           (checkOperand (base, alloc)
+                            ; checkOperand (index, alloc)
+                            ; (Operand.isLocation base
+                               andalso
+                               (Type.sequenceOffsetIsOk {base = Operand.ty base,
+                                                         index = Operand.ty index,
+                                                         offset = offset,
+                                                         tyconTy = tyconTy,
+                                                         result = ty,
+                                                         scale = scale})))
                       | StackTop => true
                       | Word _ => true
                       | Address z =>
                           (checkOperand (z, alloc)
                           ; case z of
-                              ArrayOffset _ => true
-                            | Offset _ => true
+                              Offset _ => true
+                            | SequenceOffset _ => true
                             | _ => false)
                in
                   Err.check ("operand", ok, fn () => Operand.layout x)
@@ -1132,15 +1157,12 @@ structure Program =
                let
                   datatype z = datatype Kind.t
                   exception No
-                  fun frame (FrameInfo.T {frameLayoutsIndex},
+                  fun frame (frameInfo,
                              useSlots: bool,
-                             isC: bool): bool =
-                     let
-                        val {frameOffsetsIndex, isC = isC', ...} =
-                           Vector.sub (frameLayouts, frameLayoutsIndex)
-                           handle Subscript => raise No
-                     in
-                        isC = isC'
+                             kind: FrameInfo.Kind.t): bool =
+                     checkFrameInfo frameInfo
+                     andalso
+                     FrameInfo.Kind.equals (kind, FrameInfo.kind frameInfo)
                         andalso
                         (not useSlots
                          orelse
@@ -1158,17 +1180,14 @@ structure Program =
                             val liveOffsets = Array.fromList liveOffsets
                             val () = QuickSort.sortArray (liveOffsets, Bytes.<=)
                             val liveOffsets = Vector.fromArray liveOffsets
-                            val liveOffsets' =
-                               Vector.sub (frameOffsets, frameOffsetsIndex)
-                               handle Subscript => raise No
                          in
-                            Vector.equals (liveOffsets, liveOffsets',
+                         Vector.equals
+                         (liveOffsets, FrameInfo.offsets frameInfo,
                                            Bytes.equals)
-                         end)
-                     end handle No => false
+                      end) handle No => false
                   fun slotsAreInFrame (fi: FrameInfo.t): bool =
                      let
-                        val {size, ...} = getFrameInfo fi
+                        val size = FrameInfo.size fi
                      in
                         Alloc.forall
                         (alloc, fn z =>
@@ -1180,7 +1199,7 @@ structure Program =
                in
                   case k of
                      Cont {args, frameInfo} =>
-                        if frame (frameInfo, true, false)
+                        if frame (frameInfo, true, FrameInfo.Kind.ML_FRAME)
                            andalso slotsAreInFrame frameInfo
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
@@ -1199,13 +1218,13 @@ structure Program =
                                   then (case frameInfo of
                                            NONE => false
                                          | SOME fi =>
-                                              (frame (fi, true, true)
+                                              (frame (fi, true, FrameInfo.Kind.C_FRAME)
                                                andalso slotsAreInFrame fi))
                                else if !Control.profile = Control.ProfileNone
                                        then true
                                     else (case frameInfo of
                                              NONE => false
-                                           | SOME fi => frame (fi, false, true)))
+                                           | SOME fi => frame (fi, false, FrameInfo.Kind.C_FRAME)))
                         in
                            if ok
                               then SOME (case dst of
@@ -1213,9 +1232,12 @@ structure Program =
                                           | SOME z => Alloc.defineLive (alloc, z))
                            else NONE
                         end
-                   | Func => SOME alloc
+                   | Func {frameInfo, ...} =>
+                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
+                           then SOME alloc
+                        else NONE
                    | Handler {frameInfo, ...} =>
-                        if frame (frameInfo, false, false)
+                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
                            then SOME alloc
                         else NONE
                    | Jump => SOME alloc
@@ -1261,8 +1283,8 @@ structure Program =
                               then alloc
                               else NONE
                         end
-                   | ProfileLabel l =>
-                        if profileLabelIsOk l
+                   | ProfileLabel pl =>
+                        if checkProfileLabel pl
                            then SOME alloc
                         else NONE
                end
@@ -1297,12 +1319,12 @@ structure Program =
                let
                   val Block.T {kind, live, ...} = labelBlock cont
                in
-                  if Vector.forall (live, fn z => Alloc.doesDefine (alloc, z))
+                  if liveIsOk (live, alloc)
                      then
                         (case kind of
                             Kind.Cont {args, frameInfo, ...} =>
                                (if Bytes.equals (size,
-                                                 #size (getFrameInfo frameInfo))
+                                                 FrameInfo.size frameInfo)
                                    then
                                       SOME
                                       (live,
@@ -1386,34 +1408,19 @@ structure Program =
                 returns: Live.t vector option,
                 alloc: Alloc.t): bool =
                let
-                  fun jump (l: Label.t, a: Alloc.t) =
+                  fun jump (l: Label.t) =
                      let
                         val b as Block.T {kind, ...} = labelBlock l
                      in
                         (case kind of
                             Kind.Jump => true
                           | _ => false)
-                            andalso goto (b, raises, returns, a)
+                        andalso goto (b, raises, returns, alloc)
                      end
                   datatype z = datatype Transfer.t
                in
                   case t of
-                     Arith {args, dst, overflow, prim, success, ...} =>
-                        let
-                           val _ = checkOperands (args, alloc)
-                           val alloc = Alloc.define (alloc, dst)
-                           val _ = checkOperand (dst, alloc)
-                        in
-                           Prim.mayOverflow prim
-                           andalso jump (overflow, alloc)
-                           andalso jump (success, alloc)
-                           andalso
-                           Type.checkPrimApp
-                           {args = Vector.map (args, Operand.ty),
-                            prim = prim,
-                            result = SOME (Operand.ty dst)}
-                        end
-                   | CCall {args, frameInfo = fi, func, return} =>
+                     CCall {args, func, return} =>
                         let
                            val _ = checkOperands (args, alloc)
                         in
@@ -1425,24 +1432,24 @@ structure Program =
                            andalso
                            case return of
                               NONE => true
-                            | SOME l =>
+                            | SOME {return, size} =>
                                  let
-                                    val Block.T {live, ...} = labelBlock l
+                                    val Block.T {live, ...} = labelBlock return
                                  in
                                     liveIsOk (live, alloc)
                                     andalso
-                                    case labelKind l of
+                                    case labelKind return of
                                        Kind.CReturn
-                                       {frameInfo = fi', func = f, ...} =>
+                                       {frameInfo = fi, func = f, ...} =>
                                           CFunction.equals (func, f)
                                           andalso (Option.equals
-                                                   (fi, fi', FrameInfo.equals))
+                                                   (size, Option.map (fi, FrameInfo.size),
+                                                    Bytes.equals))
                                      | _ => false
                                  end
                         end
                    | Call {label, live, return} =>
-                        Vector.forall
-                        (live, fn z => Alloc.doesDefine (alloc, z))
+                        liveIsOk (live, alloc)
                         andalso
                         callIsOk {alloc = alloc,
                                   dst = label,
@@ -1450,23 +1457,19 @@ structure Program =
                                   raises = raises,
                                   return = return,
                                   returns = returns}
-                      | Goto l => jump (l, alloc)
+                   | Goto l => jump l
                       | Raise =>
                            (case raises of
                                NONE => false
-                             | SOME zs =>
-                                  Vector.forall
-                                  (zs, fn z => Alloc.doesDefine (alloc, z)))
+                          | SOME live => liveIsOk (live, alloc))
                       | Return =>
                            (case returns of
                                NONE => false
-                             | SOME zs =>
-                                  Vector.forall
-                                  (zs, fn z => Alloc.doesDefine (alloc, z)))
+                          | SOME live => liveIsOk (live, alloc))
                       | Switch s =>
                            Switch.isOk
                            (s, {checkUse = fn z => checkOperand (z, alloc),
-                                labelIsOk = fn l => jump (l, alloc)})
+                             labelIsOk = jump})
                end
             val transferOk =
                Trace.trace
@@ -1526,6 +1529,7 @@ structure Program =
                    (blocks, fn b =>
                     check' (b, "block", blockOk, Block.layout))
                 end)
+            val _ = finishCheckProfileLabel ()
             val _ = clear program
          in
             ()
@@ -1538,6 +1542,25 @@ structure Program =
           Vector.foreach
           (blocks, fn Block.T {label, ...} =>
            Label.clearPrintName label))
+   end
+
+fun simplify p =
+   let
+      val machinePasses =
+         {name = "machineShuffle", doit = Program.shuffle, execute = false} ::
+         nil
+      (* Machine type check is too slow to run by default. *)
+      (* val () = Control.trace (Control.Pass, "machineTypeCheck") Program.typeCheck p *)
+      val p =
+         Control.simplifyPasses
+         {arg = p,
+          passes = machinePasses,
+          stats = Program.layoutStats,
+          toFile = Program.toFile,
+          typeCheck = Program.typeCheck}
+      (* val () = Control.trace (Control.Pass, "machineTypeCheck") Program.typeCheck p *)
+   in
+      p
    end
 
 end

@@ -1,9 +1,9 @@
-(* Copyright (C) 2015,2017 Matthew Fluet.
+(* Copyright (C) 2015,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -11,6 +11,7 @@ functor MatchCompile (S: MATCH_COMPILE_STRUCTS): MATCH_COMPILE =
 struct
 
 open S
+structure ExpPat = Pat
 
 structure Example =
   struct
@@ -724,7 +725,6 @@ val traceVector =
 fun matchCompile {caseType: Type.t,
                   cases: (NestedPat.t * ((Var.t -> Var.t) -> Exp.t)) vector,
                   conTycon: Con.t -> Tycon.t,
-                  region: Region.t,
                   test: Var.t,
                   testType: Type.t,
                   tyconCons: Tycon.t -> {con: Con.t,
@@ -856,10 +856,6 @@ fun matchCompile {caseType: Type.t,
                   end
              | SOME {size, ...} =>
                   let
-                     val default =
-                        Option.map
-                        (default, fn default =>
-                         (default, region))
                      val cases =
                         Vector.map
                         (cases, fn {const, rules} =>
@@ -872,7 +868,7 @@ fun matchCompile {caseType: Type.t,
                             (w, finish (rules, exampleConst const))
                          end)
                   in
-                     Exp.casee {cases = Cases.word (size, cases),
+                     Exp.casee {cases = Cases.Word (size, cases),
                                 default = default,
                                 test = test,
                                 ty = caseType}
@@ -960,10 +956,10 @@ fun matchCompile {caseType: Type.t,
                       (facts, var,
                        Fact.Con {arg = Option.map (arg, #1), con = con})
                 in
-                   {arg = arg,
-                    con = con,
-                    rhs = match (vars, rules, facts, es),
-                    targs = targs}
+                   (ExpPat.T {arg = arg,
+                              con = con,
+                              targs = targs},
+                    match (vars, rules, facts, es))
                 end)
             fun done (e, isOnlyExns) =
                SOME (match (Vector.dropNth (vars, i),
@@ -982,7 +978,7 @@ fun matchCompile {caseType: Type.t,
                      val unhandled =
                         List.keepAllMap
                         (Vector.toList cons, fn {con, hasArg, ...} =>
-                         if Vector.exists (cases, fn {con = con', ...} =>
+                         if Vector.exists (cases, fn (ExpPat.T {con = con', ...}, _) =>
                                            Con.equals (con, con'))
                             then NONE
                             else SOME (Example.ConApp
@@ -995,8 +991,8 @@ fun matchCompile {caseType: Type.t,
                      (Example.or unhandled, NONE, fn (e, _) => done (e, false))
                   end
             fun normal () =
-               Exp.casee {cases = Cases.con cases,
-                          default = Option.map (default, fn e => (e, region)),
+               Exp.casee {cases = Cases.Con cases,
+                          default = default,
                           test = test,
                           ty = caseType}
          in
@@ -1004,7 +1000,7 @@ fun matchCompile {caseType: Type.t,
                then normal ()
             else
                let
-                  val {arg, con, rhs, ...} = Vector.first cases
+                  val (ExpPat.T {arg, con, ...}, rhs) = Vector.first cases
                in
                   if not (Con.equals (con, Con.reff))
                      then normal ()
@@ -1168,8 +1164,8 @@ fun matchCompile {caseType: Type.t,
                 end)
          in
             Exp.casee
-            {cases = Cases.word (WordSize.seqIndex (), cases),
-             default = SOME (default, region),
+            {cases = Cases.Word (WordSize.seqIndex (), cases),
+             default = SOME default,
              test = Exp.vectorLength test,
              ty = caseType}
          end) arg
@@ -1205,7 +1201,6 @@ val matchCompile =
    fn {caseType: Type.t,
        cases: (NestedPat.t * (int -> (Var.t -> Var.t) -> Exp.t)) vector,
        conTycon: Con.t -> Tycon.t,
-       region: Region.t,
        test: Var.t,
        testType: Type.t,
        tyconCons: Tycon.t -> {con: Con.t,
@@ -1225,7 +1220,6 @@ val matchCompile =
       matchCompile {caseType = caseType,
                     cases = cases,
                     conTycon = conTycon,
-                    region = region,
                     test = test,
                     testType = testType,
                     tyconCons = tyconCons}
@@ -1241,5 +1235,7 @@ val matchCompile =
                    ("testType", Type.layout testType)],
     Exp.layout o #1)
    matchCompile
+
+structure Pat = ExpPat
 
 end

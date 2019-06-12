@@ -1,9 +1,9 @@
-(* Copyright (C) 2010-2011,2013-2017 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2019 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -16,16 +16,19 @@ structure Compile = Compile ()
 
 structure Place =
    struct
-      datatype t = Files | Generated | MLB | O | OUT | SML | SXML | TypeCheck
+      datatype t = Files | Generated | MLB | O | OUT | SML | SSA | SSA2 | SXML | TypeCheck | XML
       val toInt: t -> int =
          fn MLB => 1
           | SML => 1
           | Files => 2
           | TypeCheck => 4
+          | XML => 6
           | SXML => 7
-          | Generated => 10
-          | O => 11
-          | OUT => 12
+          | SSA => 10
+          | SSA2 => 11
+          | Generated => 13
+          | O => 14
+          | OUT => 15
 
       val toString =
          fn Files => "files"
@@ -34,8 +37,11 @@ structure Place =
           | O => "o"
           | OUT => "out"
           | SML => "sml"
+          | SSA => "ssa"
+          | SSA2 => "ssa2"
           | SXML => "sxml"
           | TypeCheck => "tc"
+          | XML => "xml"
 
       fun compare (p, p') = Int.compare (toInt p, toInt p')
    end
@@ -52,7 +58,7 @@ structure Show =
       datatype t = Anns | PathMap
    end
 
-val gcc: string ref = ref "<unset>"
+val cc: string list ref = ref ["cc"]
 val arScript: string ref = ref "<unset>"
 val asOpts: {opt: string, pred: OptPred.t} list ref = ref []
 val ccOpts: {opt: string, pred: OptPred.t} list ref = ref []
@@ -66,13 +72,11 @@ val llvm_optOpts: {opt: string, pred: OptPred.t} list ref = ref []
 
 val buildConstants: bool ref = ref false
 val debugRuntime: bool ref = ref false
-datatype debugFormat = Dwarf | DwarfPlus | Dwarf2 | Stabs | StabsPlus
-val debugFormat: debugFormat option ref = ref NONE
 val traceRuntime: bool ref = ref false
 val ltoRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
-val explicitChunk: Control.chunk option ref = ref NONE
+val explicitChunkify: Control.Chunkify.t option ref = ref NONE
 datatype explicitCodegen = Native | Explicit of Control.Codegen.t
 val explicitCodegen: explicitCodegen option ref = ref NONE
 val keepGenerated = ref false
@@ -110,20 +114,16 @@ val targetMap: unit -> {arch: MLton.Platform.Arch.t,
    (fn () =>
     let
        val targetsDir =
-          OS.Path.mkAbsolute { path = "targets",
-                               relativeTo = !Control.libDir }
+          OS.Path.mkAbsolute {path = "targets", relativeTo = !Control.libDir}
        val potentialTargets = Dir.lsDirs targetsDir
        fun targetMap target =
           let
              val targetDir =
-                OS.Path.mkAbsolute { path = target,
-                                     relativeTo = targetsDir }
+                OS.Path.mkAbsolute {path = target, relativeTo = targetsDir}
              val osFile =
-                OS.Path.joinDirFile { dir = targetDir,
-                                      file = "os" }
+                OS.Path.joinDirFile {dir = targetDir, file = "os"}
              val archFile =
-                OS.Path.joinDirFile { dir = targetDir,
-                                      file = "arch" }
+                OS.Path.joinDirFile {dir = targetDir, file = "arch"}
              val os   = File.contents osFile
              val arch = File.contents archFile
              val os   = List.first (String.tokens (os,   Char.isSpace))
@@ -137,7 +137,7 @@ val targetMap: unit -> {arch: MLton.Platform.Arch.t,
                    NONE => Error.bug (concat ["strange arch: ", arch])
                  | SOME a => a
           in
-             SOME { arch = arch, os = os, target = target }
+             SOME {arch = arch, os = os, target = target}
           end
           handle _ => NONE
     in
@@ -233,23 +233,36 @@ fun makeOptions {usage} =
        (Expert, "as-opt-quote", " <opt>", "pass (quoted) option to assembler",
         SpaceString
         (fn s => List.push (asOpts, {opt = s, pred = OptPred.Yes}))),
+       (Expert, "bounce-rssa-limit", "<n>",
+        "Maximum number of rssa variables to bounce around gc",
+        Int (fn i => bounceRssaLimit := (if i < 0 then NONE else SOME i))),
+       (Expert, "bounce-rssa-live-cutoff", "<n>",
+        "Limit of bounceable variables at bounce points",
+        Int (fn i => bounceRssaLiveCutoff := (if i < 0 then NONE else SOME i))),
+       (Expert, "bounce-rssa-loop-size-cutoff", "<n>",
+        "Largest loop size to consider",
+        Int (fn i => bounceRssaLoopCutoff := (if i < 0 then NONE else SOME i))),
+       (Expert, "bounce-rssa-usage-cutoff", "<n>",
+        "Maximum variable use count to consider",
+        Int (fn i => bounceRssaUsageCutoff := (if i < 0 then NONE else SOME i))),
        (Expert, "build-constants", " {false|true}",
         "output C file that prints basis constants",
         boolRef buildConstants),
-       (Expert, "cc", " <gcc>", "path to gcc executable",
-        SpaceString (fn s => gcc := s)),
+       (Expert, "cc", " <cc>", "set C compiler",
+        SpaceString
+        (fn s => cc := String.tokens (s, Char.isSpace))),
        (Normal, "cc-opt", " <opt>", "pass option to C compiler",
         (SpaceString o tokenizeOpt)
         (fn s => List.push (ccOpts, {opt = s, pred = OptPred.Yes}))),
        (Expert, "cc-opt-quote", " <opt>", "pass (quoted) option to C compiler",
         SpaceString
         (fn s => List.push (ccOpts, {opt = s, pred = OptPred.Yes}))),
-       (Expert, "chunkify", " {coalesce<n>|func|one}", "set chunkify method",
+       (Expert, "chunkify", " {coalesce<n>|func|one}", "set chunkify stategy",
         SpaceString (fn s =>
-                     explicitChunk
+                     explicitChunkify
                      := SOME (case s of
-                                 "func" => ChunkPerFunc
-                               | "one" => OneChunk
+                                 "func" => Chunkify.PerFunc
+                               | "one" => Chunkify.One
                                | _ => let
                                          val usage = fn () =>
                                             usage (concat ["invalid -chunkify flag: ", s])
@@ -261,12 +274,18 @@ fun makeOptions {usage} =
                                                     if String.forall (s, Char.isDigit)
                                                        then (case Int.fromString s of
                                                                 NONE => usage ()
-                                                              | SOME n => Coalesce
+                                                              | SOME n =>
+                                                                   Chunkify.Coalesce
                                                                           {limit = n})
                                                        else usage ()
                                                  end
                                             else usage ()
                                       end))),
+       (Expert, "chunk-batch", " <n>", "batch c files at size ~n",
+        Int (fn n => chunkBatch := n)),
+       (Expert, "chunk-tail-call", " {false|true}",
+        "whether to use tail calls for interchunk transfers",
+        Bool (fn b => chunkTailCall := b)),
        (Expert, "closure-convert-globalize", " {true|false}",
         "whether to globalize during closure conversion",
         Bool (fn b => (closureConvertGlobalize := b))),
@@ -311,18 +330,6 @@ fun makeOptions {usage} =
                        ; debugRuntime := b))),
        (Expert, "debug-runtime", " {false|true}", "produce executable with debug info",
         boolRef debugRuntime),
-       (Expert, "debug-format", " {default|dwarf|dwarf+|drwaf2|stabs|stabs+}",
-        "choose debug symbol format",
-        SpaceString (fn s =>
-                        debugFormat :=
-                        (case s of
-                            "default" => NONE
-                          | "dwarf" => SOME Dwarf
-                          | "dwarf+" => SOME DwarfPlus
-                          | "dwarf2" => SOME Dwarf2
-                          | "stabs" => SOME Stabs
-                          | "stabs+" => SOME StabsPlus
-                          | _ => usage (concat ["invalid -debug-format flag: ", s])))),
        let
           val flag = "default-ann"
        in
@@ -377,6 +384,18 @@ fun makeOptions {usage} =
                                     in List.push (executePasses, (re, false))
                                     end
                    | NONE => usage (concat ["invalid -disable-pass flag: ", s])))),
+       (Expert, "drop-pass", " <pass>", "disable optimization pass",
+        SpaceString
+        (fn s => (if !Control.warnDeprecated
+                     then Out.output
+                          (Out.error,
+                           "Warning: -drop-pass is deprecated.  Use -disable-pass.\n")
+                     else ();
+                  case Regexp.fromString s of
+                     SOME (re,_) => let val re = Regexp.compileDFA re
+                                    in List.push (executePasses, (re, false))
+                                    end
+                   | NONE => usage (concat ["invalid -disable-pass flag: ", s])))),
        let
           val flag = "enable-ann"
        in
@@ -424,6 +443,14 @@ fun makeOptions {usage} =
                        | "first" => First
                        | "every" => Every
                        | _ => usage (concat ["invalid -gc-check flag: ", s])))),
+       (Expert, "globalize-arrays", " {false|true}", "globalize arrays",
+        boolRef globalizeArrays),
+       (Expert, "globalize-refs", " {true|false}", "globalize refs",
+        boolRef globalizeRefs),
+       (Expert, "globalize-small-int-inf", " {false|true}", "globalize int-inf as small type",
+        boolRef globalizeSmallIntInf),
+       (Expert, "globalize-small-type", " {0|1|2|3|4|9}", "globalize small type",
+        intRef globalizeSmallType),
        (Normal, "ieee-fp", " {false|true}", "use strict IEEE floating-point",
         boolRef Native.IEEEFP),
        (Expert, "indentation", " <n>", "indentation level in ILs",
@@ -551,12 +578,6 @@ fun makeOptions {usage} =
        (Expert, "llvm-opt-opt-quote", " <opt>", "pass (quoted) option to llvm optimizer",
         SpaceString
         (fn s => List.push (llvm_optOpts, {opt = s, pred = OptPred.Yes}))),
-       (Expert, "loop-passes", " <n>", "loop optimization passes (1)",
-        Int
-        (fn i =>
-         if i >= 1
-            then loopPasses := i
-            else usage (concat ["invalid -loop-passes arg: ", Int.toString i]))),
        (Expert, "loop-unroll-limit", " <n>", "limit code growth by loop unrolling",
         Int
         (fn i =>
@@ -583,6 +604,9 @@ fun makeOptions {usage} =
                                   | SOME v => v])),
        (Expert, "native-commented", " <n>", "level of comments  (0)",
         intRef Native.commented),
+       (Expert, "native-al-redundant", "{true|false}",
+        "eliminate redundant AL ops",
+        boolRef Native.elimALRedundant),
        (Expert, "native-copy-prop", " {true|false}",
         "use copy propagation",
         boolRef Native.copyProp),
@@ -605,6 +629,8 @@ fun makeOptions {usage} =
        (Expert, "native-shuffle", " {true|false}",
         "shuffle registers at C-calls",
         Bool (fn b => Native.shuffle := b)),
+       (Expert, "opt-fuel", " <n>", "optimization 'fuel'",
+        Int (fn n => optFuel := SOME n)),
        (Expert, "opt-passes", " {default|minimal}", "level of optimizations",
         SpaceString (fn s =>
                      let
@@ -746,6 +772,8 @@ fun makeOptions {usage} =
         boolRef profileVal),
        (Normal, "runtime", " <arg>", "pass arg to runtime via @MLton",
         SpaceString (fn s => List.push (runtimeArgs, s))),
+       (Expert, "seed-rand", " <w>", "seed the pseudo-random number generator",
+        Word Random.srand),
        (Expert, "show", " {anns|path-map}", "print specified data and stop",
         SpaceString
         (fn s =>
@@ -753,12 +781,27 @@ fun makeOptions {usage} =
                           "anns" => Show.Anns
                         | "path-map" => Show.PathMap
                         | _ => usage (concat ["invalid -show arg: ", s])))),
-       (Normal, "show-basis", " <file>", "write out the final basis environment",
+       (Normal, "show-basis", " <file>", "write final basis environment",
         SpaceString (fn s => showBasis := SOME s)),
+       (Expert, "show-basis-compact", " {false|true}", "show basis environment in compact form",
+        boolRef showBasisCompact),
+       (Expert, "show-basis-def", " {true|false}", "show basis environment with definition source position",
+        boolRef showBasisDef),
+       (Expert, "show-basis-flat", " {true|false}", "show basis environment with long identifier names",
+        boolRef showBasisFlat),
        (Normal, "show-def-use", " <file>", "write def-use information",
         SpaceString (fn s => showDefUse := SOME s)),
        (Expert, "show-types", " {true|false}", "show types in ILs",
         boolRef showTypes),
+       (Expert, "split-types-bool", " {smart|always|never}",
+        "bool type splitting method",
+        SpaceString (fn s =>
+                     splitTypesBool :=
+                     (case s of
+                         "always" => Always
+                       | "never" => Never
+                       | "smart" => Smart
+                       | _ => usage (concat ["invalid -split-types-bool flag: ", s])))),
        (Expert, "ssa-passes", " <passes>", "ssa optimization passes",
         SpaceString
         (fn s =>
@@ -788,6 +831,13 @@ fun makeOptions {usage} =
                    | "o" => Place.O
                    | "tc" => Place.TypeCheck
                    | _ => usage (concat ["invalid -stop arg: ", s])))),
+       (Expert, "stop-pass", " <pass>", "stop compilation after pass",
+        SpaceString
+        (fn s => (case Regexp.fromString s of
+                     SOME (re,_) => let val re = Regexp.compileDFA re
+                                    in List.push (stopPasses, re)
+                                    end
+                   | NONE => usage (concat ["invalid -stop-pass flag: ", s])))),
        (Expert, "sxml-passes", " <passes>", "sxml optimization passes",
         SpaceString
         (fn s =>
@@ -917,16 +967,18 @@ fun commandLine (args: string list): unit =
             Cross s => s
           | Self => "self"
       val targetsDir =
-         OS.Path.mkAbsolute { path = "targets",
-                              relativeTo = !libDir }
+         OS.Path.mkAbsolute {path = "targets", relativeTo = !libDir}
       val targetDir =
-         OS.Path.mkAbsolute { path = targetStr,
-                              relativeTo = targetsDir }
-      val () = libTargetDir := targetDir
+         OS.Path.mkAbsolute {path = targetStr, relativeTo = targetsDir}
+      val () = Control.libTargetDir := targetDir
+      val targetIncDir =
+         OS.Path.mkAbsolute {path = "include", relativeTo = targetDir}
+      val targetLibDir = targetDir
       val targetArch = !Target.arch
-      val archStr = String.toLower (MLton.Platform.Arch.toString targetArch)
+      val targetArchStr = String.toLower (MLton.Platform.Arch.toString targetArch)
       val targetOS = !Target.os
-      val OSStr = String.toLower (MLton.Platform.OS.toString targetOS)
+      val targetOSStr = String.toLower (MLton.Platform.OS.toString targetOS)
+      val targetArchOSStr = concat [targetArchStr, "-", targetOSStr]
 
       (* Determine whether code should be PIC (position independent) or not.
        * This decision depends on the platform and output format.
@@ -990,6 +1042,14 @@ fun commandLine (args: string list): unit =
                          | _ => usage "can't use -profile with Exn.keepHistory"
                         ; profileRaise := true)
                else ()
+      val () = if !profileStack
+                  then (case !profile of
+                           ProfileAlloc => ()
+                         | ProfileCount => ()
+                         | ProfileTimeField => ()
+                         | ProfileTimeLabel => ()
+                         | _ => usage "can't use '-profile-stack true' without '-profile {alloc,count,time}'")
+                  else ()
 
       val () =
          Compile.setCommandLineConstant
@@ -1000,7 +1060,7 @@ fun commandLine (args: string list): unit =
          let
             val sizeMap =
                List.map
-               (File.lines (OS.Path.joinDirFile {dir = !Control.libTargetDir,
+               (File.lines (OS.Path.joinDirFile {dir = targetDir,
                                                  file = "sizes"}),
                 fn line =>
                 case String.tokens (line, Char.isSpace) of
@@ -1021,10 +1081,11 @@ fun commandLine (args: string list): unit =
              cptrdiff = lookup "cptrdiff",
              csize = lookup "csize",
              header = lookup "header",
-             metaData = lookup "metaData",
              mplimb = lookup "mplimb",
+             normalMetaData = lookup "normalMetaData",
              objptr = lookup "objptr",
-             seqIndex = lookup "seqIndex"}
+             seqIndex = lookup "seqIndex",
+             sequenceMetaData = lookup "sequenceMetaData"}
          end
 
       fun tokenize l =
@@ -1034,18 +1095,20 @@ fun commandLine (args: string list): unit =
        * Older gcc versions used -b for multiple targets.
        * If this is still needed, a shell script wrapper can hide this.
        *)
-      val gcc =
+      val cc =
          case target of
             Cross s =>
                let
-                  val {dir = gccDir, file = gccFile} =
-                     OS.Path.splitDirFile (!gcc)
+                  val {dir = ccDir, file = ccFile} =
+                     OS.Path.splitDirFile (hd (!cc))
                in
                   OS.Path.joinDirFile
-                  {dir = gccDir,
-                   file = s ^ "-" ^ gccFile}
+                  {dir = ccDir,
+                   file = s ^ "-" ^ ccFile}
+                  ::
+                  tl (!cc)
                end
-          | Self => !gcc
+          | Self => !cc
       val arScript = !arScript
 
       fun addTargetOpts opts =
@@ -1056,46 +1119,51 @@ fun commandLine (args: string list): unit =
                     let
                        val s = String.toLower s
                     in
-                       s = archStr orelse s = OSStr
+                       s = targetArchOSStr
+                       orelse s = targetArchStr
+                       orelse s = targetOSStr
                     end
                | OptPred.Yes => true)
              then opt :: ac
           else ac)
       val asOpts = addTargetOpts asOpts
+      val asOpts = if !debug
+                      then "-Wa,-g" :: asOpts
+                      else asOpts
       val ccOpts = addTargetOpts ccOpts
-      val ccOpts = concat ["-I",
-                           OS.Path.mkAbsolute { path = "include",
-                                                relativeTo = !libTargetDir }]
-                   :: ccOpts
-      val linkOpts =
-         List.concat [[concat ["-L", !libTargetDir]],
-                      if !debugRuntime then
-                      ["-lmlton-gdb", "-lgdtoa-gdb"]
+      val ccOpts = ("-I" ^ targetIncDir) :: ccOpts
+      val ccOpts = if !debug
+                      then "-g" :: "-DASSERT=1" :: ccOpts
+                      else ccOpts
+      val linkOpts = addTargetOpts linkOpts
+      val linkOpts = if !debugRuntime then
+                     "-lmlton-gdb" :: "-lgdtoa-gdb" :: linkOpts
                       else if !traceRuntime then
-                      ["-lmlton-trace", "-lgdtoa-trace"]
+                     "-lmlton-trace" :: "-lgdtoa-trace" :: linkOpts
                       else if !ltoRuntime then
-                      ["-lmlton-lto", "-lgdtoa-lto", "-O3", "-flto"]
+                     "-lmlton-lto" :: "-lgdtoa-lto" :: "-O3" :: "-flto" :: linkOpts
                       else if positionIndependent then
-                      ["-lmlton-pic", "-lgdtoa-pic"]
+                     "-lmlton-pic" :: "-lgdtoa-pic" :: linkOpts
                       else
-                      ["-lmlton", "-lgdtoa"],
-                      addTargetOpts linkOpts]
+                     "-lmlton" :: "-lgdtoa" :: linkOpts
+      val linkOpts = ("-L" ^ targetLibDir) :: linkOpts
+
       val linkArchives =
          if !debugRuntime then
-         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-gdb.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" }]
+         [OS.Path.joinDirFile {dir = targetLibDir, file = "libmlton-gdb.a"},
+          OS.Path.joinDirFile {dir = targetLibDir, file = "libgdtoa-gdb.a"}]
          else if !traceRuntime then
-         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-trace.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-trace.a" }]
+         [OS.Path.joinDirFile {dir = targetLibDir, file = "libmlton-trace.a"},
+          OS.Path.joinDirFile {dir = targetLibDir, file = "libgdtoa-trace.a"}]
          else if !ltoRuntime then
-         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-lto.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-lto.a" }]
+         [OS.Path.joinDirFile { dir = targetLibDir, file = "libmlton-lto.a" },
+          OS.Path.joinDirFile { dir = targetLibDir, file = "libgdtoa-lto.a" }]
          else if positionIndependent then
-         [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-pic.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
+         [OS.Path.joinDirFile {dir = targetLibDir, file = "libmlton-pic.a"},
+          OS.Path.joinDirFile {dir = targetLibDir, file = "libgdtoa-pic.a"}]
          else
-         [OS.Path.joinDirFile { dir = !libTargetDir, file =  "libmlton.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libgdtoa.a" }]
+         [OS.Path.joinDirFile {dir = targetLibDir, file =  "libmlton.a"},
+          OS.Path.joinDirFile {dir = targetLibDir, file =  "libgdtoa.a"}]
 
       val llvm_as = !llvm_as
       val llvm_llc = !llvm_llc
@@ -1119,13 +1187,13 @@ fun commandLine (args: string list): unit =
                                        | (MinGW, X86) => true
                                        | _ => false)
       val _ =
-         chunk :=
-         (case !explicitChunk of
+         chunkify :=
+         (case !explicitChunkify of
              NONE => (case !codegen of
-                         AMD64Codegen => ChunkPerFunc
-                       | CCodegen => Coalesce {limit = 4096}
-                       | LLVMCodegen => Coalesce {limit = 4096}
-                       | X86Codegen => ChunkPerFunc
+                         AMD64Codegen => Chunkify.PerFunc
+                       | CCodegen => Chunkify.Coalesce {limit = 4096}
+                       | LLVMCodegen => Chunkify.Coalesce {limit = 4096}
+                       | X86Codegen => Chunkify.PerFunc
                        )
            | SOME c => c)
       val _ = if not (!Control.codegen = X86Codegen) andalso !Native.IEEEFP
@@ -1140,16 +1208,6 @@ fun commandLine (args: string list): unit =
          := (isSome (!showDefUse)
              orelse (Control.Elaborate.enabled Control.Elaborate.warnUnused)
              orelse (Control.Elaborate.default Control.Elaborate.warnUnused))
-      val warnMatch =
-          (Control.Elaborate.enabled Control.Elaborate.nonexhaustiveMatch)
-          orelse (Control.Elaborate.enabled Control.Elaborate.redundantMatch)
-          orelse (Control.Elaborate.default Control.Elaborate.nonexhaustiveMatch <>
-                  Control.Elaborate.DiagEIW.Ignore)
-          orelse (Control.Elaborate.default Control.Elaborate.redundantMatch <>
-                  Control.Elaborate.DiagEIW.Ignore)
-      val _ = elaborateOnly := (stop = Place.TypeCheck
-                                andalso not (warnMatch)
-                                andalso not (!keepDefUse))
       val _ =
          case targetOS of
             Darwin => ()
@@ -1166,8 +1224,6 @@ fun commandLine (args: string list): unit =
                   then usage (concat ["can't use -profile time on ",
                                       MLton.Platform.OS.toString targetOS])
                else ()
-      fun printVersion (out: Out.t): unit =
-         Out.output (out, concat [Version.banner, "\n"])
       val () =
          case !show of
             NONE => ()
@@ -1181,7 +1237,7 @@ fun commandLine (args: string list): unit =
                    open Layout
                 in
                    outputl (align
-                            (List.map (Control.mlbPathMap (),
+                            (List.revMap (Control.mlbPathMap (),
                                        fn {var, path, ...} =>
                                        str (concat [var, " ", path]))),
                             Out.standard)
@@ -1192,14 +1248,12 @@ fun commandLine (args: string list): unit =
       Result.No msg => usage msg
     | Result.Yes [] =>
          (inputFile := "<none>"
-          ; if isSome (!showBasis)
-               then (trace (Top, "Type Check SML")
-                     Compile.elaborateSML {input = []})
-            else if !buildConstants
+          ; if !buildConstants
                then Compile.outputBasisConstants Out.standard
-            else if !verbosity = Silent orelse !verbosity = Top
-               then printVersion Out.standard
-            else outputHeader' (No, Out.standard))
+            else (Out.outputl (Out.standard, Version.banner)
+                  ; if Verbosity.< (!verbosity, Detail)
+                       then ()
+                       else Layout.outputl (Control.layout (), Out.standard)))
     | Result.Yes (input :: rest) =>
          let
             val _ = inputFile := File.base (File.fileOf input)
@@ -1222,7 +1276,10 @@ fun commandLine (args: string list): unit =
                in
                   loop [(".mlb", MLB, false),
                         (".sml", SML, false),
+                        (".xml", XML, false),
                         (".sxml", SXML, false),
+                        (".ssa", SSA, false),
+                        (".ssa2", SSA2, false),
                         (".c", Generated, true),
                         (".o", O, true)]
                end
@@ -1241,10 +1298,6 @@ fun commandLine (args: string list): unit =
              | EQUAL => usage "nothing to do"
              | LESS =>
                   let
-                     val _ =
-                        if !verbosity = Top
-                           then printVersion Out.error
-                        else ()
                      val tempFiles: File.t list ref = ref []
                      val tmpDir =
                         let
@@ -1278,9 +1331,9 @@ fun commandLine (args: string list): unit =
                          | SOME f => if File.extension f = SOME "exe"
                                         then concat [File.base f, suf]
                                      else concat [f, suf]
-                     val { base = outputBase, ext=_ } =
+                     val {base = outputBase, ...} =
                         OS.Path.splitBaseExt (maybeOut ".ext")
-                     val { file = defLibname, dir=_ } =
+                     val {file = defLibname, ...} =
                         OS.Path.splitDirFile outputBase
                      val defLibname =
                         if String.hasPrefix (defLibname, {prefix = "lib"})
@@ -1300,18 +1353,7 @@ fun commandLine (args: string list): unit =
                         atMLtons :=
                         Vector.fromList
                         (tokenize (rev ("--" :: (!runtimeArgs))))
-                     (* The -Wa,--gstabs says to pass the --gstabs option to the
-                      * assembler. This tells the assembler to generate stabs
-                      * debugging information for each assembler line.
-                      *)
-                     val (gccDebug, asDebug) =
-                        case !debugFormat of
-                           NONE => (["-g"], "-Wa,-g")
-                         | SOME Dwarf => (["-gdwarf", "-g2"], "-Wa,--gdwarf2")
-                         | SOME DwarfPlus => (["-gdwarf+", "-g2"], "-Wa,--gdwarf2")
-                         | SOME Dwarf2 => (["-gdwarf-2", "-g2"], "-Wa,--gdwarf2")
-                         | SOME Stabs => (["-gstabs", "-g2"], "-Wa,--gstabs")
-                         | SOME StabsPlus => (["-gstabs+", "-g2"], "-Wa,--gstabs")
+                     val (ccDebug, asDebug) = (["-g", "-DASSERT=1"], "-Wa,-g")
                      fun compileO (inputs: File.t list): unit =
                         let
                            val output =
@@ -1345,15 +1387,15 @@ fun commandLine (args: string list): unit =
                                then System.system
                                     (arScript,
                                      List.concat
-                                      [[targetStr, OSStr, output],
+                                      [[targetStr, targetOSStr, output],
                                        inputs,
                                        linkArchives])
                                else System.system
-                                    (gcc,
+                                    (hd cc,
                                      List.concat
-                                      [["-o", output],
+                                      [tl cc,
                                        if !format = Library then libOpts else [],
-                                       if !debug then gccDebug else [],
+                                       ["-o", output],
                                        inputs,
                                        linkOpts]))
                               ()
@@ -1404,46 +1446,39 @@ fun commandLine (args: string list): unit =
                         else temp (xsuf ^ ".bc")
                   fun compileC (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
-                        val debugSwitches = gccDebug @ ["-DASSERT=1"]
-                        val tracingSwitches = gccDebug @ ["-DENABLE_TRACING=1"]
-                        val ltoSwitches = ["-O3", "-flto"]
                         val output = mkOutputO (c, input)
                      in
-                        (
-                          [
-                            (gcc,
+                       ([(hd cc,
                              List.concat
-                                [[ "-std=gnu11", "-c" ],
-                                 if !format = Executable
-                                 then [] else [ "-DLIBNAME=" ^ !libname ],
-                                 if positionIndependent
-                                 then [ "-fPIC", "-DPIC" ] else [],
-                                 if !debug then debugSwitches else [],
-                                 if !traceRuntime then tracingSwitches else [],
-                                 if !ltoRuntime then ltoSwitches else [],
-                                 ccOpts,
-                                 ["-o", output],
-                                 [input]])
-                          ],
-                          output
-                        )
+                          [tl cc,
+                           [ "-c" ],
+                           if !format = Executable
+                           then [] else [ "-DLIBNAME=" ^ !libname ],
+                           if positionIndependent
+                           then [ "-fPIC", "-DPIC" ] else [],
+                           if !debug then ccDebug else [],
+                           if !traceRuntime
+                           then ["-DENABLE_TRACING=1"] else [],
+                           if !ltoRuntime
+                           then ["-O3", "-flto"] else [],
+                           ccOpts,
+                           ["-o", output],
+                           [input]])],
+                        output)
                      end
                   fun compileS (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val output = mkOutputO (c, input)
                      in
-                        (
-                          [
-                            (gcc,
+                         ([(hd cc,
                              List.concat
-                                 [["-c"],
+                            [tl cc,
+                             ["-c"],
                                   if !debug then [asDebug] else [],
                                   asOpts,
                                   ["-o", output],
-                                  [input]])
-                            ],
-                          output
-                        )
+                             [input]])],
+                          output)
                      end
                   fun compileLL (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
@@ -1513,7 +1548,7 @@ fun commandLine (args: string list): unit =
                            Place.O => ()
                          | _ => compileO (rev oFiles)
                      end
-                  fun mkCompileSrc {listFiles, elaborate, compile} input =
+                  fun compileSrc sel =
                      let
                         val outputs: File.t list ref = ref []
                         val r = ref 0
@@ -1535,68 +1570,45 @@ fun commandLine (args: string list): unit =
                                print = print,
                                done = done}
                            end
-                        val _ =
-                           case !verbosity of
-                              Silent => ()
-                            | Top => ()
-                            | _ =>
-                                 outputHeader
-                                 (Control.No, fn l =>
-                                  let val out = Out.error
-                                  in Layout.output (l, out)
-                                     ; Out.newline out
-                                  end)
+                        val _ = Control.message (Verbosity.Detail, Control.layout)
+                        val {sourceFiles, frontend, compile} =
+                           (sel o Compile.mkCompile)
+                           {outputC = make (Control.C, ".c"),
+                            outputLL = make (Control.LLVM, ".ll"),
+                            outputS = make (Control.Assembly, ".s")}
                         val _ =
                            case stop of
                               Place.Files =>
                                  Vector.foreach
-                                 (listFiles {input = input}, fn f =>
+                                 (sourceFiles input, fn f =>
                                   (print (String.translate
                                           (f, fn #"\\" => "/" | c => str c))
                                    ; print "\n"))
-                            | Place.TypeCheck =>
-                                 trace (Top, "Type Check SML")
-                                 elaborate
-                                 {input = input}
-                            | _ =>
-                                 trace (Top, "Compile SML")
-                                 compile
-                                 {input = input,
-                                  outputC = make (Control.C, ".c"),
-                                  outputLL = make (Control.LLVM, ".ll"),
-                                  outputS = make (Control.Assembly, ".s")}
+                            | Place.TypeCheck => frontend input
+                            | _ => compile input
                      in
                         case stop of
                            Place.Files => ()
                          | Place.TypeCheck => ()
                          | Place.Generated => ()
                          | _ =>
-                              (* Shrink the heap before calling gcc. *)
+                              (* Shrink the heap before calling C compiler. *)
                               (MLton.GC.pack ()
                                ; compileCSO (List.concat [!outputs, csoFiles]))
                      end
-                  val compileSML =
-                     mkCompileSrc {listFiles = fn {input} => Vector.fromList input,
-                                   elaborate = Compile.elaborateSML,
-                                   compile = Compile.compileSML}
-                  val compileMLB =
-                     mkCompileSrc {listFiles = Compile.sourceFilesMLB,
-                                   elaborate = Compile.elaborateMLB,
-                                   compile = Compile.compileMLB}
-                  val compileSXML =
-                     mkCompileSrc {listFiles = fn {input} => Vector.new1 input,
-                                   elaborate = fn _ => raise Fail "Unimplemented",
-                                   compile = Compile.compileSXML}
                   fun compile () =
                      case start of
-                        Place.SML => compileSML [input]
-                      | Place.MLB => compileMLB input
+                        Place.SML => compileSrc #sml
+                      | Place.MLB => compileSrc #mlb
                       | Place.Generated => compileCSO (input :: csoFiles)
                       | Place.O => compileCSO (input :: csoFiles)
-                      | Place.SXML => compileSXML input
+                      | Place.XML => compileSrc #xml
+                      | Place.SXML => compileSrc #xml
+                      | Place.SSA => compileSrc #ssa
+                      | Place.SSA2 => compileSrc #ssa2
                       | _ => Error.bug "invalid start"
-                  val doit
-                    = trace (Top, "MLton")
+                  val doit =
+                     traceTop Version.banner
                       (fn () =>
                        Exn.finally
                        (compile, fn () =>

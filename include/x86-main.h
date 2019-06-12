@@ -1,8 +1,8 @@
-/* Copyright (C) 2009 Matthew Fluet.
+/* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 2000-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -21,6 +21,7 @@ PRIVATE Word32 divTemp;
 PRIVATE Word32 fildTemp;
 PRIVATE Word32 fpswTemp;
 PRIVATE Word32 indexTemp;
+PRIVATE Word32 overflowCheckTemp;
 PRIVATE Word32 raTemp1;
 PRIVATE Real64 raTemp2;
 PRIVATE Real64 realTemp1D;
@@ -43,8 +44,9 @@ static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
         return *((GC_frameIndex*)(ra - sizeof(GC_frameIndex)));
 }
 
-#define MLtonCallFromC                                                  \
-PRIVATE void MLton_jumpToSML (pointer jump);                            \
+PRIVATE void MLton_jumpToSML (pointer jump);
+
+#define MLtonCallFromC()                                                \
 static void MLton_callFromC () {                                        \
         pointer jump;                                                   \
         GC_state s;                                                     \
@@ -72,7 +74,6 @@ static void MLton_callFromC () {                                        \
 }
 
 #define MLtonMain(al, mg, mfs, mmc, pk, ps, ml)                         \
-MLtonCallFromC                                                          \
 PUBLIC int MLton_main (int argc, char* argv[]) {                        \
         pointer jump;                                                   \
         extern pointer ml;                                              \
@@ -91,7 +92,6 @@ PUBLIC int MLton_main (int argc, char* argv[]) {                        \
 }
 
 #define MLtonLibrary(al, mg, mfs, mmc, pk, ps, ml)                      \
-MLtonCallFromC                                                          \
 PUBLIC void LIB_OPEN(LIBNAME) (int argc, char* argv[]) {                \
         pointer jump;                                                   \
         extern pointer ml;                                              \

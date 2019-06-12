@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2017 Matthew Fluet.
+(* Copyright (C) 2009,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -42,10 +42,10 @@ signature SSA_TREE2 =
          sig
             datatype t =
                Con of Con.t
+             | Sequence
              | Tuple
-             | Vector
 
-            val isVector: t -> bool
+            val isSequence: t -> bool
             val layout: t -> Layout.t
          end
 
@@ -73,11 +73,11 @@ signature SSA_TREE2 =
             val cpointer: t
             val datatypee: Tycon.t -> t
             val dest: t -> dest
-            val deVector1: t -> t
-            val deVectorOpt: t -> t Prod.t option
+            val deSequence1: t -> t
+            val deSequenceOpt: t -> t Prod.t option
             val equals: t * t -> bool
             val intInf: t
-            val isVector: t -> bool
+            val isSequence: t -> bool
             val isUnit: t -> bool
             val layout: t -> Layout.t
             val object: {args: t Prod.t, con: ObjectCon.t} -> t
@@ -85,9 +85,9 @@ signature SSA_TREE2 =
             val plist: t -> PropertyList.t
             val real: RealSize.t -> t
             val reff1: t -> t
+            val sequence: t Prod.t -> t
             val thread: t
             val tuple: t Prod.t -> t
-            val vector: t Prod.t -> t
             val vector1: t -> t
             val weak: t -> t
             val word: WordSize.t -> t
@@ -98,8 +98,8 @@ signature SSA_TREE2 =
          sig
             datatype 'a t =
                Object of 'a
-             | VectorSub of {index: 'a,
-                             vector: 'a}
+             | SequenceSub of {index: 'a,
+                               sequence: 'a}
 
             val foreach: 'a t * ('a -> unit) -> unit
             val layout: 'a t * ('a -> Layout.t) -> Layout.t
@@ -150,38 +150,14 @@ signature SSA_TREE2 =
             val replaceUses: t * (Var.t -> Var.t) -> t
          end
 
-      structure Cases:
-         sig
-            datatype t =
-               Con of (Con.t * Label.t) vector
-             | Word of WordSize.t * (WordX.t * Label.t) vector
-
-            val forall: t * (Label.t -> bool) -> bool
-            val foreach: t * (Label.t -> unit) -> unit
-            val hd: t -> Label.t
-            val isEmpty: t -> bool
-            val map: t * (Label.t -> Label.t) -> t
-         end
-
-      structure Handler: HANDLER
-      sharing Handler.Label = Label
-
-      structure Return: RETURN
-      sharing Return.Handler = Handler
-
       structure Transfer:
          sig
             datatype t =
-               Arith of {args: Var.t vector,
-                         overflow: Label.t, (* Must be nullary. *)
-                         prim: Type.t Prim.t,
-                         success: Label.t, (* Must be unary. *)
-                         ty: Type.t} (* int or word *)
-             | Bug  (* MLton thought control couldn't reach here. *)
+               Bug  (* MLton thought control couldn't reach here. *)
              | Call of {args: Var.t vector,
                         func: Func.t,
                         return: Return.t}
-             | Case of {cases: Cases.t,
+             | Case of {cases: (Con.t, Label.t) Cases.t,
                         default: Label.t option, (* Must be nullary. *)
                         test: Var.t}
              | Goto of {args: Var.t vector,
@@ -193,7 +169,7 @@ signature SSA_TREE2 =
              | Return of Var.t vector
              | Runtime of {args: Var.t vector,
                            prim: Type.t Prim.t,
-                           return: Label.t} (* Must be nullary. *)
+                           return: Label.t}
 
             val equals: t * t -> bool
             val foreachFunc : t * (Func.t -> unit) -> unit
@@ -298,5 +274,7 @@ signature SSA_TREE2 =
             val hasPrim: t * (Type.t Prim.t -> bool) -> bool
             val layouts: t * (Layout.t -> unit) -> unit
             val layoutStats: t -> Layout.t
+            val parse: unit -> t Parse.t
+            val toFile: {display: t Control.display, style: Control.style, suffix: string}
          end
    end

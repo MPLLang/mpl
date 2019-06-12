@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2011,2017 Matthew Fluet.
+(* Copyright (C) 2009,2011,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -61,8 +61,8 @@ fun checkScopes (program as
             val _ =
                case oc of
                   Con con => getCon con
+                | Sequence => ()
                 | Tuple => ()
-                | Vector => ()
          in
             ()
          end
@@ -128,8 +128,7 @@ fun checkScopes (program as
          end
          handle exn => Error.reraiseSuffix (exn, concat [" in ", Layout.toString (Statement.layout s)])
       val loopTransfer =
-         fn Arith {args, ty, ...} => (getVars args; loopType ty)
-          | Bug => ()
+         fn Bug => ()
           | Call {func, args, ...} => (getFunc func; getVars args)
           | Case {test, cases, default, ...} =>
                let
@@ -462,22 +461,22 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
       fun base b =
          case b of
             Base.Object ty => ty
-          | Base.VectorSub {index, vector} =>
-               if Type.isVector vector
+          | Base.SequenceSub {index, sequence} =>
+               if Type.isSequence sequence
                   then let
                           val _ =
                              if Type.equals (index, Type.word (WordSize.seqIndex ()))
                                 then ()
-                             else Error.bug "Ssa2.TypeCheck2.base (vector-sub of non seqIndex)"
+                             else Error.bug "Ssa2.TypeCheck2.base (sequence-sub of non seqIndex)"
                        in
-                          vector
+                          sequence
                        end
-               else Error.bug "Ssa2.TypeCheck2.base (vector-sub of non vector)"
+               else Error.bug "Ssa2.TypeCheck2.base (sequence-sub of non sequence)"
       fun select {base: Type.t, offset: int, resultType = _}: Type.t =
          case Type.dest base of
             Type.Object {args, ...} => Prod.elt (args, offset)
           | _ => Error.bug "Ssa2.TypeCheck2.select (non object)"
-      fun update {base, offset, value, writeBarrier} =
+      fun update {base, offset, value, writeBarrier = _} =
          case Type.dest base of
             Type.Object {args, ...} =>
                let
@@ -544,7 +543,5 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
 val typeCheck = fn p =>
    (typeCheck p)
    handle exn => Error.reraisePrefix (exn, "TypeError (SSA2): ")
-
-val typeCheck = Control.trace (Control.Pass, "typeCheck") typeCheck
 
 end

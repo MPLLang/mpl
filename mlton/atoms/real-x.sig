@@ -1,8 +1,8 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2018-2019 Matthew Fluet.
  * Copyright (C) 2004-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -43,7 +43,7 @@ signature REAL_X =
       val exp: t -> t option
       val fromIntInf: IntInf.t * RealSize.t -> t option
       val hash: t -> word
-      val layout: t -> Layout.t
+      val layout: t * {suffix: bool} -> Layout.t
       val le: t * t -> bool option
       val ln: t -> t option
       val log10: t -> t option
@@ -53,12 +53,15 @@ signature REAL_X =
       val muladd: t * t * t -> t option
       val mulsub: t * t * t -> t option
       val neg: t -> t option
+      val negInf: RealSize.t -> t
+      val parse: t Parse.t
+      val posInf: RealSize.t -> t
       val qequal: t * t -> bool option
       val sin: t -> t option
       val size: t -> RealSize.t
       val sqrt: t -> t option
       val sub: t * t -> t option
       val tan: t -> t option
-      val toString: t -> string
+      val toString: t * {suffix: bool} -> string
       val zero: RealSize.t -> t
    end

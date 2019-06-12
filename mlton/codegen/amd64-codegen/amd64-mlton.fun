@@ -1,9 +1,9 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -25,8 +25,6 @@ struct
   end
 
   type transInfo = {addData : amd64.Assembly.t list -> unit,
-                    frameInfoToAMD64: (amd64MLtonBasic.Machine.FrameInfo.t
-                                     -> amd64.FrameInfo.t),
                     live: amd64.Label.t -> amd64.Operand.t list,
                     liveInfo: amd64Liveness.LiveInfo.t}
 
@@ -71,8 +69,6 @@ struct
          | Real_le _ => true
          | Real_lt _ => true
          | Real_mul _ => true
-         | Real_muladd _ => true
-         | Real_mulsub _ => true
          | Real_neg _ => true
          | Real_qequal _ => true
          | Real_rndToReal _ => true
@@ -81,7 +77,7 @@ struct
          | Real_sub _ => true
          | Thread_returnToC => false
          | Word_add _ => true
-         | Word_addCheck _ => true
+         | Word_addCheckP _ => true
          | Word_andb _ => true
          | Word_castToReal _ => true
          | Word_equal _ => true
@@ -89,9 +85,9 @@ struct
          | Word_lshift _ => true
          | Word_lt _ => true
          | Word_mul _ => true
-         | Word_mulCheck _ => true
+         | Word_mulCheckP _ => true
          | Word_neg _ => true
-         | Word_negCheck _ => true
+         | Word_negCheckP _ => true
          | Word_notb _ => true
          | Word_orb _ => true
          | Word_quot _ => true
@@ -101,7 +97,7 @@ struct
          | Word_ror _ => true
          | Word_rshift _ => true
          | Word_sub _ => true
-         | Word_subCheck _ => true
+         | Word_subCheckP _ => true
          | Word_xorb _ => true
          | _ => false
      end
@@ -128,9 +124,6 @@ struct
         fun getSrc2 ()
           = (Vector.sub (args, 0), Vector.sub (args, 1))
             handle _ => Error.bug "amd64MLton.prim: getSrc2"
-        fun getSrc3 ()
-          = (Vector.sub (args, 0), Vector.sub (args, 1), Vector.sub (args, 2))
-            handle _ => Error.bug "amd64MLton.prim: getSrc3"
 
         fun mov ()
           = let
@@ -245,6 +238,60 @@ struct
                 transfer = NONE}]
             end
 
+        fun binalcc (oper, condition)
+          = let
+              val ((src1,src1size),
+                   (src2,src2size)) = getSrc2 ()
+              val (dst,dstsize) = getDst1 ()
+              val tmp = overflowCheckTempContentsOperand src1size
+              val _ 
+                = Assert.assert
+                  ("amd64MLton.prim: binalcc, src1size/src2size",
+                   fn () => src1size = src2size)
+
+              (* Reverse src1/src2 when src1 and src2 are temporaries
+               * and the oper is commutative. 
+               *)
+              val (src1,src2)
+                = if (oper = Instruction.ADD)
+                     orelse
+                     (oper = Instruction.ADC)
+                     orelse
+                     (oper = Instruction.AND)
+                     orelse
+                     (oper = Instruction.OR)
+                     orelse
+                     (oper = Instruction.XOR)
+                    then case (Operand.deMemloc src1, Operand.deMemloc src2)
+                           of (SOME memloc_src1, SOME memloc_src2)
+                            => if amd64Liveness.track memloc_src1
+                                  andalso
+                                  amd64Liveness.track memloc_src2
+                                 then (src2,src1)
+                                 else (src1,src2)
+                            | _ => (src1,src2)
+                    else (src1,src2)
+            in
+              AppendList.fromList
+              [Block.mkBlock'
+               {entry = NONE,
+                statements
+                = [Assembly.instruction_mov
+                   {dst = tmp,
+                    src = src1,
+                    size = src1size},
+                   Assembly.instruction_binal
+                   {oper = oper,
+                    dst = tmp,
+                    src = src2,
+                    size = src1size},
+                   Assembly.instruction_setcc
+                   {condition = condition,
+                    dst = dst,
+                    size = dstsize}],
+                transfer = NONE}]
+            end
+
         fun pmd oper
           = let
               val ((src1,src1size),
@@ -289,6 +336,54 @@ struct
                 transfer = NONE}]
             end
 
+        fun pmdcc (oper, condition)
+          = let
+              val ((src1,src1size),
+                   (src2,src2size)) = getSrc2 ()
+              val (dst,dstsize) = getDst1 ()
+              val tmp = overflowCheckTempContentsOperand src1size
+              val _ 
+                = Assert.assert
+                  ("amd64MLton.prim: pmdcc, src1size/src2size",
+                   fn () => src1size = src2size)
+
+              (* Reverse src1/src2 when src1 and src2 are temporaries
+               * and the oper is commutative. 
+               *)
+              val (src1,src2)
+                = if (oper = Instruction.IMUL)
+                     orelse
+                     (oper = Instruction.MUL)
+                    then case (Operand.deMemloc src1, Operand.deMemloc src2)
+                           of (SOME memloc_src1, SOME memloc_src2)
+                            => if amd64Liveness.track memloc_src1
+                                  andalso
+                                  amd64Liveness.track memloc_src2
+                                 then (src2,src1)
+                                 else (src1,src2)
+                            | _ => (src1,src2)
+                    else (src1,src2)
+            in
+              AppendList.fromList
+              [Block.mkBlock'
+               {entry = NONE,
+                statements
+                = [Assembly.instruction_mov
+                   {dst = tmp,
+                    src = src1,
+                    size = src1size},
+                   Assembly.instruction_pmd
+                   {oper = oper,
+                    dst = tmp,
+                    src = src2,
+                    size = src1size},
+                   Assembly.instruction_setcc
+                   {condition = condition,
+                    dst = dst,
+                    size = dstsize}],
+                transfer = NONE}]
+            end
+
         fun imul2 ()
           = let
               val ((src1,src1size),
@@ -328,6 +423,49 @@ struct
                 transfer = NONE}]
             end
 
+        fun imul2cc condition
+          = let
+              val ((src1,src1size),
+                   (src2,src2size)) = getSrc2 ()
+              val (dst,dstsize) = getDst1 ()
+              val tmp = overflowCheckTempContentsOperand src1size
+              val _ 
+                = Assert.assert
+                  ("amd64MLton.prim: imul2cc, src1size/src2size",
+                   fn () => src1size = src2size)
+
+              (* Reverse src1/src2 when src1 and src2 are temporaries
+               * and the oper is commutative. 
+               *)
+              val (src1,src2)
+                = case (Operand.deMemloc src1, Operand.deMemloc src2)
+                    of (SOME memloc_src1, SOME memloc_src2)
+                     => if amd64Liveness.track memloc_src1
+                           andalso
+                           amd64Liveness.track memloc_src2
+                          then (src2,src1)
+                          else (src1,src2)
+                     | _ => (src1,src2)
+            in
+              AppendList.fromList
+              [Block.mkBlock'
+               {entry = NONE,
+                statements
+                = [Assembly.instruction_mov
+                   {dst = tmp,
+                    src = src1,
+                    size = src1size},
+                   Assembly.instruction_imul2
+                   {dst = tmp,
+                    src = src2,
+                    size = src1size},
+                   Assembly.instruction_setcc
+                   {dst = dst,
+                    condition = condition,
+                    size = dstsize}],
+                transfer = NONE}]
+            end
+
         fun unal oper
           = let
               val (src,srcsize) = getSrc1 ()
@@ -347,6 +485,31 @@ struct
                     size = srcsize},
                    Assembly.instruction_unal
                    {oper = oper,
+                    dst = dst,
+                    size = dstsize}],
+                transfer = NONE}]
+            end
+
+        fun unalcc (oper, condition)
+          = let
+              val (src,srcsize) = getSrc1 ()
+              val (dst,dstsize) = getDst1 ()
+              val tmp = overflowCheckTempContentsOperand srcsize
+            in
+              AppendList.fromList
+              [Block.mkBlock'
+               {entry = NONE,
+                statements
+                = [Assembly.instruction_mov
+                   {dst = tmp,
+                    src = src,
+                    size = srcsize},
+                   Assembly.instruction_unal
+                   {oper = oper,
+                    dst = tmp,
+                    size = srcsize},
+                   Assembly.instruction_setcc
+                   {condition = condition,
                     dst = dst,
                     size = dstsize}],
                 transfer = NONE}]
@@ -573,40 +736,6 @@ struct
                 transfer = NONE}]
             end
 
-        fun sse_binas_mul oper
-          = let
-              val ((src1,src1size),
-                   (src2,src2size),
-                   (src3,src3size)) = getSrc3 ()
-              val (dst,dstsize) = getDst1 ()
-              val _ 
-                = Assert.assert
-                  ("amd64MLton.prim: binal, dstsize/src1size/src2size",
-                   fn () => src1size = dstsize andalso
-                            src2size = dstsize andalso
-                            src3size = dstsize)
-            in
-              AppendList.fromList
-              [Block.mkBlock'
-               {entry = NONE,
-                statements
-                = [Assembly.instruction_sse_movs
-                   {dst = dst,
-                    src = src1,
-                    size = src1size},
-                   Assembly.instruction_sse_binas
-                   {oper = Instruction.SSE_MULS,
-                    dst = dst,
-                    src = src2,
-                    size = dstsize},
-                   Assembly.instruction_sse_binas
-                   {oper = oper,
-                    dst = dst,
-                    src = src3,
-                    size = dstsize}],
-                transfer = NONE}]
-            end
-
         fun sse_unas oper
           = let
               val (src,srcsize) = getSrc1 ()
@@ -650,6 +779,9 @@ struct
                         transfer = NONE}))
                    end
               else (AppendList.empty,AppendList.empty)
+
+        fun flag {signed} =
+           if signed then amd64.Instruction.O else amd64.Instruction.C
       in
         AppendList.appends
         [comment_begin,
@@ -897,8 +1029,6 @@ struct
                      transfer = NONE}]
                 end
              | Real_mul _ => sse_binas Instruction.SSE_MULS
-             | Real_muladd _ => sse_binas_mul Instruction.SSE_ADDS
-             | Real_mulsub _ => sse_binas_mul Instruction.SSE_SUBS
              | Real_neg s =>
                 let
                    val (dst,dstsize) = getDst1 ()
@@ -1032,6 +1162,7 @@ struct
                   end
              | Real_sub _ => sse_binas Instruction.SSE_SUBS
              | Word_add _ => binal Instruction.ADD
+             | Word_addCheckP (_, sg) => binalcc (Instruction.ADD, flag sg)
              | Word_andb _ => binal Instruction.AND
              | Word_castToReal _ => sse_movd ()
              | Word_equal _ => cmp Instruction.E
@@ -1045,7 +1176,17 @@ struct
                   | W16 => imul2 ()
                   | W32 => imul2 ()
                   | W64 => imul2 ())
+             | Word_mulCheckP (s, {signed}) =>
+                 if signed then
+                   (case WordSize.prim s of
+                      W8 => pmdcc (Instruction.IMUL, amd64.Instruction.O)
+                    | W16 => imul2cc amd64.Instruction.O
+                    | W32 => imul2cc amd64.Instruction.O
+                    | W64 => imul2cc amd64.Instruction.O)
+                 else
+                   pmdcc (Instruction.MUL, amd64.Instruction.C)
              | Word_neg _ => unal Instruction.NEG
+             | Word_negCheckP (_, sg) => unalcc (Instruction.NEG, flag sg)
              | Word_notb _ => unal Instruction.NOT
              | Word_orb _ => binal Instruction.OR
              | Word_quot (_, {signed}) =>
@@ -1110,6 +1251,7 @@ struct
              | Word_rshift (_, {signed}) =>
                   sral (if signed then Instruction.SAR else Instruction.SHR)
              | Word_sub _ => binal Instruction.SUB
+             | Word_subCheckP (_, sg) => binalcc (Instruction.SUB, flag sg)
              | Word_extdToWord (s, s', {signed}) =>
                   let
                      val b = WordSize.bits s
@@ -1129,9 +1271,8 @@ struct
       end
 
   fun ccall {args: (amd64.Operand.t * amd64.Size.t) vector,
-             frameInfo,
              func,
-             return: amd64.Label.t option,
+             return: {return: amd64.Label.t, size: int option} option,
              transInfo = {...}: transInfo}
     = let
         val CFunction.T {convention, target, ...} = func
@@ -1158,7 +1299,6 @@ struct
            statements = [],
            transfer = SOME (Transfer.ccall 
                             {args = Vector.toList args,
-                             frameInfo = frameInfo,
                              func = func,
                              return = return})})]
       end
@@ -1200,203 +1340,6 @@ struct
               else AppendList.empty
       in
         AppendList.appends [default (), comment_end]
-      end
-
-  fun arith {prim : RepType.t Prim.t,
-             args : (Operand.t * Size.t) vector,
-             dsts : (Operand.t * Size.t) vector,
-             overflow : Label.t,
-             success : Label.t,
-             transInfo = {...} : transInfo}
-    = let
-        val primName = Prim.toString prim
-        datatype z = datatype Prim.Name.t
-
-        fun getDst1 ()
-          = Vector.sub (dsts, 0)
-            handle _ => Error.bug "amd64MLton.arith: getDst1"
-        fun getSrc1 ()
-          = Vector.sub (args, 0)
-            handle _ => Error.bug "amd64MLton.arith: getSrc1"
-        fun getSrc2 ()
-          = (Vector.sub (args, 0), Vector.sub (args, 1))
-            handle _ => Error.bug "amd64MLton.arith: getSrc2"
-
-        fun check (statements, condition)
-          = AppendList.single
-            (amd64.Block.mkBlock'
-             {entry = NONE,     
-              statements = statements,
-              transfer = SOME (amd64.Transfer.iff
-                               {condition = condition,
-                                truee = overflow,
-                                falsee = success})})
-        fun binal (oper: amd64.Instruction.binal, condition)
-          = let
-              val (dst, dstsize) = getDst1 ()
-              val ((src1, src1size), (src2, src2size)) = getSrc2 ()
-              val _ = Assert.assert
-                      ("amd64MLton.arith: binal, dstsize/src1size/src2size",
-                       fn () => src1size = dstsize andalso src2size = dstsize)
-              (* Reverse src1/src2 when src1 and src2 are
-               * temporaries and the oper is commutative. 
-               *)
-              val (src1,src2)
-                = if (oper = amd64.Instruction.ADD)
-                    then case (amd64.Operand.deMemloc src1,
-                               amd64.Operand.deMemloc src2)
-                           of (SOME memloc_src1, SOME memloc_src2)
-                            => if amd64Liveness.track memloc_src1
-                                  andalso
-                                  amd64Liveness.track memloc_src2
-                                 then (src2,src1)
-                                 else (src1,src2)
-                            | _ => (src1,src2)
-                    else (src1,src2)
-            in
-              check ([Assembly.instruction_mov
-                      {dst = dst,
-                       src = src1,
-                       size = dstsize},
-                      Assembly.instruction_binal
-                      {oper = oper,
-                       dst = dst,
-                       src = src2,
-                       size = dstsize}],
-                     condition)
-            end
-        fun pmd (oper: amd64.Instruction.md, condition)
-          = let
-              val (dst, dstsize) = getDst1 ()
-              val ((src1, src1size), (src2, src2size)) = getSrc2 ()
-              val _ = Assert.assert
-                      ("amd64MLton.arith: pmd, dstsize/src1size/src2size",
-                       fn () => src1size = dstsize andalso src2size = dstsize)
-              (* Reverse src1/src2 when src1 and src2 are
-               * temporaries and the oper is commutative. 
-               *)
-              val (src1, src2)
-                = if oper = amd64.Instruction.MUL
-                    then case (amd64.Operand.deMemloc src1,
-                               amd64.Operand.deMemloc src2)
-                           of (SOME memloc_src1, SOME memloc_src2)
-                            => if amd64Liveness.track memloc_src1
-                                  andalso
-                                  amd64Liveness.track memloc_src2
-                                 then (src2,src1)
-                                 else (src1,src2)
-                            | _ => (src1,src2)
-                    else (src1,src2)
-            in
-              check ([Assembly.instruction_mov
-                      {dst = dst,
-                       src = src1,
-                       size = dstsize},
-                      Assembly.instruction_pmd
-                      {oper = oper,
-                       dst = dst,
-                       src = src2,
-                       size = dstsize}],
-                     condition)
-            end
-        fun unal (oper: amd64.Instruction.unal, condition)
-          = let
-              val (dst, dstsize) = getDst1 ()
-              val (src1, src1size) = getSrc1 ()
-              val _ = Assert.assert
-                      ("amd64MLton.arith: unal, dstsize/src1size",
-                       fn () => src1size = dstsize)
-            in
-              check ([Assembly.instruction_mov
-                      {dst = dst,
-                       src = src1,
-                       size = dstsize},
-                      Assembly.instruction_unal 
-                      {oper = oper,
-                       dst = dst,
-                       size = dstsize}],
-                     condition)
-            end
-
-        fun imul2 condition
-          = let
-              val (dst, dstsize) = getDst1 ()
-              val ((src1, src1size), (src2, src2size)) = getSrc2 ()
-              val _ = Assert.assert
-                      ("amd64MLton.arith: imul2, dstsize/src1size/src2size",
-                       fn () => src1size = dstsize andalso src2size = dstsize)
-              (* Reverse src1/src2 when src1 and src2 are
-               * temporaries and the oper is commutative. 
-               *)
-              val (src1, src2)
-                = case (amd64.Operand.deMemloc src1,
-                        amd64.Operand.deMemloc src2)
-                    of (SOME memloc_src1, SOME memloc_src2)
-                     => if amd64Liveness.track memloc_src1
-                           andalso
-                           amd64Liveness.track memloc_src2
-                          then (src2,src1)
-                          else (src1,src2)
-                     | _ => (src1,src2)
-            in
-              check ([Assembly.instruction_mov
-                      {dst = dst,
-                       src = src1,
-                       size = dstsize},
-                      Assembly.instruction_imul2
-                      {dst = dst,
-                       src = src2,
-                       size = dstsize}],
-                     condition)
-            end
-
-        val (comment_begin,_)
-          = if !Control.Native.commented > 0
-              then let
-                     val comment = primName
-                   in 
-                     (AppendList.single
-                      (amd64.Block.mkBlock'
-                       {entry = NONE,
-                        statements 
-                        = [amd64.Assembly.comment 
-                           ("begin arith: " ^ comment)],
-                        transfer = NONE}),
-                      AppendList.single
-                      (amd64.Block.mkBlock'
-                       {entry = NONE,
-                        statements 
-                        = [amd64.Assembly.comment 
-                           ("end arith: " ^ comment)],
-                        transfer = NONE}))
-                   end
-              else (AppendList.empty,AppendList.empty)
-        fun flag {signed} =
-           if signed then amd64.Instruction.O else amd64.Instruction.C
-      in
-        AppendList.appends
-        [comment_begin,
-         (case Prim.name prim of
-             Word_addCheck (_, sg) =>
-                binal (amd64.Instruction.ADD, flag sg)
-           | Word_mulCheck (s, {signed}) =>
-                let
-                in
-                   if signed
-                      then
-                         (case WordSize.prim s of
-                             W8 => pmd (amd64.Instruction.IMUL, amd64.Instruction.O)
-                           | W16 => imul2 amd64.Instruction.O
-                           | W32 => imul2 amd64.Instruction.O
-                           | W64 => imul2 amd64.Instruction.O)
-                   else
-                      pmd (amd64.Instruction.MUL, amd64.Instruction.C)
-                end
-           | Word_negCheck _ => 
-               unal (amd64.Instruction.NEG, amd64.Instruction.O)
-           | Word_subCheck (_, sg) =>
-               binal (amd64.Instruction.SUB, flag sg)
-           | _ => Error.bug ("amd64MLton.arith: strange Prim.Name.t: " ^ primName))]
       end
 
 end

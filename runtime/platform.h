@@ -1,9 +1,9 @@
-/* Copyright (C) 2010,2012,2016 Matthew Fluet.
+/* Copyright (C) 2010,2012,2016,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -91,15 +91,6 @@
 #ifndef MLTON_CODEGEN_STATIC_INLINE
 #define MLTON_CODEGEN_STATIC_INLINE PRIVATE
 #endif
-#ifndef MLTON_CODEGEN_MATHFN
-#define MLTON_CODEGEN_MATHFN(decl)
-#endif
-#ifndef MLTON_CODEGEN_WORDSQUOTREM
-#define MLTON_CODEGEN_WORDSQUOTREM(func) func
-#endif
-#ifndef MLTON_CODEGEN_WORDSQUOTREM_IMPL
-#define MLTON_CODEGEN_WORDSQUOTREM_IMPL(func) func
-#endif
 #include "basis-ffi.h"
 
 #include "gc.h"
@@ -131,9 +122,17 @@ PRIVATE __attribute__ ((noreturn)) void MLton_heapCheckTooLarge (void);
 PRIVATE void GC_displayMem (void);
 
 PRIVATE void *GC_mmapAnon (void *start, size_t length);
+PRIVATE void *GC_mmapAnonFlags (void *start, size_t length, int flags);
 PRIVATE void *GC_mmapAnon_safe (void *start, size_t length);
+PRIVATE void *GC_mmapAnonFlags_safe (void *start, size_t length, int flags);
 PRIVATE void *GC_mmapAnon_safe_protect (void *start, size_t length, int prot,
-                                         size_t dead_low, size_t dead_high);
+                                        size_t dead_low, size_t dead_high);
+PRIVATE void *GC_mmapAnonStack (void *start, size_t length, int prot,
+                                size_t dead_low, size_t dead_high);
+PRIVATE void *GC_mmapAnonFlags_safe_protect (void *start, size_t length,
+                                             int prot, int flags,
+                                             size_t dead_low,
+                                             size_t dead_high);
 PRIVATE void *GC_mremap (void *start, size_t oldLength, size_t newLength);
 PRIVATE void GC_release (void *base, size_t length);
 

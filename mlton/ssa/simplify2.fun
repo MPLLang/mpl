@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2017,2019 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -11,27 +12,10 @@ struct
 
 open S
 
-(* structure CommonArg = CommonArg (S) *)
-(* structure CommonBlock = CommonBlock (S) *)
-(* structure CommonSubexp = CommonSubexp (S) *)
-(* structure ConstantPropagation = ConstantPropagation (S) *)
-(* structure Contify = Contify (S) *)
 structure DeepFlatten = DeepFlatten (S)
-(* structure Flatten = Flatten (S) *)
-(* structure Inline = Inline (S) *)
-(* structure IntroduceLoops = IntroduceLoops (S) *)
-(* structure KnownCase = KnownCase (S) *)
-(* structure LocalFlatten = LocalFlatten (S) *)
-(* structure LocalRef = LocalRef (S) *)
-(* structure LoopInvariant = LoopInvariant (S) *)
-(* structure PolyEqual = PolyEqual (S) *)
 structure Profile2 = Profile2 (S)
-(* structure Redundant = Redundant (S) *)
-(* structure RedundantTests = RedundantTests (S) *)
 structure RefFlatten = RefFlatten (S)
 structure RemoveUnused2 = RemoveUnused2 (S)
-(* structure SimplifyTypes = SimplifyTypes (S) *)
-(* structure Useless = Useless (S) *)
 structure Zone = Zone (S)
 
 type pass = {name: string,
@@ -65,16 +49,16 @@ local
 
 
    val passGens = 
-      List.map([("addProfile", Profile2.addProfile),
-                ("deepFlatten", DeepFlatten.transform2),
-                ("dropProfile", Profile2.dropProfile),
+      List.map([("deepFlatten", DeepFlatten.transform2),
                 ("refFlatten", RefFlatten.transform2),
                 ("removeUnused", RemoveUnused2.transform2),
                 ("zone", Zone.transform2),
-                ("eliminateDeadBlocks",S.eliminateDeadBlocks),
-                ("orderFunctions",S.orderFunctions),
-                ("reverseFunctions",S.reverseFunctions),
-                ("shrink", S.shrink)],
+                ("ssa2AddProfile", Profile2.addProfile),
+                ("ssa2DropProfile", Profile2.dropProfile),
+                ("ssa2EliminateDeadBlocks", S.eliminateDeadBlocks),
+                ("ssa2OrderFunctions", S.orderFunctions),
+                ("ssa2ReverseFunctions", S.reverseFunctions),
+                ("ssa2Shrink", S.shrink)],
                mkSimplePassGen)
 in
    fun ssa2PassesSetCustom s =
@@ -107,76 +91,35 @@ val ssa2PassesSet = fn s =>
 val _ = List.push (Control.optimizationPasses,
                    {il = "ssa2", get = ssa2PassesGet, set = ssa2PassesSet})
 
-fun pass ({name, doit, midfix}, p) =
-   let
-      val _ =
-         let open Control
-         in maybeSaveToFile
-            ({name = name, 
-              suffix = midfix ^ "pre.ssa2"},
-             Control.No, p, Control.Layouts Program.layouts)
-         end
-      val p =
-         Control.passTypeCheck
-         {display = Control.Layouts Program.layouts,
-          name = name,
-          stats = Program.layoutStats,
-          style = Control.No,
-          suffix = midfix ^ "post.ssa2",
-          thunk = fn () => doit p,
-          typeCheck = typeCheck}
-   in
-      p
-   end 
-fun maybePass ({name, doit, execute, midfix}, p) =
-   if List.foldr (!Control.executePasses, execute, fn ((re, new), old) =>
-                  if Regexp.Compiled.matchesAll (re, name)
-                     then new
-                     else old)
-      then pass ({name = name, doit = doit, midfix = midfix}, p)
-      else (Control.messageStr (Control.Pass, name ^ " skipped"); p)
-
 fun simplify p =
    let
-      fun simplify' n p =
-         let
-            val midfix = if n = 0
-                            then ""
-                         else concat [Int.toString n,"."]
-         in
-            if n = !Control.loopPasses
-               then p
-            else simplify' 
-                 (n + 1)
-                 (List.fold
-                  (!ssa2Passes, p, fn ({name, doit, execute}, p) =>
-                   maybePass ({name = name, doit = doit, execute = execute, midfix = midfix}, p)))
-         end
-      val p = simplify' 0 p
+      val ssa2Passes = AppendList.fromList (!ssa2Passes)
+      val ssa2Passes =
+         if !Control.profile <> Control.ProfileNone
+            andalso !Control.profileIL = Control.ProfileSSA2
+            then AppendList.snoc (ssa2Passes,
+                                  {name = "ssa2AddProfile",
+                                   doit = Profile2.addProfile,
+                                   execute = true})
+            else ssa2Passes
+      val ssa2Passes =
+         AppendList.snoc (ssa2Passes, {name = "ssa2OrderFunctions",
+                                       doit = S.orderFunctions,
+                                       execute = true})
+      val ssa2Passes = AppendList.toList ssa2Passes
+      (* Always want to type check the initial and final SSA2 programs,
+       * even if type checking is turned off, just to catch bugs.
+       *)
+      val () = Control.trace (Control.Pass, "ssa2TypeCheck") typeCheck p
+      val p =
+         Control.simplifyPasses
+         {arg = p,
+          passes = ssa2Passes,
+          stats = Program.layoutStats,
+          toFile = Program.toFile,
+          typeCheck = typeCheck}
+      val () = Control.trace (Control.Pass, "ssa2TypeCheck") typeCheck p
    in
       p
    end
-
-val simplify = fn p => let
-                         (* Always want to type check the initial and final SSA 
-                          * programs, even if type checking is turned off, just
-                          * to catch bugs.
-                          *)
-                         val _ = typeCheck p
-                         val p = simplify p
-                         val p =
-                            if !Control.profile <> Control.ProfileNone
-                               andalso !Control.profileIL = Control.ProfileSSA2
-                               then pass ({name = "addProfile2",
-                                           doit = Profile2.addProfile,
-                                           midfix = ""}, p)
-                            else p
-                         val p = maybePass ({name = "orderFunctions2",
-                                             doit = S.orderFunctions,
-                                             execute = true,
-                                             midfix = ""}, p)
-                         val _ = typeCheck p
-                       in
-                         p
-                       end
 end

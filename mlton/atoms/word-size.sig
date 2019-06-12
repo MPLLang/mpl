@@ -1,8 +1,8 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -37,6 +37,7 @@ signature WORD_SIZE =
       val memoize: (t -> 'a) -> t -> 'a
       val objptr: unit -> t
       val objptrHeader: unit -> t
+      val parse: t Parse.t
       datatype prim = W8 | W16 | W32 | W64
       val prim: t -> prim
       val prims: t list

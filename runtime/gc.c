@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -20,6 +20,14 @@
 #define LOCAL_USED_FOR_ASSERT  __attribute__ ((unused))
 #endif
 
+#ifdef ENABLE_TRACING
+#define ARG_USED_FOR_TRACING
+#define LOCAL_USED_FOR_TRACING
+#else
+#define ARG_USED_FOR_TRACING  __attribute__ ((unused))
+#define LOCAL_USED_FOR_TRACING  __attribute__ ((unused))
+#endif
+
 #include "gc/virtual-memory.c"
 #include "gc/align.c"
 #include "gc/read_write.c"
@@ -28,8 +36,6 @@
 /* used to look up per-processor state */
 extern C_Pthread_Key_t gcstate_key;
 
-#include "gc/array-allocate.c"
-#include "gc/array.c"
 #include "gc/assign.c"
 #include "gc/atomic.c"
 #include "gc/call-stack.c"
@@ -71,7 +77,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/profiling.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"
-//#include "gc/rwlock.c"
+#include "gc/sequence-allocate.c"
+#include "gc/sequence.c"
 #include "gc/share.c"
 #include "gc/signals.c"
 #include "gc/size.c"

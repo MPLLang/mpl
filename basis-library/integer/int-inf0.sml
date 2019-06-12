@@ -1,9 +1,9 @@
-(* Copyright (C) 2013-2014,2017 Matthew Fluet.
+(* Copyright (C) 2013-2014,2016-2017 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -32,23 +32,19 @@ signature PRIM_INT_INF =
 
       val abs: int -> int
       val +! : int * int -> int
-      val +? : int * int -> int
       val + : int * int -> int
       val divMod: int * int -> int * int
       val div: int * int -> int
       val gcd: int * int -> int
       val mod: int * int -> int
       val *! : int * int -> int
-      val *? : int * int -> int
       val * : int * int -> int
       val ~! : int -> int
-      val ~? : int -> int
       val ~ : int -> int
       val quotRem: int * int -> int * int
       val quot: int * int -> int
       val rem: int * int -> int
       val -! : int * int -> int
-      val -? : int * int -> int
       val - : int * int -> int
 
       val < : int * int -> bool
@@ -951,15 +947,8 @@ structure IntInf =
 
       local
          val bytesPerMPLimb = Sz.zextdFromInt32 (Int32.quot (MPLimb.sizeInBits, 8))
-         val bytesPerCounter = Sz.zextdFromInt32 (Int32.quot (S.sizeInBits, 8))
-         val bytesPerLength = Sz.zextdFromInt32 (Int32.quot (S.sizeInBits, 8))
-         val bytesPerNormalMetaData = Sz.zextdFromInt32 MetaDataSize.bytes
       in
-         val bytesPerArrayMetaData =
-            Sz.+ (bytesPerCounter, 
-            Sz.+ (bytesPerLength, 
-                  bytesPerNormalMetaData
-            ))
+         val bytesPerSequenceMetaData = Sz.zextdFromInt32 SequenceMetaDataSize.bytes
          (* Reserve heap space for a large IntInf.int with room for num + extra
           * `limbs'.  The reason for splitting this up is that extra is intended
           * to be a constant, and so can be combined at compile time.
@@ -968,7 +957,7 @@ structure IntInf =
             Sz.+ (Sz.* (bytesPerMPLimb, Sz.zextdFromSeqIndex num),
             Sz.+ (Sz.* (bytesPerMPLimb, Sz.zextdFromSeqIndex extra),
             Sz.+ (bytesPerMPLimb, (* isneg Field *)
-            Sz.+ (bytesPerArrayMetaData, (* Array MetaData *)
+            Sz.+ (bytesPerSequenceMetaData, (* Sequence MetaData *)
                   case MLton.Align.align of (* alignment *)
                      MLton.Align.Align4 => 0w3
                    | MLton.Align.Align8 => 0w7
@@ -1022,9 +1011,9 @@ structure IntInf =
                 | SOME i => i
             end
       in
-         val bigAdd = make (I.+!, Prim.+, S.max, 1)
-         val bigSub = make (I.-!, Prim.-, S.max, 1)
-         val bigMul = make (I.*!, Prim.*, S.+, 0)
+         val bigAdd = make (I.+$, Prim.+, S.max, 1)
+         val bigSub = make (I.-$, Prim.-, S.max, 1)
+         val bigMul = make (I.*$, Prim.*, S.+, 0)
       end
 
       fun bigNeg (arg: bigInt): bigInt =
@@ -1294,7 +1283,7 @@ structure IntInf =
                                 if Int32.mod (bpl, bpd) = 0
                                    then 0 else 1)
                     val bytes =
-                       Sz.+ (Sz.+ (bytesPerArrayMetaData (* Array MetaData *),
+                       Sz.+ (Sz.+ (bytesPerSequenceMetaData (* Sequence MetaData *),
                              Sz.+ (0w1 (* sign *),
                                    case MLton.Align.align of (* alignment *)
                                       MLton.Align.Align4 => 0w3
@@ -1332,23 +1321,19 @@ structure IntInf =
 
       val abs = bigAbs
       val op +! = bigAdd
-      val op +? = bigAdd
       val op + = bigAdd
       val divMod = bigDivMod
       val op div = bigDiv
       val gcd = bigGcd
       val op mod = bigMod
       val op *! = bigMul
-      val op *? = bigMul
       val op * = bigMul
       val op ~! = bigNeg
-      val op ~? = bigNeg
       val op ~ = bigNeg
       val quotRem = bigQuotRem
       val quot = bigQuot
       val rem = bigRem
       val op -! = bigSub
-      val op -? = bigSub
       val op - = bigSub
 
       val op < = bigLT

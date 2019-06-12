@@ -1,9 +1,9 @@
-(* Copyright (C) 2015,2017 Matthew Fluet.
+(* Copyright (C) 2015,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -52,45 +52,30 @@ end
 structure NestedPat = NestedPat (open Xml)
 
 structure MatchCompile =
-   MatchCompile (open CoreML
+   MatchCompile (open Xml
                  structure Type = Xtype
                  structure NestedPat = NestedPat
-                 structure Cases =
+                 structure Exp =
                     struct
-                       type exp = Xexp.t
+                       open Xexp
+                       val lett = let1
+                       val var = monoVar
 
-                       open Xcases
-                       type t = exp t
-                       val word = Word
-                       fun con v =
-                          Con (Vector.map
-                               (v, fn {con, targs, arg, rhs} =>
-                                (Xpat.T {con = con,
-                                         targs = targs,
-                                         arg = arg},
-                                 rhs)))
-                    end
-                structure Exp =
-                   struct
-                      open Xexp
-                      val lett = let1
-                      val var = monoVar
+                       fun detuple {tuple, body} =
+                          Xexp.detuple
+                          {tuple = tuple,
+                           body = fn xts => body (Vector.map
+                                                  (xts, fn (x, t) =>
+                                                   (XvarExp.var x, t)))}
 
-                      fun detuple {tuple, body} =
-                         Xexp.detuple
-                         {tuple = tuple,
-                          body = fn xts => body (Vector.map
-                                                 (xts, fn (x, t) =>
-                                                  (XvarExp.var x, t)))}
-
-                      fun devector {vector, length, body} =
-                         Xexp.devector
-                         {vector = vector,
-                          length = length,
-                          body = fn xts => body (Vector.map
-                                                 (xts, fn (x, t) =>
-                                                  (XvarExp.var x, t)))}
-                   end)
+                       fun devector {vector, length, body} =
+                          Xexp.devector
+                          {vector = vector,
+                           length = length,
+                           body = fn xts => body (Vector.map
+                                                  (xts, fn (x, t) =>
+                                                   (XvarExp.var x, t)))}
+                    end)
 
 structure Xexp =
    struct
@@ -245,7 +230,6 @@ fun casee {ctxt: unit -> Layout.t,
                MatchCompile.matchCompile {caseType = caseType,
                                           cases = cases,
                                           conTycon = conTycon,
-                                          region = region,
                                           test = testVar,
                                           testType = testType,
                                           tyconCons = tyconCons}
@@ -1124,8 +1108,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
       val _ = (destroy1 (); destroy2 (); destroy3 ())
    in
       Xml.Program.T {body = body,
-                     datatypes = Vector.fromList (!datatypes),
-                     overflow = NONE}
+                     datatypes = Vector.fromList (!datatypes)}
    end
 
 end

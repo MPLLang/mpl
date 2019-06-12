@@ -752,10 +752,10 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *metaDataSize = GC_NORMAL_METADATA_SIZE;
       *objectSize = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       *copySize = *objectSize;
-    } else if (ARRAY_TAG == tag) {
-      *metaDataSize = GC_ARRAY_METADATA_SIZE;
-      *objectSize = sizeofArrayNoMetaData (s, getArrayLength (p),
-                                           bytesNonObjptrs, numObjptrs);
+    } else if (SEQUENCE_TAG == tag) {
+      *metaDataSize = GC_SEQUENCE_METADATA_SIZE;
+      *objectSize = sizeofSequenceNoMetaData (s, getSequenceLength (p),
+                                              bytesNonObjptrs, numObjptrs);
       *copySize = *objectSize;
     } else {
       /* Stack. */

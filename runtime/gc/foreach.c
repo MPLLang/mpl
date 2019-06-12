@@ -1,9 +1,9 @@
-/* Copyright (C) 2016 Matthew Fluet.
+/* Copyright (C) 2016,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -98,9 +98,9 @@ void printObjectsInRange(GC_state s,
     if (NORMAL_TAG == oi.tag) {
       p += oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE);
     }
-    else if (ARRAY_TAG == oi.tag) {
-      size_t dataBytes = getArrayLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
-      p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
+    else if (SEQUENCE_TAG == oi.tag) {
+      size_t dataBytes = getSequenceLength(p) * (oi.bytesNonObjptrs + (oi.numObjptrs * OBJPTR_SIZE));
+      p += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
     }
     else if (STACK_TAG == oi.tag) {
       p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved;
@@ -171,13 +171,13 @@ pointer foreachObjptrInObject (GC_state s,
       }
       p += OBJPTR_SIZE;
     }
-  } else if (ARRAY_TAG == tag) {
+  } else if (SEQUENCE_TAG == tag) {
     size_t bytesPerElement;
     size_t dataBytes;
     pointer last;
-    GC_arrayLength numElements;
+    GC_sequenceLength numElements;
 
-    numElements = getArrayLength (p);
+    numElements = getSequenceLength (p);
     bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
     dataBytes = numElements * bytesPerElement;
     if (0 == numObjptrs) {
@@ -190,18 +190,17 @@ pointer foreachObjptrInObject (GC_state s,
         goto ARRAY_DOME;
       }
 
-      if (0 == bytesNonObjptrs) {
-        /* Array with only pointers. */
-        for ( ; p < last; p += OBJPTR_SIZE) {
+      if (0 == bytesNonObjptrs)
+        /* Sequence with only pointers. */
+        for ( ; p < last; p += OBJPTR_SIZE)
           callIfIsObjptr (s, f, ((objptr*)(p)), fArgs);
-        }
-      } else {
-        /* Array with a mix of pointers and non-pointers. */
+      else {
+        /* Sequence with a mix of pointers and non-pointers. */
         size_t bytesObjptrs;
 
         bytesObjptrs = numObjptrs * OBJPTR_SIZE;
 
-        /* For each array element. */
+        /* For each sequence element. */
         for ( ; p < last; ) {
           pointer next;
 
@@ -219,13 +218,13 @@ pointer foreachObjptrInObject (GC_state s,
     }
 
  ARRAY_DOME:
-    p += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
+    p += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
   } else if (STACK_TAG == tag) {
     GC_stack stack;
     pointer top, bottom;
     unsigned int i;
     GC_returnAddress returnAddress;
-    GC_frameLayout frameLayout;
+    GC_frameInfo frameInfo;
     GC_frameOffsets frameOffsets;
 
 
@@ -249,9 +248,9 @@ pointer foreachObjptrInObject (GC_state s,
         fprintf (stderr, "  top = "FMTPTR"  return address = "FMTRA"\n",
                  (uintptr_t)top, returnAddress);
       }
-      frameLayout = getFrameLayoutFromReturnAddress (s, returnAddress);
-      frameOffsets = frameLayout->offsets; // index zero of this array is size
-      top -= frameLayout->size;
+      frameInfo = getFrameInfoFromReturnAddress (s, returnAddress);
+      frameOffsets = frameInfo->offsets; // index zero of this array is size
+      top -= frameInfo->size;
       for (i = 0 ; i < frameOffsets[0] ; ++i) {
         if (DEBUG) {
           fprintf(stderr, "  offset %"PRIx16"  address "FMTOBJPTR"\n",
@@ -276,8 +275,8 @@ DONE:
 /* Apply f to the frame index of each frame in the current thread's stack. */
 void foreachStackFrame (GC_state s, GC_foreachStackFrameFun f) {
   pointer bottom;
-  GC_frameIndex findex;
-  GC_frameLayout layout;
+  GC_frameIndex frameIndex;
+  GC_frameInfo frameInfo;
   GC_returnAddress returnAddress;
   pointer top;
 
@@ -287,18 +286,18 @@ void foreachStackFrame (GC_state s, GC_foreachStackFrameFun f) {
   if (DEBUG_PROFILE)
     fprintf (stderr, "  bottom = "FMTPTR"  top = "FMTPTR".\n",
              (uintptr_t)bottom, (uintptr_t)s->stackTop);
-  for (top = s->stackTop; top > bottom; top -= layout->size) {
+  for (top = s->stackTop; top > bottom; top -= frameInfo->size) {
     returnAddress = *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
-    findex = getFrameIndexFromReturnAddress (s, returnAddress);
+    frameIndex = getFrameIndexFromReturnAddress (s, returnAddress);
     if (DEBUG_PROFILE)
-      fprintf (stderr, "top = "FMTPTR"  findex = "FMTFI"\n",
-               (uintptr_t)top, findex);
-    unless (findex < s->frameLayoutsLength)
-      die ("top = "FMTPTR"  returnAddress = "FMTRA"  findex = "FMTFI"\n",
-           (uintptr_t)top, (uintptr_t)returnAddress, findex);
-    f (s, findex);
-    layout = &(s->frameLayouts[findex]);
-    assert (layout->size > 0);
+      fprintf (stderr, "top = "FMTPTR"  frameIndex = "FMTFI"\n",
+               (uintptr_t)top, frameIndex);
+    unless (frameIndex < s->frameInfosLength)
+      die ("top = "FMTPTR"  returnAddress = "FMTRA"  frameIndex = "FMTFI"\n",
+           (uintptr_t)top, (uintptr_t)returnAddress, frameIndex);
+    f (s, frameIndex);
+    frameInfo = &(s->frameInfos[frameIndex]);
+    assert (frameInfo->size > 0);
   }
   if (DEBUG_PROFILE)
     fprintf (stderr, "done foreachStackFrame\n");
