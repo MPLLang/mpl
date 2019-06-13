@@ -10,8 +10,8 @@
 # Specify C compiler and binutils.
 # Can be used for alternative tools (e.g., `CC=clang` or `CC=gcc-7`).
 CC := gcc
-AR := ar
-RANLIB := ranlib
+AR := gcc-ar
+RANLIB := gcc-ranlib
 STRIP := strip
 
 # Specify GMP include and library paths, if not on default search paths.

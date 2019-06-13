@@ -8,7 +8,7 @@
  ##
 
 CC := gcc
-AR := ar
+AR := gcc-ar
 RANLIB := gcc-ranlib
 
 WITH_GMP_DIR :=
