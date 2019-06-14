@@ -21,7 +21,9 @@ static inline bool areSmall (objptr arg1, objptr arg2) {
 /*
  * Convert a bignum intInf to a bignum pointer.
  */
-static inline GC_intInf toBignum (GC_state s, objptr arg) {
+static inline GC_intInf toBignum (__attribute__((unused)) GC_state s,
+                                  objptr arg)
+{
   GC_intInf bp;
 
   assert (not isSmall(arg));

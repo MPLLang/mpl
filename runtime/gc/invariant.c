@@ -8,7 +8,7 @@
  */
 
 #if ASSERT
-bool invariantForGC (GC_state s) {
+bool invariantForGC(__attribute__((unused)) GC_state s) {
   WARN("Skipping GC invariants check while hierarchical heaps are used.");
   return TRUE;
 }

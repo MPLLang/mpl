@@ -7,7 +7,9 @@
  */
 
 __attribute__((noreturn))
-void GC_saveWorld (GC_state s, NullString8_t fileName) {
+void GC_saveWorld (__attribute__((unused)) GC_state s,
+                   __attribute__((unused)) NullString8_t fileName)
+{
   DIE("GC_saveWorld is unsupported");
 }
 

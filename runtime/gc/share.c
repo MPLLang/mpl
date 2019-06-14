@@ -7,6 +7,8 @@
  */
 
 __attribute__((noreturn))
-void GC_share (GC_state s, pointer object) {
+void GC_share (__attribute__((unused)) GC_state s,
+               __attribute__((unused)) pointer object)
+{
   DIE("GC_share unsupported");
 }

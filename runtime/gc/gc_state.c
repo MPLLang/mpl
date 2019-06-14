@@ -172,7 +172,7 @@ uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc) {
 }
 
 __attribute__((noreturn))
-void GC_setHashConsDuringGC(bool b) {
+void GC_setHashConsDuringGC(__attribute__((unused)) bool b) {
   DIE("GC_setHashConsDuringGC unsupported");
 }
 

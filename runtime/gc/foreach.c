@@ -70,8 +70,8 @@ struct objectInfo {
   bool hasIdentity;
 };
 
-void printObjectInfo(GC_state s, struct objectInfo *args);
-void printObjectInfo(GC_state s, struct objectInfo *args) {
+void printObjectInfo(struct objectInfo *args);
+void printObjectInfo(struct objectInfo *args) {
   printf("object %p index %u tag %s bytes %u ptrs %u identity %d\n",
     (void *)args->op,
     args->objectTypeIndex,
@@ -110,7 +110,7 @@ void printObjectsInRange(GC_state s,
       return;
     }
 
-    printObjectInfo(s, &oi);
+    printObjectInfo(&oi);
   }
 }
 

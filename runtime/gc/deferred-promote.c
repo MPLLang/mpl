@@ -89,7 +89,12 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
   return downPtrs[0];
 }
 
-void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* arg) {
+void bucketIfValid(__attribute__((unused)) GC_state s,
+                   objptr dst,
+                   objptr* field,
+                   objptr src,
+                   void* arg)
+{
   HM_chunkList* downPtrs = arg;
   // pointer dstp = objptrToPointer(dst, NULL);
   // pointer srcp = objptrToPointer(src, NULL);
@@ -118,7 +123,12 @@ void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* arg)
   HM_remember(downPtrs[dstLevel], NULL, dst, field, src);
 }
 
-void promoteDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+void promoteDownPtr(__attribute__((unused)) GC_state s,
+                    __attribute__((unused)) objptr dst,
+                    objptr* field,
+                    objptr src,
+                    void* rawArgs)
+{
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   assert(args->toLevel == HM_getObjptrLevel(dst));
 

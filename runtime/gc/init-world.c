@@ -60,7 +60,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 
     /* Extend with a new chunk, if there is not enough free space or if we have
      * crossed a block boundary. */
-    if (limit - frontier < objectSize ||
+    if ((size_t)(limit - frontier) < objectSize ||
         !inFirstBlockOfChunk(currentChunk, frontier)) {
       HM_HH_updateValues(hh, frontier);
       if (!HM_HH_extend(hh, objectSize)) {
@@ -78,7 +78,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
     }
 
     assert(isFrontierAligned(s, frontier));
-    assert(limit - frontier >= objectSize);
+    assert((size_t)(limit - frontier) >= objectSize);
     assert(inFirstBlockOfChunk(currentChunk, frontier));
 
     *((GC_sequenceCounter*)(frontier)) = 0;
@@ -161,7 +161,7 @@ GC_thread initThreadAndHeap(GC_state s, Word32 level) {
 }
 
 void initWorld(GC_state s) {
-  for (int i = 0; i < s->globalsLength; ++i)
+  for (uint32_t i = 0; i < s->globalsLength; ++i)
     s->globals[i] = BOGUS_OBJPTR;
 
   GC_thread thread = initThreadAndHeap(s, 0);
