@@ -1,14 +1,14 @@
-/* Copyright (C) 2011-2012 Matthew Fluet.
+/* Copyright (C) 2011-2012,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
 #if ASSERT
-bool invariantForGC (GC_state s) {
+bool invariantForGC(__attribute__((unused)) GC_state s) {
   WARN("Skipping GC invariants check while hierarchical heaps are used.");
   return TRUE;
 }
@@ -40,7 +40,7 @@ bool carefulInvariantForMutatorStack(GC_state s) {
   GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
   GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
 
-  bool badfi = fi >= s->frameLayoutsLength;
+  bool badfi = fi >= s->frameInfosLength;
 
   return !badfi && invariantForMutatorStack(s);
 }
@@ -50,8 +50,8 @@ void displayStackInfo(GC_state s) {
   GC_returnAddress ra = *((GC_returnAddress*)(getStackTop(s, stack) - GC_RETURNADDRESS_SIZE));
   GC_frameIndex fi = getFrameIndexFromReturnAddress(s, ra);
 
-  bool badfi = fi >= s->frameLayoutsLength;
-  int fsize = badfi ? -1 : s->frameLayouts[fi].size;
+  bool badfi = fi >= s->frameInfosLength;
+  int fsize = badfi ? -1 : s->frameInfos[fi].size;
 
   fprintf(stderr,
     "stack bottom %p limit +%zu top +%zu; fi %u; fsize %d\n",

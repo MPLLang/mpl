@@ -1,9 +1,9 @@
-(* Copyright (C) 2017 Matthew Fluet.
+(* Copyright (C) 2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2005, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -208,7 +208,7 @@ val traceLoopBind =
     Unit.layout)
 
 fun closureConvert
-   (program as Sxml.Program.T {datatypes, body, overflow}): Ssa.Program.t =
+   (program as Sxml.Program.T {datatypes, body}): Ssa.Program.t =
    let
       val {get = conArg: Con.t -> Value.t option, set = setConArg, ...} =
          Property.getSetOnce (Con.plist,
@@ -329,7 +329,7 @@ fun closureConvert
                                | (SOME (x, _), SOME v)     => newVar (x, v)
                                | _ => Error.bug "ClosureConvert.loopBind: Case"
                            val _ = Cases.foreach' (cases, branch, handlePat)
-                           val _ = Option.app (default, branch o #1)
+                           val _ = Option.app (default, branch)
                         in ()
                         end
                    | ConApp {con, arg, ...} =>
@@ -393,12 +393,10 @@ fun closureConvert
                                                   str " ",
                                                   Value.layout (value x)]
                                           end)))
-      val overflow = valOf overflow
       val _ =
          Control.trace (Control.Pass, "free variables")
          LambdaFree.lambdaFree
          {program = program,
-          overflow = overflow,
           varInfo = fn x => let val {frees, status, ...} = varInfo x
                             in {frees = frees, status = status}
                             end,
@@ -849,7 +847,7 @@ fun closureConvert
                      val (default, ac) =
                         case default of
                            NONE => (NONE, ac)
-                         | SOME (e, _) => let
+                         | SOME e => let
                                              val (e, ac) =  convertJoin (e, ac)
                                           in
                                              (SOME e, ac)
@@ -948,13 +946,6 @@ fun closureConvert
                                       targs = targs,
                                       ty = ty}
                   in
-                     if Prim.mayOverflow prim
-                        then simple (Dexp.arith
-                                     {args = Vector.map (args, convertVarExp),
-                                      overflow = Dexp.raisee (convertVar overflow),
-                                      prim = prim,
-                                      ty = ty})
-                     else
                         let
                            datatype z = datatype Prim.Name.t
                         in

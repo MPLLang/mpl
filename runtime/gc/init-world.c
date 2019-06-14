@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -21,7 +21,7 @@ size_t sizeofInitialBytesLive (GC_state s) {
     dataBytes =
       s->vectorInits[i].elementSize
       * s->vectorInits[i].length;
-    total += align(GC_ARRAY_METADATA_SIZE + dataBytes, s->alignment);
+    total += align (GC_SEQUENCE_METADATA_SIZE + dataBytes, s->alignment);
   }
   return total;
 }
@@ -50,7 +50,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 
     elementSize = inits[i].elementSize;
     dataBytes = elementSize * inits[i].length;
-    objectSize = align(GC_ARRAY_METADATA_SIZE + dataBytes, s->alignment);
+    objectSize = align(GC_SEQUENCE_METADATA_SIZE + dataBytes, s->alignment);
 
 #if ASSERT
     assert(limit == HM_getChunkLimit(currentChunk));
@@ -60,7 +60,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 
     /* Extend with a new chunk, if there is not enough free space or if we have
      * crossed a block boundary. */
-    if (limit - frontier < objectSize ||
+    if ((size_t)(limit - frontier) < objectSize ||
         !inFirstBlockOfChunk(currentChunk, frontier)) {
       HM_HH_updateValues(hh, frontier);
       if (!HM_HH_extend(hh, objectSize)) {
@@ -78,13 +78,13 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
     }
 
     assert(isFrontierAligned(s, frontier));
-    assert(limit - frontier >= objectSize);
+    assert((size_t)(limit - frontier) >= objectSize);
     assert(inFirstBlockOfChunk(currentChunk, frontier));
 
-    *((GC_arrayCounter*)(frontier)) = 0;
-    frontier = frontier + GC_ARRAY_COUNTER_SIZE;
-    *((GC_arrayLength*)(frontier)) = inits[i].length;
-    frontier = frontier + GC_ARRAY_LENGTH_SIZE;
+    *((GC_sequenceCounter*)(frontier)) = 0;
+    frontier = frontier + GC_SEQUENCE_COUNTER_SIZE;
+    *((GC_sequenceLength*)(frontier)) = inits[i].length;
+    frontier = frontier + GC_SEQUENCE_LENGTH_SIZE;
     switch (elementSize) {
     case 1:
       typeIndex = WORD8_VECTOR_TYPE_INDEX;
@@ -111,7 +111,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
       fprintf (stderr, "allocated vector at "FMTPTR"\n",
                (uintptr_t)(s->globals[inits[i].globalIndex]));
     memcpy (frontier, inits[i].words, dataBytes);
-    frontier += objectSize - GC_ARRAY_METADATA_SIZE;
+    frontier += objectSize - GC_SEQUENCE_METADATA_SIZE;
   }
 
   s->frontier = frontier;
@@ -161,7 +161,7 @@ GC_thread initThreadAndHeap(GC_state s, Word32 level) {
 }
 
 void initWorld(GC_state s) {
-  for (int i = 0; i < s->globalsLength; ++i)
+  for (uint32_t i = 0; i < s->globalsLength; ++i)
     s->globals[i] = BOGUS_OBJPTR;
 
   GC_thread thread = initThreadAndHeap(s, 0);

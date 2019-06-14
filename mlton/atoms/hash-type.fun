@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -122,19 +122,13 @@ structure Type =
 
       fun var a = lookup (Tyvar.hash a, Var a)
 
-      local
-         val generator: Word.t = 0wx5555
-      in
          fun con (c, ts) =
-            lookup (Vector.fold (ts, Tycon.hash c, fn (t, w) =>
-                                 Word.xorb (w * generator, hash t)),
-                    Con (c, ts))
+         lookup (Hash.combine (Tycon.hash c, Hash.vectorMap (ts, hash)), Con (c, ts))
          val con = Trace.trace2 ("HashType.Type.con",
                                  Tycon.layout,
                                  Vector.layout layout,
                                  layout) con
       end
-   end
 structure Ops = TypeOps (structure Tycon = Tycon
                          open Type)
 open Type Ops

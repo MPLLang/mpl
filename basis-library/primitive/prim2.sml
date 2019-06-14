@@ -1,20 +1,15 @@
-(* Copyright (C) 1999-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
 structure Primitive =
    struct
       open Primitive
-
-      structure MLton =
-         struct
-            open MLton
-            val bug = PrimitiveFFI.MLton.bug
-         end
 
       val dontInline: (unit -> 'a) -> 'a =
          fn f =>
@@ -56,7 +51,6 @@ local
    val _ =
       P.TopLevel.setSuffix
       (fn () => 
-       (P.MLton.halt 0
-        ; P.MLton.bug ("missing suffix in Basis Library")))
+       P.MLton.bug ("missing suffix in Basis Library"))
 in
 end

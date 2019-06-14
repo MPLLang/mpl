@@ -3,7 +3,7 @@
  * Copyright (C) 2005-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -14,7 +14,9 @@ bool threadAndHeapOkay(GC_state s) {
 }
 #endif
 
-bool isPointerInRootHeap(GC_state s, pointer p) {
+bool isPointerInRootHeap(__attribute__((unused)) GC_state s,
+                         pointer p)
+{
   HM_chunkList list = HM_getLevelHead(HM_getChunkOf(p));
   assert(list != NULL);
   bool result = (0 == HM_getChunkListLevel(list));

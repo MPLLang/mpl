@@ -2,11 +2,13 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
 __attribute__((noreturn))
-void GC_share (GC_state s, pointer object) {
+void GC_share (__attribute__((unused)) GC_state s,
+               __attribute__((unused)) pointer object)
+{
   DIE("GC_share unsupported");
 }

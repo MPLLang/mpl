@@ -1,9 +1,9 @@
-/* Copyright (C) 2009,2012,2015,2017 Matthew Fluet.
+/* Copyright (C) 2009,2012,2015,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -128,7 +128,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-summary-format")) {
           i++;
 
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton gc-summary-format missing argument.");
           }
 
@@ -142,34 +142,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
                  "human or json.",
                  format);
           }
-        } else if (0 == strcmp(arg, "gc-summary-file")) {
-          i++;
-          if (i == argc) {
-            die("@MLton gc-summary-file missing argument.");
-          }
-
-          const char* filePath = argv[i++];
-          if (0 == strcmp(filePath, "-")) {
-            s->controls->summaryFile = stdout;
-          } else {
-            FILE* file = fopen(filePath, "w");
-            if (NULL == file) {
-              diee("@MLton Could not open specified GC summary file.");
-            } else {
-              s->controls->summaryFile = file;
-            }
-          }
         } else if (0 == strcmp (arg, "set-affinity")) {
           i++;
           s->controls->setAffinity = TRUE;
         } else if (0 == strcmp (arg, "affinity-base")) {
           i++;
-          if (i == argc)
+          if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("@MLton affinity-base missing argument.");
           s->controls->affinityBase = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "affinity-stride")) {
           i++;
-          if (i == argc)
+          if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("@MLton affinity-stride missing argument.");
           s->controls->affinityStride = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "load-world")) {
@@ -182,7 +165,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           *worldFile = argv[i++];
         } else if (0 == strcmp(arg, "log-file")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die("@MLton log-file missing argument.");
           }
 
@@ -199,7 +182,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
         } else if (0 == strcmp(arg, "log-level")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die("@MLton log-level missing argument.");
           }
 
@@ -272,7 +255,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           GC_setCygwinUseMmap (stringToBool (argv[i++]));
         } else if (0 == strcmp (arg, "number-processors")) {
           i++;
-          if (i == argc)
+          if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("@MLton number-processors missing argument.");
           if (!s->amOriginal)
             die ("@MLton number-processors incompatible with loaded worlds.");
@@ -281,13 +264,13 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->controls->mayLoadWorld = FALSE;
         } else if (0 == strcmp(arg, "min-chunk")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton min-chunk missing argument.");
           }
           s->controls->minChunkSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "alloc-chunk")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton alloc-chunk missing argument.");
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
@@ -296,7 +279,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->controls->mayUseAncestorChunk = FALSE;
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton hh-allocated-ratio missing argument.");
           }
 
@@ -306,7 +289,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton hh-collection-level missing argument.");
           }
           const char* level = argv[i++];
@@ -323,7 +306,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
         } else if (0 == strcmp(arg, "hh-live-lc-ratio")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton hh-live-lc-ratio missing argument.");
           }
 
@@ -333,21 +316,21 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
         } else if (0 == strcmp(arg, "hh-initial-lc-heap-size")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton hh-initial-lc-heap-size missing argument.");
           }
 
           s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton hh-max-lc-heap-size missing argument.");
           }
 
           s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "trace-buffer-size")) {
           i++;
-          if (i == argc) {
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton trace-buffer-size missing argument.");
           }
 
@@ -489,11 +472,11 @@ int GC_init (GC_state s, int argc, char **argv) {
              100.0 * ((double)ram / (double)(s->sysvals.physMem)));
   if (DEBUG_SOURCES or DEBUG_PROFILE) {
     uint32_t i;
-    for (i = 0; i < s->sourceMaps.frameSourcesLength; i++) {
+    for (i = 0; i < s->frameInfosLength; i++) {
       uint32_t j;
       uint32_t *sourceSeq;
       fprintf (stderr, "%"PRIu32"\n", i);
-      sourceSeq = s->sourceMaps.sourceSeqs[s->sourceMaps.frameSources[i]];
+      sourceSeq = s->sourceMaps.sourceSeqs[s->frameInfos[i].sourceSeqIndex];
       for (j = 1; j <= sourceSeq[0]; j++)
         fprintf (stderr, "\t%s\n",
                  s->sourceMaps.sourceNames[
@@ -582,7 +565,7 @@ void GC_duplicate (GC_state d, GC_state s) {
 }
 
 // AG_NOTE: is this the proper place for this function?
-void GC_traceInit(GC_state s) {
+void GC_traceInit(ARG_USED_FOR_TRACING GC_state s) {
 #ifdef ENABLE_TRACING
   char filename[256];
   const char *dir;
@@ -597,7 +580,7 @@ void GC_traceInit(GC_state s) {
 #endif
 }
 
-void GC_traceFinish(GC_state s) {
+void GC_traceFinish(ARG_USED_FOR_TRACING GC_state s) {
 #ifdef ENABLE_TRACING
   TracingCloseAndFreeContext(&s->trace);
 #endif

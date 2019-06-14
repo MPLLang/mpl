@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -90,6 +90,7 @@ signature AMD64_MLTON_BASIC =
     val applyFFTempXmmRegArgContents : amd64.Size.t * int -> amd64.MemLoc.t
     val fpcvtTempContentsOperand : amd64.Operand.t
     val fpeqTempContentsOperand : amd64.Size.t -> amd64.Operand.t
+    val overflowCheckTempContentsOperand : amd64.Size.t -> amd64.Operand.t
 
     (* Static arrays defined in main.h and amd64-main.h *)
     val local_base : amd64.CType.t -> amd64.Label.t

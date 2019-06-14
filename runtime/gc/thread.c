@@ -5,7 +5,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -30,7 +30,7 @@ void GC_HH_attachHeap(pointer threadp, pointer hhp) {
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);
   /* Make sure this is an inactive thread. */
-  for (int i = 0; i < s->numberOfProcs; i++) {
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     assert(s->procStates[i].currentThread != threadop);
   }
 #endif
@@ -73,12 +73,12 @@ void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
   assert(parentop != BOGUS_OBJPTR);
   assert(childop != BOGUS_OBJPTR);
   /* Make sure child is an inactive thread. */
-  for (int i = 0; i < s->numberOfProcs; i++) {
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     assert(s->procStates[i].currentThread != childop);
   }
   /* Make sure parent is either mine, or inactive */
-  for (int i = 0; i < s->numberOfProcs; i++) {
-    if (i != s->procNumber)
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    if ((int32_t)i != s->procNumber)
       assert(s->procStates[i].currentThread != parentop);
   }
 #endif
@@ -94,8 +94,8 @@ void GC_HH_mergeDeepestChild(pointer threadp) {
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);
   /* make sure thread is either mine or inactive */
-  for (int i = 0; i < s->numberOfProcs; i++) {
-    if (i != s->procNumber)
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    if ((int32_t)i != s->procNumber)
       assert(s->procStates[i].currentThread != threadop);
   }
 #endif

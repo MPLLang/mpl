@@ -539,9 +539,10 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
-void HM_getObjptrInfo(GC_state s,
+void HM_getObjptrInfo(__attribute__((unused)) GC_state s,
                       objptr object,
-                      struct HM_ObjptrInfo* info) {
+                      struct HM_ObjptrInfo* info)
+{
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
   assert(NULL != chunk);
 
@@ -731,7 +732,9 @@ Word32 HM_getObjptrLevel(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
 }
 
-bool HM_isObjptrInToSpace(GC_state s, objptr object) {
+bool HM_isObjptrInToSpace(__attribute__((unused)) GC_state s,
+                          objptr object)
+{
   /* SAM_NOTE: why is this commented out? why are there two ways to check if
    * an object is in the toSpace? Does promotion use one, while collection
    * uses the other? */

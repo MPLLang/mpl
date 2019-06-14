@@ -26,9 +26,9 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (NORMAL_TAG == tag) {
     objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
   }
-  else if (ARRAY_TAG == tag) {
-    size_t dataBytes = getArrayLength(dstp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
-    objend += alignWithExtra (s, dataBytes, GC_ARRAY_METADATA_SIZE);
+  else if (SEQUENCE_TAG == tag) {
+    size_t dataBytes = getSequenceLength(dstp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+    objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
   }
   else {
     DIE("write barrier: cannot handle tag %u", tag);

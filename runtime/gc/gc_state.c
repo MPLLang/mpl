@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -172,7 +172,7 @@ uintmax_t GC_getPromoMillisecondsOfProc(uint32_t proc) {
 }
 
 __attribute__((noreturn))
-void GC_setHashConsDuringGC(bool b) {
+void GC_setHashConsDuringGC(__attribute__((unused)) bool b) {
   DIE("GC_setHashConsDuringGC unsupported");
 }
 
@@ -189,8 +189,8 @@ pointer GC_getCallFromCHandlerThread (void) {
 
 void GC_setCallFromCHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  assert(getArrayLength (p) == s->numberOfProcs);
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  assert(getSequenceLength (p) == s->numberOfProcs);
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
   }
 }
@@ -222,8 +222,8 @@ void GC_setSavedThread (pointer p) {
 
 void GC_setSignalHandlerThreads (pointer p) {
   GC_state s = pthread_getspecific (gcstate_key);
-  assert(getArrayLength (p) == s->numberOfProcs);
-  for (int proc = 0; proc < s->numberOfProcs; proc++) {
+  assert(getSequenceLength (p) == s->numberOfProcs);
+  for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].signalHandlerThread = ((objptr*)p)[proc];
   }
 }
@@ -240,7 +240,7 @@ void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
   if (p < 0) {
     /* get process gc rusage */
     rusageZero(rusage);
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       /* global heap collection is stop-the-world, so multiply by P */
       struct rusage stwGC;
       rusageZero(&stwGC);
@@ -271,12 +271,12 @@ void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
     /* get processor gc rusage */
     rusageZero(rusage);
 
-    if (p >= s->numberOfProcs) {
+    if ((uint32_t)p >= s->numberOfProcs) {
       /* proc doesn't exist so return zero */
       return;
     }
 
-    for (int proc = 0; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
       /* global heap collection is stop-the-world, so gather from all procs */
       rusagePlusMax(rusage,
                     &(s->procStates[proc].cumulativeStatistics->ru_gcCopying),

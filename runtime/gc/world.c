@@ -2,12 +2,14 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
 __attribute__((noreturn))
-void GC_saveWorld (GC_state s, NullString8_t fileName) {
+void GC_saveWorld (__attribute__((unused)) GC_state s,
+                   __attribute__((unused)) NullString8_t fileName)
+{
   DIE("GC_saveWorld is unsupported");
 }
 

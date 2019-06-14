@@ -7,7 +7,7 @@ void Parallel_init (void) {
 
   if (!Proc_isInitialized (s)) {
     struct HM_HierarchicalHeap *phh = getHierarchicalHeapCurrent(s);
-    for (int proc = 1; proc < s->numberOfProcs; proc++) {
+    for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
       struct HM_HierarchicalHeap *chh = getHierarchicalHeapCurrent(&(s->procStates[proc]));
       HM_HH_appendChild(s, phh, chh, 0);
     }
@@ -181,19 +181,19 @@ Int64 Parallel_fetchAndAdd64 (pointer p, Int64 v) {
 
 // arrayFetchAndAdd implementations
 
-Int8 Parallel_arrayFetchAndAdd8 (Pointer p, GC_arrayLength i, Int8 v) {
+Int8 Parallel_arrayFetchAndAdd8 (Pointer p, GC_sequenceLength i, Int8 v) {
   return __sync_fetch_and_add (((Int8*)p)+i, v);
 }
 
-Int16 Parallel_arrayFetchAndAdd16 (Pointer p, GC_arrayLength i, Int16 v) {
+Int16 Parallel_arrayFetchAndAdd16 (Pointer p, GC_sequenceLength i, Int16 v) {
   return __sync_fetch_and_add (((Int16*)p)+i, v);
 }
 
-Int32 Parallel_arrayFetchAndAdd32 (Pointer p, GC_arrayLength i, Int32 v) {
+Int32 Parallel_arrayFetchAndAdd32 (Pointer p, GC_sequenceLength i, Int32 v) {
   return __sync_fetch_and_add (((Int32*)p)+i, v);
 }
 
-Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_arrayLength i, Int64 v) {
+Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_sequenceLength i, Int64 v) {
   return __sync_fetch_and_add (((Int64*)p)+i, v);
 }
 
@@ -217,18 +217,18 @@ Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
 
 // arrayCompareAndSwap implementations
 
-Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_arrayLength i, Int8 old, Int8 new) {
+Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_sequenceLength i, Int8 old, Int8 new) {
   return __sync_val_compare_and_swap (((Int8*)p)+i, old, new);
 }
 
-Int16 Parallel_arrayCompareAndSwap16 (Pointer p, GC_arrayLength i, Int16 old, Int16 new) {
+Int16 Parallel_arrayCompareAndSwap16 (Pointer p, GC_sequenceLength i, Int16 old, Int16 new) {
   return __sync_val_compare_and_swap (((Int16*)p)+i, old, new);
 }
 
-Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_arrayLength i, Int32 old, Int32 new) {
+Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_sequenceLength i, Int32 old, Int32 new) {
   return __sync_val_compare_and_swap (((Int32*)p)+i, old, new);
 }
 
-Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, Int64 new) {
+Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_sequenceLength i, Int64 old, Int64 new) {
   return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
 }

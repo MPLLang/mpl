@@ -114,7 +114,9 @@ void HM_HH_appendChild(GC_state s,
   assertInvariants(s, childHH);
 }
 
-Word32 HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh) {
+Word32 HM_HH_getLevel(__attribute__((unused)) GC_state s,
+                      struct HM_HierarchicalHeap* hh)
+{
   return hh->level;
 }
 
@@ -227,7 +229,10 @@ void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh) {
 }
 
 /* SAM_NOTE: TODO: hijack this function with ensureBytesFree */
-void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, Word32 level) {
+void HM_HH_setLevel(__attribute__((unused)) GC_state s,
+                    struct HM_HierarchicalHeap* hh,
+                    Word32 level)
+{
   hh->level = level;
 
   if (hh->level >= HM_MAX_NUM_LEVELS) {
@@ -341,14 +346,15 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;
 }
 
-Word32 HM_HH_getDeepestStolenLevel(GC_state s,
-                                   struct HM_HierarchicalHeap* hh) {
+Word32 HM_HH_getDeepestStolenLevel(__attribute__((unused)) GC_state s,
+                                   struct HM_HierarchicalHeap* hh)
+{
   if (NULL == hh->childHHList)
     return HM_HH_INVALID_LEVEL;
   return hh->childHHList->stealLevel;
 }
 
-Word32 HM_HH_getShallowestPrivateLevel(GC_state s,
+Word32 HM_HH_getShallowestPrivateLevel(__attribute__((unused)) GC_state s,
                                        struct HM_HierarchicalHeap* hh) {
   if (NULL == hh->childHHList)
     return hh->stealLevel+1;
@@ -413,7 +419,7 @@ void adjustLCHS(GC_state s,
 }
 
 #if ASSERT
-void assertInvariants(GC_state s,
+void assertInvariants(__attribute__((unused)) GC_state s,
                       struct HM_HierarchicalHeap* hh) {
   ASSERTPRINT(((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
                (hh->level > hh->stealLevel)),

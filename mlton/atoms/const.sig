@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2014,2017 Matthew Fluet.
+(* Copyright (C) 2009,2014,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -50,6 +50,7 @@ signature CONST =
       val lookup: ({default: string option,
                     name: string} * ConstType.t -> t) ref
       val null: t
+      val parse: t Parse.t
       val real: RealX.t -> t
       val string: string -> t
       val toString: t -> string

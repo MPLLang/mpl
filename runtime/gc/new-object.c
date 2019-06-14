@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -19,7 +19,7 @@ pointer newObject(GC_state s,
   pointer result;
 
   assert(isAligned(bytesRequested, s->alignment));
-  assert(s->limitPlusSlop - s->frontier >= bytesRequested);
+  assert((size_t)(s->limitPlusSlop - s->frontier) >= bytesRequested);
 
   frontier = s->frontier;
 
@@ -129,7 +129,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
 
   pointer frontier = HM_HH_getFrontier(hh);
 
-  assert(HM_HH_getLimit(hh) - frontier >= totalSize);
+  assert((size_t)(HM_HH_getLimit(hh) - frontier) >= totalSize);
   assert(inFirstBlockOfChunk(HM_getChunkOf(frontier), frontier+totalSize));
 
   *((GC_header*)(frontier)) = GC_THREAD_HEADER;

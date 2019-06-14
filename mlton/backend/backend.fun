@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2013-2014,2017 Matthew Fluet.
+(* Copyright (C) 2009,2013-2014,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -16,6 +16,7 @@ structure M = Machine
 local
    open Machine
 in
+   structure CFunction = CFunction
    structure Global = Global
    structure Label = Label
    structure Live = Live
@@ -34,7 +35,6 @@ in
    structure GCField = GCField
 end
 
-structure Rssa = Rssa (open Ssa Machine)
 structure R = Rssa
 local
    open Rssa
@@ -51,14 +51,7 @@ end
 structure AllocateRegisters = AllocateRegisters (structure Machine = Machine
                                                  structure Rssa = Rssa)
 structure Chunkify = Chunkify (Rssa)
-structure ImplementHandlers = ImplementHandlers (structure Rssa = Rssa)
-structure ImplementProfiling = ImplementProfiling (structure Machine = Machine
-                                                   structure Rssa = Rssa)
-structure LimitCheck = LimitCheck (structure Rssa = Rssa)
 structure ParallelMove = ParallelMove ()
-structure SignalCheck = SignalCheck(structure Rssa = Rssa)
-structure SsaToRssa = SsaToRssa (structure Rssa = Rssa
-                                 structure Ssa = Ssa)
 
 structure VarOperand =
    struct
@@ -78,17 +71,16 @@ structure VarOperand =
              | Const oper => seq [str "Const ", M.Operand.layout oper]
          end
 
-      val operand: t -> M.Operand.t =
-         fn Allocate {operand, ...} => valOf (!operand)
-          | Const oper => oper
+      val operand: t -> M.Operand.t option =
+         fn Allocate {operand, ...} => !operand
+          | Const oper => SOME oper
    end
 
-structure IntSet = UniqueSet (val cacheSize: int = 1
+structure ByteSet = UniqueSet (val cacheSize: int = 1
                               val bits: int = 14
                               structure Element =
                                  struct
-                                    open Int
-                                    fun hash n = Word.fromInt n
+                                     open Bytes
                                  end)
 
 structure Chunk =
@@ -140,107 +132,10 @@ fun eliminateDeadCode (f: R.Function.t): R.Function.t =
                       start = start}
    end
 
-fun toMachine (program: Ssa.Program.t, codegen) =
-   let
-      fun pass (name, doit, program) =
-         Control.passTypeCheck {display = Control.Layouts Rssa.Program.layouts,
-                                name = name,
-                                stats = R.Program.layoutStats,
-                                style = Control.No,
-                                suffix = "rssa",
-                                thunk = fn () => doit program,
-                                typeCheck = R.Program.typeCheck}
-      val program = pass ("toRssa", SsaToRssa.convert, (program, codegen))
-      fun rssaSimplify p =
+fun toMachine (rssa: Rssa.Program.t) =
          let
-            open Rssa
-            fun pass' ({name, doit}, sel, p) =
-               let
-                  val _ =
-                     let open Control
-                     in maybeSaveToFile
-                        ({name = name,
-                          suffix = "pre.rssa"},
-                         Control.No, p, Control.Layouts Program.layouts)
-                     end
-                  val p =
-                     Control.passTypeCheck
-                     {display = Control.Layouts
-                                (fn (r,output) =>
-                                 Program.layouts (sel r, output)),
-                      name = name,
-                      stats = Program.layoutStats o sel,
-                      style = Control.No,
-                      suffix = "post.rssa",
-                      thunk = fn () => doit p,
-                      typeCheck = Program.typeCheck o sel}
-               in
-                  p
-               end
-            fun pass ({name, doit}, p) =
-               pass' ({name = name, doit = doit}, fn p => p, p)
-            fun maybePass ({name, doit, execute}, p) =
-               if List.foldr (!Control.executePasses, execute, fn ((re, new), old) =>
-                  if Regexp.Compiled.matchesAll (re, name)
-                     then new
-                     else old)
-               then pass ({name = name, doit = doit}, p)
-               else (Control.messageStr (Control.Pass, name ^ " skipped"); p)
-            val p = maybePass ({name = "rssaShrink1",
-                                doit = Program.shrink,
-                                execute = true}, p)
-            val p = pass ({name = "insertLimitChecks",
-                           doit = LimitCheck.transform}, p)
-            val p = pass ({name = "insertSignalChecks",
-                           doit = SignalCheck.transform}, p)
-            val p = pass ({name = "implementHandlers",
-                           doit = ImplementHandlers.transform}, p)
-            val p = maybePass ({name = "rssaShrink2",
-                                doit = Program.shrink,
-                                execute = true}, p)
-            val () = Program.checkHandlers p
-            val (p, makeProfileInfo) =
-               pass' ({name = "implementProfiling",
-                       doit = ImplementProfiling.doit},
-                      fn (p,_) => p, p)
-            val p = maybePass ({name = "rssaOrderFunctions",
-                                doit = Program.orderFunctions,
-                                execute = true}, p)
-         in
-            (p, makeProfileInfo)
-         end
-      val (program, makeProfileInfo) =
-         Control.passTypeCheck
-         {display = Control.Layouts (fn ((program, _), output) =>
-                                     Rssa.Program.layouts (program, output)),
-          name = "rssaSimplify",
-          stats = fn (program,_) => Rssa.Program.layoutStats program,
-          style = Control.No,
-          suffix = "rssa",
-          thunk = fn () => rssaSimplify program,
-          typeCheck = R.Program.typeCheck o #1}
-      val _ =
-         let
-            open Control
-         in
-            if !keepRSSA
-               then saveToFile ({suffix = "rssa"},
-                                No,
-                                program,
-                                Layouts Rssa.Program.layouts)
-            else ()
-         end
-      val program =
-         Control.pass
-         {display = Control.Layouts Machine.Program.layouts,
-          name = "toMachine",
-          stats = fn _ => Layout.empty,
-          style = Control.No,
-          suffix = "machine",
-          thunk = fn () =>
-let
-      val R.Program.T {functions, handlesSignals, main, objectTypes} = program
-      (* Chunk information *)
+      val R.Program.T {functions, handlesSignals, main, objectTypes, profileInfo} = rssa
+      (* Chunk info *)
       val {get = labelChunk, set = setLabelChunk, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("labelChunk", Label.layout))
@@ -255,11 +150,10 @@ let
          in
             c
          end
-      val handlers = ref []
       (* Set funcChunk and labelChunk. *)
       val _ =
          Vector.foreach
-         (Chunkify.chunkify program, fn {funcs, labels} =>
+         (Chunkify.chunkify rssa, fn {funcs, labels} =>
           let
              val c = newChunk ()
              val _ = Vector.foreach (funcs, fn f => setFuncChunk (f, c))
@@ -267,84 +161,138 @@ let
           in
              ()
           end)
-      (* FrameInfo. *)
+      (* Profile info *)
+      val (sourceMaps, getFrameSourceSeqIndex) =
+         case profileInfo of
+            NONE => (NONE, fn _ => NONE)
+          | SOME {sourceMaps, getFrameSourceSeqIndex} => (SOME sourceMaps, getFrameSourceSeqIndex)
+      (* Frame info *)
       local
-         val frameLabels = ref []
-         val frameLayouts = ref []
-         val frameLayoutsCounter = Counter.new 0
-         val _ = IntSet.reset ()
-         val table = HashSet.new {hash = Word.fromInt o #frameOffsetsIndex}
-         val frameOffsets: Bytes.t vector list ref = ref []
+         val frameInfos: M.FrameInfo.t list ref = ref []
+         val frameInfosCounter = Counter.new 0
+         val _ = ByteSet.reset ()
+         val table =
+            let
+               fun equals ({kind = k1, frameOffsets = fo1, size = s1, sourceSeqIndex = ssi1},
+                           {kind = k2, frameOffsets = fo2, size = s2, sourceSeqIndex = ssi2}) =
+                  M.FrameInfo.Kind.equals (k1, k2)
+                  andalso M.FrameOffsets.equals (fo1, fo2)
+                  andalso Bytes.equals (s1, s2)
+                  andalso Option.equals (ssi1, ssi2, Int.equals)
+               fun hash {kind, frameOffsets, size, sourceSeqIndex} =
+                  Hash.list [M.FrameInfo.Kind.hash kind,
+                             M.FrameOffsets.hash frameOffsets,
+                             Bytes.hash size,
+                             Hash.optionMap (sourceSeqIndex, Word.fromInt)]
+            in
+               HashTable.new {equals = equals,
+                              hash = hash}
+            end
+         val frameOffsets: M.FrameOffsets.t list ref = ref []
          val frameOffsetsCounter = Counter.new 0
-         val {get = frameOffsetsIndex: IntSet.t -> int, ...} =
+         val {get = getFrameOffsets: ByteSet.t -> M.FrameOffsets.t, ...} =
             Property.get
-            (IntSet.plist,
+            (ByteSet.plist,
              Property.initFun
              (fn offsets =>
               let
-                 val _ = List.push (frameOffsets,
+                 val index = Counter.next frameOffsetsCounter
+                 val offsets =
                                     QuickSort.sortVector
-                                    (Vector.fromListMap
-                                     (IntSet.toList offsets, Bytes.fromInt),
-                                     Bytes.<=))
+                    (Vector.fromList (ByteSet.toList offsets),
+                     Bytes.<=)
+                 val fo =
+                    M.FrameOffsets.new {index = index, offsets = offsets}
+                 val _ = List.push (frameOffsets, fo)
               in
-                 Counter.next frameOffsetsCounter
+                 fo
               end))
       in
-         fun allFrameInfo () =
+         fun allFrameInfo chunks =
             let
                (* Reverse lists because the index is from back of list. *)
-               val frameLabels = Vector.fromListRev (!frameLabels)
-               val frameLayouts = Vector.fromListRev (!frameLayouts)
+               val frameInfos = Vector.fromListRev (!frameInfos)
                val frameOffsets = Vector.fromListRev (!frameOffsets)
+               (* If we are using the C or LLVM codegens, then we reindex the
+                * frameInfos so that the indices of the entry frames of a chunk
+                * are consecutive integers so that gcc will use a jump table.
+                *)
+               val frameInfos =
+                  if !Control.codegen = Control.CCodegen orelse !Control.codegen = Control.LLVMCodegen
+                     then let
+                             val done =
+                                Array.array (Vector.length frameInfos, false)
+                             val newFrameInfos = ref []
+                             fun newFrameInfo fi =
+                                if Array.sub (done, M.FrameInfo.index fi)
+                                   then ()
+                                   else (Array.update (done, M.FrameInfo.index fi, true)
+                                         ; List.push (newFrameInfos, fi))
+                             val () =
+                                List.foreach
+                                (chunks, fn M.Chunk.T {blocks, ...} =>
+                                 Vector.foreach
+                                 (blocks, fn M.Block.T {kind, ...} =>
+                                  case M.Kind.frameInfoOpt kind of
+                                     NONE => ()
+                                   | SOME fi => if M.Kind.isEntry kind
+                                                   then newFrameInfo fi
+                                                   else ()))
+                             val () = Vector.foreach (frameInfos, newFrameInfo)
+                             val frameInfos =
+                                Vector.fromListRev (!newFrameInfos)
+                             val () =
+                                Vector.foreachi
+                                (frameInfos, fn (i, fi) =>
+                                 M.FrameInfo.setIndex (fi, i))
             in
-               (frameLabels, frameLayouts, frameOffsets)
+                             frameInfos
             end
-         fun getFrameLayoutsIndex {isC: bool,
-                                   label: Label.t,
+                     else frameInfos
+            in
+               (frameInfos, frameOffsets)
+            end
+         fun getFrameInfo {entry: bool,
+                           kind: M.FrameInfo.Kind.t,
                                    offsets: Bytes.t list,
-                                   size: Bytes.t}: int =
+                           size: Bytes.t,
+                           sourceSeqIndex: int option}: M.FrameInfo.t =
             let
-               val foi =
-                  frameOffsetsIndex (IntSet.fromList
-                                     (List.map (offsets, Bytes.toInt)))
+               val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
                fun new () =
                   let
-                     val _ =
-                        List.push (frameLayouts,
-                                   {frameOffsetsIndex = foi,
-                                    isC = isC,
-                                    size = size})
-                     val _ = List.push (frameLabels, label)
+                     val index = Counter.next frameInfosCounter
+                     val frameInfo =
+                        M.FrameInfo.new
+                        {frameOffsets = frameOffsets,
+                         index = index,
+                         kind = kind,
+                         size = size,
+                         sourceSeqIndex = sourceSeqIndex}
+                     val _ = List.push (frameInfos, frameInfo)
                   in
-                     Counter.next frameLayoutsCounter
+                     frameInfo
                   end
             in
-               (* We need to give each frame its own layout index in two cases.
-                * 1. If we are using the C codegen, in which case we want the
-                *    indices in a chunk to be consecutive integers so that gcc
-                *    will use a jump table.
-                * 2. If we are profiling, we want every frame to have a
-                *    different index so that it can have its own profiling info.
-                *    This will be created by the call to makeProfileInfo at the
-                *    end of the backend.
+               (* If we are using the C or LLVM codegens, then we want
+                * each entry frame to have a different index, because
+                * the index will be used for the trampoline
+                * (nextChunks mapping and ChunkSwitch); moreover, we
+                * want the indices of entry frames of a chunk to be
+                * consecutive integers so that gcc will use a jump
+                * table.
                 *)
-               if !Control.codegen = Control.CCodegen
-                  orelse !Control.codegen = Control.LLVMCodegen
-                  orelse !Control.profile <> Control.ProfileNone
+               if entry
+                  andalso (!Control.codegen = Control.CCodegen
+                           orelse !Control.codegen = Control.LLVMCodegen)
                   then new ()
-               else
-               #frameLayoutsIndex
-               (HashSet.lookupOrInsert
-                (table, Word.fromInt foi,
-                 fn {frameOffsetsIndex = foi', isC = isC', size = s', ...} =>
-                 foi = foi'
-                 andalso isC = isC'
-                 andalso Bytes.equals (size, s'),
-                 fn () => {frameLayoutsIndex = new (),
-                           frameOffsetsIndex = foi,
-                           isC = isC,
-                           size = size}))
+                  else HashTable.lookupOrInsert
+                       (table,
+                        {frameOffsets = frameOffsets,
+                         kind = kind,
+                         size = size,
+                         sourceSeqIndex = sourceSeqIndex},
+                        fn () => new ())
             end
       end
       val {get = frameInfo: Label.t -> M.FrameInfo.t option,
@@ -412,51 +360,44 @@ let
                       fn {operand, ...} =>
                       Layout.record [("operand", VarOperand.layout operand)])
          varInfo
-      val varOperand: Var.t -> M.Operand.t =
+      val varOperandOpt: Var.t -> M.Operand.t option =
          VarOperand.operand o #operand o varInfo
+      val varOperand: Var.t -> M.Operand.t = valOf o varOperandOpt
+      val varOperand =
+         Trace.trace ("Backend.varOperand",
+                      Var.layout,
+                      M.Operand.layout)
+         varOperand
       (* Hash tables for uniquifying globals. *)
       local
-         fun ('a, 'b) make (equals: 'a * 'a -> bool,
-                            info: 'a -> string * Type.t * 'b) =
+         fun 'a make {equals: 'a * 'a -> bool,
+                      hash: 'a -> word,
+                      ty: 'a -> Type.t} =
             let
-               val set: {a: 'a,
-                         global: M.Global.t,
-                         hash: word,
-                         value: 'b} HashSet.t = HashSet.new {hash = #hash}
-               fun get (a: 'a): M.Operand.t =
-                  let
-                     val (string, ty, value) = info a
-                     val hash = String.hash string
-                  in
+               val table: ('a, M.Global.t) HashTable.t =
+                  HashTable.new {equals = equals, hash = hash}
+               fun get (value: 'a): M.Operand.t =
                      M.Operand.Global
-                     (#global
-                      (HashSet.lookupOrInsert
-                       (set, hash,
-                        fn {a = a', ...} => equals (a, a'),
-                        fn () => {a = a,
-                                  hash = hash,
-                                  global = M.Global.new {isRoot = true,
-                                                         ty = ty},
-                                  value = value})))
-                  end
+                  (HashTable.lookupOrInsert
+                   (table, value, fn () =>
+                    M.Global.new {isRoot = true,
+                                  ty = ty value}))
                fun all () =
-                  HashSet.fold
-                  (set, [], fn ({global, value, ...}, ac) =>
+                  HashTable.fold
+                  (table, [], fn ((value, global), ac) =>
                    (global, value) :: ac)
             in
                (all, get)
             end
       in
          val (allReals, globalReal) =
-            make (RealX.equals,
-                  fn r => (RealX.toString r,
-                           Type.real (RealX.size r),
-                           r))
+            make {equals = RealX.equals,
+                  hash = RealX.hash,
+                  ty = Type.real o RealX.size}
          val (allVectors, globalVector) =
-            make (WordXVector.equals,
-                  fn v => (WordXVector.toString v,
-                           Type.ofWordXVector v,
-                           v))
+            make {equals = WordXVector.equals,
+                  hash = WordXVector.hash,
+                  ty = Type.ofWordXVector}
       end
       fun bogusOp (t: Type.t): M.Operand.t =
          case Type.deReal t of
@@ -483,8 +424,7 @@ let
              | Word w => M.Operand.Word w
              | WordVector v => globalVector v
          end
-      fun parallelMove {chunk = _,
-                        dsts: M.Operand.t vector,
+      fun parallelMove {dsts: M.Operand.t vector,
                         srcs: M.Operand.t vector}: M.Statement.t vector =
          let
             val moves =
@@ -518,22 +458,8 @@ let
             datatype z = datatype R.Operand.t
          in
             case oper of
-               ArrayOffset {base, index, offset, scale, ty} =>
-                  let
-                     val base = translateOperand base
-                  in
-                     if M.Operand.isLocation base
-                        then M.Operand.ArrayOffset {base = base,
-                                                    index = translateOperand index,
-                                                    offset = offset,
-                                                    scale = scale,
-                                                    ty = ty}
-                     else bogusOp ty
-                  end
-             | Cast (z, t) => M.Operand.Cast (translateOperand z, t)
+               Cast (z, t) => M.Operand.Cast (translateOperand z, t)
              | Const c => constOperand c
-             | EnsuresBytesFree =>
-                  Error.bug "Backend.translateOperand: EnsuresBytesFree"
              | GCState => M.Operand.GCState
              | Offset {base, offset, ty} =>
                   let
@@ -552,6 +478,18 @@ let
                                    (ObjptrTycon.index opt)),
                     WordSize.objptrHeader ()))
              | Runtime f => runtimeOp f
+             | SequenceOffset {base, index, offset, scale, ty} =>
+                  let
+                     val base = translateOperand base
+                  in
+                     if M.Operand.isLocation base
+                        then M.Operand.SequenceOffset {base = base,
+                                                        index = translateOperand index,
+                                                        offset = offset,
+                                                        scale = scale,
+                                                        ty = ty}
+                     else bogusOp ty
+                  end
              | Var {var, ...} => varOperand var
              | Address z => M.Operand.Address (translateOperand z)
          end
@@ -656,7 +594,6 @@ let
                   (globalVector
                    (WordXVector.fromString
                     "backend thought control shouldn't reach here"))),
-          frameInfo = NONE,
           func = Type.BuiltInCFunction.bug (),
           return = NONE}
       val {get = labelInfo: Label.t -> {args: (Var.t * Type.t) vector},
@@ -667,7 +604,7 @@ let
          Trace.trace2 ("Backend.setLabelInfo",
                        Label.layout, Layout.ignore, Unit.layout)
          setLabelInfo
-      fun callReturnOperands (xs: 'a vector,
+      fun callReturnStackOffsets (xs: 'a vector,
                               ty: 'a -> Type.t,
                               shift: Bytes.t): StackOffset.t vector =
          #1 (Vector.mapAndFold
@@ -708,10 +645,7 @@ let
             val raises = Option.map (raises, fn ts => raiseOperands ts)
             val returns =
                Option.map (returns, fn ts =>
-                           callReturnOperands (ts, fn t => t, Bytes.zero))
-            val chunk = funcChunk name
-            fun labelArgOperands (l: R.Label.t): M.Operand.t vector =
-               Vector.map (#args (labelInfo l), varOperand o #1)
+                           callReturnStackOffsets (ts, fn t => t, Bytes.zero))
             fun newVarInfo (x, ty: Type.t) =
                let
                   val operand =
@@ -744,7 +678,7 @@ let
             val _ = newVarInfos args
             val _ =
                Rssa.Function.dfs
-               (f, fn R.Block.T {args, label, statements, transfer, ...} =>
+               (f, fn R.Block.T {args, label, statements, ...} =>
                 let
                    val _ = setLabelInfo (label, {args = args})
                    val _ = newVarInfos args
@@ -790,7 +724,6 @@ let
                                    end
                            | _ => normal ()
                        end)
-                   val _ = R.Transfer.foreachDef (transfer, newVarInfo)
                 in
                    fn () => ()
                 end)
@@ -810,12 +743,10 @@ let
             in
                val {handlerLinkOffset, labelInfo = labelRegInfo, ...} =
                   let
-                     val argOperands =
-                        Vector.map
-                        (callReturnOperands (args, #2, Bytes.zero),
-                         M.Operand.StackOffset)
+                     fun formalsStackOffsets args =
+                        callReturnStackOffsets (args, fn (_, ty) => ty, Bytes.zero)
                   in
-                     AllocateRegisters.allocate {argOperands = argOperands,
+                     AllocateRegisters.allocate {formalsStackOffsets = formalsStackOffsets,
                                                  function = f,
                                                  varInfo = varInfo}
                   end
@@ -841,20 +772,21 @@ let
                                     | _ => ac)
                             else
                                []
-                         val isC =
+                         val (entry, kind) =
                             case kind of
-                               R.Kind.CReturn _ => true
-                             | _ => false
-                         val frameLayoutsIndex =
-                            getFrameLayoutsIndex {isC = isC,
-                                                  label = label,
+                               R.Kind.Cont _=> (true, M.FrameInfo.Kind.ML_FRAME)
+                             | R.Kind.CReturn {func} => (CFunction.maySwitchThreadsTo func,
+                                                         M.FrameInfo.Kind.C_FRAME)
+                             | R.Kind.Handler => (true, M.FrameInfo.Kind.ML_FRAME)
+                             | R.Kind.Jump => (false, M.FrameInfo.Kind.ML_FRAME)
+                         val frameInfo =
+                            getFrameInfo {entry = entry,
+                                          kind = kind,
                                                   offsets = offsets,
-                                                  size = size}
+                                          size = size,
+                                          sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
-                         setFrameInfo
-                         (label,
-                          SOME (M.FrameInfo.T
-                                {frameLayoutsIndex = frameLayoutsIndex}))
+                         setFrameInfo (label, SOME frameInfo)
                       end
                 in
                    case R.Kind.frameStyle kind of
@@ -865,28 +797,31 @@ let
             (* ------------------------------------------------- *)
             (*                    genTransfer                    *)
             (* ------------------------------------------------- *)
-            fun genTransfer (t: R.Transfer.t, chunk: Chunk.t)
+            fun genTransfer (t: R.Transfer.t)
                : M.Statement.t vector * M.Transfer.t =
                let
                   fun simple t = (Vector.new0 (), t)
                in
                   case t of
-                     R.Transfer.Arith {args, dst, overflow, prim, success,
-                                       ...} =>
-                        simple
-                        (M.Transfer.Arith {args = translateOperands args,
-                                           dst = varOperand dst,
-                                           overflow = overflow,
-                                           prim = prim,
-                                           success = success})
-                   | R.Transfer.CCall {args, func, return} =>
+                     R.Transfer.CCall {args, func, return} =>
+                        let
+                           val return =
+                              case return of
+                                 NONE => NONE
+                               | SOME return =>
+                                    let
+                                       val fio = frameInfo return
+                                       val {size, ...} = labelRegInfo return
+                                    in
+                                        SOME {return = return,
+                                              size = Option.map (fio, fn _ => size)}
+                                    end
+                        in
                         simple (M.Transfer.CCall
                                 {args = translateOperands args,
-                                 frameInfo = (case return of
-                                                 NONE => NONE
-                                               | SOME l => frameInfo l),
                                  func = func,
                                  return = return})
+                        end
                    | R.Transfer.Call {func, args, return} =>
                         let
                            datatype z = datatype R.Return.t
@@ -912,12 +847,11 @@ let
                                               size = size})
                                     end
                            val dsts =
-                              callReturnOperands
+                              callReturnStackOffsets
                               (args, R.Operand.ty, frameSize)
                            val setupArgs =
                               parallelMove
-                              {chunk = chunk,
-                               dsts = Vector.map (dsts, M.Operand.StackOffset),
+                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
                                srcs = translateOperands args}
                            val live =
                               Vector.concat [operandsLive contLive,
@@ -930,18 +864,25 @@ let
                            (setupArgs, transfer)
                         end
                    | R.Transfer.Goto {dst, args} =>
-                        (parallelMove {srcs = translateOperands args,
-                                       dsts = labelArgOperands dst,
-                                       chunk = labelChunk dst},
+                        let
+                           val (dsts', srcs') =
+                              Vector.unzip
+                              (Vector.keepAllMap2
+                               (#args (labelInfo dst), args, fn ((dst, _), src) =>
+                                case varOperandOpt dst of
+                                   NONE => NONE
+                                 | SOME dst => SOME (dst, translateOperand src)))
+                        in
+                           (parallelMove {srcs = srcs', dsts = dsts'},
                          M.Transfer.Goto dst)
+                        end
                    | R.Transfer.Raise srcs =>
                         (M.Statement.moves {dsts = Vector.map (valOf raises,
                                                                Live.toOperand),
                                             srcs = translateOperands srcs},
                          M.Transfer.Raise)
                    | R.Transfer.Return xs =>
-                        (parallelMove {chunk = chunk,
-                                       dsts = Vector.map (valOf returns,
+                        (parallelMove {dsts = Vector.map (valOf returns,
                                                           M.Operand.StackOffset),
                                        srcs = translateOperands xs},
                          M.Transfer.Return)
@@ -967,63 +908,70 @@ let
                end
             val genTransfer =
                Trace.trace ("Backend.genTransfer",
-                            R.Transfer.layout o #1,
+                            R.Transfer.layout,
                             Layout.tuple2 (Vector.layout M.Statement.layout,
                                            M.Transfer.layout))
                genTransfer
             fun genBlock (R.Block.T {args, kind, label, statements, transfer,
                                      ...}) : unit =
                let
+                  val {live, liveNoFormals, size, ...} = labelRegInfo label
                   val _ =
                      if Label.equals (label, start)
                         then let
-                                val live = #live (labelRegInfo start)
                                 val returns =
                                    Option.map
                                    (returns, fn returns =>
                                     Vector.map (returns, Live.StackOffset))
+                                val frameInfo =
+                                   getFrameInfo {entry = true,
+                                                 kind = M.FrameInfo.Kind.ML_FRAME,
+                                                 offsets = [],
+                                                 size = Bytes.zero,
+                                                 sourceSeqIndex = NONE}
                              in
                                 Chunk.newBlock
-                                (chunk,
+                                (funcChunk name,
                                  {label = funcToLabel name,
-                                  kind = M.Kind.Func,
-                                  live = operandsLive live,
+                                  kind = M.Kind.Func {frameInfo = frameInfo},
+                                  live = operandsLive liveNoFormals,
                                   raises = raises,
                                   returns = returns,
                                   statements = Vector.new0 (),
                                   transfer = M.Transfer.Goto start})
                              end
                      else ()
-                  val {live, liveNoFormals, size, ...} = labelRegInfo label
-                  val chunk = labelChunk label
                   val statements =
                      Vector.concatV
                      (Vector.map (statements, fn s =>
                                   genStatement (s, handlerLinkOffset)))
-                  val (preTransfer, transfer) = genTransfer (transfer, chunk)
+                  val (preTransfer, transfer) = genTransfer transfer
                   val (kind, live, pre) =
                      case kind of
                         R.Kind.Cont _ =>
                            let
-                              val srcs = callReturnOperands (args, #2, size)
+                              val srcs = callReturnStackOffsets (args, #2, size)
+                              val (dsts', srcs') =
+                                 Vector.unzip
+                                 (Vector.keepAllMap2
+                                  (args, srcs, fn ((dst, _), src) =>
+                                   case varOperandOpt dst of
+                                      NONE => NONE
+                                    | SOME dst => SOME (dst, M.Operand.StackOffset src)))
                            in
-                              (M.Kind.Cont {args = Vector.map (srcs,
-                                                               Live.StackOffset),
+                              (M.Kind.Cont {args = Vector.map (srcs, Live.StackOffset),
                                             frameInfo = valOf (frameInfo label)},
                                liveNoFormals,
-                               parallelMove
-                               {chunk = chunk,
-                                dsts = Vector.map (args, varOperand o #1),
-                                srcs = Vector.map (srcs, M.Operand.StackOffset)})
+                               parallelMove {dsts = dsts', srcs = srcs'})
                            end
                       | R.Kind.CReturn {func, ...} =>
                            let
                               val dst =
                                  case Vector.length args of
                                     0 => NONE
-                                  | 1 => SOME (operandLive
-                                               (varOperand
-                                                (#1 (Vector.sub (args, 0)))))
+                                  | 1 => Option.map
+                                         (varOperandOpt (#1 (Vector.first args)),
+                                          operandLive)
                                   | _ => Error.bug "Backend.genBlock: CReturn"
                            in
                               (M.Kind.CReturn {dst = dst,
@@ -1034,21 +982,20 @@ let
                            end
                       | R.Kind.Handler =>
                            let
-                              val _ =
-                                 List.push
-                                 (handlers, {chunkLabel = Chunk.label chunk,
-                                             label = label})
-                              val dsts = Vector.map (args, varOperand o #1)
-                              val handles =
-                                 raiseOperands (Vector.map (dsts, M.Operand.ty))
+                              val handles = raiseOperands (Vector.map (args, #2))
+                              val (dsts', srcs') =
+                                 Vector.unzip
+                                 (Vector.keepAllMap2
+                                  (args, handles, fn ((dst, _), h) =>
+                                   case varOperandOpt dst of
+                                      NONE => NONE
+                                    | SOME dst =>SOME (dst, Live.toOperand h)))
                            in
                               (M.Kind.Handler
                                {frameInfo = valOf (frameInfo label),
                                 handles = handles},
                                liveNoFormals,
-                               M.Statement.moves
-                               {dsts = dsts,
-                                srcs = Vector.map (handles, Live.toOperand)})
+                               M.Statement.moves {dsts = dsts', srcs = srcs'})
                            end
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
                   val (first, statements) =
@@ -1075,7 +1022,7 @@ let
                      Option.map (returns, fn returns =>
                                  Vector.map (returns, Live.StackOffset))
                in
-                  Chunk.newBlock (chunk,
+                  Chunk.newBlock (labelChunk label,
                                   {kind = kind,
                                    label = label,
                                    live = operandsLive live,
@@ -1139,7 +1086,7 @@ let
                    ()
                 end)
          in
-            Machine.Chunk.T {chunkLabel = chunkLabel,
+            M.Chunk.T {chunkLabel = chunkLabel,
                              blocks = blocks,
                              regMax = ! o regMax}
          end
@@ -1152,7 +1099,7 @@ let
        *)
       val _ = List.foreach (chunks, fn M.Chunk.T {blocks, ...} =>
                             Vector.foreach (blocks, Label.clear o M.Block.label))
-      val (frameLabels, frameLayouts, frameOffsets) = allFrameInfo ()
+      val (frameInfos, frameOffsets) = allFrameInfo chunks
       val maxFrameSize: Bytes.t =
          List.fold
          (chunks, Bytes.zero, fn (M.Chunk.T {blocks, ...}, max) =>
@@ -1164,7 +1111,7 @@ let
                     datatype z = datatype M.Operand.t
                  in
                     case z of
-                       ArrayOffset {base, index, ...} =>
+                       SequenceOffset {base, index, ...} =>
                           doOperand (base, doOperand (index, max))
                      | Cast (z, _) => doOperand (z, max)
                      | Contents {oper, ...} => doOperand (oper, max)
@@ -1176,10 +1123,7 @@ let
               val max =
                  case M.Kind.frameInfoOpt kind of
                     NONE => max
-                  | SOME (M.FrameInfo.T {frameLayoutsIndex, ...}) =>
-                       Bytes.max
-                       (max,
-                        #size (Vector.sub (frameLayouts, frameLayoutsIndex)))
+                  | SOME fi => Bytes.max (max, M.FrameInfo.size fi)
               val max =
                  Vector.fold
                  (statements, max, fn (s, max) =>
@@ -1190,21 +1134,19 @@ let
               max
            end))
       val maxFrameSize = Bytes.alignWord32 maxFrameSize
-      val profileInfo = makeProfileInfo {frames = frameLabels}
-in
-      Machine.Program.T
+      val machine =
+         M.Program.T
       {chunks = chunks,
-       frameLayouts = frameLayouts,
+          frameInfos = frameInfos,
        frameOffsets = frameOffsets,
        handlesSignals = handlesSignals,
        main = main,
        maxFrameSize = maxFrameSize,
        objectTypes = objectTypes,
-       profileInfo = profileInfo,
        reals = allReals (),
+          sourceMaps = sourceMaps,
        vectors = allVectors ()}
-end}
    in
-      program
+      machine
    end
 end

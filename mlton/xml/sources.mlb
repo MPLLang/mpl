@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -39,14 +39,11 @@ local
    sxml-simplify.fun
    sxml.sig
    sxml.fun
-   parse-sxml.sig
-   parse-sxml.fun
 in
    signature SXML
    signature XML
 
    functor Monomorphise
-   functor ParseSxml
    functor Sxml
    functor Xml
 end
