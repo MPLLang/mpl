@@ -96,20 +96,20 @@ val STACK = _const "MLton_Rlimit_STACK" : C_Int.t;
 end
 structure Rusage = 
 struct
-val children_stime_sec = _import "MLton_Rusage_children_stime_sec" private : unit -> C_Time.t;
-val children_stime_usec = _import "MLton_Rusage_children_stime_usec" private : unit -> C_SUSeconds.t;
-val children_utime_sec = _import "MLton_Rusage_children_utime_sec" private : unit -> C_Time.t;
-val children_utime_usec = _import "MLton_Rusage_children_utime_usec" private : unit -> C_SUSeconds.t;
-val gc_stime_sec = _import "MLton_Rusage_gc_stime_sec" private : unit -> C_Time.t;
-val gc_stime_usec = _import "MLton_Rusage_gc_stime_usec" private : unit -> C_SUSeconds.t;
-val gc_utime_sec = _import "MLton_Rusage_gc_utime_sec" private : unit -> C_Time.t;
-val gc_utime_usec = _import "MLton_Rusage_gc_utime_usec" private : unit -> C_SUSeconds.t;
-val getGCRusageOfProc = _import "MLton_Rusage_getGCRusageOfProc" private : Int32.t -> unit;
-val getrusage = _import "MLton_Rusage_getrusage" private : unit -> unit;
-val self_stime_sec = _import "MLton_Rusage_self_stime_sec" private : unit -> C_Time.t;
-val self_stime_usec = _import "MLton_Rusage_self_stime_usec" private : unit -> C_SUSeconds.t;
-val self_utime_sec = _import "MLton_Rusage_self_utime_sec" private : unit -> C_Time.t;
-val self_utime_usec = _import "MLton_Rusage_self_utime_usec" private : unit -> C_SUSeconds.t;
+val children_stime_sec = _import "MLton_Rusage_children_stime_sec" private : GCState.t -> C_Time.t;
+val children_stime_usec = _import "MLton_Rusage_children_stime_usec" private : GCState.t -> C_SUSeconds.t;
+val children_utime_sec = _import "MLton_Rusage_children_utime_sec" private : GCState.t -> C_Time.t;
+val children_utime_usec = _import "MLton_Rusage_children_utime_usec" private : GCState.t -> C_SUSeconds.t;
+val gc_stime_sec = _import "MLton_Rusage_gc_stime_sec" private : GCState.t -> C_Time.t;
+val gc_stime_usec = _import "MLton_Rusage_gc_stime_usec" private : GCState.t -> C_SUSeconds.t;
+val gc_utime_sec = _import "MLton_Rusage_gc_utime_sec" private : GCState.t -> C_Time.t;
+val gc_utime_usec = _import "MLton_Rusage_gc_utime_usec" private : GCState.t -> C_SUSeconds.t;
+val getGCRusageOfProc = _import "MLton_Rusage_getGCRusageOfProc" private : GCState.t * Int32.t -> unit;
+val getrusage = _import "MLton_Rusage_getrusage" private : GCState.t -> unit;
+val self_stime_sec = _import "MLton_Rusage_self_stime_sec" private : GCState.t -> C_Time.t;
+val self_stime_usec = _import "MLton_Rusage_self_stime_usec" private : GCState.t -> C_SUSeconds.t;
+val self_utime_sec = _import "MLton_Rusage_self_utime_sec" private : GCState.t -> C_Time.t;
+val self_utime_usec = _import "MLton_Rusage_self_utime_usec" private : GCState.t -> C_SUSeconds.t;
 end
 structure Syslog = 
 struct
@@ -691,16 +691,16 @@ val waitpid = _import "Posix_Process_waitpid" private : C_PId.t * (C_Status.t) r
 end
 structure Signal = 
 struct
-val default = _import "Posix_Signal_default" private : C_Signal.t -> (C_Int.t) C_Errno.t;
-val handlee = _import "Posix_Signal_handlee" private : C_Signal.t -> (C_Int.t) C_Errno.t;
-val handleGC = _import "Posix_Signal_handleGC" private : unit -> unit;
-val ignore = _import "Posix_Signal_ignore" private : C_Signal.t -> (C_Int.t) C_Errno.t;
+val default = _import "Posix_Signal_default" private : GCState.t * C_Signal.t -> (C_Int.t) C_Errno.t;
+val handlee = _import "Posix_Signal_handlee" private : GCState.t * C_Signal.t -> (C_Int.t) C_Errno.t;
+val handleGC = _import "Posix_Signal_handleGC" private : GCState.t -> unit;
+val ignore = _import "Posix_Signal_ignore" private : GCState.t * C_Signal.t -> (C_Int.t) C_Errno.t;
 val isDefault = _import "Posix_Signal_isDefault" private : C_Signal.t * (C_Int.t) ref -> (C_Int.t) C_Errno.t;
 val isIgnore = _import "Posix_Signal_isIgnore" private : C_Signal.t * (C_Int.t) ref -> (C_Int.t) C_Errno.t;
-val isPending = _import "Posix_Signal_isPending" private : C_Signal.t -> C_Int.t;
-val isPendingGC = _import "Posix_Signal_isPendingGC" private : unit -> C_Int.t;
+val isPending = _import "Posix_Signal_isPending" private : GCState.t * C_Signal.t -> C_Int.t;
+val isPendingGC = _import "Posix_Signal_isPendingGC" private : GCState.t -> C_Int.t;
 val NSIG = _const "Posix_Signal_NSIG" : C_Int.t;
-val resetPending = _import "Posix_Signal_resetPending" private : unit -> unit;
+val resetPending = _import "Posix_Signal_resetPending" private : GCState.t -> unit;
 val SIG_BLOCK = _const "Posix_Signal_SIG_BLOCK" : C_Int.t;
 val SIG_SETMASK = _const "Posix_Signal_SIG_SETMASK" : C_Int.t;
 val SIG_UNBLOCK = _const "Posix_Signal_SIG_UNBLOCK" : C_Int.t;

@@ -7,9 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
-void GC_pack (void) {
+void GC_pack (GC_state s) {
   size_t keep;
-  GC_state s = pthread_getspecific (gcstate_key);
   s->syncReason = SYNC_PACK;
   ENTER0 (s);
   if (DEBUG or s->controls->messages)
@@ -37,8 +36,7 @@ void GC_pack (void) {
   LEAVE0 (s);
 }
 
-void GC_unpack (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_unpack (GC_state s) {
   s->syncReason = SYNC_PACK;
   ENTER0 (s);
   if (DEBUG or s->controls->messages)

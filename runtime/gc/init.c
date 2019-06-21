@@ -507,7 +507,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
   s->wsQueueLock = BOGUS_OBJPTR;
-  s->ffiArgs = NULL;
   s->globalFrontier = NULL;
   s->globalLimitPlusSlop = NULL;
   s->hashConsDuringGC = FALSE;

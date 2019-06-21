@@ -1,4 +1,4 @@
-(* Copyright (C) 2014 Matthew Fluet.
+(* Copyright (C) 2014,2019 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -17,6 +17,8 @@ fun die (s: string): 'a =
     ; let exception DieFailed
       in raise DieFailed
       end)
+
+val gcState = Primitive.MLton.GCState.gcState
 
 structure AtomicState =
    struct
@@ -83,14 +85,14 @@ local
                 val proc = procNum ()
             in
                 case Array.unsafeSub (func, proc) of
-                    NONE => Prim.savedPre ()
+                    NONE => Prim.savedPre (gcState ())
                   | SOME x =>
                     (* This branch never returns. *)
                     let
                         (* Atomic 1 *)
                         val () = Array.update (func, proc, NONE)
                         val () = atomicEnd ()
-                                           (* Atomic 0 *)
+                        (* Atomic 0 *)
                     in
                         (x () handle e => MLtonExn.topLevelHandler e)
                       ; die "Thread didn't exit properly.\n"
@@ -118,7 +120,7 @@ in
             then
                 let
                     val () = atomicEnd ()
-                                       (* Atomic 0 *)
+                    (* Atomic 0 *)
                 in
                     raise Fail "atomicSwitchTop while switching (nested Thread.switch?)"
                 end
@@ -126,7 +128,7 @@ in
                 let
                     val _ = Array.update (switching, proc, true)
 
-                    val curPrimThread = Prim.current ()
+                    val curPrimThread = Prim.current (gcState ())
 
                     val r : (unit -> 'a) ref =
                         ref (fn () => die "Thread.atomicSwitch didn't set r.\n")
@@ -235,9 +237,9 @@ in
                (* Atomic 1 *)
                val proc = procNum ()
                val _ = Array.update (state, proc, InHandler)
-               val t = f (fromPrimitive (Prim.saved ()))
+               val t = f (fromPrimitive (Prim.saved (gcState ())))
                val _ = Array.update (state, proc, Normal)
-               val _ = Prim.finishSignalHandler ()
+               val _ = Prim.finishSignalHandler (gcState ())
                val _ =
                   atomicSwitch
                   (fn (T r) =>
@@ -263,7 +265,7 @@ in
                 p
              end)
       in
-         Prim.setSignalHandlers handlerThreads
+         Prim.setSignalHandlers (gcState (), handlerThreads)
       end
 
    fun switchToSignalHandler () =
@@ -271,7 +273,7 @@ in
          (* Atomic 0 *)
          val () = atomicBegin ()
          (* Atomic 1 *)
-         val () = Prim.startSignalHandler () (* implicit atomicBegin () *)
+         val () = Prim.startSignalHandler (gcState ()) (* implicit atomicBegin () *)
          (* Atomic 2 *)
       in
          case Array.sub (signalHandlers, procNum ()) of
@@ -298,7 +300,7 @@ in
                fun workerLoop () =
                   let
                      (* Atomic 1 *)
-                     val p = Primitive.MLton.FFI.getArgs ()
+                     val p = Primitive.MLton.FFI.getOpArgsResPtr (gcState ())
                      val _ = atomicEnd ()
                      (* Atomic 0 *)
                      val i = MLtonPointer.getInt32 (MLtonPointer.getPointer (p, 0), 0)
@@ -313,7 +315,7 @@ in
                      (* Atomic 1 *)
                      val proc = procNum ()
                      val _ = Array.update (worker, proc, !thisWorker)
-                     val _ = Prim.setSaved (valOf (!savedRef))
+                     val _ = Prim.setSaved (gcState (), valOf (!savedRef))
                      val _ = savedRef := NONE
                      val _ = Prim.returnToC () (* implicit atomicEnd() *)
                   in
@@ -328,7 +330,7 @@ in
             let
                (* Atomic 2 *)
                val proc = procNum ()
-               val saved = Prim.saved ()
+               val saved = Prim.saved (gcState ())
                val (workerThread, savedRef) =
                   case Array.sub (worker, proc) of
                      NONE => mkWorker ()
@@ -341,7 +343,7 @@ in
                handlerLoop ()
             end
          val handlerThreads = Array.tabulate (numProcs, fn _ => toPrimitive (new handlerLoop))
-         val _ = Prim.setCallFromCHandlers handlerThreads
+         val _ = Prim.setCallFromCHandlers (gcState (), handlerThreads)
       in
          fn (i, f) => Array.update (exports, i, f)
       end
@@ -374,7 +376,7 @@ val intermediateSwitchLoop: unit -> unit =
 
                 (* update intermediateThread for switching *)
                 val iT: unit t =
-                    T (ref (Interrupted (Prim.current ())))
+                    T (ref (Interrupted (Prim.current (gcState ()))))
                 val () = Array.update (intermediateThreads, p, iT)
 
                 (* get new thread *)
@@ -397,7 +399,7 @@ local
         let
             val p = procNum ()
             val t: unit thread ref =
-                ref (Interrupted (Prim.current ()))
+                ref (Interrupted (Prim.current (gcState ())))
             val () = Array.update (intermediateSwitchArgs, p, SOME arg)
             val T iT = Array.sub (intermediateThreads, p)
             val primIT = case !iT before iT := Dead

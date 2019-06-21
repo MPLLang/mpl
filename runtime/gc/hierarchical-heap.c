@@ -149,7 +149,7 @@ void HM_HH_mergeIntoParent(pointer hhPointer) {
   struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s, hh->parentHH);
 
   /* can only merge from the thread that owns the parent hierarchical heap! */
-  assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap());
+  assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap(s));
 
   lockHH(hh);
   lockHH(parentHH);

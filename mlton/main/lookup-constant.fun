@@ -52,16 +52,12 @@ datatype z = datatype ConstType.t
 val gcFields =
    [
     "atomicState",
-    "currentThread",
     "sourceMaps.curSourceSeqIndex",
     "exnStack",
-    "ffiArgs",
     "frontier",
     "generationalMaps.cardMapAbsolute",
-    "globalObjptrNonRoot",
     "limit",
     "limitPlusSlop",
-    "maxFrameSize",
     "signalsInfo.signalIsPending",
     "stackBottom",
     "stackLimit",

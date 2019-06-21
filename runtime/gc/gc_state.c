@@ -1,4 +1,4 @@
-/* Copyright (C) 2009,2012 Matthew Fluet.
+/* Copyright (C) 2009,2012,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -257,27 +257,22 @@ void setGCStateCurrentHeap (GC_state s,
   assert (isFrontierAligned (s, s->frontier));
 }
 
-bool GC_getAmOriginal (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+bool GC_getAmOriginal (GC_state s) {
   return s->amOriginal;
 }
-void GC_setAmOriginal (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setAmOriginal (GC_state s, bool b) {
   s->amOriginal = b;
 }
 
-void GC_setControlsMessages (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setControlsMessages (GC_state s, bool b) {
   s->controls->messages = b;
 }
 
-void GC_setControlsSummary (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setControlsSummary (GC_state s, bool b) {
   s->controls->summary = b;
 }
 
-void GC_setControlsRusageMeasureGC (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setControlsRusageMeasureGC (GC_state s, bool b) {
   s->controls->rusageMeasureGC = b;
 }
 
@@ -285,15 +280,11 @@ size_t GC_getMaxChunkPoolOccupancy (void) {
   return ChunkPool_maxAllocated ();
 }
 
-size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (GC_state s) {
   return s->globalCumulativeStatistics->maxHeapOccupancy;
 }
 
-uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s) {
   /* return sum across all processors */
   size_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
@@ -303,9 +294,7 @@ uintmax_t GC_getCumulativeStatisticsBytesAllocated (void) {
   return retVal;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (GC_state s) {
   /* return sum across all processors */
   uintmax_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
@@ -315,9 +304,7 @@ uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void) {
   return retVal;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (GC_state s) {
   /* return sum across all processors */
   uintmax_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
@@ -327,9 +314,7 @@ uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void) {
   return retVal;
 }
 
-uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+uintmax_t GC_getCumulativeStatisticsNumMinorGCs (GC_state s) {
   /* return sum across all processors */
   uintmax_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
@@ -339,9 +324,7 @@ uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void) {
   return retVal;
 }
 
-size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s) {
   /* return max across all processors */
   size_t retVal = 0;
   for (size_t i = 0; i < s->numberOfProcs; i++) {
@@ -354,39 +337,37 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (void) {
   return retVal;
 }
 
-void GC_setHashConsDuringGC (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setHashConsDuringGC (GC_state s, bool b) {
   s->hashConsDuringGC = b;
 }
 
-size_t GC_getLastMajorStatisticsBytesLive (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+size_t GC_getLastMajorStatisticsBytesLive (GC_state s) {
   return s->lastMajorStatistics->bytesLive;
 }
 
-pointer GC_getCallFromCHandlerThread (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+pointer GC_getCallFromCHandlerThread (GC_state s) {
   pointer p = objptrToPointer (s->callFromCHandlerThread, s->heap->start);
   return p;
 }
 
-void GC_setCallFromCHandlerThreads (pointer p) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setCallFromCHandlerThreads (GC_state s, pointer p) {
   assert(getSequenceLength (p) == s->numberOfProcs);
   for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
   }
 }
 
-pointer GC_getCurrentThread (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+pointer GC_getCallFromCOpArgsResPtr (GC_state s) {
+  return s->callFromCOpArgsResPtr;
+}
+
+pointer GC_getCurrentThread (GC_state s) {
   pointer p = objptrToPointer (s->currentThread, s->heap->start);
   return p;
 }
 
 /* RAM_NOTE: These function should be moved to thread.c */
-pointer GC_getCurrentHierarchicalHeap (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+pointer GC_getCurrentHierarchicalHeap (GC_state s) {
   GC_thread t = getThreadCurrent(s);
 
   pointer retVal;
@@ -395,14 +376,13 @@ pointer GC_getCurrentHierarchicalHeap (void) {
   } else {
     /* create a new hierarchical heap to return */
     retVal = HM_newHierarchicalHeap(s);
-    GC_setCurrentHierarchicalHeap(retVal);
+    GC_setCurrentHierarchicalHeap(s, retVal);
   }
 
   return retVal;
 }
 
-void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setCurrentHierarchicalHeap (GC_state s, pointer hhPointer) {
   objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
   objptr threadObjptr = getThreadCurrentObjptr(s);
   GC_thread thread = threadObjptrToStruct(s, threadObjptr);
@@ -416,8 +396,7 @@ void GC_setCurrentHierarchicalHeap (pointer hhPointer) {
       ((void*)(hhObjptr)));
 }
 
-pointer GC_getSavedThread (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+pointer GC_getSavedThread (GC_state s) {
   pointer p;
 
   assert(s->savedThread != BOGUS_OBJPTR);
@@ -426,8 +405,7 @@ pointer GC_getSavedThread (void) {
   return p;
 }
 
-void GC_setSavedThread (pointer p) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setSavedThread (GC_state s, pointer p) {
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
@@ -435,23 +413,18 @@ void GC_setSavedThread (pointer p) {
   s->savedThread = op;
 }
 
-void GC_setSignalHandlerThreads (pointer p) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setSignalHandlerThreads (GC_state s, pointer p) {
   assert(getSequenceLength (p) == s->numberOfProcs);
   for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].signalHandlerThread = ((objptr*)p)[proc];
   }
 }
 
-struct TLSObjects* GC_getTLSObjects(void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+struct TLSObjects* GC_getTLSObjects(GC_state s) {
   return &(s->tlsObjects);
 }
 
-void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+void GC_getGCRusageOfProc (GC_state s, int32_t p, struct rusage* rusage) {
   if (p < 0) {
     /* get process gc rusage */
     rusageZero(rusage);
@@ -511,28 +484,23 @@ void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage) {
 }
 
 // Signal disposition is per-process; use primary to maintain handled set.
-sigset_t* GC_getSignalsHandledAddr (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+sigset_t* GC_getSignalsHandledAddr (GC_state s) {
   return &(s->procStates[0].signalsInfo.signalsHandled);
 }
 
-sigset_t* GC_getSignalsPendingAddr (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+sigset_t* GC_getSignalsPendingAddr (GC_state s) {
   return &(s->signalsInfo.signalsPending);
 }
 
 // Signal disposition is per-process; use primary to maintain handled set.
-void GC_setGCSignalHandled (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setGCSignalHandled (GC_state s, bool b) {
   s->procStates[0].signalsInfo.gcSignalHandled = b;
 }
 
-bool GC_getGCSignalPending (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+bool GC_getGCSignalPending (GC_state s) {
   return (s->signalsInfo.gcSignalPending);
 }
 
-void GC_setGCSignalPending (bool b) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setGCSignalPending (GC_state s, bool b) {
   s->signalsInfo.gcSignalPending = b;
 }

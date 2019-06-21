@@ -1,9 +1,9 @@
 #include "platform.h"
 
-C_Errno_t(C_Int_t) Posix_Signal_default (C_Signal_t signum) {
+C_Errno_t(C_Int_t) Posix_Signal_default (GCState_t s, C_Signal_t signum) {
   struct sigaction sa;
 
-  sigdelset (GC_getSignalsHandledAddr (), signum);
+  sigdelset (GC_getSignalsHandledAddr (s), signum);
   memset (&sa, 0, sizeof(sa));
   sa.sa_handler = SIG_DFL;
   return sigaction (signum, &sa, NULL);
@@ -19,10 +19,10 @@ C_Errno_t(C_Int_t) Posix_Signal_isDefault (C_Int_t signum, Ref(C_Int_t) isDef) {
   return res;
 }
 
-C_Errno_t(C_Int_t) Posix_Signal_ignore (C_Signal_t signum) {
+C_Errno_t(C_Int_t) Posix_Signal_ignore (GCState_t s, C_Signal_t signum) {
   struct sigaction sa;
 
-  sigdelset (GC_getSignalsHandledAddr (), signum);
+  sigdelset (GC_getSignalsHandledAddr (s), signum);
   memset (&sa, 0, sizeof(sa));
   sa.sa_handler = SIG_IGN;
   return sigaction (signum, &sa, NULL);
@@ -38,10 +38,10 @@ C_Errno_t(C_Int_t) Posix_Signal_isIgnore (C_Int_t signum, Ref(C_Int_t) isIgn) {
   return res;
 }
 
-C_Errno_t(C_Int_t) Posix_Signal_handlee (C_Int_t signum) {
+C_Errno_t(C_Int_t) Posix_Signal_handlee (GCState_t s, C_Int_t signum) {
   struct sigaction sa;
 
-  sigaddset (GC_getSignalsHandledAddr (), signum);
+  sigaddset (GC_getSignalsHandledAddr (s), signum);
   memset (&sa, 0, sizeof(sa));
   /* The mask must be full because GC_handler reads and writes
    * s->signalsPending (else there is a race condition).
@@ -54,21 +54,21 @@ C_Errno_t(C_Int_t) Posix_Signal_handlee (C_Int_t signum) {
   return sigaction (signum, &sa, NULL);
 }
 
-void Posix_Signal_handleGC (void) {
-  GC_setGCSignalHandled (TRUE);
+void Posix_Signal_handleGC (GCState_t s) {
+  GC_setGCSignalHandled (s, TRUE);
 }
 
-C_Int_t Posix_Signal_isPending (C_Int_t signum) {
-  return sigismember (GC_getSignalsPendingAddr (), signum);
+C_Int_t Posix_Signal_isPending (GCState_t s, C_Int_t signum) {
+  return sigismember (GC_getSignalsPendingAddr (s), signum);
 }
 
-C_Int_t Posix_Signal_isPendingGC (void) {
-  return GC_getGCSignalPending ();
+C_Int_t Posix_Signal_isPendingGC (GCState_t s) {
+  return GC_getGCSignalPending (s);
 }
 
-void Posix_Signal_resetPending (void) {
-  sigemptyset (GC_getSignalsPendingAddr ());
-  GC_setGCSignalPending (FALSE);
+void Posix_Signal_resetPending (GCState_t s) {
+  sigemptyset (GC_getSignalsPendingAddr (s));
+  GC_setGCSignalPending (s, FALSE);
 }
 
 C_Errno_t(C_Int_t) Posix_Signal_sigaddset (Array(Word8_t) sigset, C_Signal_t signum) {

@@ -805,8 +805,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                | Thread => Size.makeTop s
                                | Weak _ => ()
                                | Word _ => ()
-                           (* RAM_NOTE: Not sure if this change was superceded or not *)
-                           (* val () = if Type.isVector t then Size.makeTop s else () *)
                         in
                            s
                         end))
@@ -816,17 +814,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
           let
              val s = tyconSize tycon
              fun dependsOn (t: Type.t): unit = Size.<= (typeSize t, s)
-                 (* RAM_NOTE: Not sure if this change was superceded or not *)
-                 (* let *)
-                 (*   datatype z = datatype Type.dest *)
-                 (*   val () = case Type.dest t of *)
-                 (*              Datatype tycon' => if Tycon.equals (tycon, tycon') *)
-                 (*                                 then Size.makeTop s *)
-                 (*                                 else () *)
-                 (*            | _ => () *)
-                 (* in *)
-                 (*   Size.<= (typeSize t, s) *)
-                 (* end *)
              val () = Vector.foreach (cons, fn {args, ...} =>
                                       Prod.foreach (args, dependsOn))
           in
