@@ -40,6 +40,10 @@ PRIVATE Word32 wordTemp1L;
 #define DEBUG_X86CODEGEN FALSE
 #endif
 
+PRIVATE GC_state MLton_gcState() {
+  return &gcState;
+}
+
 static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
         return *((GC_frameIndex*)(ra - sizeof(GC_frameIndex)));
 }
@@ -47,13 +51,13 @@ static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
 PRIVATE void MLton_jumpToSML (pointer jump);
 
 #define MLtonCallFromC()                                                \
-static void MLton_callFromC () {                                        \
+static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
         pointer jump;                                                   \
-        GC_state s;                                                     \
+        GC_state s = MLton_gcState();                                   \
                                                                         \
         if (DEBUG_X86CODEGEN)                                           \
                 fprintf (stderr, "MLton_callFromC() starting\n");       \
-        s = &gcState;                                                   \
+        s->callFromCOpArgsResPtr = localOpArgsResPtr;                   \
         GC_setSavedThread (s, GC_getCurrentThread (s));                 \
         s->atomicState += 3;                                            \
         if (s->signalsInfo.signalIsPending)                             \
@@ -65,8 +69,7 @@ static void MLton_callFromC () {                                        \
         s->atomicState += 1;                                            \
         GC_switchToThread (s, GC_getSavedThread (s), 0);                \
         s->atomicState -= 1;                                            \
-        if (0 == s->atomicState                                         \
-            && s->signalsInfo.signalIsPending)                          \
+        if (0 == s->atomicState && s->signalsInfo.signalIsPending)      \
                 s->limit = 0;                                           \
         if (DEBUG_X86CODEGEN)                                           \
                 fprintf (stderr, "MLton_callFromC() done\n");           \
@@ -76,16 +79,15 @@ static void MLton_callFromC () {                                        \
 #define MLtonMain(al, mg, mfs, mmc, pk, ps, ml)                         \
 PUBLIC int MLton_main (int argc, char* argv[]) {                        \
         pointer jump;                                                   \
-        extern pointer ml;                                              \
-        int procNumber = 0;                                             \
-        gcState = (GC_state *) malloc (MAX_PROCS * sizeof (GC_state));  \
+        extern unsigned char ml;                                        \
+        GC_state s = MLton_gcState();                                   \
                                                                         \
-        Initialize (procNumber, al, mg, mfs, mmc, pk, ps);              \
-        if (gcState[procNumber].amOriginal) {                           \
+        Initialize (s, al, mg, mfs, mmc, pk, ps);                       \
+        if (s->amOriginal) {                                            \
                 real_Init();                                            \
                 jump = (pointer)&ml;                                    \
         } else {                                                        \
-                jump = *(pointer*)(gcState[procNumber].stackTop - GC_RETURNADDRESS_SIZE); \
+                jump = *(pointer*)(s->stackTop - GC_RETURNADDRESS_SIZE); \
         }                                                               \
         MLton_jumpToSML(jump);                                          \
         return 1;                                                       \
@@ -94,22 +96,25 @@ PUBLIC int MLton_main (int argc, char* argv[]) {                        \
 #define MLtonLibrary(al, mg, mfs, mmc, pk, ps, ml)                      \
 PUBLIC void LIB_OPEN(LIBNAME) (int argc, char* argv[]) {                \
         pointer jump;                                                   \
-        extern pointer ml;                                              \
+        GC_state s = MLton_gcState();                                   \
+        extern unsigned char ml;                                        \
                                                                         \
-        Initialize (al, mg, mfs, mmc, pk, ps);                          \
-        if (gcState.amOriginal) {                                       \
+        Initialize (s, al, mg, mfs, mmc, pk, ps);                       \
+        if (s->amOriginal) {                                            \
                 real_Init();                                            \
                 jump = (pointer)&ml;                                    \
         } else {                                                        \
-                jump = *(pointer*)(gcState.stackTop - GC_RETURNADDRESS_SIZE); \
+                jump = *(pointer*)(s->stackTop - GC_RETURNADDRESS_SIZE); \
         }                                                               \
         MLton_jumpToSML(jump);                                          \
 }                                                                       \
 PUBLIC void LIB_CLOSE(LIBNAME) () {                                     \
         pointer jump;                                                   \
-        jump = *(pointer*)(gcState.stackTop - GC_RETURNADDRESS_SIZE);   \
+        GC_state s = MLton_gcState();                                   \
+                                                                        \
+        jump = *(pointer*)(s->stackTop - GC_RETURNADDRESS_SIZE);        \
         MLton_jumpToSML(jump);                                          \
-        GC_done(&gcState);                                              \
+        GC_done(s);                                                     \
 }
 
 #endif /* #ifndef _X86_MAIN_H_ */

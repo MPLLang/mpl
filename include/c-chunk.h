@@ -10,9 +10,7 @@
 #ifndef _C_CHUNK_H_
 #define _C_CHUNK_H_
 
-#include <pthread.h>
 #include <stdio.h>
-#include <assert.h>
 /* `memcpy` is used by coercion `<ty>_castTo<ty>` functions (`basis/coerce.h`)
  * and by misaligned `<ty>_fetch`, `<ty>_store`, and `<ty>_move` functions
  * (`basis/Real/Real-ops.h` and `basis/Word/Word-ops.h`)
@@ -87,7 +85,6 @@
 
 #define C(ty, x) (*(ty*)(x))
 #define G(ty, i) (global##ty [i])
-#define GPNR(i) (((Pointer*)(GCState + GlobalObjptrNonRootOffset))[i])
 #define O(ty, b, o) (*(ty*)((b) + (o)))
 #define X(ty, b, i, s, o) (*(ty*)((b) + ((i) * (s)) + (o)))
 #define S(ty, i) (*(ty*)(StackTop + (i)))
@@ -106,12 +103,12 @@
 /* ------------------------------------------------- */
 
 #define CacheFrontier()                         \
-        do {                                                            \
+        do {                                    \
                 Frontier = FrontierMem;         \
         } while (0)
 
 #define CacheStackTop()                         \
-        do {                                                            \
+        do {                                    \
                 StackTop = StackTopMem;         \
         } while (0)
 
@@ -142,7 +139,7 @@
 /* ------------------------------------------------- */
 
 #define BNZ(x, lnz, lz)                                                 \
-        do {                                    \
+        do {                                                            \
                 if (DEBUG_CCODEGEN)                                     \
                         fprintf (stderr, "%s:%d: BNZ(%llu, %s, %s)\n",  \
                                         __FILE__, __LINE__, ((unsigned long long)x), #lnz, #lz); \
@@ -153,8 +150,8 @@
         goto l
 
 #define FarCall(n, l, tail)                     \
-        do {                                                            \
-                if (DEBUG_CCODEGEN)                                     \
+        do {                                    \
+                if (DEBUG_CCODEGEN)             \
                         fprintf (stderr, "%s:%d: FarCall(%d, %s)\n", \
                                         __FILE__, __LINE__, (int)n, #l); \
                 if (tail) {                     \
@@ -181,7 +178,6 @@
                         fprintf (stderr, "%s:%d: Raise()\n",                    \
                                         __FILE__, __LINE__);                    \
                 StackTop = StackBottom + ExnStack;                              \
-        /* SAM_NOTE: could do a fence here to make the exn bug more likely? */   \
                 Return();                                                       \
         } while (0)                                                             \
 
@@ -199,13 +195,12 @@
         } while (0)
 
 /* ------------------------------------------------- */
-/*                       Primitives                  */
+/* Primitives                                        */
 /* ------------------------------------------------- */
 
 #ifndef MLTON_CODEGEN_STATIC_INLINE
 #define MLTON_CODEGEN_STATIC_INLINE static inline
 #endif
-#include "basis-ffi.h"
 #include "basis/coerce.h"
 #include "basis/cpointer.h"
 #include "basis/Real/Real-ops.h"

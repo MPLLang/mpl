@@ -29,41 +29,35 @@
 #define LoadArray(a, f) if (fread (a, sizeof(*a), cardof(a), f) != cardof(a)) return -1;
 #define SaveArray(a, f) if (fwrite(a, sizeof(*a), cardof(a), f) != cardof(a)) return -1;
 
-PRIVATE Pointer gcStateAddress;
-
-/* RAM_NOTE: What is globalObjptrNonRoot? Is it required? */
-#define Initialize(s, al, mg, mfs, mmc, pk, ps, gnr)              \
-        gcStateAddress = &s;                                      \
-        s.alignment = al;                                         \
-        s.atMLtons = atMLtons;                                    \
-        s.atMLtonsLength = cardof(atMLtons);                      \
-        s.frameInfos = frameInfos;                                \
-        s.frameInfosLength = cardof(frameInfos);                  \
-        s.globals = (objptr*)globalObjptr;                        \
-        s.globalsLength = cardof(globalObjptr);                   \
-        s.loadGlobals = loadGlobals;                              \
-        s.magic = mg;                                             \
-        s.maxFrameSize = mfs;                                     \
-        s.mutatorMarksCards = mmc;                                \
-        s.objectTypes = objectTypes;                              \
-        s.objectTypesLength = cardof(objectTypes);                \
-        s.returnAddressToFrameIndex = returnAddressToFrameIndex;  \
-        s.saveGlobals = saveGlobals;                              \
-        s.vectorInits = vectorInits;                              \
-        s.vectorInitsLength = cardof(vectorInits);                \
-        s.sourceMaps.profileLabelInfos = profileLabelInfos;       \
-        s.sourceMaps.profileLabelInfosLength = cardof(profileLabelInfos);   \
-        s.sourceMaps.sourceNames = sourceNames;                   \
-        s.sourceMaps.sourceNamesLength = cardof(sourceNames);     \
-        s.sourceMaps.sourceSeqs = sourceSeqs;                     \
-        s.sourceMaps.sourceSeqsLength = cardof(sourceSeqs);       \
-        s.sourceMaps.sources = sources;                           \
-        s.sourceMaps.sourcesLength = cardof(sources);             \
-        s.profiling.kind = pk;                                    \
-        s.profiling.stack = ps;                                   \
-        s.globalObjptrNonRootLength = gnr;                        \
-        s.globalObjptrNonRoot = (Pointer *) malloc (gnr * sizeof (Pointer));  \
-        MLton_init (argc, argv, &s);                              \
+#define Initialize(s, al, mg, mfs, mmc, pk, ps)                         \
+        s->alignment = al;                                              \
+        s->atMLtons = atMLtons;                                         \
+        s->atMLtonsLength = cardof(atMLtons);                           \
+        s->frameInfos = frameInfos;                                     \
+        s->frameInfosLength = cardof(frameInfos);                       \
+        s->globals = (objptr*)globalObjptr;                             \
+        s->globalsLength = cardof(globalObjptr);                        \
+        s->loadGlobals = loadGlobals;                                   \
+        s->magic = mg;                                                  \
+        s->maxFrameSize = mfs;                                          \
+        s->mutatorMarksCards = mmc;                                     \
+        s->objectTypes = objectTypes;                                   \
+        s->objectTypesLength = cardof(objectTypes);                     \
+        s->returnAddressToFrameIndex = returnAddressToFrameIndex;       \
+        s->saveGlobals = saveGlobals;                                   \
+        s->vectorInits = vectorInits;                                   \
+        s->vectorInitsLength = cardof(vectorInits);                     \
+        s->sourceMaps.profileLabelInfos = profileLabelInfos;            \
+        s->sourceMaps.profileLabelInfosLength = cardof(profileLabelInfos); \
+        s->sourceMaps.sourceNames = sourceNames;                        \
+        s->sourceMaps.sourceNamesLength = cardof(sourceNames);          \
+        s->sourceMaps.sourceSeqs = sourceSeqs;                          \
+        s->sourceMaps.sourceSeqsLength = cardof(sourceSeqs);            \
+        s->sourceMaps.sources = sources;                                \
+        s->sourceMaps.sourcesLength = cardof(sources);                  \
+        s->profiling.kind = pk;                                         \
+        s->profiling.stack = ps;                                        \
+        MLton_init (argc, argv, s);
 
 #define LIB_PASTE(x,y) x ## y
 #define LIB_OPEN(x) LIB_PASTE(x, _open)
@@ -100,8 +94,6 @@ void Duplicate (GC_state d, GC_state s) {
   d->profiling.kind = s->profiling.kind;
   d->profiling.stack = s->profiling.stack;
   d->profiling.isOn = s->profiling.isOn;
-  d->globalObjptrNonRootLength = s->globalObjptrNonRootLength;
-  d->globalObjptrNonRoot = (Pointer *) malloc (s->globalObjptrNonRootLength * sizeof (Pointer));
   GC_duplicate (d, s);
 }
 

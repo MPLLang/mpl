@@ -19,15 +19,11 @@ signature RUNTIME =
          sig
             datatype t =
                AtomicState
-             | CurrentThread
              | CurSourceSeqIndex
              | ExnStack
-             | FFIArgs
              | Frontier (* The place where the next object is allocated. *)
-             | GlobalObjptrNonRoot
              | Limit (* frontier + heapSize - LIMIT_SLOP *)
              | LimitPlusSlop (* frontier + heapSize *)
-             | MaxFrameSize
              | SignalIsPending
              | StackBottom
              | StackLimit (* Must have StackTop <= StackLimit *)
@@ -36,29 +32,21 @@ signature RUNTIME =
             val layout: t -> Layout.t
             val offset: t -> Bytes.t (* Field offset in struct GC_state. *)
             val setOffsets: {atomicState: Bytes.t,
-                             currentThread: Bytes.t,
                              curSourceSeqIndex: Bytes.t,
                              exnStack: Bytes.t,
-                             ffiArgs: Bytes.t,
                              frontier: Bytes.t,
-                             globalObjptrNonRoot: Bytes.t,
                              limit: Bytes.t,
                              limitPlusSlop: Bytes.t,
-                             maxFrameSize: Bytes.t,
                              signalIsPending: Bytes.t,
                              stackBottom: Bytes.t,
                              stackLimit: Bytes.t,
                              stackTop: Bytes.t} -> unit
             val setSizes: {atomicState: Bytes.t,
-                           currentThread: Bytes.t,
                            curSourceSeqIndex: Bytes.t,
                            exnStack: Bytes.t,
-                           ffiArgs: Bytes.t,
                            frontier: Bytes.t,
-                           globalObjptrNonRoot: Bytes.t,
                            limit: Bytes.t,
                            limitPlusSlop: Bytes.t,
-                           maxFrameSize: Bytes.t,
                            signalIsPending: Bytes.t,
                            stackBottom: Bytes.t,
                            stackLimit: Bytes.t,

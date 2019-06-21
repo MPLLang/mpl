@@ -16,9 +16,6 @@
 
 #include "export.h"
 
-/* A key whose value will be a unique integer per thread */
-extern C_Pthread_Key_t gcstate_key;
-
 #define ChunkName(n) Chunk ## n
 
 #define DeclareChunk(n)                         \

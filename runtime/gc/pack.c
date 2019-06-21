@@ -8,11 +8,11 @@
  */
 
 __attribute__((noreturn))
-void GC_pack (void) {
+void GC_pack (__attribute__((unused)) GC_state s) {
   DIE("GC_pack unsupported");
 }
 
 __attribute__((noreturn))
-void GC_unpack (void) {
+void GC_unpack (__attribute__((unused)) GC_state s) {
   DIE("GC_unpack unsupported");
 }
