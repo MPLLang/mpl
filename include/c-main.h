@@ -13,6 +13,12 @@
 #include "common-main.h"
 #include "c-common.h"
 
+PRIVATE C_Pthread_Key_t gcstate_key;
+
+PRIVATE GC_state MLton_gcState() {
+  return pthread_getspecific (gcstate_key);
+}
+
 static GC_frameIndex returnAddressToFrameIndex (GC_returnAddress ra) {
   return (GC_frameIndex)ra;
 }
@@ -23,25 +29,24 @@ static void MLtonGCCleanup(void *arg) {
 }
 
 #define MLtonCallFromC()                                                \
-static void MLton_callFromC (void* ffiArgs) {                           \
+static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
   uintptr_t nextBlock;                                                  \
-  GC_state s = pthread_getspecific (gcstate_key);                       \
-                                                                        \
+  GC_state s = MLton_gcState();                                         \
   if (DEBUG_CCODEGEN)                                                   \
     fprintf (stderr, "MLton_callFromC() starting\n");                   \
-  GC_setSavedThread (GC_getCurrentThread ());                           \
+  s->callFromCOpArgsResPtr = localOpArgsResPtr;                         \
+  GC_setSavedThread (s, GC_getCurrentThread (s));                       \
   s->atomicState += 3;                                                  \
-  s->ffiArgs = ffiArgs;                                                 \
   if (s->signalsInfo.signalIsPending)                                   \
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;                   \
   /* Switch to the C Handler thread. */                                 \
-  GC_switchToThread (s, GC_getCallFromCHandlerThread (), 0);            \
+  GC_switchToThread (s, GC_getCallFromCHandlerThread (s), 0);           \
   nextBlock = *(uintptr_t*)(s->stackTop - GC_RETURNADDRESS_SIZE);       \
   do {                                                                  \
     nextBlock = (*(nextChunks[nextBlock]))(s, s->stackTop, s->frontier, nextBlock); \
   } while (nextBlock != (uintptr_t)-1);                                 \
   s->atomicState += 1;                                                  \
-  GC_switchToThread (s, GC_getSavedThread (), 0);                       \
+  GC_switchToThread (s, GC_getSavedThread (s), 0);                      \
   s->atomicState -= 1;                                                  \
   if (0 == s->atomicState                                               \
       && s->signalsInfo.signalIsPending)                                \
@@ -86,21 +91,20 @@ void MLton_threadFunc (void* arg) {                                     \
     Trace0(EVENT_LAUNCH);                                               \
     Parallel_run ();                                                    \
   }                                                                     \
+  return 1;                                                             \
 }
 
-#define MLtonMain(al, mg, mfs, mmc, pk, ps, gnr, ml)                    \
-  /* Globals */                                                         \
-  C_Pthread_Key_t gcstate_key;                                          \
-                                                                        \
+#define MLtonMain(al, mg, mfs, mmc, pk, ps, ml)                         \
   MLtonThreadFunc(ml)                                                   \
                                                                         \
   PUBLIC int MLton_main (int argc, char* argv[]) {                      \
     int procNo;                                                         \
+    GC_state gcState;                                                   \
     pthread_t *threads;                                                 \
     {                                                                   \
       struct GC_state s;                                                \
       /* Initialize with a generic state to read in @MLtons, etc */     \
-      Initialize (s, al, mg, mfs, mmc, pk, ps, gnr);                    \
+      Initialize ((&s), al, mg, mfs, mmc, pk, ps);                      \
                                                                         \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
@@ -136,8 +140,9 @@ void MLton_threadFunc (void* arg) {                                     \
 #define MLtonLibrary(al, mg, mfs, mmc, pk, ps, mc, ml)                  \
 PUBLIC void LIB_OPEN(LIBNAME) (int argc, char* argv[]) {                \
   uintptr_t nextBlock;                                                  \
-  Initialize (al, mg, mfs, mmc, pk, ps);                                \
-  if (gcState.amOriginal) {                                             \
+  GC_state s = MLton_gcState();                                         \
+  Initialize (s, al, mg, mfs, mmc, pk, ps);                             \
+  if (s->amOriginal) {                                                  \
     real_Init();                                                        \
     nextBlock = ml;                                                     \
   } else {                                                              \
@@ -151,13 +156,12 @@ PUBLIC void LIB_OPEN(LIBNAME) (int argc, char* argv[]) {                \
 }                                                                       \
 PUBLIC void LIB_CLOSE(LIBNAME) () {                                     \
   uintptr_t nextBlock;                                                  \
-  uintptr_t nextBlock;                                                  \
-  GC_state s = &gcState;                                                \
+  GC_state s = MLton_gcState();                                         \
   nextBlock = *(uintptr_t*)(s->stackTop - GC_RETURNADDRESS_SIZE);       \
   do {                                                                  \
     nextBlock = (*(nextChunks[nextBlock]))(s, s->stackTop, s->frontier, nextBlock); \
   } while (nextBlock != (uintptr_t)-1);                                 \
-  GC_done(&gcState);                                                    \
+  GC_done(s);                                                           \
 }
 
 #endif /* #ifndef _C_MAIN_H */

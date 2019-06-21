@@ -163,6 +163,7 @@ fun hasCodegen (cg) =
    in
       case cg of
         CCodegen => true
+      | LLVMCodegen => true
       | _ => false
    end
 fun hasNativeCodegen () = false

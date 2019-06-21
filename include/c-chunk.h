@@ -10,7 +10,6 @@
 #ifndef _C_CHUNK_H_
 #define _C_CHUNK_H_
 
-#include <pthread.h>
 #include <stdio.h>
 /* `memcpy` is used by coercion `<ty>_castTo<ty>` functions (`basis/coerce.h`)
  * and by misaligned `<ty>_fetch`, `<ty>_store`, and `<ty>_move` functions
@@ -86,7 +85,6 @@
 
 #define C(ty, x) (*(ty*)(x))
 #define G(ty, i) (global##ty [i])
-#define GPNR(i) (((Pointer*)(GCState + GlobalObjptrNonRootOffset))[i])
 #define O(ty, b, o) (*(ty*)((b) + (o)))
 #define X(ty, b, i, s, o) (*(ty*)((b) + ((i) * (s)) + (o)))
 #define S(ty, i) (*(ty*)(StackTop + (i)))
@@ -203,7 +201,6 @@
 #ifndef MLTON_CODEGEN_STATIC_INLINE
 #define MLTON_CODEGEN_STATIC_INLINE static inline
 #endif
-#include "basis-ffi.h"
 #include "basis/coerce.h"
 #include "basis/cpointer.h"
 #include "basis/Real/Real-ops.h"

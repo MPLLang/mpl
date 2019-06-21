@@ -30,6 +30,7 @@ struct GC_state {
   int atMLtonsLength;
   uint32_t atomicState;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
+  pointer callFromCOpArgsResPtr; /* Pass op, args, and res from exported C call */
   struct GC_callStackState callStackState;
   bool canMinor; /* TRUE iff there is space for a minor gc. */
   struct GC_controls *controls;
@@ -38,20 +39,12 @@ struct GC_state {
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
   objptr wsQueueLock; /* The work-stealing queue lock for this processor */
-  /* RAM_NOTE: Is this the right type? */
-  pointer ffiArgs;
   struct GC_forwardState forwardState;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct GC_generationalMaps generationalMaps;
   pointer globalFrontier;
   pointer globalLimitPlusSlop;
-  /* RAM_NOTE: Not sure if this is used anymore... */
-  /*
-   * SPOONHOWER_NOTE: Currently only used to hold raise operands. At least, I
-   * think so
-   */
-  Pointer *globalObjptrNonRoot;
   /* Ordinary globals */
   objptr *globals;
   uint32_t globalsLength;
@@ -118,25 +111,27 @@ static void setGCStateCurrentHeap (GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE bool GC_getAmOriginal (void);
-PRIVATE void GC_setAmOriginal (bool b);
-PRIVATE void GC_setControlsMessages (bool b);
-PRIVATE void GC_setControlsSummary (bool b);
-PRIVATE void GC_setControlsRusageMeasureGC (bool b);
-PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
-PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (void);
-PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (void);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (void);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (void);
-PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (void);
-PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (void);
-PRIVATE void GC_setHashConsDuringGC (bool b);
-PRIVATE size_t GC_getLastMajorStatisticsBytesLive (void);
+PRIVATE bool GC_getAmOriginal (GC_state s);
+PRIVATE void GC_setAmOriginal (GC_state s, bool b);
+PRIVATE void GC_setControlsMessages (GC_state s, bool b);
+PRIVATE void GC_setControlsSummary (GC_state s, bool b);
+PRIVATE void GC_setControlsRusageMeasureGC (GC_state s, bool b);
+PRIVATE size_t GC_getMaxChunkPoolOccupancy ();
+PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (GC_state s);
+PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (GC_state s);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (GC_state s);
+PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (GC_state s);
+PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s);
+PRIVATE void GC_setHashConsDuringGC (GC_state s, bool b);
+PRIVATE size_t GC_getLastMajorStatisticsBytesLive (GC_state s);
 
-PRIVATE pointer GC_getCallFromCHandlerThread (void);
-PRIVATE void GC_setCallFromCHandlerThreads (pointer p);
-PRIVATE pointer GC_getCurrentThread (void);
-PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (void);
+PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
+PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);
+PRIVATE pointer GC_getCallFromCOpArgsResPtr (GC_state s);
+
+
+PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (GC_state s);
 /**
  * This function returns the current hierarchical heap
  *
@@ -146,22 +141,26 @@ PRIVATE void GC_setCurrentThreadUseHierarchicalHeap (void);
  *
  * @return pointer to the current hierarchical heap
  */
-PRIVATE pointer GC_getCurrentHierarchicalHeap (void);
-PRIVATE void GC_setCurrentHierarchicalHeap (pointer hhPointer);
-PRIVATE pointer GC_getSavedThread (void);
-PRIVATE void GC_setSavedThread (pointer p);
-PRIVATE void GC_setSignalHandlerThreads (pointer p);
+PRIVATE pointer GC_getCurrentHierarchicalHeap (GC_state s);
+PRIVATE void GC_setCurrentHierarchicalHeap (GC_state s, pointer hhPointer);
+
+PRIVATE pointer GC_getCurrentThread (GC_state s);
+PRIVATE pointer GC_getSavedThread (GC_state s);
+PRIVATE void GC_setSavedThread (GC_state s, pointer p);
+PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
-PRIVATE struct TLSObjects* GC_getTLSObjects(void);
+PRIVATE struct TLSObjects* GC_getTLSObjects(GC_state s);
 
-PRIVATE void GC_getGCRusageOfProc (int32_t p, struct rusage* rusage);
+PRIVATE void GC_getGCRusageOfProc (GC_state s, int32_t p, struct rusage* rusage);
 
-PRIVATE sigset_t* GC_getSignalsHandledAddr (void);
-PRIVATE sigset_t* GC_getSignalsPendingAddr (void);
-PRIVATE void GC_setGCSignalHandled (bool b);
-PRIVATE bool GC_getGCSignalPending (void);
-PRIVATE void GC_setGCSignalPending (bool b);
+PRIVATE sigset_t* GC_getSignalsHandledAddr (GC_state s);
+PRIVATE sigset_t* GC_getSignalsPendingAddr (GC_state s);
+PRIVATE void GC_setGCSignalHandled (GC_state s, bool b);
+PRIVATE bool GC_getGCSignalPending (GC_state s);
+PRIVATE void GC_setGCSignalPending (GC_state s, bool b);
+
+PRIVATE GC_state MLton_gcState ();
 
 #endif /* GC_STATE_H_ */

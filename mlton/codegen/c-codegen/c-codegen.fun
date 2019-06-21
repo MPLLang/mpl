@@ -198,7 +198,11 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | Word_orb _ => true
        | Word_quot _ => true
        | Word_rem _ => true
-       | Word_rndToReal _ => true
+       | Word_rndToReal _ =>
+            (* Real coercions depend on rounding mode and can't be
+             * inlined where gcc might constant-fold them.
+             *)
+            false
        | Word_rol _ => true
        | Word_ror _ => true
        | Word_rshift _ => true
@@ -218,10 +222,6 @@ fun declareProfileLabel (l, print) =
 
 fun declareGlobals (prefix: string, print) =
    let
-      (* gcState can't be static because stuff in mlton-lib.c refers to
-       * it.
-       *)
-      val _ = print (concat [prefix, "struct GC_state * gcState;\n"])
       val _ =
          List.foreach
          (CType.all, fn t =>
@@ -233,14 +233,6 @@ fun declareGlobals (prefix: string, print) =
                 then print (concat [prefix, s, " global", s, " [", C.int n, "];\n"])
                 else ()
           end)
-      val _ =
-         let
-            val n = Global.numberOfNonRoot ()
-         in
-            if n > 0
-               then print (concat [prefix, "Objptr globalObjptrNonRoot [", C.int n, "];\n"])
-               else ()
-         end
    in
       ()
    end
@@ -734,11 +726,8 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
              | Frontier => "Frontier"
              | GCState => "GCState"
              | Global g =>
-                  if Global.isRoot g
-                     then concat ["G",
-                                  C.args [Type.toC (Global.ty g),
-                                          Int.toString (Global.index g)]]
-                  else concat ["GPNR", C.args [Int.toString (Global.index g)]]
+                  concat ["G", C.args [Type.toC (Global.ty g),
+                                       Int.toString (Global.index g)]]
              | Label l => labelIndexAsString (l, {pretty = true})
              | Null => "NULL"
              | Offset {base, offset, ty} =>
@@ -1143,9 +1132,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
             fun outputOffsets () =
                List.foreach
                ([("ExnStackOffset", GCField.ExnStack),
-                 ("FFIArgsOffset", GCField.FFIArgs),
                  ("FrontierOffset", GCField.Frontier),
-                 ("GlobalObjptrNonRootOffset", GCField.GlobalObjptrNonRoot),
                  ("StackBottomOffset", GCField.StackBottom),
                  ("StackTopOffset", GCField.StackTop)],
                 fn (name, f) =>
@@ -1184,8 +1171,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
       val {print, done, ...} = outputC ()
       val _ =
          outputDeclarations
-         {additionalMainArgs = [C.int (Global.numberOfNonRoot ()),
-                                labelIndexAsString (#label main, {pretty = true})],
+         {additionalMainArgs = [labelIndexAsString (#label main, {pretty = true})],
           includes = ["c-main.h"],
           program = program,
           print = print,
