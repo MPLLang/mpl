@@ -40,10 +40,12 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
      * promoting the roots */
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
+    size_t beforeSize = 0;
     if (NULL != HM_HH_LEVEL(args->hh, i) &&
         NULL != HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i))) {
       rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i));
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
+      beforeSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
     }
 
     /* promote the roots, as indicated by the remembered downptrs */
@@ -78,6 +80,12 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       NULL,
       promoteIfPointingDownIntoLocalScope,
       args);
+
+    if (i < args->minLevel) {
+      size_t afterSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
+      assert(afterSize >= beforeSize);
+      HM_HH_LEVEL_OBP(args->hh, i) += (afterSize - beforeSize);
+    }
   }
 
   /* Finally, free the chunks that we used as temporary storage for bucketing */

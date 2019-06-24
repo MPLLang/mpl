@@ -171,6 +171,19 @@ void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
+  /* combine outstandingBytesPromoted */
+  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_OBP(parentHH, i) += HM_HH_LEVEL_OBP(hh, i);
+  }
+  for (uint32_t i = newShallowestPrivateLevel; i < oldShallowestPrivateLevel; i++) {
+    HM_HH_LEVEL_OBP(parentHH, i) = 0;
+  }
+
+  size_t outstandingBytesPromoted = 0;
+  for (uint32_t i = 0; i < newShallowestPrivateLevel; i++) {
+    outstandingBytesPromoted += HM_HH_LEVEL_OBP(parentHH, i);
+  }
+
   /* Add up the size of the immediate ancestors which are now unfrozen due to
    * this merge. We need this quantity to adjust the LCHS below. */
   Word64 unfrozenSize = 0;
@@ -184,7 +197,7 @@ void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
     childrenSize += HM_getChunkListSize(level);
   });
 
-  parentHH->locallyCollectibleSize = childrenSize + unfrozenSize;
+  parentHH->locallyCollectibleSize = outstandingBytesPromoted + childrenSize + unfrozenSize;
   parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
 
   if (!s->controls->oldHHGCPolicy &&
@@ -295,6 +308,9 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   }
   for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_HH_LEVEL_CAPACITY(hh, i) = 0;
+  }
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_OBP(hh, i) = 0;
   }
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;

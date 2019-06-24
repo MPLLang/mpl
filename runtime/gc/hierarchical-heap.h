@@ -17,6 +17,7 @@
 struct HM_HierarchicalHeap {
   HM_chunkList levels[HM_MAX_NUM_LEVELS];
   Word64 capacities[HM_MAX_NUM_LEVELS];
+  size_t outstandingBytesPromoted[HM_MAX_NUM_LEVELS];
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
@@ -49,6 +50,7 @@ struct HM_HierarchicalHeap {
 // l/r-value for ith level
 #define HM_HH_LEVEL(hh, i) ((hh)->levels[i])
 #define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->capacities[i])
+#define HM_HH_LEVEL_OBP(hh, i) ((hh)->outstandingBytesPromoted[i])
 
 /* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
 #define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \

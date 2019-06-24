@@ -402,6 +402,9 @@ void HM_HHC_collectLocal(void) {
    */
   /* update locally collectible size */
   hh->locallyCollectibleSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_HH_getShallowestPrivateLevel(s, hh), {
+    hh->locallyCollectibleSize += HM_HH_LEVEL_OBP(hh, i);
+  });
   FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getShallowestPrivateLevel(s, hh), hh->level+1, {
     hh->locallyCollectibleSize += HM_getChunkListSize(level);
   });
