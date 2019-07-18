@@ -1259,7 +1259,40 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                  Ref_cas NONE =>
                                     (case toRtype ty of
                                        NONE => none ()
-                                     | SOME rty => primApp (Prim.cas (Type.toCType rty)))
+                                     | SOME rty =>
+                                          let
+                                             val args' = varOps args
+                                             val theCAS =
+                                               PrimApp {dst = dst (),
+                                                        prim = Prim.cas (Type.toCType rty),
+                                                        args = args'}
+                                          in
+                                            if not (Type.isObjptr rty) then
+                                              add theCAS
+                                            else
+                                              let
+                                                val objOp = varOp (arg 0)
+                                                val srcOp = varOp (arg 2)
+                                                val fieldOp =
+                                                  Operand.Address
+                                                  (Operand.Offset {base = objOp,
+                                                                   offset = Bytes.zero, (* SAM_NOTE: IS THIS CORRECT? *)
+                                                                   ty = Operand.ty srcOp})
+                                                val wbArgs = Vector.new4 (GCState, objOp, fieldOp, srcOp)
+                                                val func = CFunction.writeBarrier
+                                                  {obj = Operand.ty objOp,
+                                                   dst = Operand.ty fieldOp,
+                                                   src = Operand.ty srcOp}
+                                              in
+                                                split
+                                                (Vector.new0 (), Kind.CReturn {func = func}, theCAS :: ss,
+                                                 fn l =>
+                                                 ([],
+                                                  Transfer.CCall {args = wbArgs,
+                                                                  func = func,
+                                                                  return = SOME l}))
+                                              end
+                                          end)
                                | Array_alloc {raw} =>
                                     let
                                        val allocOpt = fn () =>

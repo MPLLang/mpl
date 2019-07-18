@@ -678,6 +678,15 @@ fun checkPrimApp {args, prim, result} =
        | Word_sub s => wordBinary s
        | Word_subCheck (s, _) => wordBinary s
        | Word_xorb s => wordBinary s
+       | Ref_cas (SOME cty) =>
+           let
+             fun isCty t = CType.equals (Type.toCType t, cty)
+           in
+             done ([objptr, isCty, isCty],
+               case result of
+                 NONE => NONE
+               | _ => SOME isCty)
+           end
        | _ => Error.bug (concat ["RepType.checkPrimApp got strange prim: ",
                                  Prim.toString prim])
    end
