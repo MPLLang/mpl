@@ -109,23 +109,6 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "MLton_halt"}
 
-      val ffiGetArgs = fn () =>
-         T {args = Vector.new1 (Type.gcState ()),
-            convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
-                                 ensuresBytesFree = NONE,
-                                 mayGC = true,
-                                 maySwitchThreadsFrom = false,
-                                 maySwitchThreadsTo = false,
-                                 modifiesFrontier = false,
-                                 readsStackTop = false,
-                                 writesStackTop = false},
-	    (* RAM_NOTE: Is this correct return type? *)
-            prototype = (Vector.new1 CType.gcState, SOME CType.cpointer),
-            return = Type.cpointer (),
-            symbolScope = Private,
-            target = Direct "FFI_getArgs"}
-
       fun gcSequenceAllocate {return} =
          T {args = Vector.new4 (Type.gcState (),
                                 Type.csize (),
@@ -1291,12 +1274,6 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | CPointer_setReal _ => cpointerSet ()
                                | CPointer_setWord _ => cpointerSet ()
                                | FFI f => simpleCCall f
-                               (* SPOONOWER_NOTE: PERF this not a very
-                                  efficient way of getting this value
-                                  (since we know its offset *)
-                               | FFI_getArgs =>
-                                    simpleCCallWithGCState
-                                    (CFunction.ffiGetArgs ())
                                | GC_collect =>
                                     ccall
                                     {args = (Vector.new3
@@ -1305,6 +1282,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                               Operand.bool true)),
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
+                               | GC_state => move GCState
                                | IntInf_add =>
                                     simpleCCallWithGCState
                                     (CFunction.intInfBinary IntInf_add)

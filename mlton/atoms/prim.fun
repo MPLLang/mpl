@@ -63,11 +63,11 @@ datatype 'a t =
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
  | FFI of 'a CFunction.t (* to rssa *)
- | FFI_getArgs  (* RAM_NOTE: Is this right? *)
  | FFI_Symbol of {name: string,
                   cty: CType.t option,
                   symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* to rssa (as runtime C fn) *)
+ | GC_state (* to rssa (as operand) *)
  | IntInf_add (* to rssa (as runtime C fn) *)
  | IntInf_andb (* to rssa (as runtime C fn) *)
  | IntInf_arshift (* to rssa (as runtime C fn) *)
@@ -255,9 +255,9 @@ fun toString (n: 'a t): string =
        | Exn_name => "Exn_name"
        | Exn_setExtendExtra => "Exn_setExtendExtra"
        | FFI f => (CFunction.Target.toString o CFunction.target) f
-       | FFI_getArgs => "FFI_getArgs"
        | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
+       | GC_state => "GC_state"
        | IntInf_add => "IntInf_add"
        | IntInf_andb => "IntInf_andb"
        | IntInf_arshift => "IntInf_arshift"
@@ -416,9 +416,9 @@ val equals: 'a t * 'a t -> bool =
     | (Exn_name, Exn_name) => true
     | (Exn_setExtendExtra, Exn_setExtendExtra) => true
     | (FFI f, FFI f') => CFunction.equals (f, f')
-    | (FFI_getArgs, FFI_getArgs) => true
     | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
+    | (GC_state, GC_state) => true
     | (IntInf_add, IntInf_add) => true
     | (IntInf_andb, IntInf_andb) => true
     | (IntInf_arshift, IntInf_arshift) => true
@@ -594,10 +594,10 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Exn_name => Exn_name
     | Exn_setExtendExtra => Exn_setExtendExtra
     | FFI func => FFI (CFunction.map (func, f))
-    | FFI_getArgs => FFI_getArgs
     | FFI_Symbol {name, cty, symbolScope} =>
         FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
+    | GC_state => GC_state
     | IntInf_add => IntInf_add
     | IntInf_andb => IntInf_andb
     | IntInf_arshift => IntInf_arshift
@@ -849,9 +849,9 @@ val kind: 'a t -> Kind.t =
                                               CFunction.Kind.Impure => SideEffect
                                             | CFunction.Kind.Pure => Functional
                                             | CFunction.Kind.Runtime _ => SideEffect)
-       | FFI_getArgs => SideEffect (* SPOONOWER_NOTE: PERF perhaps conservative? *)
        | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
+       | GC_state => DependsOnState
        | IntInf_add => Functional
        | IntInf_andb => Functional
        | IntInf_arshift => Functional
@@ -1054,8 +1054,8 @@ in
        Exn_extra,
        Exn_name,
        Exn_setExtendExtra,
-       FFI_getArgs,
        GC_collect,
+       GC_state,
        IntInf_add,
        IntInf_andb,
        IntInf_arshift,
@@ -1378,9 +1378,9 @@ fun 'a checkApp (prim: 'a t,
        | Exn_setExtendExtra => oneTarg (fn t => (oneArg (arrow (t, t)), unit))
        | FFI f =>
              noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
-       | FFI_getArgs => noTargs (fn () => (noArgs, cpointer))
        | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
+       | GC_state => noTargs (fn () => (noArgs, cpointer))
        | IntInf_add => intInfBinary ()
        | IntInf_andb => intInfBinary ()
        | IntInf_arshift => intInfShift ()

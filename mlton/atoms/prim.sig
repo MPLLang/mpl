@@ -58,8 +58,8 @@ signature PRIM =
              | FFI_Symbol of {name: string,
                               cty: CType.t option,
                               symbolScope: CFunction.SymbolScope.t } (* codegen *)
-             | FFI_getArgs (* RAM_WARNING: Is this correct? *)
              | GC_collect (* to rssa (as runtime C fn) *)
+             | GC_state (* to rssa (as operand) *)
              | IntInf_add (* to rssa (as runtime C fn) *)
              | IntInf_andb (* to rssa (as runtime C fn) *)
              | IntInf_arshift (* to rssa (as runtime C fn) *)

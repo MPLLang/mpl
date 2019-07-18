@@ -172,15 +172,11 @@ fun setupRuntimeConstants() : unit =
             Runtime.GCField.setOffsets
             {
              atomicState = get "atomicState_Offset",
-             currentThread = get "currentThread_Offset",
              curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Offset",
              exnStack = get "exnStack_Offset",
-             ffiArgs = get "ffiArgs_Offset",
              frontier = get "frontier_Offset",
-             globalObjptrNonRoot = get "globalObjptrNonRoot_Offset",
              limit = get "limit_Offset",
              limitPlusSlop = get "limitPlusSlop_Offset",
-             maxFrameSize = get "maxFrameSize_Offset",
              signalIsPending = get "signalsInfo.signalIsPending_Offset",
              stackBottom = get "stackBottom_Offset",
              stackLimit = get "stackLimit_Offset",
@@ -189,15 +185,11 @@ fun setupRuntimeConstants() : unit =
             Runtime.GCField.setSizes
             {
              atomicState = get "atomicState_Size",
-             currentThread = get "currentThread_Size",
              curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Size",
              exnStack = get "exnStack_Size",
-             ffiArgs = get "ffiArgs_Size",
              frontier = get "frontier_Size",
-             globalObjptrNonRoot = get "globalObjptrNonRoot_Size",
              limit = get "limit_Size",
              limitPlusSlop = get "limitPlusSlop_Size",
-             maxFrameSize = get "maxFrameSize_Size",
              signalIsPending = get "signalsInfo.signalIsPending_Size",
              stackBottom = get "stackBottom_Size",
              stackLimit = get "stackLimit_Size",

@@ -413,7 +413,6 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
-  s->ffiArgs = NULL;
 
   s->lastMajorStatistics = newLastMajorStatistics();
 

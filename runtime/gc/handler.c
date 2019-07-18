@@ -1,4 +1,5 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -15,9 +16,8 @@
  * Don't make it inline, because it is also called in basis/Thread.c,
  * and when compiling with COMPILE_FAST, they may appear out of order.
  */
-void GC_startSignalHandler (void) {
+void GC_startSignalHandler (GC_state s) {
   /* Switch to the signal handler thread. */
-  GC_state s = pthread_getspecific (gcstate_key);
   if (DEBUG_SIGNALS) {
     fprintf (stderr, "GC_startSignalHandler [%d]\n",
              Proc_processorNumber (s));
@@ -37,9 +37,7 @@ void GC_startSignalHandler (void) {
   s->atomicState = 2;
 }
 
-void GC_finishSignalHandler (void) {
-
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_finishSignalHandler (GC_state s) {
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_finishSignalHandler () [%d]\n",
              Proc_processorNumber (s));
@@ -50,7 +48,7 @@ void GC_finishSignalHandler (void) {
 void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
   if (s->atomicState == 1
       and s->signalsInfo.signalIsPending) {
-    GC_startSignalHandler ();
+    GC_startSignalHandler (s);
     switchToThread (s, s->signalHandlerThread);
   }
 }
@@ -62,7 +60,7 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
  * by Posix_Signal_handle (see Posix/Signal/Signal.c).
  */
 void GC_handler (int signum) {
-  GC_state s = pthread_getspecific (gcstate_key);
+  GC_state s = MLton_gcState ();
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_handler signum = %d [%d]\n", signum,
              Proc_processorNumber (s));

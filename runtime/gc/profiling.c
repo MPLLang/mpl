@@ -228,8 +228,7 @@ GC_profileData profileMalloc (GC_state s) {
   return p;
 }
 
-GC_profileData GC_profileMalloc (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+GC_profileData GC_profileMalloc (GC_state s) {
   return profileMalloc (s);
 }
 
@@ -242,8 +241,7 @@ void profileFree (GC_state s, GC_profileData p) {
   free (p);
 }
 
-void GC_profileFree (GC_profileData p) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_profileFree (GC_state s, GC_profileData p) {
   profileFree (s, p);
 }
 
@@ -311,8 +309,7 @@ void profileWrite (GC_state s, GC_profileData p, const char *fileName) {
   fclose_safe (f);
 }
 
-void GC_profileWrite (GC_profileData p, NullString8_t fileName) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_profileWrite (GC_state s, GC_profileData p, NullString8_t fileName) {
   profileWrite (s, p, (const char*)fileName);
 }
 
@@ -491,10 +488,9 @@ void initProfiling (GC_state s) {
   }
 }
 
-void GC_profileDone (void) {
+void GC_profileDone (GC_state s) {
   GC_profileData p;
   GC_profileMasterIndex profileMasterIndex;
-  GC_state s = pthread_getspecific (gcstate_key);
 
   if (DEBUG_PROFILE)
     fprintf (stderr, "GC_profileDone () [%d]\n",
@@ -522,11 +518,9 @@ void GC_profileDone (void) {
 }
 
 
-GC_profileData GC_getProfileCurrent (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+GC_profileData GC_getProfileCurrent (GC_state s) {
   return s->profiling.data;
 }
-void GC_setProfileCurrent (GC_profileData p) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void GC_setProfileCurrent (GC_state s, GC_profileData p) {
   s->profiling.data = p;
 }
