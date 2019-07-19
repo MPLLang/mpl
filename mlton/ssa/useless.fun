@@ -566,7 +566,7 @@ fun transform (program: Program.t): Program.t =
                    | Array_update _ => update ()
                    (* SAM_NOTE: unification is certainly "correct" but we should
                     * investigate whether coercions are possible. *)
-                   | Array_cas _ => (unify (arg 1, arg 2)
+                   | Array_cas _ => (arg 1 dependsOn (dearray (arg 0))
                                      ; unify (arg 2, arg 3)
                                      ; unify (arg 2, dearray (arg 0))
                                      ; unify (result, dearray (arg 0)))

@@ -680,22 +680,28 @@ fun checkPrimApp {args, prim, result} =
        | Word_xorb s => wordBinary s
        | Ref_cas (SOME cty) =>
            let
-             fun isCty t = CType.equals (Type.toCType t, cty)
+             val ty = Vector.sub (args, 1)
+             fun isTy t = equals (t, ty)
            in
-             done ([objptr, isCty, isCty],
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isTy, isTy],
                case result of
                  NONE => NONE
-               | _ => SOME isCty)
+               | _ => SOME isTy)
            end
        | Array_cas (SOME cty) =>
            let
-             fun isSeqIndex t = CType.equals (Type.toCType t, CType.seqIndex ())
-             fun isCty t = CType.equals (Type.toCType t, cty)
+             fun isSeqIndex t = Type.equals (t, Type.seqIndex ())
+             val ty = Vector.sub (args, 2)
+             fun isTy t = equals (t, ty)
            in
-             done ([objptr, isSeqIndex, isCty, isCty],
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isSeqIndex, isTy, isTy],
                case result of
                  NONE => NONE
-               | _ => SOME isCty)
+               | _ => SOME isTy)
            end
        | _ => Error.bug (concat ["RepType.checkPrimApp got strange prim: ",
                                  Prim.toString prim])
