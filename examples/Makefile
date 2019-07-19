@@ -5,6 +5,12 @@ FLAGS=
 
 .PHONY: tab tab.dbg fib fib.dbg fib.trc trace clean
 
+cas-wb-check: cas-wb-check.sml cas-wb-check.mlb
+	$(MLTON) $(FLAGS) -output cas-wb-check cas-wb-check.mlb
+
+cas-wb-check.dbg: cas-wb-check.sml cas-wb-check.mlb
+	$(MLTON) $(FLAGS) $(DBG) -output cas-wb-check.dbg cas-wb-check.mlb
+
 tab: tab.sml tab.mlb
 	$(MLTON) $(FLAGS) -output tab tab.mlb
 

@@ -675,6 +675,31 @@ fun checkPrimApp {args, prim, result} =
        | Word_sub s => wordBinary s
        | Word_subCheckP (s, _) => wordBinaryP s
        | Word_xorb s => wordBinary s
+       | Ref_cas (SOME cty) =>
+           let
+             val ty = Vector.sub (args, 1)
+             fun isTy t = equals (t, ty)
+           in
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isTy, isTy],
+               case result of
+                 NONE => NONE
+               | _ => SOME isTy)
+           end
+       | Array_cas (SOME cty) =>
+           let
+             fun isSeqIndex t = Type.equals (t, Type.seqIndex ())
+             val ty = Vector.sub (args, 2)
+             fun isTy t = equals (t, ty)
+           in
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isSeqIndex, isTy, isTy],
+               case result of
+                 NONE => NONE
+               | _ => SOME isTy)
+           end
        | _ => Error.bug (concat ["RepType.checkPrimApp got strange prim: ",
                                  Prim.toString prim])
    end

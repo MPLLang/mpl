@@ -677,6 +677,12 @@ fun transform (program: Program.t): Program.t =
                          Useful.makeUseful (arrayUseful (arg 0)))
                    (* SAM_NOTE: can just ignore the writeBarrier here? *)
                    | Array_update _ => update ()
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Array_cas _ => (arg 1 dependsOn (dearray (arg 0))
+                                     ; unify (arg 2, arg 3)
+                                     ; unify (arg 2, dearray (arg 0))
+                                     ; unify (result, dearray (arg 0)))
                    | FFI _ =>
                         (Vector.foreach (args, deepMakeUseful);
                          deepMakeUseful result)
@@ -704,6 +710,11 @@ fun transform (program: Program.t): Program.t =
                    | Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
                    | Ref_deref => return (deref (arg 0))
                    | Ref_ref => coerce {from = arg 0, to = deref result}
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Ref_cas _ => (unify (arg 1, arg 2)
+                                   ; unify (arg 1, deref (arg 0))
+                                   ; unify (result, deref (arg 0)))
                    | Vector_length => return (vectorLength (arg 0))
                    | Vector_sub => (arg 1 dependsOn result
                                     ; return (devector (arg 0)))
@@ -1036,6 +1047,12 @@ fun transform (program: Program.t): Program.t =
                                     | Ref_assign _ =>
                                          Value.isUseful
                                          (Value.deref (value (arg 0)))
+                                    | Ref_cas _ =>
+                                         Value.isUseful
+                                         (Value.deref (value (arg 0)))
+                                    | Array_cas _ =>
+                                         Value.isUseful
+                                         (Value.dearray (value (arg 0)))
                                     | WordArray_updateWord _ => array ()
                                     | _ => true
                                 end

@@ -210,6 +210,28 @@
 /*                 References                        */
 /* ------------------------------------------------- */
 
+#define RefW8_cas(r, x, y) __sync_val_compare_and_swap((Word8*)(r), (x), (y))
+#define RefW16_cas(r, x, y) __sync_val_compare_and_swap((Word16*)(r), (x), (y))
+#define RefW32_cas(r, x, y) __sync_val_compare_and_swap((Word32*)(r), (x), (y))
+#define RefW64_cas(r, x, y) __sync_val_compare_and_swap((Word64*)(r), (x), (y))
+
+#define RefR32_cas(r, x, y) __sync_val_compare_and_swap((Real32*)(r), (x), (y))
+#define RefR64_cas(r, x, y) __sync_val_compare_and_swap((Real64*)(r), (x), (y))
+
+#define RefP_cas(r, x, y) __sync_val_compare_and_swap((Objptr*)(r), (x), (y))
+#define RefQ_cas(r, x, y) __sync_val_compare_and_swap((CPointer*)(r), (x), (y))
+
+#define ArrayW8_cas(a, i, x, y) __sync_val_compare_and_swap(((Word8*)(a)) + (i), (x), (y))
+#define ArrayW16_cas(a, i, x, y) __sync_val_compare_and_swap(((Word16*)(a)) + (i), (x), (y))
+#define ArrayW32_cas(a, i, x, y) __sync_val_compare_and_swap(((Word32*)(a)) + (i), (x), (y))
+#define ArrayW64_cas(a, i, x, y) __sync_val_compare_and_swap(((Word64*)(a)) + (i), (x), (y))
+
+#define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
+#define ArrayR64_cas(a, i, x, y) __sync_val_compare_and_swap(((Real64*)(a)) + (i), (x), (y))
+
+#define ArrayP_cas(a, i, x, y) __sync_val_compare_and_swap(((Objptr*)(a)) + (i), (x), (y))
+#define ArrayQ_cas(a, i, x, y) __sync_val_compare_and_swap(((CPointer*)(a)) + (i), (x), (y))
+
 extern void Assignable_writeBarrier(CPointer, Objptr, Objptr*, Objptr);
 
 static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {

@@ -19,6 +19,7 @@ signature REP_TYPE_STRUCTS =
       structure WordX: WORD_X
       structure WordXVector: WORD_X_VECTOR
       sharing CFunction = Prim.CFunction
+      sharing CType = Prim.CType
       sharing RealSize = Prim.RealSize
       sharing WordSize = Prim.WordSize = WordX.WordSize
       sharing WordX = WordXVector.WordX
