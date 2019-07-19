@@ -196,39 +196,3 @@ Int32 Parallel_arrayFetchAndAdd32 (Pointer p, GC_arrayLength i, Int32 v) {
 Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_arrayLength i, Int64 v) {
   return __sync_fetch_and_add (((Int64*)p)+i, v);
 }
-
-// compareAndSwap implementations
-
-Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
-  return __sync_val_compare_and_swap ((Int8 *)p, old, new);
-}
-
-Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new) {
-  return __sync_val_compare_and_swap ((Int16 *)p, old, new);
-}
-
-Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new) {
-  return __sync_val_compare_and_swap ((Int32 *)p, old, new);
-}
-
-Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
-  return __sync_val_compare_and_swap ((Int64 *)p, old, new);
-}
-
-// arrayCompareAndSwap implementations
-
-Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_arrayLength i, Int8 old, Int8 new) {
-  return __sync_val_compare_and_swap (((Int8*)p)+i, old, new);
-}
-
-Int16 Parallel_arrayCompareAndSwap16 (Pointer p, GC_arrayLength i, Int16 old, Int16 new) {
-  return __sync_val_compare_and_swap (((Int16*)p)+i, old, new);
-}
-
-Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_arrayLength i, Int32 old, Int32 new) {
-  return __sync_val_compare_and_swap (((Int32*)p)+i, old, new);
-}
-
-Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_arrayLength i, Int64 old, Int64 new) {
-  return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
-}
