@@ -687,6 +687,16 @@ fun checkPrimApp {args, prim, result} =
                  NONE => NONE
                | _ => SOME isCty)
            end
+       | Array_cas (SOME cty) =>
+           let
+             fun isSeqIndex t = CType.equals (Type.toCType t, CType.seqIndex ())
+             fun isCty t = CType.equals (Type.toCType t, cty)
+           in
+             done ([objptr, isSeqIndex, isCty, isCty],
+               case result of
+                 NONE => NONE
+               | _ => SOME isCty)
+           end
        | _ => Error.bug (concat ["RepType.checkPrimApp got strange prim: ",
                                  Prim.toString prim])
    end

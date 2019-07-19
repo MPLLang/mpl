@@ -564,6 +564,12 @@ fun transform (program: Program.t): Program.t =
                         ()
                    (* SAM_NOTE: can just ignore the writeBarrier here? *)
                    | Array_update _ => update ()
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Array_cas _ => (unify (arg 1, arg 2)
+                                     ; unify (arg 2, arg 3)
+                                     ; unify (arg 2, dearray (arg 0))
+                                     ; unify (result, dearray (arg 0)))
                    | FFI _ =>
                         (Vector.foreach (args, deepMakeUseful);
                          deepMakeUseful result)

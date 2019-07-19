@@ -413,6 +413,10 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
          if n = 3
             then (arg 0, arg 1, arg 2)
          else Error.bug "AbstractValue.primApply.threeArgs"
+      fun fourArgs () =
+         if n = 4
+            then (arg 0, arg 1, arg 2, arg 3)
+         else Error.bug "AbstractValue.primApply.fourArgs"
       fun fiveArgs () =
          if n = 5
             then (arg 0, arg 1, arg 2, arg 3, arg 4)
@@ -473,6 +477,15 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                  | Type _ => ()
                  | _ => typeError ())
                ; result ()
+            end
+       | Array_cas _ =>
+            let
+              val (a, _, x, y) = fourArgs ()
+            in
+              (case dest a of
+                 Array v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
             end
        | MLton_deserialize => serialValue resultTy
        | MLton_serialize =>

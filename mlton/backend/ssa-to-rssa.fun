@@ -1293,6 +1293,53 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                   return = SOME l}))
                                               end
                                           end)
+                               | Array_cas NONE =>
+                                    (case toRtype ty of
+                                       NONE => none ()
+                                     | SOME rty =>
+                                          let
+                                             val args' = varOps args
+                                             val theCAS =
+                                               PrimApp {dst = dst (),
+                                                        prim = Prim.arrayCas (Type.toCType rty),
+                                                        args = args'}
+                                          in
+                                            if not (Type.isObjptr rty) then
+                                              add theCAS
+                                            else
+                                              let
+                                                val objOp = varOp (arg 0)
+                                                val idxOp = varOp (arg 1)
+                                                val srcOp = varOp (arg 3)
+                                                val sc =
+                                                  case Scale.fromBytes (Bits.toBytes (Type.width rty)) of
+                                                    SOME sc => sc
+                                                  | NONE => Error.bug (concat ["SsaToRssa.translateStatementsTransfer: ",
+                                                                               "PrimApp Array_cas: ",
+                                                                               "no valid scale for element width ",
+                                                                               Bytes.toString (Bits.toBytes (Type.width rty))])
+                                                val fieldOp =
+                                                  Operand.Address
+                                                  (Operand.ArrayOffset {base = objOp,
+                                                                        index = idxOp,
+                                                                        offset = Bytes.zero, (* SAM_NOTE: IS THIS CORRECT? *)
+                                                                        scale = sc,
+                                                                        ty = Operand.ty srcOp})
+                                                val wbArgs = Vector.new4 (GCState, objOp, fieldOp, srcOp)
+                                                val func = CFunction.writeBarrier
+                                                  {obj = Operand.ty objOp,
+                                                   dst = Operand.ty fieldOp,
+                                                   src = Operand.ty srcOp}
+                                              in
+                                                split
+                                                (Vector.new0 (), Kind.CReturn {func = func}, theCAS :: ss,
+                                                 fn l =>
+                                                 ([],
+                                                  Transfer.CCall {args = wbArgs,
+                                                                  func = func,
+                                                                  return = SOME l}))
+                                              end
+                                          end)
                                | Array_alloc {raw} =>
                                     let
                                        val allocOpt = fn () =>

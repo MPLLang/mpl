@@ -36,6 +36,7 @@ signature PRIM =
              | Array_uninit (* to rssa *)
              | Array_uninitIsNop (* to rssa *)
              | Array_update of {writeBarrier : bool} (* to ssa2 *)
+             | Array_cas of CType.t option (* codegen *)
              | CPointer_add (* codegen *)
              | CPointer_diff (* codegen *)
              | CPointer_equal (* codegen *)
@@ -228,6 +229,7 @@ signature PRIM =
       val bogus: 'a t
       val bug: 'a t
       val cas : CType.t -> 'a t
+      val arrayCas : CType.t -> 'a t
       val checkApp: 'a t * {args: 'a vector,
                             result: 'a,
                             targs: 'a vector,

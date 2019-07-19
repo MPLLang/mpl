@@ -760,6 +760,16 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                     ; Value.unify (arg 2, c)
                     ; c
                  end
+             | Array_cas _ =>
+                 let
+                    (* SAM_NOTE: what does "offset" mean in this context? *)
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 2, c)
+                    ; Value.unify (arg 3, c)
+                    ; c
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()

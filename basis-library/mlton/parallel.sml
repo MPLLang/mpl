@@ -55,7 +55,7 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
         (* ======================== arrayCompareAndSwap ==================== *)
 
-        local
+        (* local
            structure I =
               Int_ChooseInt
               (type 'a t = 'a array * SeqIndex.int * 'a * 'a -> 'a
@@ -67,7 +67,10 @@ structure MLtonParallel:> MLTON_PARALLEL =
         in
            fun arrayCompareAndSwap (xs, i) (old, new) =
               I.f (xs, SeqIndex.fromInt i, old, new)
-        end
+        end *)
+
+        fun arrayCompareAndSwap (arr, i) (old, new) =
+          Prim.arrayCompareAndSwap (arr, SeqIndex.fromInt i, old, new)
 
         (* ========================= arrayFetchAndAdd ========================= *)
 

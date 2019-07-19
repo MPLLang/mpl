@@ -209,6 +209,7 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | Ref_assign _ => true
        | Ref_deref => true
        | Ref_cas _ => true
+       | Array_cas _ => true
        | Word_add _ => true
        | Word_addCheck _ => true
        | Word_andb _ => true

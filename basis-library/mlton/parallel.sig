@@ -59,7 +59,7 @@ signature MLTON_PARALLEL =
          * of (old, new) at xs[i], returning the previous value stored
          * at xs[i]. This implementation does not check bounds on i.
          *)
-        val arrayCompareAndSwap : int array * int -> int * int -> int
+        val arrayCompareAndSwap : 'a array * int -> 'a * 'a -> 'a
 
         (**
          * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
@@ -110,7 +110,7 @@ signature MLTON_PARALLEL =
      * of (old, new) at xs[i], returning the previous value stored at xs[i].
      * If i is out of bounds, it raises Subscript.
      *)
-    val arrayCompareAndSwap : int array * int -> int * int -> int
+    val arrayCompareAndSwap : 'a array * int -> 'a * 'a -> 'a
 
     (**
      * `fetchAndAdd r d` atomically does `r := !r + d` and returns the value of

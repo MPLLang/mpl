@@ -44,6 +44,7 @@ datatype 'a t =
  | Array_uninit (* to rssa *)
  | Array_uninitIsNop (* to rssa *)
  | Array_update of {writeBarrier : bool} (* to ssa2 *)
+ | Array_cas of CType.t option (* codegen *)
  | CPointer_add (* codegen *)
  | CPointer_diff (* codegen *)
  | CPointer_equal (* codegen *)
@@ -237,6 +238,8 @@ fun toString (n: 'a t): string =
        | Array_uninitIsNop => "Array_uninitIsNop"
        | Array_update {writeBarrier=true} => "Array_update"
        | Array_update {writeBarrier=false} => "Array_update_noWriteBarrier"
+       | Array_cas NONE => "Array_cas"
+       | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | CPointer_add => "CPointer_add"
        | CPointer_diff => "CPointer_diff"
        | CPointer_equal => "CPointer_equal"
@@ -399,6 +402,8 @@ val equals: 'a t * 'a t -> bool =
     | (Array_uninit, Array_uninit) => true
     | (Array_uninitIsNop, Array_uninitIsNop) => true
     | (Array_update wb1, Array_update wb2) => wb1 = wb2
+    | (Array_cas NONE, Array_cas NONE) => true
+    | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (CPointer_add, CPointer_add) => true
     | (CPointer_diff, CPointer_diff) => true
     | (CPointer_equal, CPointer_equal) => true
@@ -578,6 +583,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_uninit => Array_uninit
     | Array_uninitIsNop => Array_uninitIsNop
     | Array_update wb => Array_update wb
+    | Array_cas cty => Array_cas cty
     | CPointer_add => CPointer_add
     | CPointer_diff => CPointer_diff
     | CPointer_equal => CPointer_equal
@@ -723,6 +729,7 @@ val assign = Ref_assign {writeBarrier=true}
 val bogus = MLton_bogus
 val bug = MLton_bug
 fun cas ctype = Ref_cas (SOME ctype)
+fun arrayCas ctype = Array_cas (SOME ctype)
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
@@ -837,6 +844,7 @@ val kind: 'a t -> Kind.t =
        | Array_uninit => SideEffect
        | Array_uninitIsNop => Functional
        | Array_update _ => SideEffect
+       | Array_cas _ => SideEffect
        | CPointer_add => Functional
        | CPointer_diff => Functional
        | CPointer_equal => Functional
@@ -1051,6 +1059,7 @@ in
        (* SAM_NOTE: do I need to list both here? *)
        Array_update {writeBarrier=true},
        Array_update {writeBarrier=false},
+       Array_cas NONE,
        CPointer_add,
        CPointer_diff,
        CPointer_equal,
@@ -1126,6 +1135,7 @@ in
        Word8Vector_toString,
        World_save]
       @ List.map (CType.all, fn ctype => Ref_cas (SOME ctype))
+      @ List.map (CType.all, fn ctype => Array_cas (SOME ctype))
       @ List.concat [List.concatMap (RealSize.all, reals),
                      List.concatMap (WordSize.prims, words)]
       @ let
@@ -1240,6 +1250,12 @@ fun 'a checkApp (prim: 'a t,
          andalso equals (arg0', arg 0)
          andalso equals (arg1', arg 1)
          andalso equals (arg2', arg 2)
+      fun fourArgs (arg0', arg1', arg2', arg3') () =
+         4 = Vector.length args
+         andalso equals (arg0', arg 0)
+         andalso equals (arg1', arg 1)
+         andalso equals (arg2', arg 2)
+         andalso equals (arg3', arg 3)
       fun fiveArgs (arg0', arg1', arg2', arg3', arg4') () =
          5 = Vector.length args
          andalso equals (arg0', arg 0)
@@ -1323,6 +1339,8 @@ fun 'a checkApp (prim: 'a t,
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
+       | Array_cas _ =>
+            oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
        | CPointer_add =>
             noTargs (fn () => (twoArgs (cpointer, cptrdiff), cpointer))
        | CPointer_diff =>
@@ -1519,6 +1537,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_uninitIsNop => one (deArray (arg 0))
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ => one (deArray (arg 0))
+       | Array_cas _ => one (deArray (arg 0))
        | CPointer_getObjptr => one result
        | CPointer_setObjptr => one (arg 2)
        | Exn_extra => one result
@@ -2215,7 +2234,6 @@ fun ('a, 'b) layoutApp (p: 'a t,
        | Ref_assign _ => two ":="
        | Ref_deref => one "!"
        | Ref_ref => one "ref"
-       | Ref_cas _ => one "cas"
        | Vector_length => one "length"
        | Word_add _ => two "+"
        | Word_addCheck _ => two "+"

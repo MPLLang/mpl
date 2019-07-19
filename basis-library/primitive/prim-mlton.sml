@@ -174,6 +174,9 @@ structure Parallel =
 
       val compareAndSwap =
         _prim "Ref_cas": 'a ref * 'a * 'a -> 'a;
+
+      val arrayCompareAndSwap =
+        _prim "Array_cas": 'a array * SeqIndex.int * 'a * 'a -> 'a;
    end
 
 structure Platform =
