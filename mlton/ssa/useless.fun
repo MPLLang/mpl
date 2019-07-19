@@ -920,6 +920,12 @@ fun transform (program: Program.t): Program.t =
                                     | Ref_assign _ =>
                                          Value.isUseful
                                          (Value.deref (value (arg 0)))
+                                    | Ref_cas _ =>
+                                         Value.isUseful
+                                         (Value.deref (value (arg 0)))
+                                    | Array_cas _ =>
+                                         Value.isUseful
+                                         (Value.dearray (value (arg 0)))
                                     | WordArray_updateWord _ => array ()
                                     | _ => true
                                 end
