@@ -674,20 +674,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                          ("con", Option.layout Con.layout con)],
           Value.layout)
          object
-      val deRef1 : Value.t -> Value.t =
-        fn v =>
-        case v of
-          Value.Ground t =>
-            (case Type.deRef1Opt t of
-               NONE => Error.bug "DeepFlatten.primApp: deRef1"
-             | SOME t => typeValue t)
-        | Value.Object e =>
-            (case Equatable.value e of
-               {args, con = Tuple, ...} =>
-                 if Prod.length args = 1 andalso Prod.allAreMutable args
-                 then Prod.elt (args, 0)
-                 else Error.bug "DeepFlatten.primApp: deRef1"
-             | _ => Error.bug "DeepFlatten.primApp: deRef1")
       val deWeak : Value.t -> Value.t =
          fn v =>
          case v of
