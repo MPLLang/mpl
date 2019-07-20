@@ -35,6 +35,7 @@ structure Kind =
 
 datatype 'a t =
    Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
+ | Array_cas of CType.t option (* codegen *)
  | Array_copyArray (* to rssa (as runtime C fn) *)
  | Array_copyVector (* to rssa (as runtime C fn) *)
  | Array_length (* to rssa *)
@@ -44,7 +45,6 @@ datatype 'a t =
  | Array_uninit (* to rssa *)
  | Array_uninitIsNop (* to rssa *)
  | Array_update of {writeBarrier : bool} (* to ssa2 *)
- | Array_cas of CType.t option (* codegen *)
  | CPointer_add (* codegen *)
  | CPointer_diff (* codegen *)
  | CPointer_equal (* codegen *)
@@ -143,9 +143,9 @@ datatype 'a t =
  | Real_round of RealSize.t (* codegen *)
  | Real_sub of RealSize.t (* codegen *)
  | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
+ | Ref_cas of CType.t option (* codegen *)
  | Ref_deref (* to ssa2 *)
  | Ref_ref (* to ssa2 *)
- | Ref_cas of CType.t option (* codegen *)
  | String_toWord8Vector (* defunctorize *)
  | Thread_atomicBegin (* to rssa *)
  | Thread_atomicEnd (* to rssa *)
@@ -228,6 +228,8 @@ fun toString (n: 'a t): string =
    in
       case n of
          Array_alloc {raw} => if raw then "Array_allocRaw" else "Array_alloc"
+       | Array_cas NONE => "Array_cas"
+       | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
        | Array_copyVector => "Array_copyVector"
        | Array_length => "Array_length"
@@ -238,8 +240,6 @@ fun toString (n: 'a t): string =
        | Array_uninitIsNop => "Array_uninitIsNop"
        | Array_update {writeBarrier=true} => "Array_update"
        | Array_update {writeBarrier=false} => "Array_update_noWriteBarrier"
-       | Array_cas NONE => "Array_cas"
-       | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | CPointer_add => "CPointer_add"
        | CPointer_diff => "CPointer_diff"
        | CPointer_equal => "CPointer_equal"
@@ -322,10 +322,10 @@ fun toString (n: 'a t): string =
        | Real_sub s => real (s, "sub")
        | Ref_assign {writeBarrier=true} => "Ref_assign"
        | Ref_assign {writeBarrier=false} => "Ref_assign_noWriteBarrier"
-       | Ref_deref => "Ref_deref"
-       | Ref_ref => "Ref_ref"
        | Ref_cas NONE => "Ref_cas"
        | Ref_cas (SOME ctype) => concat ["Ref", CType.name ctype, "_cas"]
+       | Ref_deref => "Ref_deref"
+       | Ref_ref => "Ref_ref"
        | String_toWord8Vector => "String_toWord8Vector"
        | Thread_atomicBegin => "Thread_atomicBegin"
        | Thread_atomicEnd => "Thread_atomicEnd"
@@ -394,6 +394,8 @@ fun layoutFull (p, layoutX) =
 
 val equals: 'a t * 'a t -> bool =
    fn (Array_alloc {raw = r}, Array_alloc {raw = r'}) => Bool.equals (r, r')
+    | (Array_cas NONE, Array_cas NONE) => true
+    | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (Array_copyArray, Array_copyArray) => true
     | (Array_copyVector, Array_copyVector) => true
     | (Array_length, Array_length) => true
@@ -403,8 +405,6 @@ val equals: 'a t * 'a t -> bool =
     | (Array_uninit, Array_uninit) => true
     | (Array_uninitIsNop, Array_uninitIsNop) => true
     | (Array_update wb1, Array_update wb2) => wb1 = wb2
-    | (Array_cas NONE, Array_cas NONE) => true
-    | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (CPointer_add, CPointer_add) => true
     | (CPointer_diff, CPointer_diff) => true
     | (CPointer_equal, CPointer_equal) => true
@@ -492,10 +492,10 @@ val equals: 'a t * 'a t -> bool =
     | (Real_round s, Real_round s') => RealSize.equals (s, s')
     | (Real_sub s, Real_sub s') => RealSize.equals (s, s')
     | (Ref_assign wb1, Ref_assign wb2) => wb1 = wb2
-    | (Ref_deref, Ref_deref) => true
-    | (Ref_ref, Ref_ref) => true
     | (Ref_cas NONE, Ref_cas NONE) => true
     | (Ref_cas (SOME ctype1), Ref_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
+    | (Ref_deref, Ref_deref) => true
+    | (Ref_ref, Ref_ref) => true
     | (String_toWord8Vector, String_toWord8Vector) => true
     | (Thread_atomicBegin, Thread_atomicBegin) => true
     | (Thread_atomicEnd, Thread_atomicEnd) => true
@@ -576,6 +576,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
    fn (p, f) =>
    case p of
       Array_alloc {raw} => Array_alloc {raw = raw}
+    | Array_cas cty => Array_cas cty
     | Array_copyArray => Array_copyArray
     | Array_copyVector => Array_copyVector
     | Array_length => Array_length
@@ -585,7 +586,6 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_uninit => Array_uninit
     | Array_uninitIsNop => Array_uninitIsNop
     | Array_update wb => Array_update wb
-    | Array_cas cty => Array_cas cty
     | CPointer_add => CPointer_add
     | CPointer_diff => CPointer_diff
     | CPointer_equal => CPointer_equal
@@ -668,8 +668,8 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Real_round z => Real_round z
     | Real_sub z => Real_sub z
     | Ref_assign wb => Ref_assign wb
-    | Ref_deref => Ref_deref
     | Ref_cas ctyp => Ref_cas ctyp
+    | Ref_deref => Ref_deref
     | Ref_ref => Ref_ref
     | String_toWord8Vector => String_toWord8Vector
     | Thread_atomicBegin => Thread_atomicBegin
@@ -723,6 +723,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
 val arrayAlloc = fn {raw} => Array_alloc {raw = raw}
+fun arrayCas ctype = Array_cas (SOME ctype)
 val arrayLength = Array_length
 val arrayToVector = Array_toVector
 val arrayUpdate = Array_update {writeBarrier=true}
@@ -731,7 +732,6 @@ val assign = Ref_assign {writeBarrier=true}
 val bogus = MLton_bogus
 val bug = MLton_bug
 fun cas ctype = Ref_cas (SOME ctype)
-fun arrayCas ctype = Array_cas (SOME ctype)
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
@@ -832,6 +832,7 @@ val kind: 'a t -> Kind.t =
    in
       case p of
          Array_alloc _ => Moveable
+       | Array_cas _ => SideEffect
        | Array_copyArray => SideEffect
        | Array_copyVector => SideEffect
        | Array_length => Functional
@@ -841,7 +842,6 @@ val kind: 'a t -> Kind.t =
        | Array_uninit => SideEffect
        | Array_uninitIsNop => Functional
        | Array_update _ => SideEffect
-       | Array_cas _ => SideEffect
        | CPointer_add => Functional
        | CPointer_diff => Functional
        | CPointer_equal => Functional
@@ -926,9 +926,9 @@ val kind: 'a t -> Kind.t =
        | Real_round _ => DependsOnState (* depends on rounding mode *)
        | Real_sub _ => DependsOnState (* depends on rounding mode *)
        | Ref_assign _ => SideEffect
+       | Ref_cas _ => SideEffect
        | Ref_deref => DependsOnState
        | Ref_ref => Moveable
-       | Ref_cas _ => SideEffect
        | String_toWord8Vector => Functional
        | Thread_atomicBegin => SideEffect
        | Thread_atomicEnd => SideEffect
@@ -1045,6 +1045,7 @@ in
    val all: unit t list =
       [Array_alloc {raw = false},
        Array_alloc {raw = true},
+       Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
        Array_length,
@@ -1056,7 +1057,6 @@ in
        (* SAM_NOTE: do I need to list both here? *)
        Array_update {writeBarrier=true},
        Array_update {writeBarrier=false},
-       Array_cas NONE,
        CPointer_add,
        CPointer_diff,
        CPointer_equal,
@@ -1106,9 +1106,9 @@ in
        (* SAM_NOTE: do I need to list both here? *)
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
+       Ref_cas NONE,
        Ref_deref,
        Ref_ref,
-       Ref_cas NONE,
        String_toWord8Vector,
        Thread_atomicBegin,
        Thread_atomicEnd,
@@ -1357,6 +1357,8 @@ fun 'a checkApp (prim: 'a t,
   in
       case prim of
          Array_alloc _ => oneTarg (fn targ => (oneArg seqIndex, array targ))
+       | Array_cas _ =>
+            oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
        | Array_copyArray => oneTarg (fn t => (fiveArgs (array t, seqIndex, array t, seqIndex, seqIndex), unit))
        | Array_copyVector => oneTarg (fn t => (fiveArgs (array t, seqIndex, vector t, seqIndex, seqIndex), unit))
        | Array_length => oneTarg (fn t => (oneArg (array t), seqIndex))
@@ -1370,8 +1372,6 @@ fun 'a checkApp (prim: 'a t,
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
-       | Array_cas _ =>
-            oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
        | CPointer_add =>
             noTargs (fn () => (twoArgs (cpointer, cptrdiff), cpointer))
        | CPointer_diff =>
@@ -1475,9 +1475,9 @@ fun 'a checkApp (prim: 'a t,
        | Real_sub s => realBinary s
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
+       | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
        | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
        | Ref_ref => oneTarg (fn t => (oneArg t, reff t))
-       | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
        | Thread_atomicBegin => noTargs (fn () => (noArgs, unit))
        | Thread_atomicEnd => noTargs (fn () => (noArgs, unit))
        | Thread_atomicState => noTargs (fn () => (noArgs, word32))
@@ -1558,6 +1558,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
    in
       case prim of
          Array_alloc _ => one (deArray result)
+       | Array_cas _ => one (deArray (arg 0))
        | Array_copyArray => one (deArray (arg 0))
        | Array_copyVector => one (deArray (arg 0))
        | Array_length => one (deArray (arg 0))
@@ -1568,7 +1569,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_uninitIsNop => one (deArray (arg 0))
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ => one (deArray (arg 0))
-       | Array_cas _ => one (deArray (arg 0))
        | CPointer_getObjptr => one result
        | CPointer_setObjptr => one (arg 2)
        | Exn_extra => one result
@@ -1584,9 +1584,9 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_touch => one (arg 0)
        (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ => one (deRef (arg 0))
+       | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref => one (deRef (arg 0))
        | Ref_ref => one (deRef result)
-       | Ref_cas _ => one (deRef (arg 0))
        | Vector_length => one (deVector (arg 0))
        | Vector_sub => one (deVector (arg 0))
        | Vector_vector => one (deVector result)
