@@ -86,7 +86,7 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
   /* Search all chunks in my own hierarchical heap. Off-by-one loop to
    * prevent underflow. */
   for (Word32 i = hh->level+1; i > 0; i--) {
-    HM_chunkList list = hh->levels[i-1];
+    HM_chunkList list = HM_HH_LEVEL(hh, i-1);
     if (list == NULL) continue;
     for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
          cursor != NULL;
@@ -104,7 +104,7 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
     /* off-by-one to prevent underflow. This executes the body for each
      * stop <= i < start, but in decreasing order. */
     for (Word32 i = start; i > stop; i--) {
-      HM_chunkList list = phh->levels[i-1];
+      HM_chunkList list = HM_HH_LEVEL(phh, i-1);
       if (list == NULL) continue;
       for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
            cursor != NULL;

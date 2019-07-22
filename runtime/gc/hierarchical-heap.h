@@ -1,4 +1,4 @@
-/* Copyright (C) 2018 Sam Westrick
+/* Copyright (C) 2018,2019 Sam Westrick
  * Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
@@ -14,10 +14,14 @@
 
 #define HM_MAX_NUM_LEVELS 64
 
+struct levelData {
+  HM_chunkList chunkList;
+  size_t capacity;
+  size_t outstandingBytesPromoted;
+};
+
 struct HM_HierarchicalHeap {
-  HM_chunkList levels[HM_MAX_NUM_LEVELS];
-  Word64 capacities[HM_MAX_NUM_LEVELS];
-  size_t outstandingBytesPromoted[HM_MAX_NUM_LEVELS];
+  struct levelData levels[HM_MAX_NUM_LEVELS];
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
@@ -48,9 +52,9 @@ struct HM_HierarchicalHeap {
 };
 
 // l/r-value for ith level
-#define HM_HH_LEVEL(hh, i) ((hh)->levels[i])
-#define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->capacities[i])
-#define HM_HH_LEVEL_OBP(hh, i) ((hh)->outstandingBytesPromoted[i])
+#define HM_HH_LEVEL(hh, i) ((hh)->levels[i].chunkList)
+#define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->levels[i].capacity)
+#define HM_HH_LEVEL_OBP(hh, i) ((hh)->levels[i].outstandingBytesPromoted)
 
 /* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
 #define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
