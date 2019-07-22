@@ -621,6 +621,27 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
          Trace.trace ("DeepFlatten.typeValue", Type.layout, Value.layout)
          typeValue
       val (coerce, coerceProd) = (Value.coerce, Value.coerceProd)
+      fun base b =
+         case b of
+            Base.Object obj => obj
+          | Base.SequenceSub {sequence, ...} => sequence
+      fun const c = typeValue (Type.ofConst c)
+      fun select {base, offset} =
+         let
+            datatype z = datatype Value.t
+         in
+            case base of
+               Ground t =>
+                  (case Type.dest t of
+                      Type.Object {args, ...} =>
+                         typeValue (Prod.elt (args, offset))
+                    | _ => Error.bug "DeepFlatten.select: Ground")
+             | Object e => Object.select (Equatable.value e, offset)
+             | _ => Error.bug "DeepFlatten.select:"
+         end
+      fun update {base, offset, value, writeBarrier} =
+         coerce {from = value,
+                 to = select {base = base, offset = offset}}
       fun inject {sum, variant = _} = typeValue (Type.datatypee sum)
       fun object {args, con, resultType} =
          let
@@ -715,6 +736,25 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                    * be flattened.
                    *)
                   dontFlatten ()
+
+             | Ref_cas _ =>
+                 let
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 1, c)
+                    ; Value.unify (arg 2, c)
+                    ; c
+                 end
+             | Array_cas _ =>
+                 let
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 2, c)
+                    ; Value.unify (arg 3, c)
+                    ; c
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()

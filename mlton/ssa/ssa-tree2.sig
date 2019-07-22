@@ -75,6 +75,8 @@ signature SSA_TREE2 =
             val dest: t -> dest
             val deSequence1: t -> t
             val deSequenceOpt: t -> t Prod.t option
+            val deRef1Opt : t -> t option
+            val deRef1 : t -> t
             val equals: t * t -> bool
             val intInf: t
             val isSequence: t -> bool

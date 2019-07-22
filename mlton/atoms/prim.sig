@@ -27,6 +27,7 @@ signature PRIM =
          sig
             datatype 'a t =
                Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
+             | Array_cas of CType.t option (* codegen *)
              | Array_copyArray (* to rssa (as runtime C fn) *)
              | Array_copyVector (* to rssa (as runtime C fn) *)
              | Array_length (* to rssa *)
@@ -134,6 +135,7 @@ signature PRIM =
              | Real_round of RealSize.t (* codegen *)
              | Real_sub of RealSize.t (* codegen *)
              | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
+             | Ref_cas of CType.t option (* codegen *)
              | Ref_deref (* to ssa2 *)
              | Ref_ref (* to ssa2 *)
              | String_toWord8Vector (* defunctorize *)
@@ -225,6 +227,8 @@ signature PRIM =
       val assign: 'a t
       val bogus: 'a t
       val bug: 'a t
+      val cas : CType.t -> 'a t
+      val arrayCas : CType.t -> 'a t
       val checkApp: 'a t * {args: 'a vector,
                             result: 'a,
                             targs: 'a vector,
