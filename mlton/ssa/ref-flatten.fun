@@ -482,6 +482,15 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                  let val a = arg 0
                  in (Value.dontFlatten a; result ())
                  end
+             | Array_cas _ =>
+                 let
+                   val r1 = arg 2
+                   val r2 = arg 3
+                 in
+                   Value.dontFlatten r1;
+                   Value.dontFlatten r2;
+                   result ()
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()
