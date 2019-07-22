@@ -748,7 +748,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                  end
              | Array_cas _ =>
                  let
-                    (* SAM_NOTE: what does "offset" mean in this context? *)
                     val c = select {base = arg 0, offset = 0}
                  in
                     Value.dontFlatten c

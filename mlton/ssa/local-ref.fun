@@ -326,7 +326,6 @@ fun transform (program: Program.t): Program.t =
                              in
                                 case Prim.name prim
                                    of Ref_ref => rewriteReff ()
-                                 (* SAM_NOTE: can just ignore the writeBarrier here? *)
                                  | Ref_assign _ => rewriteAssign ()
                                  | Ref_deref => rewriteDeref ()
                                  | _ => s
@@ -430,7 +429,6 @@ fun transform (program: Program.t): Program.t =
                          in
                            case Prim.name prim
                              of Ref_ref => (setReff (); default ())
-                              (* SAM_NOTE: can just ignore the writeBarrier here? *)
                               | Ref_assign _ => (setAssign (arg 0);
                                                  nonLocal (arg 1))
                               | Ref_deref => setDeref (arg 0)

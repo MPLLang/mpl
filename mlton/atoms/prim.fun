@@ -1054,7 +1054,6 @@ in
        Array_toVector,
        Array_uninit,
        Array_uninitIsNop,
-       (* SAM_NOTE: do I need to list both here? *)
        Array_update {writeBarrier=true},
        Array_update {writeBarrier=false},
        CPointer_add,
@@ -1103,7 +1102,6 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       (* SAM_NOTE: do I need to list both here? *)
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
        Ref_cas NONE,
@@ -1369,7 +1367,6 @@ fun 'a checkApp (prim: 'a t,
             oneTarg (fn t => (twoArgs (array t, seqIndex), unit))
        | Array_uninitIsNop =>
             oneTarg (fn t => (oneArg (array t), bool))
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
        | CPointer_add =>
@@ -1473,7 +1470,6 @@ fun 'a checkApp (prim: 'a t,
             noTargs (fn () => (oneArg (real s), word s'))
        | Real_round s => realUnary s
        | Real_sub s => realBinary s
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
        | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
        | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
@@ -1567,7 +1563,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_toVector => one (deArray (arg 0))
        | Array_uninit => one (deArray (arg 0))
        | Array_uninitIsNop => one (deArray (arg 0))
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ => one (deArray (arg 0))
        | CPointer_getObjptr => one result
        | CPointer_setObjptr => one (arg 2)
@@ -1582,7 +1577,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref => one (deRef (arg 0))

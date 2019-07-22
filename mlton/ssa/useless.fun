@@ -675,7 +675,6 @@ fun transform (program: Program.t): Program.t =
                         Useful.whenUseful
                         (deground result, fn () =>
                          Useful.makeUseful (arrayUseful (arg 0)))
-                   (* SAM_NOTE: can just ignore the writeBarrier here? *)
                    | Array_update _ => update ()
                    (* SAM_NOTE: unification is certainly "correct" but we should
                     * investigate whether coercions are possible. *)
@@ -706,7 +705,6 @@ fun transform (program: Program.t): Program.t =
                         (deground result, fn () =>
                          makeWanted (arg 0))
                    | MLton_touch => shallowMakeUseful (arg 0)
-                   (* SAM_NOTE: can just ignore the writeBarrier here? *)
                    | Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
                    | Ref_deref => return (deref (arg 0))
                    | Ref_ref => coerce {from = arg 0, to = deref result}
@@ -1041,9 +1039,7 @@ fun transform (program: Program.t): Program.t =
                                       Array_copyArray => array ()
                                     | Array_copyVector => array ()
                                     | Array_uninit => array ()
-                                    (* SAM_NOTE: can just ignore the writeBarrier here? *)
                                     | Array_update _ => array ()
-                                    (* SAM_NOTE: can just ignore the writeBarrier here? *)
                                     | Ref_assign _ =>
                                          Value.isUseful
                                          (Value.deref (value (arg 0)))

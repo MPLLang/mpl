@@ -1031,7 +1031,6 @@ fun transform (program: Program.t): Program.t =
                 | Array_sub => dearray (arg 0)
                 | Array_toArray => arrayFromArray (arg 0)
                 | Array_toVector => vectorFromArray (arg 0)
-                (* SAM_NOTE: can just ignore the writeBarrier here? *)
                 | Array_update _ => update (arg 0, arg 2)
                 | Array_cas _ =>
                     (coerce {from = arg 3, to = dearray (arg 0)}

@@ -469,7 +469,6 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                 Array x => x
               | Type _ => result ()
               | _ => typeError ())
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ =>
             let val (a, _, x) = threeArgs ()
             in (case dest a of
@@ -493,7 +492,6 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of

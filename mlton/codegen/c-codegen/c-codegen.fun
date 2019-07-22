@@ -182,7 +182,6 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | Real_rndToWord _ => true
        | Real_round _ => true
        | Real_sub _ => true
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ => true
        | Ref_deref => true
        | Ref_cas _ => true

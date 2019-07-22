@@ -951,7 +951,6 @@ fun closureConvert
                         in
                            simple
                            (case Prim.name prim of
-                               (* SAM_NOTE: can just ignore the writeBarrier here? *)
                                Array_update _ =>
                                   let
                                      val a = varExpInfo (arg 0)
@@ -1002,7 +1001,6 @@ fun closureConvert
                                   if handlesSignals
                                      then Dexp.truee
                                   else Dexp.falsee
-                             (* SAM_NOTE: can just ignore the writeBarrier here? *)
                              | Ref_assign _ =>
                                   let
                                      val r = varExpInfo (arg 0)
