@@ -121,7 +121,7 @@ Word32 HM_HH_getLevel(__attribute__((unused)) GC_state s,
 }
 
 #pragma message "Remember to do enter/leave correctly for new HH primitives."
-void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
+void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_HierarchicalHeap* hh) {
   /* SAM_NOTE: will need to move this to the appropriate places... */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
@@ -136,7 +136,7 @@ void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
   endAtomic(s);
 
   assert(NULL != hh->parentHH);
-  struct HM_HierarchicalHeap* parentHH = hh->parentHH;
+  assert(parentHH == hh->parentHH);
 
   /*
    * This should be true, otherwise our call to

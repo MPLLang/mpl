@@ -55,7 +55,7 @@ signature MLTON_THREAD =
 
           (* Merge the heap of the deepest child of this thread. Requires that
            * this child is inactive and has an associated heap. *)
-          val mergeDeepestChild : thread -> unit
+          val mergeThreads : thread * thread -> unit
 
           (* Move all chunks at the current level up one level. *)
           val promoteChunks : thread -> unit

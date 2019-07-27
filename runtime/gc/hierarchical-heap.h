@@ -95,7 +95,7 @@ void HM_HH_appendChild(GC_state s,
                        Word32 stealLevel);
 
 Word32 HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh);
-void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh);
+void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parent, struct HM_HierarchicalHeap* child);
 void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh);
 void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, Word32 level);
 void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);

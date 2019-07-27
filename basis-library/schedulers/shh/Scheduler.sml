@@ -318,17 +318,21 @@ struct
         val thread = Thread.current ()
         val level = HH.getLevel thread
 
-        val rightSide = ref (NONE : 'b result option)
+        val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
 
         fun g' () =
-          ( rightSide := SOME (result g)
-          ; communicate ()
-          ; if not (decrementHitsZero incounter) then
-              returnToSched ()
-            else
+          let
+            val gr = result g
+            val t = Thread.current ()
+          in
+            rightSide := SOME (gr, t);
+            communicate ();
+            if decrementHitsZero incounter then
               threadSwitch thread
-          )
+            else
+              returnToSched ()
+          end
 
         val _ = push (g', level)
         val _ = HH.setLevel (thread, level + 1)
@@ -341,10 +345,9 @@ struct
             (communicate (); result g)
           else
             ( if decrementHitsZero incounter then () else returnToSched ()
-            ; HH.mergeDeepestChild thread
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME gr => gr
+              | SOME (gr, t) => (HH.mergeThreads (thread, t); gr)
             )
 
         val _ = HH.promoteChunks thread

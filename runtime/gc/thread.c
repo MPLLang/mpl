@@ -86,10 +86,12 @@ void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
   HM_HH_appendChild(s, parent->hierarchicalHeap, child->hierarchicalHeap, level);
 }
 
-void GC_HH_mergeDeepestChild(pointer threadp) {
+void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
   objptr threadop = pointerToObjptr(threadp, NULL);
+  objptr childop = pointerToObjptr(childp, NULL);
   GC_thread thread = threadObjptrToStruct(s, threadop);
+  GC_thread child = threadObjptrToStruct(s, childop);
 
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);
@@ -98,11 +100,18 @@ void GC_HH_mergeDeepestChild(pointer threadp) {
     if ((int32_t)i != s->procNumber)
       assert(s->procStates[i].currentThread != threadop);
   }
+  assert(childop != BOGUS_OBJPTR);
+  /* make sure child is inactive */
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    assert(s->procStates[i].currentThread != childop);
+  }
 #endif
 
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
-  HM_HH_mergeIntoParent(s, thread->hierarchicalHeap->childHHList);
+  assert(child != NULL);
+  assert(child->hierarchicalHeap != NULL);
+  HM_HH_merge(s, thread->hierarchicalHeap, child->hierarchicalHeap);
 }
 
 void GC_HH_promoteChunks(pointer threadp) {
