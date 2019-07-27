@@ -22,26 +22,6 @@ pointer GC_HH_newHeap() {
   return (pointer)HM_HH_new(s);
 }
 
-void GC_HH_attachHeap(pointer threadp, pointer hhp) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  objptr threadop = pointerToObjptr(threadp, NULL);
-  GC_thread thread = threadObjptrToStruct(s, threadop);
-
-#if ASSERT
-  assert(threadop != BOGUS_OBJPTR);
-  /* Make sure this is an inactive thread. */
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    assert(s->procStates[i].currentThread != threadop);
-  }
-#endif
-
-  if (thread->hierarchicalHeap != NULL) {
-    DIE("tried to assign hierarchical heap, but thread already has one");
-  }
-
-  thread->hierarchicalHeap = (struct HM_HierarchicalHeap *)hhp;
-}
-
 Word32 GC_HH_getLevel(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

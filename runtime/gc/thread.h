@@ -61,20 +61,12 @@ typedef struct GC_thread *GC_thread;
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-/**
- * This function sets the current thread to either use or not use the
- * hierarchical heap.
- *
- * @param use TRUE if using the Hierarchical Heap, FALSE otherwise.
- */
-// PRIVATE void T_setCurrentThreadUseHierarchicalHeap(Bool use);
 
 PRIVATE Pointer GC_HH_newHeap(void);
-PRIVATE void GC_HH_attachHeap(pointer thread, pointer hh);
 PRIVATE Word32 GC_HH_getLevel(pointer thread);
 PRIVATE void GC_HH_setLevel(pointer thread, Word32 level);
 PRIVATE void GC_HH_attachChild(pointer parent, pointer child, Word32 level);
-PRIVATE void GC_HH_mergeDeepestChild(pointer thread);
+PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
