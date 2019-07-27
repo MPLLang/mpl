@@ -17,10 +17,6 @@ PRIVATE void Assignable_writeBarrier(
   GC_state s, objptr dst, objptr* field, objptr src
   );
 
-#if ASSERT
-PRIVATE void assertObjptrDisentangledForMe(GC_state s, objptr op);
-#endif
-
 #endif  /* MLTON_GC_INTERNAL_BASIS */
 
 #endif  /* ASSIGN_H */

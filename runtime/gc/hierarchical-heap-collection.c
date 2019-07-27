@@ -596,10 +596,6 @@ void forwardHHObjptr (GC_state s,
           opInfo.level,
           args->minLevel,
           args->maxLevel);
-      LOCAL_USED_FOR_ASSERT objptr oppop =
-        pointerToObjptr((pointer)opp, NULL);
-      assert ((inPromotion && HM_isObjptrInToSpace(s, oppop))
-              || HM_objptrIsAboveHH(s, p, args->hh));
       return;
   }
 

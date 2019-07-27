@@ -62,7 +62,6 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/init.c"
 #include "gc/int-inf.c"
 #include "gc/invariant.c"
-#include "gc/level.c"
 #include "gc/local-heap.c"
 #include "gc/logger.c"
 #include "gc/model.c"

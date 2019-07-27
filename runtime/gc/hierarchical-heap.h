@@ -37,10 +37,6 @@ struct HM_HierarchicalHeap {
                                       * collectible heap size, used for
                                       * collection decisions */
 
-
-  struct HM_HierarchicalHeap* parentHH; /**< The heap this object branched off of or BOGUS_OBJPTR
-                    * if it is the first heap. */
-
   struct HM_HierarchicalHeap* nextChildHH; /**< The next heap in the 'derivedHHList' of
                        * the 'parentHH'. This variable is the 'next'
                        * pointer for the intrusive linked list. */

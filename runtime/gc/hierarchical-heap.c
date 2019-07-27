@@ -58,13 +58,11 @@ void HM_HH_appendChild(GC_state s,
   Word32 oldDeepestStolenLevel = HM_HH_getDeepestStolenLevel(s, parentHH);
 
   /* childHH should be a orphan! */
-  assert(NULL == childHH->parentHH);
   assert(NULL == childHH->nextChildHH);
 
   /* initialize childHH */
   childHH->stealLevel = stealLevel;
   childHH->level = stealLevel + 1;
-  childHH->parentHH = parentHH;
 
   /* push child at front of parent's child list */
 #if ASSERT
@@ -134,9 +132,6 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
 
   endAtomic(s);
-
-  assert(NULL != hh->parentHH);
-  assert(parentHH == hh->parentHH);
 
   /*
    * This should be true, otherwise our call to
@@ -282,13 +277,11 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
            "\tlastAllocatedChunk = %p\n"
            "\tlevel = %u\n"
            "\tstealLevel = %u\n"
-           "\tparentHH = %p\n"
            "\tnextChildHH = %p\n"
            "\tchildHHList= %p\n",
            (void*)hh->lastAllocatedChunk,
            hh->level,
            hh->stealLevel,
-           (void*)hh->parentHH,
            (void*)hh->nextChildHH,
            (void*)hh->childHHList);
 }
@@ -317,7 +310,6 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   hh->stealLevel = HM_HH_INVALID_LEVEL;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
-  hh->parentHH = NULL;
   hh->nextChildHH = NULL;
   hh->childHHList = NULL;
 
@@ -486,21 +478,6 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   // });
   // assert(hh->locallyCollectibleSize == locallyCollectibleSize);
 
-  struct HM_HierarchicalHeap* parentHH = hh->parentHH;
-  if (NULL != parentHH) {
-    /* Make sure I am in parentHH->childHHList */
-    bool foundInParentList = FALSE;
-    for (struct HM_HierarchicalHeap* childHH = parentHH->childHHList;
-         NULL != childHH;
-         childHH = childHH->nextChildHH) {
-      if (hh == childHH) {
-        foundInParentList = TRUE;
-        break;
-      }
-    }
-    assert(foundInParentList);
-  }
-
   /* make sure childHHList is sorted by steal level */
   Word32 previousStealLevel = ~((Word32)(0));
   for (struct HM_HierarchicalHeap* childHH = hh->childHHList;
@@ -508,7 +485,6 @@ void assertInvariants(__attribute__((unused)) GC_state s,
        childHH = childHH->nextChildHH) {
     assert(childHH->stealLevel <= previousStealLevel);
     previousStealLevel = childHH->stealLevel;
-    assert(childHH->parentHH == hh);
   }
 }
 #else
