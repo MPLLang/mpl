@@ -80,8 +80,19 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
     if ((int32_t)i != s->procNumber)
       assert(s->procStates[i].currentThread != threadop);
   }
+
   assert(childop != BOGUS_OBJPTR);
-  /* make sure child is inactive */
+  /* SAM_NOTE there is a race where the following check can raise
+   * a false alarm, if a worker delays to mark its current thread as
+   * BOGUS_OBJPTR after completing a thread and decrementing the incounter
+   * (in the scheduler). However, having the assert seems useful as a
+   * sanity check regardless.
+   *
+   * If this becomes a problem, we can either fix the incounter business
+   * (switch away before decrementing incounter) or just remove the sanity
+   * check and not worry about it.
+   */
+  // Make sure child is inactive
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     assert(s->procStates[i].currentThread != childop);
   }

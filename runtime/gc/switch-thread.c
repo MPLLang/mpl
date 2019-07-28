@@ -47,24 +47,27 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     (void*)p,
     ensureBytesFree);
 
+  GC_thread oldCurrentThread = getThreadCurrent(s);
+
   //ENTER1 (s, p);
   /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
+  oldCurrentThread->exnStack = s->exnStack;
   beginAtomic(s);
 
   assert(threadAndHeapOkay(s));
-  struct HM_HierarchicalHeap *hh = getThreadCurrent(s)->hierarchicalHeap;
+  struct HM_HierarchicalHeap *hh = oldCurrentThread->hierarchicalHeap;
   HM_HH_updateValues(hh, s->frontier);
   s->frontier = 0;
   s->limitPlusSlop = 0;
   s->limit = 0;
 
-  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  oldCurrentThread->bytesNeeded = ensureBytesFree;
 
+  s->currentThread = BOGUS_OBJPTR;
   /* SAM_NOTE: This write synchronizes with the spinloop in switchToThread (above) */
-  atomicStoreS32(&(getThreadCurrent(s)->currentProcNum), -1);
+  atomicStoreS32(&(oldCurrentThread->currentProcNum), -1);
 
   switchToThread(s, pointerToObjptr(p, NULL));
   /* SAM_NOTE: TODO: do signal handlers work properly? */
