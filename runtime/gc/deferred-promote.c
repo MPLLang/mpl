@@ -18,7 +18,7 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
 
   /* First, bucket in-scope downptrs by the level of the downptr origin */
   HM_chunkList downPtrs[HM_MAX_NUM_LEVELS];
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     downPtrs[i] = NULL;
   }
   FOR_LEVEL_IN_RANGE(level, i, args->hh, args->minLevel, args->maxLevel+1, {
@@ -35,7 +35,7 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
    * appropriate remembered-set.
    * Note that we skip down-pointers from the root heap; these are "preserved"
    * instead of promoted, and used as roots for collection. */
-  for (Word32 i = 1; i <= args->maxLevel; i++) {
+  for (uint32_t i = 1; i <= args->maxLevel; i++) {
     /* remember where the roots begin, so we know where to scan from after
      * promoting the roots */
     HM_chunk rootsBeginChunk = NULL;
@@ -89,7 +89,7 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
   }
 
   /* Finally, free the chunks that we used as temporary storage for bucketing */
-  for (Word32 i = 1; i < HM_MAX_NUM_LEVELS; i++) {
+  for (uint32_t i = 1; i < HM_MAX_NUM_LEVELS; i++) {
     HM_appendChunkList(s->freeListSmall, downPtrs[i]);
   }
 
@@ -114,8 +114,8 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     return;
   }
 
-  Word32 dstLevel = HM_getObjptrLevel(dst);
-  Word32 srcLevel = HM_getObjptrLevel(src);
+  uint32_t dstLevel = HM_getObjptrLevel(dst);
+  uint32_t srcLevel = HM_getObjptrLevel(src);
 
   assert(dstLevel <= srcLevel);
 
@@ -193,7 +193,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  Word32 srcLevel = HM_getObjptrLevel(src);
+  uint32_t srcLevel = HM_getObjptrLevel(src);
   assert(srcLevel <= args->maxLevel);
 
   if (srcLevel <= args->toLevel) {

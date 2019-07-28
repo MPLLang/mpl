@@ -25,17 +25,17 @@ struct HM_HierarchicalHeap {
 
   HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
 
-  Word32 level; /**< The current level of the hierarchy which new chunks should
+  uint32_t level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
-  Word32 stealLevel; /**< The parent's level that I stole from */
+  uint32_t stealLevel; /**< The parent's level that I stole from */
 
-  Word32 shallowestPrivateLevel;
+  uint32_t shallowestPrivateLevel;
 
-  Word64 locallyCollectibleSize; /**< The size in bytes of the locally
+  size_t locallyCollectibleSize; /**< The size in bytes of the locally
                                   * collectable heap. */
 
-  Word64 locallyCollectibleHeapSize; /** < The size in bytes of locally
+  size_t locallyCollectibleHeapSize; /** < The size in bytes of locally
                                       * collectible heap size, used for
                                       * collection decisions */
 };
@@ -48,7 +48,7 @@ struct HM_HierarchicalHeap {
 /* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
 #define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
   do {                                                   \
-    for (Word32 IDX = (LO); IDX < (HI); IDX++) {         \
+    for (uint32_t IDX = (LO); IDX < (HI); IDX++) {       \
       HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);         \
       if (LEVEL != NULL) { BODY }                        \
     }                                                    \
@@ -56,7 +56,7 @@ struct HM_HierarchicalHeap {
 
 #define FOR_LEVEL_DECREASING_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
   do {                                                              \
-    Word32 IDX = (HI);                                              \
+    uint32_t IDX = (HI);                                            \
     while (IDX > (LO)) {                                            \
       IDX--;                                                        \
       HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);                    \
@@ -81,12 +81,12 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
 void HM_HH_appendChild(GC_state s,
                        struct HM_HierarchicalHeap* parentHH,
                        struct HM_HierarchicalHeap* childHH,
-                       Word32 stealLevel);
+                       uint32_t stealLevel);
 
-Word32 HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh);
+uint32_t HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh);
 void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parent, struct HM_HierarchicalHeap* child);
 void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh);
-void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, Word32 level);
+void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, uint32_t level);
 void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);
 void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 

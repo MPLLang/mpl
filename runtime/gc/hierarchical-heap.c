@@ -52,7 +52,7 @@ static void assertInvariants(GC_state s,
 void HM_HH_appendChild(GC_state s,
                        struct HM_HierarchicalHeap* parentHH,
                        struct HM_HierarchicalHeap* childHH,
-                       Word32 stealLevel) {
+                       uint32_t stealLevel) {
   assertInvariants(s, parentHH);
 
   /* initialize childHH */
@@ -100,7 +100,7 @@ void HM_HH_appendChild(GC_state s,
   assertInvariants(s, childHH);
 }
 
-Word32 HM_HH_getLevel(__attribute__((unused)) GC_state s,
+uint32_t HM_HH_getLevel(__attribute__((unused)) GC_state s,
                       struct HM_HierarchicalHeap* hh)
 {
   return hh->level;
@@ -132,8 +132,8 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
-  Word32 oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
-  Word32 newShallowestPrivateLevel = hh->stealLevel;
+  uint32_t oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
+  uint32_t newShallowestPrivateLevel = hh->stealLevel;
   assert(newShallowestPrivateLevel+1 == oldShallowestPrivateLevel);
   parentHH->shallowestPrivateLevel = newShallowestPrivateLevel;
 
@@ -164,13 +164,13 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
 
   /* Add up the size of the immediate ancestors which are now unfrozen due to
    * this merge. We need this quantity to adjust the LCHS below. */
-  Word64 unfrozenSize = 0;
+  size_t unfrozenSize = 0;
   FOR_LEVEL_IN_RANGE(level, i, parentHH, newShallowestPrivateLevel, oldShallowestPrivateLevel, {
     unfrozenSize += HM_getChunkListSize(level);
   });
 
   /* Add up the rest of the now local data. */
-  Word64 childrenSize = 0;
+  size_t childrenSize = 0;
   FOR_LEVEL_IN_RANGE(level, i, parentHH, oldShallowestPrivateLevel, parentHH->level+1, {
     childrenSize += HM_getChunkListSize(level);
   });
@@ -222,7 +222,7 @@ void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh) {
 /* SAM_NOTE: TODO: hijack this function with ensureBytesFree */
 void HM_HH_setLevel(__attribute__((unused)) GC_state s,
                     struct HM_HierarchicalHeap* hh,
-                    Word32 level)
+                    uint32_t level)
 {
   hh->level = level;
 
@@ -232,7 +232,7 @@ void HM_HH_setLevel(__attribute__((unused)) GC_state s,
 
   /* SAM_NOTE: TODO: This still appears to be broken; debugging needed. */
   // if (!(s->controls->mayUseAncestorChunk)) {
-  //   Word32 allocLevel = HM_getHighestLevel(hh->levelList);
+  //   uint32_t allocLevel = HM_getHighestLevel(hh->levelList);
   //   assert(getLevelHead(hh->lastAllocatedChunk)->level == allocLevel);
   //   assert(allocLevel <= level);
   //   if (allocLevel != level) {
@@ -421,7 +421,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   HM_assertLevelListInvariants(hh, hh->stealLevel, false);
 
   /* Check that all chunk lists are levelHeads */
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_chunkList list = HM_HH_LEVEL(hh, i);
     if (list != NULL) {
       assert(HM_isLevelHead(list));
@@ -429,7 +429,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   }
 
   /* Check that the levels past the recorded level are empty */
-  Word64 locallyCollectibleSize = 0;
+  size_t locallyCollectibleSize = 0;
   FOR_LEVEL_IN_RANGE(level, i, hh, hh->level+1, HM_MAX_NUM_LEVELS, {
     locallyCollectibleSize += HM_getChunkListSize(level);
   });

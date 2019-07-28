@@ -23,9 +23,9 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
   struct HM_HierarchicalHeap* hh;
-  Word32 minLevel;
-  Word32 maxLevel;
-  Word32 toLevel; /* if == HM_HH_INVALID_LEVEL, preserve level of the forwarded object */
+  uint32_t minLevel;
+  uint32_t maxLevel;
+  uint32_t toLevel; /* if == HM_HH_INVALID_LEVEL, preserve level of the forwarded object */
   HM_chunkList* toSpace;
   objptr containingObject; /* a hack to keep track of which object is currently being traced */
   size_t bytesCopied;

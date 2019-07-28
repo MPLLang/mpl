@@ -355,7 +355,7 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level) {
 
   // SAM_NOTE: replace with custom arena allocation if a performance bottleneck
   HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
@@ -470,7 +470,7 @@ pointer HM_getChunkLimit(HM_chunk chunk) {
   return chunk->limit;
 }
 
-Word64 HM_getChunkSize(HM_chunk chunk) {
+size_t HM_getChunkSize(HM_chunk chunk) {
   return chunk->limit - (pointer)chunk;
 }
 
@@ -478,7 +478,7 @@ pointer HM_getChunkStart(HM_chunk chunk) {
   return (pointer)chunk + sizeof(struct HM_chunk);
 }
 
-Word32 HM_getChunkListLevel(HM_chunkList levelHead) {
+uint32_t HM_getChunkListLevel(HM_chunkList levelHead) {
   assert(HM_isLevelHead(levelHead));
   return levelHead->level;
 }
@@ -501,7 +501,7 @@ HM_chunk HM_getChunkListFirstChunk(HM_chunkList levelHead) {
   return levelHead->firstChunk;
 }
 
-Word64 HM_getChunkListSize(HM_chunkList levelHead) {
+size_t HM_getChunkListSize(HM_chunkList levelHead) {
   assert(levelHead != NULL);
   assert(HM_isLevelHead(levelHead));
   return levelHead->size;
@@ -624,14 +624,14 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 // }
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  Word32 stealLevel,
+                                  uint32_t stealLevel,
                                   bool inToSpace) {
   ((void)(stealLevel));
-  Word32 previousLevel = ~((Word32)(0));
+  uint32_t previousLevel = ~((uint32_t)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
 
-    Word32 level = chunkList->level;
+    uint32_t level = chunkList->level;
     assert(level == i);
 
     struct HM_HierarchicalHeap* levelListHH = chunkList->containingHH;
@@ -652,7 +652,7 @@ void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
 // }
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  Word32 stealLevel,
+                                  uint32_t stealLevel,
                                   bool inToSpace) {
   ((void)(hh));
   ((void)(stealLevel));
@@ -691,7 +691,7 @@ void HM_assertChunkInvariants(HM_chunk chunk,
 void HM_assertChunkListInvariants(HM_chunkList chunkList,
                                   const struct HM_HierarchicalHeap* hh) {
   assert(HM_isLevelHead(chunkList));
-  Word64 size = 0;
+  size_t size = 0;
   HM_chunk chunk = chunkList->firstChunk;
   while (NULL != chunk) {
     HM_assertChunkInvariants(chunk, chunkList);
@@ -728,7 +728,7 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
   return objInfo.hh;
 }
 
-Word32 HM_getObjptrLevel(objptr op) {
+uint32_t HM_getObjptrLevel(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
 }
 

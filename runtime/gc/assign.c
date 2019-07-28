@@ -62,7 +62,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
           "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
           dst, src);
       } else {
-        Word32 level = srcList->level;
+        uint32_t level = srcList->level;
         if (NULL == HM_HH_LEVEL(hh, level)) {
           HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
         }

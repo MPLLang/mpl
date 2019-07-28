@@ -39,7 +39,7 @@ struct GC_vectorInit {
 
 static inline size_t sizeofInitialBytesLive (GC_state s);
 static void initVectors (GC_state s, struct HM_HierarchicalHeap *hh);
-static GC_thread initThreadAndHeap (GC_state s, Word32 level);
+static GC_thread initThreadAndHeap (GC_state s, uint32_t level);
 static void initWorld (GC_state s);
 static void duplicateWorld (GC_state d, GC_state s);
 

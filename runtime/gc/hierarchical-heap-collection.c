@@ -181,7 +181,7 @@ void HM_HHC_collectLocal(void) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
   HM_chunkList toSpace[HM_MAX_NUM_LEVELS];
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     toSpace[i] = NULL;
   }
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
@@ -283,7 +283,7 @@ void HM_HHC_collectLocal(void) {
   };
 
   /* off-by-one to prevent underflow */
-  Word32 depth = hh->level+1;
+  uint32_t depth = hh->level+1;
   while (depth > forwardHHObjptrArgs.minLevel) {
     depth--;
     HM_chunkList toSpaceLevel = toSpace[depth];
@@ -384,7 +384,7 @@ void HM_HHC_collectLocal(void) {
   });
 
   /* merge in toSpace */
-  for (Word32 i = 0; i <= hh->level; i++) {
+  for (uint32_t i = 0; i <= hh->level; i++) {
     if (NULL == HM_HH_LEVEL(hh, i)) {
       HM_HH_LEVEL(hh, i) = toSpace[i];
       if (NULL != toSpace[i]) {
@@ -524,7 +524,7 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
 
 void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  Word32 srcLevel = HM_getObjptrLevel(src);
+  uint32_t srcLevel = HM_getObjptrLevel(src);
 
   assert(args->minLevel <= srcLevel);
   assert(srcLevel <= args->maxLevel);

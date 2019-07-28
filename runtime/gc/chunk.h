@@ -20,7 +20,7 @@ typedef struct HM_chunkList * HM_chunkList;
  * be in hierarchical-heap-collection.{c,h}? */
 struct ForwardHHObjptrArgs;
 
-#define CHUNK_INVALID_LEVEL (~((Word32)(0)))
+#define CHUNK_INVALID_LEVEL (~((uint32_t)(0)))
 
 #define CHUNK_MAGIC 0xcafeface
 
@@ -64,14 +64,14 @@ struct HM_chunk {
 
 struct HM_chunkList {
   HM_chunkList parent;
-  Word32 level;
+  uint32_t level;
   HM_chunkList rememberedSet;
 
   HM_chunk firstChunk;
   HM_chunk lastChunk;
 
   struct HM_HierarchicalHeap * containingHH;
-  Word64 size; // size (bytes) of this level, both allocated and unallocated
+  size_t size; // size (bytes) of this level, both allocated and unallocated
   bool isInToSpace;
 };
 
@@ -81,7 +81,7 @@ COMPILE_TIME_ASSERT(HM_chunk__aligned,
 struct HM_ObjptrInfo {
   struct HM_HierarchicalHeap* hh;
   HM_chunkList chunkList;
-  Word32 level;
+  uint32_t level;
 };
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -145,7 +145,7 @@ void HM_configChunks(GC_state s);
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level);
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level);
 
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
@@ -216,7 +216,7 @@ pointer HM_getChunkLimit(HM_chunk chunk);
  *
  * @return the size of the chunk in bytes.
  */
-Word64 HM_getChunkSize(HM_chunk chunk);
+size_t HM_getChunkSize(HM_chunk chunk);
 
 /**
  * This function returns the start of allocable area of the chunk (pointer to
@@ -236,7 +236,7 @@ pointer HM_getChunkStart(HM_chunk chunk);
  *
  * @return The level of the chunkList
  */
-Word32 HM_getChunkListLevel(HM_chunkList chunk);
+uint32_t HM_getChunkListLevel(HM_chunkList chunk);
 
 /**
  * This function gets the last chunk in a list
@@ -248,7 +248,7 @@ Word32 HM_getChunkListLevel(HM_chunkList chunk);
 HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
-Word64 HM_getChunkListSize(HM_chunkList levelHead);
+size_t HM_getChunkListSize(HM_chunkList levelHead);
 
 /**
  * Gets the info for the given objptr
@@ -263,7 +263,7 @@ Word64 HM_getChunkListSize(HM_chunkList levelHead);
 void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  Word32 stealLevel,
+                                  uint32_t stealLevel,
                                   bool inToSpace);
 
 /**
@@ -301,7 +301,7 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
  */
 // rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
-Word32 HM_getObjptrLevel(objptr op);
+uint32_t HM_getObjptrLevel(objptr op);
 
 /**
  * Check whether the given objptr is in to-space

@@ -138,7 +138,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
   assert(inFirstBlockOfChunk(currentChunk, s->frontier));
 }
 
-GC_thread initThreadAndHeap(GC_state s, Word32 level) {
+GC_thread initThreadAndHeap(GC_state s, uint32_t level) {
   GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), level);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 
