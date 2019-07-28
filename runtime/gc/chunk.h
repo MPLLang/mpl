@@ -263,7 +263,6 @@ size_t HM_getChunkListSize(HM_chunkList levelHead);
 void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  uint32_t stealLevel,
                                   bool inToSpace);
 
 /**

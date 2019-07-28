@@ -56,7 +56,7 @@ void HM_HH_appendChild(GC_state s,
   assertInvariants(s, parentHH);
 
   /* initialize childHH */
-  childHH->stealLevel = stealLevel;
+  childHH->shallowestLevel = stealLevel + 1;
   childHH->shallowestPrivateLevel = stealLevel + 1;
   childHH->level = stealLevel + 1;
 
@@ -133,7 +133,7 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   assert(hh->level == parentHH->level);
 
   uint32_t oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
-  uint32_t newShallowestPrivateLevel = hh->stealLevel;
+  uint32_t newShallowestPrivateLevel = hh->shallowestLevel-1;
   assert(newShallowestPrivateLevel+1 == oldShallowestPrivateLevel);
   parentHH->shallowestPrivateLevel = newShallowestPrivateLevel;
 
@@ -259,11 +259,11 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
            "\tlevel = %u\n"
-           "\tstealLevel = %u\n"
+           "\tshallowestLevel = %u\n"
            "\tshallowestPrivateLevel = %u\n",
            (void*)hh->lastAllocatedChunk,
            hh->level,
-           hh->stealLevel,
+           hh->shallowestLevel,
            hh->shallowestPrivateLevel);
 }
 
@@ -288,7 +288,7 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   }
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
-  hh->stealLevel = HM_HH_INVALID_LEVEL;
+  hh->shallowestLevel = 0;
   hh->shallowestPrivateLevel = 0;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
@@ -394,12 +394,11 @@ void adjustLCHS(GC_state s,
 #if ASSERT
 void assertInvariants(__attribute__((unused)) GC_state s,
                       struct HM_HierarchicalHeap* hh) {
-  ASSERTPRINT(((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
-               (hh->level > hh->stealLevel)),
-              "HH %p has invalid level values! level %u stealLevel %u",
+  ASSERTPRINT(hh->level >= hh->shallowestLevel,
+              "HH %p has invalid level values! level %u shallowestLevel %u",
               ((void*)(hh)),
               hh->level,
-              hh->stealLevel);
+              hh->shallowestLevel);
 
   if (NULL != hh->lastAllocatedChunk) {
     HM_chunkList levelHead = HM_getLevelHead(hh->lastAllocatedChunk);
@@ -418,7 +417,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
       assert(level->size == 0);
     });
   }
-  HM_assertLevelListInvariants(hh, hh->stealLevel, false);
+  HM_assertLevelListInvariants(hh, false);
 
   /* Check that all chunk lists are levelHeads */
   for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {

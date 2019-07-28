@@ -28,7 +28,7 @@ struct HM_HierarchicalHeap {
   uint32_t level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
-  uint32_t stealLevel; /**< The parent's level that I stole from */
+  uint32_t shallowestLevel;
 
   uint32_t shallowestPrivateLevel;
 

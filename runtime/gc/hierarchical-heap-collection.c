@@ -171,7 +171,7 @@ void HM_HHC_collectLocal(void) {
       "  local scope is %u -> %u\n"
       "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
-      hh->stealLevel,
+      hh->shallowestLevel,
       hh->level,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel,

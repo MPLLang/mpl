@@ -624,9 +624,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 // }
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  uint32_t stealLevel,
                                   bool inToSpace) {
-  ((void)(stealLevel));
   uint32_t previousLevel = ~((uint32_t)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
@@ -652,10 +650,8 @@ void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
 // }
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  uint32_t stealLevel,
                                   bool inToSpace) {
   ((void)(hh));
-  ((void)(stealLevel));
   ((void)(inToSpace));
 }
 #endif /* ASSERT */
