@@ -30,21 +30,14 @@ struct HM_HierarchicalHeap {
 
   Word32 stealLevel; /**< The parent's level that I stole from */
 
+  Word32 shallowestPrivateLevel;
+
   Word64 locallyCollectibleSize; /**< The size in bytes of the locally
                                   * collectable heap. */
 
   Word64 locallyCollectibleHeapSize; /** < The size in bytes of locally
                                       * collectible heap size, used for
                                       * collection decisions */
-
-  struct HM_HierarchicalHeap* nextChildHH; /**< The next heap in the 'derivedHHList' of
-                       * the 'parentHH'. This variable is the 'next'
-                       * pointer for the intrusive linked list. */
-
-  struct HM_HierarchicalHeap* childHHList; /**< The list of heaps that are derived from this
-                       * heap. All heaps in this list have their 'parentHH' set
-                       * to this object. In addition, it is in descending order
-                       * of 'stealLevel' */
 };
 
 // l/r-value for ith level
@@ -114,8 +107,6 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
-Word32 HM_HH_getDeepestStolenLevel(GC_state s, struct HM_HierarchicalHeap* hh);
-Word32 HM_HH_getShallowestPrivateLevel(GC_state s, struct HM_HierarchicalHeap* hh);
 pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh);
 pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh);
 double HM_HH_getLCRatio(struct HM_HierarchicalHeap* hh);

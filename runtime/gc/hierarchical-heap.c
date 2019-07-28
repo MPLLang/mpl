@@ -53,60 +53,48 @@ void HM_HH_appendChild(GC_state s,
                        struct HM_HierarchicalHeap* parentHH,
                        struct HM_HierarchicalHeap* childHH,
                        Word32 stealLevel) {
-
   assertInvariants(s, parentHH);
-  Word32 oldDeepestStolenLevel = HM_HH_getDeepestStolenLevel(s, parentHH);
-
-  /* childHH should be a orphan! */
-  assert(NULL == childHH->nextChildHH);
 
   /* initialize childHH */
   childHH->stealLevel = stealLevel;
+  childHH->shallowestPrivateLevel = stealLevel + 1;
   childHH->level = stealLevel + 1;
 
-  /* push child at front of parent's child list */
-#if ASSERT
-  if (parentHH->childHHList != NULL) {
-    assert(parentHH->childHHList->stealLevel <= stealLevel);
-  }
-#endif
-  childHH->nextChildHH = parentHH->childHHList;
-  parentHH->childHHList = childHH;
+  uint32_t oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
+  parentHH->shallowestPrivateLevel = stealLevel + 1;
+  assert(parentHH->shallowestPrivateLevel >= oldShallowestPrivateLevel);
 
   HM_HH_LEVEL_CAPACITY(parentHH, stealLevel) = parentHH->locallyCollectibleHeapSize;
 
-  if ((HM_HH_INVALID_LEVEL == oldDeepestStolenLevel) ||
-      (stealLevel > oldDeepestStolenLevel)) {
-    /* need to update lcs and lchs */
-    Word64 sizeDelta = 0;
-    FOR_LEVEL_IN_RANGE(level, i, parentHH, oldDeepestStolenLevel+1, stealLevel+1, {
-      sizeDelta += HM_getChunkListSize(level);
-    });
+  /* need to update lcs and lchs */
+  size_t sizeDelta = 0;
+  FOR_LEVEL_IN_RANGE(level, i, parentHH, oldShallowestPrivateLevel, stealLevel+1, {
+    sizeDelta += HM_getChunkListSize(level);
+  });
 
-    size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
-    double ratio = HM_HH_getLCRatio(parentHH);
-    if (isinf(ratio)) {
-      /* lcs is zero, so just bottom-out lchs with ratio 0 */
-      ratio = 0.0;
-    }
-
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
-        ((void*)(parentHH)),
-        parentHH->locallyCollectibleSize,
-        sizeDelta,
-        parentHH->locallyCollectibleSize - sizeDelta);
-    parentHH->locallyCollectibleSize -= sizeDelta;
-
-    adjustLCHS(s, parentHH, ratio);
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
-        "(ratio %.2f)",
-        ((void*)(parentHH)),
-        oldLCHS,
-        parentHH->locallyCollectibleHeapSize,
-        ratio);
+  size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+  double ratio = HM_HH_getLCRatio(parentHH);
+  if (isinf(ratio)) {
+    /* lcs is zero, so just bottom-out lchs with ratio 0 */
+    ratio = 0.0;
   }
+
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+      "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
+      ((void*)(parentHH)),
+      parentHH->locallyCollectibleSize,
+      sizeDelta,
+      parentHH->locallyCollectibleSize - sizeDelta);
+  parentHH->locallyCollectibleSize -= sizeDelta;
+
+  adjustLCHS(s, parentHH, ratio);
+  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+      "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
+      "(ratio %.2f)",
+      ((void*)(parentHH)),
+      oldLCHS,
+      parentHH->locallyCollectibleHeapSize,
+      ratio);
 
   assertInvariants(s, parentHH);
   assertInvariants(s, childHH);
@@ -144,15 +132,10 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
-
-  Word32 oldShallowestPrivateLevel = HM_HH_getShallowestPrivateLevel(s, parentHH);
-
-  /* remove hh from parentHH->childHHList */
-  assert(parentHH->childHHList == hh);
-  parentHH->childHHList = hh->nextChildHH;
-
-  Word32 newShallowestPrivateLevel = HM_HH_getShallowestPrivateLevel(s, parentHH);
-  assert(newShallowestPrivateLevel < oldShallowestPrivateLevel);
+  Word32 oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
+  Word32 newShallowestPrivateLevel = hh->stealLevel;
+  assert(newShallowestPrivateLevel+1 == oldShallowestPrivateLevel);
+  parentHH->shallowestPrivateLevel = newShallowestPrivateLevel;
 
   /* Merge levels. */
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
@@ -196,12 +179,12 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
 
   if (!s->controls->oldHHGCPolicy &&
-      parentHH->locallyCollectibleHeapSize < HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1)) {
+      parentHH->locallyCollectibleHeapSize < HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel)) {
     // printf("After merge, LCHS = %ld, %.2f of old capacity\n",
     //   parentHH->locallyCollectibleHeapSize,
     //   ((double) parentHH->locallyCollectibleHeapSize) /
-    //   (double) HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1));
-    parentHH->locallyCollectibleHeapSize = HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1);
+    //   (double) HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel));
+    parentHH->locallyCollectibleHeapSize = HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel);
   }
 
   assertInvariants(s, parentHH);
@@ -277,13 +260,11 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
            "\tlastAllocatedChunk = %p\n"
            "\tlevel = %u\n"
            "\tstealLevel = %u\n"
-           "\tnextChildHH = %p\n"
-           "\tchildHHList= %p\n",
+           "\tshallowestPrivateLevel = %u\n",
            (void*)hh->lastAllocatedChunk,
            hh->level,
            hh->stealLevel,
-           (void*)hh->nextChildHH,
-           (void*)hh->childHHList);
+           hh->shallowestPrivateLevel);
 }
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
@@ -308,10 +289,9 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
   hh->stealLevel = HM_HH_INVALID_LEVEL;
+  hh->shallowestPrivateLevel = 0;
   hh->locallyCollectibleSize = 0;
   hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
-  hh->nextChildHH = NULL;
-  hh->childHHList = NULL;
 
   return hh;
 }
@@ -352,21 +332,6 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;
-}
-
-Word32 HM_HH_getDeepestStolenLevel(__attribute__((unused)) GC_state s,
-                                   struct HM_HierarchicalHeap* hh)
-{
-  if (NULL == hh->childHHList)
-    return HM_HH_INVALID_LEVEL;
-  return hh->childHHList->stealLevel;
-}
-
-Word32 HM_HH_getShallowestPrivateLevel(__attribute__((unused)) GC_state s,
-                                       struct HM_HierarchicalHeap* hh) {
-  if (NULL == hh->childHHList)
-    return hh->stealLevel+1;
-  return hh->childHHList->stealLevel+1;
 }
 
 pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh) {
@@ -477,15 +442,6 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   //   locallyCollectibleSize += HM_getChunkListSize(level);
   // });
   // assert(hh->locallyCollectibleSize == locallyCollectibleSize);
-
-  /* make sure childHHList is sorted by steal level */
-  Word32 previousStealLevel = ~((Word32)(0));
-  for (struct HM_HierarchicalHeap* childHH = hh->childHHList;
-       NULL != childHH;
-       childHH = childHH->nextChildHH) {
-    assert(childHH->stealLevel <= previousStealLevel);
-    previousStealLevel = childHH->stealLevel;
-  }
 }
 #else
 void assertInvariants(GC_state s,

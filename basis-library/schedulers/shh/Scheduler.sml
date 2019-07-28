@@ -342,16 +342,22 @@ struct
 
         val gr =
           if popDiscard () then
-            (communicate (); result g)
+            ( communicate ()
+            ; HH.promoteChunks thread
+            ; HH.setLevel (thread, level)
+            ; result g
+            )
           else
             ( if decrementHitsZero incounter then () else returnToSched ()
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME (gr, t) => (HH.mergeThreads (thread, t); gr)
+              | SOME (gr, t) =>
+                  ( HH.mergeThreads (thread, t)
+                  ; HH.promoteChunks thread
+                  ; HH.setLevel (thread, level)
+                  ; gr
+                  )
             )
-
-        val _ = HH.promoteChunks thread
-        val _ = HH.setLevel (thread, level)
       in
         (extractResult fr, extractResult gr)
       end

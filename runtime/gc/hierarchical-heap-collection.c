@@ -95,7 +95,7 @@ void HM_HHC_collectLocal(void) {
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  if (HM_HH_getShallowestPrivateLevel(s, hh) == 0) {
+  if (hh->shallowestPrivateLevel == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
     return;
   }
@@ -131,7 +131,7 @@ void HM_HHC_collectLocal(void) {
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = HM_HH_getShallowestPrivateLevel(s, hh),
+    .minLevel = hh->shallowestPrivateLevel,
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
@@ -402,10 +402,10 @@ void HM_HHC_collectLocal(void) {
    */
   /* update locally collectible size */
   hh->locallyCollectibleSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_HH_getShallowestPrivateLevel(s, hh), {
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, hh->shallowestPrivateLevel, {
     hh->locallyCollectibleSize += HM_HH_LEVEL_OBP(hh, i);
   });
-  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getShallowestPrivateLevel(s, hh), hh->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, hh->shallowestPrivateLevel, hh->level+1, {
     hh->locallyCollectibleSize += HM_getChunkListSize(level);
   });
 
