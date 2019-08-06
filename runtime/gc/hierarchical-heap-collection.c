@@ -100,6 +100,11 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
+  if (hh->level <= 1) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
+    return;
+  }
+
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
     return;
@@ -128,10 +133,16 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
+  uint32_t preferredMinLevel = hh->shallowestPrivateLevel;
+  if (preferredMinLevel == 1) {
+    /* if we can, prefer not to collect depth 1 */
+    preferredMinLevel++;
+  }
+
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = hh->shallowestPrivateLevel,
+    .minLevel = preferredMinLevel,
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
