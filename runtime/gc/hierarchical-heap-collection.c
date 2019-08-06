@@ -269,11 +269,11 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.stacksCopied);
 
   /* preserve remaining down-pointers from global heap */
-  LOG(LM_HH_COLLECTION, LL_INFO,
+  LOG(LM_HH_COLLECTION, LL_DEBUG,
     "START forwarding %zu global down-pointers",
     HM_numRemembered(globalDownPtrs));
   HM_foreachRemembered(s, globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
-  LOG(LM_HH_COLLECTION, LL_INFO, "END forwarding global down-pointers");
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
   HM_appendChunkList(s->freeListSmall, globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
@@ -484,7 +484,7 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
     if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    LOG(LM_HH_COLLECTION, LL_INFO,
+    LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "Moved single-object chunk %p of size %zu",
       (void*)chunk,
       HM_getChunkSize(chunk));
@@ -655,7 +655,7 @@ void forwardHHObjptr (GC_state s,
 
     assert (!hasFwdPtr(p));
 
-    LOG(LM_HH_COLLECTION, LL_INFO,
+    LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "during %s, copying pointer %p at level %u to level list %p",
         (inPromotion ? "promotion" : "collection"),
         (void *)p,
@@ -683,7 +683,7 @@ void forwardHHObjptr (GC_state s,
       if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      LOG(LM_HH_COLLECTION, LL_INFO,
+      LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "Moved single-object chunk %p of size %zu",
         (void*)chunk,
         HM_getChunkSize(chunk));
