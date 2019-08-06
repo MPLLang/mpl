@@ -17,11 +17,6 @@
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-pointer GC_HH_newHeap() {
-  GC_state s = pthread_getspecific(gcstate_key);
-  return (pointer)HM_HH_new(s);
-}
-
 Word32 GC_HH_getLevel(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

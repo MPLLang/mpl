@@ -277,16 +277,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
           i++;
           s->controls->mayUseAncestorChunk = FALSE;
-        } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
-          i++;
-          if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-allocated-ratio missing argument.");
-          }
-
-          s->controls->hhConfig.allocatedRatio = stringToFloat(argv[i++]);
-          if (s->controls->hhConfig.allocatedRatio < 2.0) {
-            die("@MLton hh-allocated-ratio must be at least 2.0");
-          }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -387,7 +377,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
-  s->controls->hhConfig.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;

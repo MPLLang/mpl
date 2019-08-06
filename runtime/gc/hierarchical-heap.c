@@ -18,17 +18,6 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
-/**
- * Adjusts the LCHS to reflect the ratio provided. Limits adjustment to
- * [s->controls->initialLCHS, s->controls->maxLCHS].
- *
- * @param s The GC_state to use
- * @param hh The hiererchical heap to adjust
- * @param desiredRatio The desired ratio to adjust to.
- */
-void adjustLCHS(GC_state s,
-                struct HM_HierarchicalHeap* hh,
-                double desiredRatio);
 
 /**
  * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
@@ -60,41 +49,7 @@ void HM_HH_appendChild(GC_state s,
   childHH->shallowestPrivateLevel = stealLevel + 1;
   childHH->level = stealLevel + 1;
 
-  uint32_t oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
   parentHH->shallowestPrivateLevel = stealLevel + 1;
-  assert(parentHH->shallowestPrivateLevel >= oldShallowestPrivateLevel);
-
-  HM_HH_LEVEL_CAPACITY(parentHH, stealLevel) = parentHH->locallyCollectibleHeapSize;
-
-  /* need to update lcs and lchs */
-  size_t sizeDelta = 0;
-  FOR_LEVEL_IN_RANGE(level, i, parentHH, oldShallowestPrivateLevel, stealLevel+1, {
-    sizeDelta += HM_getChunkListSize(level);
-  });
-
-  size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
-  double ratio = HM_HH_getLCRatio(parentHH);
-  if (isinf(ratio)) {
-    /* lcs is zero, so just bottom-out lchs with ratio 0 */
-    ratio = 0.0;
-  }
-
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-      "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
-      ((void*)(parentHH)),
-      parentHH->locallyCollectibleSize,
-      sizeDelta,
-      parentHH->locallyCollectibleSize - sizeDelta);
-  parentHH->locallyCollectibleSize -= sizeDelta;
-
-  adjustLCHS(s, parentHH, ratio);
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-      "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
-      "(ratio %.2f)",
-      ((void*)(parentHH)),
-      oldLCHS,
-      parentHH->locallyCollectibleHeapSize,
-      ratio);
 
   assertInvariants(s, parentHH);
   assertInvariants(s, childHH);
@@ -132,9 +87,7 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
-  uint32_t oldShallowestPrivateLevel = parentHH->shallowestPrivateLevel;
   uint32_t newShallowestPrivateLevel = hh->shallowestLevel-1;
-  assert(newShallowestPrivateLevel+1 == oldShallowestPrivateLevel);
   parentHH->shallowestPrivateLevel = newShallowestPrivateLevel;
 
   /* Merge levels. */
@@ -149,52 +102,12 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
-  /* combine outstandingBytesPromoted */
-  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_HH_LEVEL_OBP(parentHH, i) += HM_HH_LEVEL_OBP(hh, i);
-  }
-  for (uint32_t i = newShallowestPrivateLevel; i < oldShallowestPrivateLevel; i++) {
-    HM_HH_LEVEL_OBP(parentHH, i) = 0;
-  }
-
-  size_t outstandingBytesPromoted = 0;
-  for (uint32_t i = 0; i < newShallowestPrivateLevel; i++) {
-    outstandingBytesPromoted += HM_HH_LEVEL_OBP(parentHH, i);
-  }
-
-  /* Add up the size of the immediate ancestors which are now unfrozen due to
-   * this merge. We need this quantity to adjust the LCHS below. */
-  size_t unfrozenSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, parentHH, newShallowestPrivateLevel, oldShallowestPrivateLevel, {
-    unfrozenSize += HM_getChunkListSize(level);
-  });
-
-  /* Add up the rest of the now local data. */
-  size_t childrenSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, parentHH, oldShallowestPrivateLevel, parentHH->level+1, {
-    childrenSize += HM_getChunkListSize(level);
-  });
-
-  parentHH->locallyCollectibleSize = outstandingBytesPromoted + childrenSize + unfrozenSize;
-  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
-
-  if (!s->controls->oldHHGCPolicy &&
-      parentHH->locallyCollectibleHeapSize < HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel)) {
-    // printf("After merge, LCHS = %ld, %.2f of old capacity\n",
-    //   parentHH->locallyCollectibleHeapSize,
-    //   ((double) parentHH->locallyCollectibleHeapSize) /
-    //   (double) HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel));
-    parentHH->locallyCollectibleHeapSize = HM_HH_LEVEL_CAPACITY(parentHH, newShallowestPrivateLevel);
-  }
+  parentHH->collectionThreshold =
+    max(parentHH->collectionThreshold, hh->collectionThreshold);
 
   assertInvariants(s, parentHH);
 
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)hh);
-
-  Trace3(EVENT_CHUNKP_RATIO,
-         parentHH->locallyCollectibleHeapSize,
-         parentHH->locallyCollectibleSize,
-         s->controls->hhConfig.allocatedRatio);
 
   free(hh);
 }
@@ -280,18 +193,11 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_HH_LEVEL(hh, i) = NULL;
   }
-  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_HH_LEVEL_CAPACITY(hh, i) = 0;
-  }
-  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_HH_LEVEL_OBP(hh, i) = 0;
-  }
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
   hh->shallowestLevel = 0;
   hh->shallowestPrivateLevel = 0;
-  hh->locallyCollectibleSize = 0;
-  hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
+  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, 0);
 
   return hh;
 }
@@ -325,7 +231,6 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   }
 
   hh->lastAllocatedChunk = chunk;
-  hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
   return TRUE;
 }
@@ -343,53 +248,33 @@ pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh) {
   return HM_getChunkLimit(hh->lastAllocatedChunk);
 }
 
-double HM_HH_getLCRatio(struct HM_HierarchicalHeap* hh) {
-  return (((double)(hh->locallyCollectibleHeapSize)) /
-          ((double)(hh->locallyCollectibleSize)));
-}
-
-void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
-  size_t oldLCHS = hh->locallyCollectibleHeapSize;
-  double desiredRatio = 2 * (s->controls->hhConfig.liveLCRatio + 1);
-  double ratio = HM_HH_getLCRatio(hh);
-
-  adjustLCHS(s, hh, desiredRatio);
-
-  if (oldLCHS != hh->locallyCollectibleHeapSize) {
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "Live Ratio %.2f %s %.2f, so resized LCHS from %zu bytes to %zu bytes",
-        ratio,
-        (ratio < desiredRatio) ? "<" : ">",
-        desiredRatio,
-        oldLCHS,
-        hh->locallyCollectibleHeapSize);
-  }
-}
-
 void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
                         pointer frontier) {
   HM_updateChunkValues(hh->lastAllocatedChunk, frontier);
 }
+
+size_t HM_HH_size(struct HM_HierarchicalHeap* hh) {
+  size_t sz = 0;
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, hh->level+1, {
+    sz += HM_getChunkListSize(level);
+  });
+  return sz;
+}
+
+size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
+  size_t threshold =
+    (size_t)((double)survivingSize * s->controls->hhConfig.liveLCRatio);
+  if (threshold < s->controls->hhConfig.initialLCHS) {
+    threshold = s->controls->hhConfig.initialLCHS;
+  }
+  return threshold;
+}
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 /*******************************/
 /* Static Function Definitions */
 /*******************************/
-
-void adjustLCHS(GC_state s,
-                struct HM_HierarchicalHeap* hh,
-                double desiredRatio) {
-  size_t newLCHS = desiredRatio * hh->locallyCollectibleSize;
-
-  if (newLCHS < s->controls->hhConfig.initialLCHS) {
-    newLCHS = s->controls->hhConfig.initialLCHS;
-  } else if (s->controls->hhConfig.maxLCHS != MAX_LCHS_INFINITE &&
-             newLCHS > s->controls->hhConfig.maxLCHS) {
-    newLCHS = s->controls->hhConfig.maxLCHS;
-  }
-
-  hh->locallyCollectibleHeapSize = newLCHS;
-}
 
 #if ASSERT
 void assertInvariants(__attribute__((unused)) GC_state s,
@@ -428,19 +313,11 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   }
 
   /* Check that the levels past the recorded level are empty */
-  size_t locallyCollectibleSize = 0;
+  size_t extraSize = 0;
   FOR_LEVEL_IN_RANGE(level, i, hh, hh->level+1, HM_MAX_NUM_LEVELS, {
-    locallyCollectibleSize += HM_getChunkListSize(level);
+    extraSize += HM_getChunkListSize(level);
   });
-  assert(0 == locallyCollectibleSize);
-
-  /* SAM_NOTE: TODO:
-   * removing this for now, as it is tripping but there are more
-   * pressing things to fix... */
-  // FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getDeepestStolenLevel(s, hh)+1, hh->level+1, {
-  //   locallyCollectibleSize += HM_getChunkListSize(level);
-  // });
-  // assert(hh->locallyCollectibleSize == locallyCollectibleSize);
+  assert(0 == extraSize);
 }
 #else
 void assertInvariants(GC_state s,

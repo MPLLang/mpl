@@ -8,15 +8,9 @@ void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr dst, objptr
   HM_chunk chunk = HM_getChunkListLastChunk(remset);
   if (NULL == chunk || (size_t)(chunk->limit - chunk->frontier) < sizeof(struct HM_remembered)) {
     chunk = HM_allocateChunk(remset, sizeof(struct HM_remembered));
-
     if (levelHead != NULL) {
       assert(levelHead->rememberedSet == remset);
       levelHead->size += HM_getChunkSize(chunk);
-      if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
-          levelHead->containingHH != NULL &&
-          levelHead->level >= levelHead->containingHH->shallowestPrivateLevel) {
-        levelHead->containingHH->locallyCollectibleSize += HM_getChunkSize(chunk);
-      }
     }
   }
 

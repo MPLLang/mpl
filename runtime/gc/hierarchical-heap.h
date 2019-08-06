@@ -16,8 +16,8 @@
 
 struct levelData {
   HM_chunkList chunkList;
-  size_t capacity;
-  size_t outstandingBytesPromoted;
+  // size_t capacity;
+  // size_t outstandingBytesPromoted;
 };
 
 struct HM_HierarchicalHeap {
@@ -32,18 +32,13 @@ struct HM_HierarchicalHeap {
 
   uint32_t shallowestPrivateLevel;
 
-  size_t locallyCollectibleSize; /**< The size in bytes of the locally
-                                  * collectable heap. */
-
-  size_t locallyCollectibleHeapSize; /** < The size in bytes of locally
-                                      * collectible heap size, used for
-                                      * collection decisions */
+  /* when the number of bytes in this HH exceeds the threshold, we collect.
+   * the threshold is adjusted after each collection. */
+  size_t collectionThreshold;
 };
 
 // l/r-value for ith level
 #define HM_HH_LEVEL(hh, i) ((hh)->levels[i].chunkList)
-#define HM_HH_LEVEL_CAPACITY(hh, i) ((hh)->levels[i].capacity)
-#define HM_HH_LEVEL_OBP(hh, i) ((hh)->levels[i].outstandingBytesPromoted)
 
 /* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
 #define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
@@ -109,9 +104,10 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
 pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh);
 pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh);
-double HM_HH_getLCRatio(struct HM_HierarchicalHeap* hh);
-void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh);
 void HM_HH_updateValues(struct HM_HierarchicalHeap* hh, pointer frontier);
+
+size_t HM_HH_size(struct HM_HierarchicalHeap* hh);
+size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

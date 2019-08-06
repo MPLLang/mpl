@@ -25,9 +25,6 @@ struct GC_ratios {
  * Ratios for Hierarchical Heap operations
  */
 struct HM_HierarchicalHeapConfig {
-  double allocatedRatio; /**< the ratio of PoolSize:AllocatedBytes under which a
-                          * collection is triggered */
-
   double liveLCRatio; /**< minimum LCHS:LCS ratio to maintain */
 
   size_t initialLCHS; /**< initial LCHS, in bytes */

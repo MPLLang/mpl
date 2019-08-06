@@ -75,29 +75,12 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  double allocatedRatio = HM_HH_getLCRatio(hh);
-  Trace3(EVENT_CHUNKP_RATIO,
-         hh->locallyCollectibleHeapSize,
-         hh->locallyCollectibleSize,
-         s->controls->hhConfig.allocatedRatio);
-  if (forceGC || (allocatedRatio < s->controls->hhConfig.allocatedRatio)) {
+  if (forceGC || HM_HH_size(hh) > hh->collectionThreshold) {
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal();
 
-    double newAllocatedRatio = HM_HH_getLCRatio(hh);
-    Trace3(EVENT_CHUNKP_RATIO,
-           hh->locallyCollectibleHeapSize,
-           hh->locallyCollectibleSize,
-           s->controls->hhConfig.allocatedRatio);
-
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
-        "Live Ratio %.2f < %.2f, performed local collection to increase "
-        "ratio to %.2f (%zu / %zu)",
-        allocatedRatio,
-        s->controls->hhConfig.allocatedRatio,
-        newAllocatedRatio,
-        hh->locallyCollectibleHeapSize,
-        hh->locallyCollectibleSize);
+    size_t newSize = HM_HH_size(hh);
+    hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, newSize);
 
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
@@ -109,18 +92,14 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
-    HM_HH_maybeResizeLCHS(s, hh);
-
     /* I may have reached a new maxHHLCS, so check */
-    if (s->cumulativeStatistics->maxHHLCS <
-        hh->locallyCollectibleSize) {
-      s->cumulativeStatistics->maxHHLCS =
-          hh->locallyCollectibleSize;
+    if (s->cumulativeStatistics->maxHHLCS < newSize) {
+      s->cumulativeStatistics->maxHHLCS = newSize;
     }
 
     /* I may have reached a new maxHHLHCS, so check */
-    if (s->cumulativeStatistics->maxHHLCHS < hh->locallyCollectibleHeapSize) {
-      s->cumulativeStatistics->maxHHLCHS = hh->locallyCollectibleHeapSize;
+    if (s->cumulativeStatistics->maxHHLCHS < hh->collectionThreshold) {
+      s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
     }
 
     if (NULL == hh->lastAllocatedChunk) {

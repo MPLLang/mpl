@@ -171,7 +171,14 @@ void initWorld(GC_state s) {
    * s->{frontier,limit,limitPlusSlop} */
   initVectors(s, hh);
 
-  HM_HH_maybeResizeLCHS(s, hh);
+  size_t currentSize = HM_HH_size(hh);
+  assert(HM_getChunkListSize(HM_HH_LEVEL(hh, 0)) == currentSize);
+  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, currentSize);
+
+  /* SAM_NOTE: some of these statistics may be maintained incorrectly
+   * elsewhere in the runtime. */
+  s->cumulativeStatistics->bytesAllocated += currentSize;
+  s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
@@ -181,11 +188,6 @@ void initWorld(GC_state s) {
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
   assert(s->limit == s->limitPlusSlop - GC_HEAP_LIMIT_SLOP);
 #endif
-
-  /* SAM_NOTE: some of these statistics may be maintained incorrectly
-   * elsewhere in the runtime. */
-  s->cumulativeStatistics->bytesAllocated += HM_getChunkListSize(HM_HH_LEVEL(hh, 0));
-  s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 }
 
 void duplicateWorld (GC_state d, GC_state s) {
@@ -193,7 +195,7 @@ void duplicateWorld (GC_state d, GC_state s) {
 
   GC_thread thread = initThreadAndHeap(d, 1);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
-  HM_HH_maybeResizeLCHS(d, hh);
+  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, HM_HH_size(hh));
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;

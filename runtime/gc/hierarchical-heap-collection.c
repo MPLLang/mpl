@@ -168,15 +168,13 @@ void HM_HHC_collectLocal(void) {
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "collecting hh %p (SL: %u L: %u):\n"
-      "  local scope is %u -> %u\n"
-      "  lchs %"PRIu64" lcs %"PRIu64,
+      "  local scope is %u -> %u\n",
+      // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
       hh->shallowestLevel,
       hh->level,
       forwardHHObjptrArgs.minLevel,
-      forwardHHObjptrArgs.maxLevel,
-      hh->locallyCollectibleHeapSize,
-      hh->locallyCollectibleSize);
+      forwardHHObjptrArgs.maxLevel);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
@@ -395,19 +393,6 @@ void HM_HHC_collectLocal(void) {
       HM_appendChunkList(HM_HH_LEVEL(hh, i), toSpace[i]);
     }
   }
-
-  /*
-   * RAM_NOTE: Really should get this off of forwardHHObjptrArgs instead of
-   * summing up
-   */
-  /* update locally collectible size */
-  hh->locallyCollectibleSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, 0, hh->shallowestPrivateLevel, {
-    hh->locallyCollectibleSize += HM_HH_LEVEL_OBP(hh, i);
-  });
-  FOR_LEVEL_IN_RANGE(level, i, hh, hh->shallowestPrivateLevel, hh->level+1, {
-    hh->locallyCollectibleSize += HM_getChunkListSize(level);
-  });
 
   /* update lastAllocatedChunk and associated */
   HM_chunk lastChunk = NULL;
@@ -676,7 +661,6 @@ void forwardHHObjptr (GC_state s,
       assert(!hasFwdPtr(p));
       HM_chunk chunk = HM_getChunkOf(p);
       HM_unlinkChunk(chunk);
-      opInfo.hh->locallyCollectibleSize -= HM_getChunkSize(chunk);
       /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
        * previous last chunk, resulting in unnecessary fragmentation. This can
        * be avoided by not relying upon using the tgtChunkList...lastChunk to

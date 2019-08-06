@@ -62,7 +62,6 @@ typedef struct GC_thread *GC_thread;
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE Pointer GC_HH_newHeap(void);
 PRIVATE Word32 GC_HH_getLevel(pointer thread);
 PRIVATE void GC_HH_setLevel(pointer thread, Word32 level);
 PRIVATE void GC_HH_attachChild(pointer parent, pointer child, Word32 level);
