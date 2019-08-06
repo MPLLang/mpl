@@ -48,6 +48,7 @@ struct ForwardHHObjptrArgs {
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 PRIVATE void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer);
+PRIVATE void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
@@ -67,6 +68,9 @@ void HM_HHC_collectLocal(void);
 void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
 
 objptr relocateObject(GC_state s, objptr obj, HM_chunkList tgtChunkList);
+
+uint32_t lockLocalScope(GC_state s);
+void unlockLocalScope(GC_state s);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

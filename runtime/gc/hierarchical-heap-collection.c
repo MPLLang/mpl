@@ -84,9 +84,29 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
                                                       NULL);
 }
 
+void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+
+  assert(processor < s->numberOfProcs);
+
+  s->procStates[processor].wsQueueTop = pointerToObjptr(topPointer, NULL);
+}
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
-#if (defined (MLTON_GC_INTERNAL_BASIS))
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+uint32_t lockLocalScope(GC_state s) {
+  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  assert(top >= HM_HH_getCurrent(s)->shallowestLevel);
+  return *top;
+}
+
+void unlockLocalScope(GC_state s) {
+  // uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  /* SAM_NOTE: nothing to do for private-deques scheduler */
+  return;
+}
+
 void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
@@ -95,19 +115,24 @@ void HM_HHC_collectLocal(void) {
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  if (hh->shallowestPrivateLevel == 0) {
+  /* SAM_NOTE: TODO:
+   * lock local scope requires interfacing with the deque, to reject steals
+   */
+  uint32_t minLevel = lockLocalScope(s);
+
+  if (minLevel == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    return;
+    goto unlock_local_scope_and_return;
   }
 
   if (hh->level <= 1) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
-    return;
+    goto unlock_local_scope_and_return;
   }
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
-    return;
+    goto unlock_local_scope_and_return;
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -133,11 +158,8 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
-  uint32_t preferredMinLevel = hh->shallowestPrivateLevel;
-  if (preferredMinLevel == 1) {
-    /* if we can, prefer not to collect depth 1 */
-    preferredMinLevel++;
-  }
+  /* prefer not to collect depth 1 */
+  uint32_t preferredMinLevel = max(minLevel, 2);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
@@ -462,6 +484,12 @@ void HM_HHC_collectLocal(void) {
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
+
+unlock_local_scope_and_return:
+  /* SAM_NOTE: TODO:
+   * requires interfacing with the ws deque */
+  unlockLocalScope(s);
+  return;
 }
 
 /* ========================================================================= */
@@ -722,7 +750,7 @@ void forwardHHObjptr (GC_state s,
       ((uintptr_t)(opp)),
       *opp);
 }
-#endif /* MLTON_GC_INTERNAL_BASIS */
+#endif /* MLTON_GC_INTERNAL_FUNCS */
 
 GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
                                              size_t *objectSize,

@@ -110,6 +110,7 @@ struct
   type worker_public_data =
     { mailbox :
         { thbox : Thread.t option ref
+        , lbox : int ref
         , tbox : (unit -> unit) option ref
         , flag : int ref
         }
@@ -121,6 +122,7 @@ struct
     { mailbox =
         { thbox = ref NONE
         , tbox = ref NONE
+        , lbox = ref (~1)
         , flag = ref MAIL_WAITING
         }
     , hasWork = ref false
@@ -142,6 +144,18 @@ struct
 
   fun setThreadBox (p, h) =
     #thbox (mailbox p) := SOME h
+
+  fun setLevelBox (p, l) =
+    #lbox (mailbox p) := l
+
+  fun getLevelBox p =
+    let
+      val box = #lbox (mailbox p)
+      val l = !box
+    in
+      box := ~1;
+      l
+    end
 
   fun getThreadBox p =
     let
@@ -222,15 +236,30 @@ struct
 
   type worker_local_data =
     { queue : ((unit -> unit) * int) Queue.t
+    , localScope : Word64.word ref
     , schedThread : Thread.t option ref
     }
 
   fun wldInit p : worker_local_data =
     { queue = Queue.new p
+    , localScope =
+        let
+          val r = ref 0w0
+        in
+          HM.registerQueueTop (Word32.fromInt p, r);
+          r
+        end
     , schedThread = ref NONE
     }
 
   val workerLocalData = Vector.tabulate (P, wldInit)
+
+  fun setLocalScope p level =
+    let
+      val {localScope=lsRef, ...} = vectorSub (workerLocalData, p)
+    in
+      lsRef := Word64.fromInt level
+    end
 
   fun communicate () =
     let
@@ -254,6 +283,8 @@ struct
                   (* val ch = HH.newHeap () *)
                 in
                   HH.attachChild (Thread.current (), taskThread, level);
+                  setLocalScope myId (level+1);
+                  setLevelBox (r, level+1);
                   setThreadBox (r, taskThread);
                   setTaskBox (r, task);
                   setMailReceiving r
@@ -352,7 +383,8 @@ struct
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
-                  ( HH.mergeThreads (thread, t)
+                  ( setLocalScope (myWorkerId ()) level
+                  ; HH.mergeThreads (thread, t)
                   ; HH.promoteChunks thread
                   ; HH.setLevel (thread, level)
                   ; gr
@@ -378,7 +410,8 @@ struct
       val myId = myWorkerId ()
       val myRand = SimpleRandom.rand myId
       val mySchedThread = Thread.current ()
-      val {queue=myQueue, schedThread} = vectorSub (workerLocalData, myId)
+      val {queue=myQueue, schedThread, ...} =
+        vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
@@ -442,6 +475,9 @@ struct
            *)
           val idleTimer' = request idleTimer
           val t = getThreadBox myId
+          val level = getLevelBox myId
+          val _ = if level > 1 then () else
+            die (fn _ => "scheduler bug: acquired with level " ^ Int.toString level ^ "\n")
 
           val _ = unblockRequests ()
           val _ = stopTimer idleTimer'
@@ -451,7 +487,12 @@ struct
         in
           case t of
             NONE => die (fn _ => "scheduler bug: thread box is empty")
-          | SOME taskThread => (threadSwitch taskThread; acquireWork ())
+          | SOME taskThread =>
+              ( setLocalScope myId level
+              ; threadSwitch taskThread
+              ; setLocalScope myId 1
+              ; acquireWork ()
+              )
         end
 
     in
@@ -466,6 +507,7 @@ struct
     let
       val acquireWork = setupSchedLoop ()
     in
+      setLocalScope (myWorkerId ()) 1;
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
@@ -496,6 +538,7 @@ struct
         HH.attachChild (originalThread, schedThread, 0);
         (* HH.attachHeap (schedThread, schedHeap); *)
         amOriginal := false;
+        setLocalScope (myWorkerId ()) 1;
         threadSwitch schedThread
       end
     else
@@ -503,6 +546,7 @@ struct
         val acquireWork = setupSchedLoop ()
       in
         threadSwitch originalThread;
+        setLocalScope (myWorkerId ()) 1;
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end

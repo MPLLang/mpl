@@ -46,10 +46,7 @@ void HM_HH_appendChild(GC_state s,
 
   /* initialize childHH */
   childHH->shallowestLevel = stealLevel + 1;
-  childHH->shallowestPrivateLevel = stealLevel + 1;
   childHH->level = stealLevel + 1;
-
-  parentHH->shallowestPrivateLevel = stealLevel + 1;
 
   assertInvariants(s, parentHH);
   assertInvariants(s, childHH);
@@ -86,9 +83,6 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   assertInvariants(s, hh);
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
-
-  uint32_t newShallowestPrivateLevel = hh->shallowestLevel-1;
-  parentHH->shallowestPrivateLevel = newShallowestPrivateLevel;
 
   /* Merge levels. */
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
@@ -172,12 +166,10 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
            "\tlevel = %u\n"
-           "\tshallowestLevel = %u\n"
-           "\tshallowestPrivateLevel = %u\n",
+           "\tshallowestLevel = %u\n",
            (void*)hh->lastAllocatedChunk,
            hh->level,
-           hh->shallowestLevel,
-           hh->shallowestPrivateLevel);
+           hh->shallowestLevel);
 }
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
@@ -196,7 +188,6 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
   hh->shallowestLevel = 0;
-  hh->shallowestPrivateLevel = 0;
   hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, 0);
 
   return hh;

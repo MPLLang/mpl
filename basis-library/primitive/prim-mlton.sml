@@ -157,6 +157,10 @@ structure HM =
             _import "HM_HHC_registerQueue" runtime private:
             Word32.word * 'a array -> unit;
 
+        val registerQueueTop: Word32.word * Word64.word ref -> unit =
+            _import "HM_HHC_registerQueueTop" runtime private:
+            Word32.word * Word64.word ref -> unit;
+
         val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit =
             _prim "Array_update_noWriteBarrier" : 'a array * SeqIndex.int * 'a -> unit;
 

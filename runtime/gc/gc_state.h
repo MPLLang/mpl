@@ -37,6 +37,7 @@ struct GC_state {
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
+  objptr wsQueueTop;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct HM_chunkList* freeListSmall;

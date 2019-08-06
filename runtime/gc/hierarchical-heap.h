@@ -30,8 +30,6 @@ struct HM_HierarchicalHeap {
 
   uint32_t shallowestLevel;
 
-  uint32_t shallowestPrivateLevel;
-
   /* when the number of bytes in this HH exceeds the threshold, we collect.
    * the threshold is adjusted after each collection. */
   size_t collectionThreshold;
