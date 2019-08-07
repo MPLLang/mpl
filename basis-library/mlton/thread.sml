@@ -75,7 +75,6 @@ struct
 
   fun getLevel t = Word32.toInt (Prim.getLevel t)
   fun setLevel (t, d) = Prim.setLevel (t, Word32.fromInt d)
-  fun attachChild (p, c, d) = Prim.attachChild (p, c, Word32.fromInt d)
 end
 
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =

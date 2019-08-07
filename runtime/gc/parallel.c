@@ -6,10 +6,9 @@ void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   if (!Proc_isInitialized (s)) {
-    struct HM_HierarchicalHeap *phh = getHierarchicalHeapCurrent(s);
     for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
       struct HM_HierarchicalHeap *chh = getHierarchicalHeapCurrent(&(s->procStates[proc]));
-      HM_HH_appendChild(s, phh, chh, 0);
+      chh->level = 1;
     }
 
     /* Now wake them up! */

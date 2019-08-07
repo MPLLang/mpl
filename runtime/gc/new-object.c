@@ -124,7 +124,6 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
 
   struct HM_HierarchicalHeap *hh = HM_HH_new(s);
   hh->level = level;
-  assert(HM_HH_getLevel(s, hh) == level);
   HM_HH_extend(hh, totalSize);
 
   pointer frontier = HM_HH_getFrontier(hh);

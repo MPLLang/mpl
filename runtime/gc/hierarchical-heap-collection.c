@@ -97,7 +97,6 @@ void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
 
 uint32_t lockLocalScope(GC_state s) {
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  assert(top >= HM_HH_getCurrent(s)->shallowestLevel);
   return *top;
 }
 
@@ -200,11 +199,10 @@ void HM_HHC_collectLocal(void) {
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "collecting hh %p (SL: %u L: %u):\n"
+      "collecting hh %p (L: %u):\n"
       "  local scope is %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
-      hh->shallowestLevel,
       hh->level,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);

@@ -38,26 +38,6 @@ static void assertInvariants(GC_state s,
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HH_appendChild(GC_state s,
-                       struct HM_HierarchicalHeap* parentHH,
-                       struct HM_HierarchicalHeap* childHH,
-                       uint32_t stealLevel) {
-  assertInvariants(s, parentHH);
-
-  /* initialize childHH */
-  childHH->shallowestLevel = stealLevel + 1;
-  childHH->level = stealLevel + 1;
-
-  assertInvariants(s, parentHH);
-  assertInvariants(s, childHH);
-}
-
-uint32_t HM_HH_getLevel(__attribute__((unused)) GC_state s,
-                      struct HM_HierarchicalHeap* hh)
-{
-  return hh->level;
-}
-
 #pragma message "Remember to do enter/leave correctly for new HH primitives."
 void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_HierarchicalHeap* hh) {
   /* SAM_NOTE: will need to move this to the appropriate places... */
@@ -165,11 +145,9 @@ void HM_HH_setLevel(__attribute__((unused)) GC_state s,
 void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
-           "\tlevel = %u\n"
-           "\tshallowestLevel = %u\n",
+           "\tlevel = %u\n",
            (void*)hh->lastAllocatedChunk,
-           hh->level,
-           hh->shallowestLevel);
+           hh->level);
 }
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
@@ -187,7 +165,6 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   }
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
-  hh->shallowestLevel = 0;
   hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, 0);
 
   return hh;
@@ -270,12 +247,6 @@ size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
 #if ASSERT
 void assertInvariants(__attribute__((unused)) GC_state s,
                       struct HM_HierarchicalHeap* hh) {
-  ASSERTPRINT(hh->level >= hh->shallowestLevel,
-              "HH %p has invalid level values! level %u shallowestLevel %u",
-              ((void*)(hh)),
-              hh->level,
-              hh->shallowestLevel);
-
   if (NULL != hh->lastAllocatedChunk) {
     HM_chunkList levelHead = HM_getLevelHead(hh->lastAllocatedChunk);
     assert(levelHead->containingHH == hh);

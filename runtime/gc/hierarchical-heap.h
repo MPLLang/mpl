@@ -28,8 +28,6 @@ struct HM_HierarchicalHeap {
   uint32_t level; /**< The current level of the hierarchy which new chunks should
                  * belong to. */
 
-  uint32_t shallowestLevel;
-
   /* when the number of bytes in this HH exceeds the threshold, we collect.
    * the threshold is adjusted after each collection. */
   size_t collectionThreshold;
@@ -69,14 +67,6 @@ struct HM_HierarchicalHeap;
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
 
-/* stealLevel is the level of the parent that will now become suspended due
- * to this child. */
-void HM_HH_appendChild(GC_state s,
-                       struct HM_HierarchicalHeap* parentHH,
-                       struct HM_HierarchicalHeap* childHH,
-                       uint32_t stealLevel);
-
-uint32_t HM_HH_getLevel(GC_state s, struct HM_HierarchicalHeap* hh);
 void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parent, struct HM_HierarchicalHeap* child);
 void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh);
 void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, uint32_t level);

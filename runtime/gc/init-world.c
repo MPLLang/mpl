@@ -40,7 +40,7 @@ void initVectors(GC_state s, struct HM_HierarchicalHeap *hh) {
 
   currentChunk = HM_getChunkOf(frontier);
   assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, 0)));
-  assert(HM_HH_getLevel(s, hh) == 0);
+  assert(0 == hh->level);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
     size_t elementSize;

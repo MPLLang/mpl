@@ -282,7 +282,6 @@ struct
                   val taskThread = Thread.copy prototypeThread
                   (* val ch = HH.newHeap () *)
                 in
-                  HH.attachChild (Thread.current (), taskThread, level);
                   setLocalScope myId (level+1);
                   setLevelBox (r, level+1);
                   setThreadBox (r, taskThread);
@@ -489,6 +488,7 @@ struct
             NONE => die (fn _ => "scheduler bug: thread box is empty")
           | SOME taskThread =>
               ( setLocalScope myId level
+              ; HH.setLevel (taskThread, level)
               ; threadSwitch taskThread
               ; setLocalScope myId 1
               ; acquireWork ()
@@ -535,9 +535,8 @@ struct
         val schedThread = Thread.copy (Thread.savedPre ())
         (* val schedHeap = HH.newHeap () *)
       in
-        HH.attachChild (originalThread, schedThread, 0);
-        (* HH.attachHeap (schedThread, schedHeap); *)
         amOriginal := false;
+        HH.setLevel (schedThread, 1);
         setLocalScope (myWorkerId ()) 1;
         threadSwitch schedThread
       end
