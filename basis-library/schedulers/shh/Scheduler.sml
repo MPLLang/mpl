@@ -236,29 +236,21 @@ struct
 
   type worker_local_data =
     { queue : (unit -> unit) Queue.t
-    , localScope : Word64.word ref
     , schedThread : Thread.t option ref
     }
 
   fun wldInit p : worker_local_data =
     { queue = Queue.new p
-    , localScope =
-        let
-          val r = ref 0w0
-        in
-          HM.registerQueueTop (Word32.fromInt p, r);
-          r
-        end
     , schedThread = ref NONE
     }
 
   val workerLocalData = Vector.tabulate (P, wldInit)
 
-  fun setLocalScope p level =
+  fun setQueueDepth p d =
     let
-      val {localScope=lsRef, ...} = vectorSub (workerLocalData, p)
+      val {queue, ...} = vectorSub (workerLocalData, p)
     in
-      lsRef := Word64.fromInt level
+      Queue.setDepth queue d
     end
 
   fun communicate () =
@@ -282,7 +274,6 @@ struct
                   val taskThread = Thread.copy prototypeThread
                   (* val ch = HH.newHeap () *)
                 in
-                  setLocalScope myId (level+1);
                   setLevelBox (r, level+1);
                   setThreadBox (r, taskThread);
                   setTaskBox (r, task);
@@ -382,12 +373,7 @@ struct
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
-                  ( setLocalScope (myWorkerId ()) level
-                  ; let
-                      val {queue, ...} = vectorSub (workerLocalData, myWorkerId ())
-                    in
-                      Queue.setDepth queue level
-                    end
+                  ( setQueueDepth (myWorkerId ()) level
                   ; HH.mergeThreads (thread, t)
                   ; HH.promoteChunks thread
                   ; HH.setLevel (thread, level)
@@ -419,6 +405,7 @@ struct
       val _ = schedThread := SOME mySchedThread
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
+      val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #start myQueue);
 
       val _ = Queue.setDepth myQueue 1
 
@@ -494,11 +481,10 @@ struct
           case t of
             NONE => die (fn _ => "scheduler bug: thread box is empty")
           | SOME taskThread =>
-              ( setLocalScope myId level
-              ; HH.setLevel (taskThread, level)
+              ( HH.setLevel (taskThread, level)
               ; Queue.setDepth myQueue level
               ; threadSwitch taskThread
-              ; setLocalScope myId 1
+              ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
         end
@@ -515,7 +501,6 @@ struct
     let
       val acquireWork = setupSchedLoop ()
     in
-      setLocalScope (myWorkerId ()) 1;
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
@@ -545,7 +530,7 @@ struct
       in
         amOriginal := false;
         HH.setLevel (schedThread, 1);
-        setLocalScope (myWorkerId ()) 1;
+        setQueueDepth (myWorkerId ()) 1;
         threadSwitch schedThread
       end
     else
@@ -553,7 +538,7 @@ struct
         val acquireWork = setupSchedLoop ()
       in
         threadSwitch originalThread;
-        setLocalScope (myWorkerId ()) 1;
+        setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end

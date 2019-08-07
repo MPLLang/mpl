@@ -1,7 +1,9 @@
 structure ArrayQueue : QUEUE =
 struct
   val capacity = 128
-  type 'a t = {data : 'a option array, start : int ref, frontier : int ref}
+  type 'a t = {data : 'a option array,
+               start : Word64.word ref,
+               frontier : int ref}
 
   fun arraySub (a, i) =
     Array.sub (a, i)
@@ -9,25 +11,27 @@ struct
   fun arrayUpdate (a, i, x) =
     MLton.HM.arrayUpdateNoBarrier (a, Int64.fromInt i, x)
 
+  fun getStart ({start, ...} : 'a t) = Word64.toInt (!start)
+  fun setStart ({start, ...} : 'a t) s = start := Word64.fromInt s
+
   fun new p =
     let
       val data = Array.array (capacity, NONE)
-      (* val _ = MLton.HM.registerQueue (Word32.fromInt p, data) *)
     in
       { data = data
-      , start = ref 0
+      , start = ref 0w0
       , frontier = ref 0
       }
     end
 
-  fun size ({start, frontier, ...} : 'a t) = !frontier - !start
+  fun size (q as {start, frontier, ...} : 'a t) = !frontier - getStart q
   fun empty q = (size q = 0)
 
   fun setDepth (q as {start, frontier, ...} : 'a t) d =
     if not (empty q) then
       raise Fail "can only set depth on empty queue"
     else
-      ( start := d
+      ( setStart q d
       ; frontier := d
       )
 
@@ -40,9 +44,9 @@ struct
       )
     end
 
-  fun popFront ({data, start, frontier} : 'a t) =
+  fun popFront (q as {data, start, frontier} : 'a t) =
     let
-      val s = !start
+      val s = getStart q
       val f = !frontier
     in
       if s = f then
@@ -57,9 +61,9 @@ struct
         end
     end
 
-  fun popBack ({data, start, frontier} : 'a t) =
+  fun popBack (q as {data, start, frontier} : 'a t) =
     let
-      val s = !start
+      val s = getStart q
       val f = !frontier
     in
       if s = f then
@@ -68,15 +72,15 @@ struct
         let
           val result = arraySub (data, s)
         in
-          start := s+1;
+          setStart q (s+1);
           arrayUpdate (data, s, NONE);
           SOME (valOf result, s)
         end
     end
 
-  fun toList ({data, start, frontier} : 'a t) =
+  fun toList (q as {data, start, frontier} : 'a t) =
     let
-      val sl = ArraySlice.slice (data, !start, SOME (!frontier - !start))
+      val sl = ArraySlice.slice (data, getStart q, SOME (size q))
     in
       ArraySlice.foldr (fn (x, l) => valOf x :: l) [] sl
     end
