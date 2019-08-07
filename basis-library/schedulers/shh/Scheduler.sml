@@ -235,7 +235,7 @@ struct
    *)
 
   type worker_local_data =
-    { queue : ((unit -> unit) * int) Queue.t
+    { queue : (unit -> unit) Queue.t
     , localScope : Word64.word ref
     , schedThread : Thread.t option ref
     }
@@ -364,7 +364,7 @@ struct
               returnToSched ()
           end
 
-        val _ = push (g', level)
+        val _ = push g'
         val _ = HH.setLevel (thread, level + 1)
 
         val _ = communicate ()
@@ -383,6 +383,11 @@ struct
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
                   ( setLocalScope (myWorkerId ()) level
+                  ; let
+                      val {queue, ...} = vectorSub (workerLocalData, myWorkerId ())
+                    in
+                      Queue.setDepth queue level
+                    end
                   ; HH.mergeThreads (thread, t)
                   ; HH.promoteChunks thread
                   ; HH.setLevel (thread, level)
@@ -414,6 +419,8 @@ struct
       val _ = schedThread := SOME mySchedThread
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
+
+      val _ = Queue.setDepth myQueue 1
 
       (* ------------------------------------------------------------------- *)
 
@@ -489,6 +496,7 @@ struct
           | SOME taskThread =>
               ( setLocalScope myId level
               ; HH.setLevel (taskThread, level)
+              ; Queue.setDepth myQueue level
               ; threadSwitch taskThread
               ; setLocalScope myId 1
               ; acquireWork ()
