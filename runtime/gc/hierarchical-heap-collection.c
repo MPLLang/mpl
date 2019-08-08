@@ -96,6 +96,9 @@ void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 uint32_t lockLocalScope(GC_state s) {
+  if (BOGUS_OBJPTR == s->wsQueueTop) {
+    return 0;
+  }
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   return *top;
 }
@@ -623,21 +626,19 @@ void forwardHHObjptr (GC_state s,
 
   assert(HM_getObjptrLevel(op) >= args->minLevel);
 
-  if (hasFwdPtr(p)) {
+  while (hasFwdPtr(p)) {
     op = getFwdPtr(p);
-    *opp = op;
     p = objptrToPointer(op, NULL);
+  }
 
-    assert(!hasFwdPtr(p));
-    assert(HM_isObjptrInToSpace(s, op));
-
+  if (HM_getObjptrLevel(op) < args->minLevel) {
+    *opp = op;
+    assert(!HM_isObjptrInToSpace(s, op));
   } else if (HM_isObjptrInToSpace(s, op)) {
-    /* do nothing; this could be a large object that had its chunk moved
-     * rather than copied */
-    assert(!hasFwdPtr(p));
-
+    *opp = op;
   } else {
     assert(!HM_isObjptrInToSpace(s, op));
+    assert(HM_getObjptrLevel(op) >= args->minLevel);
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;

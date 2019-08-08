@@ -350,7 +350,9 @@ struct
             rightSide := SOME (gr, t);
             communicate ();
             if decrementHitsZero incounter then
-              threadSwitch thread
+              ( setQueueDepth (myWorkerId ()) (level+1)
+              ; threadSwitch thread
+              )
             else
               returnToSched ()
           end
@@ -373,8 +375,8 @@ struct
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
-                  ( setQueueDepth (myWorkerId ()) level
-                  ; HH.mergeThreads (thread, t)
+                  ( HH.mergeThreads (thread, t)
+                  ; setQueueDepth (myWorkerId ()) level
                   ; HH.promoteChunks thread
                   ; HH.setLevel (thread, level)
                   ; gr
