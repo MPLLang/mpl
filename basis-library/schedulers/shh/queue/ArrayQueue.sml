@@ -20,7 +20,8 @@ struct
   val capacity = 128
   type 'a t = {data : 'a option array,
                start : Word64.word ref,
-               frontier : int ref}
+               frontier : int ref,
+               owner : int}
 
   fun arraySub (a, i) =
     Array.sub (a, i)
@@ -28,22 +29,24 @@ struct
   fun arrayUpdate (a, i, x) =
     MLton.HM.arrayUpdateNoBarrier (a, Int64.fromInt i, x)
 
-  val lockBit = Word64.<< (0w1, 0w63)
-  val mask = Word64.- (lockBit, 0w1)
+  val mask = Word64.- (Word64.<< (0w1, 0w62), 0w1)
   fun isLockedVal s =
-    Word64.>> (s, 0w63) = 0w1
-  fun makeLockedVal s =
-    Word64.orb (s, lockBit)
-  (* fun makeUnlockedVal s =
-    Word64.andb (s, mask) *)
+    Word64.>> (s, 0w62) <> 0w0
+  val lockedByMeMarker = Word64.<< (0w1, 0w62)
+  val lockedByOtherMarker = Word64.<< (0w2, 0w62)
+  fun makeLockedVal owner s =
+    if MLton.Parallel.processorNumber () = owner then
+      Word64.orb (s, lockedByMeMarker)
+    else
+      Word64.orb (s, lockedByOtherMarker)
 
-  fun lockGetStart (q as {start, ...} : 'a t) =
+  fun lockGetStart (q as {start, owner, ...} : 'a t) =
     let
       val s = !start
     in
       if isLockedVal s then
         lockGetStart q
-      else if s <> MLton.Parallel.compareAndSwap start (s, makeLockedVal s) then
+      else if s <> MLton.Parallel.compareAndSwap start (s, makeLockedVal owner s) then
         lockGetStart q
       else
         Word64.toInt s
@@ -62,6 +65,7 @@ struct
       { data = data
       , start = ref 0w0
       , frontier = ref 0
+      , owner = p
       }
     end
 
@@ -97,16 +101,18 @@ struct
         )
     end
 
-  fun pushFront (x, {data, start, frontier} : 'a t) =
+  fun pushFront (x, q as {data, start, frontier, ...} : 'a t) =
     let
+      val s = lockGetStart q
       val f = !frontier
     in
       ( arrayUpdate (data, f, SOME x)
       ; frontier := f + 1
+      ; setStart q s
       )
     end
 
-  fun popFront (q as {data, start, frontier} : 'a t) =
+  fun popFront (q as {data, start, frontier, ...} : 'a t) =
     let
       val s = lockGetStart q
       val f = !frontier
@@ -124,7 +130,7 @@ struct
         end
     end
 
-  fun popBack (q as {data, start, frontier} : 'a t) =
+  fun popBack (q as {data, start, frontier, ...} : 'a t) =
     let
       val s = lockGetStart q
       val f = !frontier
@@ -141,7 +147,7 @@ struct
         end
     end
 
-  fun toList (q as {data, start, frontier} : 'a t) =
+  fun toList (q as {data, start, frontier, ...} : 'a t) =
     let
       val s = lockGetStart q
       val f = !frontier

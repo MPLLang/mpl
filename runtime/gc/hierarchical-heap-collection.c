@@ -95,6 +95,14 @@ void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+#define LOCKED_BY_ME_MARKER    ((uint64_t)1)
+#define LOCKED_BY_OTHER_MARKER ((uint64_t)2)
+#define NO_MARKER_MASK ((((uint64_t)1) << 62) - 1)
+
+/* the GC locking scheme uses the current lock marker +1 as its own lock
+ * marker. So, original if unlocked (lock marker 0) then it functions as a
+ * standard 0-1 lock. But if original is locked-by-me, then after GC completes
+ * it will still appear locked-by-me to the mutator. */
 uint32_t lockLocalScope(GC_state s) {
   if (BOGUS_OBJPTR == s->wsQueueTop) {
     return 0;
@@ -103,20 +111,28 @@ uint32_t lockLocalScope(GC_state s) {
 
   uint64_t val = *top;
   size_t terminateCheckCounter = 0;
-  do {
-    while ((val >> 63) == 1) {
+  while (true) {
+    while ((val >> 62) == LOCKED_BY_OTHER_MARKER) {
       GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
       val = atomicLoadU64(top);
     }
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-  } while (!__sync_bool_compare_and_swap(top, val, val | ((uint64_t)1 << 63)));
+    uint64_t lockMarker = val >> 62;
+    assert(lockMarker == 0 || lockMarker == LOCKED_BY_ME_MARKER);
+    if (__sync_bool_compare_and_swap(top, val, val | ((lockMarker+1) << 62)))
+      break;
+  }
 
   return val;
 }
 
 void unlockLocalScope(GC_state s) {
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  atomicStoreU64(top, *top & (((uint64_t)1 << 63) - 1));
+  uint64_t lockMarker = *top >> 62;
+  uint64_t topMasked = *top & NO_MARKER_MASK;
+  assert(lockMarker == 1 || lockMarker == 2);
+  assert(topMasked >> 62 == 0 && topMasked | (lockMarker<<62) == *top);
+  atomicStoreU64(top, topMasked | ((lockMarker-1) << 62));
   return;
 }
 
