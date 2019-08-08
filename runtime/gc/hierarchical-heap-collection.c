@@ -131,7 +131,7 @@ void unlockLocalScope(GC_state s) {
   uint64_t lockMarker = *top >> 62;
   uint64_t topMasked = *top & NO_MARKER_MASK;
   assert(lockMarker == 1 || lockMarker == 2);
-  assert(topMasked >> 62 == 0 && topMasked | (lockMarker<<62) == *top);
+  assert(topMasked >> 62 == 0 && (topMasked | (lockMarker<<62)) == *top);
   atomicStoreU64(top, topMasked | ((lockMarker-1) << 62));
   return;
 }
