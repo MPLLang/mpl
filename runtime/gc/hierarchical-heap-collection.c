@@ -100,12 +100,23 @@ uint32_t lockLocalScope(GC_state s) {
     return 0;
   }
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  return *top;
+
+  uint64_t val = *top;
+  size_t terminateCheckCounter = 0;
+  do {
+    while ((val >> 63) == 1) {
+      GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+      val = atomicLoadU64(top);
+    }
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+  } while (!__sync_bool_compare_and_swap(top, val, val | ((uint64_t)1 << 63)));
+
+  return val;
 }
 
 void unlockLocalScope(GC_state s) {
-  // uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  /* SAM_NOTE: nothing to do for private-deques scheduler */
+  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  atomicStoreU64(top, *top & (((uint64_t)1 << 63) - 1));
   return;
 }
 

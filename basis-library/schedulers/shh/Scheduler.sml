@@ -89,124 +89,6 @@ struct
   *)
 
   (* ========================================================================
-   * SCHEDULER PUBLIC DATA
-   *)
-
-  (* A request is either REQUEST_NONE, REQUEST_BLOCKED, or a processor id.
-   * Workers request work by writing their own id into another worker's
-   * request cell. If a worker is idle, it blocks requests from other workers
-   * by changing its own request cell to REQUEST_BLOCKED. *)
-  val REQUEST_NONE = ~1
-  val REQUEST_BLOCKED = ~2
-
-  val MAIL_WAITING = 0
-  val MAIL_RECEIVING = 1
-  val MAIL_REJECT = 2
-
-  (* val dummyTask = NONE *)
-  (* val dummyHeap = MLton.Pointer.null *)
-  (* val dummyThread = NONE *)
-
-  type worker_public_data =
-    { mailbox :
-        { thbox : Thread.t option ref
-        , lbox : int ref
-        , tbox : (unit -> unit) option ref
-        , flag : int ref
-        }
-    , hasWork : bool ref
-    , request : int ref
-    }
-
-  fun wpdInit p : worker_public_data =
-    { mailbox =
-        { thbox = ref NONE
-        , tbox = ref NONE
-        , lbox = ref (~1)
-        , flag = ref MAIL_WAITING
-        }
-    , hasWork = ref false
-    , request = ref REQUEST_NONE
-    }
-
-  val workerPublicData = Vector.tabulate (P, wpdInit)
-
-  fun wpd p = vectorSub (workerPublicData, p)
-
-  fun checkHasWork p    = !(#hasWork (wpd p))
-  fun setHasWork (p, s) = #hasWork (wpd p) := s
-
-  fun getRequest p          = !(#request (wpd p))
-  fun setRequest (p, r)     = #request (wpd p) := r
-  fun casRequest (p, r, r') = casRef (#request (wpd p)) (r, r')
-
-  fun mailbox p = #mailbox (wpd p)
-
-  fun setThreadBox (p, h) =
-    #thbox (mailbox p) := SOME h
-
-  fun setLevelBox (p, l) =
-    #lbox (mailbox p) := l
-
-  fun getLevelBox p =
-    let
-      val box = #lbox (mailbox p)
-      val l = !box
-    in
-      box := ~1;
-      l
-    end
-
-  fun getThreadBox p =
-    let
-      val box = #thbox (mailbox p)
-      val t = !box
-    in
-      box := NONE;
-      t
-    end
-
-  fun setTaskBox (p, t) =
-    #tbox (mailbox p) := SOME t
-
-  fun getTaskBox p =
-    let
-      val box = #tbox (mailbox p)
-      val t = !box
-    in
-      box := NONE;
-      t
-    end
-
-  fun setMailReceiving p =
-    if casRef (#flag (mailbox p)) (MAIL_WAITING, MAIL_RECEIVING)
-    then ()
-    else die (fn _ => "scheduler error: set mailbox receiving failed")
-
-  fun setMailReject p =
-    if casRef (#flag (mailbox p)) (MAIL_WAITING, MAIL_REJECT)
-    then ()
-    else die (fn _ => "scheduler error: set mailbox reject failed")
-
-  fun waitForMail p =
-    let
-      val flag = #flag (mailbox p)
-      fun loop () =
-        let
-          val f = !flag
-        in
-          if f = MAIL_WAITING then
-            loop ()
-          else
-            f = MAIL_RECEIVING
-        end
-      val result = loop ()
-    in
-      flag := MAIL_WAITING;
-      result
-    end
-
-  (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
    *
    * this widget makes it possible to create new "user" threads by copying
@@ -216,18 +98,22 @@ struct
 
   local
     val amOriginal = ref true
+    val taskBoxes = Array.array (P, NONE)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
     if !amOriginal then
       (amOriginal := false; Thread.savedPre ())
     else
-      case getTaskBox (myWorkerId ()) of
+      case Array.sub (taskBoxes, myWorkerId ()) of
         NONE => die (fn _ => "scheduler bug: task box is empty")
       | SOME t =>
-          ( t () handle _ => ()
+          ( MLton.HM.arrayUpdateNoBarrier (taskBoxes, myWorkerId (), NONE)
+          ; t () handle _ => ()
           ; die (fn _ => "scheduler bug: child task didn't exit properly")
           )
+  fun setTaskBox p t =
+    MLton.HM.arrayUpdateNoBarrier (taskBoxes, p, SOME t)
   end
 
   (* ========================================================================
@@ -253,37 +139,17 @@ struct
       Queue.setDepth queue d
     end
 
-  fun communicate () =
+  fun trySteal p =
     let
-      val myId = myWorkerId ()
-      val {queue=myQueue, ...} = vectorSub (workerLocalData, myId)
-      val r = getRequest myId
-
-      fun handleRequest () =
-        if r = REQUEST_NONE then
-          ()
-        else if r = REQUEST_BLOCKED then
-          die (fn _ => "scheduler bug: serve while blocked")
-        else
-          (* r is a friendly processor id which is requesting work *)
-          ( setRequest (myId, REQUEST_NONE)
-          ; case Queue.popBack myQueue of
-              NONE => setMailReject r
-            | SOME (task, level) =>
-                let
-                  val taskThread = Thread.copy prototypeThread
-                  (* val ch = HH.newHeap () *)
-                in
-                  setLevelBox (r, level+1);
-                  setThreadBox (r, taskThread);
-                  setTaskBox (r, task);
-                  setMailReceiving r
-                end
-          )
+      val {queue, ...} = vectorSub (workerLocalData, p)
     in
-      handleRequest ();
-      setHasWork (myId, not (Queue.empty myQueue))
+      if not (Queue.pollHasWork queue) then
+        NONE
+      else
+        Queue.popBack queue
     end
+
+  fun communicate () = ()
 
   fun push x =
     let
@@ -348,7 +214,6 @@ struct
             val t = Thread.current ()
           in
             rightSide := SOME (gr, t);
-            communicate ();
             if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (level+1)
               ; threadSwitch thread
@@ -360,13 +225,11 @@ struct
         val _ = push g'
         val _ = HH.setLevel (thread, level + 1)
 
-        val _ = communicate ()
         val fr = result f
 
         val gr =
           if popDiscard () then
-            ( communicate ()
-            ; HH.promoteChunks thread
+            ( HH.promoteChunks thread
             ; HH.setLevel (thread, level)
             ; result g
             )
@@ -413,46 +276,18 @@ struct
 
       (* ------------------------------------------------------------------- *)
 
-      fun verifyStatus () =
-        if checkHasWork myId = false then ()
-        else die (fn _ => "scheduler bug: status not set correctly while idle")
-
       fun randomOtherId () =
         let val other = SimpleRandom.boundedInt (0, P-1) myRand
         in if other < myId then other else other+1
         end
 
-      fun blockRequests () =
-        let
-          val r = getRequest myId
-        in
-          if r = REQUEST_NONE then
-            if casRequest (myId, REQUEST_NONE, REQUEST_BLOCKED) then ()
-            else blockRequests () (* recurs at most once *)
-          else if r = REQUEST_BLOCKED then
-            die (fn _ => "scheduler bug: attempted to block while already blocked")
-          else
-            ( setRequest (myId, REQUEST_BLOCKED)
-            ; setMailReject r
-            )
-        end
-
-      fun unblockRequests () = setRequest (myId, REQUEST_NONE)
-
       fun request idleTimer =
         let
           val friend = randomOtherId ()
-          val hasWork = checkHasWork friend
-          val available = (getRequest friend = REQUEST_NONE)
         in
-          if not (available andalso hasWork andalso casRequest (friend, REQUEST_NONE, myId)) then
-            (verifyStatus (); request (tickTimer idleTimer))
-          else if not (waitForMail myId) then
-            (* mail request rejected *)
-            (verifyStatus (); request (tickTimer idleTimer))
-          else
-            (* mail request accepted *)
-            idleTimer
+          case trySteal friend of
+            NONE => request (tickTimer idleTimer)
+          | SOME (task, level) => (task, level, tickTimer idleTimer)
         end
 
       (* ------------------------------------------------------------------- *)
@@ -460,35 +295,18 @@ struct
       fun acquireWork () : unit =
         let
           val idleTimer = startTimer myId
-          val _ = setHasWork (myId, false)
-          val _ = blockRequests ()
-
-          (* find work from another worker. Eventually we receive
-           *   - a heap to execute it in (taken out of the heap box now)
-           *   - a task to execute (taken out of the task box by the child
-           *     thread, to avoid entanglement.)
-           *)
-          val idleTimer' = request idleTimer
-          val t = getThreadBox myId
-          val level = getLevelBox myId
-          val _ = if level > 1 then () else
-            die (fn _ => "scheduler bug: acquired with level " ^ Int.toString level ^ "\n")
-
-          val _ = unblockRequests ()
-          val _ = stopTimer idleTimer'
-
-          (* val taskThread = Thread.copy prototypeThread
-          val _ = HH.attachHeap (taskThread, hh) *)
+          val (task, level, idleTimer') = request idleTimer
+          val taskThread = Thread.copy prototypeThread
         in
-          case t of
-            NONE => die (fn _ => "scheduler bug: thread box is empty")
-          | SOME taskThread =>
-              ( HH.setLevel (taskThread, level)
-              ; Queue.setDepth myQueue level
-              ; threadSwitch taskThread
-              ; Queue.setDepth myQueue 1
-              ; acquireWork ()
-              )
+          if level >= 1 then () else
+            die (fn _ => "scheduler bug: acquired with level " ^ Int.toString level ^ "\n");
+          HH.setLevel (taskThread, level+1);
+          Queue.setDepth myQueue (level+1);
+          setTaskBox myId task;
+          stopTimer idleTimer';
+          threadSwitch taskThread;
+          Queue.setDepth myQueue 1;
+          acquireWork ()
         end
 
     in
