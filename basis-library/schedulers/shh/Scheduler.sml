@@ -146,7 +146,7 @@ struct
       if not (Queue.pollHasWork queue) then
         NONE
       else
-        Queue.popBack queue
+        Queue.tryPopBack queue
     end
 
   fun communicate () = ()

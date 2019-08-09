@@ -122,12 +122,19 @@ uint32_t lockLocalScope(GC_state s) {
   while (true) {
     while ((val >> 62) == LOCKED_BY_OTHER_MARKER) {
       GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-      if (terminateCheckCounter == 0) pthread_yield();
+      if (terminateCheckCounter == 0) {
+        pthread_yield();
+        LOG(LM_HH_COLLECTION, LL_INFO,
+            "Waiting to take queue lock, currently %lu",
+            val);
+      }
       val = atomicLoadU64(top);
     }
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
     assert((val >> 62) == 0);
-    if (__sync_bool_compare_and_swap(top, val, val | (LOCKED_BY_GC_MARKER << 62)))
+    uint64_t oldVal = val;
+    val = __sync_val_compare_and_swap(top, val, val | (LOCKED_BY_GC_MARKER << 62));
+    if (oldVal == val)
       break;
   }
 
@@ -159,6 +166,11 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
+  if (NONE == s->controls->hhCollectionLevel) {
+    /* collection disabled */
+    return;
+  }
+
   bool isLockedByMutator = isAlreadyLockedByMe(s);
   uint32_t minLevel =
     isLockedByMutator ?
@@ -180,11 +192,6 @@ void HM_HHC_collectLocal(void) {
         "Skipping collection because minLevel > current level (%u > %u)",
         minLevel,
         hh->level);
-    goto unlock_local_scope_and_return;
-  }
-
-  if (NONE == s->controls->hhCollectionLevel) {
-    /* collection disabled */
     goto unlock_local_scope_and_return;
   }
 

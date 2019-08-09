@@ -10,7 +10,8 @@ sig
   val pushFront : 'a * 'a t -> unit
 
   val popFront : 'a t -> 'a option
-  val popBack : 'a t -> ('a * int) option
+
+  val tryPopBack : 'a t -> ('a * int) option
 
   val pollHasWork : 'a t -> bool
 
@@ -23,8 +24,10 @@ struct
                frontier : int ref,
                owner : int}
 
+  structure Thread = MLton.Thread.Basic
+
   fun myWorkerId () =
-    MLton.Parallel.processorNumber () 
+    MLton.Parallel.processorNumber ()
 
   fun die strfn =
     ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
@@ -60,6 +63,20 @@ struct
         end
     in
       Word64.toInt (loop (!start))
+    end
+
+  fun tryLockGetStart (q as {start, owner, ...} : 'a t) =
+    let
+      val s = !start
+    in
+      if isLockedVal s then
+        NONE
+      else
+        let
+          val s' = MLton.Parallel.compareAndSwap start (s, makeLockedVal owner s)
+        in
+          if s = s' then SOME (Word64.toInt s) else NONE
+        end
     end
 
   (* fun unlockSetStart (q as {start, ...} : 'a t) s =
@@ -152,22 +169,24 @@ struct
         end
     end
 
-  fun popBack (q as {data, start, frontier, ...} : 'a t) =
-    let
-      val s = lockGetStart q
-      val f = !frontier
-    in
-      if s = f then
-        (setStart q s; NONE)
-      else
+  fun tryPopBack (q as {data, start, frontier, ...} : 'a t) =
+    case tryLockGetStart q of
+      NONE => NONE
+    | SOME s =>
         let
-          val result = arraySub (data, s)
+          val f = !frontier
         in
-          arrayUpdate (data, s, NONE);
-          setStart q (s+1);
-          SOME (valOf result, s)
+          if s = f then
+            (setStart q s; NONE)
+          else
+            let
+              val result = arraySub (data, s)
+            in
+              arrayUpdate (data, s, NONE);
+              setStart q (s+1);
+              SOME (valOf result, s)
+            end
         end
-    end
 
   fun toList (q as {data, start, frontier, ...} : 'a t) =
     let
