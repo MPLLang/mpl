@@ -23,6 +23,14 @@ struct
                frontier : int ref,
                owner : int}
 
+  fun myWorkerId () =
+    MLton.Parallel.processorNumber () 
+
+  fun die strfn =
+    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
+    ; OS.Process.exit OS.Process.failure
+    )
+
   fun arraySub (a, i) =
     Array.sub (a, i)
 
@@ -33,30 +41,44 @@ struct
   fun isLockedVal s =
     Word64.>> (s, 0w62) <> 0w0
   val lockedByMeMarker = Word64.<< (0w1, 0w62)
-  val lockedByOtherMarker = Word64.<< (0w2, 0w62)
+  val lockedByGCMarker = Word64.<< (0w2, 0w62)
+  val lockedByOtherMarker = Word64.<< (0w3, 0w62)
   fun makeLockedVal owner s =
-    if MLton.Parallel.processorNumber () = owner then
-      Word64.orb (s, lockedByMeMarker)
+    if myWorkerId () = owner then
+      Word64.orb (Word64.andb (s, mask), lockedByMeMarker)
     else
-      Word64.orb (s, lockedByOtherMarker)
+      Word64.orb (Word64.andb (s, mask), lockedByOtherMarker)
 
   fun lockGetStart (q as {start, owner, ...} : 'a t) =
     let
-      val s = !start
+      fun loop s =
+        if isLockedVal s then loop (!start) else
+        let
+          val s' = MLton.Parallel.compareAndSwap start (s, makeLockedVal owner s)
+        in
+          if s = s' then s else loop s'
+        end
     in
-      if isLockedVal s then
-        lockGetStart q
-      else if s <> MLton.Parallel.compareAndSwap start (s, makeLockedVal owner s) then
-        lockGetStart q
-      else
-        Word64.toInt s
+      Word64.toInt (loop (!start))
     end
 
   (* fun unlockSetStart (q as {start, ...} : 'a t) s =
     start := Word64.fromInt s *)
 
   (* fun getStart ({start, ...} : 'a t) = Word64.toInt (!start) *)
-  fun setStart ({start, ...} : 'a t) s = start := Word64.fromInt s
+  fun setStart ({start, owner, ...} : 'a t) s =
+    let
+      val old = !start
+    in
+      (* really we just need an atomic store, but this is good
+       * enough for simple implementation. *)
+      if old <> MLton.Parallel.compareAndSwap start (old, Word64.fromInt s) orelse
+         old <> makeLockedVal owner (Word64.andb (old, mask))
+      then
+        die (fn _ => "scheduler bug: unlock by setting start, but start = " ^ Word64.toString old)
+      else
+        ()
+    end
 
   fun new p =
     let
@@ -94,7 +116,7 @@ struct
       val f = !frontier
     in
       if s <> f then
-        raise Fail "can only set depth on empty queue"
+        die (fn _ => "scheduler bug: can only set depth on empty queue")
       else
         ( frontier := d
         ; setStart q d

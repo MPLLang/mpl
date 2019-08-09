@@ -96,30 +96,38 @@ void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 #define LOCKED_BY_ME_MARKER    ((uint64_t)1)
-#define LOCKED_BY_OTHER_MARKER ((uint64_t)2)
+#define LOCKED_BY_GC_MARKER    ((uint64_t)2)
+#define LOCKED_BY_OTHER_MARKER ((uint64_t)3)
 #define NO_MARKER_MASK ((((uint64_t)1) << 62) - 1)
 
-/* the GC locking scheme uses the current lock marker +1 as its own lock
- * marker. So, original if unlocked (lock marker 0) then it functions as a
- * standard 0-1 lock. But if original is locked-by-me, then after GC completes
- * it will still appear locked-by-me to the mutator. */
+static bool isAlreadyLockedByMe(GC_state s);
+static uint32_t getLocalScope(GC_state s);
+
+bool isAlreadyLockedByMe(GC_state s) {
+  uint64_t val = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  return (val >> 62) == LOCKED_BY_ME_MARKER;
+}
+
+uint32_t getLocalScope(GC_state s) {
+  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  uint64_t val = *top;
+  return val & NO_MARKER_MASK;
+}
+
 uint32_t lockLocalScope(GC_state s) {
-  if (BOGUS_OBJPTR == s->wsQueueTop) {
-    return 0;
-  }
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
 
-  uint64_t val = *top;
+  uint64_t val = atomicLoadU64(top);
   size_t terminateCheckCounter = 0;
   while (true) {
     while ((val >> 62) == LOCKED_BY_OTHER_MARKER) {
       GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+      if (terminateCheckCounter == 0) pthread_yield();
       val = atomicLoadU64(top);
     }
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    uint64_t lockMarker = val >> 62;
-    assert(lockMarker == 0 || lockMarker == LOCKED_BY_ME_MARKER);
-    if (__sync_bool_compare_and_swap(top, val, val | ((lockMarker+1) << 62)))
+    assert((val >> 62) == 0);
+    if (__sync_bool_compare_and_swap(top, val, val | (LOCKED_BY_GC_MARKER << 62)))
       break;
   }
 
@@ -128,11 +136,13 @@ uint32_t lockLocalScope(GC_state s) {
 
 void unlockLocalScope(GC_state s) {
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  uint64_t lockMarker = *top >> 62;
   uint64_t topMasked = *top & NO_MARKER_MASK;
-  assert(lockMarker == 1 || lockMarker == 2);
+#if ASSERT
+  uint64_t lockMarker = *top >> 62;
+  assert(lockMarker == LOCKED_BY_GC_MARKER);
   assert(topMasked >> 62 == 0 && (topMasked | (lockMarker<<62)) == *top);
-  atomicStoreU64(top, topMasked | ((lockMarker-1) << 62));
+#endif
+  atomicStoreU64(top, topMasked);
   return;
 }
 
@@ -144,10 +154,16 @@ void HM_HHC_collectLocal(void) {
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  /* SAM_NOTE: TODO:
-   * lock local scope requires interfacing with the deque, to reject steals
-   */
-  uint32_t minLevel = lockLocalScope(s);
+  if (s->wsQueueTop == BOGUS_OBJPTR) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection while wsQueueTop is bogus");
+    return;
+  }
+
+  bool isLockedByMutator = isAlreadyLockedByMe(s);
+  uint32_t minLevel =
+    isLockedByMutator ?
+    getLocalScope(s) :
+    lockLocalScope(s);
 
   if (minLevel == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
@@ -156,6 +172,14 @@ void HM_HHC_collectLocal(void) {
 
   if (hh->level <= 1) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
+    goto unlock_local_scope_and_return;
+  }
+
+  if (minLevel > hh->level) {
+    LOG(LM_HH_COLLECTION, LL_INFO,
+        "Skipping collection because minLevel > current level (%u > %u)",
+        minLevel,
+        hh->level);
     goto unlock_local_scope_and_return;
   }
 
@@ -514,9 +538,9 @@ void HM_HHC_collectLocal(void) {
       "END");
 
 unlock_local_scope_and_return:
-  /* SAM_NOTE: TODO:
-   * requires interfacing with the ws deque */
-  unlockLocalScope(s);
+  if (!isLockedByMutator) {
+    unlockLocalScope(s);
+  }
   return;
 }
 

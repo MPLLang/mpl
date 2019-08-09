@@ -180,7 +180,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
    * already relocated the src object */
   if (hasFwdPtr(srcp)) {
     assert(!hasFwdPtr(objptrToPointer(getFwdPtr(srcp), NULL)));
-    assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
+    //assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
     *field = getFwdPtr(srcp);
     return;
   }
