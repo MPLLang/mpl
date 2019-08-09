@@ -109,15 +109,10 @@ struct
                      "(top=" ^ Int.toString idx ^ "bot=" ^ Int.toString oldBot ^ ")")
       else
         ( depth := d
-        ; bot := d
-
-          (* this should always succeed? *)
-        ; let
-            val t = cas top (oldTop, newTop)
-          in
-            if oldTop = t then () else
-              die (fn _ => "scheduler bug: setDepth failed with " ^ Word64.toString t)
-          end
+        ; if d < idx then
+            (bot := d; top := newTop)
+          else
+            (top := newTop; bot := d)
         )
     end
 
