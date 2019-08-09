@@ -13,10 +13,8 @@ local
   end
 
   FORK_JOIN.sig
-  queue/QUEUE.sig
-
   SimpleRandom.sml
-  queue/ArrayQueue.sml
+  queue/DequeABP.sml
   Scheduler.sml
 in
   structure ForkJoin

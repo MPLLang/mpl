@@ -10,7 +10,7 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
-  structure Queue = ArrayQueue
+  structure Queue = DequeABP (*ArrayQueue*)
 
   structure Thread = MLton.Thread.Basic
   fun threadSwitch t =
@@ -157,7 +157,15 @@ struct
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      Queue.pushBot (x, queue)
+      Queue.pushBot queue x
+    end
+
+  fun clear () =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      Queue.clear queue
     end
 
   fun popDiscard () =
@@ -235,7 +243,8 @@ struct
             ; result g
             )
           else
-            ( if decrementHitsZero incounter then () else returnToSched ()
+            ( clear () (* this should be safe after popDiscard fails? *)
+            ; if decrementHitsZero incounter then () else returnToSched ()
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
@@ -271,7 +280,7 @@ struct
       val _ = schedThread := SOME mySchedThread
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
-      val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #start myQueue);
+      (* val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #start myQueue); *)
 
       val _ = Queue.setDepth myQueue 1
 
