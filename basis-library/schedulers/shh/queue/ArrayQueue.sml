@@ -7,11 +7,11 @@ sig
 
   val setDepth : 'a t -> int -> unit
 
-  val pushFront : 'a * 'a t -> unit
+  val pushBot : 'a * 'a t -> unit
 
-  val popFront : 'a t -> 'a option
+  val popBot : 'a t -> 'a option
 
-  val tryPopBack : 'a t -> ('a * int) option
+  val tryPopTop : 'a t -> ('a * int) option
 
   val pollHasWork : 'a t -> bool
 
@@ -102,7 +102,7 @@ struct
       val data = Array.array (capacity, NONE)
     in
       { data = data
-      , start = ref 0w0
+      , start = ref (0w0 : Word64.word)
       , frontier = ref 0
       , owner = p
       }
@@ -140,7 +140,7 @@ struct
         )
     end
 
-  fun pushFront (x, q as {data, start, frontier, ...} : 'a t) =
+  fun pushBot (x, q as {data, start, frontier, ...} : 'a t) =
     let
       val s = lockGetStart q
       val f = !frontier
@@ -151,7 +151,7 @@ struct
       )
     end
 
-  fun popFront (q as {data, start, frontier, ...} : 'a t) =
+  fun popBot (q as {data, start, frontier, ...} : 'a t) =
     let
       val s = lockGetStart q
       val f = !frontier
@@ -169,7 +169,7 @@ struct
         end
     end
 
-  fun tryPopBack (q as {data, start, frontier, ...} : 'a t) =
+  fun tryPopTop (q as {data, start, frontier, ...} : 'a t) =
     case tryLockGetStart q of
       NONE => NONE
     | SOME s =>

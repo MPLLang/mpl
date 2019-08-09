@@ -99,6 +99,7 @@ struct
   local
     val amOriginal = ref true
     val taskBoxes = Array.array (P, NONE)
+    fun upd i x = MLton.HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
@@ -108,12 +109,12 @@ struct
       case Array.sub (taskBoxes, myWorkerId ()) of
         NONE => die (fn _ => "scheduler bug: task box is empty")
       | SOME t =>
-          ( MLton.HM.arrayUpdateNoBarrier (taskBoxes, myWorkerId (), NONE)
+          ( upd (myWorkerId ()) NONE
           ; t () handle _ => ()
           ; die (fn _ => "scheduler bug: child task didn't exit properly")
           )
   fun setTaskBox p t =
-    MLton.HM.arrayUpdateNoBarrier (taskBoxes, p, SOME t)
+    upd p (SOME t)
   end
 
   (* ========================================================================
@@ -146,7 +147,7 @@ struct
       if not (Queue.pollHasWork queue) then
         NONE
       else
-        Queue.tryPopBack queue
+        Queue.tryPopTop queue
     end
 
   fun communicate () = ()
@@ -156,7 +157,7 @@ struct
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      Queue.pushFront (x, queue)
+      Queue.pushBot (x, queue)
     end
 
   fun popDiscard () =
@@ -164,7 +165,7 @@ struct
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      case Queue.popFront queue of
+      case Queue.popBot queue of
           NONE => false
         | SOME _ => true
     end
