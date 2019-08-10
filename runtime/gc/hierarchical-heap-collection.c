@@ -95,61 +95,35 @@ void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-#define LOCKED_BY_ME_MARKER    ((uint64_t)1)
-#define LOCKED_BY_GC_MARKER    ((uint64_t)2)
-#define LOCKED_BY_OTHER_MARKER ((uint64_t)3)
-#define NO_MARKER_MASK ((((uint64_t)1) << 62) - 1)
+#define DEQUE_CAPACITY_BITS   8
+#define MAX_IDX               ((((uint64_t)1) << DEQUE_CAPACITY_BITS) - 1)
+#define UNPACK_TAG(topval)    ((topval) >> DEQUE_CAPACITY_BITS)
+#define UNPACK_IDX(topval)    ((topval) & MAX_IDX)
+#define PACK_TAGIDX(tag, idx) (((tag) << DEQUE_CAPACITY_BITS) | (idx))
+#define TOPBIT64              (((uint64_t)1) << 63)
 
-static bool isAlreadyLockedByMe(GC_state s);
-static uint32_t getLocalScope(GC_state s);
-
-bool isAlreadyLockedByMe(GC_state s) {
-  uint64_t val = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  return (val >> 62) == LOCKED_BY_ME_MARKER;
-}
-
-uint32_t getLocalScope(GC_state s) {
-  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  uint64_t val = *top;
-  return val & NO_MARKER_MASK;
-}
-
-uint32_t lockLocalScope(GC_state s) {
+uint64_t lockLocalScope(GC_state s) {
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
 
   uint64_t val = atomicLoadU64(top);
   size_t terminateCheckCounter = 0;
   while (true) {
-    while ((val >> 62) == LOCKED_BY_OTHER_MARKER) {
-      GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-      if (terminateCheckCounter == 0) {
-        pthread_yield();
-        LOG(LM_HH_COLLECTION, LL_INFO,
-            "Waiting to take queue lock, currently %lu",
-            val);
-      }
-      val = atomicLoadU64(top);
-    }
-    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    assert((val >> 62) == 0);
-    uint64_t oldVal = val;
-    val = __sync_val_compare_and_swap(top, val, val | (LOCKED_BY_GC_MARKER << 62));
-    if (oldVal == val)
+    uint64_t oldval = val;
+    val = __sync_val_compare_and_swap(top, val, val | TOPBIT64);
+    if (oldval == val)
       break;
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
   }
 
   return val;
 }
 
-void unlockLocalScope(GC_state s) {
+void unlockLocalScope(GC_state s, uint64_t oldval) {
   uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  uint64_t topMasked = *top & NO_MARKER_MASK;
-#if ASSERT
-  uint64_t lockMarker = *top >> 62;
-  assert(lockMarker == LOCKED_BY_GC_MARKER);
-  assert(topMasked >> 62 == 0 && (topMasked | (lockMarker<<62)) == *top);
-#endif
-  atomicStoreU64(top, topMasked);
+  uint64_t tag = UNPACK_TAG(oldval);
+  uint64_t idx = UNPACK_IDX(oldval);
+  tag = tag+1;
+  atomicStoreU64(top, PACK_TAGIDX(tag, idx));
   return;
 }
 
@@ -171,19 +145,16 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
-  bool isLockedByMutator = isAlreadyLockedByMe(s);
-  uint32_t minLevel =
-    isLockedByMutator ?
-    getLocalScope(s) :
-    lockLocalScope(s);
+  if (hh->level <= 1) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
+    return;
+  }
+
+  uint64_t localScopeVal = lockLocalScope(s);
+  uint32_t minLevel = UNPACK_IDX(localScopeVal);
 
   if (minLevel == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    goto unlock_local_scope_and_return;
-  }
-
-  if (hh->level <= 1) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
     goto unlock_local_scope_and_return;
   }
 
@@ -545,9 +516,7 @@ void HM_HHC_collectLocal(void) {
       "END");
 
 unlock_local_scope_and_return:
-  if (!isLockedByMutator) {
-    unlockLocalScope(s);
-  }
+  unlockLocalScope(s, localScopeVal);
   return;
 }
 

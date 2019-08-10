@@ -69,8 +69,8 @@ void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
 
 objptr relocateObject(GC_state s, objptr obj, HM_chunkList tgtChunkList);
 
-uint32_t lockLocalScope(GC_state s);
-void unlockLocalScope(GC_state s);
+uint64_t lockLocalScope(GC_state s);
+void unlockLocalScope(GC_state s, uint64_t oldval);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

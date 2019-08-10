@@ -40,11 +40,14 @@ struct
    * compare-and-swap as a unit. *)
   structure TagIdx :
   sig
-    eqtype t
+    type t = Word64.word
     val maxTag : Word64.word
     val maxIdx : int
     val pack : {tag : Word64.word, idx : int} -> t
     val unpack : t -> {tag : Word64.word, idx : int}
+
+    (* the GC "locks" a tagged idx by setting the top bit, which rejects steals. *)
+    val isLocked : t -> bool
   end =
   struct
     type t = Word64.word
@@ -57,7 +60,8 @@ struct
     val idxBits = Word.fromInt (log2 maxIdx)
     val idxMask = Word64.fromInt maxIdx
 
-    val tagBits = 0w64 - idxBits
+    (* NOTE: 63, not 64, because top bit reserved for GC. *)
+    val tagBits = 0w63 - idxBits
     val maxTag = Word64.- (Word64.<< (0w1, tagBits), 0w1)
 
     fun pack {tag, idx} =
@@ -70,6 +74,9 @@ struct
       in
         {tag=tag, idx=idx}
       end
+
+    fun isLocked ti =
+      Word64.>> (ti, 0w63) = 0w1
   end
 
   fun myWorkerId () =
@@ -97,22 +104,35 @@ struct
      bot = ref 0,
      depth = ref 0}
 
-  fun setDepth ({depth, top, bot, data} : 'a t) d =
+  fun setDepth (q as {depth, top, bot, data} : 'a t) d =
     let
+      fun forceSetTop oldTop =
+        let
+          val newTop =
+            TagIdx.pack {idx = d, tag = 0w1 + #tag (TagIdx.unpack oldTop)}
+          val oldTop' = cas top (oldTop, newTop)
+        in
+          if oldTop = oldTop' then
+            ()
+          else
+            (* The GC must have interfered, so just do it again. GC shouldn't
+             * be able to interfere a second time... *)
+            forceSetTop oldTop'
+        end
+
       val oldTop = !top
       val oldBot = !bot
-      val {tag, idx} = TagIdx.unpack oldTop
-      val newTop = TagIdx.pack {tag=tag+0w1, idx=d}
+      val {idx, ...} = TagIdx.unpack oldTop
     in
-      if idx <> oldBot then
+      if idx < oldBot then
         die (fn _ => "scheduler bug: setDepth must be on empty deque " ^
-                     "(top=" ^ Int.toString idx ^ "bot=" ^ Int.toString oldBot ^ ")")
+                     "(top=" ^ Int.toString idx ^ " bot=" ^ Int.toString oldBot ^ ")")
       else
         ( depth := d
         ; if d < idx then
-            (bot := d; top := newTop)
+            (bot := d; forceSetTop oldTop)
           else
-            (top := newTop; bot := d)
+            (forceSetTop oldTop; bot := d)
         )
     end
 
@@ -149,7 +169,7 @@ struct
       val {tag, idx} = TagIdx.unpack oldTop
       val oldBot = !bot
     in
-      if oldBot <= idx then
+      if TagIdx.isLocked oldTop orelse oldBot <= idx then
         NONE
       else
         let
@@ -180,19 +200,50 @@ struct
           val x = Array.sub (data, newBot)
           val oldTop = !top
           val {tag, idx} = TagIdx.unpack oldTop
-          val newTop = TagIdx.pack {idx=idx, tag=tag+0w1}
         in
           if newBot > idx then
             (arrayUpdate (data, newBot, NONE); x)
-          else if newBot = idx andalso oldTop = cas top (oldTop, newTop) then
-            (arrayUpdate (data, newBot, NONE); x)
+          else if newBot < idx then
+            (* We are racing with a concurrent steal to take this single
+             * element x, but we already lost the race. So we only need to set
+             * the bottom to match the idx, i.e. set the deque to a proper
+             * empty state. *)
+            (* TODO: can we relax the cas to a normal write?
+             * Note that this cas is guaranteed to succeed... *)
+            (cas bot (newBot, idx); NONE)
           else
-            ( top := newTop
-              (* once again we need a fence... cas on bot should be good
-               * enough, and guaranteed to succeed. *)
-            ; cas bot (newBot, idx)
-            ; NONE
-            )
+            (* We are racing with a concurrent steal to take this single
+             * element x, but we haven't lost the race yet. *)
+            let
+              val newTop = TagIdx.pack {tag=tag+0w1, idx=idx}
+              val oldTop' = cas top (oldTop, newTop)
+            in
+              if oldTop' = oldTop then
+                (* success; we get to keep x *)
+                (arrayUpdate (data, newBot, NONE); x)
+              else
+                (* two possibilities: either the steal succeeded (in which case
+                 * the idx will have moved) or the GC will have interfered (in
+                 * which case the tag will have advanced). *)
+                let
+                  val {idx=idx', ...} = TagIdx.unpack oldTop'
+                in
+                  if idx' <> idx then
+                    (* The steal succeeded, so we don't get to keep this
+                     * element. It's possible that the GC interfered also,
+                     * but that doesn't change the fact that we don't get to
+                     * keep this element! *)
+                    (* TODO: can we relax the cas to a normal write?
+                     * Note that this cas is guaranteed to succeed... *)
+                    (cas bot (newBot, idx'); NONE)
+                  else
+                    (* the GC must have interfered, so try again. It _should_ be
+                     * the case that the GC can't interfere on the second try,
+                     * because we haven't done any significant allocation
+                     * in-between tries. *)
+                    popBot q
+                end
+            end
         end
     end
 

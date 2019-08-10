@@ -280,7 +280,7 @@ struct
       val _ = schedThread := SOME mySchedThread
 
       val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
-      (* val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #start myQueue); *)
+      val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #top myQueue);
 
       val _ = Queue.setDepth myQueue 1
 
