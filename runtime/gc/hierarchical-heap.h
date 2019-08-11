@@ -16,20 +16,22 @@
 
 struct levelData {
   HM_chunkList chunkList;
-  // size_t capacity;
-  // size_t outstandingBytesPromoted;
 };
 
 struct HM_HierarchicalHeap {
   struct levelData levels[HM_MAX_NUM_LEVELS];
 
-  HM_chunk lastAllocatedChunk; /**< The last allocated chunk */
+  /* The "current" chunk of the heap.
+   * TODO: rename. This chunk is not necessarily the last allocated. */
+  HM_chunk lastAllocatedChunk;
 
-  uint32_t level; /**< The current level of the hierarchy which new chunks should
-                 * belong to. */
+  /* Current level (fork depth) of the thread allocating in this heap.
+   * Fresh chunks are placed at this level. */
+  uint32_t level;
 
-  /* when the number of bytes in this HH exceeds the threshold, we collect.
-   * the threshold is adjusted after each collection. */
+  /* When the size (bytes) of the local scope exceeds this threshold, we
+   * do a local collections. The threshold is adjusted after each collection,
+   * and by forks and joins. */
   size_t collectionThreshold;
 };
 

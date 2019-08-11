@@ -44,6 +44,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/copy-thread.c"
 #include "gc/current.c"
 #include "gc/termination.c"
+#include "gc/local-scope.c"
 #include "gc/done.c"
 #include "gc/deferred-promote.c"
 #include "gc/enter_leave.c"

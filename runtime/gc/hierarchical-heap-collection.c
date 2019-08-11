@@ -75,57 +75,9 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 /* Function Definitions */
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  assert(processor < s->numberOfProcs);
-
-  s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
-                                                      NULL);
-}
-
-void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  assert(processor < s->numberOfProcs);
-
-  s->procStates[processor].wsQueueTop = pointerToObjptr(topPointer, NULL);
-}
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-
-#define DEQUE_CAPACITY_BITS   8
-#define MAX_IDX               ((((uint64_t)1) << DEQUE_CAPACITY_BITS) - 1)
-#define UNPACK_TAG(topval)    ((topval) >> DEQUE_CAPACITY_BITS)
-#define UNPACK_IDX(topval)    ((topval) & MAX_IDX)
-#define PACK_TAGIDX(tag, idx) (((tag) << DEQUE_CAPACITY_BITS) | (idx))
-#define TOPBIT64              (((uint64_t)1) << 63)
-
-uint64_t lockLocalScope(GC_state s) {
-  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-
-  uint64_t val = atomicLoadU64(top);
-  size_t terminateCheckCounter = 0;
-  while (true) {
-    uint64_t oldval = val;
-    val = __sync_val_compare_and_swap(top, val, val | TOPBIT64);
-    if (oldval == val)
-      break;
-    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-  }
-
-  return val;
-}
-
-void unlockLocalScope(GC_state s, uint64_t oldval) {
-  uint64_t *top = (uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
-  uint64_t tag = UNPACK_TAG(oldval);
-  uint64_t idx = UNPACK_IDX(oldval);
-  tag = tag+1;
-  atomicStoreU64(top, PACK_TAGIDX(tag, idx));
-  return;
-}
 
 void HM_HHC_collectLocal(void) {
   GC_state s = pthread_getspecific (gcstate_key);

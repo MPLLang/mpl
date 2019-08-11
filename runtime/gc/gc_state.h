@@ -126,6 +126,9 @@ PRIVATE pointer GC_getSavedThread (GC_state s);
 PRIVATE void GC_setSavedThread (GC_state s, pointer p);
 PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 
+PRIVATE void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer);
+PRIVATE void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer);
+
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
 PRIVATE struct TLSObjects* GC_getTLSObjects(GC_state s);

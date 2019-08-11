@@ -79,6 +79,7 @@ typedef GC_state GCState_t;
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/heap-utils.h"
+#include "gc/local-scope.h"
 #include "gc/local-heap.h"
 #include "gc/chunk.h"
 #include "gc/assign.h"
