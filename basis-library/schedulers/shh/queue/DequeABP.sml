@@ -244,7 +244,10 @@ struct
                      * the case that the GC can't interfere on the second try,
                      * because we haven't done any significant allocation
                      * in-between tries. *)
-                    popBot q
+                    (* SAM_NOTE: with new local scope handling in the GC, this
+                     * case should be impossible. *)
+                    die (fn _ => "scheduler bug: unexpected GC interference")
+                    (* popBot q *)
                 end
             end
         end
