@@ -289,19 +289,20 @@ void GC_setGCSignalPending (GC_state s, bool b) {
   s->signalsInfo.gcSignalPending = b;
 }
 
-void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
+void GC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
-
   assert(processor < s->numberOfProcs);
-
-  s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
-                                                      NULL);
+  s->procStates[processor].wsQueue = pointerToObjptr(queuePointer, NULL);
 }
 
-void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer) {
+void GC_registerQueueTop(uint32_t processor, pointer topPointer) {
   GC_state s = pthread_getspecific (gcstate_key);
-
   assert(processor < s->numberOfProcs);
-
   s->procStates[processor].wsQueueTop = pointerToObjptr(topPointer, NULL);
+}
+
+void GC_registerQueueBot(uint32_t processor, pointer botPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
+  s->procStates[processor].wsQueueBot = pointerToObjptr(botPointer, NULL);
 }

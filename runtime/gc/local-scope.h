@@ -14,14 +14,13 @@
 #define UNPACK_TAG(topval)    ((topval) >> DEQUE_CAPACITY_BITS)
 #define UNPACK_IDX(topval)    ((topval) & MAX_IDX)
 #define PACK_TAGIDX(tag, idx) (((tag) << DEQUE_CAPACITY_BITS) | (idx))
-#define TOPBIT64              (((uint64_t)1) << 63)
 
 #endif /* defined (MLTON_GC_INTERNAL_TYPES) */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-uint64_t lockLocalScope(GC_state s);
-void unlockLocalScope(GC_state s, uint64_t oldval);
+bool tryClaimLocalScope(GC_state s);
+void releaseLocalScope(GC_state s, uint32_t oldbot);
 
 uint32_t pollCurrentLocalScope(GC_state s);
 

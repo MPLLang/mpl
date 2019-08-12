@@ -87,13 +87,13 @@ void HM_HHC_collectLocal(void) {
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  if (s->wsQueueTop == BOGUS_OBJPTR) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection while wsQueueTop is bogus");
+  if (NONE == s->controls->hhCollectionLevel) {
+    /* collection disabled */
     return;
   }
 
-  if (NONE == s->controls->hhCollectionLevel) {
-    /* collection disabled */
+  if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection, deque not registered yet");
     return;
   }
 
@@ -102,8 +102,12 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
-  uint64_t localScopeVal = lockLocalScope(s);
-  uint32_t minLevel = UNPACK_IDX(localScopeVal);
+  uint32_t originalLocalScope = pollCurrentLocalScope(s);
+  uint32_t minLevel = originalLocalScope;
+  // claim as many levels as we can, but only as far as desired
+  while (minLevel > 2 && tryClaimLocalScope(s)) {
+    minLevel--;
+  }
 
   if (minLevel == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
@@ -141,13 +145,10 @@ void HM_HHC_collectLocal(void) {
 
   assertInvariants(s, hh);
 
-  /* prefer not to collect depth 1 */
-  uint32_t preferredMinLevel = max(minLevel, 2);
-
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = preferredMinLevel,
+    .minLevel = minLevel,
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
@@ -192,13 +193,10 @@ void HM_HHC_collectLocal(void) {
 
   LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
-      "  local scope is      %u -> %u\n"
-      "  collection scope is %u -> %u\n",
+      "  local scope is %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
       hh->level,
-      (uint32_t)UNPACK_IDX(localScopeVal),
-      forwardHHObjptrArgs.maxLevel,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);
 
@@ -509,7 +507,7 @@ void HM_HHC_collectLocal(void) {
       "END");
 
 unlock_local_scope_and_return:
-  unlockLocalScope(s, localScopeVal);
+  releaseLocalScope(s, originalLocalScope);
   return;
 }
 

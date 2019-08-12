@@ -5,9 +5,12 @@ sig
   type 'a t
   exception Full
 
-  val new : int -> 'a t
+  val new : unit -> 'a t
   val pollHasWork : 'a t -> bool
   val clear : 'a t -> unit
+
+  (* register this deque with the specified worker id *)
+  val register : 'a t -> int -> unit
 
   (* set the minimum depth of this deque, i.e. the fork depth of the
    * MLton thread that is currently using this deque. This is used to
@@ -45,9 +48,6 @@ struct
     val maxIdx : int
     val pack : {tag : Word64.word, idx : int} -> t
     val unpack : t -> {tag : Word64.word, idx : int}
-
-    (* the GC "locks" a tagged idx by setting the top bit, which rejects steals. *)
-    val isLocked : t -> bool
   end =
   struct
     type t = Word64.word
@@ -60,8 +60,7 @@ struct
     val idxBits = Word.fromInt (log2 maxIdx)
     val idxMask = Word64.fromInt maxIdx
 
-    (* NOTE: 63, not 64, because top bit reserved for GC. *)
-    val tagBits = 0w63 - idxBits
+    val tagBits = 0w64 - idxBits
     val maxTag = Word64.- (Word64.<< (0w1, tagBits), 0w1)
 
     fun pack {tag, idx} =
@@ -74,9 +73,6 @@ struct
       in
         {tag=tag, idx=idx}
       end
-
-    fun isLocked ti =
-      Word64.>> (ti, 0w63) = 0w1
   end
 
   fun myWorkerId () =
@@ -89,7 +85,7 @@ struct
 
   type 'a t = {data : 'a option array,
                top : TagIdx.t ref,
-               bot : int ref,
+               bot : Word32.word ref,
                depth : int ref}
 
   exception Full
@@ -98,11 +94,19 @@ struct
   fun arrayUpdate (a, i, x) = MLton.HM.arrayUpdateNoBarrier (a, Int64.fromInt i, x)
   fun cas r (x, y) = MLton.Parallel.compareAndSwap r (x, y)
 
-  fun new _ =
+  fun cas32 b (x, y) = cas b (Word32.fromInt x, Word32.fromInt y)
+
+  fun new () =
     {data = Array.array (capacity, NONE),
      top = ref (TagIdx.pack {tag=0w0, idx=0}),
-     bot = ref 0,
+     bot = ref (0w0 : Word32.word),
      depth = ref 0}
+
+  fun register ({top, bot, data, ...} : 'a t) p =
+    ( MLton.HM.registerQueue (Word32.fromInt p, data)
+    ; MLton.HM.registerQueueTop (Word32.fromInt p, top)
+    ; MLton.HM.registerQueueBot (Word32.fromInt p, bot)
+    )
 
   fun setDepth (q as {depth, top, bot, data} : 'a t) d =
     let
@@ -121,7 +125,7 @@ struct
         end
 
       val oldTop = !top
-      val oldBot = !bot
+      val oldBot = Word32.toInt (!bot)
       val {idx, ...} = TagIdx.unpack oldTop
     in
       if idx < oldBot then
@@ -130,9 +134,9 @@ struct
       else
         ( depth := d
         ; if d < idx then
-            (bot := d; forceSetTop oldTop)
+            (bot := Word32.fromInt d; forceSetTop oldTop)
           else
-            (forceSetTop oldTop; bot := d)
+            (forceSetTop oldTop; bot := Word32.fromInt d)
         )
     end
 
@@ -141,7 +145,7 @@ struct
 
   fun pollHasWork ({top, bot, ...} : 'a t) =
     let
-      val b = !bot
+      val b = Word32.toInt (!bot)
       val {idx, ...} = TagIdx.unpack (!top)
     in
       idx < b
@@ -149,8 +153,7 @@ struct
 
   fun pushBot (q as {data, top, bot, depth}) x =
     let
-      val oldBot = !bot
-      val _ = if oldBot < TagIdx.maxIdx then () else raise Full
+      val oldBot = Word32.toInt (!bot)
     in
       arrayUpdate (data, oldBot, SOME x);
       (* Normally we would now increment bot and then issue a memory fence.
@@ -158,7 +161,7 @@ struct
        * So, let's hack it and do a compare-and-swap. Note that the CAS is
        * guaranteed to succeed, because multiple pushBot operations are never
        * executed concurrently. *)
-      cas bot (oldBot, oldBot+1);
+      cas32 bot (oldBot, oldBot+1);
       (* bot := oldBot + 1; *)
       ()
     end
@@ -167,9 +170,9 @@ struct
     let
       val oldTop = !top
       val {tag, idx} = TagIdx.unpack oldTop
-      val oldBot = !bot
+      val oldBot = Word32.toInt (!bot)
     in
-      if TagIdx.isLocked oldTop orelse oldBot <= idx then
+      if oldBot <= idx then
         NONE
       else
         let
@@ -185,7 +188,7 @@ struct
 
   fun popBot (q as {data, top, bot, depth}) =
     let
-      val oldBot = !bot
+      val oldBot = Word32.toInt (!bot)
       val d = !depth
     in
       if oldBot <= d then
@@ -196,7 +199,7 @@ struct
           (* once again, we need a fence here, but the best we can do is a
            * compare-and-swap. *)
           (* val _ = bot := newBot *)
-          val _ = cas bot (oldBot, newBot)
+          val _ = cas32 bot (oldBot, newBot)
           val x = Array.sub (data, newBot)
           val oldTop = !top
           val {tag, idx} = TagIdx.unpack oldTop
@@ -210,7 +213,7 @@ struct
              * empty state. *)
             (* TODO: can we relax the cas to a normal write?
              * Note that this cas is guaranteed to succeed... *)
-            (cas bot (newBot, idx); NONE)
+            (cas32 bot (newBot, idx); NONE)
           else
             (* We are racing with a concurrent steal to take this single
              * element x, but we haven't lost the race yet. *)
@@ -235,7 +238,7 @@ struct
                      * keep this element! *)
                     (* TODO: can we relax the cas to a normal write?
                      * Note that this cas is guaranteed to succeed... *)
-                    (cas bot (newBot, idx'); NONE)
+                    (cas32 bot (newBot, idx'); NONE)
                   else
                     (* the GC must have interfered, so try again. It _should_ be
                      * the case that the GC can't interfere on the second try,
@@ -249,7 +252,7 @@ struct
 
   fun size ({top, bot, ...} : 'a t) =
     let
-      val thisBot = !bot
+      val thisBot = Word32.toInt (!bot)
       val {idx, ...} = TagIdx.unpack (!top)
     in
       thisBot - idx

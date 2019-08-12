@@ -127,7 +127,7 @@ struct
     }
 
   fun wldInit p : worker_local_data =
-    { queue = Queue.new p
+    { queue = Queue.new ()
     , schedThread = ref NONE
     }
 
@@ -279,10 +279,8 @@ struct
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
-      val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
-      val _ = MLton.HM.registerQueueTop (Word32.fromInt myId, #top myQueue)
-
       val _ = Queue.setDepth myQueue 1
+      val _ = Queue.register myQueue myId
 
       (* ------------------------------------------------------------------- *)
 

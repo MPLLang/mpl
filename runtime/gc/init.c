@@ -403,6 +403,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
   s->wsQueueTop = BOGUS_OBJPTR;
+  s->wsQueueBot = BOGUS_OBJPTR;
 
   s->lastMajorStatistics = newLastMajorStatistics();
 
@@ -516,6 +517,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
+  d->wsQueueBot = BOGUS_OBJPTR;
   d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->nextChunkAllocSize = s->nextChunkAllocSize;

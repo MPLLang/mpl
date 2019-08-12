@@ -38,6 +38,7 @@ struct GC_state {
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
   objptr wsQueueTop;
+  objptr wsQueueBot;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct HM_chunkList* freeListSmall;
@@ -126,8 +127,8 @@ PRIVATE pointer GC_getSavedThread (GC_state s);
 PRIVATE void GC_setSavedThread (GC_state s, pointer p);
 PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 
-PRIVATE void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer);
-PRIVATE void HM_HHC_registerQueueTop(uint32_t processor, pointer topPointer);
+PRIVATE void GC_registerQueue(uint32_t processor, pointer queuePointer);
+PRIVATE void GC_registerQueueTop(uint32_t processor, pointer topPointer);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
