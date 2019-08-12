@@ -311,6 +311,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "hh-min-collection-level")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("@MLton hh-min-collection-level missing argument.");
+          }
+
+          int minLevel = stringToInt(argv[i++]);
+          if (minLevel <= 0) {
+            die ("@MLton hh-min-collection-level must be > 0");
+          }
+          s->controls->hhConfig.minLocalLevel = minLevel;
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -380,6 +391,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;
+  s->controls->hhConfig.minLocalLevel = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;

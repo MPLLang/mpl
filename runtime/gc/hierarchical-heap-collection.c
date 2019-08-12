@@ -105,7 +105,8 @@ void HM_HHC_collectLocal(void) {
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
   uint32_t minLevel = originalLocalScope;
   // claim as many levels as we can, but only as far as desired
-  while (minLevel > 2 && tryClaimLocalScope(s)) {
+  while (minLevel > s->controls->hhConfig.minLocalLevel &&
+         tryClaimLocalScope(s)) {
     minLevel--;
   }
 
