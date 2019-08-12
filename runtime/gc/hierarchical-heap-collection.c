@@ -161,6 +161,14 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
+  size_t sizesBefore[HM_MAX_NUM_LEVELS];
+  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
+    for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+      HM_chunkList lev = HM_HH_LEVEL(hh, i);
+      sizesBefore[i] = (lev == NULL) ? 0 : HM_getChunkListSize(lev);
+    }
+  }
+
   // if (s->controls->deferredPromotion) {
   Trace0(EVENT_PROMOTION_ENTER);
   if (needGCTime(s)) {
@@ -182,12 +190,15 @@ void HM_HHC_collectLocal(void) {
     timespec_now(&startTime);
   }
 
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
+  LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
-      "  local scope is %u -> %u\n",
+      "  local scope is      %u -> %u\n"
+      "  collection scope is %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
       hh->level,
+      (uint32_t)UNPACK_IDX(localScopeVal),
+      forwardHHObjptrArgs.maxLevel,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);
 
@@ -443,6 +454,36 @@ void HM_HHC_collectLocal(void) {
                   ((void*)(hh)));
 
   s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
+
+  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
+    for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+      size_t sizeBefore = sizesBefore[i];
+
+      HM_chunkList lev = HM_HH_LEVEL(hh, i);
+      size_t sizeAfter = (lev == NULL) ? 0 : HM_getChunkListSize(lev);
+
+      if (sizeBefore == 0 && sizeAfter == 0)
+        continue;
+
+      const char *sign;
+      size_t diff;
+      if (sizeBefore > sizeAfter) {
+        sign = "-";
+        diff = sizeBefore - sizeAfter;
+      } else {
+        sign = "+";
+        diff = sizeAfter - sizeBefore;
+      }
+
+      LOG(LM_HH_COLLECTION, LL_INFO,
+          "level %u, after collect: %zu --> %zu (%s%zu)",
+          i,
+          sizeBefore,
+          sizeAfter,
+          sign,
+          diff);
+    }
+  }
 
   /* enter statistics if necessary */
   if (needGCTime(s)) {
