@@ -129,6 +129,7 @@ PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 
 PRIVATE void GC_registerQueue(uint32_t processor, pointer queuePointer);
 PRIVATE void GC_registerQueueTop(uint32_t processor, pointer topPointer);
+PRIVATE void GC_registerQueueBot(uint32_t processor, pointer botPointer);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
