@@ -75,9 +75,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  if (forceGC || HM_HH_shouldTryToCollect(s, hh)) {
+  uint32_t desiredScope = HM_HH_desiredCollectionScope(s, hh);
+
+  if (forceGC || desiredScope <= hh->level) {
     /* too much allocated, so let's collect */
-    HM_HHC_collectLocal();
+    HM_HHC_collectLocal(desiredScope);
 
     hh->bytesAllocatedSinceLastCollection = 0;
 

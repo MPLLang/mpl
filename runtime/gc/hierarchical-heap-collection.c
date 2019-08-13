@@ -79,7 +79,7 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HHC_collectLocal(void) {
+void HM_HHC_collectLocal(uint32_t desiredScope) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
@@ -102,10 +102,14 @@ void HM_HHC_collectLocal(void) {
     return;
   }
 
+  uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  uint32_t potentialLocalScope = UNPACK_IDX(topval);
+
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
   uint32_t minLevel = originalLocalScope;
   // claim as many levels as we can, but only as far as desired
-  while (minLevel > s->controls->hhConfig.minLocalLevel &&
+  while (minLevel > desiredScope &&
+         minLevel > s->controls->hhConfig.minLocalLevel &&
          tryClaimLocalScope(s)) {
     minLevel--;
   }
@@ -194,9 +198,12 @@ void HM_HHC_collectLocal(void) {
 
   LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
-      "  local scope is %u -> %u\n",
+      "  potential local scope is %u -> %u\n"
+      "  collection scope is      %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
+      hh->level,
+      potentialLocalScope,
       hh->level,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);

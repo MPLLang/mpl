@@ -244,26 +244,30 @@ size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t byte
   return hh->bytesAllocatedSinceLastCollection;
 }
 
-bool HM_HH_shouldTryToCollect(GC_state s, struct HM_HierarchicalHeap* hh) {
-  if (s->wsQueueBot == BOGUS_OBJPTR)
-    return FALSE;
+size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
+  HM_chunkList lev = HM_HH_LEVEL(hh, level);
+  if (NULL == lev) return 0;
+  return HM_getChunkListSize(lev);
+}
 
-  uint32_t minLevel =
-    max(pollCurrentLocalScope(s), s->controls->hhConfig.minLocalLevel);
+uint32_t HM_HH_desiredCollectionScope(
+  __attribute__((unused)) GC_state s,
+  struct HM_HierarchicalHeap* hh)
+{
+  size_t budget = 2 * hh->bytesAllocatedSinceLastCollection;
 
-  if (minLevel > hh->level)
-    return FALSE;
+  if (budget <= (32L * 1024L * 1024L)) {
+    return hh->level+1; /* don't collect */
+  }
 
-  size_t potentialLocalSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, minLevel, hh->level+1, {
-    potentialLocalSize += HM_getChunkListSize(level);
-  });
+  size_t cumulativeSize = 0;
+  uint32_t level = hh->level+1;
+  while (level > 0 && cumulativeSize + HM_HH_levelSize(hh, level-1) < budget) {
+    cumulativeSize += HM_HH_levelSize(hh, level-1);
+    level--;
+  }
 
-  size_t threshold =
-    s->controls->hhConfig.liveLCRatio
-    * max(potentialLocalSize, s->controls->hhConfig.initialLCHS);
-
-  return hh->bytesAllocatedSinceLastCollection > threshold;
+  return level;
 }
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

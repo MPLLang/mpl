@@ -72,6 +72,8 @@ void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, uint32_t level);
 void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);
 void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
 
+static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level);
+
 /**
  * This function extends the hierarchical heap with at least bytesRequested free
  * space.
@@ -97,7 +99,7 @@ size_t HM_HH_size(struct HM_HierarchicalHeap* hh);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
 size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes);
 
-bool HM_HH_shouldTryToCollect(GC_state s, struct HM_HierarchicalHeap* hh);
+uint32_t HM_HH_desiredCollectionScope(GC_state s, struct HM_HierarchicalHeap* hh);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
