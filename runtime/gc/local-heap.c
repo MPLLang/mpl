@@ -75,12 +75,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  if (forceGC || HM_HH_size(hh) > hh->collectionThreshold) {
+  if (forceGC || HM_HH_shouldTryToCollect(s, hh)) {
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal();
 
-    size_t newSize = HM_HH_size(hh);
-    hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, newSize);
+    hh->bytesAllocatedSinceLastCollection = 0;
 
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
@@ -93,14 +92,14 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
     /* I may have reached a new maxHHLCS, so check */
-    if (s->cumulativeStatistics->maxHHLCS < newSize) {
-      s->cumulativeStatistics->maxHHLCS = newSize;
-    }
+    // if (s->cumulativeStatistics->maxHHLCS < newSize) {
+    //   s->cumulativeStatistics->maxHHLCS = newSize;
+    // }
 
     /* I may have reached a new maxHHLHCS, so check */
-    if (s->cumulativeStatistics->maxHHLCHS < hh->collectionThreshold) {
-      s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
-    }
+    // if (s->cumulativeStatistics->maxHHLCHS < hh->collectionThreshold) {
+    //   s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
+    // }
 
     if (NULL == hh->lastAllocatedChunk) {
       /* collected everything! */

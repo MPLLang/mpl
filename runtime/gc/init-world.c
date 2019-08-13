@@ -173,7 +173,6 @@ void initWorld(GC_state s) {
 
   size_t currentSize = HM_HH_size(hh);
   assert(HM_getChunkListSize(HM_HH_LEVEL(hh, 0)) == currentSize);
-  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, currentSize);
 
   /* SAM_NOTE: some of these statistics may be maintained incorrectly
    * elsewhere in the runtime. */
@@ -193,9 +192,10 @@ void initWorld(GC_state s) {
 void duplicateWorld (GC_state d, GC_state s) {
   d->lastMajorStatistics->bytesLive = 0;
 
-  GC_thread thread = initThreadAndHeap(d, 1);
-  struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
-  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, HM_HH_size(hh));
+  /* SAM_NOTE: TODO:
+   * initWorld calls switchToThread, but duplicateWorld does not. Why?
+   * Is this safe? */
+  initThreadAndHeap(d, 1);
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;

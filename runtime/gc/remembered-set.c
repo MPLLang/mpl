@@ -11,6 +11,10 @@ void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr dst, objptr
     if (levelHead != NULL) {
       assert(levelHead->rememberedSet == remset);
       levelHead->size += HM_getChunkSize(chunk);
+      if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
+          levelHead->containingHH != NULL) {
+        HM_HH_addRecentBytesAllocated(levelHead->containingHH, HM_getChunkSize(chunk));
+      }
     }
   }
 

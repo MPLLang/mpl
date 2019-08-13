@@ -76,8 +76,8 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
-  parentHH->collectionThreshold =
-    max(parentHH->collectionThreshold, hh->collectionThreshold);
+  parentHH->bytesAllocatedSinceLastCollection +=
+    hh->bytesAllocatedSinceLastCollection;
 
   assertInvariants(s, parentHH);
 
@@ -150,7 +150,7 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
            hh->level);
 }
 
-struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
+struct HM_HierarchicalHeap* HM_HH_new(__attribute__((unused)) GC_state s) {
 
   /* SAM_NOTE: TODO: switch to arena allocation if this is a bottleneck? */
   struct HM_HierarchicalHeap* hh =
@@ -165,7 +165,7 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   }
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
-  hh->collectionThreshold = HM_HH_nextCollectionThreshold(s, 0);
+  hh->bytesAllocatedSinceLastCollection = 0;
 
   return hh;
 }
@@ -199,6 +199,7 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
   }
 
   hh->lastAllocatedChunk = chunk;
+  HM_HH_addRecentBytesAllocated(hh, HM_getChunkSize(chunk));
 
   return TRUE;
 }
@@ -236,6 +237,33 @@ size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
     threshold = s->controls->hhConfig.initialLCHS;
   }
   return threshold;
+}
+
+size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes) {
+  hh->bytesAllocatedSinceLastCollection += bytes;
+  return hh->bytesAllocatedSinceLastCollection;
+}
+
+bool HM_HH_shouldTryToCollect(GC_state s, struct HM_HierarchicalHeap* hh) {
+  if (s->wsQueueBot == BOGUS_OBJPTR)
+    return FALSE;
+
+  uint32_t minLevel =
+    max(pollCurrentLocalScope(s), s->controls->hhConfig.minLocalLevel);
+
+  if (minLevel > hh->level)
+    return FALSE;
+
+  size_t potentialLocalSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, hh, minLevel, hh->level+1, {
+    potentialLocalSize += HM_getChunkListSize(level);
+  });
+
+  size_t threshold =
+    s->controls->hhConfig.liveLCRatio
+    * max(potentialLocalSize, s->controls->hhConfig.initialLCHS);
+
+  return hh->bytesAllocatedSinceLastCollection > threshold;
 }
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

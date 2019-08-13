@@ -29,10 +29,7 @@ struct HM_HierarchicalHeap {
    * Fresh chunks are placed at this level. */
   uint32_t level;
 
-  /* When the size (bytes) of the local scope exceeds this threshold, we
-   * do a local collections. The threshold is adjusted after each collection,
-   * and by forks and joins. */
-  size_t collectionThreshold;
+  size_t bytesAllocatedSinceLastCollection;
 };
 
 // l/r-value for ith level
@@ -98,6 +95,9 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh, pointer frontier);
 
 size_t HM_HH_size(struct HM_HierarchicalHeap* hh);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
+size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes);
+
+bool HM_HH_shouldTryToCollect(GC_state s, struct HM_HierarchicalHeap* hh);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
