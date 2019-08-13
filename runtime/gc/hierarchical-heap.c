@@ -251,20 +251,33 @@ size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
 }
 
 uint32_t HM_HH_desiredCollectionScope(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   struct HM_HierarchicalHeap* hh)
 {
-  size_t budget = 2 * hh->bytesAllocatedSinceLastCollection;
-
-  if (budget <= (32L * 1024L * 1024L)) {
+  if (s->wsQueueTop == BOGUS_OBJPTR)
     return hh->level+1; /* don't collect */
+
+  uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  uint32_t potentialLocalScope = UNPACK_IDX(topval);
+
+  size_t budget = hh->bytesAllocatedSinceLastCollection;
+
+  if (budget <= (16L * 1024L * 1024L) || potentialLocalScope > hh->level)
+    return hh->level+1; /* don't collect */
+
+  size_t sz = 0;
+  uint32_t level = hh->level+1;
+  while (level > potentialLocalScope && sz + HM_HH_levelSize(hh, level-1) < budget) {
+    sz += HM_HH_levelSize(hh, level-1);
+    level--;
   }
 
-  size_t cumulativeSize = 0;
-  uint32_t level = hh->level+1;
-  while (level > 0 && cumulativeSize + HM_HH_levelSize(hh, level-1) < budget) {
-    cumulativeSize += HM_HH_levelSize(hh, level-1);
-    level--;
+  /* It's likely that the shallower levels are mostly empty, so let's see if
+   * we can skip some of them without ignoring too much data. */
+  size_t szMin = 0.75 * sz;
+  while (level < hh->level && sz - HM_HH_levelSize(hh, level+1) > szMin) {
+    sz -= HM_HH_levelSize(hh, level+1);
+    level++;
   }
 
   return level;
