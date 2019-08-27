@@ -2,7 +2,7 @@
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -23,12 +23,12 @@ fun isValidSize (i: int) =
    (1 <= i andalso i <= 32) orelse i = 64
 
 val sizes: Bits.t list =
-   Vector.toList
-   (Vector.keepAllMap
-    (Vector.tabulate (65, fn i => if isValidSize i
-                                     then SOME (Bits.fromInt i)
-                                  else NONE),
-     fn i => i))
+   Vector.toListKeepAllMap
+   (Vector.tabulate (65, fn i =>
+                     if isValidSize i
+                        then SOME (Bits.fromInt i)
+                        else NONE),
+    fn i => i)
 
 fun make i = T {bits = i}
 

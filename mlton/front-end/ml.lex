@@ -4,7 +4,7 @@
  *
  * Copyright 1989 by AT&T Bell Laboratories
  *
- * SML/NJ is released under a BSD-style license.
+ * SML/NJ is released under a HPND-style license.
  * See the file NJ-LICENSE for details.
  *)
 
@@ -13,7 +13,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -542,6 +542,18 @@ real=(~?)(({decnum}{frac}?{exp})|({decnum}{frac}{exp}?));
    (addCommentError "Illegal line directive"
     ; YYBEGIN BLOCK_COMMENT
     ; continue ());
+
+
+<INITIAL>"(*#showBasis"{ws}+"\""[^"]*"\""{ws}*"*)" =>
+   (let
+       val file = List.nth (String.split (yytext, #"\""), 1)
+       val file =
+         if OS.Path.isAbsolute file
+            then file
+            else OS.Path.mkCanonical (OS.Path.concat (OS.Path.dir (Source.name source), file))
+   in
+       tok' (fn (_, l, r) => Tokens.SHOW_BASIS (file, l, r), yytext, source, yypos)
+   end);
 
 
 <INITIAL>. =>

@@ -2,11 +2,11 @@
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
-functor DeepFlatten (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM = 
+functor DeepFlatten (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM =
 struct
 
 open S
@@ -286,7 +286,7 @@ structure Value =
                Ground t => Type.layout t
              | Object e =>
                   Equatable.layout
-                  (e, fn {args, con, flat, ...} => 
+                  (e, fn {args, con, flat, ...} =>
                    seq [str "Object ",
                         record [("args", Prod.layout (args, layout)),
                                 ("con", ObjectCon.layout con),
@@ -380,7 +380,7 @@ structure Value =
                     let
                        val {args = a, con, ...} = Equatable.value e
                     in
-                       if Prod.someIsMutable a orelse ObjectCon.isVector con
+                       if Prod.someIsMutable a orelse ObjectCon.isSequence con
                           then unify (from, to)
                        else
                           case !f' of
@@ -399,7 +399,7 @@ structure Value =
       fun mayFlatten {args, con}: bool =
          (* Don't flatten constructors, since they are part of a sum type.
           * Don't flatten unit.
-          * Don't flatten vectors (of course their components can be
+          * Don't flatten sequences (of course their components can be
           * flattened).
           * Don't flatten objects with mutable fields, since sharing must be
           * preserved.
@@ -408,8 +408,8 @@ structure Value =
          andalso Prod.allAreImmutable args
          andalso (case con of
                      ObjectCon.Con _ => false
-                   | ObjectCon.Tuple => true
-                   | ObjectCon.Vector => false)
+                   | ObjectCon.Sequence => false
+                   | ObjectCon.Tuple => true)
 
       fun objectFields {args, con} =
          let
@@ -420,7 +420,7 @@ structure Value =
                if (case con  of
                       ObjectCon.Con _ => true
                     | ObjectCon.Tuple => true
-                    | ObjectCon.Vector => false)
+                    | ObjectCon.Sequence => false)
                   then Vector.foreach (Prod.dest args, fn {elt, isMutable} =>
                                        if isMutable
                                           then ()
@@ -607,7 +607,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                      (conValue c, fn () =>
                                       makeValue (doit ())))
                          | Tuple => doit ()
-                         | Vector => doit ()
+                         | Sequence => doit ()
                      end
                 | Weak t =>
                      (case makeTypeValue t of
@@ -621,6 +621,27 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
          Trace.trace ("DeepFlatten.typeValue", Type.layout, Value.layout)
          typeValue
       val (coerce, coerceProd) = (Value.coerce, Value.coerceProd)
+      fun base b =
+         case b of
+            Base.Object obj => obj
+          | Base.SequenceSub {sequence, ...} => sequence
+      fun const c = typeValue (Type.ofConst c)
+      fun select {base, offset} =
+         let
+            datatype z = datatype Value.t
+         in
+            case base of
+               Ground t =>
+                  (case Type.dest t of
+                      Type.Object {args, ...} =>
+                         typeValue (Prod.elt (args, offset))
+                    | _ => Error.bug "DeepFlatten.select: Ground")
+             | Object e => Object.select (Equatable.value e, offset)
+             | _ => Error.bug "DeepFlatten.select:"
+         end
+      fun update {base, offset, value, writeBarrier} =
+         coerce {from = value,
+                 to = select {base = base, offset = offset}}
       fun inject {sum, variant = _} = typeValue (Type.datatypee sum)
       fun object {args, con, resultType} =
          let
@@ -715,12 +736,31 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                    * be flattened.
                    *)
                   dontFlatten ()
+
+             | Ref_cas _ =>
+                 let
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 1, c)
+                    ; Value.unify (arg 2, c)
+                    ; c
+                 end
+             | Array_cas _ =>
+                 let
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 2, c)
+                    ; Value.unify (arg 3, c)
+                    ; c
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()
              | MLton_share => dontFlatten ()
              | Weak_get => deWeak (arg 0)
-             | Weak_new => 
+             | Weak_new =>
                   let val a = arg 0
                   in (Value.dontFlatten a; weak a)
                   end
@@ -729,7 +769,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
       fun base b =
          case b of
             Base.Object obj => obj
-          | Base.VectorSub {vector, ...} => vector
+          | Base.SequenceSub {sequence, ...} => sequence
       fun select {base, offset} =
          let
             datatype z = datatype Value.t
@@ -743,7 +783,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Object e => Object.select (Equatable.value e, offset)
              | _ => Error.bug "DeepFlatten.select:"
          end
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier = _} =
          coerce {from = value,
                  to = select {base = base, offset = offset}}
       fun const c = typeValue (Type.ofConst c)
@@ -808,7 +848,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                     val args =
                        case ! (conValue con) of
                           NONE => args
-                        | SOME v => 
+                        | SOME v =>
                              case Type.dest (Value.finalType v) of
                                 Type.Object {args, ...} => args
                               | _ => Error.bug "DeepFlatten.datatypes: strange con"
@@ -940,7 +980,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                          in
                             case Value.deObject (varValue baseVar) of
                                NONE => simple ()
-                             | SOME obj => 
+                             | SOME obj =>
                                   let
                                      val Tree.T (info, children) =
                                         varTree baseVar
@@ -983,16 +1023,16 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
             case s of
                Bind b => transformBind b
              | Profile _ => simple ()
-             | Update {base, offset, value} =>
+             | Update {base, offset, value, writeBarrier} =>
                   let
                      val baseVar =
                         case base of
                            Base.Object x => x
-                         | Base.VectorSub {vector = x, ...} => x
+                         | Base.SequenceSub {sequence = x, ...} => x
                   in
                      case Value.deObject (varValue baseVar) of
                         NONE => simple ()
-                      | SOME object => 
+                      | SOME object =>
                            let
                               val ss = ref []
                               val child =
@@ -1003,7 +1043,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                  if not (TypeTree.isFlat child)
                                     then [Update {base = base,
                                                   offset = offset,
-                                                  value = replaceVar value}]
+                                                  value = replaceVar value,
+                                                  writeBarrier = writeBarrier}]
                                  else
                                     let
                                        val (vt, ss') =
@@ -1022,7 +1063,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                               List.push (us,
                                                          Update {base = base,
                                                                  offset = offset,
-                                                                 value = var})
+                                                                 value = var,
+                                                                 writeBarrier = writeBarrier})
                                            end)
                                     in
                                        !us

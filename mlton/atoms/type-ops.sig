@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -37,14 +37,12 @@ signature TYPE_OPS =
       val deArrow: t -> t * t
       val deArrowOpt: t -> (t * t) option
       val deConOpt: t -> (tycon * t vector) option
-      val deHierarchicalHeap: t -> t
       val deRef: t -> t
       val deTuple: t -> t vector
       val deTupleOpt: t -> t vector option
       val deVector: t -> t
       val deWeak: t -> t
       val exn: t
-      val hierarchicalHeap: t -> t
       val intInf: t
       val isTuple: t -> bool
       val list: t -> t

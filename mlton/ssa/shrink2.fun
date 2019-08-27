@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2011,2017 Matthew Fluet.
+(* Copyright (C) 2009,2011,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -132,7 +132,7 @@ structure LabelMeaning =
          Block
        | Bug
        | Case of {canMove: Statement.t list,
-                  cases: Cases.t,
+                  cases: (Con.t, Label.t) Cases.t,
                   default: Label.t option}
        | Goto of {canMove: Statement.t list,
                   dst: t,
@@ -369,12 +369,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                   end
             in
                case transfer of
-                  Arith {args, overflow, success, ...} =>
-                     (incVars args
-                      ; incLabel overflow
-                      ; incLabel success
-                      ; normal ())
-                | Bug =>
+                  Bug =>
                      if Vector.isEmpty statements
                         andalso (case returns of
                                     NONE => true
@@ -804,62 +799,7 @@ fun shrinkFunction {globals: Statement.t vector} =
             traceSimplifyTransfer
             (fn (t: Transfer.t) =>
             case t of
-                Arith {prim, args, overflow, success, ty} =>
-                   let
-                      val args = varInfos args
-                   in
-                      case primApp (prim, args) of
-                         Prim.ApplyResult.Const c =>
-                            let
-                               val () = deleteLabel overflow
-                               val x = Var.newNoname ()
-                               val isUsed = ref false
-                               val vi =
-                                  VarInfo.T {isUsed = isUsed,
-                                             numOccurrences = ref 0,
-                                             ty = SOME ty,
-                                             value = ref (SOME (Value.Const c)),
-                                             var = x}
-                               val (ss, t) = goto (success, Vector.new1 vi)
-                               val ss =
-                                  if !isUsed
-                                     then Bind {var = SOME x,
-                                                ty = Type.ofConst c,
-                                                exp = Exp.Const c} :: ss
-                                  else ss
-                            in
-                               (ss, t)
-                            end
-                       | Prim.ApplyResult.Var x =>
-                            let
-                               val () = deleteLabel overflow
-                            in
-                               goto (success, Vector.new1 x)
-                            end
-                       | Prim.ApplyResult.Overflow =>
-                            let
-                               val () = deleteLabel success
-                            in
-                               goto (overflow, Vector.new0 ())
-                            end
-                       | Prim.ApplyResult.Apply (prim, args) =>
-                            let
-                               val args = Vector.fromList args
-                            in
-                               ([], Arith {prim = prim,
-                                           args = uses args,
-                                           overflow = simplifyLabel overflow,
-                                           success = simplifyLabel success,
-                                           ty = ty})
-                            end
-                       | _ =>
-                            ([], Arith {prim = prim,
-                                        args = uses args,
-                                        overflow = simplifyLabel overflow,
-                                        success = simplifyLabel success,
-                                        ty = ty})
-                   end
-             | Bug => ([], Bug)
+               Bug => ([], Bug)
              | Call {func, args, return} =>
                   let
                      val (statements, return) =
@@ -1307,7 +1247,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                                        | _ => Error.bug "Ssa2.Shrink2.evalBind: Select:non object")
                                 | _ => dontChange ()
                             end
-                       | Base.VectorSub _ => simple {sideEffect = false})
+                       | Base.SequenceSub _ => simple {sideEffect = false})
                 | Var x => setVar (varInfo x)
             end
          and evalStatement arg : Statement.t list -> Statement.t list =

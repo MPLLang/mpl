@@ -1,8 +1,8 @@
-(* Copyright (C) 2009-2010,2014,2016 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2016-2017,2019 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -20,8 +20,6 @@ structure Type =
       and node =
           Bits
         | CPointer
-        | ExnStack
-        | GCState
         | Label of Label.t
         | Objptr of ObjptrTycon.t vector
         | Real of RealSize.t
@@ -44,8 +42,6 @@ structure Type =
             case node t of
                Bits => str (concat ["Bits", Bits.toString (width t)])
              | CPointer => str "CPointer"
-             | ExnStack => str "ExnStack"
-             | GCState => str "GCState"
              | Label l => seq [str "Label ", Label.layout l]
              | Objptr opts =>
                   seq [str "Objptr ",
@@ -62,8 +58,6 @@ structure Type =
          (case (node t, node t') of
              (Bits, Bits) => true
            | (CPointer, CPointer) => true
-           | (ExnStack, ExnStack) => true
-           | (GCState, GCState) => true
            | (Label l, Label l') => Label.equals (l, l')
            | (Objptr opts, Objptr opts') =>
                 Vector.equals (opts, opts', ObjptrTycon.equals)
@@ -76,16 +70,11 @@ structure Type =
          fn (t, t') => Bits.equals (width t, width t')
 
 
-      val bits: Bits.t -> t = fn width => T {node = Bits, width = width}
+      val bits: Bits.t -> t =
+         fn width => T {node = Bits, width = width}
 
       val cpointer: unit -> t = fn () =>
          T {node = CPointer, width = WordSize.bits (WordSize.cpointer ())}
-
-      val exnStack: unit -> t = fn () =>
-         T {node = ExnStack, width = WordSize.bits (WordSize.csize ())}
-
-      val gcState: unit -> t = fn () =>
-         T {node = GCState, width = WordSize.bits (WordSize.cpointer ())}
 
       val label: Label.t -> t =
          fn l => T {node = Label l, width = WordSize.bits (WordSize.cpointer ())}
@@ -103,14 +92,15 @@ structure Type =
 
       val bool: t = word WordSize.bool
 
-      val csize: unit -> t = word o WordSize.csize
-
       val cint: unit -> t = word o WordSize.cint
 
       val compareRes = word WordSize.compareRes
 
-      val hierarchicalHeap: unit -> t =
-       fn () => objptr ObjptrTycon.hierarchicalHeap
+      val csize: unit -> t = word o WordSize.csize
+
+      val exnStack: unit -> t = csize
+
+      val gcState: unit -> t = cpointer
 
       val objptrHeader: unit -> t = word o WordSize.objptrHeader
 
@@ -332,8 +322,12 @@ structure Type =
             else
                case node t of
                   CPointer => C.CPointer
-                | GCState => C.CPointer
-                | Label _ => C.CPointer
+                | Label _ =>
+                     (case !Control.codegen of
+                         Control.Codegen.AMD64Codegen => C.CPointer
+                       | Control.Codegen.CCodegen => C.fromBits (width t)
+                       | Control.Codegen.LLVMCodegen => C.fromBits (width t)
+                       | Control.Codegen.X86Codegen => C.CPointer)
                 | Real s =>
                      (case s of
                          RealSize.R32 => C.Real32
@@ -369,10 +363,10 @@ structure ObjectType =
 
       type ty = Type.t
       datatype t =
-         Array of {elt: ty,
-                   hasIdentity: bool}
-       | Normal of {hasIdentity: bool,
+         Normal of {hasIdentity: bool,
                     ty: ty}
+       | Sequence of {elt: ty,
+                      hasIdentity: bool}
        | Stack
        | Weak of Type.t option
 
@@ -381,27 +375,21 @@ structure ObjectType =
             open Layout
          in
             case t of
-               Array {elt, hasIdentity} =>
-                  seq [str "Array ",
-                       record [("elt", Type.layout elt),
-                               ("hasIdentity", Bool.layout hasIdentity)]]
-             | Normal {hasIdentity, ty} =>
+               Normal {hasIdentity, ty} =>
                   seq [str "Normal ",
                        record [("hasIdentity", Bool.layout hasIdentity),
                                ("ty", Type.layout ty)]]
+             | Sequence {elt, hasIdentity} =>
+                  seq [str "Sequence ",
+                       record [("elt", Type.layout elt),
+                               ("hasIdentity", Bool.layout hasIdentity)]]
              | Stack => str "Stack"
              | Weak t => seq [str "Weak ", Option.layout Type.layout t]
          end
 
       fun isOk (t: t): bool =
          case t of
-            Array {elt, ...} =>
-               let
-                  val b = Type.width elt
-               in
-                  Bits.isByteAligned b
-               end
-          | Normal {ty, ...} =>
+            Normal {ty, ...} =>
                let
                   val b = Bits.+ (Type.width ty,
                                   Type.width (Type.objptrHeader ()))
@@ -410,184 +398,67 @@ structure ObjectType =
                      Control.Align4 => Bits.isWord32Aligned b
                    | Control.Align8 => Bits.isWord64Aligned b
                end
+          | Sequence {elt, ...} =>
+               let
+                  val b = Type.width elt
+               in
+                  Bits.isByteAligned b
+               end
           | Stack => true
           | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
 
       val stack = Stack
 
-      val thread =
-       fn () =>
-          let
-              val padding =
-                  let
-                      val align =
-                          case !Control.align
-                           of Control.Align4 => Bytes.fromInt 4
+      val thread = fn () =>
+         let
+            val padding =
+               let
+                  val align =
+                     case !Control.align of
+                        Control.Align4 => Bytes.fromInt 4
                             | Control.Align8 => Bytes.fromInt 8
-                      val bytesMetaData =
-                          Bits.toBytes (Control.Target.Size.metaData ())
-                      val bytesInGlobalHeapCounter =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesUseHierarchicalHeap =
-                          Bits.toBytes (Type.width Type.bool)
-                      val bytesBytesNeeded =
-                          Bits.toBytes (Control.Target.Size.csize ())
-                      val bytesExnStack =
-                          Bits.toBytes (Type.width (Type.exnStack ()))
-                      val bytesStack =
-                          Bits.toBytes (Type.width (Type.stack ()))
-                      val bytesHierarchicalHeap =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-
-                      val bytesObject =
-                          let
-                              infix 6 +
-                              val op+ = Bytes.+
-                          in
-                              bytesMetaData +
-                              bytesInGlobalHeapCounter +
-                              bytesUseHierarchicalHeap +
-                              bytesBytesNeeded +
-                              bytesExnStack +
-                              bytesStack +
-                              bytesHierarchicalHeap
-                          end
-
-                      val bytesTotal = Bytes.align (bytesObject,
-                                                    {alignment = align})
+                  val bytesMetaData =
+                     Bits.toBytes (Control.Target.Size.normalMetaData ())
+                  val bytesCurrentProcNum =
+                     Bits.toBytes (Type.width Type.word32)
+                  val bytesBytesNeeded =
+                     Bits.toBytes (Control.Target.Size.csize ())
+                  val bytesExnStack =
+                     Bits.toBytes (Type.width (Type.exnStack ()))
+                  val bytesHierarchicalHeap =
+                     Bits.toBytes (Control.Target.Size.cpointer ())
+                  val bytesStack =
+                     Bits.toBytes (Type.width (Type.stack ()))
+                     
+                  val bytesObject =
+                     let
+                        infix 6 +
+                        val op+ = Bytes.+
+                     in
+                        bytesMetaData +
+                        bytesCurrentProcNum +
+                        bytesBytesNeeded +
+                        bytesExnStack +
+                        bytesHierarchicalHeap +
+                        bytesStack
+                     end
+                  
+                  val bytesTotal =
+                     Bytes.align (bytesObject, {alignment = align})
                       val bytesPad = Bytes.- (bytesTotal, bytesObject)
-                  in
-                      Type.bits (Bytes.toBits bytesPad)
-                  end
-          in
-              Normal {hasIdentity = true,
-                      ty =
-                      Type.seq (Vector.fromList [padding,
-                                                 Type.word32,
-                                                 Type.bool,
-                                                 Type.csize (),
-                                                 Type.exnStack (),
-                                                 Type.stack (),
-                                                 Type.hierarchicalHeap ()])}
-          end
-
-      val hierarchicalHeap =
-       fn () =>
-          let
-              (* This must match runtime/gc/hierarchical_heap.h *)
-              val HM_MAX_NUM_LEVELS = 64
-
-              val padding =
-                  let
-                      val align =
-                          case !Control.align of
-                              Control.Align4 => Bytes.fromInt 4
-                            | Control.Align8 => Bytes.fromInt 8
-
-                      val bytesMetaData =
-                          Bits.toBytes (Control.Target.Size.metaData ())
-                      val bytesLevels =
-                          Bytes.fromInt
-                            (HM_MAX_NUM_LEVELS *
-                             Bytes.toInt (Bits.toBytes (Control.Target.Size.cpointer ())))
-                      val bytesCapacities =
-                          Bytes.fromInt
-                            (HM_MAX_NUM_LEVELS *
-                             Bytes.toInt (Bits.toBytes (Type.width Type.word32)))
-                      (* val bytesFreeList = *)
-                          (* Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      val bytesLastAllocatedChunk =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesLock =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesState =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesLevel =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesStealLevel =
-                          Bits.toBytes (Type.width Type.word32)
-                      val bytesID =
-                          Bits.toBytes (Type.width Type.word64)
-                      (*
-                       * RAM_NOTE: Not sure if I can use cpointer for both
-                       * pointer and void*
-                       *)
-                      (* val bytesLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      (* val bytesNewLevelList =
-                          Bits.toBytes (Control.Target.Size.cpointer ()) *)
-                      val bytesLocallyCollectibleSize =
-                          Bits.toBytes (Type.width Type.word64)
-                      val bytesLocallyCollectibleHeapSize =
-                          Bits.toBytes (Type.width Type.word64)
-                      val bytesRetVal =
-                          Bits.toBytes (Control.Target.Size.cpointer ())
-                      val bytesParentHH =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesNextChildHH =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesChildHHList =
-                          Bits.toBytes (Type.width (Type.hierarchicalHeap ()))
-                      val bytesThread =
-                          Bits.toBytes (Type.width (Type.thread ()))
-                      val bytesObject =
-                          let
-                              infix 6 +
-                              val op+ = Bytes.+
-                          in
-                              bytesMetaData +
-                              bytesLevels +
-                              bytesCapacities +
-                              (* bytesFreeList + *)
-                              bytesLastAllocatedChunk +
-                              bytesLock +
-                              bytesState +
-                              bytesLevel +
-                              bytesStealLevel +
-                              bytesID +
-                              (* bytesLevelList + *)
-                              (* bytesNewLevelList + *)
-                              bytesLocallyCollectibleSize +
-                              bytesLocallyCollectibleHeapSize +
-                              bytesRetVal +
-                              bytesParentHH +
-                              bytesNextChildHH +
-                              bytesChildHHList +
-                              bytesThread
-                          end
-
-                      val bytesTotal =
-                          Bytes.align (bytesObject, {alignment = align})
-                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
-                  in
-                      Type.bits (Bytes.toBits bytesPad)
-                  end
-
-              val typList =
-                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.cpointer ()) (* levels *)
-                @
-                List.tabulate (HM_MAX_NUM_LEVELS, fn _ => Type.word64) (* capacities *)
-                @
-                [ (*Type.cpointer ()          (* freeList *)
-                ,*) Type.cpointer ()          (* lastAllocatedChunk *)
-                , Type.word32               (* lock *)
-                , Type.word32               (* state *)
-                , Type.word32               (* level *)
-                , Type.word32               (* stealLevel *)
-                , Type.word64               (* id *)
-                (* , Type.cpointer ()          (* levelList *) *)
-                (* , Type.cpointer ()          (* newLevelList *) *)
-                , Type.word64               (* locallyCollectibleSize *)
-                , Type.word64               (* locallyCollectibleHeapSize *)
-                , Type.cpointer ()          (* retVal *)
-                , Type.hierarchicalHeap ()  (* parentHH *)
-                , Type.hierarchicalHeap ()  (* nextChildHH *)
-                , Type.hierarchicalHeap ()  (* childHHList *)
-                , Type.thread ()            (* thread *)
-                ]
-          in
-              Normal {hasIdentity = true, ty = Type.seq (Vector.fromList (padding :: typList))}
-          end
+               in
+                  Type.bits (Bytes.toBits bytesPad)
+               end
+         in
+            Normal {hasIdentity = true,
+                    ty =
+                    Type.seq (Vector.fromList [padding,
+                                               Type.word32,
+                                               Type.csize (),
+                                               Type.exnStack (),
+                                               Type.cpointer (),
+                                               Type.stack ()])}
+         end
 
       (* Order in the following vector matters.  The basic pointer tycons must
        * correspond to the constants in gc/object.h.
@@ -600,7 +471,6 @@ structure ObjectType =
        * WORD64_VECTOR_TYPE_INDEX.
        * FILL0_NORMAL_TYPE_INDEX,
        * FILL8_NORMAL_TYPE_INDEX,
-       * HIERARCHICAL_HEAP_INDEX
        *)
       val basic = fn () =>
          let
@@ -609,7 +479,7 @@ structure ObjectType =
                   val b = Bits.fromInt i
                in
                   (ObjptrTycon.wordVector b,
-                   Array {hasIdentity = false,
+                   Sequence {hasIdentity = false,
                           elt = Type.word (WordSize.fromBits b)})
                end
          in
@@ -624,8 +494,7 @@ structure ObjectType =
              (ObjptrTycon.fill0Normal,
               Normal { hasIdentity = false, ty = Type.unit }),
              (ObjptrTycon.fill8Normal,
-              Normal { hasIdentity = false, ty = Type.word WordSize.word64 }),
-             (ObjptrTycon.hierarchicalHeap, hierarchicalHeap ())]
+              Normal { hasIdentity = false, ty = Type.word WordSize.word64 })]
          end
 
       local
@@ -633,19 +502,19 @@ structure ObjectType =
       in
          fun toRuntime (t: t): R.t =
             case t of
-               Array {elt, hasIdentity} =>
-                  let
-                     val (b, nops) = Type.bytesAndObjptrs elt
-                  in
-                     R.Array {hasIdentity = hasIdentity,
-                              bytesNonObjptrs = b,
-                              numObjptrs = nops}
-                  end
-             | Normal {hasIdentity, ty} =>
+               Normal {hasIdentity, ty} =>
                   let
                      val (b, nops) = Type.bytesAndObjptrs ty
                   in
                      R.Normal {hasIdentity = hasIdentity,
+                              bytesNonObjptrs = b,
+                              numObjptrs = nops}
+                  end
+             | Sequence {elt, hasIdentity} =>
+                  let
+                     val (b, nops) = Type.bytesAndObjptrs elt
+                  in
+                     R.Sequence {hasIdentity = hasIdentity,
                                bytesNonObjptrs = b,
                                numObjptrs = nops}
                   end
@@ -664,17 +533,11 @@ fun ofGCField (f: GCField.t): t =
    in
       case f of
          AtomicState => word32
-       | CardMapAbsolute => cpointer ()
-       | CurrentThread => thread ()
-       | CurSourceSeqsIndex => word32
+       | CurSourceSeqIndex => word32
        | ExnStack => exnStack ()
-       | FFIArgs => cpointer ()
        | Frontier => cpointer ()
-       | GlobalObjptrNonRoot => cpointer ()
        | Limit => cpointer ()
        | LimitPlusSlop => cpointer ()
-       | MaxFrameSize => word32
-       | ReturnToC => word32
        | SignalIsPending => word32
        | StackBottom => cpointer ()
        | StackLimit => cpointer ()
@@ -725,6 +588,11 @@ fun checkPrimApp {args, prim, result} =
          val wordUnary = make wordOrBitsOrSeq
       end
       local
+         fun make f s = let val t = f s in done ([t], SOME bool) end
+      in
+         val wordUnaryP = make wordOrBitsOrSeq
+      end
+      local
          fun make f s = let val t = f s in done ([t, t], SOME t) end
       in
          val realBinary = make real
@@ -734,6 +602,7 @@ fun checkPrimApp {args, prim, result} =
          fun make f s = let val t = f s in done ([t, t], SOME bool) end
       in
          val realCompare = make real
+         val wordBinaryP = make wordOrBitsOrSeq
          val wordCompare = make wordOrBitsOrSeq
          val objptrCompare = make (fn _ => objptr) ()
       end
@@ -783,7 +652,7 @@ fun checkPrimApp {args, prim, result} =
        | Real_sub s => realBinary s
        | Thread_returnToC => done ([], NONE)
        | Word_add s => wordBinary s
-       | Word_addCheck (s, _) => wordBinary s
+       | Word_addCheckP (s, _) => wordBinaryP s
        | Word_andb s => wordBinary s
        | Word_castToReal (s, s') => done ([word s], SOME (real s'))
        | Word_equal s => (wordCompare s) orelse objptrCompare
@@ -792,9 +661,9 @@ fun checkPrimApp {args, prim, result} =
        | Word_lshift s => wordShift s
        | Word_lt (s, _) => wordCompare s
        | Word_mul (s, _) => wordBinary s
-       | Word_mulCheck (s, _) => wordBinary s
+       | Word_mulCheckP (s, _) => wordBinaryP s
        | Word_neg s => wordUnary s
-       | Word_negCheck s => wordUnary s
+       | Word_negCheckP (s, _) => wordUnaryP s
        | Word_notb s => wordUnary s
        | Word_orb s => wordBinary s
        | Word_quot (s, _) => wordBinary s
@@ -804,8 +673,33 @@ fun checkPrimApp {args, prim, result} =
        | Word_ror s => wordShift s
        | Word_rshift (s, _) => wordShift s
        | Word_sub s => wordBinary s
-       | Word_subCheck (s, _) => wordBinary s
+       | Word_subCheckP (s, _) => wordBinaryP s
        | Word_xorb s => wordBinary s
+       | Ref_cas (SOME cty) =>
+           let
+             val ty = Vector.sub (args, 1)
+             fun isTy t = equals (t, ty)
+           in
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isTy, isTy],
+               case result of
+                 NONE => NONE
+               | _ => SOME isTy)
+           end
+       | Array_cas (SOME cty) =>
+           let
+             fun isSeqIndex t = Type.equals (t, Type.seqIndex ())
+             val ty = Vector.sub (args, 2)
+             fun isTy t = equals (t, ty)
+           in
+             CType.equals (toCType ty, cty)
+             andalso
+             done ([objptr, isSeqIndex, isTy, isTy],
+               case result of
+                 NONE => NONE
+               | _ => SOME isTy)
+           end
        | _ => Error.bug (concat ["RepType.checkPrimApp got strange prim: ",
                                  Prim.toString prim])
    end
@@ -922,13 +816,14 @@ fun checkOffset {base, isVector, offset, result} =
 
 fun offsetIsOk {base, offset, tyconTy, result} =
    case node base of
-      Objptr opts =>
+      CPointer => true
+    | Objptr opts =>
          if Bytes.equals (offset, Runtime.headerOffset ())
             then equals (result, objptrHeader ())
-         else if Bytes.equals (offset, Runtime.arrayLengthOffset ())
+         else if Bytes.equals (offset, Runtime.sequenceLengthOffset ())
             then (1 = Vector.length opts)
                  andalso (case tyconTy (Vector.sub (opts, 0)) of
-                             ObjectType.Array _ => true
+                             ObjectType.Sequence _ => true
                            | _ => false)
                  andalso (equals (result, seqIndex ()))
          else (1 = Vector.length opts)
@@ -941,7 +836,7 @@ fun offsetIsOk {base, offset, tyconTy, result} =
                         | _ => false)
     | _ => false
 
-fun arrayOffsetIsOk {base, index, offset, tyconTy, result, scale} =
+fun sequenceOffsetIsOk {base, index, offset, tyconTy, result, scale} =
    case node base of
       CPointer =>
          (equals (index, csize ()))
@@ -959,7 +854,7 @@ fun arrayOffsetIsOk {base, index, offset, tyconTy, result, scale} =
          (equals (index, seqIndex ()))
          andalso (1 = Vector.length opts)
          andalso (case tyconTy (Vector.first opts) of
-                     ObjectType.Array {elt, ...} => 
+                     ObjectType.Sequence {elt, ...} =>
                         if equals (elt, word8)
                            then (* special case for PackWord operations *)
                                 (case node result of
@@ -999,9 +894,10 @@ structure BuiltInCFunction =
             T {args = Vector.new3 (Type.gcState (), Type.csize (), Type.bool),
                    convention = Cdecl,
    		   kind = Kind.Runtime {bytesNeeded = NONE,
-					ensuresBytesFree = true,
+                                        ensuresBytesFree = SOME 1,
 					mayGC = true,
-					maySwitchThreads = b,
+                                        maySwitchThreadsFrom = b,
+                                        maySwitchThreadsTo = b,
 					modifiesFrontier = true,
 					readsStackTop = true,
 					writesStackTop = true},

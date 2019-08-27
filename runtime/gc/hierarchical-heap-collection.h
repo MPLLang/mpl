@@ -1,4 +1,5 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2019 Sam Westrick
+ * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -46,37 +47,7 @@ struct ForwardHHObjptrArgs {
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-/**
- * This function registers 'queuePointer' as the work stealing queue associated
- * with processor 'processor'
- *
- * @note
- * A second call will overwrite the previously saved registration
- *
- * @attention
- * 'queuePointer' <em>must</em> point to an object on the global heap.
- *
- * @param processor The processor to register for
- * @param queuePointer pointer to an object in the global heap that is the queue
- * to register
- */
 PRIVATE void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer);
-
-/**
- * This function registers 'queueLockPointer' as the work stealing queue lock
- * associated with processor 'processor'
- *
- * @note
- * A second call will overwrite the previously saved registration
- *
- * @attention
- * 'queueLockPointer' <em>must</em> point to an object on the global heap.
- *
- * @param processor The processor to register for
- * @param queueLockPointer pointer to an int ref in the global heap that is the
- * queue lock to register
- */
-PRIVATE void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

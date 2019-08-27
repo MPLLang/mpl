@@ -52,16 +52,6 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList,
  */
 // void* HM_freeLevelListIterator(void* arg);
 
-#if ASSERT
-void assertObjptrInHH(objptr op) {
-  assert(HM_getChunkOf(objptrToPointer(op, NULL)));
-}
-#else
-void assertObjptrInHH(objptr op) {
-  ((void)op);
-}
-#endif
-
 /************************/
 /* Function Definitions */
 /************************/
@@ -259,7 +249,7 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
   size_t bs = HM_BLOCK_SIZE;
   pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
   if (MAP_FAILED == start) {
-    DIE("Map failed in mmapNewChunk(%zu)", chunkWidth);
+    DIE("Out of memory. Unable to allocate new chunk of size %zu.", chunkWidth);
     return NULL;
   }
   start = (pointer)(uintptr_t)align((uintptr_t)start, bs);
@@ -344,6 +334,8 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   HM_chunk chunk = HM_getFreeChunk(s, bytesRequested);
 
   if (NULL == chunk) {
+    DIE("Out of memory. Unable to allocate chunk of size %zu.",
+        bytesRequested);
     return NULL;
   }
 
@@ -367,6 +359,11 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, Word32 level) {
 
   // SAM_NOTE: replace with custom arena allocation if a performance bottleneck
   HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
+
+  if (list == NULL) {
+    DIE("Out of memory. Unable to allocate new chunk list.");
+    return NULL;
+  }
 
   list->firstChunk = NULL;
   list->lastChunk = NULL;
@@ -542,11 +539,10 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
-void HM_getObjptrInfo(GC_state s,
+void HM_getObjptrInfo(__attribute__((unused)) GC_state s,
                       objptr object,
-                      struct HM_ObjptrInfo* info) {
-  assertObjptrInHH(object);
-
+                      struct HM_ObjptrInfo* info)
+{
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
   assert(NULL != chunk);
 
@@ -584,9 +580,9 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 
   if (list2->firstChunk != NULL) {
     list2->firstChunk->prevChunk = list1->lastChunk;
+    list1->lastChunk = list2->lastChunk;
   }
 
-  list1->lastChunk = list2->lastChunk;
   list1->size += list2->size;
   list2->parent = list1;
 
@@ -736,11 +732,9 @@ Word32 HM_getObjptrLevel(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
 }
 
-// rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object) {
-//   return &HM_getObjptrHH(s, object)->lock;
-// }
-
-bool HM_isObjptrInToSpace(GC_state s, objptr object) {
+bool HM_isObjptrInToSpace(__attribute__((unused)) GC_state s,
+                          objptr object)
+{
   /* SAM_NOTE: why is this commented out? why are there two ways to check if
    * an object is in the toSpace? Does promotion use one, while collection
    * uses the other? */

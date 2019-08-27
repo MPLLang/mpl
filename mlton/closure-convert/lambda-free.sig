@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -42,7 +42,6 @@ signature LAMBDA_FREE =
        *)
       val lambdaFree:
          {program: Program.t,
-          overflow: Var.t,
           varInfo: Var.t -> {frees: Var.t list ref ref,
                              status: Status.t ref},
           lambdaInfo: Lambda.t -> {frees: Var.t vector ref,

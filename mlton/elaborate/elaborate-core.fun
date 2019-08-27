@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -1030,7 +1030,7 @@ structure Type =
                    {ctype = ctype, name = name, tycon = tycon})
 
       val unary: Tycon.t list =
-         [Tycon.array, Tycon.hierarchicalHeap, Tycon.reff, Tycon.vector]
+         [Tycon.array, Tycon.reff, Tycon.vector]
 
       fun toNullaryCType (t: t): {ctype: CType.t, name: string} option =
          case deConOpt t of
@@ -1298,7 +1298,6 @@ fun primApp {args, prim, result: Type.t} =
                                       result = result,
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = Type.deArrow,
-                                                 deHierarchicalHeap = Type.deHierarchicalHeap,
                                                  deRef = Type.deRef,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}})

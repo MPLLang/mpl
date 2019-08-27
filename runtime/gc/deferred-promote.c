@@ -13,7 +13,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 /* ========================================================================= */
 
-void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
+HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START deferred promotion");
 
   /* First, bucket in-scope downptrs by the level of the downptr origin */
@@ -29,19 +29,23 @@ void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       &(downPtrs[0]));
   });
 
-  /* Next, promote objects to the appropriate level, beginning at the root and
+  /* Next, promote objects to the appropriate level, beginning below the root and
    * working downwards towards to the leaf. Any resulting downptr that cannot
    * be promoted yet (due to pointing to a shared object) is recorded in the
-   * appropriate remembered-set */
-  for (Word32 i = 0; i <= args->maxLevel; i++) {
+   * appropriate remembered-set.
+   * Note that we skip down-pointers from the root heap; these are "preserved"
+   * instead of promoted, and used as roots for collection. */
+  for (Word32 i = 1; i <= args->maxLevel; i++) {
     /* remember where the roots begin, so we know where to scan from after
      * promoting the roots */
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
+    size_t beforeSize = 0;
     if (NULL != HM_HH_LEVEL(args->hh, i) &&
         NULL != HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i))) {
       rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i));
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
+      beforeSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
     }
 
     /* promote the roots, as indicated by the remembered downptrs */
@@ -52,7 +56,8 @@ void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       promoteDownPtr,
       args);
 
-    if (NULL == HM_HH_LEVEL(args->hh, i)) {
+    if (NULL == HM_HH_LEVEL(args->hh, i) ||
+        NULL == HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i))) {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
     }
@@ -75,17 +80,29 @@ void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       NULL,
       promoteIfPointingDownIntoLocalScope,
       args);
+
+    if (i < args->minLevel) {
+      size_t afterSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
+      assert(afterSize >= beforeSize);
+      HM_HH_LEVEL_OBP(args->hh, i) += (afterSize - beforeSize);
+    }
   }
 
   /* Finally, free the chunks that we used as temporary storage for bucketing */
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+  for (Word32 i = 1; i < HM_MAX_NUM_LEVELS; i++) {
     HM_appendChunkList(s->freeListSmall, downPtrs[i]);
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
+  return downPtrs[0];
 }
 
-void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* arg) {
+void bucketIfValid(__attribute__((unused)) GC_state s,
+                   objptr dst,
+                   objptr* field,
+                   objptr src,
+                   void* arg)
+{
   HM_chunkList* downPtrs = arg;
   // pointer dstp = objptrToPointer(dst, NULL);
   // pointer srcp = objptrToPointer(src, NULL);
@@ -114,7 +131,12 @@ void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* arg)
   HM_remember(downPtrs[dstLevel], NULL, dst, field, src);
 }
 
-void promoteDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+void promoteDownPtr(__attribute__((unused)) GC_state s,
+                    __attribute__((unused)) objptr dst,
+                    objptr* field,
+                    objptr src,
+                    void* rawArgs)
+{
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   assert(args->toLevel == HM_getObjptrLevel(dst));
 
@@ -157,7 +179,7 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
 
-  if (isObjptrInGlobalHeap(s, src)) {
+  if (isObjptrInRootHeap(s, src)) {
     assert(!hasFwdPtr(srcp));
     return;
   }

@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -37,7 +37,6 @@ local
    fun unary tycon t = con (tycon, Vector.new1 t)
 in
    val array = unary Tycon.array
-   val hierarchicalHeap = unary Tycon.hierarchicalHeap
    val list = unary Tycon.list
    val reff = unary Tycon.reff
    val vector = unary Tycon.vector
@@ -70,7 +69,6 @@ fun deUnary tycon t =
     | NONE => Error.bug "TypeOps.deUnary"
 
 val deArray = deUnary Tycon.array
-val deHierarchicalHeap = deUnary Tycon.hierarchicalHeap
 val deRef = deUnary Tycon.reff
 val deVector = deUnary Tycon.vector
 val deWeak = deUnary Tycon.weak

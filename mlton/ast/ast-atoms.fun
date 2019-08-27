@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -74,8 +74,8 @@ structure Strid =
       local
          fun make s = fromSymbol (Symbol.fromString s, Region.bogus)
       in
-         val uArg = fn s => make (s ^ "._arg")
-         val uRes = fn s => make (s ^ "._res")
+         val uArg = fn s => make ("_arg_" ^ s)
+         val uRes = fn s => make ("_res_" ^ s)
          val uStr = make "_str"
          val uSig = make "_sig"
       end

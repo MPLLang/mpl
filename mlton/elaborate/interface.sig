@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -36,6 +36,7 @@ signature INTERFACE_STRUCTS =
       structure EnvTypeStr:
          sig
             type t
+            val layout: t -> Layout.t
          end
       structure Tyvar:
          sig
@@ -228,11 +229,8 @@ signature INTERFACE =
       val lookupLongtycon:
          t * Ast.Longtycon.t * Region.t * {prefix: Ast.Strid.t list}
          -> (Ast.Tycon.t * TypeStr.t) option
-      val makeLayoutPrettyFlexTycon:
-         t * {prefixUnset: bool}
-         -> {destroy: unit -> unit,
-             layoutPretty: FlexibleTycon.t -> Layout.t}
       val new: {isClosed: bool,
+                original: t option,
                 strs: (Ast.Strid.t * t) array,
                 types: (Ast.Tycon.t * TypeStr.t) array,
                 vals: (Ast.Vid.t * (Status.t * Scheme.t)) array} -> t

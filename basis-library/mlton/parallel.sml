@@ -30,12 +30,6 @@ structure MLtonParallel:> MLTON_PARALLEL =
                   f x)
             end
 
-
-        val yield: unit -> unit =
-            (* msgWrapper1 ("yield", *)
-                         _import "Parallel_yield" runtime private:
-                         unit -> unit;(* ) *)
-
         val lockInit: Word32.word ref -> unit =
             (* msgWrapper1 ("lockInit", *)
                          _import "Parallel_lockInit" runtime private:
@@ -61,19 +55,8 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
         (* ======================== arrayCompareAndSwap ==================== *)
 
-        local
-           structure I =
-              Int_ChooseInt
-              (type 'a t = 'a array * SeqIndex.int * 'a * 'a -> 'a
-               val fInt8 = _import "Parallel_arrayCompareAndSwap8" impure private: Int8.t array * SeqIndex.int * Int8.int * Int8.int -> Int8.int;
-               val fInt16 = _import "Parallel_arrayCompareAndSwap16" impure private: Int16.t array * SeqIndex.int * Int16.int * Int16.int -> Int16.int;
-               val fInt32 = _import "Parallel_arrayCompareAndSwap32" impure private: Int32.t array * SeqIndex.int * Int32.int * Int32.int -> Int32.int;
-               val fInt64 = _import "Parallel_arrayCompareAndSwap64" impure private: Int64.t array * SeqIndex.int * Int64.int * Int64.int -> Int64.int;
-               val fIntInf = fn _ => raise Fail "MLton.Parallel.Unsafe.arrayCompareAndSwap: IntInf")
-        in
-           fun arrayCompareAndSwap (xs, i) (old, new) =
-              I.f (xs, SeqIndex.fromInt i, old, new)
-        end
+        fun arrayCompareAndSwap (arr, i) (old, new) =
+          Prim.arrayCompareAndSwap (arr, SeqIndex.fromInt i, old, new)
 
         (* ========================= arrayFetchAndAdd ========================= *)
 
@@ -111,19 +94,7 @@ structure MLtonParallel:> MLTON_PARALLEL =
 
     (* ========================== compareAndSwap ========================== *)
 
-    local
-       structure I =
-          Int_ChooseInt
-          (type 'a t = 'a ref * 'a * 'a -> 'a
-           val fInt8 = _import "Parallel_compareAndSwap8" impure private: Int8.t ref * Int8.int * Int8.int -> Int8.int;
-           val fInt16 = _import "Parallel_compareAndSwap16" impure private: Int16.t ref * Int16.int * Int16.int -> Int16.int;
-           val fInt32 = _import "Parallel_compareAndSwap32" impure private: Int32.t ref * Int32.int * Int32.int -> Int32.int;
-           val fInt64 = _import "Parallel_compareAndSwap64" impure private: Int64.t ref * Int64.int * Int64.int -> Int64.int;
-           val fIntInf = fn _ => raise Fail "MLton.Parallel.compareAndSwap: IntInf")
-    in
-       fun compareAndSwap r (old, new) =
-          I.f (r, old, new)
-    end
+    fun compareAndSwap r (old, new) = Prim.compareAndSwap (r, old, new)
 
     fun arrayCompareAndSwap (xs, i) (old, new) =
       if i < 0 orelse i >= Array.length xs

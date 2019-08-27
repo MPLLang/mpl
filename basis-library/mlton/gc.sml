@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -10,25 +11,27 @@ structure MLtonGC =
    struct
       open Primitive.MLton.GC
 
+      val gcState = Primitive.MLton.GCState.gcState
+
       val pack : unit -> unit =
-         fn () => pack ()
+         fn () => pack (gcState ())
       val unpack : unit -> unit =
-         fn () => unpack ()
+         fn () => unpack (gcState ())
 
       val setHashConsDuringGC : bool -> unit =
-         fn b => setHashConsDuringGC b
+         fn b => setHashConsDuringGC (gcState (), b)
       val setMessages : bool -> unit =
-         fn b => setMessages b
+         fn b => setMessages (gcState (), b)
       val setRusageMeasureGC : bool -> unit =
-         fn b => setRusageMeasureGC b
+         fn b => setRusageMeasureGC (gcState (), b)
       val setSummary : bool -> unit =
-         fn b => setSummary b
+         fn b => setSummary (gcState (), b)
 
       structure Statistics =
          struct
             local
                fun mk conv prim =
-                  fn () => conv (prim ())
+                  fn () => conv (prim (gcState ()))
                val mkSize = mk C_Size.toLargeInt
                val mkUIntmax = mk C_UIntmax.toLargeInt
                val mkMilliseconds = mk (Time.fromMilliseconds o C_UIntmax.toLargeInt)
@@ -36,7 +39,7 @@ structure MLtonGC =
                val bytesAllocated = mkUIntmax getBytesAllocated
                val bytesPromoted = mkUIntmax getBytesPromoted
                val lastBytesLive = mkSize getLastBytesLive
-               val maxChunkPoolOccupancy = mkSize getMaxChunkPoolOccupancy
+               val maxChunkPoolOccupancy = mkSize (fn _ => getMaxChunkPoolOccupancy ())
                val maxHeapOccupancy = mkSize getMaxHeapOccupancy
                val maxBytesLive = mkSize getMaxBytesLive
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
@@ -45,10 +48,10 @@ structure MLtonGC =
 
                fun localGCTimeOfProc p =
                  Time.fromMilliseconds (C_UIntmax.toLargeInt
-                 (getLocalGCMillisecondsOfProc (Word32.fromInt p)))
+                 (getLocalGCMillisecondsOfProc (gcState (), Word32.fromInt p)))
                fun promoTimeOfProc p =
                  Time.fromMilliseconds (C_UIntmax.toLargeInt
-                 (getPromoMillisecondsOfProc (Word32.fromInt p)))
+                 (getPromoMillisecondsOfProc (gcState (), Word32.fromInt p)))
             end
          end
 

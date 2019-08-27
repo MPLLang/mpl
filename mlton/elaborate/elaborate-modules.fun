@@ -1,9 +1,9 @@
-(* Copyright (C) 2012,2017 Matthew Fluet.
+(* Copyright (C) 2012,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -116,6 +116,20 @@ fun elaborateTopdec (topdec, {env = E: Env.t}) =
                       List.fold
                       (ds, Decs.empty, fn (d, decs) =>
                        Decs.append (decs, elabStrdec d))
+                 | Strdec.ShowBasis file =>
+                      let
+                         open Layout
+                         val () =
+                            Env.showBasis (E, file)
+                            handle exn =>
+                            Control.warning
+                            (Strdec.region d,
+                             str "Exception raised processing #showBasis",
+                             align [seq [str "file: ", File.layout file],
+                                    seq [str "exn:  ", Exn.layout exn]])
+                      in
+                         Decs.empty
+                      end
                  | Strdec.Structure strbinds => (* rules 57, 61 *)
                       let
                          val strbinds =

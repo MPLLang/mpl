@@ -1,7 +1,7 @@
 (* Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -12,10 +12,10 @@ signature OBJECT_TYPE =
 
       type ty
       datatype t =
-         Array of {elt: ty,
-                   hasIdentity: bool}
-       | Normal of {hasIdentity: bool,
+         Normal of {hasIdentity: bool,
                     ty: ty}
+       | Sequence of {elt: ty,
+                      hasIdentity: bool}
        | Stack
        | Weak of ty option (* in Weak (SOME t), must have Type.isPointer t *)
 

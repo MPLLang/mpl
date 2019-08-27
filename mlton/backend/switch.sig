@@ -2,7 +2,7 @@
  * Copyright (C) 2002-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -39,4 +39,5 @@ signature SWITCH =
       val isOk: t * {checkUse: Use.t -> unit,
                      labelIsOk: Label.t -> bool} -> bool
       val layout: t -> Layout.t
+      val replaceLabels: t * (Label.t -> Label.t) -> t
    end

@@ -1,8 +1,8 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -31,6 +31,7 @@ signature VECTOR =
       val exists: 'a t * ('a -> bool) -> bool
       val existsi: 'a t * (int * 'a -> bool) -> bool
       val existsR: 'a t * int * int * ('a -> bool) -> bool
+      val first: 'a t -> 'a
       val fold2: 'a t * 'b t * 'c * ('a * 'b * 'c -> 'c) -> 'c
       val fold3From:
          'a t * 'b t * 'c t * int * 'd * ('a * 'b * 'c * 'd -> 'd) -> 'd
@@ -44,8 +45,6 @@ signature VECTOR =
        * returns.  If the end of the vector is reached, g is applied to the
        * state.
        *)
-
-      val first: 'a t -> 'a
       val fold':
          'a t * int * 'b * (int * 'a * 'b -> ('b, 'c) continue) * ('b -> 'c)
          -> 'c
@@ -86,6 +85,7 @@ signature VECTOR =
       val keepAllSome: 'a option t -> 'a t
       val last: 'a t -> 'a
       val layout: ('a -> Layout.t) -> 'a t -> Layout.t
+      val layouti: (int * 'a -> Layout.t) -> 'a t -> Layout.t
       val loop: 'a t * ('a -> 'b option) * (unit -> 'b) -> 'b
       val loopi: 'a t * (int * 'a -> 'b option) * (unit -> 'b) -> 'b
       val map: 'a t * ('a -> 'b) -> 'b t
@@ -119,7 +119,10 @@ signature VECTOR =
       val tabulator: int * (('a -> unit) -> unit) -> 'a t
       val toArray: 'a t -> 'a array
       val toList: 'a t -> 'a list
+      val toListKeepAllMap: 'a t * ('a -> 'b option) -> 'b list
+      val toListKeepAllMapi: 'a t * (int * 'a -> 'b option) -> 'b list
       val toListMap: 'a t * ('a -> 'b) -> 'b list
+      val toListMapi: 'a t * (int * 'a -> 'b) -> 'b list
       val toListRev: 'a t -> 'a list
       val toString: ('a -> string) -> 'a t -> string
       val unzip: ('a * 'b) t -> 'a t * 'b t

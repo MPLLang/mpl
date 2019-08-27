@@ -1,8 +1,9 @@
-/* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -33,7 +34,8 @@ typedef GC_state GCState_t;
 #include "gc/pointer.h"
 #include "gc/objptr.h"
 #include "gc/object.h"
-#include "gc/array.h"
+#include "gc/sequence.h"
+#include "gc/sources.h"
 #include "gc/frame.h"
 #include "gc/stack.h"
 #include "gc/thread.h"
@@ -41,20 +43,14 @@ typedef GC_state GCState_t;
 #include "gc/int-inf.h"
 #include "gc/string.h"
 #include "gc/object-size.h"
-#include "gc/generational.h"
 #include "gc/heap.h"
 #include "gc/current.h"
 #include "gc/foreach.h"
-#include "gc/translate.h"
 #include "gc/sysvals.h"
 #include "gc/controls.h"
 #include "gc/major.h"
 #include "gc/statistics.h"
 #include "gc/forward.h"
-#include "gc/cheney-copy.h"
-#include "gc/hash-cons.h"
-#include "gc/dfs-mark.h"
-#include "gc/mark-compact.h"
 #include "gc/invariant.h"
 #include "gc/atomic.h"
 #include "gc/enter_leave.h"
@@ -63,8 +59,7 @@ typedef GC_state GCState_t;
 #include "gc/switch-thread.h"
 #include "gc/garbage-collection.h"
 #include "gc/new-object.h"
-#include "gc/array-allocate.h"
-#include "gc/sources.h"
+#include "gc/sequence-allocate.h"
 #include "gc/call-stack.h"
 #include "gc/profiling.h"
 #include "gc/rusage.h"
@@ -84,7 +79,6 @@ typedef GC_state GCState_t;
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/heap-utils.h"
-#include "gc/global-heap.h"
 #include "gc/local-heap.h"
 #include "gc/chunk.h"
 #include "gc/assign.h"

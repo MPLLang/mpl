@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -25,8 +25,8 @@ static inline void callStackAux (GC_state s, GC_frameIndex i);
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE uint32_t GC_numStackFrames (GC_state* states);
-PRIVATE void GC_callStack (GC_state* states, pointer p);
-PRIVATE uint32_t* GC_frameIndexSourceSeq (GC_state* states, GC_frameIndex frameIndex);
+PRIVATE uint32_t GC_numStackFrames (GC_state s);
+PRIVATE void GC_callStack (GC_state s, pointer p);
+PRIVATE uint32_t* GC_frameIndexSourceSeq (GC_state s, GC_frameIndex frameIndex);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */

@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2017 Matthew Fluet.
+(* Copyright (C) 2009,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -38,18 +38,6 @@ signature XML_TREE =
             val truee: t
             val con: t -> Con.t
             val layout: t -> Layout.t
-         end
-
-      structure Cases:
-         sig
-            datatype 'a t =
-               Con of (Pat.t * 'a) vector
-             | Word of WordSize.t * (WordX.t * 'a) vector
-
-            val fold: 'a t * 'b * ('a * 'b -> 'b) -> 'b
-            val foreach: 'a t * ('a -> unit) -> unit
-            val foreach': 'a t * ('a -> unit) * (Pat.t -> unit) -> unit
-            val map: 'a t * ('a -> 'b) -> 'b t
          end
 
       structure Lambda:
@@ -91,8 +79,8 @@ signature XML_TREE =
             datatype t =
                App of {arg: VarExp.t,
                        func: VarExp.t}
-             | Case of {cases: exp Cases.t,
-                        default: (exp * Region.t) option,
+             | Case of {cases: (Pat.t, exp) Cases.t,
+                        default: exp option,
                         test: VarExp.t}
              | ConApp of {arg: VarExp.t option,
                           con: Con.t,
@@ -182,8 +170,8 @@ signature XML_TREE =
             val app: {func: t, arg: t, ty: Type.t} -> t
             val bug: string -> t
             val casee:
-               {cases: t Cases.t,
-                default: (t * Region.t) option,
+               {cases: (Pat.t, t) Cases.t,
+                default: t option,
                 test: t,
                 ty: Type.t} (* type of entire case expression *)
                -> t
@@ -242,15 +230,14 @@ signature XML_TREE =
                      datatypes: {cons: {arg: Type.t option,
                                         con: Con.t} vector,
                                  tycon: Tycon.t,
-                                 tyvars: Tyvar.t vector} vector,
-                     (* overflow is SOME only after exceptions have been
-                      * implemented.
-                      *)
-                     overflow: Var.t option}
+                                 tyvars: Tyvar.t vector} vector}
 
             val clear: t -> unit (* clear all property lists *)
             val layout: t -> Layout.t
             val layouts: t * (Layout.t -> unit) -> unit
             val layoutStats: t -> Layout.t
+            val mkLayoutStats: string -> t -> Layout.t
+            val parse: unit -> t Parse.t
+            val toFile: {display: t Control.display, style: Control.style, suffix: string}
          end
    end

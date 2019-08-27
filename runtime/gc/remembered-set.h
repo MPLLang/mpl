@@ -28,6 +28,7 @@ typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, objptr* field, obj
 void HM_remember(HM_chunkList rememberedSet, HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
 void HM_rememberAtLevel(HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
 void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs);
+size_t HM_numRemembered(HM_chunkList rememberedSet);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
 

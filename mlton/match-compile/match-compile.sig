@@ -1,9 +1,9 @@
-(* Copyright (C) 2009,2015,2017 Matthew Fluet.
+(* Copyright (C) 2009,2015,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -20,24 +20,19 @@ signature MATCH_COMPILE_STRUCTS =
             val unit: t
             val word: WordSize.t -> t
          end
-      structure Cases:
+      structure Pat:
          sig
-            type exp
-            type t
-
-            val con: {arg: (Var.t * Type.t) option,
-                      con: Con.t,
-                      rhs: exp,
-                      targs: Type.t vector} vector -> t
-            val word: WordSize.t * (WordX.t * exp) vector -> t
+            datatype t = T of {arg: (Var.t * Type.t) option,
+                               con: Con.t,
+                               targs: Type.t vector}
          end
       structure Exp:
          sig
             type t
 
             val casee:
-               {cases: Cases.t,
-                default: (t * Region.t) option,
+               {cases: (Pat.t, t) Cases.t,
+                default: t option,
                 test: t,
                 ty: Type.t}  (* type of entire case expression *)
                -> t
@@ -53,7 +48,6 @@ signature MATCH_COMPILE_STRUCTS =
             val var: Var.t * Type.t -> t
             val vectorLength: t -> t
          end
-      sharing type Cases.exp = Exp.t
       structure NestedPat: NESTED_PAT
       sharing Atoms = NestedPat.Atoms
       sharing Type = NestedPat.Type
@@ -67,7 +61,6 @@ signature MATCH_COMPILE =
          {caseType: Type.t, (* type of entire expression *)
           cases: (NestedPat.t * (int -> (Var.t -> Var.t) -> Exp.t)) vector,
           conTycon: Con.t -> Tycon.t,
-          region: Region.t,
           test: Var.t,
           testType: Type.t,
           tyconCons: Tycon.t -> {con: Con.t, hasArg: bool} vector}

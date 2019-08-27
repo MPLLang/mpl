@@ -1,4 +1,5 @@
-/* Copyright (C) 2015 Ram Raghunathan.
+/* Copyright (C) 2018-2019 Sam Westrick
+ * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -20,6 +21,9 @@
 /******************************/
 /* Static Function Prototypes */
 /******************************/
+
+void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+
 /**
  * Compute the size of the object, how much of it has to be copied, as well as
  * how much metadata it has.
@@ -75,23 +79,11 @@ void HM_HHC_registerQueue(uint32_t processor, pointer queuePointer) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queuePointer,
-                                                  NULL)));
 
   s->procStates[processor].wsQueue = pointerToObjptr (queuePointer,
                                                       NULL);
 }
 
-void HM_HHC_registerQueueLock(uint32_t processor, pointer queueLockPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  assert(processor < s->numberOfProcs);
-  assert(isObjptrInGlobalHeap(s, pointerToObjptr (queueLockPointer,
-                                                  NULL)));
-
-  s->procStates[processor].wsQueueLock = pointerToObjptr (queueLockPointer,
-                                                          NULL);
-}
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -101,20 +93,16 @@ void HM_HHC_collectLocal(void) {
   struct rusage ru_start;
   struct timespec startTime;
   struct timespec stopTime;
-  Pointer wsQueueLock = objptrToPointer(s->wsQueueLock, NULL);
-  bool queueLockHeld = FALSE;
   uint64_t oldObjectCopied;
+
+  if (HM_HH_getShallowestPrivateLevel(s, hh) == 0) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
+    return;
+  }
 
   if (NONE == s->controls->hhCollectionLevel) {
     /* collection disabled */
     return;
-  }
-
-  if (Parallel_alreadyLockedByMe(wsQueueLock)) {
-    /* in a scheduler critical section, so cannot collect */
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
-        "Queue locked by mutator/scheduler");
-    queueLockHeld = TRUE;
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -138,19 +126,12 @@ void HM_HHC_collectLocal(void) {
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
 
-  /* lock queue to prevent steals */
-  if (!queueLockHeld) {
-    Parallel_lockTake(wsQueueLock);
-  }
-  // lockWriterHH(hh);
-
-  assertInvariants(s, hh, LIVE);
-  assert(hh->thread == s->currentThread);
+  assertInvariants(s, hh);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = HM_HH_getLowestPrivateLevel(s, hh),
+    .minLevel = HM_HH_getShallowestPrivateLevel(s, hh),
     .maxLevel = hh->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
@@ -164,21 +145,21 @@ void HM_HHC_collectLocal(void) {
     forwardHHObjptrArgs.minLevel = hh->level;
   }
 
-  if (s->controls->deferredPromotion) {
-    Trace0(EVENT_PROMOTION_ENTER);
-    if (needGCTime(s)) {
-      timespec_now(&startTime);
-    }
-
-    HM_deferredPromote(s, &forwardHHObjptrArgs);
-
-    if (needGCTime(s)) {
-      timespec_now(&stopTime);
-      timespec_sub(&stopTime, &startTime);
-      timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
-    }
-    Trace0(EVENT_PROMOTION_LEAVE);
+  // if (s->controls->deferredPromotion) {
+  Trace0(EVENT_PROMOTION_ENTER);
+  if (needGCTime(s)) {
+    timespec_now(&startTime);
   }
+
+  HM_chunkList globalDownPtrs = HM_deferredPromote(s, &forwardHHObjptrArgs);
+
+  if (needGCTime(s)) {
+    timespec_now(&stopTime);
+    timespec_sub(&stopTime, &startTime);
+    timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
+  }
+  Trace0(EVENT_PROMOTION_LEAVE);
+  // }
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
@@ -206,9 +187,9 @@ void HM_HHC_collectLocal(void) {
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toLevel = HM_HH_INVALID_LEVEL;
 
-  if (!s->controls->deferredPromotion) {
-    HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
-  }
+  // if (!s->controls->deferredPromotion) {
+  //   HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
+  // }
 
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -260,24 +241,6 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-
-#if ASSERT
-  /* forward thread from hh */
-  oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  forwardHHObjptr(s, &(hh->thread), &forwardHHObjptrArgs);
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
-      "Copied thread from HH" : "Did not copy thread from HH");
-  Trace3(EVENT_COPY,
-	 forwardHHObjptrArgs.bytesCopied,
-	 forwardHHObjptrArgs.objectsCopied,
-	 forwardHHObjptrArgs.stacksCopied);
-  assert(hh->thread == s->currentThread);
-#else
-  /* update thread in hh */
-  hh->thread = s->currentThread;
-#endif
-
   /* forward contents of deque */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
@@ -296,18 +259,13 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-  /* forward retVal pointer if necessary */
-  if (NULL != hh->retVal) {
-    objptr root = pointerToObjptr(hh->retVal, NULL);
-
-    oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-    forwardHHObjptr(s, &root, &forwardHHObjptrArgs);
-    LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "Copied %"PRIu64" objects from hh->retVal",
-      forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-
-    hh->retVal = objptrToPointer(root, NULL);
-  }
+  /* preserve remaining down-pointers from global heap */
+  LOG(LM_HH_COLLECTION, LL_INFO,
+    "START forwarding %zu global down-pointers",
+    HM_numRemembered(globalDownPtrs));
+  HM_foreachRemembered(s, globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
+  LOG(LM_HH_COLLECTION, LL_INFO, "END forwarding global down-pointers");
+  HM_appendChunkList(s->freeListSmall, globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -351,8 +309,6 @@ void HM_HHC_collectLocal(void) {
 	 forwardHHObjptrArgs.bytesCopied,
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
-
-  // assertInvariants(s, hh, LIVE);
 
   /*
    * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
@@ -446,7 +402,10 @@ void HM_HHC_collectLocal(void) {
    */
   /* update locally collectible size */
   hh->locallyCollectibleSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getHighestStolenLevel(s, hh)+1, hh->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_HH_getShallowestPrivateLevel(s, hh), {
+    hh->locallyCollectibleSize += HM_HH_LEVEL_OBP(hh, i);
+  });
+  FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getShallowestPrivateLevel(s, hh), hh->level+1, {
     hh->locallyCollectibleSize += HM_getChunkListSize(level);
   });
 
@@ -460,6 +419,12 @@ void HM_HHC_collectLocal(void) {
   });
   hh->lastAllocatedChunk = lastChunk;
 
+  if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
+    if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
+      DIE("Ran out of space for hierarchical heap!\n");
+    }
+  }
+
   /* SAM_NOTE: the following assert is broken, because it is possible that
    * lastChunk == NULL (if we collected everything). Also, note that even when
    * lastChunk != NULL, this assert sometimes trips... which is puzzling,
@@ -469,14 +434,7 @@ void HM_HHC_collectLocal(void) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
-  assertInvariants(s, hh, LIVE);
-
-  /* RAM_NOTE: This can be moved earlier? */
-  /* unlock hh and queue */
-  // unlockWriterHH(hh);
-  if (!queueLockHeld) {
-    Parallel_lockRelease(wsQueueLock);
-  }
+  assertInvariants(s, hh);
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "
@@ -564,6 +522,23 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
 
 /* ========================================================================= */
 
+void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
+  Word32 srcLevel = HM_getObjptrLevel(src);
+
+  assert(args->minLevel <= srcLevel);
+  assert(srcLevel <= args->maxLevel);
+  assert(args->toLevel == HM_HH_INVALID_LEVEL);
+
+  forwardHHObjptr(s, &src, rawArgs);
+  assert(NULL != args->toSpace[srcLevel]);
+
+  *field = src;
+  HM_rememberAtLevel(args->toSpace[srcLevel], dst, field, src);
+}
+
+/* ========================================================================= */
+
 void forwardHHObjptr (GC_state s,
                       objptr* opp,
                       void* rawArgs) {
@@ -587,7 +562,7 @@ void forwardHHObjptr (GC_state s,
       op,
       (uintptr_t)p);
 
-  if (!isObjptr(op) || isObjptrInGlobalHeap(s, op)) {
+  if (!isObjptr(op) || isObjptrInRootHeap(s, op)) {
     /* does not point to an HH objptr, so not in scope for collection */
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR": not in HH.",
@@ -596,9 +571,6 @@ void forwardHHObjptr (GC_state s,
         (uintptr_t)p);
     return;
   }
-
-  // if it's not in the global heap, then it must be in the HH
-  assertObjptrInHH(op);
 
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
@@ -631,52 +603,23 @@ void forwardHHObjptr (GC_state s,
       return;
   }
 
-  /* We look for the top-most collectible replica (tmcr) of p present in the
-   * collection range, that is in [arg->maxLevel, arg->minLevel]. Depending on
-   * what we find, we might have to create a copy or not. There are three cases:
-   *
-   * 1/ The tmcr is in to-space. No copying is needed, the address of the tmcr
-   * is the new location of p.
-   *
-   * 2/ The tmcr is in from-space and has been forwarded. No copy is needed, the
-   * target of the tmcr's forwarding pointer (necessarily outside collection
-   * range) is the new location of p.
-   *
-   * 3/ The tmcr is in from-space and has no forwarding pointer. The tmcr must
-   * be copied in to-space; the resulting address is the new location of p.
-   */
+  assert(HM_getObjptrLevel(op) >= args->minLevel);
 
-  /* find the top-most collectible replica */
-  p = HM_followForwardPointerUntilNullOrBelowLevel(s,
-                                                   p,
-                                                   args->minLevel);
-  op = pointerToObjptr(p, NULL);
-  HM_getObjptrInfo(s, op, &opInfo);
-
-  if (HM_isObjptrInToSpace(s, op)) {
-    /* just use p/op */
+  if (hasFwdPtr(p)) {
+    op = getFwdPtr(p);
     *opp = op;
+    p = objptrToPointer(op, NULL);
 
-    if (DEBUG_DETAILED) {
-      fprintf (stderr, "  already FORWARDED\n");
-    }
+    assert(!hasFwdPtr(p));
+    assert(HM_isObjptrInToSpace(s, op));
 
-    /* objects in to-space should not themselves have forwarding pointers */
-    assert (!hasFwdPtr(p));
-    /* to-space should be copying */
-    assert(COPY_OBJECT_HH_VALUE == opInfo.hh);
-    /* should not have copy-forwarded anything below 'args->minLevel'! */
-    assert (opInfo.level >= args->minLevel);
-  } else if (hasFwdPtr(p)) {
-    /* just use the forwarding pointer of p */
-    *opp = getFwdPtr(p);
+  } else if (HM_isObjptrInToSpace(s, op)) {
+    /* do nothing; this could be a large object that had its chunk moved
+     * rather than copied */
+    assert(!hasFwdPtr(p));
 
-    /* should point outside collectible zone */
-#if ASSERT
-    HM_getObjptrInfo(s, *opp, &opInfo);
-    assert (opInfo.level < args->minLevel);
-#endif
   } else {
+    assert(!HM_isObjptrInToSpace(s, op));
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;
@@ -801,13 +744,6 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
     header = getHeader(p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
 
-    if (GC_HIERARCHICAL_HEAP_HEADER == header) {
-        die(__FILE__ ":%d: "
-            "computeObjectCopyParameters() does not support"
-            " GC_HIERARCHICAL_HEAP_HEADER objects!",
-            __LINE__);
-    }
-
     /* Compute the space taken by the metadata and object body. */
     if ((NORMAL_TAG == tag) or (WEAK_TAG == tag)) { /* Fixed size object. */
       if (WEAK_TAG == tag) {
@@ -819,10 +755,10 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *metaDataSize = GC_NORMAL_METADATA_SIZE;
       *objectSize = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
       *copySize = *objectSize;
-    } else if (ARRAY_TAG == tag) {
-      *metaDataSize = GC_ARRAY_METADATA_SIZE;
-      *objectSize = sizeofArrayNoMetaData (s, getArrayLength (p),
-                                           bytesNonObjptrs, numObjptrs);
+    } else if (SEQUENCE_TAG == tag) {
+      *metaDataSize = GC_SEQUENCE_METADATA_SIZE;
+      *objectSize = sizeofSequenceNoMetaData (s, getSequenceLength (p),
+                                              bytesNonObjptrs, numObjptrs);
       *copySize = *objectSize;
     } else {
       /* Stack. */

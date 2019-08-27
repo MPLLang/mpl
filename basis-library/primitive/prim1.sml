@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -52,8 +52,11 @@ structure Exn =
       exception Span
       exception Subscript
 
-      val wrapOverflow: ('a -> 'b) -> ('a -> 'b) =
-         fn f => fn a => f a handle PrimOverflow => raise Overflow
+      val mkOverflow: ('a -> 'b) * ('a -> bool) -> ('a -> 'b) =
+        fn (!, ?) => fn a =>
+          let val r = ! a
+          in if ? a then raise Overflow else r
+          end
    end
 
 structure Order =

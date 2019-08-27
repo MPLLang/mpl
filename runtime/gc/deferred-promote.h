@@ -8,7 +8,7 @@
 #define DEFERRED_PROMOTE_H
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args);
+HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args);
 
 #endif  /* defined (MLTON_GC_INTERNAL_FUNCS) */
 #endif  /* DEFERRED_PROMOTE_H */

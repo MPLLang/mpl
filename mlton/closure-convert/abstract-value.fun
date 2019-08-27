@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -310,12 +310,6 @@ fun deVector v =
     | Unify (_, v) => v
     | _ => Error.bug "AbstractValue.deVector"
 
-fun deHierarchicalHeap v =
-    case tree v of
-        Type t => fromType (Type.deHierarchicalHeap t)
-      | Unify (_, v) => v
-      | _ => Error.bug "AbstractValue.deHierarchicalHeap"
-
 fun lambda (l: Sxml.Lambda.t, t: Type.t): t =
    new (Lambdas (LambdaNode.lambda l), t)
 
@@ -419,6 +413,10 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
          if n = 3
             then (arg 0, arg 1, arg 2)
          else Error.bug "AbstractValue.primApply.threeArgs"
+      fun fourArgs () =
+         if n = 4
+            then (arg 0, arg 1, arg 2, arg 3)
+         else Error.bug "AbstractValue.primApply.fourArgs"
       fun fiveArgs () =
          if n = 5
             then (arg 0, arg 1, arg 2, arg 3, arg 4)
@@ -471,7 +469,6 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                 Array x => x
               | Type _ => result ()
               | _ => typeError ())
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Array_update _ =>
             let val (a, _, x) = threeArgs ()
             in (case dest a of
@@ -480,13 +477,21 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                  | _ => typeError ())
                ; result ()
             end
+       | Array_cas _ =>
+            let
+              val (a, _, x, y) = fourArgs ()
+            in
+              (case dest a of
+                 Array v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
+            end
        | MLton_deserialize => serialValue resultTy
        | MLton_serialize =>
             let val arg = oneArg ()
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       (* SAM_NOTE: can just ignore the writeBarrier here? *)
        | Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of
@@ -499,6 +504,15 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                           Ref v => v
                         | Type _ => result ()
                         | _ => typeError ())
+       | Ref_cas _ =>
+            let
+              val (r, x, y) = threeArgs ()
+            in
+              (case dest r of
+                 Ref v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
+            end
        | Ref_ref =>
             let
                val r = result ()

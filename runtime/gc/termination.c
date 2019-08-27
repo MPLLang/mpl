@@ -94,9 +94,4 @@ bool GC_TryToTerminate(GC_state s) {
 PRIVATE void GC_PthreadAtExit(GC_state s) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  /*
-   * RAM_NOTE: This is for global heap stat tracking. I may need to update HH
-   * stats also
-   */
-  HM_enterGlobalHeap ();
 }

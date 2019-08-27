@@ -1,8 +1,8 @@
-(* Copyright (C) 2009,2011-2012 Matthew Fluet.
+(* Copyright (C) 2009,2011-2012,2018-2019 Matthew Fluet.
  * Copyright (C) 2004-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -26,6 +26,16 @@ fun zero s =
    case s of
       R32 => Real32 0.0
     | R64 => Real64 0.0
+
+fun negInf s =
+   case s of
+      R32 => Real32 PR32.negInf
+    | R64 => Real64 PR64.negInf
+
+fun posInf s =
+   case s of
+      R32 => Real32 PR32.posInf
+    | R64 => Real64 PR64.posInf
 
 fun size r =
    case r of
@@ -75,14 +85,33 @@ fun equals (r, r') =
          end
     | _ => false
 
-fun toString r =
-   case r of
-      Real32 r => Real32.format (r, Real32.Format.exact)
-    | Real64 r => Real64.format (r, Real64.Format.exact)
+fun toString (r, {suffix}) =
+   let
+      val doit =
+         if suffix
+            then fn (r, s) => r ^ s
+            else fn (r, _) => r
+   in
+      case r of
+         Real32 r => doit (Real32.format (r, Real32.Format.exact), ":r32")
+       | Real64 r => doit (Real64.format (r, Real64.Format.exact), ":r64")
+   end
 
 val layout = Layout.str o toString
 
-val hash = String.hash o toString
+val parse =
+   let
+      open Parse
+      infix  1 <|>
+      infix  3 <*
+      infixr 4 <$>
+   in
+      (Real64 <$> (fromScan Real64.scan <* str ":r64"))
+      <|>
+      (Real32 <$> (fromScan Real32.scan <* str ":r32"))
+   end
+
+fun hash r = String.hash (toString (r, {suffix = true}))
 
 (* Disable constant folding when it might change the results. *)
 fun disableCF () =

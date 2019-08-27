@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -537,7 +537,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      Dexp.call {func = hashTyconFunc tycon,
                                 args = Vector.new2 (dst, dx),
                                 ty = Hash.stateTy}
-                | Type.HierarchicalHeap _ => stateful ()
                 | Type.IntInf =>
                      let
                         val sws = WordSize.smallIntInfWord ()

@@ -1,0 +1,24 @@
+The compiler can be built from source as follows:
+
+  autoreconf -vfi
+  ./configure
+  make all-no-docs
+
+In the basis-library, there are multiple schedulers to choose from. Add one
+of the following to your .mlb:
+
+  $(SML_LIB)/basis/schedulers/spoonhower.mlb
+  $(SML_LIB)/basis/schedulers/private-deqs.mlb
+
+All schedulers implement the function `ForkJoin.fork`, which evaluates two
+functions (possibly in parallel) and returns their results.
+
+  structure ForkJoin :
+  sig
+    val fork : (unit -> 'a) * (unit -> 'b) -> ('a * 'b)
+  end
+
+A few examples can be found in the examples/ directory. After compiling an
+executable, the number of processors can be chosen at runtime as follows:
+
+  ./<executable> @MLton number-processors <n> -- <args>

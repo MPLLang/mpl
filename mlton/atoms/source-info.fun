@@ -1,7 +1,7 @@
 (* Copyright (C) 2003-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -125,7 +125,7 @@ fun isC (s: t): bool =
     | _ => false
 
 val gc = fromC "gc"
-val gcArrayAllocate = fromC "GC_arrayAllocate"
+val gcSequenceAllocate = fromC "GC_sequenceAllocate"
 val main = fromC "main"
 val polyEqual = fromC "poly-equal"
 val polyHash = fromC "poly-hash"

@@ -1,8 +1,9 @@
-/* Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -14,8 +15,8 @@ static inline void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_st
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE void GC_startSignalHandler (void);
-PRIVATE void GC_finishSignalHandler (void);
+PRIVATE void GC_startSignalHandler (GC_state s);
+PRIVATE void GC_finishSignalHandler (GC_state s);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

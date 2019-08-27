@@ -2,7 +2,7 @@
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -63,6 +63,5 @@ end
 
 val fill0Normal = new ()
 val fill8Normal = new ()
-val hierarchicalHeap = new ()
 
 end

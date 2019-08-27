@@ -2,7 +2,7 @@
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -170,7 +170,7 @@ structure Value =
                 ref
                 (if Vector.exists (Prod.dest args, fn {elt, isMutable} =>
                                    isMutable andalso not (isUnit elt))
-                    andalso not (ObjectCon.isVector con)
+                    andalso not (ObjectCon.isSequence con)
                     then Unknown
                  else NotFlat)
           in
@@ -330,7 +330,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                              val args = Prod.map (args, makeTypeValue)
                              val mayFlatten =
                                 Vector.exists (Prod.dest args, #isMutable)
-                                andalso not (ObjectCon.isVector con)
+                                andalso not (ObjectCon.isSequence con)
                           in
                              if mayFlatten orelse needToMakeProd args
                                 then Make (fn () =>
@@ -360,8 +360,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                      in
                                         v
                                      end))
+                        | Sequence => doit ()
                         | Tuple => doit ()
-                        | Vector => doit ()
                     end
                | Weak t =>
                     (case makeTypeValue t of
@@ -478,6 +478,19 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                    * be flattened.
                    *)
                   dontFlatten ()
+             | Ref_cas _ =>
+                 let val a = arg 0
+                 in (Value.dontFlatten a; result ())
+                 end
+             | Array_cas _ =>
+                 let
+                   val r1 = arg 2
+                   val r2 = arg 3
+                 in
+                   Value.dontFlatten r1;
+                   Value.dontFlatten r2;
+                   result ()
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()
@@ -492,7 +505,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
       fun base b =
          case b of
             Base.Object obj => obj
-          | Base.VectorSub {vector, ...} => vector
+          | Base.SequenceSub {sequence, ...} => sequence
       fun select {base, offset} =
          let
             datatype z = datatype Value.value
@@ -506,7 +519,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Object ob => Object.select (ob, offset)
              | _ => Error.bug "RefFlatten.select"
          end
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier = _} =
          (coerce {from = value,
                   to = select {base = base, offset = offset}}
           (* Don't flatten the component of the update,
@@ -607,7 +620,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                   else i := Unflattenable
                              | Unflattenable => ()
                          end
-                    | Base.VectorSub _ => ()))
+                    | Base.SequenceSub _ => ()))
           | _ => Statement.foreachUse (s, use)
       val loopStatement =
          Trace.trace2
@@ -714,7 +727,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
        * approximate liveness), then don't allow the flattening to
        * happen.
        *
-       * Vectors may be objects of unbounded size.
+       * Sequences may be objects of unbounded size.
        * Weak pointers may not be objects of unbounded size; weak
        * pointers do not keep pointed-to object live.
        * Instances of recursive datatypes may be objects of unbounded
@@ -794,19 +807,15 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                               case Type.dest t of
                                  CPointer => ()
                                | Datatype tc => Size.<= (tyconSize tc, s)
-                               (* RAM_NOTE: Not sure if correct *)
-                               | HierarchicalHeap _ => Size.makeTop s
                                | IntInf => Size.makeTop s
                                | Object {args, con, ...} =>
-                                    if ObjectCon.isVector con
+                                    if ObjectCon.isSequence con
                                        then Size.makeTop s
                                     else Prod.foreach (args, dependsOn)
                                | Real _ => ()
                                | Thread => Size.makeTop s
                                | Weak _ => ()
                                | Word _ => ()
-                           (* RAM_NOTE: Not sure if this change was superceded or not *)
-                           (* val () = if Type.isVector t then Size.makeTop s else () *)
                         in
                            s
                         end))
@@ -816,17 +825,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
           let
              val s = tyconSize tycon
              fun dependsOn (t: Type.t): unit = Size.<= (typeSize t, s)
-                 (* RAM_NOTE: Not sure if this change was superceded or not *)
-                 (* let *)
-                 (*   datatype z = datatype Type.dest *)
-                 (*   val () = case Type.dest t of *)
-                 (*              Datatype tycon' => if Tycon.equals (tycon, tycon') *)
-                 (*                                 then Size.makeTop s *)
-                 (*                                 else () *)
-                 (*            | _ => () *)
-                 (* in *)
-                 (*   Size.<= (typeSize t, s) *)
-                 (* end *)
              val () = Vector.foreach (cons, fn {args, ...} =>
                                       Prod.foreach (args, dependsOn))
           in
@@ -1079,14 +1077,14 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                               {base = base,
                                                offset = (objectOffset
                                                          (obj, offset))})))
-                           | Base.VectorSub _ => make exp))
+                           | Base.SequenceSub _ => make exp))
              | _ => make exp
          end
       fun transformStatement (s: Statement.t): Statement.t vector =
          case s of
             Bind b => transformBind b
           | Profile _ => Vector.new1 s
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                Vector.new1
                (case base of
                    Base.Object object =>
@@ -1105,9 +1103,10 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                              in
                                 Update {base = base,
                                         offset = objectOffset (obj, offset),
-                                        value = value}
+                                        value = value,
+                                        writeBarrier = writeBarrier}
                              end)
-                 | Base.VectorSub _ => s)
+                 | Base.SequenceSub _ => s)
       val transformStatement =
          Trace.trace ("RefFlatten.transformStatement",
                       Statement.layout,

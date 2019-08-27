@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -48,7 +48,6 @@ signature PRIM_TYCONS =
       val deRealX: tycon -> RealSize.t
       val deWordX: tycon -> WordSize.t
       val exn: tycon
-      val hierarchicalHeap: tycon
       val int: IntSize.t -> tycon
       val ints: (tycon * IntSize.t) vector
       val intInf: tycon

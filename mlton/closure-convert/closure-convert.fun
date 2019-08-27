@@ -1,9 +1,9 @@
-(* Copyright (C) 2017 Matthew Fluet.
+(* Copyright (C) 2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2005, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -121,7 +121,7 @@ structure Accum =
              else
                 let
                    val ss = Block.statements (Vector.first blocks)
-                   val vs = 
+                   val vs =
                       case Ssa.Statement.exp (Vector.last ss) of
                          Ssa.Exp.Tuple vs =>
                             if Vector.length vars = Vector.length vs
@@ -208,7 +208,7 @@ val traceLoopBind =
     Unit.layout)
 
 fun closureConvert
-   (program as Sxml.Program.T {datatypes, body, overflow}): Ssa.Program.t =
+   (program as Sxml.Program.T {datatypes, body}): Ssa.Program.t =
    let
       val {get = conArg: Con.t -> Value.t option, set = setConArg, ...} =
          Property.getSetOnce (Con.plist,
@@ -329,7 +329,7 @@ fun closureConvert
                                | (SOME (x, _), SOME v)     => newVar (x, v)
                                | _ => Error.bug "ClosureConvert.loopBind: Case"
                            val _ = Cases.foreach' (cases, branch, handlePat)
-                           val _ = Option.app (default, branch o #1)
+                           val _ = Option.app (default, branch)
                         in ()
                         end
                    | ConApp {con, arg, ...} =>
@@ -393,12 +393,10 @@ fun closureConvert
                                                   str " ",
                                                   Value.layout (value x)]
                                           end)))
-      val overflow = valOf overflow
       val _ =
          Control.trace (Control.Pass, "free variables")
          LambdaFree.lambdaFree
          {program = program,
-          overflow = overflow,
           varInfo = fn x => let val {frees, status, ...} = varInfo x
                             in {frees = frees, status = status}
                             end,
@@ -444,7 +442,6 @@ fun closureConvert
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
                 (Tycon.array, unary Type.array),
                 (Tycon.cpointer, nullary Type.cpointer),
-                (Tycon.hierarchicalHeap, unary Type.hierarchicalHeap),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
                 (Tycon.thread, nullary Type.thread),
@@ -798,7 +795,7 @@ fun closureConvert
                       if Vector.isEmpty decs
                          then (binds, ac)
                       else
-                         let 
+                         let
                             val {lambda, var, ...} = Vector.first decs
                             val info = lambdaInfo lambda
                             val tupleVar = Var.newString "tuple"
@@ -850,7 +847,7 @@ fun closureConvert
                      val (default, ac) =
                         case default of
                            NONE => (NONE, ac)
-                         | SOME (e, _) => let
+                         | SOME e => let
                                              val (e, ac) =  convertJoin (e, ac)
                                           in
                                              (SOME e, ac)
@@ -949,19 +946,11 @@ fun closureConvert
                                       targs = targs,
                                       ty = ty}
                   in
-                     if Prim.mayOverflow prim
-                        then simple (Dexp.arith
-                                     {args = Vector.map (args, convertVarExp),
-                                      overflow = Dexp.raisee (convertVar overflow),
-                                      prim = prim,
-                                      ty = ty})
-                     else
                         let
                            datatype z = datatype Prim.Name.t
                         in
                            simple
                            (case Prim.name prim of
-                               (* SAM_NOTE: can just ignore the writeBarrier here? *)
                                Array_update _ =>
                                   let
                                      val a = varExpInfo (arg 0)
@@ -1012,7 +1001,6 @@ fun closureConvert
                                   if handlesSignals
                                      then Dexp.truee
                                   else Dexp.falsee
-                             (* SAM_NOTE: can just ignore the writeBarrier here? *)
                              | Ref_assign _ =>
                                   let
                                      val r = varExpInfo (arg 0)
@@ -1073,7 +1061,6 @@ fun closureConvert
                                         result = ty,
                                         typeOps = {deArray = Type.deArray,
                                                    deArrow = fn _ => Error.bug "ClosureConvert.convertPrimExp: deArrow",
-                                                   deHierarchicalHeap = Type.deHierarchicalHeap,
                                                    deRef = Type.deRef,
                                                    deVector = Type.deVector,
                                                    deWeak = Type.deWeak}}),

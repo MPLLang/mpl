@@ -1,8 +1,12 @@
-from ubuntu:18.10
+FROM ubuntu:latest
 
-RUN apt-get update && apt-get install -y mlton git vim make build-essential autoconf
+# Install the dependencies. We'll use the ubuntu provided mlton to bootstrap our local build.
+RUN apt-get update -qq \
+ && apt-get install -qq git build-essential libgmp-dev mlton mlton-tools vim
 
+# Copy the current directory (MLton source root) to a location within the container & move there
 COPY . /root/mpl
 WORKDIR /root/mpl
 
-RUN autoreconf -vfi && ./configure && make all-no-docs BOOTSTRAP_OTHER=false
+# Build from source & install
+RUN make

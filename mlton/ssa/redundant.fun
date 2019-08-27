@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -493,13 +493,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                      exp = Exp.replaceVar (exp, loopVar)})
                     val transfer =
                        case transfer of
-                          Arith {prim, args, overflow, success, ty} =>
-                             Arith {prim = prim,
-                                    args = loopVars args,
-                                    overflow = overflow,
-                                    success = success,
-                                    ty = ty}
-                        | Bug => Bug
+                          Bug => Bug
                         | Call {func, args, return} =>
                              Call {func = func, 
                                    args = loopVars (keepUseful 

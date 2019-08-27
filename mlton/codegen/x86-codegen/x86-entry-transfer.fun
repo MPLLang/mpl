@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -67,7 +68,7 @@ struct
                          | Transfer.CCall {return, func, ...} 
                          => (case return
                                of NONE => true
-                                | SOME l => isCReturn l func)))
+                                | SOME {return, ...} => isCReturn return func)))
         val _ = destroy ()
         val _ = if b then ()
                   else List.foreach(blocks, Block.printBlock)

@@ -2,7 +2,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -38,7 +38,7 @@ structure StringCvt: STRING_CVT_EXTRA =
             in
                if n >= i
                   then s
-               else f (s, String.vector (i -? n, c))
+               else f (s, String.vector (i -! n, c))
             end
       in
          val padLeft = pad (fn (s, pad) => String.^ (pad, s))
@@ -82,7 +82,7 @@ structure StringCvt: STRING_CVT_EXTRA =
          fun range (add: int, cmin: char, cmax: char): char -> int option =
             let val min = Char.ord cmin
             in fn c => if Char.<= (cmin, c) andalso Char.<= (c, cmax)
-                          then SOME (add +? Char.ord c -? min)
+                          then SOME (add +! Char.ord c -! min)
                        else NONE
             end
 
@@ -146,7 +146,7 @@ structure StringCvt: STRING_CVT_EXTRA =
           | SOME (c, state) =>
                case charToDigit radix c of
                   NONE => NONE
-                | SOME n => digits (radix, max -? 1, n) reader state
+                | SOME n => digits (radix, max -! 1, n) reader state
 
       fun digitsExact (radix, num) reader state =
          let val r = radixToInt radix

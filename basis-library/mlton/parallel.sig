@@ -13,11 +13,6 @@ signature MLTON_PARALLEL =
     structure Deprecated :
       sig
         (**
-         * Yields to the runtime
-         *)
-        val yield: unit -> unit
-
-        (**
          * Initializes a lock to the "unlocked" state
          *)
         val lockInit: Word32.word ref -> unit;
@@ -64,7 +59,7 @@ signature MLTON_PARALLEL =
          * of (old, new) at xs[i], returning the previous value stored
          * at xs[i]. This implementation does not check bounds on i.
          *)
-        val arrayCompareAndSwap : int array * int -> int * int -> int
+        val arrayCompareAndSwap : 'a array * int -> 'a * 'a -> 'a
 
         (**
          * `arrayFetchAndAdd (xs, i) d` atomically does `xs[i] := xs[i] + d` and
@@ -108,14 +103,14 @@ signature MLTON_PARALLEL =
      * `compareAndSwap r (old, new)` atomically does `r := new`, but only if
      * `!r = old`. Returns the value of `!r` before the swap.
      *)
-    val compareAndSwap : int ref -> int * int -> int
+    val compareAndSwap : 'a ref -> 'a * 'a -> 'a
 
     (**
      * `arrayCompareAndSwap (xs, i) (old, new)` performs a CAS
      * of (old, new) at xs[i], returning the previous value stored at xs[i].
      * If i is out of bounds, it raises Subscript.
      *)
-    val arrayCompareAndSwap : int array * int -> int * int -> int
+    val arrayCompareAndSwap : 'a array * int -> 'a * 'a -> 'a
 
     (**
      * `fetchAndAdd r d` atomically does `r := !r + d` and returns the value of

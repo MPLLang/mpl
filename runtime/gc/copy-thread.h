@@ -2,13 +2,14 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static inline GC_thread copyThread (GC_state s, GC_thread from, size_t size);
+static inline GC_thread copyThreadWithHeap (GC_state s, GC_thread from, size_t size);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

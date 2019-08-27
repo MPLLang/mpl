@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -20,6 +20,14 @@
 #define LOCAL_USED_FOR_ASSERT  __attribute__ ((unused))
 #endif
 
+#ifdef ENABLE_TRACING
+#define ARG_USED_FOR_TRACING
+#define LOCAL_USED_FOR_TRACING
+#else
+#define ARG_USED_FOR_TRACING  __attribute__ ((unused))
+#define LOCAL_USED_FOR_TRACING  __attribute__ ((unused))
+#endif
+
 #include "gc/virtual-memory.c"
 #include "gc/align.c"
 #include "gc/read_write.c"
@@ -28,17 +36,13 @@
 /* used to look up per-processor state */
 extern C_Pthread_Key_t gcstate_key;
 
-#include "gc/array-allocate.c"
-#include "gc/array.c"
 #include "gc/assign.c"
 #include "gc/atomic.c"
 #include "gc/call-stack.c"
-#include "gc/cheney-copy.c"
 #include "gc/chunk.c"
 #include "gc/controls.c"
 #include "gc/copy-thread.c"
 #include "gc/current.c"
-#include "gc/dfs-mark.c"
 #include "gc/termination.c"
 #include "gc/done.c"
 #include "gc/deferred-promote.c"
@@ -49,11 +53,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/processor.c"
 #include "gc/garbage-collection.c"
 #include "gc/gc_state.c"
-#include "gc/generational.c"
 #include "gc/handler.c"
-#include "gc/hash-cons.c"
 #include "gc/heap.c"
-#include "gc/heap_predicates.c"
 #include "gc/heap-utils.c"
 #include "gc/hierarchical-heap.c"
 #include "gc/hierarchical-heap-collection.c"
@@ -61,11 +62,9 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/init.c"
 #include "gc/int-inf.c"
 #include "gc/invariant.c"
-#include "gc/global-heap.c"
 #include "gc/level.c"
 #include "gc/local-heap.c"
 #include "gc/logger.c"
-#include "gc/mark-compact.c"
 #include "gc/model.c"
 #include "gc/new-object.c"
 #include "gc/object-size.c"
@@ -78,7 +77,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/profiling.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"
-//#include "gc/rwlock.c"
+#include "gc/sequence-allocate.c"
+#include "gc/sequence.c"
 #include "gc/share.c"
 #include "gc/signals.c"
 #include "gc/size.c"
@@ -87,6 +87,5 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/statistics.c"
 #include "gc/switch-thread.c"
 #include "gc/thread.c"
-#include "gc/translate.c"
 #include "gc/weak.c"
 #include "gc/world.c"

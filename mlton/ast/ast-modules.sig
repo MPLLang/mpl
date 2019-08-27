@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -121,6 +121,7 @@ signature AST_MODULES =
                Core of Dec.t
              | Local of t * t
              | Seq of t list
+             | ShowBasis of File.t
              | Structure of {constraint: SigConst.t,
                              def: Strexp.t,
                              name: Strid.t} vector

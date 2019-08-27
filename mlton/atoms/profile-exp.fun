@@ -1,7 +1,7 @@
 (* Copyright (C) 2004-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -31,8 +31,8 @@ local
    val leave = newHash ()
 in
    val hash =
-      fn Enter si => Word.xorb (enter, SourceInfo.hash si)
-       | Leave si => Word.xorb (leave, SourceInfo.hash si)
+      fn Enter si => Hash.combine (enter, SourceInfo.hash si)
+       | Leave si => Hash.combine (leave, SourceInfo.hash si)
 end
 
 end

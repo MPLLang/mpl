@@ -315,8 +315,6 @@ Word32 HM_getObjptrLevel(objptr op);
  */
 bool HM_isObjptrInToSpace(GC_state s, objptr object);
 
-void assertObjptrInHH(objptr op);
-
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* CHUNK_H_ */

@@ -1,9 +1,9 @@
-(* Copyright (C) 2010-2011,2013-2014 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2014,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -52,17 +52,11 @@ datatype z = datatype ConstType.t
 val gcFields =
    [
     "atomicState",
-    "currentThread",
-    "sourceMaps.curSourceSeqsIndex",
+    "sourceMaps.curSourceSeqIndex",
     "exnStack",
-    "ffiArgs",
     "frontier",
-    "generationalMaps.cardMapAbsolute",
-    "globalObjptrNonRoot",
     "limit",
     "limitPlusSlop",
-    "maxFrameSize",
-    "returnToC",
     "signalsInfo.signalIsPending",
     "stackBottom",
     "stackLimit",

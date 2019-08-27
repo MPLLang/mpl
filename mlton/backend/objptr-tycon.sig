@@ -2,7 +2,7 @@
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -33,5 +33,4 @@ signature OBJPTR_TYCON =
       val wordVector: Bits.t -> t
       val fill0Normal: t
       val fill8Normal: t
-      val hierarchicalHeap: t
    end

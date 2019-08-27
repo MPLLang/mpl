@@ -1,8 +1,8 @@
-(* Copyright (C) 2015 Matthew Fluet.
+(* Copyright (C) 2015,2019 Matthew Fluet.
  * Copyright (C) 2003-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -11,17 +11,31 @@ struct
 
 open S
 
+(* infix declarations for Parse.Ops *)
+infix  1 <|> >>=
+infix  3 <*> <* *>
+infixr 4 <$> <$$> <$$$> <$$$$> <$ <$?>
+
 structure Convention =
    struct
       datatype t =
          Cdecl
        | Stdcall
 
+      val all = [Cdecl, Stdcall]
+
       val toString =
          fn Cdecl => "cdecl"
           | Stdcall => "stdcall"
 
       val layout = Layout.str o toString
+
+      val parse =
+         let
+            open Parse
+         in
+            any (List.map (all, fn t => kw (toString t) *> pure t))
+         end
    end
 
 structure Kind =
@@ -29,18 +43,20 @@ structure Kind =
       datatype t = 
          Impure
        | Pure
-       | Runtime of {bytesNeeded: int option, 
-                     ensuresBytesFree: bool,
+       | Runtime of {bytesNeeded: int option,
+                     ensuresBytesFree:int option,
                      mayGC: bool,
-                     maySwitchThreads: bool,
+                     maySwitchThreadsFrom: bool,
+                     maySwitchThreadsTo: bool,
                      modifiesFrontier: bool,
                      readsStackTop: bool,
                      writesStackTop: bool}
 
       val runtimeDefault = Runtime {bytesNeeded = NONE,
-                                    ensuresBytesFree = false,
+                                    ensuresBytesFree = NONE,
                                     mayGC = true,
-                                    maySwitchThreads = false,
+                                    maySwitchThreadsFrom = false,
+                                    maySwitchThreadsTo = false,
                                     modifiesFrontier = true,
                                     readsStackTop = true,
                                     writesStackTop = true}
@@ -53,19 +69,47 @@ structure Kind =
             Impure => Layout.str "Impure"
           | Pure => Layout.str "Pure"
           | Runtime {bytesNeeded, ensuresBytesFree, mayGC,
-                     maySwitchThreads, modifiesFrontier,
-                     readsStackTop, writesStackTop} =>
+                     maySwitchThreadsFrom, maySwitchThreadsTo,
+                     modifiesFrontier, readsStackTop, writesStackTop} =>
                Layout.namedRecord
                ("Runtime",
                 [("bytesNeeded", Option.layout Int.layout bytesNeeded),
-                 ("ensuresBytesFree", Bool.layout ensuresBytesFree),
+                 ("ensuresBytesFree", Option.layout Int.layout ensuresBytesFree),
                  ("mayGC", Bool.layout mayGC),
-                 ("maySwitchThreads", Bool.layout maySwitchThreads),
+                 ("maySwitchThreadsFrom", Bool.layout maySwitchThreadsFrom),
+                 ("maySwitchThreadsTo", Bool.layout maySwitchThreadsTo),
                  ("modifiesFrontier", Bool.layout modifiesFrontier),
                  ("readsStackTop", Bool.layout readsStackTop),
                  ("writesStackTop", Bool.layout writesStackTop)])
 
       val toString = Layout.toString o layout
+
+      val parse =
+         let
+            open Parse
+         in
+            any
+            [kw "Impure" *> pure Impure,
+             kw "Pure" *> pure Pure,
+             kw "Runtime" *>
+             cbrack (ffield ("bytesNeeded", option int) >>= (fn bytesNeeded =>
+                     nfield ("ensuresBytesFree", option int) >>= (fn ensuresBytesFree =>
+                     nfield ("mayGC", bool) >>= (fn mayGC =>
+                     nfield ("maySwitchThreadsFrom", bool) >>= (fn maySwitchThreadsFrom =>
+                     nfield ("maySwitchThreadsTo", bool) >>= (fn maySwitchThreadsTo =>
+                     nfield ("modifiesFrontier", bool) >>= (fn modifiesFrontier =>
+                     nfield ("readsStackTop", bool) >>= (fn readsStackTop =>
+                     nfield ("writesStackTop", bool) >>= (fn writesStackTop =>
+                     pure {bytesNeeded = bytesNeeded,
+                           ensuresBytesFree = ensuresBytesFree,
+                           mayGC = mayGC,
+                           maySwitchThreadsFrom = maySwitchThreadsFrom,
+                           maySwitchThreadsTo = maySwitchThreadsTo,
+                           modifiesFrontier = modifiesFrontier,
+                           readsStackTop = readsStackTop,
+                           writesStackTop = writesStackTop}))))))))) >>= (fn args =>
+             pure (Runtime args))]
+         end
 
       local
          fun make (sel, default) k = 
@@ -77,9 +121,10 @@ structure Kind =
          fun makeOpt sel = make (sel, NONE)
       in
          val bytesNeeded = makeOpt #bytesNeeded
-         val ensuresBytesFree = makeBool #ensuresBytesFree
+         val ensuresBytesFree = makeOpt #ensuresBytesFree
          val mayGC = makeBool #mayGC
-         val maySwitchThreads = makeBool #maySwitchThreads
+         val maySwitchThreadsFrom = makeBool #maySwitchThreadsFrom
+         val maySwitchThreadsTo = makeBool #maySwitchThreadsTo
          val modifiesFrontier = makeBool #modifiesFrontier
          val readsStackTop = makeBool #readsStackTop
          val writesStackTop = makeBool #writesStackTop
@@ -93,12 +138,21 @@ structure SymbolScope =
        | Private
        | Public
 
+      val all = [External, Private, Public]
+
       val toString =
          fn External => "external"
           | Private => "private"
           | Public => "public"
 
       val layout = Layout.str o toString
+
+      val parse =
+         let
+            open Parse
+         in
+            any (List.map (all, fn ss => kw (toString ss) *> pure ss))
+         end
    end
 
 structure Target =
@@ -112,6 +166,18 @@ structure Target =
           | Indirect => "<*>"
 
       val layout = Layout.str o toString
+
+      val parse =
+         let
+            open Parse
+         in
+            (Direct <$> (spaces *>
+                         ((String.implode o op ::) <$$>
+                          (nextSat (fn c => Char.isAlpha c orelse c = #"_"),
+                           many (nextSat (fn c => Char.isAlphaNum c orelse c = #"_"))))))
+            <|>
+            (sym "<*>" *> pure Indirect)
+         end
 
       val equals =
          fn (Direct name, Direct name') => name = name'
@@ -142,6 +208,25 @@ fun layout (T {args, convention, kind, prototype, return, symbolScope, target, .
     ("symbolScope", SymbolScope.layout symbolScope),
     ("target", Target.layout target)]
 
+fun parse parseType =
+   let
+      open Parse
+   in
+      T <$>
+      cbrack (ffield ("args", vector parseType) >>= (fn args =>
+              nfield ("convention", Convention.parse) >>= (fn convention =>
+              nfield ("kind", Kind.parse) >>= (fn kind =>
+              nfield ("prototype", cbrack (ffield ("args", vector CType.parse) >>= (fn args =>
+                                           nfield ("res", option CType.parse) >>= (fn res =>
+                                           pure (args, res))))) >>= (fn prototype =>
+              nfield ("return", parseType) >>= (fn return =>
+              nfield ("symbolScope", SymbolScope.parse) >>= (fn symbolScope =>
+              nfield ("target", Target.parse) >>= (fn target =>
+              pure {args = args, convention = convention,
+                    kind = kind, prototype = prototype, return = return,
+                    symbolScope = symbolScope, target = target}))))))))
+   end
+
 local
    fun make f (T r) = f r
    fun makeKind f (T r) = f (#kind r)
@@ -151,7 +236,8 @@ in
    fun convention z = make #convention z
    fun ensuresBytesFree z = makeKind Kind.ensuresBytesFree z
    fun mayGC z = makeKind Kind.mayGC z
-   fun maySwitchThreads z = makeKind Kind.maySwitchThreads z
+   fun maySwitchThreadsFrom z = makeKind Kind.maySwitchThreadsFrom z
+   fun maySwitchThreadsTo z = makeKind Kind.maySwitchThreadsTo z
    fun modifiesFrontier z = makeKind Kind.modifiesFrontier z
    fun prototype z = make #prototype z
    fun readsStackTop z = makeKind Kind.readsStackTop z
@@ -177,17 +263,24 @@ fun map (T {args, convention, kind, prototype, return, symbolScope, target},
 
 fun isOk (T {kind, return, ...},
           {isUnit}): bool =
-   (if Kind.maySwitchThreads kind
-       then Kind.mayGC kind andalso isUnit return
+   (if Kind.maySwitchThreadsFrom kind
+       then Kind.maySwitchThreadsTo kind
     else true)
-   andalso (if Kind.ensuresBytesFree kind orelse Kind.maySwitchThreads kind
+   andalso (if Kind.maySwitchThreadsTo kind
+               then (Kind.mayGC kind
+                     andalso isUnit return)
+            else true)
+   andalso (if Option.isSome (Kind.ensuresBytesFree kind)
                then Kind.mayGC kind
             else true)
    andalso (if Kind.mayGC kind
                then (Kind.modifiesFrontier kind
-                     andalso Kind.readsStackTop kind andalso Kind.writesStackTop kind)
+                     andalso Kind.readsStackTop kind
+                     andalso Kind.writesStackTop kind)
             else true)
-   andalso (not (Kind.writesStackTop kind) orelse Kind.readsStackTop kind)
+   andalso (if Kind.writesStackTop kind
+               then Kind.readsStackTop kind
+            else true)
 
 fun vanilla {args, name, prototype, return} =
    T {args = args,

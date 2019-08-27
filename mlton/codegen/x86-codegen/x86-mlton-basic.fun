@@ -1,9 +1,9 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -190,6 +190,14 @@ struct
   val applyFFTempArgContentsOperand
     = Operand.memloc applyFFTempArgContents
 
+  val overflowCheckTemp = Label.fromString "overflowCheckTemp"
+  fun overflowCheckTempContents size
+    = makeContents {base = Immediate.label overflowCheckTemp,
+                    size = size,
+                    class = Classes.StaticTemp}
+  fun overflowCheckTempContentsOperand size
+    = Operand.memloc (overflowCheckTempContents size)
+
   val realTemp1D = Label.fromString "realTemp1D"
   val realTemp1ContentsD
     = makeContents {base = Immediate.label realTemp1D,
@@ -321,8 +329,6 @@ struct
      val local_base = make "local"
      val global_base = make "global"
   end
-
-  val globalObjptrNonRoot_base = Label.fromString "globalObjptrNonRoot"
 
   val gcState_label = Label.fromString "gcState"
 

@@ -1,8 +1,9 @@
-(* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
@@ -15,10 +16,7 @@ structure DirectExp =
 struct
 
 datatype t =
-   Arith of {prim: Type.t Prim.t,
-             args: t vector,
-             overflow: t,
-             ty: Type.t}
+   Bug
  | Call of {func: Func.t,
             args: t vector,
             ty: Type.t}
@@ -66,7 +64,6 @@ and cases =
            body: t} vector
  | Word of WordSize.t * (WordX.t * t) vector
 
-val arith = Arith
 val call = Call
 val casee = Case
 val conApp = ConApp
@@ -94,14 +91,16 @@ fun primApp {args, prim, targs, ty} =
          Runtime {args = args,
                   prim = prim,
                   ty = ty}
+      fun primApp () =
+         PrimApp {args = args,
+                  prim = prim,
+                  targs = targs,
+                  ty = ty}
    in
       case Prim.name prim of
-         Prim.Name.MLton_halt => runtime ()
+         Prim.Name.MLton_bug => Seq (primApp (), Bug)
        | Prim.Name.Thread_copyCurrent => runtime ()
-       | _ => PrimApp {args = args,
-                       prim = prim,
-                       targs = targs,
-                       ty = ty}
+       | _ => primApp ()
    end
 
 local
@@ -126,9 +125,7 @@ local
 in
    fun layout e : Layout.t =
       case e of
-         Arith {prim, args, overflow, ...} =>
-            align [Prim.layoutApp (prim, args, layout),
-                   seq [str "Overflow => ", layout overflow]]
+         Bug => str "bug"
        | Call {func, args, ty} =>
             seq [Func.layout func, str " ", layouts args,
                  str ": ", Type.layout ty]
@@ -155,7 +152,7 @@ in
                                     (seq [Con.layout con,
                                           Vector.layout (Var.layout o #1) args],
                                      body))
-                         | Word (_, v) => simple (v, WordX.layout)
+                         | Word (_, v) => simple (v, fn w => WordX.layout (w, {suffix = true}))
                      end,
                         case default of
                            NONE => empty
@@ -382,21 +379,8 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
          traceLinearizeLoop
          (fn (e: t, h: Handler.t, k: Cont.t) =>
          case e of
-            Arith {prim, args, overflow, ty} =>
-               loops
-               (args, h, fn xs =>
-                let
-                   val l = reify (k, ty)
-                   val k = Cont.goto l
-                in
-                   {statements = [],
-                    transfer =
-                    Transfer.Arith {prim = prim,
-                                    args = xs,
-                                    overflow = newLabel0 (overflow, h, k),
-                                    success = l,
-                                    ty = ty}}
-                end)
+            Bug => {statements = [],
+                    transfer = Transfer.Bug}
           | Call {func, args, ty} =>
                loops
                (args, h, fn xs =>

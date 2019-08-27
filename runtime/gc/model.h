@@ -1,7 +1,7 @@
 /* Copyright (C) 2005-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -142,13 +142,13 @@ manageable set for users.
 #define GC_MODEL_OBJPTR_SHIFT 0
 #define GC_MODEL_OBJPTR_BASE 0
 #define GC_MODEL_HEADER_SIZE 32
-#define GC_MODEL_ARRLEN_SIZE 32
+#define GC_MODEL_SEQLEN_SIZE 32
 #elif defined (GC_MODEL_NATIVE64)
 #define GC_MODEL_OBJPTR_SIZE 64
 #define GC_MODEL_OBJPTR_SHIFT 0
 #define GC_MODEL_OBJPTR_BASE 0
 #define GC_MODEL_HEADER_SIZE 64
-#define GC_MODEL_ARRLEN_SIZE 64
+#define GC_MODEL_SEQLEN_SIZE 64
 #else
 #error GC_MODEL_* undefined
 #endif

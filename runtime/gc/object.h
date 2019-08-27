@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -11,7 +11,7 @@
 
 /*
  * There are four kinds of ML objects:
- *   array, normal (fixed size), stack, and weak.
+ *   normal (fixed size), sequence, stack, and weak.
  * Plus three additional tags that are used to fill gaps:
  *   zero, one, and two word objects
  *   (that is, {0,1,2} words in addition to the header)
@@ -19,8 +19,8 @@
 typedef enum {
   /* The tag indices here must agree with those in declareObjectTypes()
    * in codegen/c-codegen/c-codegen.fun. */
-  ARRAY_TAG = 0,
-  NORMAL_TAG = 1,
+  NORMAL_TAG = 0,
+  SEQUENCE_TAG = 1,
   STACK_TAG = 2,
   WEAK_TAG = 3,
 } GC_objectTypeTag;
@@ -104,7 +104,7 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
 
-/* Array objects are described in "array.h" */
+/* Sequence objects are described in "sequence.h" */
 
 /* Stack objects are described in "stack.h" */
 
@@ -126,10 +126,10 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * fields, in which case it may not be hash-cons-ed.  In a normal
  * object, the bytesNonObjptrs field indicates the number of bytes of
  * non heap-pointer data, while the numObjptrs field indicates the
- * number of heap pointers.  In an array object, the bytesNonObjptrs
+ * number of heap pointers.  In a sequence object, the bytesNonObjptrs
  * field indicates the number of bytes of non heap-pointer data in a
- * single array element, while the numObjptrs field indicates the
- * number of heap pointers in a single array element.  In a stack
+ * single sequence element, while the numObjptrs field indicates the
+ * number of heap pointers in a single sequence element.  In a stack
  * object, the bytesNonObjptrs and numObjptrs fields are irrelevant.
  * In a weak object, the bytesNonObjptrs and numObjptrs fields are
  * interpreted as in a normal object.
@@ -151,8 +151,7 @@ enum {
   WORD16_VECTOR_TYPE_INDEX = 5,
   WORD64_VECTOR_TYPE_INDEX = 6,
   FILL0_NORMAL_TYPE_INDEX =  7,
-  FILL8_NORMAL_TYPE_INDEX =  8,
-  HIERARCHICAL_HEAP_INDEX =  9
+  FILL8_NORMAL_TYPE_INDEX =  8
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -168,7 +167,6 @@ enum {
 #define GC_WORD64_VECTOR_HEADER buildHeaderFromTypeIndex (WORD64_VECTOR_TYPE_INDEX)
 #define GC_FILL0_NORMAL_HEADER buildHeaderFromTypeIndex (FILL0_NORMAL_TYPE_INDEX)
 #define GC_FILL8_NORMAL_HEADER buildHeaderFromTypeIndex (FILL8_NORMAL_TYPE_INDEX)
-#define GC_HIERARCHICAL_HEAP_HEADER buildHeaderFromTypeIndex (HIERARCHICAL_HEAP_INDEX)
 
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,

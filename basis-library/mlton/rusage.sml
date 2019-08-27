@@ -1,14 +1,16 @@
-(* Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
 
 structure MLtonRusage: MLTON_RUSAGE =
    struct
       structure Prim = PrimitiveFFI.MLton.Rusage
+      structure GCState = Primitive.MLton.GCState
 
       type t = {utime: Time.time, stime: Time.time}
 
@@ -17,9 +19,9 @@ structure MLtonRusage: MLTON_RUSAGE =
             fun toTime (sec, usec) =
                let
                   val time_sec =
-                     Time.fromSeconds (C_Time.toLargeInt (sec ()))
+                     Time.fromSeconds (C_Time.toLargeInt (sec (GCState.gcState ())))
                   val time_usec =
-                     Time.fromMicroseconds (C_SUSeconds.toLargeInt (usec ()))
+                     Time.fromMicroseconds (C_SUSeconds.toLargeInt (usec (GCState.gcState ())))
                in
                   Time.+ (time_sec, time_usec)
                end
@@ -36,7 +38,7 @@ structure MLtonRusage: MLTON_RUSAGE =
          in
             fn () =>
             let
-               val () = Prim.getrusage ()
+               val () = Prim.getrusage (GCState.gcState ())
                open Prim
             in
                {children = collect (children_utime_sec, children_utime_usec,
@@ -54,7 +56,7 @@ structure MLtonRusage: MLTON_RUSAGE =
           in
               fn p =>
                  let
-                     val () = Prim.getGCRusageOfProc (Int32.fromInt p)
+                     val () = Prim.getGCRusageOfProc (GCState.gcState (), Int32.fromInt p)
                      open Prim
                  in
                      collect (gc_utime_sec, gc_utime_usec,
