@@ -249,7 +249,6 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
   size_t bs = HM_BLOCK_SIZE;
   pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
   if (MAP_FAILED == start) {
-    DIE("Out of memory. Unable to allocate new chunk of size %zu.", chunkWidth);
     return NULL;
   }
   start = (pointer)(uintptr_t)align((uintptr_t)start, bs);
@@ -315,8 +314,31 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
 
   size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
   size_t allocSize = max(bytesNeeded, s->nextChunkAllocSize);
-  s->nextChunkAllocSize = 2 * allocSize;
   chunk = mmapNewChunk(allocSize);
+  if (NULL != chunk) {
+    /* success; on next mmap, get even more. */
+    if (s->nextChunkAllocSize < (SIZE_MAX / 2)) {
+      s->nextChunkAllocSize *= 2;
+    }
+  } else {
+    /* the mmap failed. try again where we only request exactly what we need,
+     * and if this still fails, then we're really out of memory and need to
+     * abort. */
+
+    LOG(LM_ALLOCATION, LL_INFO,
+        "mmap of size %zu failed; trying again for %zu bytes",
+        allocSize,
+        bytesNeeded);
+
+    chunk = mmapNewChunk(bytesNeeded);
+    if (NULL == chunk) {
+      DIE("Out of memory. Unable to allocate new chunk of size %zu.", bytesNeeded);
+    }
+    /* also, on next mmap, don't try to allocate so much. */
+    if (s->nextChunkAllocSize > 2 * s->controls->allocChunkSize) {
+      s->nextChunkAllocSize /= 2;
+    }
+  }
   HM_prependChunk(s->freeListLarge, chunk);
 
 finish:
