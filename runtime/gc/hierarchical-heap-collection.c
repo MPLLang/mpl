@@ -461,6 +461,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
 
+  /* SAM_NOTE: bytesSurvivedLastCollection is more precise than the
+   * corresponding bytesAllocatedSinceLastCollection, which granularizes on
+   * chunk boundaries.
+   *
+   * TODO: IS THIS A PROBLEM?
+   */
+  hh->bytesSurvivedLastCollection =
+    forwardHHObjptrArgs.bytesMoved + forwardHHObjptrArgs.bytesCopied;
+
+  hh->bytesAllocatedSinceLastCollection = 0;
+
   if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
     for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
       size_t sizeBefore = sizesBefore[i];
@@ -523,11 +534,27 @@ unlock_local_scope_and_return:
 
 /* SAM_NOTE: TODO: DRY: this code is similar (but not identical) to
  * forwardHHObjptr */
-objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
+objptr relocateObject(
+  GC_state s,
+  objptr op,
+  HM_chunkList tgtChunkList,
+  struct ForwardHHObjptrArgs *args)
+{
   pointer p = objptrToPointer(op, NULL);
 
   assert(!hasFwdPtr(p));
   assert(HM_isLevelHead(tgtChunkList));
+
+  size_t metaDataBytes;
+  size_t objectBytes;
+  size_t copyBytes;
+
+  /* compute object size and bytes to be copied */
+  computeObjectCopyParameters(s,
+                              p,
+                              &objectBytes,
+                              &copyBytes,
+                              &metaDataBytes);
 
   if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
     /* This chunk contains *only* this object, so no need to copy. Instead,
@@ -543,19 +570,10 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
       "Moved single-object chunk %p of size %zu",
       (void*)chunk,
       HM_getChunkSize(chunk));
+    args->bytesMoved += copyBytes;
+    args->objectsMoved++;
     return op;
   }
-
-  size_t metaDataBytes;
-  size_t objectBytes;
-  size_t copyBytes;
-
-  /* compute object size and bytes to be copied */
-  computeObjectCopyParameters(s,
-                              p,
-                              &objectBytes,
-                              &copyBytes,
-                              &metaDataBytes);
 
   pointer copyPointer = copyObject(p - metaDataBytes,
                                    objectBytes,
@@ -566,6 +584,9 @@ objptr relocateObject(GC_state s, objptr op, HM_chunkList tgtChunkList) {
   *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
                                       NULL);
   assert (hasFwdPtr(p));
+
+  args->bytesCopied += copyBytes;
+  args->objectsCopied++;
 
   /* use the forwarding pointer */
   return getFwdPtr(p);
@@ -740,6 +761,8 @@ void forwardHHObjptr (GC_state s,
         "Moved single-object chunk %p of size %zu",
         (void*)chunk,
         HM_getChunkSize(chunk));
+      args->bytesMoved += copyBytes;
+      args->objectsMoved++;
       return;
     }
 

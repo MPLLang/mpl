@@ -81,8 +81,6 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal(desiredScope);
 
-    hh->bytesAllocatedSinceLastCollection = 0;
-
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
     //     "%zu/%zu bytes allocated in Chunk Pool after collection",

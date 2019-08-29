@@ -30,6 +30,7 @@ struct HM_HierarchicalHeap {
   uint32_t level;
 
   size_t bytesAllocatedSinceLastCollection;
+  size_t bytesSurvivedLastCollection;
 };
 
 // l/r-value for ith level

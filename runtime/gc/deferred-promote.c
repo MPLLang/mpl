@@ -159,7 +159,7 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   assert(HM_HH_LEVEL(args->hh, args->toLevel) != NULL);
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel));
+  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel), args);
   assert(HM_getObjptrLevel(*field) == args->toLevel);
 }
 
@@ -201,6 +201,6 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel));
+  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel), args);
   assert(HM_getObjptrLevel(*field) == args->toLevel);
 }

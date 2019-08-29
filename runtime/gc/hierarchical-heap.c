@@ -63,6 +63,7 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
   assertInvariants(s, hh);
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
+  assert(hh->level >= 1);
 
   /* Merge levels. */
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
@@ -76,6 +77,12 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
+  // HM_chunkList unfrozenLevel = HM_HH_LEVEL(hh, hh->level-1);
+  // size_t unfrozenSize =
+  //   unfrozenLevel == NULL ? 0 : HM_getChunkListSize(unfrozenLevel);
+
+  parentHH->bytesSurvivedLastCollection +=
+    hh->bytesSurvivedLastCollection;
   parentHH->bytesAllocatedSinceLastCollection +=
     hh->bytesAllocatedSinceLastCollection;
 
@@ -166,6 +173,7 @@ struct HM_HierarchicalHeap* HM_HH_new(__attribute__((unused)) GC_state s) {
   hh->lastAllocatedChunk = NULL;
   hh->level = 0;
   hh->bytesAllocatedSinceLastCollection = 0;
+  hh->bytesSurvivedLastCollection = 0;
 
   return hh;
 }
@@ -250,6 +258,7 @@ size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
   return HM_getChunkListSize(lev);
 }
 
+#if 0
 uint32_t HM_HH_desiredCollectionScope(
   GC_state s,
   struct HM_HierarchicalHeap* hh)
@@ -271,6 +280,49 @@ uint32_t HM_HH_desiredCollectionScope(
     sz += HM_HH_levelSize(hh, level-1);
     level--;
   }
+
+  /* It's likely that the shallower levels are mostly empty, so let's see if
+   * we can skip some of them without ignoring too much data. */
+  size_t szMin = 0.75 * sz;
+  while (level < hh->level && sz - HM_HH_levelSize(hh, level+1) > szMin) {
+    sz -= HM_HH_levelSize(hh, level+1);
+    level++;
+  }
+
+  return level;
+}
+#endif
+
+uint32_t HM_HH_desiredCollectionScope(
+  GC_state s,
+  struct HM_HierarchicalHeap* hh)
+{
+  if (s->wsQueueTop == BOGUS_OBJPTR)
+    return hh->level+1; /* don't collect */
+
+  if (hh->bytesAllocatedSinceLastCollection <
+      (s->controls->hhConfig.liveLCRatio * hh->bytesSurvivedLastCollection))
+  {
+    return hh->level+1; /* don't collect */
+  }
+
+  uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
+  uint32_t potentialLocalScope = UNPACK_IDX(topval);
+
+  size_t budget = hh->bytesAllocatedSinceLastCollection;
+
+  if (budget < (1024L * 1024L) || potentialLocalScope > hh->level)
+    return hh->level+1; /* don't collect */
+
+  size_t sz = 0;
+  uint32_t level = hh->level+1;
+  while (level > potentialLocalScope && sz + HM_HH_levelSize(hh, level-1) < budget) {
+    sz += HM_HH_levelSize(hh, level-1);
+    level--;
+  }
+
+  if (sz < (1024L * 1024L))
+    return hh->level+1; /* don't collect if too small */
 
   /* It's likely that the shallower levels are mostly empty, so let's see if
    * we can skip some of them without ignoring too much data. */
