@@ -309,7 +309,7 @@ uint32_t HM_HH_desiredCollectionScope(
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
-  size_t budget = hh->bytesAllocatedSinceLastCollection;
+  size_t budget = 4 * hh->bytesAllocatedSinceLastCollection;
 
   if (budget < (1024L * 1024L) || potentialLocalScope > hh->level)
     return hh->level+1; /* don't collect */
@@ -327,8 +327,8 @@ uint32_t HM_HH_desiredCollectionScope(
   /* It's likely that the shallower levels are mostly empty, so let's see if
    * we can skip some of them without ignoring too much data. */
   size_t szMin = 0.75 * sz;
-  while (level < hh->level && sz - HM_HH_levelSize(hh, level+1) > szMin) {
-    sz -= HM_HH_levelSize(hh, level+1);
+  while (level < hh->level && sz - HM_HH_levelSize(hh, level) > szMin) {
+    sz -= HM_HH_levelSize(hh, level);
     level++;
   }
 
