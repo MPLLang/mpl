@@ -1,7 +1,7 @@
 #!/bin/bash
 
 BASE="/afs/cs/academic/class/15210-s17"
-TARGET="mpl-new"
+TARGET="mpl"
 
 kinit
 rm -rf $BASE/$TARGET/build
