@@ -1,0 +1,9 @@
+#!/bin/bash
+
+BASE="/afs/cs/academic/class/15210-s17"
+TARGET="mpl-new"
+
+kinit
+rm -rf $BASE/$TARGET/build
+cp -r build $BASE/$TARGET/
+ln -s $BASE/$TARGET/build/bin/mlton-parmem $BASE/$TARGET/build/bin/mpl
