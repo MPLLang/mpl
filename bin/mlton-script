@@ -9,6 +9,17 @@ EXE=
 
 CC="gcc"
 
+# SAM_NOTE: this is a hack to workaround the default gcc on
+# andrew unix machines is version 4.8. MLton needs at least gcc 5.
+# The gcc at this /opt... path is version 5.3, but the file only
+# exists on unix<N>.andrew.cmu.edu machines. So if we are running
+# the compiler elsewhere, just use gcc, and hope that the
+# environment is using gcc 5.
+USECC="/opt/rh/devtoolset-4/root/bin/gcc"
+if [ ! -f $USECC ]; then
+  USECC="$CC"
+fi
+
 # You may need to set 'GMP_INC_DIR' so the C compiler can find gmp.h.
 GMP_INC_DIR=
 # You may need to set 'GMP_LIB_DIR' so the C compiler can find libgmp.
@@ -85,7 +96,7 @@ fi
 
 doit "$lib" \
         -ar-script "$lib/static-library"                         \
-        -cc "$CC"                                                \
+        -cc "$USECC"                                                \
         -cc-opt '-std=gnu11 -fno-common'                         \
         -cc-opt '-O1 -fno-strict-aliasing'                       \
         -cc-opt '-foptimize-sibling-calls'                       \
