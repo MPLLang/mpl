@@ -313,11 +313,8 @@ struct
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    fun fork (f : unit -> 'a, g : unit -> 'b) =
+    fun parfork thread level (f : unit -> 'a, g : unit -> 'b) =
       let
-        val thread = Thread.current ()
-        val level = HH.getLevel thread
-
         val rightSide = ref (NONE : 'b result option)
         val incounter = ref 2
 
@@ -353,6 +350,17 @@ struct
         (extractResult fr, extractResult gr)
       end
 
+    fun fork (f, g) =
+      let
+        val thread = Thread.current ()
+        val level = HH.getLevel thread
+      in
+        (* max num levels in runtime is 64 *)
+        if level < 63 then
+          parfork thread level (f, g)
+        else
+          (f (), g ())
+      end
   end
 
   (* ========================================================================
