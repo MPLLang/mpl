@@ -79,7 +79,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
 
   if (forceGC || desiredScope <= hh->level) {
     /* too much allocated, so let's collect */
-    HM_HHC_collectLocal(desiredScope);
+    HM_HHC_collectLocal(desiredScope, forceGC);
 
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,

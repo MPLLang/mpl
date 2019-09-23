@@ -79,7 +79,7 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HHC_collectLocal(uint32_t desiredScope) {
+void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   GC_state s = pthread_getspecific (gcstate_key);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
   struct rusage ru_start;
@@ -97,7 +97,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     return;
   }
 
-  if (hh->level <= 1) {
+  if (!force && hh->level <= 1) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
     return;
   }
