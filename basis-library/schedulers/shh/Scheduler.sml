@@ -293,11 +293,20 @@ struct
 
       fun request idleTimer =
         let
-          val friend = randomOtherId ()
+          fun loop tries it =
+            if tries = P * 100 then
+              (OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
+               loop 0 (tickTimer idleTimer))
+            else
+            let
+              val friend = randomOtherId ()
+            in
+              case trySteal friend of
+                NONE => loop (tries+1) (tickTimer idleTimer)
+              | SOME (task, level) => (task, level, tickTimer idleTimer)
+            end
         in
-          case trySteal friend of
-            NONE => request (tickTimer idleTimer)
-          | SOME (task, level) => (task, level, tickTimer idleTimer)
+          loop 0 idleTimer
         end
 
       (* ------------------------------------------------------------------- *)
