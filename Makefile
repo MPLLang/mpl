@@ -176,6 +176,9 @@ script:
 		-e 's/mlton-compile/$(MLTON_OUTPUT)/' \
 		< "$(SRC)/bin/mlton-script" > "$(BIN)/$(MLTON)"
 	chmod a+x "$(BIN)/$(MLTON)"
+ifneq (,$(ALTERNATE_SCRIPT_NAME))
+	ln -fs "$(MLTON)" "$(BIN)/$(ALTERNATE_SCRIPT_NAME)"
+endif
 	$(CP) "$(SRC)/bin/static-library" "$(LIB)"
 ifeq (mingw, $(TARGET_OS))
 	$(CP) "$(SRC)/bin/static-library.bat" "$(LIB)"
