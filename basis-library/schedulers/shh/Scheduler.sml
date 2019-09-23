@@ -273,7 +273,8 @@ struct
   fun setupSchedLoop () =
     let
       val myId = myWorkerId ()
-      val myRand = SimpleRandom.rand myId
+      val myRand = SMLNJRandom.rand (0, myId)
+      (*val myRand = SimpleRandom.rand myId*)
       val mySchedThread = Thread.current ()
       val {queue=myQueue, schedThread, ...} =
         vectorSub (workerLocalData, myId)
@@ -285,7 +286,8 @@ struct
       (* ------------------------------------------------------------------- *)
 
       fun randomOtherId () =
-        let val other = SimpleRandom.boundedInt (0, P-1) myRand
+        (*let val other = SimpleRandom.boundedInt (0, P-1) myRand*)
+        let val other = SMLNJRandom.randRange (0, P-2) myRand
         in if other < myId then other else other+1
         end
 
