@@ -90,7 +90,7 @@ void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parentHH, struct HM_Hie
 
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)hh);
 
-  free(hh);
+  // free(hh);
 }
 
 void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh) {
@@ -157,15 +157,25 @@ void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
            hh->level);
 }
 
-struct HM_HierarchicalHeap* HM_HH_new(__attribute__((unused)) GC_state s) {
+struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
 
   /* SAM_NOTE: TODO: switch to arena allocation if this is a bottleneck? */
-  struct HM_HierarchicalHeap* hh =
-    (struct HM_HierarchicalHeap*)malloc(sizeof(struct HM_HierarchicalHeap));
-  if (hh == NULL) {
-    DIE("Out of memory. Could not allocate new HH object.");
-    return NULL;
+  // struct HM_HierarchicalHeap* hh =
+  //   (struct HM_HierarchicalHeap*)malloc(sizeof(struct HM_HierarchicalHeap));
+  // if (hh == NULL) {
+  //   DIE("Out of memory. Could not allocate new HH object.");
+  //   return NULL;
+  // }
+
+  size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
+  HM_chunk sourceChunk = HM_getChunkListLastChunk(s->extraSmallObjects);
+  if (NULL == sourceChunk ||
+      (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
+    sourceChunk = HM_allocateChunk(s->extraSmallObjects, bytesNeeded);
   }
+  pointer frontier = HM_getChunkFrontier(sourceChunk);
+  HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
+  struct HM_HierarchicalHeap* hh = (struct HM_HierarchicalHeap *)frontier;
 
   for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_HH_LEVEL(hh, i) = NULL;

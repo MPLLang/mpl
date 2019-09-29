@@ -493,16 +493,17 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
     die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
 
-  HM_configChunks(s);
-
-  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  s->nextChunkAllocSize = s->controls->allocChunkSize;
-
   return res;
 }
 
 void GC_lateInit (GC_state s) {
+
+  /* this has to happen AFTER pthread_setspecific for the main thread */
+  HM_configChunks(s);
+  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->nextChunkAllocSize = s->controls->allocChunkSize;
+
   /* Initialize profiling.  This must occur after processing
    * command-line arguments, because those may just be doing a
    * show-sources, in which case we don't want to initialize the
@@ -532,6 +533,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueBot = BOGUS_OBJPTR;
   d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->extraSmallObjects = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

@@ -73,7 +73,7 @@ struct HM_chunkList {
   struct HM_HierarchicalHeap * containingHH;
   size_t size; // size (bytes) of this level, both allocated and unallocated
   bool isInToSpace;
-};
+} __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
                     (sizeof(struct HM_chunk) % 8) == 0);
@@ -139,12 +139,15 @@ static inline bool HM_isLevelHead(HM_chunkList list) {
 // Sets the block size and alloc size; called once at program startup.
 void HM_configChunks(GC_state s);
 
+HM_chunk HM_initializeChunk(pointer start, pointer end);
+
 /* Allocate and return a pointer to a new chunk in the list of the given
  * levelHead, with the requirement that
  *   chunk->limit - chunk->frontier <= bytesRequested
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
+void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t level);
 HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level);
 
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
