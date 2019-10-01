@@ -15,8 +15,6 @@
  */
 
 #include "hierarchical-heap-collection.h"
-// #include "deferred-promote.h"
-#include "preserve-downptrs.h"
 
 /******************************/
 /* Static Function Prototypes */
@@ -81,7 +79,9 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   GC_state s = pthread_getspecific (gcstate_key);
-  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+  GC_thread thread = getThreadCurrent(s);
+  struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
+
   struct rusage ru_start;
   struct timespec startTime;
   struct timespec stopTime;
@@ -97,7 +97,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  if (!force && hh->level <= 1) {
+  if (!force && thread->level <= 1) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
     return;
   }
@@ -119,11 +119,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     goto unlock_local_scope_and_return;
   }
 
-  if (minLevel > hh->level) {
+  if (minLevel > thread->level) {
     LOG(LM_HH_COLLECTION, LL_INFO,
         "Skipping collection because minLevel > current level (%u > %u)",
         minLevel,
-        hh->level);
+        thread->level);
     goto unlock_local_scope_and_return;
   }
 
@@ -148,13 +148,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
                   ((void*)(hh)));
   HM_debugDisplayHierarchicalHeap(s, hh);
 
-  assertInvariants(s, hh);
+  assertInvariants(s, thread);
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = minLevel,
-    .maxLevel = hh->level,
+    .maxLevel = thread->level,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
     .containingObject = BOGUS_OBJPTR,
@@ -164,7 +164,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
-    forwardHHObjptrArgs.minLevel = hh->level;
+    forwardHHObjptrArgs.minLevel = thread->level;
   }
 
   size_t sizesBefore[HM_MAX_NUM_LEVELS];
@@ -202,9 +202,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       "  collection scope is      %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
-      hh->level,
+      thread->level,
       potentialLocalScope,
-      hh->level,
+      thread->level,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);
 
@@ -313,7 +313,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   };
 
   /* off-by-one to prevent underflow */
-  uint32_t depth = hh->level+1;
+  uint32_t depth = thread->level+1;
   while (depth > forwardHHObjptrArgs.minLevel) {
     depth--;
     HM_chunkList toSpaceLevel = toSpace[depth];
@@ -340,47 +340,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-  /*
-   * RAM_NOTE: Add hooks to forwardHHObjptr and freeChunks to count from/toBytes
-   * instead of iterating
-   */
-#if 0
-  if (DEBUG_HEAP_MANAGEMENT or s->controls->HMMessages) {
-    /* count number of from-bytes */
-    size_t fromBytes = 0;
-    for (void* chunkList = hh->levelList;
-         (NULL != chunkList) && (HM_getChunkListLevel(chunkList) >=
-                                 forwardHHObjptrArgs.minLevel);
-         chunkList = HM_getChunkInfo(chunkList)->split.levelHead.nextHead) {
-      for (void* chunk = chunkList;
-           NULL != chunk;
-           chunk = HM_getChunkInfo(chunk)->nextChunk) {
-        fromBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
-      }
-    }
-
-    /* count number of to-chunks */
-    size_t toBytes = 0;
-    for (void* chunkList = hh->newLevelList;
-         NULL != chunkList;
-         chunkList = HM_getChunkInfo(chunkList)->split.levelHead.nextHead) {
-      for (void* chunk = chunkList;
-           NULL != chunk;
-           chunk = HM_getChunkInfo(chunk)->nextChunk) {
-        toBytes += HM_getChunkLimit(chunk) - HM_getChunkStart(chunk);
-      }
-    }
-
-    LOG(LM_HH_COLLECTION, LL_INFO,
-        "Collection went from %zu bytes to %zu bytes",
-        fromBytes,
-        toBytes);
-  }
-#endif
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->level+1, {
     HM_chunk chunk = level->firstChunk;
     while (chunk != NULL) {
       pointer start = HM_getChunkStart(chunk);
@@ -402,7 +365,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 #endif
 
   /* Free old chunks */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, hh->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->level+1, {
     HM_chunkList remset = level->rememberedSet;
     if (NULL != remset) {
       level->size -= remset->size;
@@ -414,7 +377,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   });
 
   /* merge in toSpace */
-  for (uint32_t i = 0; i <= hh->level; i++) {
+  for (uint32_t i = 0; i <= thread->level; i++) {
     if (NULL == HM_HH_LEVEL(hh, i)) {
       HM_HH_LEVEL(hh, i) = toSpace[i];
       if (NULL != toSpace[i]) {
@@ -428,7 +391,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   /* update lastAllocatedChunk and associated */
   HM_chunk lastChunk = NULL;
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, hh->level+1, {
+  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, thread->level+1, {
     if (HM_getChunkListLastChunk(level) != NULL) {
       lastChunk = HM_getChunkListLastChunk(level);
       break;
@@ -437,7 +400,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   hh->lastAllocatedChunk = lastChunk;
 
   if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
-    if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
+    if (!HM_HH_extend(hh, thread->level, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for hierarchical heap!\n");
     }
   }
@@ -451,7 +414,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
-  assertInvariants(s, hh);
+  assertInvariants(s, thread);
 
   HM_debugMessage(s,
                   "[%d] HM_HH_collectLocal(): Finished Local collection on "

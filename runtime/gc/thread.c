@@ -22,8 +22,7 @@ Word32 GC_HH_getLevel(pointer threadp) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
-  assert(thread->hierarchicalHeap != NULL);
-  return thread->hierarchicalHeap->level;
+  return thread->level;
 }
 
 void GC_HH_setLevel(pointer threadp, Word32 level) {
@@ -31,12 +30,25 @@ void GC_HH_setLevel(pointer threadp, Word32 level) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
-  assert(thread->hierarchicalHeap != NULL);
-  HM_HH_setLevel(s, thread->hierarchicalHeap, level);
+  thread->level = level;
+
+  if (level >= HM_MAX_NUM_LEVELS) {
+    DIE("Exceeded maximum fork depth (%d)", HM_MAX_NUM_LEVELS);
+  }
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
 void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
+
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  assert(threadAndHeapOkay(s));
+
   objptr threadop = pointerToObjptr(threadp, NULL);
   objptr childop = pointerToObjptr(childp, NULL);
   GC_thread thread = threadObjptrToStruct(s, threadop);
@@ -71,16 +83,30 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   assert(thread->hierarchicalHeap != NULL);
   assert(child != NULL);
   assert(child->hierarchicalHeap != NULL);
-  HM_HH_merge(s, thread->hierarchicalHeap, child->hierarchicalHeap);
+
+  beginAtomic(s);
+  /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
+   * level? */
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
+  endAtomic(s);
+
+  /*
+   * This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+  HM_HH_merge(s, thread, child);
 }
 
+#pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"
 void GC_HH_promoteChunks(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
-  HM_HH_promoteChunks(s, thread->hierarchicalHeap);
+  HM_HH_promoteChunks(s, thread);
 }
 
 

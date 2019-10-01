@@ -39,6 +39,11 @@ typedef struct GC_thread {
   int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
   size_t exnStack;
+
+  /* Current level (fork depth) of the thread allocating in this heap.
+   * Fresh chunks are placed at this level. */
+  uint32_t level;
+
   struct HM_HierarchicalHeap* hierarchicalHeap;
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
@@ -48,6 +53,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
+                    sizeof(uint32_t) + // level
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(objptr));  // stack
 

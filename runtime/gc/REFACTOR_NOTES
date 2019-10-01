@@ -1,0 +1,52 @@
+=============================================================================
+STATUS
+=============================================================================
+
+Working on moving hh->level to thread->level
+  - next big thing is e.g. HM_HH_extend, which is called from many places and
+    takes hh as argument rather than thread.
+
+Should follow up with moving other fields too, so that eventually the
+HM_HierarchicalHeap structure is useless except for looking up per-level data:
+  - bytesAllocatedSinceLastCollection
+  - bytesSurvivedLastCollection
+  - lastAllocatedChunk (and rename to currentChunk)
+
+Also can we rename thread->level to thread->currentDepth or something
+
+=============================================================================
+GOAL
+=============================================================================
+
+The goal is to recreate the level-linked data structure for hierarchical heaps,
+with various improvements along the way. Heaps will be organized into a
+tree where intermediate empty levels are skipped. We will also link heaps into
+a dynamic disjoint-set data structure instead of their constituent chunklist
+objects.
+  - unbounded fork depth
+  - no cost (space or time!!) for unused empty levels
+  - single-point-of-allocation for runtime metadata (the heap objects)
+
+The data structure will look roughly like this:
+
+  struct GC_heap {
+    /* in the path-compressing query tree */
+    struct GC_heap* representative; 
+
+    /* in the heap hierarchy. not necessarily immediate parent, as some levels
+     * can be empty.*/
+    struct GC_heap* nextAncestor;   
+
+    chunklist smallObjectsSpace;
+    chunklist largeObjectsSpace;
+    chunklist rememberedSet;
+
+    int depth;
+  }
+
+  struct GC_thread {
+    ...
+    struct GC_heap* heap;
+    int currentDepth;
+  }
+

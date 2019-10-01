@@ -23,7 +23,7 @@
 void HM_enterLocalHeap (GC_state s) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  HM_HH_ensureNotEmpty(hh);
+  HM_HH_ensureNotEmpty(hh, getThreadCurrent(s)->level);
   s->frontier = HM_HH_getFrontier(hh);
   s->limitPlusSlop = HM_HH_getLimit(hh);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -64,6 +64,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   }
 
   /* fetch after management heap GC to make sure that I get the updated value */
+  GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
   /* update hh before modification */
@@ -75,9 +76,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  uint32_t desiredScope = HM_HH_desiredCollectionScope(s, hh);
+  uint32_t desiredScope = HM_HH_desiredCollectionScope(s, thread);
 
-  if (forceGC || desiredScope <= hh->level) {
+  if (forceGC || desiredScope <= thread->level) {
     /* too much allocated, so let's collect */
     HM_HHC_collectLocal(desiredScope, forceGC);
 
@@ -125,11 +126,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
     if (NULL == hh->lastAllocatedChunk ||
-        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
+        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != thread->level) ||
         HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
         (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
     {
-      if (!HM_HH_extend(hh, stackBytes)) {
+      if (!HM_HH_extend(hh, thread->level, stackBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       s->frontier = HM_HH_getFrontier(hh);
@@ -152,11 +153,11 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   /* Determine if we need to extend to accommodate bytesRequested (and possibly
    * ensureCurrentLevel */
   if (NULL == hh->lastAllocatedChunk ||
-      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
+      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != thread->level) ||
       HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {
-    if (!HM_HH_extend(hh, bytesRequested)) {
+    if (!HM_HH_extend(hh, thread->level, bytesRequested)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
     s->frontier = HM_HH_getFrontier(hh);

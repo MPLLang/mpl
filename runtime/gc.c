@@ -73,7 +73,6 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/pack.c"
 #include "gc/parallel.c"
 #include "gc/pointer.c"
-#include "gc/preserve-downptrs.c"
 #include "gc/profiling.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"

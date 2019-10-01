@@ -38,7 +38,7 @@ struct GC_vectorInit {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static inline size_t sizeofInitialBytesLive (GC_state s);
-static void initVectors (GC_state s, struct HM_HierarchicalHeap *hh);
+static void initVectors (GC_state s, GC_thread thread);
 static GC_thread initThreadAndHeap (GC_state s, uint32_t level);
 static void initWorld (GC_state s);
 static void duplicateWorld (GC_state d, GC_state s);

@@ -40,8 +40,8 @@ pointer sequenceAllocateInHH(GC_state s,
 /************************/
 
 pointer sequenceAllocateInHH(GC_state s,
-                          size_t sequenceSizeAligned,
-                          size_t ensureBytesFree) {
+                             size_t sequenceSizeAligned,
+                             size_t ensureBytesFree) {
   assert(ensureBytesFree <= s->controls->minChunkSize - sizeof(struct HM_chunk));
   size_t sequenceChunkBytes = align(sequenceSizeAligned, s->controls->minChunkSize);
   size_t bytesRequested = sequenceSizeAligned + ensureBytesFree;
@@ -88,7 +88,7 @@ pointer sequenceAllocateInHH(GC_state s,
     /* force a new chunk to be created so that no new objects lie after this
      * sequence, which crossed a block boundary. */
     HM_HH_updateValues(hh, s->frontier);
-    HM_HH_extend(hh, ensureBytesFree);
+    HM_HH_extend(hh, getThreadCurrent(s)->level, ensureBytesFree);
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;

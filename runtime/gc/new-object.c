@@ -37,7 +37,7 @@ pointer newObject(GC_state s,
     assert(HM_getChunkOf(frontier) == hh->lastAllocatedChunk);
     HM_HH_updateValues(hh, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
-    HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+    HM_HH_extend(hh, getThreadCurrent(s)->level, GC_HEAP_LIMIT_SLOP);
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -104,6 +104,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
+  thread->level = HM_HH_INVALID_LEVEL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->hierarchicalHeap = NULL;
   if (DEBUG_THREADS)
@@ -123,8 +124,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
   size_t totalSize = stackSize + threadSize;
 
   struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  hh->level = level;
-  HM_HH_extend(hh, totalSize);
+  HM_HH_extend(hh, level, totalSize);
 
   pointer frontier = HM_HH_getFrontier(hh);
 
@@ -143,6 +143,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
+  thread->level = level;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->hierarchicalHeap = hh;
 
