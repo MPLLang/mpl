@@ -17,22 +17,22 @@
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-Word32 GC_HH_getLevel(pointer threadp) {
+Word32 GC_HH_getDepth(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
-  return thread->level;
+  return thread->currentDepth;
 }
 
-void GC_HH_setLevel(pointer threadp, Word32 level) {
+void GC_HH_setDepth(pointer threadp, Word32 depth) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
-  thread->level = level;
+  thread->currentDepth = depth;
 
-  if (level >= HM_MAX_NUM_LEVELS) {
+  if (depth >= HM_MAX_NUM_LEVELS) {
     DIE("Exceeded maximum fork depth (%d)", HM_MAX_NUM_LEVELS);
   }
 

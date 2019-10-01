@@ -97,7 +97,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  if (!force && thread->level <= 1) {
+  if (!force && thread->currentDepth <= 1) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
     return;
   }
@@ -119,11 +119,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     goto unlock_local_scope_and_return;
   }
 
-  if (minLevel > thread->level) {
+  if (minLevel > thread->currentDepth) {
     LOG(LM_HH_COLLECTION, LL_INFO,
         "Skipping collection because minLevel > current level (%u > %u)",
         minLevel,
-        thread->level);
+        thread->currentDepth);
     goto unlock_local_scope_and_return;
   }
 
@@ -154,7 +154,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minLevel = minLevel,
-    .maxLevel = thread->level,
+    .maxLevel = thread->currentDepth,
     .toLevel = HM_HH_INVALID_LEVEL,
     .toSpace = NULL,
     .containingObject = BOGUS_OBJPTR,
@@ -164,7 +164,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
-    forwardHHObjptrArgs.minLevel = thread->level;
+    forwardHHObjptrArgs.minLevel = thread->currentDepth;
   }
 
   size_t sizesBefore[HM_MAX_NUM_LEVELS];
@@ -202,9 +202,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       "  collection scope is      %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
-      thread->level,
+      thread->currentDepth,
       potentialLocalScope,
-      thread->level,
+      thread->currentDepth,
       forwardHHObjptrArgs.minLevel,
       forwardHHObjptrArgs.maxLevel);
 
@@ -313,7 +313,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   };
 
   /* off-by-one to prevent underflow */
-  uint32_t depth = thread->level+1;
+  uint32_t depth = thread->currentDepth+1;
   while (depth > forwardHHObjptrArgs.minLevel) {
     depth--;
     HM_chunkList toSpaceLevel = toSpace[depth];
@@ -343,7 +343,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->currentDepth+1, {
     HM_chunk chunk = level->firstChunk;
     while (chunk != NULL) {
       pointer start = HM_getChunkStart(chunk);
@@ -365,7 +365,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 #endif
 
   /* Free old chunks */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->level+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->currentDepth+1, {
     HM_chunkList remset = level->rememberedSet;
     if (NULL != remset) {
       level->size -= remset->size;
@@ -377,7 +377,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   });
 
   /* merge in toSpace */
-  for (uint32_t i = 0; i <= thread->level; i++) {
+  for (uint32_t i = 0; i <= thread->currentDepth; i++) {
     if (NULL == HM_HH_LEVEL(hh, i)) {
       HM_HH_LEVEL(hh, i) = toSpace[i];
       if (NULL != toSpace[i]) {
@@ -391,7 +391,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   /* update lastAllocatedChunk and associated */
   HM_chunk lastChunk = NULL;
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, thread->level+1, {
+  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, thread->currentDepth+1, {
     if (HM_getChunkListLastChunk(level) != NULL) {
       lastChunk = HM_getChunkListLastChunk(level);
       break;
@@ -400,7 +400,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   hh->lastAllocatedChunk = lastChunk;
 
   if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
-    if (!HM_HH_extend(hh, thread->level, GC_HEAP_LIMIT_SLOP)) {
+    if (!HM_HH_extend(hh, thread->currentDepth, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for hierarchical heap!\n");
     }
   }

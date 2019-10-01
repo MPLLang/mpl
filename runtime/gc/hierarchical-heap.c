@@ -36,8 +36,8 @@ void HM_HH_merge(GC_state s, GC_thread parentThread, GC_thread childThread)
   assertInvariants(s, parentThread);
   assertInvariants(s, childThread);
   /* can only merge at join point! */
-  assert(childThread->level == parentThread->level);
-  assert(childThread->level >= 1);
+  assert(childThread->currentDepth == parentThread->currentDepth);
+  assert(childThread->currentDepth >= 1);
 
   /* Merge levels. */
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
@@ -67,19 +67,19 @@ void HM_HH_promoteChunks(GC_state s, GC_thread thread)
 {
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
-  HM_chunkList level = HM_HH_LEVEL(hh, thread->level);
+  HM_chunkList level = HM_HH_LEVEL(hh, thread->currentDepth);
   if (level != NULL) {
-    assert(thread->level > 0);
-    HM_chunkList parentLevel = HM_HH_LEVEL(hh, thread->level-1);
+    assert(thread->currentDepth > 0);
+    HM_chunkList parentLevel = HM_HH_LEVEL(hh, thread->currentDepth-1);
     if (parentLevel != NULL) {
       HM_appendChunkList(parentLevel, level);
     } else {
-      HM_HH_LEVEL(hh, thread->level-1) = level;
+      HM_HH_LEVEL(hh, thread->currentDepth-1) = level;
       /* SAM_NOTE: this naming convention is bad. Should rename the integer to
        * `depth`, and leave `level` to refer to the actual list itself */
-      level->level = thread->level-1;
+      level->level = thread->currentDepth-1;
     }
-    HM_HH_LEVEL(hh, thread->level) = NULL;
+    HM_HH_LEVEL(hh, thread->currentDepth) = NULL;
   }
 
   assertInvariants(s, thread);
@@ -210,12 +210,12 @@ uint32_t HM_HH_desiredCollectionScope(
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
   if (s->wsQueueTop == BOGUS_OBJPTR)
-    return thread->level+1; /* don't collect */
+    return thread->currentDepth+1; /* don't collect */
 
   if (hh->bytesAllocatedSinceLastCollection <
       (s->controls->hhConfig.liveLCRatio * hh->bytesSurvivedLastCollection))
   {
-    return thread->level+1; /* don't collect */
+    return thread->currentDepth+1; /* don't collect */
   }
 
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
@@ -223,28 +223,28 @@ uint32_t HM_HH_desiredCollectionScope(
 
   size_t budget = 4 * hh->bytesAllocatedSinceLastCollection;
 
-  if (budget < (1024L * 1024L) || potentialLocalScope > thread->level)
-    return thread->level+1; /* don't collect */
+  if (budget < (1024L * 1024L) || potentialLocalScope > thread->currentDepth)
+    return thread->currentDepth+1; /* don't collect */
 
   size_t sz = 0;
-  uint32_t level = thread->level+1;
-  while (level > potentialLocalScope && sz + HM_HH_levelSize(hh, level-1) < budget) {
-    sz += HM_HH_levelSize(hh, level-1);
-    level--;
+  uint32_t d = thread->currentDepth+1;
+  while (d > potentialLocalScope && sz + HM_HH_levelSize(hh, d-1) < budget) {
+    sz += HM_HH_levelSize(hh, d-1);
+    d--;
   }
 
   if (sz < (1024L * 1024L))
-    return thread->level+1; /* don't collect if too small */
+    return thread->currentDepth+1; /* don't collect if too small */
 
   /* It's likely that the shallower levels are mostly empty, so let's see if
    * we can skip some of them without ignoring too much data. */
   size_t szMin = 0.75 * sz;
-  while (level < thread->level && sz - HM_HH_levelSize(hh, level) > szMin) {
-    sz -= HM_HH_levelSize(hh, level);
-    level++;
+  while (d < thread->currentDepth && sz - HM_HH_levelSize(hh, d) > szMin) {
+    sz -= HM_HH_levelSize(hh, d);
+    d++;
   }
 
-  return level;
+  return d;
 }
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
@@ -288,7 +288,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
 
   /* Check that the levels past the recorded level are empty */
   size_t extraSize = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, thread->level+1, HM_MAX_NUM_LEVELS, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, thread->currentDepth+1, HM_MAX_NUM_LEVELS, {
     extraSize += HM_getChunkListSize(level);
   });
   assert(0 == extraSize);

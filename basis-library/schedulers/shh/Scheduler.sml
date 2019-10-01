@@ -212,7 +212,7 @@ struct
     fun fork (f : unit -> 'a, g : unit -> 'b) =
       let
         val thread = Thread.current ()
-        val level = HH.getLevel thread
+        val depth = HH.getDepth thread
 
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
@@ -224,7 +224,7 @@ struct
           in
             rightSide := SOME (gr, t);
             if decrementHitsZero incounter then
-              ( setQueueDepth (myWorkerId ()) (level+1)
+              ( setQueueDepth (myWorkerId ()) (depth+1)
               ; threadSwitch thread
               )
             else
@@ -232,14 +232,14 @@ struct
           end
 
         val _ = push g'
-        val _ = HH.setLevel (thread, level + 1)
+        val _ = HH.setDepth (thread, depth + 1)
 
         val fr = result f
 
         val gr =
           if popDiscard () then
             ( HH.promoteChunks thread
-            ; HH.setLevel (thread, level)
+            ; HH.setDepth (thread, depth)
             ; result g
             )
           else
@@ -249,9 +249,9 @@ struct
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
                   ( HH.mergeThreads (thread, t)
-                  ; setQueueDepth (myWorkerId ()) level
+                  ; setQueueDepth (myWorkerId ()) depth
                   ; HH.promoteChunks thread
-                  ; HH.setLevel (thread, level)
+                  ; HH.setDepth (thread, depth)
                   ; gr
                   )
             )
@@ -303,7 +303,7 @@ struct
             in
               case trySteal friend of
                 NONE => loop (tries+1) (tickTimer idleTimer)
-              | SOME (task, level) => (task, level, tickTimer idleTimer)
+              | SOME (task, depth) => (task, depth, tickTimer idleTimer)
             end
         in
           loop 0 idleTimer
@@ -314,13 +314,13 @@ struct
       fun acquireWork () : unit =
         let
           val idleTimer = startTimer myId
-          val (task, level, idleTimer') = request idleTimer
+          val (task, depth, idleTimer') = request idleTimer
           val taskThread = Thread.copy prototypeThread
         in
-          if level >= 1 then () else
-            die (fn _ => "scheduler bug: acquired with level " ^ Int.toString level ^ "\n");
-          HH.setLevel (taskThread, level+1);
-          Queue.setDepth myQueue (level+1);
+          if depth >= 1 then () else
+            die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
+          HH.setDepth (taskThread, depth+1);
+          Queue.setDepth myQueue (depth+1);
           setTaskBox myId task;
           stopTimer idleTimer';
           threadSwitch taskThread;
@@ -347,9 +347,9 @@ struct
 
   val originalThread = Thread.current ()
   val _ =
-    if HH.getLevel originalThread = 0 then ()
-    else die (fn _ => "scheduler bug: root level <> 0")
-  val _ = HH.setLevel (originalThread, 1)
+    if HH.getDepth originalThread = 0 then ()
+    else die (fn _ => "scheduler bug: root depth <> 0")
+  val _ = HH.setDepth (originalThread, 1)
 
   (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
@@ -368,7 +368,7 @@ struct
         (* val schedHeap = HH.newHeap () *)
       in
         amOriginal := false;
-        HH.setLevel (schedThread, 1);
+        HH.setDepth (schedThread, 1);
         setQueueDepth (myWorkerId ()) 1;
         threadSwitch schedThread
       end

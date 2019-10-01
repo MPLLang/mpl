@@ -425,7 +425,7 @@ structure ObjectType =
                      Bits.toBytes (Control.Target.Size.csize ())
                   val bytesExnStack =
                      Bits.toBytes (Type.width (Type.exnStack ()))
-                  val bytesLevel =
+                  val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
                   val bytesHierarchicalHeap =
                      Bits.toBytes (Control.Target.Size.cpointer ())
@@ -441,7 +441,7 @@ structure ObjectType =
                         bytesCurrentProcNum +
                         bytesBytesNeeded +
                         bytesExnStack +
-                        bytesLevel +
+                        bytesCurrentDepth +
                         bytesHierarchicalHeap +
                         bytesStack
                      end

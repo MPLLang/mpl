@@ -42,7 +42,7 @@ void initVectors(GC_state s, GC_thread thread) {
 
   currentChunk = HM_getChunkOf(frontier);
   assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, 0)));
-  assert(0 == thread->level);
+  assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
     size_t elementSize;
@@ -173,7 +173,7 @@ void initWorld(GC_state s) {
    * s->{frontier,limit,limitPlusSlop} */
   initVectors(s, thread);
 
-  size_t currentSize = HM_HH_size(hh, thread->level);
+  size_t currentSize = HM_HH_size(hh, thread->currentDepth);
   assert(HM_getChunkListSize(HM_HH_LEVEL(hh, 0)) == currentSize);
 
   /* SAM_NOTE: some of these statistics may be maintained incorrectly

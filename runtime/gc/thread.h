@@ -40,9 +40,9 @@ typedef struct GC_thread {
   size_t bytesNeeded;
   size_t exnStack;
 
-  /* Current level (fork depth) of the thread allocating in this heap.
+  /* Current depth (fork depth) of the thread allocating in this heap.
    * Fresh chunks are placed at this level. */
-  uint32_t level;
+  uint32_t currentDepth;
 
   struct HM_HierarchicalHeap* hierarchicalHeap;
   objptr stack;
@@ -53,7 +53,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
-                    sizeof(uint32_t) + // level
+                    sizeof(uint32_t) + // currentDepth
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(objptr));  // stack
 
@@ -68,8 +68,8 @@ typedef struct GC_thread *GC_thread;
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE Word32 GC_HH_getLevel(pointer thread);
-PRIVATE void GC_HH_setLevel(pointer thread, Word32 level);
+PRIVATE Word32 GC_HH_getDepth(pointer thread);
+PRIVATE void GC_HH_setDepth(pointer thread, Word32 level);
 PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 #endif /* MLTON_GC_INTERNAL_BASIS */
