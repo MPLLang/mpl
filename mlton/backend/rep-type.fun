@@ -427,6 +427,10 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
+                  val bytesAllocatedSinceLastCollection =
+                     Bits.toBytes (Control.Target.Size.csize ())
+                  val bytesSurvivedLastCollection =
+                     Bits.toBytes (Control.Target.Size.csize ())
                   val bytesHierarchicalHeap =
                      Bits.toBytes (Control.Target.Size.cpointer ())
                   val bytesStack =
@@ -442,6 +446,8 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesAllocatedSinceLastCollection +
+                        bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
                         bytesStack
                      end
@@ -460,6 +466,8 @@ structure ObjectType =
                                                Type.csize (),
                                                Type.exnStack (),
                                                Type.word32,
+                                               Type.csize (),
+                                               Type.csize (),
                                                Type.cpointer (),
                                                Type.stack ()])}
          end

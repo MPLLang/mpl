@@ -2,17 +2,14 @@
 STATUS
 =============================================================================
 
-Working on moving hh->level to thread->level
-  - next big thing is e.g. HM_HH_extend, which is called from many places and
-    takes hh as argument rather than thread.
+Next todo:
+  - move hh->lastAllocatedChunk to thread->lastAllocatedChunk
+  - rename to currentChunk?
 
-Should follow up with moving other fields too, so that eventually the
-HM_HierarchicalHeap structure is useless except for looking up per-level data:
-  - bytesAllocatedSinceLastCollection
-  - bytesSurvivedLastCollection
-  - lastAllocatedChunk (and rename to currentChunk)
-
-Also can we rename thread->level to thread->currentDepth or something
+Done:
+  - thread->level, instead of hh->...
+  - renamed thread->level to thread->currentDepth
+  - thread->{bytesAllocated..., bytesSurvived...}, instead of hh->...
 
 =============================================================================
 GOAL
@@ -31,11 +28,11 @@ The data structure will look roughly like this:
 
   struct GC_heap {
     /* in the path-compressing query tree */
-    struct GC_heap* representative; 
+    struct GC_heap* representative;
 
     /* in the heap hierarchy. not necessarily immediate parent, as some levels
      * can be empty.*/
-    struct GC_heap* nextAncestor;   
+    struct GC_heap* nextAncestor;
 
     chunklist smallObjectsSpace;
     chunklist largeObjectsSpace;

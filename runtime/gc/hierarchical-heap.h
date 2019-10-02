@@ -24,9 +24,6 @@ struct HM_HierarchicalHeap {
   /* The "current" chunk of the heap.
    * TODO: rename. This chunk is not necessarily the last allocated. */
   HM_chunk lastAllocatedChunk;
-
-  size_t bytesAllocatedSinceLastCollection;
-  size_t bytesSurvivedLastCollection;
 };
 
 // l/r-value for ith level
@@ -66,11 +63,11 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
 void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);
-void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh, uint32_t level);
+void HM_HH_ensureNotEmpty(GC_thread thread);
 
 static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level);
 
-bool HM_HH_extend(struct HM_HierarchicalHeap* hh, uint32_t level, size_t bytesRequested);
+bool HM_HH_extend(GC_thread thread, size_t bytesRequested);
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
 pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh);
@@ -79,7 +76,7 @@ void HM_HH_updateValues(struct HM_HierarchicalHeap* hh, pointer frontier);
 
 size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t level);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
-size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes);
+size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 
 uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 

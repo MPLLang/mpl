@@ -66,6 +66,10 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
         if (NULL == HM_HH_LEVEL(hh, level)) {
           HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
         }
+
+        /* SAM_NOTE: TODO: track bytes allocated here in
+         * thread->bytesAllocatedSinceLast...? */
+
         HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
       }
     }

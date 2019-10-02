@@ -65,7 +65,7 @@ void initVectors(GC_state s, GC_thread thread) {
     if ((size_t)(limit - frontier) < objectSize ||
         !inFirstBlockOfChunk(currentChunk, frontier)) {
       HM_HH_updateValues(hh, frontier);
-      if (!HM_HH_extend(hh, 0, objectSize)) {
+      if (!HM_HH_extend(thread, objectSize)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       s->frontier = HM_HH_getFrontier(hh);
@@ -122,7 +122,7 @@ void initVectors(GC_state s, GC_thread thread) {
    * a valid frontier. Extending with GC_HEAP_LIMIT_SLOP is arbitrary. */
   if (!inFirstBlockOfChunk(currentChunk, frontier)) {
     HM_HH_updateValues(hh, frontier);
-    if (!HM_HH_extend(hh, 0, GC_HEAP_LIMIT_SLOP)) {
+    if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
     s->frontier = HM_HH_getFrontier(hh);

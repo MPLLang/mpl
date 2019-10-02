@@ -44,6 +44,9 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  size_t bytesAllocatedSinceLastCollection;
+  size_t bytesSurvivedLastCollection;
+
   struct HM_HierarchicalHeap* hierarchicalHeap;
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
@@ -54,6 +57,8 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
+                    sizeof(size_t) +  // bytesAllocatedSinceLastCollection
+                    sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(objptr));  // stack
 

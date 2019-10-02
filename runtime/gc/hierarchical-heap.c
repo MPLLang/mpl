@@ -51,10 +51,10 @@ void HM_HH_merge(GC_state s, GC_thread parentThread, GC_thread childThread)
     HM_HH_LEVEL(hh, i) = NULL;
   });
 
-  parentHH->bytesSurvivedLastCollection +=
-    hh->bytesSurvivedLastCollection;
-  parentHH->bytesAllocatedSinceLastCollection +=
-    hh->bytesAllocatedSinceLastCollection;
+  parentThread->bytesSurvivedLastCollection +=
+    childThread->bytesSurvivedLastCollection;
+  parentThread->bytesAllocatedSinceLastCollection +=
+    childThread->bytesAllocatedSinceLastCollection;
 
   assertInvariants(s, parentThread);
 
@@ -115,13 +115,13 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
     HM_HH_LEVEL(hh, i) = NULL;
   }
   hh->lastAllocatedChunk = NULL;
-  hh->bytesAllocatedSinceLastCollection = 0;
-  hh->bytesSurvivedLastCollection = 0;
 
   return hh;
 }
 
-void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh, uint32_t level) {
+void HM_HH_ensureNotEmpty(GC_thread thread) {
+  struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
+
   if (NULL != hh->lastAllocatedChunk) return;
 
 #if ASSERT
@@ -131,17 +131,20 @@ void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh, uint32_t level) {
 #endif
 
   /* add in one chunk */
-  if (!HM_HH_extend(hh, level, GC_HEAP_LIMIT_SLOP)) {
+  if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
     DIE("Ran out of space for Hierarchical Heap!");
   }
 }
 
-bool HM_HH_extend(struct HM_HierarchicalHeap* hh, uint32_t level, size_t bytesRequested)
+bool HM_HH_extend(GC_thread thread, size_t bytesRequested)
 {
-  HM_chunkList levelHead = HM_HH_LEVEL(hh, level);
+  struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
+  uint32_t d = thread->currentDepth;
+
+  HM_chunkList levelHead = HM_HH_LEVEL(hh, d);
   if (NULL == levelHead) {
-    levelHead = HM_newChunkList(hh, level);
-    HM_HH_LEVEL(hh, level) = levelHead;
+    levelHead = HM_newChunkList(hh, d);
+    HM_HH_LEVEL(hh, d) = levelHead;
   }
 
   HM_chunk chunk = HM_allocateChunk(levelHead, bytesRequested);
@@ -151,7 +154,7 @@ bool HM_HH_extend(struct HM_HierarchicalHeap* hh, uint32_t level, size_t bytesRe
   }
 
   hh->lastAllocatedChunk = chunk;
-  HM_HH_addRecentBytesAllocated(hh, HM_getChunkSize(chunk));
+  HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
 
   return TRUE;
 }
@@ -191,9 +194,9 @@ size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
   return threshold;
 }
 
-size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes) {
-  hh->bytesAllocatedSinceLastCollection += bytes;
-  return hh->bytesAllocatedSinceLastCollection;
+size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes) {
+  thread->bytesAllocatedSinceLastCollection += bytes;
+  return thread->bytesAllocatedSinceLastCollection;
 }
 
 size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
@@ -202,18 +205,15 @@ size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
   return HM_getChunkListSize(lev);
 }
 
-uint32_t HM_HH_desiredCollectionScope(
-  GC_state s,
-  GC_thread thread)
-  // struct HM_HierarchicalHeap* hh)
+uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
 {
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
   if (s->wsQueueTop == BOGUS_OBJPTR)
     return thread->currentDepth+1; /* don't collect */
 
-  if (hh->bytesAllocatedSinceLastCollection <
-      (s->controls->hhConfig.liveLCRatio * hh->bytesSurvivedLastCollection))
+  if (thread->bytesAllocatedSinceLastCollection <
+      (s->controls->hhConfig.liveLCRatio * thread->bytesSurvivedLastCollection))
   {
     return thread->currentDepth+1; /* don't collect */
   }
@@ -221,7 +221,7 @@ uint32_t HM_HH_desiredCollectionScope(
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
-  size_t budget = 4 * hh->bytesAllocatedSinceLastCollection;
+  size_t budget = 4 * thread->bytesAllocatedSinceLastCollection;
 
   if (budget < (1024L * 1024L) || potentialLocalScope > thread->currentDepth)
     return thread->currentDepth+1; /* don't collect */

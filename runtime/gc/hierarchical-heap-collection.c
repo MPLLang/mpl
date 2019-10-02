@@ -400,7 +400,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   hh->lastAllocatedChunk = lastChunk;
 
   if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
-    if (!HM_HH_extend(hh, thread->currentDepth, GC_HEAP_LIMIT_SLOP)) {
+    if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for hierarchical heap!\n");
     }
   }
@@ -430,10 +430,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    *
    * TODO: IS THIS A PROBLEM?
    */
-  hh->bytesSurvivedLastCollection =
+  thread->bytesSurvivedLastCollection =
     forwardHHObjptrArgs.bytesMoved + forwardHHObjptrArgs.bytesCopied;
 
-  hh->bytesAllocatedSinceLastCollection = 0;
+  thread->bytesAllocatedSinceLastCollection = 0;
 
   if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
     for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {

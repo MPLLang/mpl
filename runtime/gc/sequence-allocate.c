@@ -88,11 +88,14 @@ pointer sequenceAllocateInHH(GC_state s,
     /* force a new chunk to be created so that no new objects lie after this
      * sequence, which crossed a block boundary. */
     HM_HH_updateValues(hh, s->frontier);
-    HM_HH_extend(hh, getThreadCurrent(s)->currentDepth, ensureBytesFree);
+    HM_HH_extend(getThreadCurrent(s), ensureBytesFree);
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
+
+  assert(inFirstBlockOfChunk(hh->lastAllocatedChunk, s->frontier));
+  assert((size_t)(s->limitPlusSlop - s->frontier) >= ensureBytesFree);
 
   return result;
 }

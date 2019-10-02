@@ -37,7 +37,7 @@ pointer newObject(GC_state s,
     assert(HM_getChunkOf(frontier) == hh->lastAllocatedChunk);
     HM_HH_updateValues(hh, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
-    HM_HH_extend(hh, getThreadCurrent(s)->currentDepth, GC_HEAP_LIMIT_SLOP);
+    HM_HH_extend(getThreadCurrent(s), GC_HEAP_LIMIT_SLOP);
     s->frontier = HM_HH_getFrontier(hh);
     s->limitPlusSlop = HM_HH_getLimit(hh);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -105,8 +105,10 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->currentDepth = HM_HH_INVALID_LEVEL;
-  thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->bytesAllocatedSinceLastCollection = 0;
+  thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = NULL;
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -123,8 +125,18 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
 
+  /* Allocate and initialize the heap that will be assigned to this thread.
+   * Some of these lines are copied from HM_HH_extend, but cannot just use it
+   * directly because the corresponding thread doesn't exist yet. */
   struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  HM_HH_extend(hh, depth, totalSize);
+  HM_HH_LEVEL(hh, depth) = HM_newChunkList(hh, depth);
+  HM_chunk chunk = HM_allocateChunk(HM_HH_LEVEL(hh, depth), totalSize);
+  if (NULL == chunk) {
+    DIE("Ran out of space for hierarchical heap!");
+  }
+  hh->lastAllocatedChunk = chunk;
+
+  /* Next, allocate+init the thread within the heap that we just created. */
 
   pointer frontier = HM_HH_getFrontier(hh);
 
@@ -144,8 +156,10 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->currentDepth = depth;
-  thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->bytesAllocatedSinceLastCollection = totalSize;
+  thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = hh;
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
 
   HM_HH_updateValues(hh, frontier + totalSize);
 

@@ -23,7 +23,7 @@
 void HM_enterLocalHeap (GC_state s) {
   struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
 
-  HM_HH_ensureNotEmpty(hh, getThreadCurrent(s)->currentDepth);
+  HM_HH_ensureNotEmpty(getThreadCurrent(s));
   s->frontier = HM_HH_getFrontier(hh);
   s->limitPlusSlop = HM_HH_getLimit(hh);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -130,7 +130,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
         (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
     {
-      if (!HM_HH_extend(hh, thread->currentDepth, stackBytes)) {
+      if (!HM_HH_extend(thread, stackBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       s->frontier = HM_HH_getFrontier(hh);
@@ -157,7 +157,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {
-    if (!HM_HH_extend(hh, thread->currentDepth, bytesRequested)) {
+    if (!HM_HH_extend(thread, bytesRequested)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
     s->frontier = HM_HH_getFrontier(hh);
