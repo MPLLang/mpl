@@ -34,7 +34,7 @@ pointer newObject(GC_state s,
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
     GC_thread thread = getThreadCurrent(s);
-    assert(HM_getChunkOf(frontier) == thread->lastAllocatedChunk);
+    assert(HM_getChunkOf(frontier) == thread->currentChunk);
     HM_HH_updateValues(thread, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
     HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP);
@@ -108,7 +108,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->bytesAllocatedSinceLastCollection = 0;
   thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = NULL;
-  thread->lastAllocatedChunk = NULL;
+  thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
@@ -159,7 +159,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->bytesAllocatedSinceLastCollection = totalSize;
   thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = hh;
-  thread->lastAllocatedChunk = chunk;
+  thread->currentChunk = chunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
 
   HM_HH_updateValues(thread, frontier + totalSize);

@@ -3,13 +3,14 @@ STATUS
 =============================================================================
 
 Next todo:
-  - move hh->lastAllocatedChunk to thread->lastAllocatedChunk
-  - rename to currentChunk?
+  - ??
 
 Done:
   - thread->level, instead of hh->...
   - renamed thread->level to thread->currentDepth
   - thread->{bytesAllocated..., bytesSurvived...}, instead of hh->...
+  - move hh->lastAllocatedChunk to thread->lastAllocatedChunk
+  - renamed lastAllocatedChunk to currentChunk
 
 =============================================================================
 GOAL

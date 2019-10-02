@@ -65,9 +65,9 @@ pointer sequenceAllocateInHH(GC_state s,
     /* split the large chunk so that we have space for the sequence at the end;
      * this guarantees that the single chunk holding the sequence is not a
      * level-head which makes it easy to move it during a GC */
-    assert(thread->lastAllocatedChunk->frontier == s->frontier);
-    assert(thread->lastAllocatedChunk->limit == s->limitPlusSlop);
-    HM_chunk sequenceChunk = HM_splitChunk(thread->lastAllocatedChunk, sequenceChunkBytes);
+    assert(thread->currentChunk->frontier == s->frontier);
+    assert(thread->currentChunk->limit == s->limitPlusSlop);
+    HM_chunk sequenceChunk = HM_splitChunk(thread->currentChunk, sequenceChunkBytes);
     assert(sequenceChunk != NULL);
     pointer result = sequenceChunk->frontier;
     sequenceChunk->frontier += sequenceSizeAligned;
@@ -84,8 +84,8 @@ pointer sequenceAllocateInHH(GC_state s,
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
-  assert(HM_getChunkOf(result) == thread->lastAllocatedChunk);
-  if (!inFirstBlockOfChunk(thread->lastAllocatedChunk, s->frontier)) {
+  assert(HM_getChunkOf(result) == thread->currentChunk);
+  if (!inFirstBlockOfChunk(thread->currentChunk, s->frontier)) {
     /* force a new chunk to be created so that no new objects lie after this
      * sequence, which crossed a block boundary. */
     HM_HH_updateValues(thread, s->frontier);
@@ -95,7 +95,7 @@ pointer sequenceAllocateInHH(GC_state s,
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
-  assert(inFirstBlockOfChunk(thread->lastAllocatedChunk, s->frontier));
+  assert(inFirstBlockOfChunk(thread->currentChunk, s->frontier));
   assert((size_t)(s->limitPlusSlop - s->frontier) >= ensureBytesFree);
 
   return result;

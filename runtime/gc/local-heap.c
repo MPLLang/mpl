@@ -100,7 +100,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     //   s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
     // }
 
-    if (NULL == thread->lastAllocatedChunk) {
+    if (NULL == thread->currentChunk) {
       /* collected everything! */
       s->frontier = NULL;
       s->limitPlusSlop = NULL;
@@ -110,8 +110,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       /* SAM_NOTE: I don't use HM_HH_getFrontier/Limit here, because these have
        * assertions for the chunk frontier invariant, which might be violated
        * here. */
-      s->frontier = HM_getChunkFrontier(thread->lastAllocatedChunk);
-      s->limitPlusSlop = HM_getChunkLimit(thread->lastAllocatedChunk);
+      s->frontier = HM_getChunkFrontier(thread->currentChunk);
+      s->limitPlusSlop = HM_getChunkLimit(thread->currentChunk);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
 
@@ -123,9 +123,9 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (growStack) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
-    if (NULL == thread->lastAllocatedChunk ||
-        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->lastAllocatedChunk)) != thread->currentDepth) ||
-        HM_getChunkFrontier(thread->lastAllocatedChunk) >= (pointer)thread->lastAllocatedChunk + HM_BLOCK_SIZE ||
+    if (NULL == thread->currentChunk ||
+        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+        HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
         (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
     {
       if (!HM_HH_extend(thread, stackBytes)) {
@@ -143,16 +143,16 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
      * the saved frontier in the hh is synced. */
     /* SAM_NOTE: TODO: caching the frontier in so many different places is a
      * major headache. We need a refactor. */
-    assert(HM_getChunkOf(s->frontier) == thread->lastAllocatedChunk);
+    assert(HM_getChunkOf(s->frontier) == thread->currentChunk);
     HM_HH_updateValues(thread, s->frontier);
     setGCStateCurrentThreadAndStack(s);
   }
 
   /* Determine if we need to extend to accommodate bytesRequested (and possibly
    * ensureCurrentLevel */
-  if (NULL == thread->lastAllocatedChunk ||
-      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->lastAllocatedChunk)) != thread->currentDepth) ||
-      HM_getChunkFrontier(thread->lastAllocatedChunk) >= (pointer)thread->lastAllocatedChunk + HM_BLOCK_SIZE ||
+  if (NULL == thread->currentChunk ||
+      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {
     if (!HM_HH_extend(thread, bytesRequested)) {

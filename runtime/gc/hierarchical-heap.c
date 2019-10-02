@@ -113,7 +113,7 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
 }
 
 void HM_HH_ensureNotEmpty(GC_thread thread) {
-  if (NULL != thread->lastAllocatedChunk) return;
+  if (NULL != thread->currentChunk) return;
 
 #if ASSERT
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
@@ -145,7 +145,7 @@ bool HM_HH_extend(GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
-  thread->lastAllocatedChunk = chunk;
+  thread->currentChunk = chunk;
   HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
 
   return TRUE;
@@ -156,16 +156,16 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
 }
 
 pointer HM_HH_getFrontier(GC_thread thread) {
-  assert(blockOf(HM_getChunkFrontier(thread->lastAllocatedChunk)) == (pointer)thread->lastAllocatedChunk);
-  return HM_getChunkFrontier(thread->lastAllocatedChunk);
+  assert(blockOf(HM_getChunkFrontier(thread->currentChunk)) == (pointer)thread->currentChunk);
+  return HM_getChunkFrontier(thread->currentChunk);
 }
 
 pointer HM_HH_getLimit(GC_thread thread) {
-  return HM_getChunkLimit(thread->lastAllocatedChunk);
+  return HM_getChunkLimit(thread->currentChunk);
 }
 
 void HM_HH_updateValues(GC_thread thread, pointer frontier) {
-  HM_updateChunkValues(thread->lastAllocatedChunk, frontier);
+  HM_updateChunkValues(thread->currentChunk, frontier);
 }
 
 size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentLevel) {
@@ -250,12 +250,12 @@ void assertInvariants(__attribute__((unused)) GC_state s,
 {
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
-  if (NULL != thread->lastAllocatedChunk) {
-    HM_chunkList levelHead = HM_getLevelHead(thread->lastAllocatedChunk);
+  if (NULL != thread->currentChunk) {
+    HM_chunkList levelHead = HM_getLevelHead(thread->currentChunk);
     assert(levelHead->containingHH == hh);
     bool foundChunk = FALSE;
     for (HM_chunk chunk = levelHead->firstChunk; chunk != NULL; chunk = chunk->nextChunk) {
-      if (chunk == thread->lastAllocatedChunk) {
+      if (chunk == thread->currentChunk) {
         foundChunk = TRUE;
         break;
       }

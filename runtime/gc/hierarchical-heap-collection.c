@@ -380,7 +380,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     }
   }
 
-  /* update lastAllocatedChunk and associated */
+  /* update currentChunk and associated */
   HM_chunk lastChunk = NULL;
   FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, thread->currentDepth+1, {
     if (HM_getChunkListLastChunk(level) != NULL) {
@@ -388,7 +388,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       break;
     }
   });
-  thread->lastAllocatedChunk = lastChunk;
+  thread->currentChunk = lastChunk;
 
   if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
     if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
@@ -697,7 +697,7 @@ void forwardHHObjptr (GC_state s,
       /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
        * previous last chunk, resulting in unnecessary fragmentation. This can
        * be avoided by not relying upon using the tgtChunkList...lastChunk to
-       * allocate the next object, similiar to how lastAllocatedChunk
+       * allocate the next object, similiar to how currentChunk
        * doesn't need to be at the end of its chunk list. */
       /* SAM_NOTE: it is crucial that this is append and not prepend, because
        * traversing the to-space executes left-to-right. */
