@@ -433,6 +433,8 @@ structure ObjectType =
                      Bits.toBytes (Control.Target.Size.csize ())
                   val bytesHierarchicalHeap =
                      Bits.toBytes (Control.Target.Size.cpointer ())
+                  val bytesLastAllocatedChunk =
+                     Bits.toBytes (Control.Target.Size.cpointer ())
                   val bytesStack =
                      Bits.toBytes (Type.width (Type.stack ()))
 
@@ -449,6 +451,7 @@ structure ObjectType =
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
+                        bytesLastAllocatedChunk +
                         bytesStack
                      end
 
@@ -468,6 +471,7 @@ structure ObjectType =
                                                Type.word32,
                                                Type.csize (),
                                                Type.csize (),
+                                               Type.cpointer (),
                                                Type.cpointer (),
                                                Type.stack ()])}
          end

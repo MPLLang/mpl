@@ -85,12 +85,6 @@ void HM_HH_promoteChunks(GC_state s, GC_thread thread)
   assertInvariants(s, thread);
 }
 
-void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
-  fprintf (stream,
-           "\tlastAllocatedChunk = %p\n",
-           (void*)hh->lastAllocatedChunk);
-}
-
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
 
   /* SAM_NOTE: TODO: switch to arena allocation if this is a bottleneck? */
@@ -114,17 +108,15 @@ struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
   for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
     HM_HH_LEVEL(hh, i) = NULL;
   }
-  hh->lastAllocatedChunk = NULL;
 
   return hh;
 }
 
 void HM_HH_ensureNotEmpty(GC_thread thread) {
-  struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
-
-  if (NULL != hh->lastAllocatedChunk) return;
+  if (NULL != thread->lastAllocatedChunk) return;
 
 #if ASSERT
+  struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
   FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(level->firstChunk == NULL);
   });
@@ -153,7 +145,7 @@ bool HM_HH_extend(GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
-  hh->lastAllocatedChunk = chunk;
+  thread->lastAllocatedChunk = chunk;
   HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
 
   return TRUE;
@@ -163,18 +155,17 @@ struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;
 }
 
-pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh) {
-  assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
-  return HM_getChunkFrontier(hh->lastAllocatedChunk);
+pointer HM_HH_getFrontier(GC_thread thread) {
+  assert(blockOf(HM_getChunkFrontier(thread->lastAllocatedChunk)) == (pointer)thread->lastAllocatedChunk);
+  return HM_getChunkFrontier(thread->lastAllocatedChunk);
 }
 
-pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh) {
-  return HM_getChunkLimit(hh->lastAllocatedChunk);
+pointer HM_HH_getLimit(GC_thread thread) {
+  return HM_getChunkLimit(thread->lastAllocatedChunk);
 }
 
-void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
-                        pointer frontier) {
-  HM_updateChunkValues(hh->lastAllocatedChunk, frontier);
+void HM_HH_updateValues(GC_thread thread, pointer frontier) {
+  HM_updateChunkValues(thread->lastAllocatedChunk, frontier);
 }
 
 size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentLevel) {
@@ -259,12 +250,12 @@ void assertInvariants(__attribute__((unused)) GC_state s,
 {
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
-  if (NULL != hh->lastAllocatedChunk) {
-    HM_chunkList levelHead = HM_getLevelHead(hh->lastAllocatedChunk);
+  if (NULL != thread->lastAllocatedChunk) {
+    HM_chunkList levelHead = HM_getLevelHead(thread->lastAllocatedChunk);
     assert(levelHead->containingHH == hh);
     bool foundChunk = FALSE;
     for (HM_chunk chunk = levelHead->firstChunk; chunk != NULL; chunk = chunk->nextChunk) {
-      if (chunk == hh->lastAllocatedChunk) {
+      if (chunk == thread->lastAllocatedChunk) {
         foundChunk = TRUE;
         break;
       }

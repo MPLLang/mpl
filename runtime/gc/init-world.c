@@ -38,10 +38,8 @@ void initVectors(GC_state s, GC_thread thread) {
   frontier = s->frontier;
   limit = s->limitPlusSlop;
 
-  struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
-
   currentChunk = HM_getChunkOf(frontier);
-  assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, 0)));
+  assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, 0)));
   assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
@@ -63,20 +61,21 @@ void initVectors(GC_state s, GC_thread thread) {
     /* Extend with a new chunk, if there is not enough free space or if we have
      * crossed a block boundary. */
     if ((size_t)(limit - frontier) < objectSize ||
-        !inFirstBlockOfChunk(currentChunk, frontier)) {
-      HM_HH_updateValues(hh, frontier);
+        !inFirstBlockOfChunk(currentChunk, frontier))
+    {
+      HM_HH_updateValues(thread, frontier);
       if (!HM_HH_extend(thread, objectSize)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      s->frontier = HM_HH_getFrontier(hh);
-      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->frontier = HM_HH_getFrontier(thread);
+      s->limitPlusSlop = HM_HH_getLimit(thread);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
       frontier = s->frontier;
       limit = s->limitPlusSlop;
 
       currentChunk = HM_getChunkOf(frontier);
-      assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, 0)));
+      assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, 0)));
     }
 
     assert(isFrontierAligned(s, frontier));
@@ -120,20 +119,21 @@ void initVectors(GC_state s, GC_thread thread) {
 
   /* If the last allocation passed a block boundary, we need to extend to have
    * a valid frontier. Extending with GC_HEAP_LIMIT_SLOP is arbitrary. */
-  if (!inFirstBlockOfChunk(currentChunk, frontier)) {
-    HM_HH_updateValues(hh, frontier);
+  if (!inFirstBlockOfChunk(currentChunk, frontier))
+  {
+    HM_HH_updateValues(thread, frontier);
     if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    s->frontier = HM_HH_getFrontier(hh);
-    s->limitPlusSlop = HM_HH_getLimit(hh);
+    s->frontier = HM_HH_getFrontier(thread);
+    s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
     frontier = s->frontier;
     limit = s->limitPlusSlop;
 
     currentChunk = HM_getChunkOf(frontier);
-    assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, 0)));
+    assert(currentChunk == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, 0)));
   }
 
   assert(isFrontierAligned(s, s->frontier));
@@ -142,15 +142,14 @@ void initVectors(GC_state s, GC_thread thread) {
 
 GC_thread initThreadAndHeap(GC_state s, uint32_t level) {
   GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), level);
-  struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 
-  s->frontier = HM_HH_getFrontier(hh);
-  s->limitPlusSlop = HM_HH_getLimit(hh);
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
-  assert(current == HM_getChunkListLastChunk(HM_HH_LEVEL(hh, level)));
+  assert(current == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, level)));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));

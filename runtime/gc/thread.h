@@ -48,7 +48,10 @@ typedef struct GC_thread {
   size_t bytesSurvivedLastCollection;
 
   struct HM_HierarchicalHeap* hierarchicalHeap;
-  // HM_chunk lastAllocatedChunk;
+
+  /* The "current" chunk of the heap.
+   * TODO: rename. This chunk is not necessarily the last allocated. */
+  HM_chunk lastAllocatedChunk;
 
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
@@ -62,6 +65,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
+                    sizeof(void*) +   // lastAllocatedChunk
                     sizeof(objptr));  // stack
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
