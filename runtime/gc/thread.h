@@ -48,6 +48,8 @@ typedef struct GC_thread {
   size_t bytesSurvivedLastCollection;
 
   struct HM_HierarchicalHeap* hierarchicalHeap;
+  // HM_chunk lastAllocatedChunk;
+
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
 

@@ -139,15 +139,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
-  int processor = Proc_processorNumber (s);
-
-  HM_debugMessage(s,
-                  "[%d] HM_HH_collectLocal(): Starting Local collection on "
-                  "HierarchicalHeap = %p\n",
-                  processor,
-                  ((void*)(hh)));
-  HM_debugDisplayHierarchicalHeap(s, hh);
-
   assertInvariants(s, thread);
 
   /* copy roots */
@@ -415,12 +406,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    */
 
   assertInvariants(s, thread);
-
-  HM_debugMessage(s,
-                  "[%d] HM_HH_collectLocal(): Finished Local collection on "
-                  "HierarchicalHeap = %p\n",
-                  processor,
-                  ((void*)(hh)));
 
   s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
 

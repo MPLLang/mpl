@@ -15,8 +15,6 @@
 
 #include "local-heap.h"
 
-#include "heap-utils.h"
-
 /************************/
 /* Function Definitions */
 /************************/

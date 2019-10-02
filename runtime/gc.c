@@ -56,7 +56,6 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/gc_state.c"
 #include "gc/handler.c"
 #include "gc/heap.c"
-#include "gc/heap-utils.c"
 #include "gc/hierarchical-heap.c"
 #include "gc/hierarchical-heap-collection.c"
 #include "gc/init-world.c"
