@@ -16,10 +16,12 @@ stdenv.mkDerivation rec {
 
   buildInputs = [ gcc gmp gnumake binutils bash mlton ];
 
+  enableParallelBuilding = true;
+  
   buildPhase = ''
     find . -type f | grep -v -e '\.tgz''$' | xargs sed -i "s@/usr/bin/env bash@$(type -p bash)@"
     make dirs
-    make runtime -j
+    make runtime -j $NIX_BUILD_CORES
     make
   '';
 
