@@ -106,23 +106,23 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
-  uint32_t minLevel = originalLocalScope;
+  uint32_t minDepth = originalLocalScope;
   // claim as many levels as we can, but only as far as desired
-  while (minLevel > desiredScope &&
-         minLevel > s->controls->hhConfig.minLocalLevel &&
+  while (minDepth > desiredScope &&
+         minDepth > s->controls->hhConfig.minLocalDepth &&
          tryClaimLocalScope(s)) {
-    minLevel--;
+    minDepth--;
   }
 
-  if (minLevel == 0) {
+  if (minDepth == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
     goto unlock_local_scope_and_return;
   }
 
-  if (minLevel > thread->currentDepth) {
+  if (minDepth > thread->currentDepth) {
     LOG(LM_HH_COLLECTION, LL_INFO,
-        "Skipping collection because minLevel > current depth (%u > %u)",
-        minLevel,
+        "Skipping collection because minDepth > current depth (%u > %u)",
+        minDepth,
         thread->currentDepth);
     goto unlock_local_scope_and_return;
   }
@@ -144,9 +144,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
-    .minLevel = minLevel,
-    .maxLevel = thread->currentDepth,
-    .toLevel = HM_HH_INVALID_LEVEL,
+    .minDepth = minDepth,
+    .maxDepth = thread->currentDepth,
+    .toDepth = HM_HH_INVALID_DEPTH,
     .toSpace = NULL,
     .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
@@ -155,7 +155,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   };
 
   if (SUPERLOCAL == s->controls->hhCollectionLevel) {
-    forwardHHObjptrArgs.minLevel = thread->currentDepth;
+    forwardHHObjptrArgs.minDepth = thread->currentDepth;
   }
 
   size_t sizesBefore[HM_MAX_NUM_LEVELS];
@@ -196,8 +196,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       thread->currentDepth,
       potentialLocalScope,
       thread->currentDepth,
-      forwardHHObjptrArgs.minLevel,
-      forwardHHObjptrArgs.maxLevel);
+      forwardHHObjptrArgs.minDepth,
+      forwardHHObjptrArgs.maxDepth);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
@@ -206,7 +206,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     toSpace[i] = NULL;
   }
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
-  forwardHHObjptrArgs.toLevel = HM_HH_INVALID_LEVEL;
+  forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
   // if (!s->controls->deferredPromotion) {
   //   HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
@@ -305,7 +305,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   /* off-by-one to prevent underflow */
   uint32_t depth = thread->currentDepth+1;
-  while (depth > forwardHHObjptrArgs.minLevel) {
+  while (depth > forwardHHObjptrArgs.minDepth) {
     depth--;
     HM_chunkList toSpaceLevel = toSpace[depth];
     if (NULL != toSpaceLevel && NULL != toSpaceLevel->firstChunk) {
@@ -334,7 +334,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->currentDepth+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minDepth, thread->currentDepth+1, {
     HM_chunk chunk = level->firstChunk;
     while (chunk != NULL) {
       pointer start = HM_getChunkStart(chunk);
@@ -356,7 +356,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 #endif
 
   /* Free old chunks */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minLevel, thread->currentDepth+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minDepth, thread->currentDepth+1, {
     HM_chunkList remset = level->rememberedSet;
     if (NULL != remset) {
       level->size -= remset->size;
@@ -544,17 +544,17 @@ objptr relocateObject(
 
 void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  uint32_t srcLevel = HM_getObjptrDepth(src);
+  uint32_t srcDepth = HM_getObjptrDepth(src);
 
-  assert(args->minLevel <= srcLevel);
-  assert(srcLevel <= args->maxLevel);
-  assert(args->toLevel == HM_HH_INVALID_LEVEL);
+  assert(args->minDepth <= srcDepth);
+  assert(srcDepth <= args->maxDepth);
+  assert(args->toDepth == HM_HH_INVALID_DEPTH);
 
   forwardHHObjptr(s, &src, rawArgs);
-  assert(NULL != args->toSpace[srcLevel]);
+  assert(NULL != args->toSpace[srcDepth]);
 
   *field = src;
-  HM_rememberAtLevel(args->toSpace[srcLevel], dst, field, src);
+  HM_rememberAtLevel(args->toSpace[srcDepth], dst, field, src);
 }
 
 /* ========================================================================= */
@@ -565,7 +565,7 @@ void forwardHHObjptr (GC_state s,
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, NULL);
-  bool inPromotion = (args->toLevel != HM_HH_INVALID_LEVEL);
+  bool inPromotion = (args->toDepth != HM_HH_INVALID_DEPTH);
 
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -595,45 +595,45 @@ void forwardHHObjptr (GC_state s,
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
 
-  if (opInfo.depth > args->maxLevel) {
+  if (opInfo.depth > args->maxDepth) {
     DIE("entanglement detected during %s: %p is at depth %u, below %u",
         inPromotion ? "promotion" : "collection",
         (void *)p,
         opInfo.depth,
-        args->maxLevel);
+        args->maxDepth);
   }
 
   /* RAM_NOTE: This is more nuanced with non-local collection */
-  if ((opInfo.depth > args->maxLevel) ||
-      /* cannot forward any object below 'args->minLevel' */
-      (opInfo.depth < args->minLevel)) {
+  if ((opInfo.depth > args->maxDepth) ||
+      /* cannot forward any object below 'args->minDepth' */
+      (opInfo.depth < args->minDepth)) {
       LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR
-          ": depth %d not in [minLevel %d, maxLevel %d].",
+          ": depth %d not in [minDepth %d, maxDepth %d].",
           (uintptr_t)opp,
           op,
           (uintptr_t)p,
           opInfo.depth,
-          args->minLevel,
-          args->maxLevel);
+          args->minDepth,
+          args->maxDepth);
       return;
   }
 
-  assert(HM_getObjptrDepth(op) >= args->minLevel);
+  assert(HM_getObjptrDepth(op) >= args->minDepth);
 
   while (hasFwdPtr(p)) {
     op = getFwdPtr(p);
     p = objptrToPointer(op, NULL);
   }
 
-  if (HM_getObjptrDepth(op) < args->minLevel) {
+  if (HM_getObjptrDepth(op) < args->minDepth) {
     *opp = op;
     assert(!HM_isObjptrInToSpace(s, op));
   } else if (HM_isObjptrInToSpace(s, op)) {
     *opp = op;
   } else {
     assert(!HM_isObjptrInToSpace(s, op));
-    assert(HM_getObjptrDepth(op) >= args->minLevel);
+    assert(HM_getObjptrDepth(op) >= args->minDepth);
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;

@@ -20,7 +20,7 @@ typedef struct HM_chunkList * HM_chunkList;
  * be in hierarchical-heap-collection.{c,h}? */
 struct ForwardHHObjptrArgs;
 
-#define CHUNK_INVALID_LEVEL (~((uint32_t)(0)))
+#define CHUNK_INVALID_DEPTH (~((uint32_t)(0)))
 
 #define CHUNK_MAGIC 0xcafeface
 

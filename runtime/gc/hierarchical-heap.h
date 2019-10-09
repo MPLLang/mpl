@@ -44,7 +44,7 @@ struct HM_HierarchicalHeap {
     }                                                               \
   } while (0)
 
-#define HM_HH_INVALID_LEVEL CHUNK_INVALID_LEVEL
+#define HM_HH_INVALID_DEPTH CHUNK_INVALID_DEPTH
 
 #else
 

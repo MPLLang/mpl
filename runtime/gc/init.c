@@ -321,7 +321,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (minDepth <= 0) {
             die ("@MLton hh-min-collection-depth must be > 0");
           }
-          s->controls->hhConfig.minLocalLevel = minDepth;
+          s->controls->hhConfig.minLocalDepth = minDepth;
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -391,7 +391,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;
-  s->controls->hhConfig.minLocalLevel = 2;
+  s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;
@@ -500,8 +500,8 @@ void GC_lateInit (GC_state s) {
 
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
-  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
+  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   /* Initialize profiling.  This must occur after processing
@@ -531,9 +531,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
-  d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  d->extraSmallObjects = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
+  d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
+  d->extraSmallObjects = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

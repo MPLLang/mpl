@@ -89,7 +89,7 @@ void HM_configChunks(GC_state s) {
   if (list == NULL) {
     DIE("Out of memory. Unable to allocate new chunk list.");
   }
-  HM_initChunkList(list, NULL, CHUNK_INVALID_LEVEL);
+  HM_initChunkList(list, NULL, CHUNK_INVALID_DEPTH);
   s->extraSmallObjects = list;
 
   HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
