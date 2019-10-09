@@ -80,7 +80,7 @@ typedef struct GC_thread *GC_thread;
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
 PRIVATE Word32 GC_HH_getDepth(pointer thread);
-PRIVATE void GC_HH_setDepth(pointer thread, Word32 level);
+PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
 PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 #endif /* MLTON_GC_INTERNAL_BASIS */

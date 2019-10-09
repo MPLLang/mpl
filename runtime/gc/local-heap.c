@@ -124,7 +124,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
     if (NULL == thread->currentChunk ||
-        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+        (ensureCurrentLevel && HM_getChunkListDepth(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
         HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
         (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
     {
@@ -151,7 +151,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   /* Determine if we need to extend to accommodate bytesRequested (and possibly
    * ensureCurrentLevel */
   if (NULL == thread->currentChunk ||
-      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+      (ensureCurrentLevel && HM_getChunkListDepth(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
       HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {

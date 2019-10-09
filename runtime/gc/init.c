@@ -311,17 +311,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
-        } else if (0 == strcmp(arg, "hh-min-collection-level")) {
+        } else if (0 == strcmp(arg, "hh-min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-min-collection-level missing argument.");
+            die ("@MLton hh-min-collection-depth missing argument.");
           }
 
-          int minLevel = stringToInt(argv[i++]);
-          if (minLevel <= 0) {
-            die ("@MLton hh-min-collection-level must be > 0");
+          int minDepth = stringToInt(argv[i++]);
+          if (minDepth <= 0) {
+            die ("@MLton hh-min-collection-depth must be > 0");
           }
-          s->controls->hhConfig.minLocalLevel = minLevel;
+          s->controls->hhConfig.minLocalLevel = minDepth;
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {

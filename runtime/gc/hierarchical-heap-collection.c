@@ -121,7 +121,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   if (minLevel > thread->currentDepth) {
     LOG(LM_HH_COLLECTION, LL_INFO,
-        "Skipping collection because minLevel > current level (%u > %u)",
+        "Skipping collection because minLevel > current depth (%u > %u)",
         minLevel,
         thread->currentDepth);
     goto unlock_local_scope_and_return;
@@ -544,7 +544,7 @@ objptr relocateObject(
 
 void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  uint32_t srcLevel = HM_getObjptrLevel(src);
+  uint32_t srcLevel = HM_getObjptrDepth(src);
 
   assert(args->minLevel <= srcLevel);
   assert(srcLevel <= args->maxLevel);
@@ -595,45 +595,45 @@ void forwardHHObjptr (GC_state s,
   struct HM_ObjptrInfo opInfo;
   HM_getObjptrInfo(s, op, &opInfo);
 
-  if (opInfo.level > args->maxLevel) {
-    DIE("entanglement detected during %s: %p is at level %u, below %u",
+  if (opInfo.depth > args->maxLevel) {
+    DIE("entanglement detected during %s: %p is at depth %u, below %u",
         inPromotion ? "promotion" : "collection",
         (void *)p,
-        opInfo.level,
+        opInfo.depth,
         args->maxLevel);
   }
 
   /* RAM_NOTE: This is more nuanced with non-local collection */
-  if ((opInfo.level > args->maxLevel) ||
+  if ((opInfo.depth > args->maxLevel) ||
       /* cannot forward any object below 'args->minLevel' */
-      (opInfo.level < args->minLevel)) {
+      (opInfo.depth < args->minLevel)) {
       LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR
-          ": level %d not in [minLevel %d, maxLevel %d].",
+          ": depth %d not in [minLevel %d, maxLevel %d].",
           (uintptr_t)opp,
           op,
           (uintptr_t)p,
-          opInfo.level,
+          opInfo.depth,
           args->minLevel,
           args->maxLevel);
       return;
   }
 
-  assert(HM_getObjptrLevel(op) >= args->minLevel);
+  assert(HM_getObjptrDepth(op) >= args->minLevel);
 
   while (hasFwdPtr(p)) {
     op = getFwdPtr(p);
     p = objptrToPointer(op, NULL);
   }
 
-  if (HM_getObjptrLevel(op) < args->minLevel) {
+  if (HM_getObjptrDepth(op) < args->minLevel) {
     *opp = op;
     assert(!HM_isObjptrInToSpace(s, op));
   } else if (HM_isObjptrInToSpace(s, op)) {
     *opp = op;
   } else {
     assert(!HM_isObjptrInToSpace(s, op));
-    assert(HM_getObjptrLevel(op) >= args->minLevel);
+    assert(HM_getObjptrDepth(op) >= args->minLevel);
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;
@@ -660,28 +660,28 @@ void forwardHHObjptr (GC_state s,
         break;
     }
 
-    HM_chunkList tgtChunkList = args->toSpace[opInfo.level];
+    HM_chunkList tgtChunkList = args->toSpace[opInfo.depth];
 
     assert(!inPromotion);
     if (tgtChunkList == NULL) {
       /* Level does not exist, so create it */
-      tgtChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.level);
+      tgtChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.depth);
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
       if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
       tgtChunkList->isInToSpace = TRUE;
-      args->toSpace[opInfo.level] = tgtChunkList;
+      args->toSpace[opInfo.depth] = tgtChunkList;
     }
 
     assert (!hasFwdPtr(p));
 
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
-        "during %s, copying pointer %p at level %u to level list %p",
+        "during %s, copying pointer %p at depth %u to chunk list %p",
         (inPromotion ? "promotion" : "collection"),
         (void *)p,
-        opInfo.level,
+        opInfo.depth,
         (void *)tgtChunkList);
 
     /* SAM_NOTE: TODO: get this spaghetti code out of here.

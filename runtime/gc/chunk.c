@@ -379,14 +379,14 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   HM_appendChunk(levelHead, chunk);
 
   LOG(LM_CHUNK, LL_DEBUG,
-      "Allocate chunk %p at level %u",
+      "Allocate chunk %p at depth %u",
       (void*)chunk,
-      levelHead->level);
+      levelHead->depth);
 
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level) {
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
 
   size_t bytesNeeded = sizeof(struct HM_chunkList);
@@ -399,11 +399,11 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level) {
   HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
   HM_chunkList list = (HM_chunkList)frontier;
 
-  HM_initChunkList(list, hh, level);
+  HM_initChunkList(list, hh, depth);
   return list;
 }
 
-void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t level) {
+void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
   list->representative = NULL;
@@ -411,7 +411,7 @@ void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_
   list->containingHH = hh;
   list->size = 0;
   list->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
-  list->level = level;
+  list->depth = depth;
 }
 
 void HM_unlinkChunk(HM_chunk chunk) {
@@ -515,9 +515,9 @@ pointer HM_getChunkStart(HM_chunk chunk) {
   return (pointer)chunk + sizeof(struct HM_chunk);
 }
 
-uint32_t HM_getChunkListLevel(HM_chunkList levelHead) {
+uint32_t HM_getChunkListDepth(HM_chunkList levelHead) {
   assert(HM_isLevelHead(levelHead));
-  return levelHead->level;
+  return levelHead->depth;
 }
 
 HM_chunk HM_getChunkListLastChunk(HM_chunkList levelHead) {
@@ -588,7 +588,7 @@ void HM_getObjptrInfo(__attribute__((unused)) GC_state s,
   assert(HM_isLevelHead(chunkList));
   info->hh = chunkList->containingHH;
   info->chunkList = chunkList;
-  info->level = chunkList->level;
+  info->depth = chunkList->depth;
 }
 
 void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
@@ -662,20 +662,20 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
                                   bool inToSpace) {
-  uint32_t previousLevel = ~((uint32_t)(0));
+  uint32_t previousDepth = ~((uint32_t)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
 
-    uint32_t level = chunkList->level;
-    assert(level == i);
+    uint32_t depth = chunkList->depth;
+    assert(depth == i);
 
     struct HM_HierarchicalHeap* levelListHH = chunkList->containingHH;
     assert(levelListHH == hh);
 
     assert(chunkList->isInToSpace == inToSpace);
 
-    assert(level < previousLevel);
-    previousLevel = level;
+    assert(depth < previousDepth);
+    previousDepth = depth;
 
     HM_assertChunkListInvariants(chunkList, levelListHH);
   });
@@ -761,8 +761,8 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
   return objInfo.hh;
 }
 
-uint32_t HM_getObjptrLevel(objptr op) {
-  return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
+uint32_t HM_getObjptrDepth(objptr op) {
+  return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
 }
 
 bool HM_isObjptrInToSpace(__attribute__((unused)) GC_state s,

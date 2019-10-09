@@ -53,7 +53,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* This creates a down pointer; must be remembered. */
-  if (dstList->level < srcList->level) {
+  if (dstList->depth < srcList->depth) {
     if (dst != s->wsQueue) {
       // assert(getHierarchicalHeapCurrent(s) != NULL);
       struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
@@ -62,15 +62,15 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
           "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
           dst, src);
       } else {
-        uint32_t level = srcList->level;
-        if (NULL == HM_HH_LEVEL(hh, level)) {
-          HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
+        uint32_t d = srcList->depth;
+        if (NULL == HM_HH_LEVEL(hh, d)) {
+          HM_HH_LEVEL(hh, d) = HM_newChunkList(hh, d);
         }
 
         /* SAM_NOTE: TODO: track bytes allocated here in
          * thread->bytesAllocatedSinceLast...? */
 
-        HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
+        HM_rememberAtLevel(HM_HH_LEVEL(hh, d), dst, field, src);
       }
     }
   }

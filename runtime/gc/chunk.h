@@ -63,7 +63,7 @@ struct HM_chunk {
 
 struct HM_chunkList {
   HM_chunkList representative;
-  uint32_t level;
+  uint32_t depth;
   HM_chunkList rememberedSet;
 
   HM_chunk firstChunk;
@@ -80,7 +80,7 @@ COMPILE_TIME_ASSERT(HM_chunk__aligned,
 struct HM_ObjptrInfo {
   struct HM_HierarchicalHeap* hh;
   HM_chunkList chunkList;
-  uint32_t level;
+  uint32_t depth;
 };
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -146,8 +146,8 @@ HM_chunk HM_initializeChunk(pointer start, pointer end);
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
-void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t level);
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level);
+void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth);
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth);
 
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
@@ -231,14 +231,7 @@ size_t HM_getChunkSize(HM_chunk chunk);
  */
 pointer HM_getChunkStart(HM_chunk chunk);
 
-/**
- * Returns the level of a chunk list
- *
- * @param chunkList The chunk list to operate on
- *
- * @return The level of the chunkList
- */
-uint32_t HM_getChunkListLevel(HM_chunkList chunk);
+uint32_t HM_getChunkListDepth(HM_chunkList chunk);
 
 /**
  * This function gets the last chunk in a list
@@ -302,7 +295,7 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
  */
 // rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
-uint32_t HM_getObjptrLevel(objptr op);
+uint32_t HM_getObjptrDepth(objptr op);
 
 /**
  * Check whether the given objptr is in to-space

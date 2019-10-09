@@ -140,8 +140,8 @@ void initVectors(GC_state s, GC_thread thread) {
   assert(inFirstBlockOfChunk(currentChunk, s->frontier));
 }
 
-GC_thread initThreadAndHeap(GC_state s, uint32_t level) {
-  GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), level);
+GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
+  GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), depth);
 
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
@@ -149,7 +149,7 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t level) {
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
-  assert(current == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, level)));
+  assert(current == HM_getChunkListLastChunk(HM_HH_LEVEL(thread->hierarchicalHeap, depth)));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));

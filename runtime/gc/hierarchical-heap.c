@@ -75,9 +75,7 @@ void HM_HH_promoteChunks(GC_state s, GC_thread thread)
       HM_appendChunkList(parentLevel, level);
     } else {
       HM_HH_LEVEL(hh, thread->currentDepth-1) = level;
-      /* SAM_NOTE: this naming convention is bad. Should rename the integer to
-       * `depth`, and leave `level` to refer to the actual list itself */
-      level->level = thread->currentDepth-1;
+      level->depth = thread->currentDepth-1;
     }
     HM_HH_LEVEL(hh, thread->currentDepth) = NULL;
   }
@@ -168,9 +166,9 @@ void HM_HH_updateValues(GC_thread thread, pointer frontier) {
   HM_updateChunkValues(thread->currentChunk, frontier);
 }
 
-size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentLevel) {
+size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentDepth) {
   size_t sz = 0;
-  FOR_LEVEL_IN_RANGE(level, i, hh, 0, currentLevel+1, {
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, currentDepth+1, {
     sz += HM_getChunkListSize(level);
   });
   return sz;
@@ -190,10 +188,10 @@ size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes) {
   return thread->bytesAllocatedSinceLastCollection;
 }
 
-size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level) {
-  HM_chunkList lev = HM_HH_LEVEL(hh, level);
-  if (NULL == lev) return 0;
-  return HM_getChunkListSize(lev);
+size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t depth) {
+  HM_chunkList level = HM_HH_LEVEL(hh, depth);
+  if (NULL == level) return 0;
+  return HM_getChunkListSize(level);
 }
 
 uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)

@@ -19,7 +19,7 @@ bool isPointerInRootHeap(__attribute__((unused)) GC_state s,
 {
   HM_chunkList list = HM_getLevelHead(HM_getChunkOf(p));
   assert(list != NULL);
-  bool result = (0 == HM_getChunkListLevel(list));
+  bool result = (0 == HM_getChunkListDepth(list));
   return result;
 }
 

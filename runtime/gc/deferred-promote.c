@@ -106,8 +106,8 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     return;
   }
 
-  uint32_t dstLevel = HM_getObjptrLevel(dst);
-  uint32_t srcLevel = HM_getObjptrLevel(src);
+  uint32_t dstLevel = HM_getObjptrDepth(dst);
+  uint32_t srcLevel = HM_getObjptrDepth(src);
 
   assert(dstLevel <= srcLevel);
 
@@ -130,14 +130,14 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
                     void* rawArgs)
 {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(args->toLevel == HM_getObjptrLevel(dst));
+  assert(args->toLevel == HM_getObjptrDepth(dst));
 
   pointer srcp = objptrToPointer(src, NULL);
 
   /* It's possible that a previous promotion has already relocated the src object. */
   if (hasFwdPtr(srcp)) {
     assert(!hasFwdPtr(objptrToPointer(getFwdPtr(srcp), NULL)));
-    assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
+    assert(HM_getObjptrDepth(getFwdPtr(srcp)) <= args->toLevel);
     *field = getFwdPtr(srcp);
     return;
   }
@@ -146,7 +146,7 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
    * for large objects housed in single-object chunks, the chunk is logically
    * (but not physically) moved. It's incorrect to relocate the object again,
    * because this could create an unrecorded downptr. */
-  if (HM_getObjptrLevel(src) <= args->toLevel) {
+  if (HM_getObjptrDepth(src) <= args->toLevel) {
     /* src was logically moved in a previous promotion */
     return;
   }
@@ -160,13 +160,13 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
 
   assert(HM_HH_LEVEL(args->hh, args->toLevel) != NULL);
   *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel), args);
-  assert(HM_getObjptrLevel(*field) == args->toLevel);
+  assert(HM_getObjptrDepth(*field) == args->toLevel);
 }
 
 /* SAM_NOTE: TODO: DRY: very similar to promoteDownPtr */
 void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(args->toLevel == HM_getObjptrLevel(args->containingObject));
+  assert(args->toLevel == HM_getObjptrDepth(args->containingObject));
 
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
@@ -180,12 +180,12 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
    * already relocated the src object */
   if (hasFwdPtr(srcp)) {
     assert(!hasFwdPtr(objptrToPointer(getFwdPtr(srcp), NULL)));
-    //assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
+    //assert(HM_getObjptrDepth(getFwdPtr(srcp)) <= args->toLevel);
     *field = getFwdPtr(srcp);
     return;
   }
 
-  uint32_t srcLevel = HM_getObjptrLevel(src);
+  uint32_t srcLevel = HM_getObjptrDepth(src);
   assert(srcLevel <= args->maxLevel);
 
   if (srcLevel <= args->toLevel) {
@@ -202,5 +202,5 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
   }
 
   *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel), args);
-  assert(HM_getObjptrLevel(*field) == args->toLevel);
+  assert(HM_getObjptrDepth(*field) == args->toLevel);
 }

@@ -3,7 +3,12 @@ STATUS
 =============================================================================
 
 Next todo:
-  - ??
+  - Intermediate goal, remove pre-allocated levels for hierarchical heap.
+    1. rename HM_chunkList->parent to representative
+    2. hijack HM_chunkList objects as heap objects
+        - reuse representative pointers
+        - give HM_chunkList a nextNonEmptyAncestor pointer
+          (ancestor in the heap hierarchy!)
 
 Done:
   - thread->level, instead of hh->...

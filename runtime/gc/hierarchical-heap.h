@@ -60,7 +60,7 @@ void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
 void HM_HH_ensureNotEmpty(GC_thread thread);
 
-static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level);
+static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t depth);
 
 bool HM_HH_extend(GC_thread thread, size_t bytesRequested);
 
@@ -69,7 +69,7 @@ pointer HM_HH_getFrontier(GC_thread thread);
 pointer HM_HH_getLimit(GC_thread thread);
 void HM_HH_updateValues(GC_thread thread, pointer frontier);
 
-size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t level);
+size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentDepth);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
 size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 
