@@ -406,7 +406,7 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level) {
 void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t level) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
-  list->parent = NULL;
+  list->representative = NULL;
   list->rememberedSet = NULL;
   list->containingHH = hh;
   list->size = 0;
@@ -548,8 +548,8 @@ HM_chunkList HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
   HM_chunkList cursor = chunk->levelHead;
-  while (cursor->parent != NULL) {
-    cursor = cursor->parent;
+  while (cursor->representative != NULL) {
+    cursor = cursor->representative;
   }
   return cursor;
 }
@@ -568,9 +568,9 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
 
   /* SAM_NOTE: TODO: free levelheads with reference counting */
   while (cursor != levelHead) {
-    HM_chunkList parent = cursor->parent;
-    cursor->parent = levelHead;
-    cursor = parent;
+    HM_chunkList representative = cursor->representative;
+    cursor->representative = levelHead;
+    cursor = representative;
   }
 
   return levelHead;
@@ -621,7 +621,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   }
 
   list1->size += list2->size;
-  list2->parent = list1;
+  list2->representative = list1;
 
   if (list1->rememberedSet == NULL) {
     list1->rememberedSet = list2->rememberedSet;
@@ -704,8 +704,8 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 HM_chunkList getLevelHead(HM_chunk chunk) {
   HM_chunkList cursor = chunk->levelHead;
   assert(NULL != cursor);
-  while (cursor->parent != NULL) {
-    cursor = cursor->parent;
+  while (cursor->representative != NULL) {
+    cursor = cursor->representative;
     assert(NULL != cursor);
   }
 

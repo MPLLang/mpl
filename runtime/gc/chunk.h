@@ -54,7 +54,6 @@ struct HM_chunk {
   HM_chunk nextAdjacent;
   HM_chunk prevAdjacent;
 
-
   bool mightContainMultipleObjects;
 
   // for padding and sanity checks
@@ -63,7 +62,7 @@ struct HM_chunk {
 } __attribute__((aligned(8)));
 
 struct HM_chunkList {
-  HM_chunkList parent;
+  HM_chunkList representative;
   uint32_t level;
   HM_chunkList rememberedSet;
 
@@ -131,7 +130,7 @@ static inline bool HM_isUnlinked(HM_chunk chunk) {
 }
 
 static inline bool HM_isLevelHead(HM_chunkList list) {
-  return list->parent == NULL;
+  return list->representative == NULL;
 }
 
 // DECLARATIONS ==============================================================
