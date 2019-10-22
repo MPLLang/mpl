@@ -57,8 +57,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   beginAtomic(s);
 
   assert(threadAndHeapOkay(s));
-  struct HM_HierarchicalHeap *hh = oldCurrentThread->hierarchicalHeap;
-  HM_HH_updateValues(hh, s->frontier);
+  HM_HH_updateValues(oldCurrentThread, s->frontier);
   s->frontier = 0;
   s->limitPlusSlop = 0;
   s->limit = 0;
@@ -75,9 +74,8 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
   assert(threadAndHeapOkay(s));
-  hh = getThreadCurrent(s)->hierarchicalHeap;
-  s->frontier = HM_HH_getFrontier(hh);
-  s->limitPlusSlop = HM_HH_getLimit(hh);
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   HM_ensureHierarchicalHeapAssurances(s, FALSE, getThreadCurrent(s)->bytesNeeded, FALSE);
 

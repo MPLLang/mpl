@@ -31,9 +31,9 @@ struct HM_HierarchicalHeapConfig {
 
   size_t maxLCHS; /**< maximum LCHS, in bytes. */
 
-  /* the shallowest level that will be claimed for a local
+  /* the shallowest depth that will be claimed for a local
    * collection. */
-  uint32_t minLocalLevel;
+  uint32_t minLocalDepth;
 };
 
 enum HHCollectionLevel {

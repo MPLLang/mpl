@@ -20,7 +20,7 @@ typedef struct HM_chunkList * HM_chunkList;
  * be in hierarchical-heap-collection.{c,h}? */
 struct ForwardHHObjptrArgs;
 
-#define CHUNK_INVALID_LEVEL (~((uint32_t)(0)))
+#define CHUNK_INVALID_DEPTH (~((uint32_t)(0)))
 
 #define CHUNK_MAGIC 0xcafeface
 
@@ -54,7 +54,6 @@ struct HM_chunk {
   HM_chunk nextAdjacent;
   HM_chunk prevAdjacent;
 
-
   bool mightContainMultipleObjects;
 
   // for padding and sanity checks
@@ -63,8 +62,8 @@ struct HM_chunk {
 } __attribute__((aligned(8)));
 
 struct HM_chunkList {
-  HM_chunkList parent;
-  uint32_t level;
+  HM_chunkList representative;
+  uint32_t depth;
   HM_chunkList rememberedSet;
 
   HM_chunk firstChunk;
@@ -73,7 +72,7 @@ struct HM_chunkList {
   struct HM_HierarchicalHeap * containingHH;
   size_t size; // size (bytes) of this level, both allocated and unallocated
   bool isInToSpace;
-};
+} __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
                     (sizeof(struct HM_chunk) % 8) == 0);
@@ -81,7 +80,7 @@ COMPILE_TIME_ASSERT(HM_chunk__aligned,
 struct HM_ObjptrInfo {
   struct HM_HierarchicalHeap* hh;
   HM_chunkList chunkList;
-  uint32_t level;
+  uint32_t depth;
 };
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
@@ -131,7 +130,7 @@ static inline bool HM_isUnlinked(HM_chunk chunk) {
 }
 
 static inline bool HM_isLevelHead(HM_chunkList list) {
-  return list->parent == NULL;
+  return list->representative == NULL;
 }
 
 // DECLARATIONS ==============================================================
@@ -139,13 +138,16 @@ static inline bool HM_isLevelHead(HM_chunkList list) {
 // Sets the block size and alloc size; called once at program startup.
 void HM_configChunks(GC_state s);
 
+HM_chunk HM_initializeChunk(pointer start, pointer end);
+
 /* Allocate and return a pointer to a new chunk in the list of the given
  * levelHead, with the requirement that
  *   chunk->limit - chunk->frontier <= bytesRequested
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level);
+void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth);
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth);
 
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
@@ -229,14 +231,7 @@ size_t HM_getChunkSize(HM_chunk chunk);
  */
 pointer HM_getChunkStart(HM_chunk chunk);
 
-/**
- * Returns the level of a chunk list
- *
- * @param chunkList The chunk list to operate on
- *
- * @return The level of the chunkList
- */
-uint32_t HM_getChunkListLevel(HM_chunkList chunk);
+uint32_t HM_getChunkListDepth(HM_chunkList chunk);
 
 /**
  * This function gets the last chunk in a list
@@ -300,7 +295,7 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
  */
 // rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
-uint32_t HM_getObjptrLevel(objptr op);
+uint32_t HM_getObjptrDepth(objptr op);
 
 /**
  * Check whether the given objptr is in to-space

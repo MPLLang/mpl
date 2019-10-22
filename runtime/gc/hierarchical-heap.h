@@ -20,17 +20,6 @@ struct levelData {
 
 struct HM_HierarchicalHeap {
   struct levelData levels[HM_MAX_NUM_LEVELS];
-
-  /* The "current" chunk of the heap.
-   * TODO: rename. This chunk is not necessarily the last allocated. */
-  HM_chunk lastAllocatedChunk;
-
-  /* Current level (fork depth) of the thread allocating in this heap.
-   * Fresh chunks are placed at this level. */
-  uint32_t level;
-
-  size_t bytesAllocatedSinceLastCollection;
-  size_t bytesSurvivedLastCollection;
 };
 
 // l/r-value for ith level
@@ -55,7 +44,7 @@ struct HM_HierarchicalHeap {
     }                                                               \
   } while (0)
 
-#define HM_HH_INVALID_LEVEL CHUNK_INVALID_LEVEL
+#define HM_HH_INVALID_DEPTH CHUNK_INVALID_DEPTH
 
 #else
 
@@ -67,40 +56,24 @@ struct HM_HierarchicalHeap;
 
 struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
 
-void HM_HH_merge(GC_state s, struct HM_HierarchicalHeap* parent, struct HM_HierarchicalHeap* child);
-void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh);
-void HM_HH_setLevel(GC_state s, struct HM_HierarchicalHeap* hh, uint32_t level);
-void HM_HH_display(struct HM_HierarchicalHeap* hh, FILE* stream);
-void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh);
+void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
+void HM_HH_promoteChunks(GC_state s, GC_thread thread);
+void HM_HH_ensureNotEmpty(GC_thread thread);
 
-static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t level);
+static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t depth);
 
-/**
- * This function extends the hierarchical heap with at least bytesRequested free
- * space.
- *
- * @attention
- * On successful completion, the frontier in hh->lastAllocatedChunk is updated
- * to the frontier of the extension and HM_getHierarchicalHeapLimit(hh) will
- * return the limit of the extension.
- *
- * @param hh The hierarchical heap to extend
- * @param bytesRequested The minimum size of the extension
- *
- * @return TRUE if extension succeeded, FALSE otherwise
- */
-bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested);
+bool HM_HH_extend(GC_thread thread, size_t bytesRequested);
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
-pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh);
-pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh);
-void HM_HH_updateValues(struct HM_HierarchicalHeap* hh, pointer frontier);
+pointer HM_HH_getFrontier(GC_thread thread);
+pointer HM_HH_getLimit(GC_thread thread);
+void HM_HH_updateValues(GC_thread thread, pointer frontier);
 
-size_t HM_HH_size(struct HM_HierarchicalHeap* hh);
+size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentDepth);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
-size_t HM_HH_addRecentBytesAllocated(struct HM_HierarchicalHeap* hh, size_t bytes);
+size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 
-uint32_t HM_HH_desiredCollectionScope(GC_state s, struct HM_HierarchicalHeap* hh);
+uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

@@ -33,13 +33,13 @@ pointer newObject(GC_state s,
   if (!inFirstBlockOfChunk(HM_getChunkOf(frontier), s->frontier)) {
     /* force a new chunk to be created so that no new objects lie after this
      * array, which crossed a block boundary. */
-    struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
-    assert(HM_getChunkOf(frontier) == hh->lastAllocatedChunk);
-    HM_HH_updateValues(hh, s->frontier);
+    GC_thread thread = getThreadCurrent(s);
+    assert(HM_getChunkOf(frontier) == thread->currentChunk);
+    HM_HH_updateValues(thread, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
-    HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
-    s->frontier = HM_HH_getFrontier(hh);
-    s->limitPlusSlop = HM_HH_getLimit(hh);
+    HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP);
+    s->frontier = HM_HH_getFrontier(thread);
+    s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
@@ -104,8 +104,12 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->currentDepth = HM_HH_INVALID_DEPTH;
+  thread->bytesAllocatedSinceLastCollection = 0;
+  thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = NULL;
+  thread->currentChunk = NULL;
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -117,19 +121,27 @@ GC_thread newThread(GC_state s, size_t reserved) {
   return thread;
 }
 
-GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
+GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
 
+  /* Allocate and initialize the heap that will be assigned to this thread.
+   * Some of these lines are copied from HM_HH_extend, but cannot just use it
+   * directly because the corresponding thread doesn't exist yet. */
   struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  hh->level = level;
-  HM_HH_extend(hh, totalSize);
+  HM_HH_LEVEL(hh, depth) = HM_newChunkList(hh, depth);
+  HM_chunk chunk = HM_allocateChunk(HM_HH_LEVEL(hh, depth), totalSize);
+  if (NULL == chunk) {
+    DIE("Ran out of space for hierarchical heap!");
+  }
 
-  pointer frontier = HM_HH_getFrontier(hh);
+  /* Next, allocate+init the thread within the heap that we just created. */
 
-  assert((size_t)(HM_HH_getLimit(hh) - frontier) >= totalSize);
-  assert(inFirstBlockOfChunk(HM_getChunkOf(frontier), frontier+totalSize));
+  pointer frontier = HM_getChunkFrontier(chunk);
+
+  assert((size_t)(HM_getChunkLimit(chunk) - frontier) >= totalSize);
+  assert(inFirstBlockOfChunk(chunk, frontier+totalSize));
 
   *((GC_header*)(frontier)) = GC_THREAD_HEADER;
   GC_thread thread = (GC_thread)(frontier + GC_HEADER_SIZE + offsetofThread(s));
@@ -143,10 +155,14 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t level) {
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
-  thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->currentDepth = depth;
+  thread->bytesAllocatedSinceLastCollection = totalSize;
+  thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = hh;
+  thread->currentChunk = chunk;
+  thread->stack = pointerToObjptr((pointer)stack, NULL);
 
-  HM_HH_updateValues(hh, frontier + totalSize);
+  HM_HH_updateValues(thread, frontier + totalSize);
 
   return thread;
 }

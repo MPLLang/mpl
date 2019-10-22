@@ -1,4 +1,4 @@
-/* Copyright (C) 2018 Sam Westrick
+/* Copyright (C) 2018-2019 Sam Westrick
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -11,10 +11,6 @@ void HM_remember(HM_chunkList remset, HM_chunkList levelHead, objptr dst, objptr
     if (levelHead != NULL) {
       assert(levelHead->rememberedSet == remset);
       levelHead->size += HM_getChunkSize(chunk);
-      if (levelHead->containingHH != COPY_OBJECT_HH_VALUE &&
-          levelHead->containingHH != NULL) {
-        HM_HH_addRecentBytesAllocated(levelHead->containingHH, HM_getChunkSize(chunk));
-      }
     }
   }
 
@@ -32,7 +28,7 @@ void HM_rememberAtLevel(HM_chunkList levelHead, objptr dst, objptr* field, objpt
 
   HM_chunkList rememberedSet = levelHead->rememberedSet;
   if (NULL == rememberedSet) {
-    rememberedSet = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+    rememberedSet = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
     levelHead->rememberedSet = rememberedSet;
   }
 

@@ -60,12 +60,40 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList,
 size_t HM_BLOCK_SIZE;
 size_t HM_ALLOC_SIZE;
 
+HM_chunk mmapNewChunk(size_t chunkWidth);
+HM_chunk mmapNewChunk(size_t chunkWidth) {
+  assert(isAligned(chunkWidth, HM_BLOCK_SIZE));
+  size_t bs = HM_BLOCK_SIZE;
+  pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
+  if (MAP_FAILED == start) {
+    return NULL;
+  }
+  start = (pointer)(uintptr_t)align((uintptr_t)start, bs);
+  HM_chunk result = HM_initializeChunk(start, start + chunkWidth);
+
+  LOG(LM_CHUNK, LL_INFO,
+    "Mapped a new region of size %zu",
+    chunkWidth + bs);
+
+  return result;
+}
+
 void HM_configChunks(GC_state s) {
   assert(isAligned(s->controls->minChunkSize, GC_MODEL_MINALIGN));
   assert(s->controls->minChunkSize >= GC_HEAP_LIMIT_SLOP);
   assert(isAligned(s->controls->allocChunkSize, s->controls->minChunkSize));
   HM_BLOCK_SIZE = s->controls->minChunkSize;
   HM_ALLOC_SIZE = s->controls->allocChunkSize;
+
+  HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
+  if (list == NULL) {
+    DIE("Out of memory. Unable to allocate new chunk list.");
+  }
+  HM_initChunkList(list, NULL, CHUNK_INVALID_DEPTH);
+  s->extraSmallObjects = list;
+
+  HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
+  HM_appendChunk(list, firstChunk);
 }
 
 void HM_prependChunk(HM_chunkList levelHead, HM_chunk chunk) {
@@ -104,7 +132,6 @@ void HM_appendChunk(HM_chunkList levelHead, HM_chunk chunk) {
 /* Set up and return a pointer to a new chunk between start and end. Note that
  * the returned pointer is equal to start, and thus each of
  * {start, end, end - start} must be aligned on the block size. */
-HM_chunk HM_initializeChunk(pointer start, pointer end);
 HM_chunk HM_initializeChunk(pointer start, pointer end) {
   assert(start != NULL);
   assert(end != NULL);
@@ -243,24 +270,6 @@ HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested) {
   return splitChunkAt(chunk, splitPoint);
 }
 
-HM_chunk mmapNewChunk(size_t chunkWidth);
-HM_chunk mmapNewChunk(size_t chunkWidth) {
-  assert(isAligned(chunkWidth, HM_BLOCK_SIZE));
-  size_t bs = HM_BLOCK_SIZE;
-  pointer start = (pointer)GC_mmapAnon(NULL, chunkWidth + bs);
-  if (MAP_FAILED == start) {
-    return NULL;
-  }
-  start = (pointer)(uintptr_t)align((uintptr_t)start, bs);
-  HM_chunk result = HM_initializeChunk(start, start + chunkWidth);
-
-  LOG(LM_CHUNK, LL_INFO,
-    "Mapped a new region of size %zu",
-    chunkWidth + bs);
-
-  return result;
-}
-
 static inline bool chunkHasBytesFree(HM_chunk chunk, size_t bytes) {
   return chunk != NULL && (size_t)(chunk->limit - HM_getChunkStart(chunk)) >= bytes;
 }
@@ -370,33 +379,39 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   HM_appendChunk(levelHead, chunk);
 
   LOG(LM_CHUNK, LL_DEBUG,
-      "Allocate chunk %p at level %u",
+      "Allocate chunk %p at depth %u",
       (void*)chunk,
-      levelHead->level);
+      levelHead->depth);
 
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t level) {
+HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth) {
+  GC_state s = pthread_getspecific(gcstate_key);
 
-  // SAM_NOTE: replace with custom arena allocation if a performance bottleneck
-  HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
-
-  if (list == NULL) {
-    DIE("Out of memory. Unable to allocate new chunk list.");
-    return NULL;
+  size_t bytesNeeded = sizeof(struct HM_chunkList);
+  HM_chunk sourceChunk = HM_getChunkListLastChunk(s->extraSmallObjects);
+  if (NULL == sourceChunk ||
+      (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
+    sourceChunk = HM_allocateChunk(s->extraSmallObjects, bytesNeeded);
   }
+  pointer frontier = HM_getChunkFrontier(sourceChunk);
+  HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
+  HM_chunkList list = (HM_chunkList)frontier;
 
+  HM_initChunkList(list, hh, depth);
+  return list;
+}
+
+void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
-  list->parent = NULL;
+  list->representative = NULL;
   list->rememberedSet = NULL;
   list->containingHH = hh;
   list->size = 0;
   list->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
-  list->level = level;
-
-  return list;
+  list->depth = depth;
 }
 
 void HM_unlinkChunk(HM_chunk chunk) {
@@ -500,9 +515,9 @@ pointer HM_getChunkStart(HM_chunk chunk) {
   return (pointer)chunk + sizeof(struct HM_chunk);
 }
 
-uint32_t HM_getChunkListLevel(HM_chunkList levelHead) {
+uint32_t HM_getChunkListDepth(HM_chunkList levelHead) {
   assert(HM_isLevelHead(levelHead));
-  return levelHead->level;
+  return levelHead->depth;
 }
 
 HM_chunk HM_getChunkListLastChunk(HM_chunkList levelHead) {
@@ -533,8 +548,8 @@ HM_chunkList HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
   HM_chunkList cursor = chunk->levelHead;
-  while (cursor->parent != NULL) {
-    cursor = cursor->parent;
+  while (cursor->representative != NULL) {
+    cursor = cursor->representative;
   }
   return cursor;
 }
@@ -553,9 +568,9 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
 
   /* SAM_NOTE: TODO: free levelheads with reference counting */
   while (cursor != levelHead) {
-    HM_chunkList parent = cursor->parent;
-    cursor->parent = levelHead;
-    cursor = parent;
+    HM_chunkList representative = cursor->representative;
+    cursor->representative = levelHead;
+    cursor = representative;
   }
 
   return levelHead;
@@ -573,7 +588,7 @@ void HM_getObjptrInfo(__attribute__((unused)) GC_state s,
   assert(HM_isLevelHead(chunkList));
   info->hh = chunkList->containingHH;
   info->chunkList = chunkList;
-  info->level = chunkList->level;
+  info->depth = chunkList->depth;
 }
 
 void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
@@ -606,7 +621,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   }
 
   list1->size += list2->size;
-  list2->parent = list1;
+  list2->representative = list1;
 
   if (list1->rememberedSet == NULL) {
     list1->rememberedSet = list2->rememberedSet;
@@ -647,20 +662,20 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
                                   bool inToSpace) {
-  uint32_t previousLevel = ~((uint32_t)(0));
+  uint32_t previousDepth = ~((uint32_t)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
 
-    uint32_t level = chunkList->level;
-    assert(level == i);
+    uint32_t depth = chunkList->depth;
+    assert(depth == i);
 
     struct HM_HierarchicalHeap* levelListHH = chunkList->containingHH;
     assert(levelListHH == hh);
 
     assert(chunkList->isInToSpace == inToSpace);
 
-    assert(level < previousLevel);
-    previousLevel = level;
+    assert(depth < previousDepth);
+    previousDepth = depth;
 
     HM_assertChunkListInvariants(chunkList, levelListHH);
   });
@@ -689,8 +704,8 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 HM_chunkList getLevelHead(HM_chunk chunk) {
   HM_chunkList cursor = chunk->levelHead;
   assert(NULL != cursor);
-  while (cursor->parent != NULL) {
-    cursor = cursor->parent;
+  while (cursor->representative != NULL) {
+    cursor = cursor->representative;
     assert(NULL != cursor);
   }
 
@@ -746,8 +761,8 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
   return objInfo.hh;
 }
 
-uint32_t HM_getObjptrLevel(objptr op) {
-  return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->level;
+uint32_t HM_getObjptrDepth(objptr op) {
+  return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
 }
 
 bool HM_isObjptrInToSpace(__attribute__((unused)) GC_state s,
