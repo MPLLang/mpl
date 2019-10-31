@@ -487,12 +487,7 @@ bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
   assert(depth < HM_MAX_NUM_LEVELS);
   assert(NULL != levelHead);
 
-  bool result = (args->toSpace[depth] == levelHead);
-
-  /* this is the old method, so let's check that this approach agrees */
-  assert( (!result) || levelHead->containingHH == COPY_OBJECT_HH_VALUE );
-
-  return result;
+  return (args->toSpace[depth] == levelHead);
 }
 
 /* ========================================================================= */
@@ -682,7 +677,7 @@ void forwardHHObjptr (GC_state s,
     assert(!inPromotion);
     if (tgtChunkList == NULL) {
       /* Level does not exist, so create it */
-      tgtChunkList = HM_newChunkList(COPY_OBJECT_HH_VALUE, opInfo.depth);
+      tgtChunkList = HM_newChunkList(NULL, opInfo.depth);
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
       if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
@@ -747,14 +742,6 @@ void forwardHHObjptr (GC_state s,
 
     /* use the forwarding pointer */
     *opp = getFwdPtr(p);
-
-#if ASSERT
-    /* args->hh->newLevelList has containingHH set to COPY_OBJECT_HH_VALUE
-     * during a copy-collection. */
-    HM_getObjptrInfo(s, *opp, &opInfo);
-    /* TODO have a more precise assert that also handles the promotion case. */
-    assert (inPromotion || COPY_OBJECT_HH_VALUE == opInfo.hh);
-#endif
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUGMORE,

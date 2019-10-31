@@ -40,15 +40,6 @@ struct ForwardHHObjptrArgs {
 
 #define MAX_NUM_HOLES 512
 
-/**********/
-/* Macros */
-/**********/
-#if ASSERT
-#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(0xb000deadfee1dead))
-#else
-#define COPY_OBJECT_HH_VALUE (NULL)
-#endif
-
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
