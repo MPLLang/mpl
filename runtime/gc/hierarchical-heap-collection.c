@@ -577,7 +577,8 @@ void forwardHHObjptr (GC_state s,
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
   objptr op = *opp;
   pointer p = objptrToPointer (op, NULL);
-  bool inPromotion = (args->toDepth != HM_HH_INVALID_DEPTH);
+
+  assert(args->toDepth == HM_HH_INVALID_DEPTH);
 
   if (DEBUG_DETAILED) {
     fprintf (stderr,
@@ -608,8 +609,7 @@ void forwardHHObjptr (GC_state s,
   HM_getObjptrInfo(s, op, &opInfo);
 
   if (opInfo.depth > args->maxDepth) {
-    DIE("entanglement detected during %s: %p is at depth %u, below %u",
-        inPromotion ? "promotion" : "collection",
+    DIE("entanglement detected during collection: %p is at depth %u, below %u",
         (void *)p,
         opInfo.depth,
         args->maxDepth);
@@ -674,7 +674,6 @@ void forwardHHObjptr (GC_state s,
 
     HM_chunkList tgtChunkList = args->toSpace[opInfo.depth];
 
-    assert(!inPromotion);
     if (tgtChunkList == NULL) {
       /* Level does not exist, so create it */
       tgtChunkList = HM_newChunkList(NULL, opInfo.depth);
@@ -689,8 +688,7 @@ void forwardHHObjptr (GC_state s,
     assert (!hasFwdPtr(p));
 
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
-        "during %s, copying pointer %p at depth %u to chunk list %p",
-        (inPromotion ? "promotion" : "collection"),
+        "during collection, copying pointer %p at depth %u to chunk list %p",
         (void *)p,
         opInfo.depth,
         (void *)tgtChunkList);
@@ -701,7 +699,6 @@ void forwardHHObjptr (GC_state s,
       // assert(FALSE);
       /* This chunk contains *only* this object, so no need to copy. Instead,
        * just move the chunk. */
-      assert(!inPromotion);
       assert(!hasFwdPtr(p));
       HM_chunk chunk = HM_getChunkOf(p);
       HM_unlinkChunk(chunk);
