@@ -410,7 +410,6 @@ void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_
   list->rememberedSet = NULL;
   list->containingHH = hh;
   list->size = 0;
-  list->isInToSpace = (hh == COPY_OBJECT_HH_VALUE);
   list->depth = depth;
 }
 
@@ -660,8 +659,8 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 //               (void*)chunk);
 // }
 
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  bool inToSpace) {
+void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh)
+{
   uint32_t previousDepth = ~((uint32_t)(0));
   FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
     assert(HM_isLevelHead(chunkList));
@@ -671,8 +670,6 @@ void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
 
     struct HM_HierarchicalHeap* levelListHH = chunkList->containingHH;
     assert(levelListHH == hh);
-
-    assert(chunkList->isInToSpace == inToSpace);
 
     assert(depth < previousDepth);
     previousDepth = depth;
@@ -686,10 +683,8 @@ void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
 //   ((void)(chunk));
 // }
 
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  bool inToSpace) {
+void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh) {
   ((void)(hh));
-  ((void)(inToSpace));
 }
 #endif /* ASSERT */
 
@@ -763,16 +758,5 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
 
 uint32_t HM_getObjptrDepth(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
-}
-
-bool HM_isObjptrInToSpace(__attribute__((unused)) GC_state s,
-                          objptr object)
-{
-  /* SAM_NOTE: why is this commented out? why are there two ways to check if
-   * an object is in the toSpace? Does promotion use one, while collection
-   * uses the other? */
-  /* return HM_getObjptrLevelHeadChunk(s, object)->split.levelHead.isInToSpace; */
-  HM_chunk c = HM_getChunkOf(objptrToPointer(object, NULL));
-  return HM_getLevelHeadPathCompress(c)->containingHH == COPY_OBJECT_HH_VALUE;
 }
 

@@ -265,7 +265,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
       assert(level->size == 0);
     });
   }
-  HM_assertLevelListInvariants(hh, false);
+  HM_assertLevelListInvariants(hh);
 
   /* Check that all chunk lists are levelHeads */
   for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {

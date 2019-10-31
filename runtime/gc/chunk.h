@@ -71,7 +71,6 @@ struct HM_chunkList {
 
   struct HM_HierarchicalHeap * containingHH;
   size_t size; // size (bytes) of this level, both allocated and unallocated
-  bool isInToSpace;
 } __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
@@ -257,8 +256,7 @@ size_t HM_getChunkListSize(HM_chunkList levelHead);
  */
 void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
 
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh,
-                                  bool inToSpace);
+void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Updates the chunk's values to reflect mutator
@@ -296,18 +294,6 @@ struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
 // rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
 
 uint32_t HM_getObjptrDepth(objptr op);
-
-/**
- * Check whether the given objptr is in to-space
- *
- * @attention
- * object <em>must</em> be within the allocated hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap for
- * @param retVal True if the objptr is in to-space, false otherwise
- */
-bool HM_isObjptrInToSpace(GC_state s, objptr object);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

@@ -70,6 +70,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force);
  */
 void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
 
+/* check if `op` is in args->toSpace[depth(op)] */
+bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args);
+
 objptr relocateObject(GC_state s, objptr obj, HM_chunkList tgtChunkList, struct ForwardHHObjptrArgs *args);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

@@ -373,7 +373,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       HM_HH_LEVEL(hh, i) = toSpace[i];
       if (NULL != toSpace[i]) {
         toSpace[i]->containingHH = hh;
-        toSpace[i]->isInToSpace = FALSE;
       }
     } else {
       HM_appendChunkList(HM_HH_LEVEL(hh, i), toSpace[i]);
@@ -476,6 +475,24 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 unlock_local_scope_and_return:
   releaseLocalScope(s, originalLocalScope);
   return;
+}
+
+/* ========================================================================= */
+
+bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
+{
+  HM_chunk c = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_chunkList levelHead = HM_getLevelHeadPathCompress(c);
+  uint32_t depth = HM_getChunkListDepth(levelHead);
+  assert(depth < HM_MAX_NUM_LEVELS);
+  assert(NULL != levelHead);
+
+  bool result = (args->toSpace[depth] == levelHead);
+
+  /* this is the old method, so let's check that this approach agrees */
+  assert( (!result) || levelHead->containingHH == COPY_OBJECT_HH_VALUE );
+
+  return result;
 }
 
 /* ========================================================================= */
@@ -628,11 +645,11 @@ void forwardHHObjptr (GC_state s,
 
   if (HM_getObjptrDepth(op) < args->minDepth) {
     *opp = op;
-    assert(!HM_isObjptrInToSpace(s, op));
-  } else if (HM_isObjptrInToSpace(s, op)) {
+    assert(!isObjptrInToSpace(op, args));
+  } else if (isObjptrInToSpace(op, args)) {
     *opp = op;
   } else {
-    assert(!HM_isObjptrInToSpace(s, op));
+    assert(!isObjptrInToSpace(op, args));
     assert(HM_getObjptrDepth(op) >= args->minDepth);
     /* forward the object */
     GC_objectTypeTag tag;
@@ -671,7 +688,6 @@ void forwardHHObjptr (GC_state s,
       if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      tgtChunkList->isInToSpace = TRUE;
       args->toSpace[opInfo.depth] = tgtChunkList;
     }
 
