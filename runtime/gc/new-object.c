@@ -130,7 +130,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
    * Some of these lines are copied from HM_HH_extend, but cannot just use it
    * directly because the corresponding thread doesn't exist yet. */
   struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  HM_HH_LEVEL(hh, depth) = HM_newChunkList(hh, depth);
+  HM_HH_LEVEL(hh, depth) = HM_newChunkList(depth);
   HM_chunk chunk = HM_allocateChunk(HM_HH_LEVEL(hh, depth), totalSize);
   if (NULL == chunk) {
     DIE("Ran out of space for hierarchical heap!");

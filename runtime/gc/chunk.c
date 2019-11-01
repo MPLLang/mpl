@@ -29,18 +29,7 @@ static void HM_assertChunkInvariants(HM_chunk chunk,
 static HM_chunkList getLevelHead(HM_chunk chunk);
 #endif
 
-/**
- * This function asserts the chunk list invariants
- *
- * @attention
- * If an assertion fails, this function aborts the program, as per the assert()
- * macro.
- *
- * @param chunkList The chunk list to assert invariants for.
- * @param hh The hierarchical heap the chunks in 'chunkList' belong to.
- */
-static void HM_assertChunkListInvariants(HM_chunkList chunkList,
-                                         const struct HM_HierarchicalHeap* hh);
+static void HM_assertChunkListInvariants(HM_chunkList chunkList);
 
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
@@ -89,7 +78,7 @@ void HM_configChunks(GC_state s) {
   if (list == NULL) {
     DIE("Out of memory. Unable to allocate new chunk list.");
   }
-  HM_initChunkList(list, NULL, CHUNK_INVALID_DEPTH);
+  HM_initChunkList(list, CHUNK_INVALID_DEPTH);
   s->extraSmallObjects = list;
 
   HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
@@ -211,10 +200,6 @@ HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
   result->nextAdjacent = chunk->nextAdjacent;
   result->prevAdjacent = chunk;
   chunk->nextAdjacent = result;
-
-// #if ASSERT
-//   HM_assertChunkListInvariants(levelHead, getHierarchicalHeapCurrent(s));
-// #endif
 
   assert(chunk->nextChunk == result);
   assert(chunk->nextAdjacent == result);
@@ -386,7 +371,7 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth) {
+HM_chunkList HM_newChunkList(uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
 
   size_t bytesNeeded = sizeof(struct HM_chunkList);
@@ -399,16 +384,15 @@ HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth) {
   HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
   HM_chunkList list = (HM_chunkList)frontier;
 
-  HM_initChunkList(list, hh, depth);
+  HM_initChunkList(list, depth);
   return list;
 }
 
-void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth) {
+void HM_initChunkList(HM_chunkList list, uint32_t depth) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
   list->representative = NULL;
   list->rememberedSet = NULL;
-  list->containingHH = hh;
   list->size = 0;
   list->depth = depth;
 }
@@ -439,7 +423,7 @@ void HM_unlinkChunk(HM_chunk chunk) {
   chunk->nextChunk = NULL;
 
 #if ASSERT
-  HM_assertChunkListInvariants(levelHead, levelHead->containingHH);
+  HM_assertChunkListInvariants(levelHead);
 #endif
 
   assert(HM_isUnlinked(chunk));
@@ -617,61 +601,10 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 #if ASSERT
   list2->rememberedSet = NULL;
   list2->lastChunk = NULL;
-  list2->containingHH = NULL;
 #endif
 
-  HM_assertChunkListInvariants(list1, list1->containingHH);
+  HM_assertChunkListInvariants(list1);
 }
-
-#if ASSERT
-// void HM_assertChunkInLevelList(HM_chunkList levelList, HM_chunk chunk) {
-//   for (HM_chunkList chunkList = levelList;
-//        NULL != chunkList;
-//        chunkList = chunkList->nextHead) {
-//     for (HM_chunk cursor = chunkList->firstChunk;
-//          NULL != cursor;
-//          cursor = cursor->nextChunk) {
-//       if (chunk == cursor) {
-//         /* found! */
-//         return;
-//       }
-//     }
-//   }
-
-//   /* If I get here, I couldn't find the chunk */
-//   ASSERTPRINT(FALSE,
-//               "Could not find chunk %p!",
-//               (void*)chunk);
-// }
-
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh)
-{
-  uint32_t previousDepth = ~((uint32_t)(0));
-  FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
-    assert(HM_isLevelHead(chunkList));
-
-    uint32_t depth = chunkList->depth;
-    assert(depth == i);
-
-    struct HM_HierarchicalHeap* levelListHH = chunkList->containingHH;
-    assert(levelListHH == hh);
-
-    assert(depth < previousDepth);
-    previousDepth = depth;
-
-    HM_assertChunkListInvariants(chunkList, levelListHH);
-  });
-}
-#else
-// void HM_assertChunkInLevelList(HM_chunkList levelList, HM_chunk chunk) {
-//   ((void)(levelList));
-//   ((void)(chunk));
-// }
-
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh) {
-  ((void)(hh));
-}
-#endif /* ASSERT */
 
 void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
   assert(chunk->frontier <= frontier && frontier <= chunk->limit);
@@ -701,8 +634,7 @@ void HM_assertChunkInvariants(HM_chunk chunk,
   assert(levelHead == getLevelHead(chunk));
 }
 
-void HM_assertChunkListInvariants(HM_chunkList chunkList,
-                                  const struct HM_HierarchicalHeap* hh) {
+void HM_assertChunkListInvariants(HM_chunkList chunkList) {
   assert(HM_isLevelHead(chunkList));
   size_t size = 0;
   HM_chunk chunk = chunkList->firstChunk;
@@ -718,20 +650,17 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList,
 
   if (chunkList->rememberedSet != NULL) {
     /* this call won't recurse again */
-    HM_assertChunkListInvariants(chunkList->rememberedSet, NULL);
+    HM_assertChunkListInvariants(chunkList->rememberedSet);
     assert(chunkList->size == size + chunkList->rememberedSet->size);
   } else {
     assert(chunkList->size == size);
   }
 
-  assert(chunkList->containingHH == hh);
   assert(chunkList->lastChunk == chunk);
 }
 #else
-void HM_assertChunkListInvariants(HM_chunkList chunkList,
-                                  const struct HM_HierarchicalHeap* hh) {
+void HM_assertChunkListInvariants(HM_chunkList chunkList) {
   ((void)(chunkList));
-  ((void)(hh));
 }
 #endif /* ASSERT */
 

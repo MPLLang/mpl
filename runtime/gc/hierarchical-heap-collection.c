@@ -371,9 +371,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   for (uint32_t i = 0; i <= thread->currentDepth; i++) {
     if (NULL == HM_HH_LEVEL(hh, i)) {
       HM_HH_LEVEL(hh, i) = toSpace[i];
-      if (NULL != toSpace[i]) {
-        toSpace[i]->containingHH = hh;
-      }
     } else {
       HM_appendChunkList(HM_HH_LEVEL(hh, i), toSpace[i]);
     }
@@ -677,7 +674,7 @@ void forwardHHObjptr (GC_state s,
 
     if (tgtChunkList == NULL) {
       /* Level does not exist, so create it */
-      tgtChunkList = HM_newChunkList(NULL, opDepth);
+      tgtChunkList = HM_newChunkList(opDepth);
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
       if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {

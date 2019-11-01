@@ -28,7 +28,7 @@ void HM_rememberAtLevel(HM_chunkList levelHead, objptr dst, objptr* field, objpt
 
   HM_chunkList rememberedSet = levelHead->rememberedSet;
   if (NULL == rememberedSet) {
-    rememberedSet = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
+    rememberedSet = HM_newChunkList(CHUNK_INVALID_DEPTH);
     levelHead->rememberedSet = rememberedSet;
   }
 

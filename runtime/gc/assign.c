@@ -64,7 +64,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
       } else {
         uint32_t d = srcList->depth;
         if (NULL == HM_HH_LEVEL(hh, d)) {
-          HM_HH_LEVEL(hh, d) = HM_newChunkList(hh, d);
+          HM_HH_LEVEL(hh, d) = HM_newChunkList(d);
         }
 
         /* SAM_NOTE: TODO: track bytes allocated here in

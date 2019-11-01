@@ -117,7 +117,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
   }
 
   if (downPtrs[dstDepth] == NULL) {
-    downPtrs[dstDepth] = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
+    downPtrs[dstDepth] = HM_newChunkList(CHUNK_INVALID_DEPTH);
   }
 
   HM_remember(downPtrs[dstDepth], NULL, dst, field, src);
@@ -152,7 +152,7 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   if (NULL == HM_HH_LEVEL(args->hh, args->toDepth)) {
-    HM_chunkList list = HM_newChunkList(args->hh, args->toDepth);
+    HM_chunkList list = HM_newChunkList(args->toDepth);
     /* just need to allocate a valid chunk; the size is arbitrary */
     HM_allocateChunk(list, GC_HEAP_LIMIT_SLOP);
     HM_HH_LEVEL(args->hh, args->toDepth) = list;

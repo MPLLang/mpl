@@ -18,9 +18,9 @@ struct levelData {
   HM_chunkList chunkList;
 };
 
-struct HM_HierarchicalHeap {
+typedef struct HM_HierarchicalHeap {
   struct levelData levels[HM_MAX_NUM_LEVELS];
-};
+} *HM_HierarchicalHeap;
 
 // l/r-value for ith level
 #define HM_HH_LEVEL(hh, i) ((hh)->levels[i].chunkList)
@@ -49,6 +49,7 @@ struct HM_HierarchicalHeap {
 #else
 
 struct HM_HierarchicalHeap;
+typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 

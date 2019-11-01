@@ -44,7 +44,6 @@ void HM_HH_merge(GC_state s, GC_thread parentThread, GC_thread childThread)
     HM_chunkList mirrorLevel = HM_HH_LEVEL(parentHH, i);
     if (mirrorLevel == NULL) {
       HM_HH_LEVEL(parentHH, i) = level;
-      level->containingHH = parentHH;
     } else {
       HM_appendChunkList(mirrorLevel, level);
     }
@@ -133,7 +132,7 @@ bool HM_HH_extend(GC_thread thread, size_t bytesRequested)
 
   HM_chunkList levelHead = HM_HH_LEVEL(hh, d);
   if (NULL == levelHead) {
-    levelHead = HM_newChunkList(hh, d);
+    levelHead = HM_newChunkList(d);
     HM_HH_LEVEL(hh, d) = levelHead;
   }
 
@@ -243,6 +242,24 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
 /*******************************/
 
 #if ASSERT
+
+static
+void assertLevelListInvariants(struct HM_HierarchicalHeap* hh)
+{
+  uint32_t previousDepth = ~((uint32_t)(0));
+  FOR_LEVEL_DECREASING_IN_RANGE(chunkList, i, hh, 0, HM_MAX_NUM_LEVELS, {
+    assert(HM_isLevelHead(chunkList));
+
+    uint32_t depth = chunkList->depth;
+    assert(depth == i);
+
+    assert(depth < previousDepth);
+    previousDepth = depth;
+
+    HM_assertChunkListInvariants(chunkList);
+  });
+}
+
 void assertInvariants(__attribute__((unused)) GC_state s,
                       GC_thread thread)
 {
@@ -250,7 +267,6 @@ void assertInvariants(__attribute__((unused)) GC_state s,
 
   if (NULL != thread->currentChunk) {
     HM_chunkList levelHead = HM_getLevelHead(thread->currentChunk);
-    assert(levelHead->containingHH == hh);
     bool foundChunk = FALSE;
     for (HM_chunk chunk = levelHead->firstChunk; chunk != NULL; chunk = chunk->nextChunk) {
       if (chunk == thread->currentChunk) {
@@ -265,7 +281,7 @@ void assertInvariants(__attribute__((unused)) GC_state s,
       assert(level->size == 0);
     });
   }
-  HM_assertLevelListInvariants(hh);
+  assertLevelListInvariants(hh);
 
   /* Check that all chunk lists are levelHeads */
   for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
@@ -282,9 +298,12 @@ void assertInvariants(__attribute__((unused)) GC_state s,
   });
   assert(0 == extraSize);
 }
+
 #else
+
 void assertInvariants(GC_state s, GC_thread thread) {
   ((void)(s));
   ((void)(thread));
 }
+
 #endif /* ASSERT */

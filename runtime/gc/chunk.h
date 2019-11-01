@@ -69,7 +69,6 @@ struct HM_chunkList {
   HM_chunk firstChunk;
   HM_chunk lastChunk;
 
-  struct HM_HierarchicalHeap * containingHH;
   size_t size; // size (bytes) of this level, both allocated and unallocated
 } __attribute__((aligned(8)));
 
@@ -139,8 +138,8 @@ HM_chunk HM_initializeChunk(pointer start, pointer end);
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList levelHeadChunk, size_t bytesRequested);
 
-void HM_initChunkList(HM_chunkList list, struct HM_HierarchicalHeap* hh, uint32_t depth);
-HM_chunkList HM_newChunkList(struct HM_HierarchicalHeap* hh, uint32_t depth);
+void HM_initChunkList(HM_chunkList list, uint32_t depth);
+HM_chunkList HM_newChunkList(uint32_t depth);
 
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
@@ -237,8 +236,6 @@ HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 size_t HM_getChunkListSize(HM_chunkList levelHead);
-
-void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh);
 
 /**
  * Updates the chunk's values to reflect mutator
