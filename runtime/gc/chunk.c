@@ -575,21 +575,6 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
-void HM_getObjptrInfo(__attribute__((unused)) GC_state s,
-                      objptr object,
-                      struct HM_ObjptrInfo* info)
-{
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(object, NULL));
-  assert(NULL != chunk);
-
-  HM_chunkList chunkList = HM_getLevelHeadPathCompress(chunk);
-
-  assert(HM_isLevelHead(chunkList));
-  info->hh = chunkList->containingHH;
-  info->chunkList = chunkList;
-  info->depth = chunkList->depth;
-}
-
 void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "Appending %p into %p",
@@ -750,13 +735,10 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList,
 }
 #endif /* ASSERT */
 
-struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object) {
-  struct HM_ObjptrInfo objInfo;
-  HM_getObjptrInfo(s, object, &objInfo);
-  return objInfo.hh;
-}
-
 uint32_t HM_getObjptrDepth(objptr op) {
   return HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
 }
 
+uint32_t HM_getObjptrDepthPathCompress(objptr op) {
+  return HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
+}

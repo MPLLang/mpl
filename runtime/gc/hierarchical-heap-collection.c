@@ -605,27 +605,26 @@ void forwardHHObjptr (GC_state s,
     return;
   }
 
-  struct HM_ObjptrInfo opInfo;
-  HM_getObjptrInfo(s, op, &opInfo);
+  uint32_t opDepth = HM_getObjptrDepthPathCompress(op);
 
-  if (opInfo.depth > args->maxDepth) {
+  if (opDepth > args->maxDepth) {
     DIE("entanglement detected during collection: %p is at depth %u, below %u",
         (void *)p,
-        opInfo.depth,
+        opDepth,
         args->maxDepth);
   }
 
   /* RAM_NOTE: This is more nuanced with non-local collection */
-  if ((opInfo.depth > args->maxDepth) ||
+  if ((opDepth > args->maxDepth) ||
       /* cannot forward any object below 'args->minDepth' */
-      (opInfo.depth < args->minDepth)) {
+      (opDepth < args->minDepth)) {
       LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
           "skipping opp = "FMTPTR"  op = "FMTOBJPTR"  p = "FMTPTR
           ": depth %d not in [minDepth %d, maxDepth %d].",
           (uintptr_t)opp,
           op,
           (uintptr_t)p,
-          opInfo.depth,
+          opDepth,
           args->minDepth,
           args->maxDepth);
       return;
@@ -672,17 +671,17 @@ void forwardHHObjptr (GC_state s,
         break;
     }
 
-    HM_chunkList tgtChunkList = args->toSpace[opInfo.depth];
+    HM_chunkList tgtChunkList = args->toSpace[opDepth];
 
     if (tgtChunkList == NULL) {
       /* Level does not exist, so create it */
-      tgtChunkList = HM_newChunkList(NULL, opInfo.depth);
+      tgtChunkList = HM_newChunkList(NULL, opDepth);
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
       if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      args->toSpace[opInfo.depth] = tgtChunkList;
+      args->toSpace[opDepth] = tgtChunkList;
     }
 
     assert (!hasFwdPtr(p));
@@ -690,7 +689,7 @@ void forwardHHObjptr (GC_state s,
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "during collection, copying pointer %p at depth %u to chunk list %p",
         (void *)p,
-        opInfo.depth,
+        opDepth,
         (void *)tgtChunkList);
 
     /* SAM_NOTE: TODO: get this spaghetti code out of here.

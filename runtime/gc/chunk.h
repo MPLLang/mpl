@@ -244,18 +244,6 @@ HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 size_t HM_getChunkListSize(HM_chunkList levelHead);
 
-/**
- * Gets the info for the given objptr
- *
- * @attention
- * object <em>must</em> be within the allocated hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap for
- * @param retVal Pointer to the struct to populate with 'object''s info.
- */
-void HM_getObjptrInfo(GC_state s, objptr object, struct HM_ObjptrInfo* info);
-
 void HM_assertLevelListInvariants(const struct HM_HierarchicalHeap* hh);
 
 /**
@@ -268,32 +256,8 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier);
 
 HM_chunkList HM_getChunkList(HM_chunk chunk);
 
-
-/**
- * Gets the HH for the given objptr
- *
- * @attention
- * object <em>must</em> be within the allocated hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap for
- * @param retVal Pointer to the HH of the object
- */
-struct HM_HierarchicalHeap *HM_getObjptrHH(GC_state s, objptr object);
-
-/**
- * Gets the HH lock for the given objptr
- *
- * @attention
- * object <em>must</em> be within the allocated hierarchical heap!
- *
- * @param s The GC_state to use
- * @param object The objptr to get the Hierarchical Heap lock for
- * @param retVal Pointer to the rwlock of this object's HH.
- */
-// rwlock_t *HM_getObjptrHHLock(GC_state s, objptr object);
-
 uint32_t HM_getObjptrDepth(objptr op);
+uint32_t HM_getObjptrDepthPathCompress(objptr op);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
