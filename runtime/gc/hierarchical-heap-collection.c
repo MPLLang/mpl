@@ -634,6 +634,7 @@ void forwardHHObjptr (GC_state s,
 
   while (hasFwdPtr(p)) {
     op = getFwdPtr(p);
+    opDepth = HM_getObjptrDepthPathCompress(op);
     p = objptrToPointer(op, NULL);
   }
 
@@ -645,6 +646,7 @@ void forwardHHObjptr (GC_state s,
   } else {
     assert(!isObjptrInToSpace(op, args));
     assert(HM_getObjptrDepth(op) >= args->minDepth);
+    assert(HM_getObjptrDepth(op) == opDepth);
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;
