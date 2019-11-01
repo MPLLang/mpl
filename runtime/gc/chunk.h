@@ -76,12 +76,6 @@ struct HM_chunkList {
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
                     (sizeof(struct HM_chunk) % 8) == 0);
 
-struct HM_ObjptrInfo {
-  struct HM_HierarchicalHeap* hh;
-  HM_chunkList chunkList;
-  uint32_t depth;
-};
-
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
