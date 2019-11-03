@@ -116,7 +116,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   if (minDepth == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    goto unlock_local_scope_and_return;
+    // goto unlock_local_scope_and_return;
+    releaseLocalScope(s, originalLocalScope);
+    return;
   }
 
   if (minDepth > thread->currentDepth) {
@@ -124,8 +126,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         "Skipping collection because minDepth > current depth (%u > %u)",
         minDepth,
         thread->currentDepth);
-    goto unlock_local_scope_and_return;
+    // goto unlock_local_scope_and_return;
+    releaseLocalScope(s, originalLocalScope);
+    return;
   }
+
+  uint32_t maxDepth = thread->currentDepth;
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START");
@@ -139,14 +145,19 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
-  assertInvariants(s, thread);
+  assertInvariants(thread);
+
+  if (SUPERLOCAL == s->controls->hhCollectionLevel) {
+    minDepth = maxDepth;
+  }
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
     .hh = hh,
     .minDepth = minDepth,
-    .maxDepth = thread->currentDepth,
+    .maxDepth = maxDepth,
     .toDepth = HM_HH_INVALID_DEPTH,
+    .fromSpace = NULL,
     .toSpace = NULL,
     .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
@@ -154,15 +165,18 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     .stacksCopied = 0
   };
 
-  if (SUPERLOCAL == s->controls->hhCollectionLevel) {
-    forwardHHObjptrArgs.minDepth = thread->currentDepth;
-  }
+  size_t sizesBefore[maxDepth+1];
+  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO))
+  {
+    for (uint32_t i = 0; i <= maxDepth; i++)
+      sizesBefore[i] = 0;
 
-  size_t sizesBefore[HM_MAX_NUM_LEVELS];
-  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
-    for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-      HM_chunkList lev = HM_HH_LEVEL(hh, i);
-      sizesBefore[i] = (lev == NULL) ? 0 : HM_getChunkListSize(lev);
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor;
+         cursor = cursor->nextAncestor)
+    {
+      uint32_t d = HM_getChunkListDepth(cursor->chunkList);
+      sizesBefore[d] = HM_getChunkListSize(cursor->chunkList);
     }
   }
 
@@ -172,7 +186,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     timespec_now(&startTime);
   }
 
-  HM_chunkList globalDownPtrs = HM_deferredPromote(s, &forwardHHObjptrArgs);
+  HM_chunkList globalDownPtrs =
+    HM_deferredPromote(s, thread, &forwardHHObjptrArgs);
+  hh = thread->hierarchicalHeap;
+
+  assertInvariants(thread);
 
   if (needGCTime(s)) {
     timespec_now(&stopTime);
@@ -201,10 +219,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
-  HM_chunkList toSpace[HM_MAX_NUM_LEVELS];
-  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    toSpace[i] = NULL;
-  }
+  HM_chunkList toSpace[maxDepth+1];
+  for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
@@ -334,7 +350,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minDepth, thread->currentDepth+1, {
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor && HM_getChunkListDepth(cursor->chunkList) >= minDepth;
+       cursor = cursor->nextAncestor)
+  {
+    HM_chunkList level = cursor->chunkList;
     HM_chunk chunk = level->firstChunk;
     while (chunk != NULL) {
       pointer start = HM_getChunkStart(chunk);
@@ -352,42 +372,58 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         chunk = chunk->nextChunk;
       }
     }
-  });
+  }
 #endif
 
-  /* Free old chunks */
-  FOR_LEVEL_IN_RANGE(level, i, hh, forwardHHObjptrArgs.minDepth, thread->currentDepth+1, {
+  /* Free old chunks and find the tail (upper segment) of the original hh
+   * that will be merged with the toSpace */
+  HM_HierarchicalHeap hhTail = hh;
+  for (;
+       NULL != hhTail && HM_getChunkListDepth(hhTail->chunkList) >= minDepth;
+       hhTail = hhTail->nextAncestor)
+  {
+    HM_chunkList level = hhTail->chunkList;
+
     HM_chunkList remset = level->rememberedSet;
     if (NULL != remset) {
       level->size -= remset->size;
       level->rememberedSet = NULL;
       HM_appendChunkList(s->freeListSmall, remset);
     }
-    HM_HH_LEVEL(hh, i) = NULL;
     HM_appendChunkList(s->freeListSmall, level);
-  });
+  }
+
+  /* Build the toSpace hh */
+  HM_HierarchicalHeap hhToSpace = NULL;
+  for (uint32_t i = 0; i <= maxDepth; i++)
+  {
+    if (NULL == toSpace[i])
+      continue;
+
+    HM_HierarchicalHeap newhh = HM_HH_newFromChunkList(s, toSpace[i]);
+    newhh->nextAncestor = hhToSpace;
+    hhToSpace = newhh;
+  }
 
   /* merge in toSpace */
-  for (uint32_t i = 0; i <= thread->currentDepth; i++) {
-    if (NULL == HM_HH_LEVEL(hh, i)) {
-      HM_HH_LEVEL(hh, i) = toSpace[i];
-    } else {
-      HM_appendChunkList(HM_HH_LEVEL(hh, i), toSpace[i]);
-    }
-  }
+  hh = HM_HH_zip(hhTail, hhToSpace);
+  thread->hierarchicalHeap = hh;
 
   /* update currentChunk and associated */
   HM_chunk lastChunk = NULL;
-  FOR_LEVEL_DECREASING_IN_RANGE(level, i, hh, 0, thread->currentDepth+1, {
-    if (HM_getChunkListLastChunk(level) != NULL) {
-      lastChunk = HM_getChunkListLastChunk(level);
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    if (HM_getChunkListLastChunk(cursor->chunkList) != NULL) {
+      lastChunk = HM_getChunkListLastChunk(cursor->chunkList);
       break;
     }
-  });
+  }
   thread->currentChunk = lastChunk;
 
   if (lastChunk != NULL && !lastChunk->mightContainMultipleObjects) {
-    if (!HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP)) {
+    if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for hierarchical heap!\n");
     }
   }
@@ -401,7 +437,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
-  assertInvariants(s, thread);
+  assertInvariants(thread);
 
   s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
 
@@ -416,12 +452,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   thread->bytesAllocatedSinceLastCollection = 0;
 
-  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO)) {
-    for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO))
+  {
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor;
+         cursor = cursor->nextAncestor)
+    {
+      uint32_t i = HM_getChunkListDepth(cursor->chunkList);
       size_t sizeBefore = sizesBefore[i];
 
-      HM_chunkList lev = HM_HH_LEVEL(hh, i);
-      size_t sizeAfter = (lev == NULL) ? 0 : HM_getChunkListSize(lev);
+      HM_chunkList lev = cursor->chunkList;
+      size_t sizeAfter = HM_getChunkListSize(lev);
 
       if (sizeBefore == 0 && sizeAfter == 0)
         continue;
@@ -469,7 +510,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
 
-unlock_local_scope_and_return:
+// unlock_local_scope_and_return:
   releaseLocalScope(s, originalLocalScope);
   return;
 }
@@ -481,7 +522,7 @@ bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
   HM_chunk c = HM_getChunkOf(objptrToPointer(op, NULL));
   HM_chunkList levelHead = HM_getLevelHeadPathCompress(c);
   uint32_t depth = HM_getChunkListDepth(levelHead);
-  assert(depth < HM_MAX_NUM_LEVELS);
+  assert(depth <= args->maxDepth);
   assert(NULL != levelHead);
 
   return (args->toSpace[depth] == levelHead);

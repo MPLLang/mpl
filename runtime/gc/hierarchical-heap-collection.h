@@ -26,6 +26,7 @@ struct ForwardHHObjptrArgs {
   uint32_t minDepth;
   uint32_t maxDepth;
   uint32_t toDepth; /* if == HM_HH_INVALID_DEPTH, preserve level of the forwarded object */
+  HM_chunkList* fromSpace;
   HM_chunkList* toSpace;
   objptr containingObject; /* a hack to keep track of which object is currently being traced */
 

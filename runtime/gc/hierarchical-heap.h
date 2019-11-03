@@ -12,37 +12,19 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-#define HM_MAX_NUM_LEVELS 64
-
-struct levelData {
-  HM_chunkList chunkList;
-};
-
 typedef struct HM_HierarchicalHeap {
-  struct levelData levels[HM_MAX_NUM_LEVELS];
+
+  /* the data at this heap.
+   * TODO migrate the data stored at a chunkList into this structure, and
+   * refactor/simplify chunk lists. */
+  HM_chunkList chunkList;
+
+  /* The next non-empty ancestor heap. This may skip over "unused" levels.
+   * Also, all threads have their own leaf-to-root path (essentially, path
+   * copying) which is merged only at join points of the program. */
+  struct HM_HierarchicalHeap *nextAncestor;
+
 } *HM_HierarchicalHeap;
-
-// l/r-value for ith level
-#define HM_HH_LEVEL(hh, i) ((hh)->levels[i].chunkList)
-
-/* SAM_NOTE: These macros are nasty. But they are also nice. Sorry. */
-#define FOR_LEVEL_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
-  do {                                                   \
-    for (uint32_t IDX = (LO); IDX < (HI); IDX++) {       \
-      HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);         \
-      if (LEVEL != NULL) { BODY }                        \
-    }                                                    \
-  } while (0)
-
-#define FOR_LEVEL_DECREASING_IN_RANGE(LEVEL, IDX, HH, LO, HI, BODY) \
-  do {                                                              \
-    uint32_t IDX = (HI);                                            \
-    while (IDX > (LO)) {                                            \
-      IDX--;                                                        \
-      HM_chunkList LEVEL = HM_HH_LEVEL(HH, IDX);                    \
-      if (LEVEL != NULL) { BODY }                                   \
-    }                                                               \
-  } while (0)
 
 #define HM_HH_INVALID_DEPTH CHUNK_INVALID_DEPTH
 
@@ -55,22 +37,27 @@ typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-struct HM_HierarchicalHeap* HM_HH_new(GC_state s);
+HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);
+HM_HierarchicalHeap HM_HH_newFromChunkList(GC_state s, HM_chunkList list);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
-void HM_HH_ensureNotEmpty(GC_thread thread);
+void HM_HH_ensureNotEmpty(GC_state s, GC_thread thread);
 
-static inline size_t HM_HH_levelSize(struct HM_HierarchicalHeap *hh, uint32_t depth);
+bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested);
 
-bool HM_HH_extend(GC_thread thread, size_t bytesRequested);
+/* zip-up hh1 and hh2, returning the new deepest leaf
+ * (will be one of hh1 or hh2) */
+HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2);
 
-struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s);
+/* Find the HH at the indicated depth (create one if doesn't exist) */
+HM_HierarchicalHeap HM_HH_getHeapAtDepth(GC_state s, GC_thread thread, uint32_t depth);
+
+HM_HierarchicalHeap HM_HH_getCurrent(GC_state s);
 pointer HM_HH_getFrontier(GC_thread thread);
 pointer HM_HH_getLimit(GC_thread thread);
 void HM_HH_updateValues(GC_thread thread, pointer frontier);
 
-size_t HM_HH_size(struct HM_HierarchicalHeap* hh, uint32_t currentDepth);
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
 size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 

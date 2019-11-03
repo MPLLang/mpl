@@ -52,26 +52,29 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   pointer srcp = objptrToPointer(src, NULL);
   HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
-  /* This creates a down pointer; must be remembered. */
-  if (dstList->depth < srcList->depth) {
-    if (dst != s->wsQueue) {
-      // assert(getHierarchicalHeapCurrent(s) != NULL);
-      struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
-      if (hh == NULL) {
-        LOG(LM_HH_PROMOTION, LL_WARNING,
-          "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
-          dst, src);
-      } else {
-        uint32_t d = srcList->depth;
-        if (NULL == HM_HH_LEVEL(hh, d)) {
-          HM_HH_LEVEL(hh, d) = HM_newChunkList(d);
-        }
+  /* Internal or up-pointer. */
+  if (dstList->depth >= srcList->depth)
+    return;
 
-        /* SAM_NOTE: TODO: track bytes allocated here in
-         * thread->bytesAllocatedSinceLast...? */
+  /* deque down-pointers are handled separately during collection. */
+  if (dst == s->wsQueue)
+    return;
 
-        HM_rememberAtLevel(HM_HH_LEVEL(hh, d), dst, field, src);
-      }
-    }
+  /* Otherwise, remember the down-pointer! */
+  uint32_t d = srcList->depth;
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
+
+  if (hh == NULL)
+  {
+    LOG(LM_HH_PROMOTION, LL_WARNING,
+      "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
+      dst, src);
+    return;
   }
+
+  HM_rememberAtLevel(hh->chunkList, dst, field, src);
+
+  /* SAM_NOTE: TODO: track bytes allocated here in
+   * thread->bytesAllocatedSinceLast...? */
 }

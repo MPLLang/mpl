@@ -89,7 +89,7 @@ pointer sequenceAllocateInHH(GC_state s,
     /* force a new chunk to be created so that no new objects lie after this
      * sequence, which crossed a block boundary. */
     HM_HH_updateValues(thread, s->frontier);
-    HM_HH_extend(thread, ensureBytesFree);
+    HM_HH_extend(s, thread, ensureBytesFree);
     s->frontier = HM_HH_getFrontier(thread);
     s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;

@@ -32,10 +32,6 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   assert(thread != NULL);
   thread->currentDepth = depth;
 
-  if (depth >= HM_MAX_NUM_LEVELS) {
-    DIE("Exceeded maximum fork depth (%d)", HM_MAX_NUM_LEVELS);
-  }
-
   /* SAM_NOTE: not super relevant here, but if we do eventually decide to
    * control the "use ancestor chunk" optimization, a good sanity check. */
   assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
