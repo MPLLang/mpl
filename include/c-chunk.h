@@ -374,16 +374,12 @@ extern void Assignable_unlockReplicaWriter(
 extern Objptr Assignable_get(CPointer, Objptr, Int64);
 extern void Assignable_set(CPointer, Objptr, Int64, Objptr);
 
-#if ASSERT
-extern void assertObjptrDisentangledForMe(CPointer, Objptr);
-#endif
+extern void checkObjptrDisentangledForMe(CPointer, Objptr);
 
 static inline Objptr Ref_deref_P(CPointer s, Objptr src) {
   Objptr res;
   res = *IDX(Objptr, src, 0);
-#if ASSERT
-  assertObjptrDisentangledForMe(s, res);
-#endif
+  checkObjptrDisentangledForMe(s, res);
   return res;
 }
 
@@ -445,9 +441,7 @@ RefAccessFunctionsForOpaqueData(R64, Real64_t)
 static inline Objptr Array_sub_P(CPointer s, Objptr src, Int64 index) {
   Objptr res;
   res = *IDX(Objptr, src, index);
-#if ASSERT
-  assertObjptrDisentangledForMe(s, res);
-#endif
+  checkObjptrDisentangledForMe(s, res);
   return res;
 }
 

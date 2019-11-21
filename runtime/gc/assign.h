@@ -39,9 +39,7 @@ PRIVATE void Assignable_set(
   GC_state s, objptr dst, Int64 index, objptr src
   );
 
-#if ASSERT
-PRIVATE void assertObjptrDisentangledForMe(GC_state s, objptr op);
-#endif
+PRIVATE void checkObjptrDisentangledForMe(GC_state s, objptr op);
 
 #endif  /* MLTON_GC_INTERNAL_BASIS */
 

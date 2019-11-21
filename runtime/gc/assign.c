@@ -259,8 +259,7 @@ void Assignable_set(GC_state s, objptr dst, Int64 index, objptr src) {
   }
 }
 
-#if ASSERT
-void assertObjptrDisentangledForMe(GC_state s, objptr op) {
+void checkObjptrDisentangledForMe(GC_state s, objptr op) {
   if (HM_inGlobalHeap(s) || !isObjptr(op)) return;
 
   /* Don't call HM_getChunkOf() here, because it does additional asserts that
@@ -321,4 +320,3 @@ void assertObjptrDisentangledForMe(GC_state s, objptr op) {
 
   return;
 }
-#endif /* ASSERT */
