@@ -13,7 +13,6 @@
  */
 GC_sequenceLength* getSequenceLengthp (pointer a) {
   return (GC_sequenceLength*)(a
-                              - OBJPTR_SIZE
                               - GC_HEADER_SIZE
                               - GC_SEQUENCE_LENGTH_SIZE);
 }
@@ -36,7 +35,6 @@ uintmax_t GC_getSequenceLength (pointer a) {
  */
 GC_sequenceCounter* getSequenceCounterp (pointer a) {
   return (GC_sequenceCounter*)(a
-                               - OBJPTR_SIZE
                                - GC_HEADER_SIZE
                                - GC_SEQUENCE_LENGTH_SIZE
                                - GC_SEQUENCE_COUNTER_SIZE);

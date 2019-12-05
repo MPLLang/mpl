@@ -478,6 +478,19 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                    * be flattened.
                    *)
                   dontFlatten ()
+             | Ref_cas _ =>
+                 let val a = arg 0
+                 in (Value.dontFlatten a; result ())
+                 end
+             | Array_cas _ =>
+                 let
+                   val r1 = arg 2
+                   val r2 = arg 3
+                 in
+                   Value.dontFlatten r1;
+                   Value.dontFlatten r2;
+                   result ()
+                 end
              | MLton_eq => equal ()
              | MLton_equal => equal ()
              | MLton_size => dontFlatten ()
@@ -506,7 +519,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Object ob => Object.select (ob, offset)
              | _ => Error.bug "RefFlatten.select"
          end
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier = _} =
          (coerce {from = value,
                   to = select {base = base, offset = offset}}
           (* Don't flatten the component of the update,
@@ -794,8 +807,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                               case Type.dest t of
                                  CPointer => ()
                                | Datatype tc => Size.<= (tyconSize tc, s)
-                               (* RAM_NOTE: Not sure if correct *)
-                               | HierarchicalHeap _ => Size.makeTop s
                                | IntInf => Size.makeTop s
                                | Object {args, con, ...} =>
                                     if ObjectCon.isSequence con
@@ -1073,7 +1084,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
          case s of
             Bind b => transformBind b
           | Profile _ => Vector.new1 s
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                Vector.new1
                (case base of
                    Base.Object object =>
@@ -1092,7 +1103,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                              in
                                 Update {base = base,
                                         offset = objectOffset (obj, offset),
-                                        value = value}
+                                        value = value,
+                                        writeBarrier = writeBarrier}
                              end)
                  | Base.SequenceSub _ => s)
       val transformStatement =

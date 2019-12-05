@@ -77,7 +77,6 @@ fun checkScopes (program as
                  case Type.dest ty of
                     CPointer => ()
                   | Datatype tycon => getTycon tycon
-                  | HierarchicalHeap ty =>  loopType ty
                   | IntInf => ()
                   | Object {args, con, ...} =>
                        let
@@ -477,7 +476,7 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
          case Type.dest base of
             Type.Object {args, ...} => Prod.elt (args, offset)
           | _ => Error.bug "Ssa2.TypeCheck2.select (non object)"
-      fun update {base, offset, value} =
+      fun update {base, offset, value, writeBarrier = _} =
          case Type.dest base of
             Type.Object {args, ...} =>
                let

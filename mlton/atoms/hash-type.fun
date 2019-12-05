@@ -122,13 +122,13 @@ structure Type =
 
       fun var a = lookup (Tyvar.hash a, Var a)
 
-      fun con (c, ts) =
+         fun con (c, ts) =
          lookup (Hash.combine (Tycon.hash c, Hash.vectorMap (ts, hash)), Con (c, ts))
-      val con = Trace.trace2 ("HashType.Type.con",
-                              Tycon.layout,
-                              Vector.layout layout,
-                              layout) con
-   end
+         val con = Trace.trace2 ("HashType.Type.con",
+                                 Tycon.layout,
+                                 Vector.layout layout,
+                                 layout) con
+      end
 structure Ops = TypeOps (structure Tycon = Tycon
                          open Type)
 open Type Ops
@@ -217,7 +217,6 @@ fun checkPrimApp {args, prim, result, targs}: bool =
                               cpointer = cpointer,
                               equals = equals,
                               exn = exn,
-                              hierarchicalHeap = hierarchicalHeap,
                               intInf = intInf,
                               real = real,
                               reff = reff,

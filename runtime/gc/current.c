@@ -20,20 +20,10 @@ objptr getStackCurrentObjptr (GC_state s) {
 }
 
 GC_stack getStackCurrent (GC_state s) {
-  pointer p = objptrToPointer(getStackCurrentObjptr(s), s->heap->start);
+  pointer p = objptrToPointer(getStackCurrentObjptr(s), NULL);
   return (GC_stack)p;
 }
 
-objptr getHierarchicalHeapCurrentObjptr (GC_state s) {
-  return getThreadCurrent(s)->hierarchicalHeap;
-}
-
 struct HM_HierarchicalHeap* getHierarchicalHeapCurrent (GC_state s) {
-  objptr hhObjptr = getHierarchicalHeapCurrentObjptr (s);
-
-  if (!isObjptr (hhObjptr)) {
-    return NULL;
-  }
-
-  return HM_HH_objptrToStruct(s, hhObjptr);
+  return getThreadCurrent(s)->hierarchicalHeap;
 }

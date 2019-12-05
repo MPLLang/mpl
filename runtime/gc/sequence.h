@@ -15,7 +15,6 @@
  * counter ::
  * length ::
  * header ::
- * fwdptr (object-pointer) ::
  * ( (non heap-pointers)* :: (heap pointers)* )*
  *
  * The counter word is used by mark compact GC.  The length word is
@@ -36,7 +35,7 @@ typedef GC_sequenceLength GC_sequenceCounter;
 #define GC_SEQUENCE_COUNTER_SIZE sizeof(GC_sequenceCounter)
 #define PRIxSEQCTR PRIxSEQLEN
 #define FMTSEQCTR "%"PRIxSEQCTR
-#define GC_SEQUENCE_METADATA_SIZE (GC_SEQUENCE_COUNTER_SIZE + GC_SEQUENCE_LENGTH_SIZE + GC_HEADER_SIZE + OBJPTR_SIZE)
+#define GC_SEQUENCE_METADATA_SIZE (GC_SEQUENCE_COUNTER_SIZE + GC_SEQUENCE_LENGTH_SIZE + GC_HEADER_SIZE)
 
 COMPILE_TIME_ASSERT(sizeof_header__le__sizeof_seqlen,
                     sizeof(GC_header) <= sizeof(GC_sequenceLength));

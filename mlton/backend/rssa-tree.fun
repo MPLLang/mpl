@@ -52,6 +52,7 @@ structure Operand =
                             ty: Type.t}
        | Var of {var: Var.t,
                  ty: Type.t}
+       | Address of t
 
       val null = Const Const.null
 
@@ -81,6 +82,7 @@ structure Operand =
           | Runtime z => Type.ofGCField z
           | SequenceOffset {ty, ...} => ty
           | Var {ty, ...} => ty
+          | Address _ => Type.cpointer ()
 
       fun layout (z: t): Layout.t =
          let
@@ -102,6 +104,7 @@ structure Operand =
                        tuple [layout base, layout index, Scale.layout scale,
                               Bytes.layout offset]]
              | Var {var, ...} => Var.layout var
+             | Address z => seq [str "Address ", tuple [layout z]]
          end
 
       fun cast (z: t, t: Type.t): t =
@@ -117,6 +120,7 @@ structure Operand =
           | Runtime _ => true
           | SequenceOffset _ => true
           | Var _ => true
+          | Address _ => true (* SAM_NOTE: CHECK *)
           | _ => false
 
       fun 'a foldVars (z: t, a: 'a, f: Var.t * 'a -> 'a): 'a =
@@ -126,6 +130,7 @@ structure Operand =
           | SequenceOffset {base, index, ...} =>
                foldVars (index, foldVars (base, a, f), f)
           | Var {var, ...} => f (var, a)
+          | Address z => foldVars (z, a, f)
           | _ => a
 
       fun replaceVar (z: t, f: Var.t -> t): t =
@@ -144,6 +149,7 @@ structure Operand =
                                   scale = scale,
                                   ty = ty}
                 | Var {var, ...} => f var
+                | Address t => Address (loop t)
                 | _ => z
          in
             loop z
@@ -1618,6 +1624,12 @@ structure Program =
                                                         result = ty,
                                                         scale = scale})
                        | Var {ty, var} => Type.isSubtype (varType var, ty)
+                       | Address z =>
+                           (checkOperand z
+                           ; case z of
+                               Offset _ => true
+                             | SequenceOffset _ => true
+                             | _ => false)
                 in
                    Err.check ("operand", ok, fn () => Operand.layout x)
                 end

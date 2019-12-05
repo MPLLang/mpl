@@ -73,6 +73,7 @@ val llvm_optOpts: {opt: string, pred: OptPred.t} list ref = ref []
 val buildConstants: bool ref = ref false
 val debugRuntime: bool ref = ref false
 val traceRuntime: bool ref = ref false
+val ltoRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunkify: Control.Chunkify.t option ref = ref NONE
@@ -276,7 +277,7 @@ fun makeOptions {usage} =
                                                                 NONE => usage ()
                                                               | SOME n =>
                                                                    Chunkify.Coalesce
-                                                                   {limit = n})
+                                                                          {limit = n})
                                                        else usage ()
                                                  end
                                             else usage ()
@@ -340,6 +341,8 @@ fun makeOptions {usage} =
        end,
        (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
         boolRef traceRuntime),
+       (Expert, "lto-runtime", " {false|true}", "perform C-level whole-program optimization",
+        boolRef ltoRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
         SpaceString
         (fn s => (case s of
@@ -1136,11 +1139,13 @@ fun commandLine (args: string list): unit =
       val linkOpts = addTargetOpts linkOpts
       val linkOpts = if !debugRuntime then
                      "-lmlton-gdb" :: "-lgdtoa-gdb" :: linkOpts
-                     else if !traceRuntime then
+                      else if !traceRuntime then
                      "-lmlton-trace" :: "-lgdtoa-trace" :: linkOpts
-                     else if positionIndependent then
+                      else if !ltoRuntime then
+                     "-lmlton-lto" :: "-lgdtoa-lto" :: "-O3" :: "-flto" :: linkOpts
+                      else if positionIndependent then
                      "-lmlton-pic" :: "-lgdtoa-pic" :: linkOpts
-                     else
+                      else
                      "-lmlton" :: "-lgdtoa" :: linkOpts
       val linkOpts = ("-L" ^ targetLibDir) :: linkOpts
 
@@ -1151,6 +1156,9 @@ fun commandLine (args: string list): unit =
          else if !traceRuntime then
          [OS.Path.joinDirFile {dir = targetLibDir, file = "libmlton-trace.a"},
           OS.Path.joinDirFile {dir = targetLibDir, file = "libgdtoa-trace.a"}]
+         else if !ltoRuntime then
+         [OS.Path.joinDirFile { dir = targetLibDir, file = "libmlton-lto.a" },
+          OS.Path.joinDirFile { dir = targetLibDir, file = "libgdtoa-lto.a" }]
          else if positionIndependent then
          [OS.Path.joinDirFile {dir = targetLibDir, file = "libmlton-pic.a"},
           OS.Path.joinDirFile {dir = targetLibDir, file = "libgdtoa-pic.a"}]
@@ -1231,8 +1239,8 @@ fun commandLine (args: string list): unit =
                 in
                    outputl (align
                             (List.revMap (Control.mlbPathMap (),
-                                          fn {var, path, ...} =>
-                                          str (concat [var, " ", path]))),
+                                       fn {var, path, ...} =>
+                                       str (concat [var, " ", path]))),
                             Out.standard)
                 end
              ; let open OS.Process in exit success end)
@@ -1440,9 +1448,9 @@ fun commandLine (args: string list): unit =
                   fun compileC (c: Counter.t, input: File.t): (string * string list) list * File.t =
                      let
                         val output = mkOutputO (c, input)
-                    in
+                     in
                        ([(hd cc,
-                          List.concat
+                             List.concat
                           [tl cc,
                            [ "-c" ],
                            if !format = Executable
@@ -1452,6 +1460,8 @@ fun commandLine (args: string list): unit =
                            if !debug then ccDebug else [],
                            if !traceRuntime
                            then ["-DENABLE_TRACING=1"] else [],
+                           if !ltoRuntime
+                           then ["-O3", "-flto"] else [],
                            ccOpts,
                            ["-o", output],
                            [input]])],
@@ -1462,12 +1472,12 @@ fun commandLine (args: string list): unit =
                         val output = mkOutputO (c, input)
                      in
                          ([(hd cc,
-                            List.concat
+                             List.concat
                             [tl cc,
                              ["-c"],
-                             if !debug then [asDebug] else [],
-                             asOpts,
-                             ["-o", output],
+                                  if !debug then [asDebug] else [],
+                                  asOpts,
+                                  ["-o", output],
                              [input]])],
                           output)
                      end
@@ -1600,10 +1610,10 @@ fun commandLine (args: string list): unit =
                       | _ => Error.bug "invalid start"
                   val doit =
                      traceTop Version.banner
-                     (fn () =>
-                      Exn.finally
-                      (compile, fn () =>
-                       List.foreach (!tempFiles, File.remove)))
+                      (fn () =>
+                       Exn.finally
+                       (compile, fn () =>
+                        List.foreach (!tempFiles, File.remove)))
                in
                   doit ()
                end

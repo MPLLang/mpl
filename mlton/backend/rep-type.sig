@@ -19,6 +19,7 @@ signature REP_TYPE_STRUCTS =
       structure WordX: WORD_X
       structure WordXVector: WORD_X_VECTOR
       sharing CFunction = Prim.CFunction
+      sharing CType = Prim.CType
       sharing RealSize = Prim.RealSize
       sharing WordSize = Prim.WordSize = WordX.WordSize
       sharing WordX = WordXVector.WordX
@@ -56,7 +57,6 @@ signature REP_TYPE =
       val exnStack: unit -> t
       val gcState: unit -> t
       val exists: t * (t -> bool) -> bool
-      val hierarchicalHeap: unit -> t
       val intInf: unit -> t
       val isCPointer: t -> bool
       val isObjptr: t -> bool

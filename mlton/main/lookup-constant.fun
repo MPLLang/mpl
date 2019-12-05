@@ -55,7 +55,6 @@ val gcFields =
     "sourceMaps.curSourceSeqIndex",
     "exnStack",
     "frontier",
-    "generationalMaps.cardMapAbsolute",
     "limit",
     "limitPlusSlop",
     "signalsInfo.signalIsPending",

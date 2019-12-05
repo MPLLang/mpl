@@ -103,27 +103,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         char *arg;
 
         arg = argv[i];
-        if (0 == strcmp (arg, "copy-generational-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton copy-generational-ratio missing argument.");
-          s->controls->ratios.copyGenerational = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.copyGenerational)
-            die ("@MLton copy-generational-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "copy-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton copy-ratio missing argument.");
-          s->controls->ratios.copy = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.copy)
-            die ("@MLton copy-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "fixed-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton fixed-heap missing argument.");
-          s->controls->fixedHeap = align (stringToBytes (argv[i++]),
-                                         2 * s->sysvals.pageSize);
-        } else if (0 == strcmp (arg, "gc-messages")) {
+        if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
         } else if (0 == strcmp (arg, "hm-messages")) {
@@ -162,13 +142,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
                  "human or json.",
                  format);
           }
-        } else if (0 == strcmp (arg, "alloc-chunk")) {
+        } else if (0 == strcmp (arg, "set-affinity")) {
           i++;
-          if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton alloc-chunk missing argument.");
-          s->controls->allocChunkSize = stringToBytes (argv[i++]);
-          unless (GC_HEAP_LIMIT_SLOP < s->controls->allocChunkSize)
-            die ("@MLton alloc-chunk argument must be greater than slop.");
+          s->controls->setAffinity = TRUE;
         } else if (0 == strcmp (arg, "affinity-base")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
@@ -179,38 +155,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("@MLton affinity-stride missing argument.");
           s->controls->affinityStride = stringToInt (argv[i++]);
-        } else if (0 == strcmp (arg, "restrict-available")) {
-          i++;
-          s->controls->restrictAvailableSize = TRUE;
-        } else if (0 == strcmp (arg, "available-ratio")) {
-          i++;
-          if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton available-ratio missing argument.");
-          s->controls->ratios.available = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.available)
-            die ("@MLton available-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "grow-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton grow-ratio missing argument.");
-          s->controls->ratios.grow = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.grow)
-            die ("@MLton grow-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "hash-cons")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton hash-cons missing argument.");
-          s->controls->ratios.hashCons = stringToFloat (argv[i++]);
-          unless (0.0 <= s->controls->ratios.hashCons
-                  and s->controls->ratios.hashCons <= 1.0)
-            die ("@MLton hash-cons argument must be between 0.0 and 1.0.");
-        } else if (0 == strcmp (arg, "live-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton live-ratio missing argument.");
-          s->controls->ratios.live = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.live)
-            die ("@MLton live-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -246,41 +190,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (!initLogLevels(levelString)) {
             die ("@MLton log-level invalid argument");
           }
-        } else if (0 == strcmp (arg, "mark-compact-generational-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton mark-compact-generational-ratio missing argument.");
-          s->controls->ratios.markCompactGenerational = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.markCompactGenerational)
-            die ("@MLton mark-compact-generational-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "mark-compact-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton mark-compact-ratio missing argument.");
-          s->controls->ratios.markCompact = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.markCompact)
-            die ("@MLton mark-compact-ratio argument must be greater than 1.0.");
-        } else if (0 == strcmp (arg, "max-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton max-heap missing argument.");
-          s->controls->maxHeap = align (stringToBytes (argv[i++]),
-                                       2 * s->sysvals.pageSize);
-        } else if (0 == strcmp (arg, "may-page-heap")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton may-page-heap missing argument.");
-          s->controls->mayPageHeap = stringToBool (argv[i++]);
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp (arg, "nursery-ratio")) {
-          i++;
-          if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton nursery-ratio missing argument.");
-          s->controls->ratios.nursery = stringToFloat (argv[i++]);
-          unless (1.0 < s->controls->ratios.nursery)
-            die ("@MLton nursery-ratio argument must be greater than 1.0.");
         } else if (0 == strcmp (arg, "ram-slop")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
@@ -350,30 +262,21 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp(arg, "initial-chunk-pool-size")) {
+        } else if (0 == strcmp(arg, "min-chunk")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton initial-chunk-pool-size missing argument.");
+            die ("@MLton min-chunk missing argument.");
           }
-
-          s->controls->chunkPoolConfig.initialSize = stringToBytes(argv[i++]);
-        } else if (0 == strcmp(arg, "max-chunk-pool-size")) {
+          s->controls->minChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "alloc-chunk")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton max-chunk-pool-size missing argument.");
+            die ("@MLton alloc-chunk missing argument.");
           }
-
-          s->controls->chunkPoolConfig.maxSize = stringToBytes(argv[i++]);
-        } else if (0 == strcmp(arg, "chunk-pool-live-ratio")) {
+          s->controls->allocChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
           i++;
-          if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton chunk-pool-live-ratio missing argument.");
-          }
-
-          s->controls->chunkPoolConfig.liveRatio = stringToFloat(argv[i++]);
-          if (s->controls->chunkPoolConfig.liveRatio < 1.0) {
-            die("@MLton chunk-pool-live-ratio must be at least 1.0");
-          }
+          s->controls->mayUseAncestorChunk = FALSE;
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -430,7 +333,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("@MLton trace-buffer-size missing argument.");
           }
+
           s->controls->traceBufferSize = stringToInt(argv[i++]);
+        } else if (0 == strcmp(arg, "disable-coalesce")) {
+          i++;
+          s->controls->freeListCoalesce = FALSE;
+        } else if (0 == strcmp(arg, "disable-promotion")) {
+          i++;
+          s->controls->deferredPromotion = FALSE;
+        } else if (0 == strcmp(arg, "use-old-hh-gc-policy")) {
+          i++;
+          s->controls->oldHHGCPolicy = TRUE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -460,26 +373,13 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->callFromCHandlerThread = BOGUS_OBJPTR;
 
   s->controls = (struct GC_controls *) malloc (sizeof (struct GC_controls));
-  s->controls->fixedHeap = 0;
-  s->controls->maxHeap = 0;
   s->controls->mayLoadWorld = TRUE;
-  s->controls->mayPageHeap = FALSE;
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
   s->controls->HMMessages = FALSE;
-  s->controls->oldGenSequenceSize = 0x100000;
-  s->controls->allocChunkSize = 4096;
+  s->controls->setAffinity = FALSE;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
-  s->controls->restrictAvailableSize = FALSE;
-  s->controls->ratios.copy = 4.0f;
-  s->controls->ratios.copyGenerational = 4.0f;
-  s->controls->ratios.grow = 8.0f;
-  s->controls->ratios.hashCons = 0.0f;
-  s->controls->ratios.live = 8.0f;
-  s->controls->ratios.markCompact = 1.04f;
-  s->controls->ratios.markCompactGenerational = 8.0f;
-  s->controls->ratios.nursery = 10.0f;
   s->controls->ratios.ramSlop = 0.5f;
   s->controls->ratios.stackCurrentGrow = 2.0f;
   s->controls->ratios.stackCurrentMaxReserved = 32.0f;
@@ -490,10 +390,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
-  s->controls->hhConfig.maxLCHS = 1; /* RAM_NOTE: Sentinel value */
-  s->controls->chunkPoolConfig.initialSize = stringToBytes("32K"); /* L1 cache size */
-  s->controls->chunkPoolConfig.maxSize = stringToBytes("1G"); /* RAM_NOTE: Arbitrary! */
-  s->controls->chunkPoolConfig.liveRatio = 8.0; /* RAM_NOTE: Arbitrary! */
+  s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;
@@ -501,18 +398,21 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhCollectionLevel = ALL;
   s->controls->traceBufferSize = 10000;
 
+  /* Not arbitrary; should be at least the page size and must also respect the
+   * limit check coalescing amount in the compiler. */
+  s->controls->minChunkSize = max(GC_pageSize(), 4096);
+  s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
+
+  s->controls->mayUseAncestorChunk = TRUE;
+  s->controls->freeListCoalesce = TRUE;
+  s->controls->deferredPromotion = TRUE;
+  s->controls->oldHHGCPolicy = FALSE;
+
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
 
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
-  s->wsQueueLock = BOGUS_OBJPTR;
-  s->globalFrontier = NULL;
-  s->globalLimitPlusSlop = NULL;
-  s->hashConsDuringGC = FALSE;
-
-  s->heap = (GC_heap) malloc (sizeof (struct GC_heap));
-  initHeap (s, s->heap);
 
   s->lastMajorStatistics = newLastMajorStatistics();
 
@@ -521,9 +421,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->roots = NULL;
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
-
-  s->secondaryHeap = (GC_heap) malloc (sizeof (struct GC_heap));
-  initHeap (s, s->secondaryHeap);
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -534,33 +431,30 @@ int GC_init (GC_state s, int argc, char **argv) {
   sigemptyset (&s->signalsInfo.signalsPending);
   s->self = pthread_self();
   s->terminationLeader = INVALID_PROCESSOR_NUMBER;
-  s->syncReason = SYNC_NONE;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
   s->saveWorldStatus = true;
   s->trace = NULL;
+  srand48_r(0, &(s->tlsObjects.drand48_data));
 
   /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
   initSignalStack (s);
   s->worldFile = NULL;
-  s->lock = SPINLOCK_INITIALIZER;
 
-  unless (isAligned (s->sysvals.pageSize, CARD_SIZE))
-    die ("Page size must be a multiple of card size.");
   L_setFile(stderr);
   processAtMLton (s, 0, s->atMLtonsLength, s->atMLtons, &s->worldFile);
   res = processAtMLton (s, 1, argc, argv, &s->worldFile);
-  if (s->controls->fixedHeap > 0 and s->controls->maxHeap > 0)
-    die ("Cannot use both fixed-heap and max-heap.");
-  unless (s->controls->ratios.markCompact <= s->controls->ratios.copy
-          and s->controls->ratios.copy <= s->controls->ratios.live)
-    die ("Ratios must satisfy mark-compact-ratio <= copy-ratio <= live-ratio.");
   unless (s->controls->ratios.stackCurrentPermitReserved
           <= s->controls->ratios.stackCurrentMaxReserved)
     die ("Ratios must satisfy stack-current-permit-reserved <= stack-current-max-reserved.");
-  /* We align s->sysvals.ram by s->sysvals.pageSize so that we can
+
+  /* SAM_NOTE: no longer used, but seems like this code may be useful in the
+   * future, so I'm leaving it.
+   *
+   * OLD COMMNENT:
+   * We align s->sysvals.ram by s->sysvals.pageSize so that we can
    * test whether or not we we are using mark-compact by comparing
    * heap size to ram size.  If we didn't round, the size might be
    * slightly off.
@@ -590,12 +484,17 @@ int GC_init (GC_state s, int argc, char **argv) {
     }
   }
 
-  /* now that options are processed, do post options init. */
-  if (1 == s->controls->hhConfig.maxLCHS) {
-    /* maxLCHS wasn't set, so default to max chunk pool */
-    s->controls->hhConfig.maxLCHS = s->controls->chunkPoolConfig.maxSize;
-  }
-  ChunkPool_initialize(&(s->controls->chunkPoolConfig));
+  unless (isAligned(s->controls->minChunkSize, s->sysvals.pageSize))
+    die ("min-chunk must be a multiple of the system page size, %zu", s->sysvals.pageSize);
+
+  unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
+    die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
+
+  HM_configChunks(s);
+
+  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   return res;
 }
@@ -609,16 +508,8 @@ void GC_lateInit (GC_state s) {
   initProfiling (s);
   if (s->amOriginal) {
     initWorld (s);
-    /* The mutator stack invariant doesn't hold,
-     * because the mutator has yet to run.
-     */
-    // spoons: can't assert because other threads are init'd
-    //assert (invariantForMutator (s, TRUE, FALSE));
   } else {
-    loadWorldFromFileName (s, s->worldFile);
-    if (s->profiling.isOn and s->profiling.stack)
-      foreachStackFrame (s, enterFrameForProfiling);
-    assert (invariantForMutator (s, TRUE, TRUE));
+    DIE("loading world from file unsupported");
   }
   s->amInGC = FALSE;
 }
@@ -634,10 +525,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
-  d->wsQueueLock = BOGUS_OBJPTR;
-  d->globalFrontier = NULL;
-  d->globalLimitPlusSlop = NULL;
-  d->hashConsDuringGC = s->hashConsDuringGC;
+  d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
   d->roots = NULL;
@@ -652,12 +542,12 @@ void GC_duplicate (GC_state d, GC_state s) {
   sigemptyset (&d->signalsInfo.signalsPending);
   d->self = s->self;
   d->terminationLeader = INVALID_PROCESSOR_NUMBER;
-  d->syncReason = SYNC_NONE;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
   d->saveWorldStatus = s->saveWorldStatus;
   d->trace = NULL;
+  srand48_r(0, &(d->tlsObjects.drand48_data));
 
   // SPOONHOWER_NOTE: better duplicate?
   //initSignalStack (d);
@@ -668,9 +558,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   //initProfiling (d);
 
   // Multi-processor support is incompatible with saved-worlds
-  assert (d->amOriginal);
-  duplicateWorld (d, s);
-  d->lock = s->lock;
+  assert(d->amOriginal);
+  duplicateWorld(d, s);
   s->amInGC = FALSE;
 }
 

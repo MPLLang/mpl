@@ -10,27 +10,6 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 struct GC_ratios {
-  /* Minimum live ratio to use copying GC. */
-  float copy;
-  /* Only use generational GC with copying collection if the ratio of
-   * heap size to live data size is below copyGenerational.
-   */
-  float copyGenerational;
-  float grow;
-  float hashCons;
-  /* Desired ratio of heap size to live data. */
-  float live;
-  /* Minimum live ratio to use mark-compact GC. */
-  float markCompact;
-  /* Only use generational GC with mark-compact collection if the
-   * ratio of heap size to live data size is below
-   * markCompactGenerational.
-   */
-  float markCompactGenerational;
-  /* As long as the ratio of bytes live to nursery size is greater
-   * than nurseryRatio, use minor GCs.
-   */
-  float nursery;
   float ramSlop;
   float stackCurrentGrow;
   float stackCurrentMaxReserved;
@@ -38,9 +17,9 @@ struct GC_ratios {
   float stackCurrentShrink;
   float stackMaxReserved;
   float stackShrink;
-  /* Limit available memory as a function of _max_live_. */
-  float available;
 };
+
+#define MAX_LCHS_INFINITE ((size_t)-1)
 
 /**
  * Ratios for Hierarchical Heap operations
@@ -54,7 +33,6 @@ struct HM_HierarchicalHeapConfig {
   size_t initialLCHS; /**< initial LCHS, in bytes */
 
   size_t maxLCHS; /**< maximum LCHS, in bytes. */
-
 };
 
 enum HHCollectionLevel {
@@ -70,21 +48,21 @@ enum SummaryFormat {
 };
 
 struct GC_controls {
-  size_t fixedHeap; /* If 0, then no fixed heap. */
-  size_t maxHeap; /* if zero, then unlimited, else limit total heap */
   bool mayLoadWorld;
-  bool mayPageHeap; /* Permit paging heap to disk during GC */
   bool mayProcessAtMLton;
   bool messages; /* Print a message at the start and end of each gc. */
   bool HMMessages; /* print messages regarding heap management */
-  size_t oldGenSequenceSize; /* Sequences larger are allocated in old gen, if possible. */
-  size_t allocChunkSize; /* Minimum size reserved for any allocation request. */
+  size_t allocChunkSize;
+  size_t minChunkSize;
+  bool deferredPromotion;
+  bool freeListCoalesce;
+  bool mayUseAncestorChunk;
+  bool oldHHGCPolicy;
+  bool setAffinity; /* whether or not to set processor affinity */
   int32_t affinityBase; /* First processor to use when setting affinity */
   int32_t affinityStride; /* Number of processors between first and second */
-  bool restrictAvailableSize; /* Use smaller heaps to improve space profiling accuracy */
   struct GC_ratios ratios;
   struct HM_HierarchicalHeapConfig hhConfig;
-  struct ChunkPool_config chunkPoolConfig;
   bool rusageMeasureGC;
   bool summary; /* Print a summary of gc info when program exits. */
   enum SummaryFormat summaryFormat;

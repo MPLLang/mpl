@@ -98,6 +98,9 @@ struct
   val returnFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy return"))
   fun returnToSched v = arraySub "returnFuncs" (returnFuncs, myWorkerId ()) v
 
+  val communicateFuncs = Array.array (P, fn _ => die (fn _ => "Error: dummy communicate"))
+  fun schedCommunicate () = arraySub "communicateFuncs" (communicateFuncs, myWorkerId ()) ()
+
   (* val sync : vertex -> unit
    * `sync v` assigns the current continuation to v, decrements its counter,
    * and executes v if the counter hits zero. *)
@@ -117,8 +120,10 @@ struct
    * ------------------------------ FORK-JOIN ------------------------------ *
    * ------------------------------------------------------------------------*)
 
-  structure ForkJoin :> FORK_JOIN =
+  structure ForkJoin =
   struct
+
+    val communicate = schedCommunicate
 
     exception ForkJoin
 
@@ -247,6 +252,7 @@ struct
       ( arrayUpdate "pushFuncs" (pushFuncs, myId, push)
       ; arrayUpdate "popDiscardFuncs" (popDiscardFuncs, myId, popDiscard)
       ; arrayUpdate "returnFuncs" (returnFuncs, myId, return)
+      ; arrayUpdate "communicateFuncs" (communicateFuncs, myId, communicate)
       ; acquireWork
       )
     end (* init *)
@@ -268,4 +274,32 @@ struct
 
 end
 
-structure ForkJoin :> FORK_JOIN = Scheduler.ForkJoin
+structure ForkJoin :> FORK_JOIN =
+struct
+  open Scheduler.ForkJoin
+
+  fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
+
+  fun parfor grain (i, j) f =
+    let val n = j - i
+    in if n <= grain
+       then for (i, j) f
+       else ( fork ( fn _ => parfor grain (i, i + n div 2) f
+                   , fn _ => parfor grain (i + n div 2, j) f
+                   )
+            ; ()
+            )
+    end
+
+  fun alloc n =
+    let
+      val a = ArrayExtra.Raw.alloc n
+      val _ =
+        if ArrayExtra.Raw.uninitIsNop a then ()
+        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
+    in
+      ArrayExtra.Raw.unsafeToArray a
+    end
+
+  fun getIdleTime _ = Time.zeroTime
+end

@@ -37,6 +37,7 @@ structure MLtonGC =
                val mkMilliseconds = mk (Time.fromMilliseconds o C_UIntmax.toLargeInt)
             in
                val bytesAllocated = mkUIntmax getBytesAllocated
+               val bytesPromoted = mkUIntmax getBytesPromoted
                val lastBytesLive = mkSize getLastBytesLive
                val maxChunkPoolOccupancy = mkSize (fn _ => getMaxChunkPoolOccupancy ())
                val maxHeapOccupancy = mkSize getMaxHeapOccupancy
@@ -44,6 +45,13 @@ structure MLtonGC =
                val numCopyingGCs = mkUIntmax getNumCopyingGCs
                val numMarkCompactGCs = mkUIntmax getNumMarkCompactGCs
                val numMinorGCs = mkUIntmax getNumMinorGCs
+
+               fun localGCTimeOfProc p =
+                 Time.fromMilliseconds (C_UIntmax.toLargeInt
+                 (getLocalGCMillisecondsOfProc (gcState (), Word32.fromInt p)))
+               fun promoTimeOfProc p =
+                 Time.fromMilliseconds (C_UIntmax.toLargeInt
+                 (getPromoMillisecondsOfProc (gcState (), Word32.fromInt p)))
             end
          end
 

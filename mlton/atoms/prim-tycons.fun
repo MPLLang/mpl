@@ -21,10 +21,9 @@ local
 in
    val array = make "array"
    val arrow = make "arrow"
-   val bool = make "bool" 
+   val bool = make "bool"
    val cpointer = make "cpointer"
    val exn = make "exn"
-   val hierarchicalHeap = make "hierarchicalHeap"
    val intInf = make "intInf"
    val list = make "list"
    val reff = make "ref"
@@ -108,7 +107,6 @@ val prims =
               (bool, Arity 0, Sometimes),
               (cpointer, Arity 0, Always),
               (exn, Arity 0, Never),
-              (hierarchicalHeap, Arity 1, Never),
               (intInf, Arity 0, Sometimes),
               (list, Arity 1, Sometimes),
               (reff, Arity 1, Always),
@@ -128,7 +126,6 @@ val arrow = #2 arrow
 val bool = #2 bool
 val cpointer = #2 cpointer
 val exn = #2 exn
-val hierarchicalHeap = #2 hierarchicalHeap
 val intInf = #2 intInf
 val list = #2 list
 val reff = #2 reff

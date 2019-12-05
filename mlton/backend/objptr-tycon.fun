@@ -61,8 +61,7 @@ in
        | _ => Error.bug "ObjptrTycon.wordVector"
 end
 
-val headerOnly = new ()
-val fill = new ()
-val hierarchicalHeap = new ()
+val fill0Normal = new ()
+val fill8Normal = new ()
 
 end

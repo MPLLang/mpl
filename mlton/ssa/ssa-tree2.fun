@@ -61,17 +61,17 @@ structure Prod =
 
       fun layout (p, layoutElt) =
          let
-            open Layout
-         in
-            seq [str "(",
-                 (mayAlign o separateRight)
-                 (Vector.toListMap (dest p, fn {elt, isMutable} =>
-                                    if isMutable
+                    open Layout
+                 in
+                    seq [str "(",
+                         (mayAlign o separateRight)
+                         (Vector.toListMap (dest p, fn {elt, isMutable} =>
+                                            if isMutable
                                        then seq [layoutElt elt, str " mut"]
                                        else layoutElt elt),
                   ","),
-                 str ")"]
-         end
+                         str ")"]
+                 end
 
       fun parse (parseElt: 'a Parse.t): 'a t Parse.t =
          let
@@ -130,7 +130,7 @@ structure ObjectCon =
          val conAlts = Vector.fromList [("sequence", Sequence), ("tuple", Tuple)]
       in
          val parse = Con.parseAs (conAlts, Con)
-      end
+         end
    end
 
 datatype z = datatype ObjectCon.t
@@ -144,7 +144,6 @@ structure Type =
       and tree =
           CPointer
         | Datatype of Tycon.t
-        | HierarchicalHeap of t
         | IntInf
         | Object of {args: t Prod.t,
                      con: ObjectCon.t}
@@ -184,6 +183,23 @@ structure Type =
 
       val isSequence: t -> bool = isSome o deSequenceOpt
 
+      val deRef1Opt: t -> t option =
+         fn t =>
+         case dest t of
+             Object { args, con = Tuple } =>
+               if Prod.length args = 1 andalso Prod.allAreMutable args
+               then SOME (Prod.elt (args, 0))
+               else NONE
+           | _ => NONE
+
+      val deRef1 : t -> t =
+        fn t =>
+        case deRef1Opt t of
+          SOME t => t
+        | _ => Error.bug "SsaTree2.Type.deRef1"
+
+      (* val deRef: t -> t = valOf o deRefOpt *)
+
       val deWeakOpt: t -> t option =
          fn t =>
          case dest t of
@@ -196,7 +212,6 @@ structure Type =
          val same: tree * tree -> bool =
             fn (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
-             | (HierarchicalHeap t1, HierarchicalHeap t2) => equals (t1, t2)
              | (IntInf, IntInf) => true
              | (Object {args = a1, con = c1}, Object {args = a2, con = c2}) =>
                   ObjectCon.equals (c1, c2)
@@ -235,10 +250,6 @@ structure Type =
       in
          val weak = make Weak
       end
-
-      fun hierarchicalHeap t =
-          lookup (Word.xorb (Tycon.hash Tycon.hierarchicalHeap, hash t),
-                  HierarchicalHeap t)
 
       val datatypee: Tycon.t -> t =
          fn t => lookup (Tycon.hash t, Datatype t)
@@ -328,7 +339,6 @@ structure Type =
               case dest t of
                  CPointer => str "cpointer"
                | Datatype t => Tycon.layout t
-               | HierarchicalHeap t => seq [layout t, str " hierarchicalHeap"]
                | IntInf => str "intInf"
                | Object {args, con} =>
                     if isUnit t
@@ -355,8 +365,7 @@ structure Type =
              List.map (WordSize.all, fn ws => ("word" ^ WordSize.toString ws, word ws)) @
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
-            Con.parseAs (Vector.new4 (("hierarchicalHap", hierarchicalHeap),
-                                      ("sequence", sequence o Prod.new1Immutable),
+            Con.parseAs (Vector.new3 (("sequence", sequence o Prod.new1Immutable),
                                       ("tuple", tuple o Prod.new1Immutable),
                                       ("weak", weak)),
                          fn con => fn ty =>
@@ -389,10 +398,9 @@ structure Type =
                      (prim,
                       {args = args,
                        result = result,
-                       typeOps = {deArray = fn _ => raise BadPrimApp,
+                       typeOps = {deArray = deSequence1,
                                   deArrow = fn _ => raise BadPrimApp,
-                                  deHierarchicalHeap = fn _ => raise BadPrimApp,
-                                  deRef = fn _ => raise BadPrimApp,
+                                  deRef = deRef1,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
                in
@@ -407,10 +415,9 @@ structure Type =
                                cpointer = cpointer,
                                equals = equals,
                                exn = unit,
-                               hierarchicalHeap = hierarchicalHeap,
                                intInf = intInf,
                                real = real,
-                               reff = fn _ => raise BadPrimApp,
+                               reff = reff1,
                                thread = thread,
                                unit = unit,
                                vector = vector1,
@@ -510,10 +517,6 @@ structure Type =
                          Prod.allAreMutable arrp
                          andalso isBool result
                     | _ => false)
-             | HierarchicalHeap_new =>
-               noArgs (fn () => case dest result
-                                 of HierarchicalHeap _ => true
-                                  | _ => false)
              | _ => default ()
          end
    end
@@ -556,7 +559,7 @@ structure Base =
          in
             seq [str "#", Int.layout offset, str " ",
                  layout (base, layoutX)]
-         end
+   end
 
       fun parseWithOffset (parseX: 'a Parse.t): ('a t * int) Parse.t =
          let
@@ -768,7 +771,8 @@ structure Statement =
        | Profile of ProfileExp.t
        | Update of {base: Var.t Base.t,
                     offset: int,
-                    value: Var.t}
+                    value: Var.t,
+                    writeBarrier: bool}
 
       fun layout' (s: t, layoutVar): Layout.t =
          let
@@ -791,8 +795,8 @@ structure Statement =
                                indent (Exp.layout' (exp, layoutVar), 2)]
                   end
              | Profile p => seq [str "prof ", ProfileExp.layout p]
-             | Update {base, offset, value} =>
-                  mayAlign [seq [str "upd ",
+             | Update {base, offset, value, writeBarrier} =>
+                  mayAlign [seq [str (if writeBarrier then "updWB" else "upd"),
                                  Base.layoutWithOffset (base, offset, layoutVar),
                                  str " :="],
                             layoutVar value]
@@ -814,7 +818,12 @@ structure Statement =
              (kw "upd" *>
               Base.parseWithOffset Var.parse >>= (fn (base, offset) =>
               sym ":=" *> Var.parse >>= (fn value =>
-              pure {base = base, offset = offset, value = value})))]
+              pure {base = base, offset = offset, value = value, writeBarrier = false}))),
+             Update <$>
+             (kw "updWB" *>
+              Base.parseWithOffset Var.parse >>= (fn (base, offset) =>
+              sym ":=" *> Var.parse >>= (fn value =>
+              pure {base = base, offset = offset, value = value, writeBarrier = true})))]
          end
 
       val profile = Profile
@@ -830,7 +839,7 @@ structure Statement =
          let
             val {get = global: Var.t -> Layout.t, set = setGlobal, ...} =
                Property.getSet (Var.plist, Property.initFun Var.layout)
-            val _ = 
+            val _ =
                Vector.foreach
                (v, fn s =>
                 case s of
@@ -846,7 +855,7 @@ structure Statement =
                                 val dotsSize = String.size dots
                                 val frontSize = 2 * (maxSize - dotsSize) div 3
                                 val backSize = maxSize - dotsSize - frontSize
-                                val s = 
+                                val s =
                                    if String.size s > maxSize
                                       then concat [String.prefix (s, frontSize),
                                                    dots,
@@ -857,7 +866,7 @@ structure Statement =
                                    orelse String.hasSubstring (s, {substring = "*)"})
                                    then ()
                                    else setGlobal (var, Layout.seq [Var.layout var,
-                                                                    Layout.str (" (*" ^ s ^ "*)")])
+                                                            Layout.str (" (*" ^ s ^ "*)")])
                              end
                        in
                           case exp of
@@ -886,10 +895,11 @@ structure Statement =
                      ty = ty,
                      var = Option.map (var, def)}
           | Profile _ => s
-          | Update {base, offset, value} =>
+          | Update {base, offset, value, writeBarrier} =>
                Update {base = Base.map (base, use),
                        offset = offset,
-                       value = use value}
+                       value = use value,
+                       writeBarrier = writeBarrier}
 
       fun replaceUses (s, f) = replaceDefsUses (s, {def = fn x => x, use = f})
    end
@@ -978,60 +988,60 @@ structure Transfer =
       fun replaceVar (t, f) = replaceLabelVar (t, fn l => l, f)
 
       fun layout' (t, layoutVar) =
-         let
-            open Layout
+            let
+               open Layout
             fun layoutArgs xs = Vector.layout layoutVar xs
             fun layoutCase {test, cases, default} =
                let
-                  fun doit (l, layout) =
-                     Vector.toListMap
-                     (l, fn (i, l) =>
-                      seq [layout i, str " => ", Label.layout l])
-                  datatype z = datatype Cases.t
+               fun doit (l, layout) =
+                  Vector.toListMap
+                  (l, fn (i, l) =>
+                   seq [layout i, str " => ", Label.layout l])
+               datatype z = datatype Cases.t
                   val (suffix, cases) =
-                     case cases of
+                  case cases of
                         Con l => (empty, doit (l, Con.layout))
                       | Word (size, l) => (str (WordSize.toString size),
                                            doit (l, fn w => (WordX.layout (w, {suffix = true}))))
-                  val cases =
-                     case default of
-                        NONE => cases
-                      | SOME j =>
-                           cases @ [seq [str "_ => ", Label.layout j]]
-               in
+               val cases =
+                  case default of
+                     NONE => cases
+                   | SOME j =>
+                        cases @ [seq [str "_ => ", Label.layout j]]
+            in
                   align [seq [str "case", suffix, str " ", layoutVar test, str " of"],
-                         indent (alignPrefix (cases, "| "), 2)]
-               end
-            fun layoutPrim {prim, args} =
+                      indent (alignPrefix (cases, "| "), 2)]
+            end
+               fun layoutPrim {prim, args} =
                seq [Prim.layoutFull (prim, Type.layout), str " ", layoutArgs args]
-         in
-            case t of
+            in
+               case t of
                Bug => str "bug"
-             | Call {func, args, return} =>
-                  let
-                     val call = seq [Func.layout func, str " ", layoutArgs args]
-                  in
-                     case return of
+                | Call {func, args, return} =>
+                     let
+                        val call = seq [Func.layout func, str " ", layoutArgs args]
+                     in
+                        case return of
                         Return.Dead => seq [str "call dead ", call]
-                      | Return.NonTail {cont, handler} =>
+                         | Return.NonTail {cont, handler} =>
                            seq [str "call ", Label.layout cont, str " ",
-                                paren call,
-                                str " handle _ => ",
-                                case handler of
-                                   Handler.Caller => str "raise"
-                                 | Handler.Dead => str "dead"
-                                 | Handler.Handle l => Label.layout l]
+                                   paren call,
+                                   str " handle _ => ",
+                                   case handler of
+                                      Handler.Caller => str "raise"
+                                    | Handler.Dead => str "dead"
+                                    | Handler.Handle l => Label.layout l]
                       | Return.Tail => seq [str "call tail ", call]
-                  end
+                     end
              | Case arg => layoutCase arg
-             | Goto {dst, args} =>
+                | Goto {dst, args} =>
                   seq [str "goto ", Label.layout dst, str " ", layoutArgs args]
-             | Raise xs => seq [str "raise ", layoutArgs xs]
-             | Return xs => seq [str "return ", layoutArgs xs]
-             | Runtime {prim, args, return} =>
+                | Raise xs => seq [str "raise ", layoutArgs xs]
+                | Return xs => seq [str "return ", layoutArgs xs]
+                | Runtime {prim, args, return} =>
                   seq [str "runtime ", Label.layout return, str " ",
                        paren (layoutPrim {prim = prim, args = args})]
-         end
+      end
       fun layout t = layout' (t, Var.layout)
 
       val parse =
@@ -1158,7 +1168,7 @@ local
 in
    fun layoutFormals (xts: (Var.t * Type.t) vector) =
       Vector.layout (fn (x, t) =>
-                     if !Control.showTypes
+                         if !Control.showTypes
                         then mayAlign [seq [Var.layout x, str ":"],
                                        indent (Type.layout t, 2)]
                         else Var.layout x)
@@ -2057,7 +2067,7 @@ structure Program =
       val toFile = {display = Control.Layouts layouts, style = Control.ML, suffix = "ssa2"}
 
       fun parse () =
-         let
+                 let
             open Parse
 
             val () = Tycon.parseReset {prims = Vector.new1 Tycon.bool}
@@ -2076,7 +2086,7 @@ structure Program =
                       globals = Vector.fromList globals,
                       functions = functions,
                       main = main})))))
-         in
+                 in
             compose (skipCommentsML, parseProgram <* (spaces *> (failing next <|> failCut "end of file")))
          end
 
@@ -2107,7 +2117,6 @@ structure Program =
                        case Type.dest t of
                           CPointer => ()
                         | Datatype _ => ()
-                        | HierarchicalHeap t => countType t
                         | IntInf => ()
                         | Object {args, ...} => Prod.foreach (args, countType)
                         | Real _ => ()

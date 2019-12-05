@@ -17,10 +17,6 @@ const char* objectTypeTagToString (GC_objectTypeTag tag) {
     return "STACK";
   case WEAK_TAG:
     return "WEAK";
-  case HEADER_ONLY_TAG:
-    return "HEADER_ONLY";
-  case FILL_TAG:
-    return "FILL";
   default:
     die ("bad GC_objectTypeTag %u", tag);
   }
@@ -32,7 +28,6 @@ const char* objectTypeTagToString (GC_objectTypeTag tag) {
  */
 GC_header* getHeaderp (pointer p) {
   return (GC_header*)(p
-                      - OBJPTR_SIZE /* forward pointer */
                       - GC_HEADER_SIZE);
 }
 

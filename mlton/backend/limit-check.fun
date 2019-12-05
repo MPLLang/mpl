@@ -156,7 +156,9 @@ val extraGlobals: Var.t list ref = ref []
 
 fun insertFunction (f: Function.t,
                     handlesSignals: bool,
+                    (* how many bytes do I need to ensure free (for each block? *)
                     blockCheckAmount: {blockIndex: int} -> Bytes.t,
+                    (* for c primitives that need ensureFree arg *)
                     ensureFree: Label.t -> Bytes.t) =
    let
      val {args, blocks, name, raises, returns, start} = Function.dest f
@@ -218,15 +220,84 @@ fun insertFunction (f: Function.t,
                                      (args, fn (j, arg) =>
                                       if i = j
                                          then Operand.word
-                                              (WordX.fromIntInf
-                                               (Bytes.toIntInf
-                                                (ensureFree (valOf return)),
-                                                WordSize.csize ()))
+                                             (WordX.fromIntInf
+                                              (Bytes.toIntInf
+                                               (ensureFree (valOf return)),
+                                               WordSize.csize ()))
                                          else arg),
                               func = func,
                               return = return})
                  | _ => transfer
              val stack = Label.equals (start, label)
+             fun insert (amount: Operand.t (* of type word *)) =
+                let
+                   val collect = Label.newNoname ()
+                   val collectReturn = Label.newNoname ()
+                   val dontCollect = Label.newNoname ()
+                   val (dontCollect', collectReturnStatements, force) =
+                      case !Control.gcCheck of
+                         Control.First =>
+                            let
+                               val global = Var.newNoname ()
+                               val _ = List.push (extraGlobals, global)
+                               val global =
+                                  Operand.Var {var = global,
+                                               ty = Type.bool}
+                               val dontCollect' = Label.newNoname ()
+                               val _ =
+                                  List.push
+                                  (newBlocks,
+                                   Block.T
+                                   {args = Vector.new0 (),
+                                    kind = Kind.Jump,
+                                    label = dontCollect',
+                                    statements = Vector.new0 (),
+                                    transfer =
+                                    Transfer.ifBool
+                                    (global, {falsee = dontCollect,
+                                              truee = collect})})
+                            in
+                               (dontCollect',
+                                Vector.new1
+                                (Statement.Move {dst = global,
+                                                 src = Operand.bool false}),
+                                global)
+                            end
+                       | Control.Limit =>
+                            (dontCollect, Vector.new0 (), Operand.bool false)
+                       | Control.Every =>
+                            (collect, Vector.new0 (), Operand.bool true)
+                   val func = CFunction.gc {maySwitchThreads = handlesSignals}
+                   val _ =
+                      newBlocks :=
+                      Block.T {args = Vector.new0 (),
+                               kind = Kind.Jump,
+                               label = collect,
+                               statements = Vector.new0 (),
+                               transfer = (Transfer.CCall
+                                           {args = Vector.new3 (Operand.GCState,
+                                                                amount,
+                                                                force),
+                                            func = func,
+                                            return = SOME collectReturn})}
+                      :: (Block.T
+                          {args = Vector.new0 (),
+                           kind = Kind.CReturn {func = func},
+                           label = collectReturn,
+                           statements = collectReturnStatements,
+                           transfer = Transfer.Goto {dst = dontCollect,
+                                                     args = Vector.new0 ()}})
+                      :: Block.T {args = Vector.new0 (),
+                                  kind = Kind.Jump,
+                                  label = dontCollect,
+                                  statements = statements,
+                                  transfer = transfer}
+                      :: !newBlocks
+                in
+                   {collect = collect,
+                    dontCollect = dontCollect'}
+                end
+(*
              fun insert (amount: Operand.t (* of type word *)) =
                 let
                    val collect = Label.newNoname ()
@@ -348,6 +419,7 @@ fun insertFunction (f: Function.t,
                    {collect = collect,
                     dontCollect = dontCollect'}
                 end
+*)
              fun newBlock (isFirst, statements, transfer) =
                 let
                    val (args, kind, label) =
@@ -387,6 +459,7 @@ fun insertFunction (f: Function.t,
                    (Vector.new1 s, transfer)
                 end
              datatype z = datatype Runtime.GCField.t
+             val () = () (* to avoid stupid code highlighting bug *)
              fun stackCheck (maybeFirst, z): Label.t =
                 let
                    val (statements, transfer) =
@@ -398,7 +471,7 @@ fun insertFunction (f: Function.t,
                    newBlock (maybeFirst, statements, transfer)
                 end
              fun maybeStack (): unit =
-                if stack
+                 if stack
                    then ignore (stackCheck
                                 (true,
                                  insert (Operand.zero (WordSize.csize ()))))
@@ -537,7 +610,7 @@ fun insertFunction (f: Function.t,
                                     Statement.PrimApp
                                     {args = Vector.new2
                                             (Operand.word extraBytes,
-                                             bytesNeeded),
+                                                        bytesNeeded),
                                      dst = SOME (test, Type.bool),
                                      prim = Prim.wordAddCheckP
                                             (WordSize.csize (),
@@ -545,8 +618,8 @@ fun insertFunction (f: Function.t,
                                    Transfer.ifBool
                                    (Operand.Var {var = test, ty = Type.bool},
                                     {falsee = heapCheck (false,
-                                                         Operand.Var
-                                                         {var = bytes,
+                                                Operand.Var
+                                                {var = bytes,
                                                           ty = Type.csize ()}),
                                      truee = heapCheckTooLarge ()}))
                          end
@@ -619,9 +692,135 @@ fun isolateBigTransfers (f: Function.t): Function.t =
                     start = start}
    end
 
-fun insertCoalesce (f: Function.t, handlesSignals) =
+(* Enforce that a block allocates at most `maxAlloc` bytes, by splitting
+ * it into multiple blocks if necessary. Returns a list of new blocks;
+ * if a block does not need to be split, this will just be a singleton.
+ * Assumes big transfers have already been isolated. *)
+fun restrictAllocInBlock
+  (originalBlock as
+    Block.T {args=originalArgs,
+             kind=originalKind,
+             label=originalLabel,
+             statements=originalStatements,
+             transfer=originalTransfer},
+   maxAlloc : Bytes.t) : Block.t list =
+  case Transfer.bytesAllocated originalTransfer of
+    (* In this case, it should be an isolated transfer, i.e. no statements. *)
+    Transfer.Big _ => [originalBlock]
+    (* Otherwise we take into account the bytes needed for the transfer. *)
+  | Transfer.Small transferBytes =>
+      if Bytes.<= (Block.objectBytesAllocated originalBlock, maxAlloc)
+      then [originalBlock]
+      else
+      let
+        fun prependStatement (s, (ss, ssAlloc, groups)) =
+          let
+            val b = Statement.bytesAllocated s
+            (* val _ =
+              if Bytes.<= (sAlloc, maxAlloc) then ()
+              else Error.bug ("LimitCheck.restrictAllocInBlock: single statement " ^
+                              "allocates too much (" ^ Bytes.toString sAlloc ^ " bytes)") *)
+          in
+            if Bytes.<= (Bytes.+ (ssAlloc, b), maxAlloc)
+            then (s :: ss, Bytes.+ (ssAlloc, b), groups)
+            else ([s], b, ss :: groups)
+          end
+
+        (* Each group of statements is guaranteed to allocate at most
+         * `maxAlloc` bytes. *)
+        val (firstGroup, _, groups) =
+          Vector.foldr (originalStatements, ([], transferBytes, []), prependStatement)
+
+        (* sanity check *)
+        val _ =
+          if not (List.isEmpty groups) then ()
+          else Error.bug ("LimitCheck.restrictAllocInBlock: groups empty")
+
+        (* Loop through groups of statements, generating a block for each group,
+         * and linking blocks together with `goto` transfers. The last such
+         * group uses the original outgoing transfer.
+         *)
+        fun makeBlocks (blocks, label, groups) =
+          case groups of
+            [] => Error.bug ("LimitCheck.restrictAllocInBlock: missed last block")
+
+          | [ss] =>
+              let
+                val b = Block.T {args = Vector.new0 (),
+                                 kind = Kind.Jump,
+                                 label = label,
+                                 statements = Vector.fromList ss,
+                                 transfer = originalTransfer}
+              in
+                List.rev (b :: blocks)
+              end
+
+          | ss :: groups' =>
+              let
+                val nextLabel = Label.newNoname ()
+                val b = Block.T {args = Vector.new0 (),
+                                 kind = Kind.Jump,
+                                 label = label,
+                                 statements = Vector.fromList ss,
+                                 transfer = Goto {args = Vector.new0 (),
+                                                  dst = nextLabel}}
+              in
+                makeBlocks (b :: blocks, nextLabel, groups')
+              end
+
+        val nextLabel = Label.newNoname ()
+        val firstBlock =
+          Block.T {args = originalArgs,
+                   kind = originalKind,
+                   label = originalLabel,
+                   statements = Vector.fromList firstGroup,
+                   transfer = Goto {args = Vector.new0 (),
+                                    dst = nextLabel}}
+
+        val blocks = makeBlocks ([firstBlock], nextLabel, groups)
+
+        val _ =
+          Control.diagnostic (fn () =>
+            let open Layout in
+              seq ([ str "SPLIT "
+                   , Label.layout originalLabel, str "; WAS\n"
+                   , indent (Block.layout originalBlock, 2), str "\n"
+                   , str "NOW IS\n"
+                   ]
+                   @
+                   List.map (blocks, fn b => seq [indent (Block.layout b, 2), str "\n"])
+                   @
+                   [ str "END SPLIT" ])
+            end)
+          (* (fn display =>
+           Vector.foreach
+           (blocks, fn Block.T {label, ...} =>
+            display (let open Layout
+                     in seq [Label.layout label, str " ",
+                             Bytes.layout (maxPath (labelIndex label))]
+                     end))) *)
+      in
+        blocks
+      end
+
+fun restrictAllocInEachBlock (f: Function.t, maxAlloc: Bytes.t) =
+  let
+    val {args, blocks, name, raises, returns, start} = Function.dest f
+    val expandedBlocks = Vector.map (blocks, fn b => restrictAllocInBlock (b, maxAlloc))
+    val blocks' = Vector.foldr (expandedBlocks, [], fn (acc, bs) => List.append (bs, acc))
+  in
+    Function.new {args = args,
+                  blocks = Vector.fromList blocks',
+                  name = name,
+                  raises = raises,
+                  returns = returns,
+                  start = start}
+  end
+
+fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
    let
       val f = isolateBigTransfers f
+      val f = restrictAllocInEachBlock (f, maxAlloc)
       val {blocks, start, ...} = Function.dest f
       val n = Vector.length blocks
       val {get = labelIndex, set = setLabelIndex, ...} =
@@ -836,8 +1035,13 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
        * So, we can compute a function, maxPath, inductively that for each node
        * tells the maximum amount allocated along any path that passes only
        * through nodes that are not mayHaveCheck.
+       *
+       * SAM_NOTE: Additionally, we mark additional nodes as mayHaveCheck in
+       * to guarantee that we never request too many bytes at a single
+       * limit check. This is to guarantee the chunk invariants of the runtime.
        *)
       local
+         (* n is number of blocks in this function *)
          val a = Array.array (n, NONE)
       in
          fun maxPath arg : Bytes.t =  (* i is a node index *)
@@ -855,9 +1059,12 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
                          let
                             val i' = nodeIndex (Edge.to e)
                          in
-                            if Array.sub (mayHaveCheck, i')
-                               then max
-                            else Bytes.max (max, maxPath i')
+                            if Array.sub (mayHaveCheck, i') then
+                              max
+                            else if Bytes.> (Bytes.+ (x, maxPath i'), maxAlloc) then
+                              (Array.update (mayHaveCheck, i', true); max)
+                            else
+                              Bytes.max (max, maxPath i')
                          end)
                      val x = Bytes.+ (x, max)
                      val _ = Array.update (a, i, SOME x)
@@ -866,10 +1073,19 @@ fun insertCoalesce (f: Function.t, handlesSignals) =
                   end
                ) arg
       end
+
+      (* computing maxPath has a side-effect of deciding which blocks have a
+       * limit check. Therefore we have to precompute to guarantee that
+       * `blockCheckAmount` behaves as a function. *)
+      fun computeMaxPathsLoop i =
+        if i >= n then () else (maxPath i; computeMaxPathsLoop (i+1))
+      val () = computeMaxPathsLoop 0
+
       fun blockCheckAmount {blockIndex} =
          if Array.sub (mayHaveCheck, blockIndex)
             then maxPath blockIndex
          else Bytes.zero
+
       val f = insertFunction (f, handlesSignals, blockCheckAmount,
                               maxPath o labelIndex)
       val _ =
@@ -892,8 +1108,27 @@ fun transform (Program.T {functions, handlesSignals, main, objectTypes, profileI
       datatype z = datatype Control.limitCheck
       fun insert f =
          case !Control.limitCheck of
-            PerBlock => insertPerBlock (f, handlesSignals)
-          | _ => insertCoalesce (f, handlesSignals)
+            PerBlock => (*insertPerBlock (f, handlesSignals)*)
+              Error.bug "LimitCheck.transform: insertPerBlock not supported"
+          | _ =>
+              let
+                (* SAM_NOTE: I chose 512*7 because the smallest block size that we
+                 * use is 4K, and each chunk has a chunk descriptor of some small
+                 * size at the beginning of each chunk. To be correct, the chunk
+                 * descriptor can be at most 512 bytes! The current runtime
+                 * uses chunk descriptors of size much smaller than 512 bytes.
+                 *
+                 * TODO: This is a dirty hack. Ideally, at compile time, a block
+                 * size should be chosen and we should pass the parameter:
+                 *   blockSize - sizeOfChunkDescriptor
+                 *)
+                val maxBytesAlloc =
+                  Bytes.- (Bytes.fromInt (512*7), Runtime.limitSlop)
+              in
+                insertCoalesce (f, maxBytesAlloc, handlesSignals)
+              end
+
+      (* insert limit checks into all functions *)
       val functions = List.revMap (functions, insert)
       val {args, blocks, name, raises, returns, start} =
          Function.dest (insert main)

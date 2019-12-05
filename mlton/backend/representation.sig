@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature REPRESENTATION_STRUCTS = 
+signature REPRESENTATION_STRUCTS =
    sig
       structure Rssa: RSSA
       structure Ssa2: SSA2
@@ -15,7 +15,7 @@ signature REPRESENTATION_STRUCTS =
       sharing Rssa.WordSize = Ssa2.WordSize
    end
 
-signature REPRESENTATION = 
+signature REPRESENTATION =
    sig
       include REPRESENTATION_STRUCTS
 
@@ -28,8 +28,8 @@ signature REPRESENTATION =
                        default: Rssa.Label.t option,
                        test: unit -> Rssa.Operand.t,
                        tycon: Ssa2.Tycon.t} -> (Rssa.Statement.t list
-                                                * Rssa.Transfer.t
-                                                * Rssa.Block.t list),
+                                               * Rssa.Transfer.t
+                                               * Rssa.Block.t list),
              object: {args: 'a vector,
                       con: Ssa2.Con.t option,
                       dst: Rssa.Var.t * Rssa.Type.t,
@@ -44,5 +44,7 @@ signature REPRESENTATION =
              update: {base: Rssa.Operand.t Ssa2.Base.t,
                       baseTy: Ssa2.Type.t,
                       offset: int,
-                      value: Rssa.Operand.t} -> Rssa.Statement.t list}
+                      value: Rssa.Operand.t} -> {dst: Rssa.Operand.t,
+                                                 src: Rssa.Operand.t,
+                                                 ss: Rssa.Statement.t list}}
    end

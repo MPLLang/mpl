@@ -177,10 +177,10 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                  Prim.Name.Array_sub => derefPrim args
                | Prim.Name.Array_toArray => Vector.sub (args, 0)
                | Prim.Name.Array_toVector => Vector.sub (args, 0)
-               | Prim.Name.Array_update => updatePrim TypeInfo.Array args
+               | Prim.Name.Array_update _ => updatePrim TypeInfo.Array args
                | Prim.Name.Ref_ref => refPrim TypeInfo.Ref args
                | Prim.Name.Ref_deref => derefPrim args
-               | Prim.Name.Ref_assign => assignPrim TypeInfo.Ref args
+               | Prim.Name.Ref_assign _ => assignPrim TypeInfo.Ref args
                | Prim.Name.Vector_sub => derefPrim args
                | Prim.Name.Vector_vector => TypeInfo.Heap
                   let
@@ -279,7 +279,6 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                          result=newTy,
                          typeOps = {deArray = Type.deArray,
                                     deArrow = fn _ => Error.bug "SplitTypes.transform.loopExp: deArrow primApp",
-                                    deHierarchicalHeap = Type.deHierarchicalHeap,
                                     deRef = Type.deRef,
                                     deVector = Type.deVector,
                                     deWeak = Type.deWeak}})

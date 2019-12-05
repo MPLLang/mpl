@@ -25,16 +25,77 @@
  * @return The pointer to the start of the sequence object, after the headers
  */
 static inline pointer sequenceInitialize(ARG_USED_FOR_ASSERT GC_state s,
-                                         pointer frontier,
+                                      pointer frontier,
                                          size_t sequenceSize,
                                          GC_sequenceLength numElements,
-                                         GC_header header,
-                                         uint16_t bytesNonObjptrs,
-                                         uint16_t numObjptrs);
+                                      GC_header header,
+                                      uint16_t bytesNonObjptrs,
+                                      uint16_t numObjptrs);
 
+pointer sequenceAllocateInHH(GC_state s,
+                          size_t sequenceSizeAligned,
+                          size_t ensureBytesFree);
 /************************/
 /* Function Definitions */
 /************************/
+
+pointer sequenceAllocateInHH(GC_state s,
+                          size_t sequenceSizeAligned,
+                          size_t ensureBytesFree) {
+  assert(ensureBytesFree <= s->controls->minChunkSize - sizeof(struct HM_chunk));
+  size_t sequenceChunkBytes = align(sequenceSizeAligned, s->controls->minChunkSize);
+  size_t bytesRequested = sequenceSizeAligned + ensureBytesFree;
+  bool giveWholeChunk = sequenceSizeAligned >= s->controls->minChunkSize / 2;
+  if (giveWholeChunk) {
+    bytesRequested = sequenceChunkBytes + s->controls->minChunkSize;
+  }
+
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  /* ensure free bytes at the most up-to-date level */
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
+  struct HM_HierarchicalHeap *hh = HM_HH_getCurrent(s);
+
+  assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=
+         bytesRequested);
+
+  if (giveWholeChunk) {
+    /* split the large chunk so that we have space for the sequence at the end;
+     * this guarantees that the single chunk holding the sequence is not a
+     * level-head which makes it easy to move it during a GC */
+    assert(hh->lastAllocatedChunk->frontier == s->frontier);
+    assert(hh->lastAllocatedChunk->limit == s->limitPlusSlop);
+    HM_chunk sequenceChunk = HM_splitChunk(hh->lastAllocatedChunk, sequenceChunkBytes);
+    assert(sequenceChunk != NULL);
+    pointer result = sequenceChunk->frontier;
+    sequenceChunk->frontier += sequenceSizeAligned;
+    sequenceChunk->mightContainMultipleObjects = FALSE;
+
+    assert(s->frontier == HM_HH_getFrontier(hh));
+    s->limitPlusSlop = HM_HH_getLimit(hh);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    return result;
+  }
+
+  pointer result = s->frontier;
+  pointer newFrontier = result + sequenceSizeAligned;
+  assert (isFrontierAligned (s, newFrontier));
+  s->frontier = newFrontier;
+
+  assert(HM_getChunkOf(result) == hh->lastAllocatedChunk);
+  if (!inFirstBlockOfChunk(hh->lastAllocatedChunk, s->frontier)) {
+    /* force a new chunk to be created so that no new objects lie after this
+     * sequence, which crossed a block boundary. */
+    HM_HH_updateValues(hh, s->frontier);
+    HM_HH_extend(hh, ensureBytesFree);
+    s->frontier = HM_HH_getFrontier(hh);
+    s->limitPlusSlop = HM_HH_getLimit(hh);
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  }
+
+  return result;
+}
 
 pointer GC_sequenceAllocate (GC_state s,
                              size_t ensureBytesFree,
@@ -46,7 +107,6 @@ pointer GC_sequenceAllocate (GC_state s,
   uint16_t numObjptrs;
   pointer frontier;
   pointer result;
-  bool holdLock = FALSE;
 
   splitHeader(s, header, NULL, NULL, &bytesNonObjptrs, &numObjptrs);
 
@@ -56,14 +116,15 @@ pointer GC_sequenceAllocate (GC_state s,
       numElements, header,
       Proc_processorNumber (s));
 
+  bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+
   Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
          (EventInt)ensureBytesFree,
          (EventInt)numElements,
-         (EventInt)header);
+         (EventInt)bytesPerElement);
 
   /* Check for overflow when computing sequenceSize.
    */
-  bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
   if (bytesPerElement > 0 and numElements > (SIZE_MAX / bytesPerElement)) {
     goto doOverflow;
   }
@@ -88,93 +149,16 @@ pointer GC_sequenceAllocate (GC_state s,
       uintmaxToCommaString(sequenceSizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
-  if (HM_inGlobalHeap(s)) {
-    /* Allocate in Global Heap */
+  assert(threadAndHeapOkay(s));
+  frontier = sequenceAllocateInHH(s, sequenceSizeAligned, ensureBytesFree);
 
-    /* Determine whether we will perform this allocation locally or not */
-    holdLock = sequenceSizeAligned >= s->controls->oldGenSequenceSize;
-
-    if (holdLock) {
-      /* Global alloc */
-      s->syncReason = SYNC_OLD_GEN_ARRAY;
-      ENTER0 (s);
-      if (not hasHeapBytesFree (s, sequenceSizeAligned, ensureBytesFree)) {
-        performGC (s, sequenceSizeAligned, ensureBytesFree, FALSE, TRUE);
-      }
-      assert (hasHeapBytesFree (s, sequenceSizeAligned, ensureBytesFree));
-      frontier = s->heap->start + s->heap->oldGenSize;
-      assert (isFrontierAligned (s, frontier));
-      result = sequenceInitialize(s,
-                                  frontier,
-                                  sequenceSize,
-                                  numElements,
-                                  header,
-                                  bytesNonObjptrs,
-                                  numObjptrs);
-
-      /* SPOONHOWER_NOTE: This must be updated while holding the lock! */
-      s->heap->oldGenSize += sequenceSizeAligned;
-      assert (s->heap->start + s->heap->oldGenSize <= s->heap->nursery);
-      s->cumulativeStatistics->bytesAllocated += sequenceSizeAligned;
-      /* NB LEAVE appears below since no heap invariant holds while the
-         oldGenSize has been updated but the sequence remains uninitialized. */
-    } else {
-      /* Local alloc */
-      size_t bytesRequested;
-      pointer newFrontier;
-
-      bytesRequested = sequenceSizeAligned + ensureBytesFree;
-      if (not hasHeapBytesFree (s, 0, bytesRequested)) {
-        /* Local alloc may still require getting the lock, but we will release
-           it before initialization. */
-        ensureHasHeapBytesFreeAndOrInvariantForMutator (s, FALSE, FALSE, FALSE,
-                                                        0, bytesRequested);
-      }
-      assert (hasHeapBytesFree (s, 0, bytesRequested));
-      frontier = s->frontier;
-      result = sequenceInitialize(s,
-                                  frontier,
-                                  sequenceSize,
-                                  numElements,
-                                  header,
-                                  bytesNonObjptrs,
-                                  numObjptrs);
-
-      newFrontier = frontier + sequenceSizeAligned;
-      assert (isFrontierAligned (s, newFrontier));
-      s->frontier = newFrontier;
-    }
-  } else {
-    /* Allocate in Hierarchical Heap */
-    size_t bytesRequested = sequenceSizeAligned + ensureBytesFree;
-    /* RAM_NOTE: This should be wrapped in a function */
-    /* used needs to be set because the mutator has changed s->stackTop. */
-    getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-    getThreadCurrent(s)->exnStack = s->exnStack;
-    getThreadCurrent(s)->bytesNeeded = bytesRequested;
-    HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
-
-    assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=
-           bytesRequested);
-
-    /*
-     * at this point, the current chunk has enough space, and is at the right
-     * level
-     */
-
-    frontier = s->frontier;
-    result = sequenceInitialize(s,
-                                frontier,
-                                sequenceSize,
-                                numElements,
-                                header,
-                                bytesNonObjptrs,
-                                numObjptrs);
-
-      pointer newFrontier = frontier + sequenceSizeAligned;
-      assert (isFrontierAligned (s, newFrontier));
-      s->frontier = newFrontier;
-  }
+  result = sequenceInitialize(s,
+                              frontier,
+                              sequenceSize,
+                              numElements,
+                              header,
+                              bytesNonObjptrs,
+                              numObjptrs);
 
   GC_profileAllocInc (s, sequenceSizeAligned);
 
@@ -188,15 +172,17 @@ pointer GC_sequenceAllocate (GC_state s,
     displayGCState (s, stderr);
   }
 
-  assert (ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
+#if ASSERT
+  if (s->frontier != s->limitPlusSlop) {
+    assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+    assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+  }
+  assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
   /* Unfortunately, the invariant isn't quite true here, because
    * unless we did the GC, we never set s->currentThread->stack->used
    * to reflect what the mutator did with stackTop.
    */
-
-  if (holdLock) {
-    LEAVE1 (s, result);
-  }
+#endif
 
   Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 
@@ -214,12 +200,12 @@ doOverflow:
 /*******************************/
 
 static pointer sequenceInitialize(ARG_USED_FOR_ASSERT GC_state s,
-                                  pointer frontier,
+                               pointer frontier,
                                   size_t sequenceSize,
                                   GC_sequenceLength numElements,
-                                  GC_header header,
-                                  uint16_t bytesNonObjptrs,
-                                  uint16_t numObjptrs) {
+                               GC_header header,
+                               uint16_t bytesNonObjptrs,
+                               uint16_t numObjptrs) {
   pointer last = frontier + sequenceSize;
 
   *((GC_sequenceCounter*)(frontier)) = 0;
@@ -231,8 +217,8 @@ static pointer sequenceInitialize(ARG_USED_FOR_ASSERT GC_state s,
   *((GC_header*)(frontier)) = header;
   frontier = frontier + GC_HEADER_SIZE;
 
-  *((objptr*)(frontier)) = BOGUS_OBJPTR;
-  frontier = frontier + OBJPTR_SIZE;
+  // *((objptr*)(frontier)) = BOGUS_OBJPTR;
+  // frontier = frontier + OBJPTR_SIZE;
 
   pointer result = frontier;
   assert (isAligned ((size_t)result, s->alignment));

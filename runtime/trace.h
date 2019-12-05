@@ -38,7 +38,11 @@ enum EventKind {
 
   EVENT_LOCK_TAKE_ENTER       = 13,
   EVENT_LOCK_TAKE_LEAVE       = 14,
-  EVENT_LOCK_RELEASE          = 15,
+
+  EVENT_RWLOCK_R_TAKE         = 15,
+  EVENT_RWLOCK_R_RELEASE      = 25,
+  EVENT_RWLOCK_W_TAKE         = 26,
+  EVENT_RWLOCK_W_RELEASE      = 27,
 
   EVENT_GSECTION_BEGIN_ENTER  = 16,
   EVENT_GSECTION_BEGIN_LEAVE  = 17,
@@ -47,6 +51,15 @@ enum EventKind {
 
   EVENT_ARRAY_ALLOCATE_ENTER  = 23,
   EVENT_ARRAY_ALLOCATE_LEAVE  = 24,
+
+  EVENT_PROMOTION_ENTER       = 28,
+  EVENT_PROMOTION_LEAVE       = 29,
+  EVENT_PROMOTED_WRITE        = 30,
+  EVENT_PROMOTION             = 31,
+
+  EVENT_MERGED_HEAP           = 32,
+
+  EVENT_COPY                  = 33,
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)

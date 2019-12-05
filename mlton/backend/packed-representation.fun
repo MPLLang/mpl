@@ -591,18 +591,18 @@ structure Base =
                                                 {signed = false}))}
                         in
                            (SequenceOffset {base = sequence,
-                                            index = Var {var = prod, ty = seqIndexTy},
-                                            offset = offset,
-                                            scale = Scale.One,
-                                            ty = ty},
+                                         index = Var {var = prod, ty = seqIndexTy},
+                                         offset = offset,
+                                         scale = Scale.One,
+                                         ty = ty},
                             [s])
                         end
                    | SOME s =>
                         (SequenceOffset {base = sequence,
-                                         index = index,
-                                         offset = offset,
-                                         scale = s,
-                                         ty = ty},
+                                      index = index,
+                                      offset = offset,
+                                      scale = s,
+                                      ty = ty},
                          [])
                end
    end
@@ -696,7 +696,10 @@ structure Select =
 
       fun update (s: t, {base: Operand.t Base.t,
                          eltWidth: Bytes.t option,
-                         value: Operand.t}): Statement.t list =
+                         value: Operand.t}):
+            {dst : Operand.t,
+             src : Operand.t,
+             ss : Statement.t list} =
          case s of
             Indirect {offset, ty} =>
                let
@@ -706,7 +709,9 @@ structure Select =
                                      offset = offset,
                                      ty = ty}
                in
-                  ss @ [Move {dst = dst, src = value}]
+                  {dst = dst,
+                   src = value,
+                   ss = ss}
                end
           | IndirectUnpack {offset, rest, ty} =>
                let
@@ -719,14 +724,16 @@ structure Select =
                      Unpack.update (rest, {chunk = chunk,
                                            component = value})
                in
-                  ss @ ss' @ [Move {dst = chunk, src = newChunk}]
+                  {dst = chunk,
+                   src = newChunk,
+                   ss = ss @ ss'}
                end
           | _ => Error.bug "PackedRepresentation.Select.update: non-indirect"
 
       val update =
          Trace.trace
          ("PackedRepresentation.Select.update",
-          layout o #1, List.layout Statement.layout)
+          layout o #1, fn {src, dst, ss} => List.layout Statement.layout (ss @ [Statement.Move {dst=dst, src=src}]))
          update
    end
 
@@ -1562,26 +1569,26 @@ structure Objptrs =
                      | SOME default =>
                           ([], Goto {args = Vector.new0 (), dst = default})
                else let
-                       val default =
-                          if Vector.length variants = Vector.length cases
-                             then NONE
-                             else default
-                       val cases =
-                          QuickSort.sortVector (cases, fn ((w, _), (w', _)) =>
-                                                WordX.le (w, w', {signed = false}))
-                       val shift = Operand.word (WordX.one WordSize.shiftArg)
-                       val (s, tag) =
-                          Statement.rshift (Offset {base = test,
-                                                    offset = Runtime.headerOffset (),
-                                                    ty = Type.objptrHeader ()},
-                                            shift)
-                    in
-                       ([s], Switch (Switch.T {cases = cases,
-                                               default = default,
-                                               size = WordSize.objptrHeader (),
-                                               test = tag}))
-                    end
+            val default =
+               if Vector.length variants = Vector.length cases
+                  then NONE
+               else default
+            val cases =
+               QuickSort.sortVector (cases, fn ((w, _), (w', _)) =>
+                                     WordX.le (w, w', {signed = false}))
+            val shift = Operand.word (WordX.one WordSize.shiftArg)
+            val (s, tag) =
+               Statement.rshift (Offset {base = test,
+                                         offset = Runtime.headerOffset (),
+                                         ty = Type.objptrHeader ()},
+                                 shift)
+         in
+            ([s], Switch (Switch.T {cases = cases,
+                                    default = default,
+                                    size = WordSize.objptrHeader (),
+                                    test = tag}))
          end
+   end
    end
 
 structure Small =
@@ -1705,14 +1712,14 @@ structure Small =
                                   in
                                      (tagOp, [s])
                                   end
-                       val transfer =
-                          Switch (Switch.T {cases = cases,
-                                            default = default,
-                                            size = testSize,
-                                            test = tagOp})
-                    in
-                       (ss, transfer)
-                    end
+            val transfer =
+               Switch (Switch.T {cases = cases,
+                                 default = default,
+                                 size = testSize,
+                                 test = tagOp})
+         in
+            (ss, transfer)
+         end
          end
 
       val genCase =
@@ -2533,9 +2540,6 @@ fun compute (program as Ssa2.Program.T {datatypes, ...}) =
                     in
                        r'
                     end
-               | HierarchicalHeap _ =>
-                    constant (Rep.T {rep = Rep.Objptr {endsIn00 = true},
-                                     ty = Type.hierarchicalHeap ()})
                | IntInf =>
                     constant (Rep.T {rep = Rep.Objptr {endsIn00 = false},
                                      ty = Type.intInf ()})

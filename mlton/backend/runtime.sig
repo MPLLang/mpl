@@ -19,7 +19,6 @@ signature RUNTIME =
          sig
             datatype t =
                AtomicState
-             | CardMapAbsolute
              | CurSourceSeqIndex
              | ExnStack
              | Frontier (* The place where the next object is allocated. *)
@@ -33,7 +32,6 @@ signature RUNTIME =
             val layout: t -> Layout.t
             val offset: t -> Bytes.t (* Field offset in struct GC_state. *)
             val setOffsets: {atomicState: Bytes.t,
-                             cardMapAbsolute: Bytes.t,
                              curSourceSeqIndex: Bytes.t,
                              exnStack: Bytes.t,
                              frontier: Bytes.t,
@@ -44,7 +42,6 @@ signature RUNTIME =
                              stackLimit: Bytes.t,
                              stackTop: Bytes.t} -> unit
             val setSizes: {atomicState: Bytes.t,
-                           cardMapAbsolute: Bytes.t,
                            curSourceSeqIndex: Bytes.t,
                            exnStack: Bytes.t,
                            frontier: Bytes.t,
@@ -61,15 +58,13 @@ signature RUNTIME =
          sig
             datatype t =
                Normal of {hasIdentity: bool,
+                         bytesNonObjptrs: Bytes.t,
+                         numObjptrs: int}
+             | Sequence of {hasIdentity: bool,
                           bytesNonObjptrs: Bytes.t,
                           numObjptrs: int}
-             | Sequence of {hasIdentity: bool,
-                            bytesNonObjptrs: Bytes.t,
-                            numObjptrs: int}
              | Stack
              | Weak of {gone: bool}
-             | HeaderOnly
-             | Fill
          end
 
       val cpointerSize: unit -> Bytes.t

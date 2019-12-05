@@ -42,8 +42,9 @@ static void displayGlobalCumulativeStatistics (
     struct GC_globalCumulativeStatistics* globalCumulativeStatistics) {
     fprintf (out, "max global heap occupancy: %s bytes\n",
            uintmaxToCommaString (globalCumulativeStatistics->maxHeapOccupancy));
-    fprintf (out, "max chunk pool occupancy: %s bytes\n",
-             uintmaxToCommaString (ChunkPool_maxAllocated ()));
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // fprintf (out, "max chunk pool occupancy: %s bytes\n",
+    //          uintmaxToCommaString (ChunkPool_maxAllocated ()));
 }
 
 
@@ -105,6 +106,8 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesAllocated));
+  fprintf (out, "total bytes promoted: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesPromoted));
   fprintf (out, "max global heap bytes live: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
   fprintf (out, "max global heap size: %s bytes\n",
@@ -176,17 +179,17 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
     fprintf(out, ", ");
 
-    fprintf(out,
-            "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
-            ChunkPool_maxAllocated ());
+    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
+    // fprintf(out,
+    //         "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
+    //         ChunkPool_maxAllocated ());
   }
 
   fprintf(out, " }");
 }
 
-void GC_done (GC_state s) {
+void GC_done(GC_state s) {
   GC_PthreadAtExit(s);
-  minorGC (s);
 
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {
@@ -210,6 +213,4 @@ void GC_done (GC_state s) {
       fprintf(s->controls->summaryFile, "\n");
     }
   }
-  releaseHeap(s, s->heap);
-  releaseHeap(s, s->secondaryHeap);
 }

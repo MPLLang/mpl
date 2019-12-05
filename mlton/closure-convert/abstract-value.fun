@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor AbstractValue (S: ABSTRACT_VALUE_STRUCTS): ABSTRACT_VALUE = 
+functor AbstractValue (S: ABSTRACT_VALUE_STRUCTS): ABSTRACT_VALUE =
 struct
 
 open S
@@ -95,8 +95,8 @@ structure LambdaNode:
          end
 
       val send =
-         Trace.trace2 
-         ("AbstractValue.LambdaNode.send", 
+         Trace.trace2
+         ("AbstractValue.LambdaNode.send",
           layout, Lambdas.layout, Unit.layout)
          send
 
@@ -149,10 +149,10 @@ structure LambdaNode:
 
 (*
       val unify =
-         Trace.trace2 
-         ("AbstractValue.LambdaNode.unify", layout, layout, Unit.layout) 
+         Trace.trace2
+         ("AbstractValue.LambdaNode.unify", layout, layout, Unit.layout)
          unify
-*)       
+*)
    end
 
 structure UnaryTycon =
@@ -310,14 +310,8 @@ fun deVector v =
     | Unify (_, v) => v
     | _ => Error.bug "AbstractValue.deVector"
 
-fun deHierarchicalHeap v =
-    case tree v of
-        Type t => fromType (Type.deHierarchicalHeap t)
-      | Unify (_, v) => v
-      | _ => Error.bug "AbstractValue.deHierarchicalHeap"
-
 fun lambda (l: Sxml.Lambda.t, t: Type.t): t =
-   new (Lambdas (LambdaNode.lambda l), t)       
+   new (Lambdas (LambdaNode.lambda l), t)
 
 fun unify (v, v') =
    if Dset.equals (v, v')
@@ -395,7 +389,7 @@ val {get = serialValue: Type.t -> t, ...} =
    Property.get (Type.plist, Property.initFun fromType)
 
 fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
-   let 
+   let
       fun result () = fromType resultTy
       fun typeError () =
          (Control.message
@@ -419,6 +413,10 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
          if n = 3
             then (arg 0, arg 1, arg 2)
          else Error.bug "AbstractValue.primApply.threeArgs"
+      fun fourArgs () =
+         if n = 4
+            then (arg 0, arg 1, arg 2, arg 3)
+         else Error.bug "AbstractValue.primApply.fourArgs"
       fun fiveArgs () =
          if n = 5
             then (arg 0, arg 1, arg 2, arg 3, arg 4)
@@ -471,7 +469,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                 Array x => x
               | Type _ => result ()
               | _ => typeError ())
-       | Array_update =>
+       | Array_update _ =>
             let val (a, _, x) = threeArgs ()
             in (case dest a of
                    Array x' => coerce {from = x, to = x'} (* unify (x, x') *)
@@ -479,13 +477,22 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                  | _ => typeError ())
                ; result ()
             end
+       | Array_cas _ =>
+            let
+              val (a, _, x, y) = fourArgs ()
+            in
+              (case dest a of
+                 Array v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
+            end
        | MLton_deserialize => serialValue resultTy
        | MLton_serialize =>
             let val arg = oneArg ()
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | Ref_assign =>
+       | Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of
                    Ref x' => coerce {from = x, to = x'} (* unify (x, x') *)
@@ -497,10 +504,19 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                           Ref v => v
                         | Type _ => result ()
                         | _ => typeError ())
+       | Ref_cas _ =>
+            let
+              val (r, x, y) = threeArgs ()
+            in
+              (case dest r of
+                 Ref v => (unify (y, v); unify (x, v); v)
+               | Type _ => result ()
+               | _ => typeError ())
+            end
        | Ref_ref =>
             let
                val r = result ()
-               val _ = 
+               val _ =
                   case dest r of
                      Ref x => coerce {from = oneArg (), to = x} (* unify (oneArg (), x) *)
                    | Type _ => ()

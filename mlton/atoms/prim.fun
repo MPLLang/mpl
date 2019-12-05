@@ -35,6 +35,7 @@ structure Kind =
 
 datatype 'a t =
    Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
+ | Array_cas of CType.t option (* codegen *)
  | Array_copyArray (* to rssa (as runtime C fn) *)
  | Array_copyVector (* to rssa (as runtime C fn) *)
  | Array_length (* to rssa *)
@@ -43,7 +44,7 @@ datatype 'a t =
  | Array_toVector (* to rssa *)
  | Array_uninit (* to rssa *)
  | Array_uninitIsNop (* to rssa *)
- | Array_update (* to ssa2 *)
+ | Array_update of {writeBarrier : bool} (* to ssa2 *)
  | CPointer_add (* codegen *)
  | CPointer_diff (* codegen *)
  | CPointer_equal (* codegen *)
@@ -63,12 +64,11 @@ datatype 'a t =
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
  | FFI of 'a CFunction.t (* to rssa *)
- | FFI_Symbol of {name: string, 
-                  cty: CType.t option, 
+ | FFI_Symbol of {name: string,
+                  cty: CType.t option,
                   symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* to rssa (as runtime C fn) *)
  | GC_state (* to rssa (as operand) *)
- | HierarchicalHeap_new (* ssa to rssa *)
  | IntInf_add (* to rssa (as runtime C fn) *)
  | IntInf_andb (* to rssa (as runtime C fn) *)
  | IntInf_arshift (* to rssa (as runtime C fn) *)
@@ -142,7 +142,8 @@ datatype 'a t =
  | Real_rndToWord of RealSize.t * WordSize.t * {signed: bool} (* codegen *)
  | Real_round of RealSize.t (* codegen *)
  | Real_sub of RealSize.t (* codegen *)
- | Ref_assign (* to ssa2 *)
+ | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
+ | Ref_cas of CType.t option (* codegen *)
  | Ref_deref (* to ssa2 *)
  | Ref_ref (* to ssa2 *)
  | String_toWord8Vector (* defunctorize *)
@@ -227,6 +228,8 @@ fun toString (n: 'a t): string =
    in
       case n of
          Array_alloc {raw} => if raw then "Array_allocRaw" else "Array_alloc"
+       | Array_cas NONE => "Array_cas"
+       | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
        | Array_copyVector => "Array_copyVector"
        | Array_length => "Array_length"
@@ -235,7 +238,8 @@ fun toString (n: 'a t): string =
        | Array_toVector => "Array_toVector"
        | Array_uninit => "Array_uninit"
        | Array_uninitIsNop => "Array_uninitIsNop"
-       | Array_update => "Array_update"
+       | Array_update {writeBarrier=true} => "Array_update"
+       | Array_update {writeBarrier=false} => "Array_update_noWriteBarrier"
        | CPointer_add => "CPointer_add"
        | CPointer_diff => "CPointer_diff"
        | CPointer_equal => "CPointer_equal"
@@ -258,7 +262,6 @@ fun toString (n: 'a t): string =
        | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
        | GC_state => "GC_state"
-       | HierarchicalHeap_new =>  "HierarchicalHeap_new"
        | IntInf_add => "IntInf_add"
        | IntInf_andb => "IntInf_andb"
        | IntInf_arshift => "IntInf_arshift"
@@ -317,7 +320,10 @@ fun toString (n: 'a t): string =
        | Real_rndToWord (s1, s2, sg) => rnd (realC, wordCS sg, s1, s2)
        | Real_round s => real (s, "round")
        | Real_sub s => real (s, "sub")
-       | Ref_assign => "Ref_assign"
+       | Ref_assign {writeBarrier=true} => "Ref_assign"
+       | Ref_assign {writeBarrier=false} => "Ref_assign_noWriteBarrier"
+       | Ref_cas NONE => "Ref_cas"
+       | Ref_cas (SOME ctype) => concat ["Ref", CType.name ctype, "_cas"]
        | Ref_deref => "Ref_deref"
        | Ref_ref => "Ref_ref"
        | String_toWord8Vector => "String_toWord8Vector"
@@ -388,6 +394,8 @@ fun layoutFull (p, layoutX) =
 
 val equals: 'a t * 'a t -> bool =
    fn (Array_alloc {raw = r}, Array_alloc {raw = r'}) => Bool.equals (r, r')
+    | (Array_cas NONE, Array_cas NONE) => true
+    | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (Array_copyArray, Array_copyArray) => true
     | (Array_copyVector, Array_copyVector) => true
     | (Array_length, Array_length) => true
@@ -396,7 +404,7 @@ val equals: 'a t * 'a t -> bool =
     | (Array_toVector, Array_toVector) => true
     | (Array_uninit, Array_uninit) => true
     | (Array_uninitIsNop, Array_uninitIsNop) => true
-    | (Array_update, Array_update) => true
+    | (Array_update wb1, Array_update wb2) => wb1 = wb2
     | (CPointer_add, CPointer_add) => true
     | (CPointer_diff, CPointer_diff) => true
     | (CPointer_equal, CPointer_equal) => true
@@ -419,7 +427,6 @@ val equals: 'a t * 'a t -> bool =
     | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
     | (GC_state, GC_state) => true
-    | (HierarchicalHeap_new, HierarchicalHeap_new) => true
     | (IntInf_add, IntInf_add) => true
     | (IntInf_andb, IntInf_andb) => true
     | (IntInf_arshift, IntInf_arshift) => true
@@ -484,7 +491,9 @@ val equals: 'a t * 'a t -> bool =
          andalso sg = sg'
     | (Real_round s, Real_round s') => RealSize.equals (s, s')
     | (Real_sub s, Real_sub s') => RealSize.equals (s, s')
-    | (Ref_assign, Ref_assign) => true
+    | (Ref_assign wb1, Ref_assign wb2) => wb1 = wb2
+    | (Ref_cas NONE, Ref_cas NONE) => true
+    | (Ref_cas (SOME ctype1), Ref_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (Ref_deref, Ref_deref) => true
     | (Ref_ref, Ref_ref) => true
     | (String_toWord8Vector, String_toWord8Vector) => true
@@ -507,7 +516,7 @@ val equals: 'a t * 'a t -> bool =
     | (Weak_new, Weak_new) => true
     | (Word_add s, Word_add s') => WordSize.equals (s, s')
     | (Word_addCheckP (s, sg), Word_addCheckP (s', sg')) =>
-        WordSize.equals (s, s') andalso sg = sg'
+         WordSize.equals (s, s') andalso sg = sg'
     | (Word_andb s, Word_andb s') => WordSize.equals (s, s')
     | (Word_castToReal (s1, s2), Word_castToReal (s1', s2')) =>
          WordSize.equals (s1, s1')
@@ -543,7 +552,7 @@ val equals: 'a t * 'a t -> bool =
          WordSize.equals (s, s') andalso sg = sg'
     | (Word_sub s, Word_sub s') => WordSize.equals (s, s')
     | (Word_subCheckP (s, sg), Word_subCheckP (s', sg')) =>
-        WordSize.equals (s, s') andalso sg = sg'
+         WordSize.equals (s, s') andalso sg = sg'
     | (Word_toIntInf, Word_toIntInf) => true
     | (Word_xorb s, Word_xorb s') => WordSize.equals (s, s')
     | (WordVector_toIntInf, WordVector_toIntInf) => true
@@ -567,6 +576,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
    fn (p, f) =>
    case p of
       Array_alloc {raw} => Array_alloc {raw = raw}
+    | Array_cas cty => Array_cas cty
     | Array_copyArray => Array_copyArray
     | Array_copyVector => Array_copyVector
     | Array_length => Array_length
@@ -575,7 +585,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_toVector => Array_toVector
     | Array_uninit => Array_uninit
     | Array_uninitIsNop => Array_uninitIsNop
-    | Array_update => Array_update
+    | Array_update wb => Array_update wb
     | CPointer_add => CPointer_add
     | CPointer_diff => CPointer_diff
     | CPointer_equal => CPointer_equal
@@ -599,7 +609,6 @@ val map: 'a t * ('a -> 'b) -> 'b t =
         FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
     | GC_state => GC_state
-    | HierarchicalHeap_new => HierarchicalHeap_new
     | IntInf_add => IntInf_add
     | IntInf_andb => IntInf_andb
     | IntInf_arshift => IntInf_arshift
@@ -658,7 +667,8 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Real_rndToWord z => Real_rndToWord z
     | Real_round z => Real_round z
     | Real_sub z => Real_sub z
-    | Ref_assign => Ref_assign
+    | Ref_assign wb => Ref_assign wb
+    | Ref_cas ctyp => Ref_cas ctyp
     | Ref_deref => Ref_deref
     | Ref_ref => Ref_ref
     | String_toWord8Vector => String_toWord8Vector
@@ -713,12 +723,15 @@ val map: 'a t * ('a -> 'b) -> 'b t =
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
 val arrayAlloc = fn {raw} => Array_alloc {raw = raw}
+fun arrayCas ctype = Array_cas (SOME ctype)
 val arrayLength = Array_length
 val arrayToVector = Array_toVector
-val arrayUpdate = Array_update
-val assign = Ref_assign
+val arrayUpdate = Array_update {writeBarrier=true}
+(* SAM_NOTE: seems safe to assume a writeBarrier here. *)
+val assign = Ref_assign {writeBarrier=true}
 val bogus = MLton_bogus
 val bug = MLton_bug
+fun cas ctype = Ref_cas (SOME ctype)
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
@@ -819,6 +832,7 @@ val kind: 'a t -> Kind.t =
    in
       case p of
          Array_alloc _ => Moveable
+       | Array_cas _ => SideEffect
        | Array_copyArray => SideEffect
        | Array_copyVector => SideEffect
        | Array_length => Functional
@@ -827,7 +841,7 @@ val kind: 'a t -> Kind.t =
        | Array_toVector => DependsOnState
        | Array_uninit => SideEffect
        | Array_uninitIsNop => Functional
-       | Array_update => SideEffect
+       | Array_update _ => SideEffect
        | CPointer_add => Functional
        | CPointer_diff => Functional
        | CPointer_equal => Functional
@@ -853,7 +867,6 @@ val kind: 'a t -> Kind.t =
        | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
        | GC_state => DependsOnState
-       | HierarchicalHeap_new => Moveable
        | IntInf_add => Functional
        | IntInf_andb => Functional
        | IntInf_arshift => Functional
@@ -912,7 +925,8 @@ val kind: 'a t -> Kind.t =
        | Real_rndToWord _ => Functional
        | Real_round _ => DependsOnState (* depends on rounding mode *)
        | Real_sub _ => DependsOnState (* depends on rounding mode *)
-       | Ref_assign => SideEffect
+       | Ref_assign _ => SideEffect
+       | Ref_cas _ => SideEffect
        | Ref_deref => DependsOnState
        | Ref_ref => Moveable
        | String_toWord8Vector => Functional
@@ -1031,6 +1045,7 @@ in
    val all: unit t list =
       [Array_alloc {raw = false},
        Array_alloc {raw = true},
+       Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
        Array_length,
@@ -1039,7 +1054,8 @@ in
        Array_toVector,
        Array_uninit,
        Array_uninitIsNop,
-       Array_update,
+       Array_update {writeBarrier=true},
+       Array_update {writeBarrier=false},
        CPointer_add,
        CPointer_diff,
        CPointer_equal,
@@ -1056,7 +1072,6 @@ in
        Exn_setExtendExtra,
        GC_collect,
        GC_state,
-       HierarchicalHeap_new,
        IntInf_add,
        IntInf_andb,
        IntInf_arshift,
@@ -1087,7 +1102,9 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       Ref_assign,
+       Ref_assign {writeBarrier=true},
+       Ref_assign {writeBarrier=false},
+       Ref_cas NONE,
        Ref_deref,
        Ref_ref,
        String_toWord8Vector,
@@ -1112,6 +1129,8 @@ in
        WordVector_toIntInf,
        Word8Vector_toString,
        World_save]
+      @ List.map (CType.all, fn ctype => Ref_cas (SOME ctype))
+      @ List.map (CType.all, fn ctype => Array_cas (SOME ctype))
       @ List.concat [List.concatMap (RealSize.all, reals),
                      List.concatMap (WordSize.prims, words)]
       @ let
@@ -1228,7 +1247,6 @@ fun 'a checkApp (prim: 'a t,
                              cpointer: 'a,
                              equals: 'a * 'a -> bool,
                              exn: 'a,
-                             hierarchicalHeap: 'a -> 'a,
                              intInf: 'a,
                              real: RealSize.t -> 'a,
                              reff: 'a -> 'a,
@@ -1253,6 +1271,12 @@ fun 'a checkApp (prim: 'a t,
          andalso equals (arg0', arg 0)
          andalso equals (arg1', arg 1)
          andalso equals (arg2', arg 2)
+      fun fourArgs (arg0', arg1', arg2', arg3') () =
+         4 = Vector.length args
+         andalso equals (arg0', arg 0)
+         andalso equals (arg1', arg 1)
+         andalso equals (arg2', arg 2)
+         andalso equals (arg3', arg 3)
       fun fiveArgs (arg0', arg1', arg2', arg3', arg4') () =
          5 = Vector.length args
          andalso equals (arg0', arg 0)
@@ -1331,6 +1355,8 @@ fun 'a checkApp (prim: 'a t,
   in
       case prim of
          Array_alloc _ => oneTarg (fn targ => (oneArg seqIndex, array targ))
+       | Array_cas _ =>
+            oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
        | Array_copyArray => oneTarg (fn t => (fiveArgs (array t, seqIndex, array t, seqIndex, seqIndex), unit))
        | Array_copyVector => oneTarg (fn t => (fiveArgs (array t, seqIndex, vector t, seqIndex, seqIndex), unit))
        | Array_length => oneTarg (fn t => (oneArg (array t), seqIndex))
@@ -1341,7 +1367,7 @@ fun 'a checkApp (prim: 'a t,
             oneTarg (fn t => (twoArgs (array t, seqIndex), unit))
        | Array_uninitIsNop =>
             oneTarg (fn t => (oneArg (array t), bool))
-       | Array_update =>
+       | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
        | CPointer_add =>
             noTargs (fn () => (twoArgs (cpointer, cptrdiff), cpointer))
@@ -1380,7 +1406,6 @@ fun 'a checkApp (prim: 'a t,
        | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
        | GC_state => noTargs (fn () => (noArgs, cpointer))
-       | HierarchicalHeap_new => oneTarg (fn targ => (noArgs, hierarchicalHeap targ))
        | IntInf_add => intInfBinary ()
        | IntInf_andb => intInfBinary ()
        | IntInf_arshift => intInfShift ()
@@ -1445,7 +1470,8 @@ fun 'a checkApp (prim: 'a t,
             noTargs (fn () => (oneArg (real s), word s'))
        | Real_round s => realUnary s
        | Real_sub s => realBinary s
-       | Ref_assign => oneTarg (fn t => (twoArgs (reff t, t), unit))
+       | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
+       | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
        | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
        | Ref_ref => oneTarg (fn t => (oneArg t, reff t))
        | Thread_atomicBegin => noTargs (fn () => (noArgs, unit))
@@ -1518,7 +1544,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                             result: 'a,
                             typeOps = {deArray: 'a -> 'a,
                                        deArrow: 'a -> 'a * 'a,
-                                       deHierarchicalHeap: 'a -> 'a,
                                        deRef: 'a -> 'a,
                                        deVector: 'a -> 'a,
                                        deWeak: 'a -> 'a}}) =
@@ -1529,6 +1554,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
    in
       case prim of
          Array_alloc _ => one (deArray result)
+       | Array_cas _ => one (deArray (arg 0))
        | Array_copyArray => one (deArray (arg 0))
        | Array_copyVector => one (deArray (arg 0))
        | Array_length => one (deArray (arg 0))
@@ -1537,12 +1563,11 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_toVector => one (deArray (arg 0))
        | Array_uninit => one (deArray (arg 0))
        | Array_uninitIsNop => one (deArray (arg 0))
-       | Array_update => one (deArray (arg 0))
+       | Array_update _ => one (deArray (arg 0))
        | CPointer_getObjptr => one result
        | CPointer_setObjptr => one (arg 2)
        | Exn_extra => one result
        | Exn_setExtendExtra => one (#2 (deArrow (arg 0)))
-       | HierarchicalHeap_new => one (deHierarchicalHeap result)
        | MLton_bogus => one result
        | MLton_deserialize => one result
        | MLton_eq => one (arg 0)
@@ -1552,7 +1577,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       | Ref_assign => one (deRef (arg 0))
+       | Ref_assign _ => one (deRef (arg 0))
+       | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref => one (deRef (arg 0))
        | Ref_ref => one (deRef result)
        | Vector_length => one (deVector (arg 0))
@@ -2227,7 +2253,7 @@ fun ('a, 'b) layoutApp (p: 'a t,
        | Real_neg _ => one "-"
        | Real_qequal _ => two "?="
        | Real_sub _ => two "-"
-       | Ref_assign => two ":="
+       | Ref_assign _ => two ":="
        | Ref_deref => one "!"
        | Ref_ref => one "ref"
        | Vector_length => one "length"

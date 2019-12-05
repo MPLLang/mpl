@@ -20,7 +20,7 @@
  * they are global in order to avoid infinite loops.
  *)
 
-functor ConstantPropagation (S: SSA_TRANSFORM_STRUCTS) : SSA_TRANSFORM = 
+functor ConstantPropagation (S: SSA_TRANSFORM_STRUCTS) : SSA_TRANSFORM =
 struct
 
 open S
@@ -49,8 +49,8 @@ structure Value =
                                coercedTo: t list ref}
             and const =
                Const of Const.t
-             | Undefined (* no possible value *)
-             | Unknown (* many possible values *)
+              | Undefined (* no possible value *)
+              | Unknown (* many possible values *)
 
             fun layout (T {const, ...}) = layoutConst (!const)
             and layoutConst c =
@@ -69,9 +69,9 @@ structure Value =
             fun equals (T {const = r, ...}, T {const = r', ...}) = r = r'
 
             val equals =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.equals", 
-                layout, layout, Bool.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.equals",
+                layout, layout, Bool.layout)
                equals
 
             val const = new o Const
@@ -88,9 +88,9 @@ structure Value =
                         ; coercedTo := [])
 
             val makeUnknown =
-               Trace.trace 
-               ("ConstantPropagation.Value.Const.makeUnknown", 
-                layout, Unit.layout) 
+               Trace.trace
+               ("ConstantPropagation.Value.Const.makeUnknown",
+                layout, Unit.layout)
                makeUnknown
 
             fun send (c: t, c': const): unit =
@@ -110,9 +110,9 @@ structure Value =
                end
 
             val send =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.send", 
-                layout, layoutConst, Unit.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.send",
+                layout, layoutConst, Unit.layout)
                send
 
             fun coerce {from = from as T {const, coercedTo}, to: t}: unit =
@@ -141,9 +141,9 @@ structure Value =
                 ; coerce {from = c', to = c})
 
             val unify =
-               Trace.trace2 
-               ("ConstantPropagation.Value.Const.unify", 
-                layout, layout, Unit.layout) 
+               Trace.trace2
+               ("ConstantPropagation.Value.Const.unify",
+                layout, layout, Unit.layout)
                unify
          end
 
@@ -165,7 +165,7 @@ structure Value =
             fun new (a: 'a): 'a t = T {extra = a,
                                        global = ref NONE}
 
-            val equals: 'a t * 'a t -> bool = 
+            val equals: 'a t * 'a t -> bool =
                fn (n, n') => global n = global n'
          end
 
@@ -200,8 +200,8 @@ structure Value =
             fun unknown (): 'a t = new Place.Unknown
             fun here (a: 'a): 'a t = new (Place.One (One.new a))
 
-            val traceMakeUnknown = 
-               Trace.info 
+            val traceMakeUnknown =
+               Trace.info
                "ConstantPropagation.Value.Birth.makeUnknown"
 
             fun makeUnknown arg =
@@ -214,8 +214,8 @@ structure Value =
                          ; List.foreach (!coercedTo, makeUnknown)
                          ; coercedTo := [])) arg
 
-            val traceSend = 
-               Trace.info 
+            val traceSend =
+               Trace.info
                "ConstantPropagation.Value.Birth.send"
 
             fun send arg =
@@ -235,8 +235,8 @@ structure Value =
                    loop b
                 end) arg
 
-            val traceCoerce = 
-               Trace.info 
+            val traceCoerce =
+               Trace.info
                "ConstantPropagation.Value.Birth.coerce"
             fun coerce arg =
                Trace.traceInfo'
@@ -257,8 +257,8 @@ structure Value =
                        | Place.Undefined => push ()
                    end) arg
 
-            val traceUnify = 
-               Trace.info 
+            val traceUnify =
+               Trace.info
                "ConstantPropagation.Value.Birth.unify"
 
             fun unify arg =
@@ -425,8 +425,8 @@ structure Value =
             case value v of
                Array {birth, elt, length, raw, ...} =>
                   seq [str "array ", tuple [Birth.layout birth,
-                                            layout length,
-                                            layout elt,
+                                           layout length,
+                                           layout elt,
                                             Raw.layout raw]]
              | Const c => Const.layout c
              | Datatype d => layoutData d
@@ -435,7 +435,7 @@ structure Value =
              | Tuple vs => Vector.layout layout vs
              | Vector {elt, length, ...} =>
                   seq [str "vector ", tuple [layout elt,
-                                             layout length]]
+                                                        layout length]]
              | Weak v => seq [str "weak ", layout v]
          and layoutData (Data {value, ...}) =
             case !value of
@@ -450,9 +450,9 @@ structure Value =
       fun equals (T s, T s') = Set.equals (s, s')
 
       val equals =
-         Trace.trace2 
-         ("ConstantPropagation.Value.equals", 
-          layout, layout, Bool.layout) 
+         Trace.trace2
+         ("ConstantPropagation.Value.equals",
+          layout, layout, Bool.layout)
          equals
 
       fun globals arg: (Var.t * Type.t) vector option =
@@ -471,7 +471,7 @@ structure Value =
       and global arg: (Var.t * Type.t) option =
          Trace.trace
          ("ConstantPropagation.Value.global",
-          layout o #1,
+                          layout o #1,
           Option.layout (Var.layout o #1))
          (fn (v as T s, isSmallType, newGlobal) =>
           let val {global = r, ty, value} = Set.! s
@@ -501,7 +501,7 @@ structure Value =
                                      SOME (x, _) =>
                                         Yes
                                         (case !glob of
-                                            NONE => 
+                                            NONE =>
                                                let
                                                   val exp =
                                                      primApp
@@ -511,7 +511,7 @@ structure Value =
                                                in
                                                   glob := SOME g; g
                                                end
-                                          | SOME g => g)
+                                              | SOME g => g)
                                    | _ => No
                                end
                           | _ => No
@@ -523,7 +523,7 @@ structure Value =
                                       fn {args, targs} =>
                                       case !raw of
                                          Raw.Raw raw =>
-                                            Exp.PrimApp {args = args,
+                                      Exp.PrimApp {args = args,
                                                          prim = Prim.arrayAlloc {raw = raw},
                                                          targs = targs}
                                        | _ => Error.bug "ConstantPropagation.Value.global: Array, raw",
@@ -615,7 +615,7 @@ structure Value =
             val v =
                case c of
                   Sconst.WordVector v => v
-                | _ => Error.bug err 
+                | _ => Error.bug err
             val length = WordXVector.length v
             val eltTy = Type.word (WordXVector.elementSize v)
             val elt =
@@ -717,7 +717,7 @@ structure Value =
                fun loop (t: Type.t): t =
                   new
                   (case Type.dest t of
-                      Type.Array t => 
+                      Type.Array t =>
                          Array {birth = arrayBirth (),
                                 elt = loop t,
                                 length = loop (Type.word (WordSize.seqIndex ())),
@@ -728,9 +728,9 @@ structure Value =
                     | Type.Tuple ts => Tuple (Vector.map (ts, loop))
                     | Type.Vector t =>
                          Vector {elt = loop t,
-                                 length = loop (Type.word (WordSize.seqIndex ()))}
+                          length = loop (Type.word (WordSize.seqIndex ()))}
                     | Type.Weak t => Weak (loop t)
-                    | _ => Const (const ()), 
+                    | _ => Const (const ()),
                    t)
             in loop
             end
@@ -752,7 +752,7 @@ structure Value =
       fun select {tuple, offset, resultType = _} =
          case value tuple of
             Tuple vs => Vector.sub (vs, offset)
-          | _ => Error.bug "ConstantPropagation.Value.select: non-tuple" 
+          | _ => Error.bug "ConstantPropagation.Value.select: non-tuple"
 
       fun unit () = tuple (Vector.new0 ())
    end
@@ -767,13 +767,13 @@ val traceSendConApp =
     Unit.layout)
 
 val traceSendConAppLoop =
-   Trace.trace 
-   ("ConstantPropagation.sendConAppLoop", 
+   Trace.trace
+   ("ConstantPropagation.sendConAppLoop",
     Value.Data.layout, Unit.layout)
 
 val traceMakeDataUnknown =
-   Trace.trace 
-   ("ConstantPropagation.makeDataUnknown", 
+   Trace.trace
+   ("ConstantPropagation.makeDataUnknown",
     Value.Data.layout, Unit.layout)
 
 (* ------------------------------------------------- *)
@@ -860,15 +860,15 @@ fun transform (program: Program.t): Program.t =
              end) arg
          and coerces {froms: Value.t vector, tos: Value.t vector} =
             Vector.foreach2 (froms, tos, fn (from, to) =>
-                             coerce {from = from, to = to})
+                            coerce {from = from, to = to})
          and coerce arg =
             traceCoerce
             (fn {from, to} =>
              if equals (from, to)
                 then ()
              else
-                let 
-                   fun error () = 
+                let
+                   fun error () =
                       Error.bug
                       (concat ["ConstantPropagation.Value.coerce: strange: from: ",
                                Layout.toString (Value.layout from),
@@ -909,7 +909,7 @@ fun transform (program: Program.t): Program.t =
             if Set.equals (s, s')
                then ()
             else
-               let 
+               let
                   val {value, ...} = Set.! s
                   val {value = value', ...} = Set.! s'
                   fun error () =
@@ -987,7 +987,7 @@ fun transform (program: Program.t): Program.t =
             let
                fun bear z =
                   case resultVar of
-                     SOME resultVar => if once resultVar 
+                     SOME resultVar => if once resultVar
                                           then Birth.here z
                                        else Birth.unknown ()
                    | _ => Error.bug "ConstantPropagation.Value.primApp.bear"
@@ -1031,8 +1031,11 @@ fun transform (program: Program.t): Program.t =
                 | Array_sub => dearray (arg 0)
                 | Array_toArray => arrayFromArray (arg 0)
                 | Array_toVector => vectorFromArray (arg 0)
-                | Array_update => update (arg 0, arg 2)
-                | Ref_assign =>
+                | Array_update _ => update (arg 0, arg 2)
+                | Array_cas _ =>
+                    (coerce {from = arg 3, to = dearray (arg 0)}
+                     ; dearray (arg 0))
+                | Ref_assign _ =>
                      (coerce {from = arg 1, to = deref (arg 0)}; unit ())
                 | Ref_deref => deref (arg 0)
                 | Ref_ref =>
@@ -1045,6 +1048,9 @@ fun transform (program: Program.t): Program.t =
                      in
                         r
                      end
+                | Ref_cas _ =>
+                    (coerce {from = arg 2, to = deref (arg 0)}
+                     ; deref (arg 0))
                 | Vector_length => vectorLength (arg 0)
                 | Vector_sub => devector (arg 0)
                 | Vector_vector => vector ()
@@ -1059,7 +1065,7 @@ fun transform (program: Program.t): Program.t =
                 | _ => (if Prim.maySideEffect prim
                            then Vector.foreach (args, sideEffect)
                         else ()
-                        ; unknown resultType)
+                           ; unknown resultType)
             end
          fun filter (variant, con, args) =
             case value variant of
@@ -1102,7 +1108,7 @@ fun transform (program: Program.t): Program.t =
          Control.diagnostics
          (fn display =>
           let open Layout
-          in 
+          in
              display (str "\n\nConstructors:")
              ; (Vector.foreach
                 (datatypes, fn Datatype.T {tycon, cons} =>
@@ -1138,7 +1144,6 @@ fun transform (program: Program.t): Program.t =
                              | CPointer => true
                              | Datatype _ => false
                              | IntInf => !Control.globalizeSmallIntInf
-                             | HierarchicalHeap _ => false
                              | Real _ => true
                              | Ref t => get t
                              | Thread => false
@@ -1177,7 +1182,6 @@ fun transform (program: Program.t): Program.t =
                              | CPointer => true
                              | Datatype tc => getTycon tc
                              | IntInf => !Control.globalizeSmallIntInf
-                             | HierarchicalHeap _ => false
                              | Real _ => true
                              | Ref t => get t
                              | Thread => false
@@ -1220,7 +1224,6 @@ fun transform (program: Program.t): Program.t =
                              | CPointer => true
                              | Datatype tc => getTycon tc
                              | IntInf => !Control.globalizeSmallIntInf
-                             | HierarchicalHeap _ => false
                              | Real _ => true
                              | Ref t => get t
                              | Thread => false
@@ -1315,7 +1318,6 @@ fun transform (program: Program.t): Program.t =
                                    | IntInf => if !Control.globalizeSmallIntInf
                                                   then ()
                                                   else Size.makeTop s
-                                   | HierarchicalHeap _ => Size.makeTop s
                                    | Real _ => ()
                                    | Ref t => dependsOn t
                                    | Thread => Size.makeTop s
@@ -1378,7 +1380,7 @@ fun transform (program: Program.t): Program.t =
          in
             case var of
                NONE => keep ()
-             | SOME var => 
+             | SOME var =>
                   (case (maybeGlobal var, exp) of
                       (NONE, _) => keep ()
                     | (SOME _, PrimApp {prim, ...}) =>

@@ -407,7 +407,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   else Dexp.call {func = equalTyconFunc tycon,
                                   args = Vector.new2 (dx1, dx2),
                                   ty = Type.bool}
-             | Type.HierarchicalHeap _ => eq ()
              | Type.IntInf =>
                   if hasConstArg ()
                      then eq ()
@@ -546,7 +545,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                (case (Prim.name prim, Vector.length targs) of
                                    (Prim.Name.MLton_eq, 1) =>
                                       (case Type.dest (Vector.first targs) of
-                                          Type.CPointer => 
+                                          Type.CPointer =>
                                              let
                                                 val cp0 = Vector.sub (args, 0)
                                                 val cp1 = Vector.sub (args, 1)

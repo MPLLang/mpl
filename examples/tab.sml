@@ -1,27 +1,26 @@
-val size = 300000000
+val size = 100000000
 val grain = 65536
-val par = ForkJoin.fork
 
-fun for (lo, hi) (f : int -> unit) : unit =
-  if lo >= hi then () else (f lo; for (lo+1, hi) f)
+datatype 'a tree = Leaf of 'a array | Node of int * 'a tree * 'a tree
 
-fun parfor (lo, hi) (f : int -> unit) : unit =
+fun length (Leaf a) = Array.length a
+  | length (Node (n, _, _)) = n
+
+fun nth t i =
+  case t of
+    Leaf a => Array.sub (a, i)
+  | Node (_, l, r) =>
+      if i < length l
+      then nth l i
+      else nth r (i - length l)
+
+fun tab f (lo, hi) =
   if hi - lo <= grain
-  then for (lo, hi) f
-  else let
-         val mid = lo + (hi - lo) div 2
-       in
-         par (fn _ => parfor (lo, mid) f, fn _ => parfor (mid, hi) f);
-         ()
+  then Leaf (Array.tabulate (hi - lo, fn i => f (lo + i)))
+  else let val (l, r) = ForkJoin.fork (fn _ => tab f (lo, lo + (hi-lo) div 2),
+                                       fn _ => tab f (lo + (hi-lo) div 2, hi))
+       in Node (hi - lo, l, r)
        end
-
-fun tab f n =
-  let
-    val a = Unsafe.Array.alloc n
-  in
-    parfor (0, n) (fn i => Array.update (a, i, f i));
-    a
-  end
 
 fun hash i =
   let
@@ -40,18 +39,7 @@ fun hash i =
   end
 
 val t0 = Time.now ()
-val r = tab hash size
+val r = tab hash (0, size)
 val t1 = Time.now ()
-
+val _ = print (Int.toString (nth r (size div 2)) ^ "\n")
 val _ = print (LargeInt.toString (Time.toMilliseconds (Time.- (t1, t0))) ^ " ms\n")
-
-val itos = Int.toString
-val _ =
-  case Array.findi (fn (i, x) => hash i <> x) r of
-    NONE => print "correct\n"
-  | SOME (i, x) =>
-      print (String.concat
-        [ "incorrect. index ", itos i, " is ", itos x
-        , " but should be ", itos (hash i), "\n"
-        ])
-

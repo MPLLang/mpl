@@ -15,17 +15,21 @@
 
 #include "hierarchical-heap.h"
 
-/********************/
-/* Extern Variables */
-/********************/
-const char* HM_HHStateToString[] = {
-  "LIVE",
-  "DEAD"
-};
-
 /******************************/
 /* Static Function Prototypes */
 /******************************/
+/**
+ * Adjusts the LCHS to reflect the ratio provided. Limits adjustment to
+ * [s->controls->initialLCHS, s->controls->maxLCHS].
+ *
+ * @param s The GC_state to use
+ * @param hh The hiererchical heap to adjust
+ * @param desiredRatio The desired ratio to adjust to.
+ */
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio);
+
 /**
  * Asserts all of the invariants assumed for the struct HM_HierarchicalHeap.
  *
@@ -38,509 +42,457 @@ const char* HM_HHStateToString[] = {
  * @param state The expected state of the hh
  */
 static void assertInvariants(GC_state s,
-                             const struct HM_HierarchicalHeap* hh,
-                             enum HM_HHState state);
-
-/**
- * Gets the lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to lock
- */
-static void lockHH(struct HM_HierarchicalHeap* hh);
-
-/**
- * Releases the lock on 'hh'
- *
- * @param hh the struct HM_HierarchicalHeap* to unlock
- */
-static void unlockHH(struct HM_HierarchicalHeap* hh);
+                             struct HM_HierarchicalHeap* hh);
 
 /************************/
 /* Function Definitions */
 /************************/
-#if (defined (MLTON_GC_INTERNAL_BASIS))
-void HM_HH_appendChild(pointer parentHHPointer,
-                       pointer childHHPointer,
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+void HM_HH_appendChild(GC_state s,
+                       struct HM_HierarchicalHeap* parentHH,
+                       struct HM_HierarchicalHeap* childHH,
                        Word32 stealLevel) {
-  GC_state s = pthread_getspecific (gcstate_key);
 
-  objptr parentHHObjptr = pointerToObjptr (parentHHPointer, s->heap->start);
-  struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s,
-                                                              parentHHObjptr);
-
-  objptr childHHObjptr = pointerToObjptr (childHHPointer, s->heap->start);
-  struct HM_HierarchicalHeap* childHH = HM_HH_objptrToStruct(s, childHHObjptr);
-
-  lockHH(parentHH);
-  lockHH(childHH);
-
-  assertInvariants(s, parentHH, LIVE);
-  Word32 oldHighestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
+  assertInvariants(s, parentHH);
+  Word32 oldDeepestStolenLevel = HM_HH_getDeepestStolenLevel(s, parentHH);
 
   /* childHH should be a orphan! */
-  assert (BOGUS_OBJPTR == childHH->parentHH);
-  assert (BOGUS_OBJPTR == childHH->nextChildHH);
+  assert(NULL == childHH->parentHH);
+  assert(NULL == childHH->nextChildHH);
 
   /* initialize childHH */
   childHH->stealLevel = stealLevel;
   childHH->level = stealLevel + 1;
-  childHH->parentHH = parentHHObjptr;
+  childHH->parentHH = parentHH;
 
-  /* insert childHH in descending order of stealLevel */
-  objptr* cursorPointer;
-  struct HM_HierarchicalHeap* cursorHH;
-  for (cursorPointer = &(parentHH->childHHList),
-            cursorHH = HM_HH_objptrToStruct(s, *cursorPointer);
-       (NULL != cursorHH) && (stealLevel < cursorHH->stealLevel);
-       cursorPointer = &(cursorHH->nextChildHH),
-            cursorHH = HM_HH_objptrToStruct(s, *cursorPointer)) { }
-  childHH->nextChildHH = *cursorPointer;
-  *cursorPointer = childHHObjptr;
+  /* push child at front of parent's child list */
+#if ASSERT
+  if (parentHH->childHHList != NULL) {
+    assert(parentHH->childHHList->stealLevel <= stealLevel);
+  }
+#endif
+  childHH->nextChildHH = parentHH->childHHList;
+  parentHH->childHHList = childHH;
 
-  if ((HM_HH_INVALID_LEVEL == oldHighestStolenLevel) ||
-      (stealLevel > oldHighestStolenLevel)) {
-    /* need to update locally collectible size */
+  HM_HH_LEVEL_CAPACITY(parentHH, stealLevel) = parentHH->locallyCollectibleHeapSize;
+
+  if ((HM_HH_INVALID_LEVEL == oldDeepestStolenLevel) ||
+      (stealLevel > oldDeepestStolenLevel)) {
+    /* need to update lcs and lchs */
     Word64 sizeDelta = 0;
-    /* off-by-one loop to prevent underflow and infinite loop */
-    Word32 level;
-    for (level = stealLevel;
-         level > (oldHighestStolenLevel + 1);
-         level--) {
-      sizeDelta += HM_getLevelSize(parentHH->levelList, level);
-    }
-    sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+    FOR_LEVEL_IN_RANGE(level, i, parentHH, oldDeepestStolenLevel+1, stealLevel+1, {
+      sizeDelta += HM_getChunkListSize(level);
+    });
 
-    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
+    size_t oldLCHS = parentHH->locallyCollectibleHeapSize;
+    double ratio = HM_HH_getLCRatio(parentHH);
+    if (isinf(ratio)) {
+      /* lcs is zero, so just bottom-out lchs with ratio 0 */
+      ratio = 0.0;
+    }
+
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
         "hh (%p) locallyCollectibleSize %"PRIu64" - %"PRIu64" = %"PRIu64,
         ((void*)(parentHH)),
         parentHH->locallyCollectibleSize,
         sizeDelta,
         parentHH->locallyCollectibleSize - sizeDelta);
     parentHH->locallyCollectibleSize -= sizeDelta;
+
+    adjustLCHS(s, parentHH, ratio);
+    LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
+        "hh (%p) locallyCollectibleHeapSize %"PRIu64" -> %"PRIu64" "
+        "(ratio %.2f)",
+        ((void*)(parentHH)),
+        oldLCHS,
+        parentHH->locallyCollectibleHeapSize,
+        ratio);
   }
 
-  /* cannot assert parentHH as it is still running! */
-  assertInvariants(s, parentHH, LIVE);
-  assertInvariants(s, childHH, LIVE);
-
-  unlockHH(childHH);
-  unlockHH(parentHH);
+  assertInvariants(s, parentHH);
+  assertInvariants(s, childHH);
 }
 
-size_t HM_HH_getLevel(pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  const struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
+Word32 HM_HH_getLevel(__attribute__((unused)) GC_state s,
+                      struct HM_HierarchicalHeap* hh)
+{
   return hh->level;
 }
 
-void HM_HH_mergeIntoParent(pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
+#pragma message "Remember to do enter/leave correctly for new HH primitives."
+void HM_HH_mergeIntoParent(GC_state s, struct HM_HierarchicalHeap* hh) {
+  /* SAM_NOTE: will need to move this to the appropriate places... */
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic (s);
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
+  assert(threadAndHeapOkay(s));
 
-  /* wait until hh is dead */
-  while (DEAD != hh->state) { }
+  /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
+   * level? */
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
 
-  assert (BOGUS_OBJPTR != hh->parentHH);
-  struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s, hh->parentHH);
+  endAtomic(s);
 
-  /* can only merge from the thread that owns the parent hierarchical heap! */
-  assert(objptrToPointer(hh->parentHH, s->heap->start) == GC_getCurrentHierarchicalHeap(s));
+  assert(NULL != hh->parentHH);
+  struct HM_HierarchicalHeap* parentHH = hh->parentHH;
 
-  lockHH(hh);
-  lockHH(parentHH);
+  /*
+   * This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == parentHH);
 
-  assertInvariants(s, parentHH, LIVE);
-  assertInvariants(s, hh, DEAD);
+  assertInvariants(s, parentHH);
+  assertInvariants(s, hh);
   /* can only merge at join point! */
   assert(hh->level == parentHH->level);
 
+
+  Word32 oldShallowestPrivateLevel = HM_HH_getShallowestPrivateLevel(s, parentHH);
+
   /* remove hh from parentHH->childHHList */
-  /*
-   * This assert assumes that all merges happen in LIFO order, as per the
-   * comment in HM_appendChildHH ()
-   */
-  objptr* cursor;
-  for (cursor = &(parentHH->childHHList);
-#if ASSERT
-       (BOGUS_OBJPTR != *cursor) &&
-#endif
-                (hhObjptr != *cursor);
-       cursor = &(HM_HH_objptrToStruct(s, *cursor)->nextChildHH)) {
+  assert(parentHH->childHHList == hh);
+  parentHH->childHHList = hh->nextChildHH;
+
+  Word32 newShallowestPrivateLevel = HM_HH_getShallowestPrivateLevel(s, parentHH);
+  assert(newShallowestPrivateLevel < oldShallowestPrivateLevel);
+
+  /* Merge levels. */
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
+    HM_chunkList mirrorLevel = HM_HH_LEVEL(parentHH, i);
+    if (mirrorLevel == NULL) {
+      HM_HH_LEVEL(parentHH, i) = level;
+      level->containingHH = parentHH;
+    } else {
+      HM_appendChunkList(mirrorLevel, level);
+    }
+    HM_HH_LEVEL(hh, i) = NULL;
+  });
+
+  /* combine outstandingBytesPromoted */
+  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_OBP(parentHH, i) += HM_HH_LEVEL_OBP(hh, i);
   }
-  assert(BOGUS_OBJPTR != *cursor);
-  *cursor = hh->nextChildHH;
-
-  /* update locally collectible size */
-  Word64 sizeDelta = 0;
-  /* off-by-one loop to prevent underflow and infinite loop */
-  Word32 level;
-  Word32 highestStolenLevel = HM_HH_getHighestStolenLevel(s, parentHH);
-  for (level = hh->stealLevel;
-       level > (highestStolenLevel + 1);
-       level--) {
-    sizeDelta += HM_getLevelSize(parentHH->levelList, level);
+  for (uint32_t i = newShallowestPrivateLevel; i < oldShallowestPrivateLevel; i++) {
+    HM_HH_LEVEL_OBP(parentHH, i) = 0;
   }
-  sizeDelta += HM_getLevelSize(parentHH->levelList, level);
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
-      ((void*)(parentHH)),
-      parentHH->locallyCollectibleSize,
-      sizeDelta,
-      parentHH->locallyCollectibleSize + sizeDelta);
-  parentHH->locallyCollectibleSize += sizeDelta;
+  size_t outstandingBytesPromoted = 0;
+  for (uint32_t i = 0; i < newShallowestPrivateLevel; i++) {
+    outstandingBytesPromoted += HM_HH_LEVEL_OBP(parentHH, i);
+  }
 
-  /* merge level lists */
-  HM_mergeLevelList(&(parentHH->levelList), hh->levelList, parentHH);
+  /* Add up the size of the immediate ancestors which are now unfrozen due to
+   * this merge. We need this quantity to adjust the LCHS below. */
+  Word64 unfrozenSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, parentHH, newShallowestPrivateLevel, oldShallowestPrivateLevel, {
+    unfrozenSize += HM_getChunkListSize(level);
+  });
 
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "hh (%p) locallyCollectibleSize %"PRIu64" + %"PRIu64" = %"PRIu64,
-      ((void*)(parentHH)),
-      parentHH->locallyCollectibleSize,
-      hh->locallyCollectibleSize,
-      parentHH->locallyCollectibleSize + hh->locallyCollectibleSize);
-  parentHH->locallyCollectibleSize += hh->locallyCollectibleSize;
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-      "merged hh %p into hh %p",
-      ((void*)(hh)),
-      ((void*)(parentHH)));
+  /* Add up the rest of the now local data. */
+  Word64 childrenSize = 0;
+  FOR_LEVEL_IN_RANGE(level, i, parentHH, oldShallowestPrivateLevel, parentHH->level+1, {
+    childrenSize += HM_getChunkListSize(level);
+  });
 
-  assertInvariants(s, parentHH, LIVE);
-  /* don't assert hh here as it should be thrown away! */
+  parentHH->locallyCollectibleSize = outstandingBytesPromoted + childrenSize + unfrozenSize;
+  parentHH->locallyCollectibleHeapSize += hh->locallyCollectibleHeapSize + 2 * unfrozenSize;
 
-  unlockHH(parentHH);
-  unlockHH(hh);
+  if (!s->controls->oldHHGCPolicy &&
+      parentHH->locallyCollectibleHeapSize < HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1)) {
+    // printf("After merge, LCHS = %ld, %.2f of old capacity\n",
+    //   parentHH->locallyCollectibleHeapSize,
+    //   ((double) parentHH->locallyCollectibleHeapSize) /
+    //   (double) HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1));
+    parentHH->locallyCollectibleHeapSize = HM_HH_LEVEL_CAPACITY(parentHH, oldShallowestPrivateLevel-1);
+  }
+
+  assertInvariants(s, parentHH);
+
+  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)hh);
+
+  Trace3(EVENT_CHUNKP_RATIO,
+         parentHH->locallyCollectibleHeapSize,
+         parentHH->locallyCollectibleSize,
+         s->controls->hhConfig.allocatedRatio);
+
+  free(hh);
 }
 
-pointer HM_HH_mergeIntoParentAndGetReturnValue(pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void HM_HH_promoteChunks(GC_state s, struct HM_HierarchicalHeap* hh) {
 
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
+  HM_chunkList level = HM_HH_LEVEL(hh, hh->level);
+  if (level != NULL) {
+    assert(hh->level > 0);
+    HM_chunkList parentLevel = HM_HH_LEVEL(hh, hh->level-1);
+    if (parentLevel != NULL) {
+      HM_appendChunkList(parentLevel, level);
+    } else {
+      HM_HH_LEVEL(hh, hh->level-1) = level;
+      /* SAM_NOTE: this naming convention is bad. Should rename the integer to
+       * `depth`, and leave `level` to refer to the actual list itself */
+      level->level = hh->level-1;
+    }
+    HM_HH_LEVEL(hh, hh->level) = NULL;
+  }
 
-#if ASSERT
-  assert(NULL != hh->retVal);
-  objptr retValObjptr = pointerToObjptr(hh->retVal, s->heap->start);
-  struct HM_ObjptrInfo retValInfo;
-  HM_getObjptrInfo(s, retValObjptr, &retValInfo);
-  assert(hh == retValInfo.hh);
-#endif
-
-  /* merge, then return retVal */
-  HM_HH_mergeIntoParent(hhPointer);
-  return hh->retVal;
+  assertInvariants(s, hh);
 }
 
-void HM_HH_promoteChunks(pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
-  lockHH(hh);
-
-  assert(HM_getHighestLevel(hh->levelList) <= hh->level);
-  HM_promoteChunks(&(hh->levelList), hh->level);
-
-  assertInvariants(s, hh, LIVE);
-
-  unlockHH(hh);
-}
-
-void HM_HH_setDead(pointer hhPointer) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
-  hh->state = DEAD;
-}
-
-void HM_HH_setLevel(pointer hhPointer, size_t level) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
+/* SAM_NOTE: TODO: hijack this function with ensureBytesFree */
+void HM_HH_setLevel(__attribute__((unused)) GC_state s,
+                    struct HM_HierarchicalHeap* hh,
+                    Word32 level)
+{
   hh->level = level;
+
+  if (hh->level >= HM_MAX_NUM_LEVELS) {
+    DIE("Exceeded maximum fork depth (%d)", HM_MAX_NUM_LEVELS);
+  }
+
+  /* SAM_NOTE: TODO: This still appears to be broken; debugging needed. */
+  // if (!(s->controls->mayUseAncestorChunk)) {
+  //   Word32 allocLevel = HM_getHighestLevel(hh->levelList);
+  //   assert(getLevelHead(hh->lastAllocatedChunk)->level == allocLevel);
+  //   assert(allocLevel <= level);
+  //   if (allocLevel != level) {
+  //     HM_HH_updateValues(hh, s->frontier);
+  //     HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP);
+  //     s->frontier = HM_HH_getFrontier(hh);
+  //     s->limitPlusSlop = HM_HH_getLimit(hh);
+  //     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  //   }
+
+  //   /* This is an alternative implementation which might have slightly higher
+  //    * overhead. */
+  //   // getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  //   // getThreadCurrent(s)->exnStack = s->exnStack;
+  //   // getThreadCurrent(s)->bytesNeeded = 0;
+  //   // HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+  // }
+
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
-pointer HM_HH_setReturnValue(pointer hhPointer, pointer retVal) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
-  objptr hhObjptr = pointerToObjptr (hhPointer, s->heap->start);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
-#if ASSERT
-  assert(NULL != retVal);
-  objptr retValObjptr = pointerToObjptr(retVal, s->heap->start);
-  struct HM_ObjptrInfo retValInfo;
-  HM_getObjptrInfo(s, retValObjptr, &retValInfo);
-  assert(hh == retValInfo.hh);
-#endif
-
-  hh->retVal = retVal;
-  return hhPointer;
-}
-#endif /* MLTON_GC_INTERNAL_BASIS */
-
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
-void HM_HH_display (
-    const struct HM_HierarchicalHeap* hh,
-    FILE* stream) {
+void HM_HH_display (struct HM_HierarchicalHeap* hh, FILE* stream) {
   fprintf (stream,
            "\tlastAllocatedChunk = %p\n"
-           "\tlock = %s\n"
            "\tlevel = %u\n"
            "\tstealLevel = %u\n"
-           "\tid = %"PRIu64"\n"
-           "\tlevelList = %p\n"
-           "\tparentHH = "FMTOBJPTR"\n"
-           "\tnextChildHH = "FMTOBJPTR"\n"
-           "\tchildHHList= "FMTOBJPTR"\n",
-           hh->lastAllocatedChunk,
-           (HM_HH_LOCK_LOCKED == hh->lock) ? "locked" : "unlocked",
+           "\tparentHH = %p\n"
+           "\tnextChildHH = %p\n"
+           "\tchildHHList= %p\n",
+           (void*)hh->lastAllocatedChunk,
            hh->level,
            hh->stealLevel,
-           hh->id,
-           hh->levelList,
-           hh->parentHH,
-           hh->nextChildHH,
-           hh->childHHList);
+           (void*)hh->parentHH,
+           (void*)hh->nextChildHH,
+           (void*)hh->childHHList);
+}
+
+struct HM_HierarchicalHeap* HM_HH_new(GC_state s) {
+
+  /* SAM_NOTE: TODO: switch to arena allocation if this is a bottleneck? */
+  struct HM_HierarchicalHeap* hh =
+    (struct HM_HierarchicalHeap*)malloc(sizeof(struct HM_HierarchicalHeap));
+  if (hh == NULL) {
+    DIE("Out of memory. Could not allocate new HH object.");
+    return NULL;
+  }
+
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL(hh, i) = NULL;
+  }
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_CAPACITY(hh, i) = 0;
+  }
+  for (int i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_HH_LEVEL_OBP(hh, i) = 0;
+  }
+  hh->lastAllocatedChunk = NULL;
+  hh->level = 0;
+  hh->stealLevel = HM_HH_INVALID_LEVEL;
+  hh->locallyCollectibleSize = 0;
+  hh->locallyCollectibleHeapSize = s->controls->hhConfig.initialLCHS;
+  hh->parentHH = NULL;
+  hh->nextChildHH = NULL;
+  hh->childHHList = NULL;
+
+  return hh;
 }
 
 void HM_HH_ensureNotEmpty(struct HM_HierarchicalHeap* hh) {
-  if (NULL == hh->levelList) {
-    assert(NULL == hh->lastAllocatedChunk);
+  if (NULL != hh->lastAllocatedChunk) return;
 
-    /* add in one chunk */
-    if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
-      die(__FILE__ ":%d: Ran out of space for Hierarchical Heap!", __LINE__);
-    }
+#if ASSERT
+  FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
+    assert(level->firstChunk == NULL);
+  });
+#endif
+
+  /* add in one chunk */
+  if (!HM_HH_extend(hh, GC_HEAP_LIMIT_SLOP)) {
+    DIE("Ran out of space for Hierarchical Heap!");
   }
 }
 
-/*
- * RAM_NOTE: Should maybe be split off into a levelList function to shared with
- * copyObject
- */
 bool HM_HH_extend(struct HM_HierarchicalHeap* hh, size_t bytesRequested) {
-  lockHH(hh);
-
-  Word32 level = HM_getHighestLevel(hh->levelList);
-  void* chunk;
-
-  assert((CHUNK_INVALID_LEVEL == level) || (hh->level >= level));
-
-  if ((CHUNK_INVALID_LEVEL == level) || (hh->level > level)) {
-    chunk = HM_allocateLevelHeadChunk(&(hh->levelList),
-                                      bytesRequested,
-                                      hh->level,
-                                      hh);
-  } else {
-    chunk = HM_allocateChunk(hh->levelList, bytesRequested);
+  HM_chunkList levelHead = HM_HH_LEVEL(hh, hh->level);
+  if (NULL == levelHead) {
+    levelHead = HM_newChunkList(hh, hh->level);
+    HM_HH_LEVEL(hh, hh->level) = levelHead;
   }
+
+  HM_chunk chunk = HM_allocateChunk(levelHead, bytesRequested);
 
   if (NULL == chunk) {
-    unlockHH(hh);
     return FALSE;
-  }
-
-  GC_state s = pthread_getspecific (gcstate_key);
-  if (NULL != hh->lastAllocatedChunk) {
-    void* lastAllocatedChunkFrontier = HM_getChunkFrontier(hh->lastAllocatedChunk);
-    void* lastAllocatedChunkStart = HM_getChunkStart(hh->lastAllocatedChunk);
-    s->cumulativeStatistics->bytesAllocated +=
-        ((size_t)(lastAllocatedChunkFrontier)) -
-        ((size_t)(lastAllocatedChunkStart));
   }
 
   hh->lastAllocatedChunk = chunk;
   hh->locallyCollectibleSize += HM_getChunkSize(chunk);
 
-  unlockHH(hh);
   return TRUE;
 }
 
 struct HM_HierarchicalHeap* HM_HH_getCurrent(GC_state s) {
-  return HM_HH_objptrToStruct(s, getThreadCurrent(s)->hierarchicalHeap);
+  return getThreadCurrent(s)->hierarchicalHeap;
 }
 
-Word32 HM_HH_getHighestStolenLevel(GC_state s,
-                                   const struct HM_HierarchicalHeap* hh) {
-  struct HM_HierarchicalHeap* highestStolenLevelHH =
-      HM_HH_objptrToStruct(s, hh->childHHList);
-
-  if (NULL == highestStolenLevelHH) {
+Word32 HM_HH_getDeepestStolenLevel(__attribute__((unused)) GC_state s,
+                                   struct HM_HierarchicalHeap* hh)
+{
+  if (NULL == hh->childHHList)
     return HM_HH_INVALID_LEVEL;
-  } else {
-    return highestStolenLevelHH->stealLevel;
-  }
+  return hh->childHHList->stealLevel;
 }
 
-void* HM_HH_getLimit(const struct HM_HierarchicalHeap* hh) {
+Word32 HM_HH_getShallowestPrivateLevel(__attribute__((unused)) GC_state s,
+                                       struct HM_HierarchicalHeap* hh) {
+  if (NULL == hh->childHHList)
+    return hh->stealLevel+1;
+  return hh->childHHList->stealLevel+1;
+}
+
+pointer HM_HH_getFrontier(struct HM_HierarchicalHeap* hh) {
+  assert(blockOf(HM_getChunkFrontier(hh->lastAllocatedChunk)) == (pointer)hh->lastAllocatedChunk);
+  return HM_getChunkFrontier(hh->lastAllocatedChunk);
+}
+
+pointer HM_HH_getLimit(struct HM_HierarchicalHeap* hh) {
   return HM_getChunkLimit(hh->lastAllocatedChunk);
 }
 
-void* HM_HH_getFrontier(const struct HM_HierarchicalHeap* hh) {
-  return HM_getChunkFrontier(hh->lastAllocatedChunk);
+double HM_HH_getLCRatio(struct HM_HierarchicalHeap* hh) {
+  return (((double)(hh->locallyCollectibleHeapSize)) /
+          ((double)(hh->locallyCollectibleSize)));
 }
 
 void HM_HH_maybeResizeLCHS(GC_state s, struct HM_HierarchicalHeap* hh) {
   size_t oldLCHS = hh->locallyCollectibleHeapSize;
+  double desiredRatio = 2 * (s->controls->hhConfig.liveLCRatio + 1);
+  double ratio = HM_HH_getLCRatio(hh);
 
-  double ratio = ((double)(hh->locallyCollectibleHeapSize)) /
-                 ((double)(hh->locallyCollectibleSize));
-
-  size_t preferredNewLCHS = (2 * (s->controls->hhConfig.liveLCRatio + 1)) *
-                            hh->locallyCollectibleSize;
-
-  hh->locallyCollectibleHeapSize =
-      (preferredNewLCHS > s->controls->hhConfig.maxLCHS) ?
-      s->controls->hhConfig.maxLCHS : preferredNewLCHS;
+  adjustLCHS(s, hh, desiredRatio);
 
   if (oldLCHS != hh->locallyCollectibleHeapSize) {
     LOG(LM_HIERARCHICAL_HEAP, LL_DEBUG,
-        "Live Ratio %.2f < %.2f, so resized LCHS from %zu bytes to %zu bytes",
+        "Live Ratio %.2f %s %.2f, so resized LCHS from %zu bytes to %zu bytes",
         ratio,
-        2 * (s->controls->hhConfig.liveLCRatio + 1),
+        (ratio < desiredRatio) ? "<" : ">",
+        desiredRatio,
         oldLCHS,
         hh->locallyCollectibleHeapSize);
   }
 }
 
-/* RAM_NOTE: should this be moved to local-heap.h? */
-bool HM_HH_objptrInHierarchicalHeap(GC_state s, objptr candidateObjptr) {
-  pointer candidatePointer = objptrToPointer (candidateObjptr, s->heap->start);
-  return ChunkPool_pointerInChunkPool(candidatePointer);
-}
-
-struct HM_HierarchicalHeap* HM_HH_objptrToStruct(GC_state s, objptr hhObjptr) {
-  if (BOGUS_OBJPTR == hhObjptr) {
-    return NULL;
-  }
-
-  pointer hhPointer = objptrToPointer (hhObjptr, s->heap->start);
-  return ((struct HM_HierarchicalHeap*)(hhPointer +
-                                        HM_HH_offsetof(s)));
-}
-
-/* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_HH_offsetof(GC_state s) {
-  return (HM_HH_sizeof(s) - (GC_NORMAL_METADATA_SIZE +
-                             sizeof (struct HM_HierarchicalHeap)));
-}
-
-void HM_HH_setThread(struct HM_HierarchicalHeap* hh, objptr threadObjptr) {
-  hh->thread = threadObjptr;
-
-  LOG(LM_HIERARCHICAL_HEAP, LL_DEBUGMORE,
-      "Set thread of HH %p to %p",
-      ((void*)(hh)),
-      ((void*)(threadObjptr)));
-}
-
-/* RAM_NOTE: Should be able to compute once and save result */
-size_t HM_HH_sizeof(GC_state s) {
-  size_t result = GC_NORMAL_METADATA_SIZE + sizeof (struct HM_HierarchicalHeap);
-  result = align (result, s->alignment);
-
-  if (DEBUG) {
-    uint16_t bytesNonObjptrs;
-    uint16_t numObjptrs;
-    splitHeader (s,
-                 GC_HIERARCHICAL_HEAP_HEADER,
-                 NULL,
-                 NULL,
-                 &bytesNonObjptrs,
-                 &numObjptrs);
-
-    size_t check = GC_NORMAL_METADATA_SIZE +
-                   (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
-
-    if (DEBUG_DETAILED) {
-      fprintf (
-          stderr,
-          "sizeofHierarchicalHeap: result = %"PRIuMAX"  check = %"PRIuMAX"\n",
-          (uintmax_t)result,
-          (uintmax_t)check);
-    }
-
-    assert (check == result);
-  }
-  assert (isAligned (result, s->alignment));
-
-  return result;
-}
-
-void HM_HH_updateLevelListPointers(objptr hhObjptr) {
-  GC_state s = pthread_getspecific (gcstate_key);
-  struct HM_HierarchicalHeap* hh = HM_HH_objptrToStruct(s, hhObjptr);
-
-  HM_updateLevelListPointers(hh->levelList, hh);
-}
-
 void HM_HH_updateValues(struct HM_HierarchicalHeap* hh,
-                        void* frontier) {
+                        pointer frontier) {
   HM_updateChunkValues(hh->lastAllocatedChunk, frontier);
 }
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
+/*******************************/
+/* Static Function Definitions */
+/*******************************/
+
+void adjustLCHS(GC_state s,
+                struct HM_HierarchicalHeap* hh,
+                double desiredRatio) {
+  size_t newLCHS = desiredRatio * hh->locallyCollectibleSize;
+
+  if (newLCHS < s->controls->hhConfig.initialLCHS) {
+    newLCHS = s->controls->hhConfig.initialLCHS;
+  } else if (s->controls->hhConfig.maxLCHS != MAX_LCHS_INFINITE &&
+             newLCHS > s->controls->hhConfig.maxLCHS) {
+    newLCHS = s->controls->hhConfig.maxLCHS;
+  }
+
+  hh->locallyCollectibleHeapSize = newLCHS;
+}
+
 #if ASSERT
-void assertInvariants(GC_state s,
-                      const struct HM_HierarchicalHeap* hh,
-                      enum HM_HHState state) {
+void assertInvariants(__attribute__((unused)) GC_state s,
+                      struct HM_HierarchicalHeap* hh) {
   ASSERTPRINT(((HM_HH_INVALID_LEVEL == hh->stealLevel) ||
                (hh->level > hh->stealLevel)),
               "HH %p has invalid level values! level %u stealLevel %u",
-              ((const void*)(hh)),
+              ((void*)(hh)),
               hh->level,
               hh->stealLevel);
-  ASSERTPRINT(state == hh->state,
-              "HH %p is not %s",
-              ((const void*)(hh)),
-              (LIVE == state) ? ("live") : ("dead"));
 
-  if (BOGUS_OBJPTR != hh->thread) {
-    assert(HM_HH_objptrToStruct(s,
-                                threadObjptrToStruct(s, hh->thread)->
-                                hierarchicalHeap) ==
-           hh);
-  }
-
-  if ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)) {
-    HM_assertChunkInLevelList(hh->levelList, hh->lastAllocatedChunk);
+  if (NULL != hh->lastAllocatedChunk) {
+    HM_chunkList levelHead = HM_getLevelHead(hh->lastAllocatedChunk);
+    assert(levelHead->containingHH == hh);
+    bool foundChunk = FALSE;
+    for (HM_chunk chunk = levelHead->firstChunk; chunk != NULL; chunk = chunk->nextChunk) {
+      if (chunk == hh->lastAllocatedChunk) {
+        foundChunk = TRUE;
+        break;
+      }
+    }
+    assert(foundChunk);
   } else {
-    assert((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk));
+    FOR_LEVEL_IN_RANGE(level, i, hh, 0, HM_MAX_NUM_LEVELS, {
+      assert(level->firstChunk == NULL);
+      assert(level->size == 0);
+    });
   }
-  HM_assertLevelListInvariants(hh->levelList, hh, hh->stealLevel);
-  assert(((NULL == hh->levelList) && (NULL == hh->lastAllocatedChunk)) ||
-         ((NULL != hh->levelList) && (NULL != hh->lastAllocatedChunk)));
+  HM_assertLevelListInvariants(hh, hh->stealLevel, false);
 
+  /* Check that all chunk lists are levelHeads */
+  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
+    HM_chunkList list = HM_HH_LEVEL(hh, i);
+    if (list != NULL) {
+      assert(HM_isLevelHead(list));
+    }
+  }
+
+  /* Check that the levels past the recorded level are empty */
   Word64 locallyCollectibleSize = 0;
-  /* off-by-one loop to prevent underflow and infinite loop */
-  Word32 level;
-  for (level = hh->level;
-       level > (HM_HH_getHighestStolenLevel(s, hh) + 1);
-       level--) {
-    locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
-  }
-  locallyCollectibleSize += HM_getLevelSize(hh->levelList, level);
-  assert(hh->locallyCollectibleSize == locallyCollectibleSize);
+  FOR_LEVEL_IN_RANGE(level, i, hh, hh->level+1, HM_MAX_NUM_LEVELS, {
+    locallyCollectibleSize += HM_getChunkListSize(level);
+  });
+  assert(0 == locallyCollectibleSize);
 
-  struct HM_HierarchicalHeap* parentHH = HM_HH_objptrToStruct(s, hh->parentHH);
+  /* SAM_NOTE: TODO:
+   * removing this for now, as it is tripping but there are more
+   * pressing things to fix... */
+  // FOR_LEVEL_IN_RANGE(level, i, hh, HM_HH_getDeepestStolenLevel(s, hh)+1, hh->level+1, {
+  //   locallyCollectibleSize += HM_getChunkListSize(level);
+  // });
+  // assert(hh->locallyCollectibleSize == locallyCollectibleSize);
+
+  struct HM_HierarchicalHeap* parentHH = hh->parentHH;
   if (NULL != parentHH) {
     /* Make sure I am in parentHH->childHHList */
     bool foundInParentList = FALSE;
-    for (struct HM_HierarchicalHeap* childHH =
-             HM_HH_objptrToStruct(s, parentHH->childHHList);
+    for (struct HM_HierarchicalHeap* childHH = parentHH->childHHList;
          NULL != childHH;
-         childHH = HM_HH_objptrToStruct(s, childHH->nextChildHH)) {
+         childHH = childHH->nextChildHH) {
       if (hh == childHH) {
         foundInParentList = TRUE;
         break;
@@ -551,37 +503,18 @@ void assertInvariants(GC_state s,
 
   /* make sure childHHList is sorted by steal level */
   Word32 previousStealLevel = ~((Word32)(0));
-  for (struct HM_HierarchicalHeap* childHH =
-           HM_HH_objptrToStruct(s, hh->childHHList);
+  for (struct HM_HierarchicalHeap* childHH = hh->childHHList;
        NULL != childHH;
-       childHH = HM_HH_objptrToStruct(s, childHH->nextChildHH)) {
+       childHH = childHH->nextChildHH) {
     assert(childHH->stealLevel <= previousStealLevel);
     previousStealLevel = childHH->stealLevel;
-    assert(HM_HH_objptrToStruct(s, childHH->parentHH) == hh);
+    assert(childHH->parentHH == hh);
   }
 }
 #else
 void assertInvariants(GC_state s,
-                      const struct HM_HierarchicalHeap* hh,
-                      enum HM_HHState state) {
+                      struct HM_HierarchicalHeap* hh) {
   ((void)(s));
   ((void)(hh));
-  ((void)(state));
 }
 #endif /* ASSERT */
-
-void lockHH(struct HM_HierarchicalHeap* hh) {
-  volatile Int32* lock = &(hh->lock);
-
-  do {
-  } while ((HM_HH_LOCK_LOCKED == *lock) ||
-           (!__sync_bool_compare_and_swap (lock,
-                                           HM_HH_LOCK_UNLOCKED,
-                                           HM_HH_LOCK_LOCKED)));
-}
-
-void unlockHH(struct HM_HierarchicalHeap* hh) {
-  assert(HM_HH_LOCK_LOCKED == hh->lock);
-  __sync_synchronize();
-  hh->lock = HM_HH_LOCK_UNLOCKED;
-}

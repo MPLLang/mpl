@@ -12,7 +12,7 @@ struct
 
 open S
 (* useless thing elimination
- *  build some kind of dependence graph where 
+ *  build some kind of dependence graph where
  *    - a value of ground type is useful if it is an arg to a primitive
  *    - a tuple is useful if it contains a useful component
  *    - a conapp is useful if it contains a useful component
@@ -104,14 +104,14 @@ structure Value =
          Array of {elt: slot,
                    length: t,
                    useful: Useful.t}
-       | Ground of Useful.t
-       | Ref of {arg: slot,
-                 useful: Useful.t}
-       | Tuple of slot vector
-       | Vector of {elt: slot,
-                    length: t}
-       | Weak of {arg: slot,
+        | Ground of Useful.t
+        | Ref of {arg: slot,
                   useful: Useful.t}
+        | Tuple of slot vector
+        | Vector of {elt: slot,
+                     length: t}
+        | Weak of {arg: slot,
+                   useful: Useful.t}
       withtype slot = t * Exists.t
 
       local
@@ -361,7 +361,7 @@ structure Value =
       end
       local
          fun make (err, sel) v =
-            case value v of
+         case value v of
                Ref fs => sel fs
              | _ => Error.bug err
       in
@@ -450,13 +450,13 @@ fun transform (program: Program.t): Program.t =
       val {get = conInfo: Con.t -> {args: Value.t vector,
                                     value: unit -> Value.t},
            set = setConInfo, ...} =
-         Property.getSetOnce 
+         Property.getSetOnce
          (Con.plist, Property.initRaise ("Useless.conInfo", Con.layout))
       val {get = tyconInfo: Tycon.t -> {cons: Con.t vector,
                                         visitedDeepMakeUseful: bool ref,
                                         visitedShallowMakeUseful: bool ref},
            set = setTyconInfo, ...} =
-         Property.getSetOnce 
+         Property.getSetOnce
          (Tycon.plist, Property.initRaise ("Useless.tyconInfo", Tycon.layout))
       local open Value
       in
@@ -525,9 +525,9 @@ fun transform (program: Program.t): Program.t =
                                            ; visitedShallowMakeUseful := true
                                            ; Vector.foreach
                                              (cons, fn con =>
-                                              Vector.foreach
-                                              (#args (conInfo con),
-                                               deepMakeUseful)))
+                                                          Vector.foreach
+                                                          (#args (conInfo con),
+                                                           deepMakeUseful)))
                                end
                           | _ => ()))
                 | Ref {useful = u, arg = a} => (Useful.makeUseful u; slot a)
@@ -675,7 +675,13 @@ fun transform (program: Program.t): Program.t =
                         Useful.whenUseful
                         (deground result, fn () =>
                          Useful.makeUseful (arrayUseful (arg 0)))
-                   | Array_update => update ()
+                   | Array_update _ => update ()
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Array_cas _ => (arg 1 dependsOn (dearray (arg 0))
+                                     ; unify (arg 2, arg 3)
+                                     ; unify (arg 2, dearray (arg 0))
+                                     ; unify (result, dearray (arg 0)))
                    | FFI _ =>
                         (Vector.foreach (args, deepMakeUseful);
                          deepMakeUseful result)
@@ -699,9 +705,14 @@ fun transform (program: Program.t): Program.t =
                         (deground result, fn () =>
                          makeWanted (arg 0))
                    | MLton_touch => shallowMakeUseful (arg 0)
-                   | Ref_assign => coerce {from = arg 1, to = deref (arg 0)}
+                   | Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
                    | Ref_deref => return (deref (arg 0))
                    | Ref_ref => coerce {from = arg 0, to = deref result}
+                   (* SAM_NOTE: unification is certainly "correct" but we should
+                    * investigate whether coercions are possible. *)
+                   | Ref_cas _ => (unify (arg 1, arg 2)
+                                   ; unify (arg 1, deref (arg 0))
+                                   ; unify (result, deref (arg 0)))
                    | Vector_length => return (vectorLength (arg 0))
                    | Vector_sub => (arg 1 dependsOn result
                                     ; return (devector (arg 0)))
@@ -733,10 +744,10 @@ fun transform (program: Program.t): Program.t =
                            if Prim.maySideEffect prim
                               then Vector.foreach (args, deepMakeUseful)
                               else Vector.foreach (args, fn a =>
-                                                   case (allOrNothing a, res) of
+                                              case (allOrNothing a, res) of
                                                       (SOME u, SOME u') =>
-                                                         Useful.<= (u', u)
-                                                    | _ => ())
+                                                    Useful.<= (u', u)
+                                               | _ => ())
                         end
             in
                result
@@ -925,7 +936,6 @@ fun transform (program: Program.t): Program.t =
                                     result = resultType,
                                     typeOps = {deArray = Type.deArray,
                                                deArrow = fn _ => Error.bug "Useless.doitExp: deArrow",
-                                               deHierarchicalHeap = Type.deHierarchicalHeap,
                                                deRef = Type.deRef,
                                                deVector = Type.deVector,
                                                deWeak = Type.deWeak}}))}
@@ -960,7 +970,7 @@ fun transform (program: Program.t): Program.t =
                                     * not equal.
                                     *)
                                    ConApp {args = Vector.new0 (),
-                                           con = Con.falsee}
+                                        con = Con.falsee}
                         end
                    | Ref_ref => makePtr Type.deRef
                    | Weak_new => makePtr Type.deWeak
@@ -1029,10 +1039,16 @@ fun transform (program: Program.t): Program.t =
                                       Array_copyArray => array ()
                                     | Array_copyVector => array ()
                                     | Array_uninit => array ()
-                                    | Array_update => array ()
-                                    | Ref_assign =>
+                                    | Array_update _ => array ()
+                                    | Ref_assign _ =>
                                          Value.isUseful
                                          (Value.deref (value (arg 0)))
+                                    | Ref_cas _ =>
+                                         Value.isUseful
+                                         (Value.deref (value (arg 0)))
+                                    | Array_cas _ =>
+                                         Value.isUseful
+                                         (Value.dearray (value (arg 0)))
                                     | WordArray_updateWord _ => array ()
                                     | _ => true
                                 end
@@ -1066,13 +1082,13 @@ fun transform (program: Program.t): Program.t =
                   fun bug () =
                      let
                         val l = Label.newNoname ()
-                     in
+                       in
                         (l,
                          Block.T {label = l,
                                   args = Vector.new0 (),
                                   statements = Vector.new0 (),
                                   transfer = Bug})
-                     end
+               end
                   fun wrap (froms, tos, mkTrans) =
                      case (froms, tos) of
                         (NONE, NONE) => (true, bug)
@@ -1089,7 +1105,7 @@ fun transform (program: Program.t): Program.t =
                                ((true, _), (true, _)) =>
                                   ([], Return.Tail)
                              | ((false, mkc), (true, _)) =>
-                                  let
+                                     let
                                      val (lc, bc) = mkc ()
                                   in
                                      ([bc],
@@ -1103,7 +1119,7 @@ fun transform (program: Program.t): Program.t =
                                      ([bc, bh],
                                       Return.NonTail {cont = lc,
                                                       handler = Handler.Handle lh})
-                                  end)
+                                     end)
                       | Return.NonTail {cont, handler} =>
                            let
                               val returns = SOME (label cont)
@@ -1146,7 +1162,7 @@ fun transform (program: Program.t): Program.t =
                                         Return.NonTail {cont = lc,
                                                         handler = Handler.Handle lh})
                                     end
-                           end
+                                          end
                in (blocks,
                    Call {func = f,
                          args = keepUseful (args, fargs),

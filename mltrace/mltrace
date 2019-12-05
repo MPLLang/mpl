@@ -11,7 +11,8 @@ Verbs:
   export [FILE.trace.gz] export latest trace or FILE to sqlite3
   sqlite [FILE.sqlite]   open latest db or FILE in sqlite3
   visu [FILE.sqlite]     visualize FILE using the veezuh tool
-  stats [FILE.sqlite]    show basic statistics about FILE using the veezuh tool
+  gcstats [FILE.sqlite]  show GC statistics about FILE using the veezuh tool
+  objstats [FILE.sqlite] show object statistics about FILE
   clean                  erase trace files in the current directory
 EOF
 }
@@ -42,6 +43,23 @@ while \$i < gcState->numberOfProcs
   set \$i = \$i + 1
 end
 EOF
+}
+
+objstats() {
+    plot=`mktemp /tmp/XXXXXX.plot`
+    file=`basename $1 .sqlite`.objects.csv
+    sqlite3 "$1" <<EOF
+.headers off
+.mode csv
+.output $file
+SELECT arg2 * arg3, COUNT(*)
+FROM events
+WHERE kind = "ARRAY_ALLOCATE_ENTER"
+GROUP BY arg2 * arg3
+ORDER BY arg2 * arg3;
+.quit
+EOF
+    echo "*** Created $file"
 }
 
 if [ $# -le 0 ]; then
@@ -147,14 +165,24 @@ case "$verb" in
         veezuh $FILE
         ;;
 
-    stats)
+    gcstats)
         if [ $# -ge 1 ]; then
             FILE=$1
         else
             FILE=`ls -t *.sqlite | head -n 1`
         fi
-        echo "*** Showing statistics of $FILE" >&2
+        echo "*** Showing GC statistics of $FILE" >&2
         veezuh -stats $FILE
+        ;;
+
+    objstats)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.sqlite | head -n 1`
+        fi
+        echo "*** Showing object statistics of $FILE" >&2
+        objstats $FILE
         ;;
 
     clean)

@@ -182,6 +182,10 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | Real_rndToWord _ => true
        | Real_round _ => true
        | Real_sub _ => true
+       | Ref_assign _ => true
+       | Ref_deref => true
+       | Ref_cas _ => true
+       | Array_cas _ => true
        | Word_add _ => true
        | Word_addCheckP _ => true
        | Word_andb _ => true
@@ -214,8 +218,8 @@ fun implementsPrim (p: 'a Prim.t): bool =
 
 fun outputIncludes (includes, print) =
    List.foreach (includes, fn i => (print "#include <";
-                                    print i;
-                                    print ">\n"))
+                                       print i;
+                                       print ">\n"))
 
 fun declareProfileLabel (l, print) =
    C.call ("DeclareProfileLabel", [ProfileLabel.toString l], print)
@@ -327,7 +331,7 @@ fun outputDeclarations
           ; declareArray ("struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
                           frameInfos, fn (_, fi) =>
-                          concat ["{",
+                       concat ["{",
                                   FrameInfo.Kind.toString (FrameInfo.kind fi),
                                   ", frameOffsets", C.int (FrameOffsets.index (FrameInfo.frameOffsets fi)),
                                   ", ", C.bytes (FrameInfo.size fi),
@@ -391,8 +395,6 @@ fun outputDeclarations
                       in
                          ("WEAK_TAG", false, bytesNonObjptrs, numObjptrs)
                       end
-                 | HeaderOnly => ("HEADER_ONLY_TAG", false, 0, 0)
-                 | Fill => ("FILL_TAG", false, 0, 0)
           in
              concat ["{", tag, ", ",
                      C.bool hasIdentity, ", ",
@@ -520,52 +522,52 @@ fun declareFFI (chunks, print) =
    in
       List.foreach
       (chunks, fn Chunk.T {blocks, ...} =>
-       Vector.foreach
-       (blocks, fn Block.T {statements, transfer, ...} =>
-        let
-           datatype z = datatype CFunction.SymbolScope.t
-           val _ =
-              Vector.foreach
-              (statements, fn s =>
-               case s of
-                  Statement.PrimApp {prim, ...} =>
-                     (case Prim.name prim of
-                         Prim.Name.FFI_Symbol {name, cty, symbolScope} =>
-                            doit
-                            (name, fn () =>
-                             concat [case symbolScope of
-                                        External => "EXTERNAL "
-                                      | Private => "PRIVATE "
-                                      | Public => "PUBLIC ",
-                                     "extern ",
-                                     case cty of
-                                        SOME x => CType.toString x
-                                      | NONE => "void",
-                                     " ",
-                                     name,
-                                     ";\n"])
-                       | _ => ())
-                | _ => ())
-           val _ =
-              case transfer of
+      Vector.foreach
+      (blocks, fn Block.T {statements, transfer, ...} =>
+       let
+          datatype z = datatype CFunction.SymbolScope.t
+          val _ =
+             Vector.foreach
+             (statements, fn s =>
+              case s of
+                 Statement.PrimApp {prim, ...} =>
+                    (case Prim.name prim of
+                        Prim.Name.FFI_Symbol {name, cty, symbolScope} =>
+                           doit
+                           (name, fn () =>
+                            concat [case symbolScope of
+                                       External => "EXTERNAL "
+                                     | Private => "PRIVATE "
+                                     | Public => "PUBLIC ",
+                                    "extern ",
+                                    case cty of
+                                       SOME x => CType.toString x
+                                     | NONE => "void",
+                                    " ",
+                                    name,
+                                    ";\n"])
+                      | _ => ())
+               | _ => ())
+          val _ =
+             case transfer of
                  Transfer.CCall {func, return, ...} =>
-                    let
-                       datatype z = datatype CFunction.Target.t
-                       val CFunction.T {target, ...} = func
-                    in
-                       case target of
-                          Direct "Thread_returnToC" => ()
-                        | Direct name =>
-                             doit (name, fn () =>
+                   let
+                      datatype z = datatype CFunction.Target.t
+                      val CFunction.T {target, ...} = func
+                   in
+                      case target of
+                         Direct "Thread_returnToC" => ()
+                       | Direct name =>
+                            doit (name, fn () =>
                                    concat [case return of
                                               NONE => "NORETURN "
                                             | SOME _ => "",
                                            CFunction.cPrototype func, ";\n"])
-                        | Indirect => ()
-                    end
-               | _ => ()
-        in
-           ()
+                       | Indirect => ()
+                   end
+              | _ => ()
+       in
+          ()
         end))
       ; if !empty then () else print "\n"
    end
@@ -592,11 +594,11 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
          List.foreachi
          (chunks, fn (i, Chunk.T {blocks, chunkLabel, ...}) =>
           (setChunkLabelInfo (chunkLabel, {index = i});
-           Vector.foreach
+          Vector.foreach
            (blocks, fn block as Block.T {kind, label, ...} =>
-            let
+           let
                val index =
-                  case Kind.frameInfoOpt kind of
+                 case Kind.frameInfoOpt kind of
                      NONE => NONE
                    | SOME fi =>
                         let
@@ -604,12 +606,12 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         in
                            if Kind.isEntry kind
                               then Array.update (nextChunks, index, SOME label)
-                              else ()
+                             else ()
                            ; SOME index
                         end
-            in
+           in
                setLabelInfo (label, {block = block,
-                                     chunkLabel = chunkLabel,
+                                    chunkLabel = chunkLabel,
                                      index = index,
                                      marked = ref false})
             end)))
@@ -619,7 +621,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
       fun labelIndexAsString (l, {pretty}) =
          let
             val s = C.int (valOf (labelIndex l))
-         in
+                                            in
             if pretty
                then concat ["/* ", Label.toString l, " */ ", s]
                else s
@@ -710,9 +712,9 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                 ty: Type.t}: string =
          if handleMisaligned ty
             then (case (dstIsMem, srcIsMem) of
-                     (false, false) => concat [dst, " = ", src, ";\n"]
-                   | (false, true) => concat [dst, " = ", fetch (src, ty), ";\n"]
-                   | (true, false) => store ({dst = dst, src = src}, ty)
+               (false, false) => concat [dst, " = ", src, ";\n"]
+             | (false, true) => concat [dst, " = ", fetch (src, ty), ";\n"]
+             | (true, false) => store ({dst = dst, src = src}, ty)
                    | (true, true) => move' ({dst = dst, src = src}, ty))
             else concat [dst, " = ", src, ";\n"]
       local
@@ -747,6 +749,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
              | StackOffset s => StackOffset.toString s
              | StackTop => "StackTop"
              | Word w => WordX.toC w
+             | Address z => addr (toString z)
       in
          val operandToString = toString
       end
@@ -787,44 +790,44 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                      then print "\tFlushStackTop();\n"
                      else ())
             fun outputStatement s =
-               let
-                  datatype z = datatype Statement.t
-               in
-                  case s of
-                     Move {dst, src} =>
+         let
+            datatype z = datatype Statement.t
+         in
+            case s of
+                         Move {dst, src} =>
                         (print "\t"
                          ; print (move {dst = operandToString dst,
-                                        dstIsMem = Operand.isMem dst,
-                                        src = operandToString src,
-                                        srcIsMem = Operand.isMem src,
+                                   dstIsMem = Operand.isMem dst,
+                                   src = operandToString src,
+                                   srcIsMem = Operand.isMem src,
                                         ty = Operand.ty dst}))
-                   | Noop => ()
-                   | PrimApp {args, dst, prim} =>
-                        let
-                           fun call (): string =
-                              concat
+                       | Noop => ()
+                       | PrimApp {args, dst, prim} =>
+                            let
+                               fun call (): string =
+                                  concat
                               [Prim.toString prim, " ",
                                C.args (Vector.toListMap (args, fetchOperand))]
-                           fun app (): string =
-                              case Prim.name prim of
-                                 Prim.Name.FFI_Symbol {name, ...} =>
-                                    concat
-                                    ["((",CType.toString CType.CPointer,
-                                     ")(&", name, "))"]
-                               | _ => call ()
+                               fun app (): string =
+                                  case Prim.name prim of
+                                     Prim.Name.FFI_Symbol {name, ...} =>
+                                        concat
+                                        ["((",CType.toString CType.CPointer,
+                                         ")(&", name, "))"]
+                                   | _ => call ()
                            val _ = print "\t"
-                        in
-                           case dst of
-                              NONE => (print (app ())
-                                       ; print ";\n")
-                            | SOME dst =>
-                                 print (move {dst = operandToString dst,
-                                              dstIsMem = Operand.isMem dst,
-                                              src = app (),
-                                              srcIsMem = false,
-                                              ty = Operand.ty dst})
-                        end
-                   | ProfileLabel l =>
+                            in
+                               case dst of
+                                  NONE => (print (app ())
+                                           ; print ";\n")
+                                | SOME dst =>
+                                     print (move {dst = operandToString dst,
+                                                  dstIsMem = Operand.isMem dst,
+                                                  src = app (),
+                                                  srcIsMem = false,
+                                                  ty = Operand.ty dst})
+                            end
+                       | ProfileLabel l =>
                         (print "\t"
                          ; C.call ("ProfileLabel", [ProfileLabel.toString l], print))
                end
@@ -841,7 +844,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                 ; C.push (size, print)
                 ; if amTimeProfiling
                      then print "\tFlushStackTop();\n"
-                     else ())
+                  else ())
             fun copyArgs (args: Operand.t vector): string list * (unit -> unit) =
                let
                   fun usesStack z =
@@ -890,7 +893,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
             fun gotoLabel (l, {tab}) =
                print (concat [if tab then "\tgoto " else "goto ", Label.toString l, ";\n"])
             fun outputTransfer t =
-               let
+                                let
                   datatype z = datatype Transfer.t
                in
                   case t of
@@ -987,7 +990,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                            [chunkLabelIndexAsString dstChunk,
                                             labelIndexAsString (label, {pretty = true}),
                                             C.bool (!Control.chunkTailCall)],
-                                           print)
+                                      print)
                         end
                    | Goto dst => gotoLabel (dst, {tab = true})
                    | Raise => C.call ("\tRaise", [], print)
@@ -995,13 +998,13 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                    | Switch switch =>
                         let
                            val Switch.T {cases, default, test, ...} = switch
-                           val test = operandToString test
+                                 val test = operandToString test
                            fun bnz (lnz, lz) =
                               C.call ("\tBNZ", [test, Label.toString lnz, Label.toString lz], print)
                            fun switch () =
                               (print "\tswitch ("
-                               ; print test
-                               ; print ") {\n"
+                                     ; print test
+                                     ; print ") {\n"
                                ; Vector.foreach
                                  (cases, fn (w, l) => (print "\tcase "
                                                        ; print (WordX.toC w)
@@ -1012,15 +1015,15 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                      NONE => print "\tUnreachable();\n"
                                    | SOME default => gotoLabel (default, {tab = false}))
                                ; print "\t}\n")
-                        in
-                           case (Vector.length cases, default) of
+                              in
+                                 case (Vector.length cases, default) of
                               (0, NONE) => Error.bug "CCodegen.outputTransfers: Switch"
                             | (0, SOME ld) => gotoLabel (ld, {tab = true})
                             | (1, NONE) => gotoLabel (#2 (Vector.sub (cases, 0)), {tab = true})
                             | (1, SOME ld) =>
                                  let
                                     val (w, l) = Vector.sub (cases, 0)
-                                 in
+                        in
                                     if WordX.isZero w
                                        then bnz (ld, l)
                                        else switch ()
@@ -1040,7 +1043,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         end
                end
             fun outputBlock (Block.T {kind, label, statements, transfer, ...}) =
-               let
+                let
                   val _ = print (concat [Label.toString label, ":\n"])
                   val _ =
                      case kind of
@@ -1052,7 +1055,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                 let
                                    val x = Live.toOperand x
                                    val ty = Operand.ty x
-                                in
+                in
                                    print
                                    (concat
                                     ["\t",
@@ -1158,9 +1161,9 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
          case chunks of
             [] => outputChunks acc
           | (chunk, s)::chunks' =>
-               let
+                            let
                   val m = n + s
-               in
+                            in
                   if List.isEmpty acc orelse m <= !Control.chunkBatch
                      then batch (chunks', chunk::acc, m)
                      else (outputChunks acc;

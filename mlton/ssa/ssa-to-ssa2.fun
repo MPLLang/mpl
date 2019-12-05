@@ -41,8 +41,6 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
               S.Type.Array t => S2.Type.array1 (convertType t)
             | S.Type.CPointer => S2.Type.cpointer
             | S.Type.Datatype tycon => S2.Type.datatypee tycon
-            | S.Type.HierarchicalHeap t =>
-              S2.Type.hierarchicalHeap (convertType t)
             | S.Type.IntInf => S2.Type.intInf
             | S.Type.Real s => S2.Type.real s
             | S.Type.Ref t => S2.Type.reff1 (convertType t)
@@ -126,19 +124,21 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                    in
                       case Prim.name prim of
                          Array_sub => sub ()
-                       | Array_update =>
+                       | Array_update {writeBarrier} =>
                             maybeBindUnit
                             (S2.Statement.Update
                              {base = Base.SequenceSub {index = arg 1,
                                                        sequence = arg 0},
                               offset = 0,
-                              value = arg 2})
-                       | Ref_assign =>
+                              value = arg 2,
+                              writeBarrier = writeBarrier})
+                       | Ref_assign {writeBarrier} =>
                             maybeBindUnit
                             (S2.Statement.Update
                              {base = Base.Object (arg 0),
                               offset = 0,
-                              value = arg 1})
+                              value = arg 1,
+                              writeBarrier = writeBarrier})
                        | Ref_deref =>
                             simple (S2.Exp.Select {base = Base.Object (arg 0),
                                                    offset = 0})
@@ -177,7 +177,8 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                          {base = Base.SequenceSub {index = iVar,
                                                                    sequence = aVar},
                                           offset = 0,
-                                          value = arg}
+                                          value = arg,
+                                          writeBarrier = false}
                                    in
                                       iStmt::uStmt::stmts
                                    end)

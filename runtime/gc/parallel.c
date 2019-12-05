@@ -2,28 +2,18 @@
 #include <time.h>
 #include "platform.h"
 
-/* num of holding thread or -1 if no one*/
-volatile int32_t *Parallel_mutexes;
-
 void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   if (!Proc_isInitialized (s)) {
-    Parallel_mutexes = (int32_t *) malloc (s->numberOfProcs * sizeof (int32_t));
-
-    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
-      Parallel_mutexes[proc] = -1;
+    struct HM_HierarchicalHeap *phh = getHierarchicalHeapCurrent(s);
+    for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
+      struct HM_HierarchicalHeap *chh = getHierarchicalHeapCurrent(&(s->procStates[proc]));
+      HM_HH_appendChild(s, phh, chh, 0);
     }
+
     /* Now wake them up! */
     Proc_signalInitialization (s);
-  }
-}
-
-void Parallel_yield (void) {
-  if (Proc_threadInSection ()) {
-    GC_state s = pthread_getspecific (gcstate_key);
-    ENTER0 (s);
-    LEAVE0 (s);
   }
 }
 
@@ -44,24 +34,21 @@ void Parallel_lockTake (Pointer arg) {
       "trying to lock %p to %u",
       ((volatile void*)(lock)),
       lockValue);
-  Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
 
-  do {
-    if (GC_MightCheckForTerminationRequest(s, &cpoll)) {
+  if (!spinlock_trylock(lock, lockValue)) {
+      Trace1(EVENT_LOCK_TAKE_ENTER, (EventInt)lock);
+
+      do {
+          if (GC_CheckForTerminationRequestRarely(s, &cpoll)) {
+              Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
+              GC_TerminateThread(s);
+          }
+      } while (!spinlock_trylock(lock, lockValue));
       Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
-      GC_TerminateThread(s);
-    }
-
-    if (Proc_threadInSection ()) {
-      ENTER1(s, arg);
-      LEAVE1(s, arg);
-      lock = ((spinlock_t*)(arg));
-    }
-  } while (!spinlock_trylock(lock, lockValue));
+  }
 
   LOG(LM_PARALLEL, LL_DEBUG,
       "locked");
-  Trace1(EVENT_LOCK_TAKE_LEAVE, (EventInt)lock);
 }
 
 void Parallel_lockRelease (Pointer arg) {
@@ -70,7 +57,6 @@ void Parallel_lockRelease (Pointer arg) {
   LOG(LM_PARALLEL, LL_DEBUG,
       "releasing %p",
       ((volatile void*)(lock)));
-  WITH_GCSTATE(Trace1(EVENT_LOCK_RELEASE, (EventInt)lock));
 
   spinlock_unlock(lock);
 }
@@ -106,8 +92,7 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
     fprintf (stderr, "failed lock!\n");
   }
   while (*other) {
-    if (GC_MightCheckForTerminationRequest(s, &cpoll))
-      GC_TerminateThread(s);
+    GC_MayTerminateThreadRarely(s, &cpoll);
 
     //__sync_synchronize ();
     if (amLeft != *leftsTurn) {
@@ -118,16 +103,6 @@ void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer left
       __sync_bool_compare_and_swap (mine, 1, 0);
       while (amLeft != *leftsTurn) {
         //__sync_synchronize ();
-        if (Proc_threadInSection ()) {
-          Pointer mine_ = (Pointer)mine,
-            other_ = (Pointer)other;
-          leftsTurn_ = (Pointer)leftsTurn;
-          ENTER3 (s, mine_, other_, leftsTurn_);
-          LEAVE3 (s, mine_, other_, leftsTurn_);
-          mine = (Bool *)mine_;
-          other = (Bool *)other_;
-          leftsTurn = (Bool *)leftsTurn_;
-        }
       }
       //*mine = 1;
       //if (__sync_lock_test_and_set (mine, 1)) {
@@ -220,40 +195,4 @@ Int32 Parallel_arrayFetchAndAdd32 (Pointer p, GC_sequenceLength i, Int32 v) {
 
 Int64 Parallel_arrayFetchAndAdd64 (Pointer p, GC_sequenceLength i, Int64 v) {
   return __sync_fetch_and_add (((Int64*)p)+i, v);
-}
-
-// compareAndSwap implementations
-
-Int8 Parallel_compareAndSwap8 (pointer p, Int8 old, Int8 new) {
-  return __sync_val_compare_and_swap ((Int8 *)p, old, new);
-}
-
-Int16 Parallel_compareAndSwap16 (pointer p, Int16 old, Int16 new) {
-  return __sync_val_compare_and_swap ((Int16 *)p, old, new);
-}
-
-Int32 Parallel_compareAndSwap32 (pointer p, Int32 old, Int32 new) {
-  return __sync_val_compare_and_swap ((Int32 *)p, old, new);
-}
-
-Int64 Parallel_compareAndSwap64 (pointer p, Int64 old, Int64 new) {
-  return __sync_val_compare_and_swap ((Int64 *)p, old, new);
-}
-
-// arrayCompareAndSwap implementations
-
-Int8 Parallel_arrayCompareAndSwap8 (Pointer p, GC_sequenceLength i, Int8 old, Int8 new) {
-  return __sync_val_compare_and_swap (((Int8*)p)+i, old, new);
-}
-
-Int16 Parallel_arrayCompareAndSwap16 (Pointer p, GC_sequenceLength i, Int16 old, Int16 new) {
-  return __sync_val_compare_and_swap (((Int16*)p)+i, old, new);
-}
-
-Int32 Parallel_arrayCompareAndSwap32 (Pointer p, GC_sequenceLength i, Int32 old, Int32 new) {
-  return __sync_val_compare_and_swap (((Int32*)p)+i, old, new);
-}
-
-Int64 Parallel_arrayCompareAndSwap64 (Pointer p, GC_sequenceLength i, Int64 old, Int64 new) {
-  return __sync_val_compare_and_swap (((Int64*)p)+i, old, new);
 }

@@ -28,7 +28,7 @@
  *   Useless: it never appears in a ConApp.
  *   Transparent: it is the only variant in its datatype
  *     and its argument type does not contain any uses of
- *     Tycon.array or Tycon.vector.
+ *       Tycon.array or Tycon.vector.
  *   Useful: otherwise
  * This pass also removes Useless and Transparent constructors.
  *
@@ -235,24 +235,24 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          (datatypes, fn Datatype.T {tycon, cons} =>
           (setTyconInfo (tycon, {cardinality = Cardinality.newZero (),
                                  ffi = (fn () =>
-                                        (Control.diagnostics
-                                         (fn display =>
-                                          let
-                                             open Layout
-                                          in
-                                             display (seq [str "  tycon: ",
-                                                           Tycon.layout tycon])
-                                          end);
+                               (Control.diagnostics
+                                    (fn display =>
+                                        let
+                                            open Layout
+                                        in
+                                            display (seq [str "  tycon: ",
+                                                          Tycon.layout tycon])
+                                        end);
                                          Vector.foreach
                                          (cons, fn {con, ...} =>
                                           (Control.diagnostics
-                                           (fn display =>
-                                            let
-                                               open Layout
-                                            in
-                                               display (seq [str "    con: ",
-                                                             Con.layout con])
-                                            end);
+                                                           (fn display =>
+                                                               let
+                                                                   open Layout
+                                                               in
+                                                                   display (seq [str "    con: ",
+                                                                                 Con.layout con])
+                                                               end);
                                            setConRep (con, ConRep.FFI))))),
                                  numCons = ref 0,
                                  replacement = ref NONE});
@@ -280,43 +280,42 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            case Type.dest t of
                               Type.Array t => deepSetFFI t
                             | Type.Datatype tycon => tyconFFI tycon ()
-                            | Type.HierarchicalHeap t => deepSetFFI t
                             | Type.Ref t => deepSetFFI t
                             | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
                             | Type.Vector t => deepSetFFI t
                             | Type.Weak t => deepSetFFI t
                             | _ => ()
-                     in
+                   in
                         case Prim.name prim of
                            Prim.Name.FFI cfunction =>
-                              (Control.diagnostics
-                               (fn display =>
-                                let
-                                   open Layout
-                                in
-                                   display (seq [str "deepSetFFI for ",
-                                                 str (CFunction.cPrototype cfunction)])
-                                end);
-                               Vector.foreach (CFunction.args cfunction,
-                                               deepSetFFI);
-                               deepSetFFI (CFunction.return cfunction))
+                           (Control.diagnostics
+                                (fn display =>
+                                    let
+                                        open Layout
+                                    in
+                                        display (seq [str "deepSetFFI for ",
+                                                      str (CFunction.cPrototype cfunction)])
+                                    end);
+                            Vector.foreach (CFunction.args cfunction,
+                                            deepSetFFI);
+                            deepSetFFI (CFunction.return cfunction))
                          | Prim.Name.MLton_bogus =>
                               (case Type.dest (Vector.sub (targs, 0)) of
                                   Type.Datatype tycon =>
                                      Cardinality.makeMany (tyconCardinality tycon)
                                 | _ => ())
                          | _ => ()
-                     end
-                | _ => ()
+                   end
+                 | _ => ()
             (* Booleans are special because they are generated by primitives. *)
             val _ = setConRepUseful Con.truee
             val _ = setConRepUseful Con.falsee
             val _ = Vector.foreach (globals, handleStatement)
             val _ = List.foreach
-                    (functions, fn f =>
-                     Vector.foreach
-                     (Function.blocks f, fn Block.T {statements, ...} =>
-                      Vector.foreach (statements, handleStatement)))
+                        (functions, fn f =>
+                                       Vector.foreach
+                                           (Function.blocks f, fn Block.T {statements, ...} =>
+                                                                  Vector.foreach (statements, handleStatement)))
          in ()
          end
       (* Compute the type cardinalities with a fixed point
@@ -345,7 +344,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  Array _ => Cardinality.many
                | CPointer => Cardinality.many
                | Datatype tycon => tyconCardinality tycon
-               | HierarchicalHeap t => ptrCard t
                | IntInf => Cardinality.many
                | Real _ => Cardinality.many
                | Ref t => ptrCard t
@@ -365,7 +363,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          Vector.keepAllMap
          (datatypes, fn Datatype.T {tycon, cons} =>
           let
-             val cons = Vector.keepAll (cons, fn {con, ...} =>
+              val cons = Vector.keepAll (cons, fn {con, ...} =>
                                         conIsUseful con
                                         orelse conIsFFI con)
              val _ =
@@ -410,17 +408,17 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          Control.diagnostics
          (fn display =>
           let open Layout
-          in Vector.foreach 
+          in Vector.foreach
              (origDatatypes, fn Datatype.T {tycon, cons} =>
               (display (seq [str "cardinality of ",
-                             Tycon.layout tycon,
-                             str " = ",
+                            Tycon.layout tycon,
+                            str " = ",
                              Cardinality.layout (tyconCardinality tycon)]);
                Vector.foreach
                (cons, fn {con, ...} =>
                 (display (seq [str "cardinality of ",
                                Con.layout con,
-                               str " = ",
+                            str " = ",
                                Cardinality.layout (conCardinality con)])))))
           end)
       fun transparent (tycon, con, args) =
@@ -438,7 +436,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
             fun loop t =
                case Type.dest t of
                    Array _ => true
-                 | HierarchicalHeap t => loop t
                  | Ref t => loop t
                  | Tuple ts => Vector.exists (ts, loop)
                  | Vector _ => true
@@ -456,7 +453,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 (cons, fn c as {con, ...} =>
                  if Cardinality.isZero (conCardinality con)
                     then (setConRep (con, ConRep.Useless)
-                          ; NONE)
+                                         ; NONE)
                     else SOME c)
 
              val _ = Control.diagnostics
@@ -534,7 +531,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                        (case tyconReplacement tyc' of
                            NONE => Tycon.equals (tyc, tyc')
                          | SOME t => containsTycon t)
-                  | HierarchicalHeap t => containsTycon t
                   | Tuple ts => Vector.exists (ts, containsTycon)
                   | Ref t => containsTycon t
                   | Vector t => containsTycon t
@@ -596,7 +592,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            t
                         end
                    | NONE => t)
-            | HierarchicalHeap t => hierarchicalHeap (simplifyType t)
             | Ref t => reff (simplifyType t)
             | Tuple ts => Type.tuple (keepSimplifyTypes ts)
             | Vector t => vector (simplifyType t)

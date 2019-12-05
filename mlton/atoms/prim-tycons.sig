@@ -48,7 +48,6 @@ signature PRIM_TYCONS =
       val deRealX: tycon -> RealSize.t
       val deWordX: tycon -> WordSize.t
       val exn: tycon
-      val hierarchicalHeap: tycon
       val int: IntSize.t -> tycon
       val ints: (tycon * IntSize.t) vector
       val intInf: tycon

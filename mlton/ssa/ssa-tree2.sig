@@ -56,7 +56,6 @@ signature SSA_TREE2 =
             datatype dest =
                CPointer
              | Datatype of Tycon.t
-             | HierarchicalHeap of t
              | IntInf
              | Object of {args: t Prod.t,
                           con: ObjectCon.t}
@@ -76,8 +75,9 @@ signature SSA_TREE2 =
             val dest: t -> dest
             val deSequence1: t -> t
             val deSequenceOpt: t -> t Prod.t option
+            val deRef1Opt : t -> t option
+            val deRef1 : t -> t
             val equals: t * t -> bool
-            val hierarchicalHeap: t -> t
             val intInf: t
             val isSequence: t -> bool
             val isUnit: t -> bool
@@ -141,7 +141,8 @@ signature SSA_TREE2 =
              | Profile of ProfileExp.t
              | Update of {base: Var.t Base.t,
                           offset: int,
-                          value: Var.t}
+                          value: Var.t,
+                          writeBarrier: bool}
 
             val clear: t -> unit (* clear the var *)
             val foreachDef: t * (Var.t * Type.t -> unit) -> unit

@@ -53,6 +53,31 @@ structure Runnable =
       type t = unit t
    end
 
+structure Basic =
+  struct
+    open Prim
+    type p = preThread
+    type t = thread
+    val current = fn () =>
+       current (gcState ())
+    val savedPre = fn () =>
+       savedPre (gcState ())
+  end
+
+structure HierarchicalHeap =
+struct
+  (* The prim operations are generally the same, except that we need to
+   * convert to/from integers for a few of them. *)
+  open Prim
+
+  type thread = Basic.t
+  type t = MLtonPointer.t
+
+  fun getLevel t = Word32.toInt (Prim.getLevel t)
+  fun setLevel (t, d) = Prim.setLevel (t, Word32.fromInt d)
+  fun attachChild (p, c, d) = Prim.attachChild (p, c, Word32.fromInt d)
+end
+
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
    let
       val t =
@@ -363,9 +388,9 @@ val intermediateSwitchLoop: unit -> unit =
         fun loop ((): unit): unit  =
             let
                 (* make sure I am not using a HH *)
-                val () = (MLtonHM.enterGlobalHeap ();
+                (* val () = (MLtonHM.enterGlobalHeap ();
                           MLtonHM.HierarchicalHeap.setUseHierarchicalHeap false;
-                          MLtonHM.exitGlobalHeap ())
+                          MLtonHM.exitGlobalHeap ()) *)
 
                 val p = procNum ()
 

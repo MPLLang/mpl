@@ -35,6 +35,14 @@ case "$1" in
                 exit 1
         fi
         ;;
+@gdb)
+        shift
+        action="gdb --args"
+        ;;
+@trace)
+        shift
+        action="mltrace record"
+        ;;
 esac
 
 doitMLton () {
@@ -111,5 +119,5 @@ doit "$lib" \
         -target-link-opt solaris '-lnsl -lsocket -lrt'           \
         -target-link-opt x86 '-m32'                              \
         -profile-exclude '\$\(SML_LIB\)'                         \
-	-mark-cards false                                        \
+        -mark-cards false                                        \
         "$@"

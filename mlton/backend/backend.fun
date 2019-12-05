@@ -45,7 +45,7 @@ in
    structure Prim = Prim
    structure Type = Type
    structure Var = Var
-end 
+end
 
 structure AllocateRegisters = AllocateRegisters (structure Machine = Machine
                                                  structure Rssa = Rssa)
@@ -76,11 +76,11 @@ structure VarOperand =
    end
 
 structure ByteSet = UniqueSet (val cacheSize: int = 1
-                               val bits: int = 14
-                               structure Element =
-                                  struct
+                              val bits: int = 14
+                              structure Element =
+                                 struct
                                      open Bytes
-                                  end)
+                                 end)
 
 structure Chunk =
    struct
@@ -132,7 +132,7 @@ fun eliminateDeadCode (f: R.Function.t): R.Function.t =
    end
 
 fun toMachine (rssa: Rssa.Program.t) =
-   let
+         let
       val R.Program.T {functions, handlesSignals, main, objectTypes, profileInfo} = rssa
       (* Chunk info *)
       val {get = labelChunk, set = setLabelChunk, ...} =
@@ -153,7 +153,7 @@ fun toMachine (rssa: Rssa.Program.t) =
       val _ =
          Vector.foreach
          (Chunkify.chunkify rssa, fn {funcs, labels} =>
-          let 
+          let
              val c = newChunk ()
              val _ = Vector.foreach (funcs, fn f => setFuncChunk (f, c))
              val _ = Vector.foreach (labels, fn l => setLabelChunk (l, c))
@@ -197,7 +197,7 @@ fun toMachine (rssa: Rssa.Program.t) =
               let
                  val index = Counter.next frameOffsetsCounter
                  val offsets =
-                    QuickSort.sortVector
+                                    QuickSort.sortVector
                     (Vector.fromList (ByteSet.toList offsets),
                      Bytes.<=)
                  val fo =
@@ -244,16 +244,16 @@ fun toMachine (rssa: Rssa.Program.t) =
                                 Vector.foreachi
                                 (frameInfos, fn (i, fi) =>
                                  M.FrameInfo.setIndex (fi, i))
-                          in
+            in
                              frameInfos
-                          end
+            end
                      else frameInfos
             in
                (frameInfos, frameOffsets)
             end
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
-                           offsets: Bytes.t list,
+                                   offsets: Bytes.t list,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
@@ -295,7 +295,7 @@ fun toMachine (rssa: Rssa.Program.t) =
             end
       end
       val {get = frameInfo: Label.t -> M.FrameInfo.t option,
-           set = setFrameInfo, ...} = 
+           set = setFrameInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initConst NONE)
       val setFrameInfo =
@@ -335,7 +335,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                val table: ('a, M.Global.t) HashTable.t =
                   HashTable.new {equals = equals, hash = hash}
                fun get (value: 'a): M.Operand.t =
-                  M.Operand.Global
+                     M.Operand.Global
                   (HashTable.lookupOrInsert
                    (table, value, fn () =>
                     M.Global.new (ty value)))
@@ -403,7 +403,7 @@ fun toMachine (rssa: Rssa.Program.t) =
          case field of
             GCField.Frontier => M.Operand.Frontier
           | GCField.StackTop => M.Operand.StackTop
-          | _ => 
+          | _ =>
                M.Operand.Offset {base = M.Operand.GCState,
                                  offset = GCField.offset field,
                                  ty = Type.ofGCField field}
@@ -448,6 +448,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                      else bogusOp ty
                   end
              | Var {var, ...} => varOperand var
+             | Address z => M.Operand.Address (translateOperand z)
          end
       fun translateOperands ops = Vector.map (ops, translateOperand)
       fun genStatement (s: R.Statement.t,
@@ -478,7 +479,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                   in
                      case Prim.name prim of
                         MLton_touch => Vector.new0 ()
-                      | _ => 
+                      | _ =>
                            Vector.new1
                            (M.Statement.PrimApp
                             {args = translateOperands args,
@@ -752,7 +753,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
-                                          offsets = offsets,
+                                                  offsets = offsets,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -787,10 +788,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                                               size = Option.map (fio, fn _ => size)}
                                     end
                         in
-                           simple (M.Transfer.CCall
-                                   {args = translateOperands args,
-                                    func = func,
-                                    return = return})
+                        simple (M.Transfer.CCall
+                                {args = translateOperands args,
+                                 func = func,
+                                 return = return})
                         end
                    | R.Transfer.Call {func, args, return} =>
                         let
@@ -811,7 +812,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                            | Handle h => SOME h
                                     in
                                        (liveNoFormals,
-                                        size, 
+                                        size,
                                         SOME {return = cont,
                                               handler = handler,
                                               size = size})
@@ -1059,8 +1060,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                 end)
          in
             M.Chunk.T {chunkLabel = chunkLabel,
-                       blocks = blocks,
-                       regMax = ! o regMax}
+                             blocks = blocks,
+                             regMax = ! o regMax}
          end
       val mainName = R.Function.name main
       val main = {chunkLabel = Chunk.label (funcChunk mainName),
@@ -1108,16 +1109,16 @@ fun toMachine (rssa: Rssa.Program.t) =
       val maxFrameSize = Bytes.alignWord32 maxFrameSize
       val machine =
          M.Program.T
-         {chunks = chunks,
+      {chunks = chunks,
           frameInfos = frameInfos,
-          frameOffsets = frameOffsets,
-          handlesSignals = handlesSignals,
-          main = main,
-          maxFrameSize = maxFrameSize,
-          objectTypes = objectTypes,
-          reals = allReals (),
+       frameOffsets = frameOffsets,
+       handlesSignals = handlesSignals,
+       main = main,
+       maxFrameSize = maxFrameSize,
+       objectTypes = objectTypes,
+       reals = allReals (),
           sourceMaps = sourceMaps,
-          vectors = allVectors ()}
+       vectors = allVectors ()}
    in
       machine
    end

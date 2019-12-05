@@ -15,7 +15,6 @@ structure GCField =
    struct
       datatype t =
          AtomicState
-       | CardMapAbsolute
        | CurSourceSeqIndex
        | ExnStack
        | Frontier
@@ -27,7 +26,6 @@ structure GCField =
        | StackTop
 
       val atomicStateOffset: Bytes.t ref = ref Bytes.zero
-      val cardMapAbsoluteOffset: Bytes.t ref = ref Bytes.zero
       val curSourceSeqIndexOffset: Bytes.t ref = ref Bytes.zero
       val exnStackOffset: Bytes.t ref = ref Bytes.zero
       val frontierOffset: Bytes.t ref = ref Bytes.zero
@@ -38,11 +36,10 @@ structure GCField =
       val stackLimitOffset: Bytes.t ref = ref Bytes.zero
       val stackTopOffset: Bytes.t ref = ref Bytes.zero
 
-      fun setOffsets {atomicState, cardMapAbsolute, curSourceSeqIndex,
+      fun setOffsets {atomicState, curSourceSeqIndex,
                       exnStack, frontier, limit, limitPlusSlop,
                       signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateOffset := atomicState
-          ; cardMapAbsoluteOffset := cardMapAbsolute
           ; curSourceSeqIndexOffset := curSourceSeqIndex
           ; exnStackOffset := exnStack
           ; frontierOffset := frontier
@@ -55,7 +52,6 @@ structure GCField =
 
       val offset =
          fn AtomicState => !atomicStateOffset
-          | CardMapAbsolute => !cardMapAbsoluteOffset
           | CurSourceSeqIndex => !curSourceSeqIndexOffset
           | ExnStack => !exnStackOffset
           | Frontier => !frontierOffset
@@ -67,7 +63,6 @@ structure GCField =
           | StackTop => !stackTopOffset
 
       val atomicStateSize: Bytes.t ref = ref Bytes.zero
-      val cardMapAbsoluteSize: Bytes.t ref = ref Bytes.zero
       val curSourceSeqIndexSize: Bytes.t ref = ref Bytes.zero
       val exnStackSize: Bytes.t ref = ref Bytes.zero
       val frontierSize: Bytes.t ref = ref Bytes.zero
@@ -78,11 +73,10 @@ structure GCField =
       val stackLimitSize: Bytes.t ref = ref Bytes.zero
       val stackTopSize: Bytes.t ref = ref Bytes.zero
 
-      fun setSizes {atomicState, cardMapAbsolute, curSourceSeqIndex,
+      fun setSizes {atomicState, curSourceSeqIndex,
                     exnStack, frontier, limit, limitPlusSlop,
                     signalIsPending, stackBottom, stackLimit, stackTop} =
          (atomicStateSize := atomicState
-          ; cardMapAbsoluteSize := cardMapAbsolute
           ; curSourceSeqIndexSize := curSourceSeqIndex
           ; exnStackSize := exnStack
           ; frontierSize := frontier
@@ -95,7 +89,6 @@ structure GCField =
 
       val size =
          fn AtomicState => !atomicStateSize
-          | CardMapAbsolute => !cardMapAbsoluteSize
           | CurSourceSeqIndex => !curSourceSeqIndexSize
           | ExnStack => !exnStackSize
           | Frontier => !frontierSize
@@ -108,7 +101,6 @@ structure GCField =
 
       val toString =
          fn AtomicState => "AtomicState"
-          | CardMapAbsolute => "CardMapAbsolute"
           | CurSourceSeqIndex => "CurSourceSeqIndex"
           | ExnStack => "ExnStack"
           | Frontier => "Frontier"
@@ -126,15 +118,13 @@ structure RObjectType =
    struct
       datatype t =
          Normal of {hasIdentity: bool,
+                   bytesNonObjptrs: Bytes.t,
+                   numObjptrs: int}
+       | Sequence of {hasIdentity: bool,
                     bytesNonObjptrs: Bytes.t,
                     numObjptrs: int}
-       | Sequence of {hasIdentity: bool,
-                      bytesNonObjptrs: Bytes.t,
-                      numObjptrs: int}
        | Stack
        | Weak of {gone: bool}
-       | HeaderOnly
-       | Fill
 
       fun layout (t: t): Layout.t =
          let
@@ -155,8 +145,6 @@ structure RObjectType =
              | Weak {gone} =>
                   seq [str "Weak",
                        record [("gone", Bool.layout gone)]]
-             | HeaderOnly => str "HeaderOnly"
-             | Fill => str "Fill"
 
          end
       val _ = layout (* quell unused warning *)
@@ -184,16 +172,14 @@ val objptrSize : unit -> Bytes.t =
 val headerSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.header)
 val headerOffset : unit -> Bytes.t =
-   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
-                                            headerSize ())))
+   Promise.lazy (fn () => Bytes.~ (headerSize ()))
 
 (* see gc/sequence.h *)
 val sequenceLengthSize : unit -> Bytes.t =
    Promise.lazy (Bits.toBytes o Control.Target.Size.seqIndex)
 val sequenceLengthOffset : unit -> Bytes.t =
-   Promise.lazy (fn () => Bytes.~ (Bytes.+ (objptrSize (),
-                                   Bytes.+ (headerSize (),
-                                            sequenceLengthSize ()))))
+   Promise.lazy (fn () => Bytes.~ (Bytes.+ (headerSize (),
+                                            sequenceLengthSize ())))
 
 (* see gc/object.h and gc/sequence.h *)
 val sequenceMetaDataSize : unit -> Bytes.t =

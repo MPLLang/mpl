@@ -27,6 +27,7 @@ struct GC_globalCumulativeStatistics {
 
 struct GC_cumulativeStatistics {
   uintmax_t bytesAllocated;
+  uintmax_t bytesPromoted;
   uintmax_t bytesFilled; /* i.e. unused gaps */
   uintmax_t bytesCopied;
   uintmax_t bytesCopiedMinor;
@@ -59,6 +60,9 @@ struct GC_cumulativeStatistics {
   uintmax_t numMarkCompactGCs;
   uintmax_t numMinorGCs;
   uintmax_t numHHLocalGCs;
+
+  struct timespec timeLocalGC;
+  struct timespec timeLocalPromo;
 
   struct rusage ru_gc; /* total resource usage in gc. */
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */

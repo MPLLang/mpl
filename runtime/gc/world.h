@@ -7,11 +7,6 @@
  */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
-
-static void loadWorldFromFILE (GC_state s, FILE *f);
-static void loadWorldFromFileName (GC_state s, const char *fileName);
-static int saveWorldToFILE (GC_state s, FILE *f);
-
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))

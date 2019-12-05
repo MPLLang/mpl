@@ -27,6 +27,7 @@ signature PRIM =
          sig
             datatype 'a t =
                Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
+             | Array_cas of CType.t option (* codegen *)
              | Array_copyArray (* to rssa (as runtime C fn) *)
              | Array_copyVector (* to rssa (as runtime C fn) *)
              | Array_length (* to rssa *)
@@ -35,7 +36,7 @@ signature PRIM =
              | Array_toVector (* to rssa *)
              | Array_uninit (* to rssa *)
              | Array_uninitIsNop (* to rssa *)
-             | Array_update (* to ssa2 *)
+             | Array_update of {writeBarrier : bool} (* to ssa2 *)
              | CPointer_add (* codegen *)
              | CPointer_diff (* codegen *)
              | CPointer_equal (* codegen *)
@@ -60,7 +61,6 @@ signature PRIM =
                               symbolScope: CFunction.SymbolScope.t } (* codegen *)
              | GC_collect (* to rssa (as runtime C fn) *)
              | GC_state (* to rssa (as operand) *)
-             | HierarchicalHeap_new (* ssa to rssa *)
              | IntInf_add (* to rssa (as runtime C fn) *)
              | IntInf_andb (* to rssa (as runtime C fn) *)
              | IntInf_arshift (* to rssa (as runtime C fn) *)
@@ -134,7 +134,8 @@ signature PRIM =
              | Real_rndToWord of RealSize.t * WordSize.t * {signed: bool} (* codegen *)
              | Real_round of RealSize.t (* codegen *)
              | Real_sub of RealSize.t (* codegen *)
-             | Ref_assign (* to ssa2 *)
+             | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
+             | Ref_cas of CType.t option (* codegen *)
              | Ref_deref (* to ssa2 *)
              | Ref_ref (* to ssa2 *)
              | String_toWord8Vector (* defunctorize *)
@@ -226,6 +227,8 @@ signature PRIM =
       val assign: 'a t
       val bogus: 'a t
       val bug: 'a t
+      val cas : CType.t -> 'a t
+      val arrayCas : CType.t -> 'a t
       val checkApp: 'a t * {args: 'a vector,
                             result: 'a,
                             targs: 'a vector,
@@ -235,7 +238,6 @@ signature PRIM =
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,
                                       exn: 'a,
-                                      hierarchicalHeap: 'a -> 'a,
                                       intInf: 'a,
                                       real: RealSize.t -> 'a,
                                       reff: 'a -> 'a,
@@ -260,7 +262,6 @@ signature PRIM =
                                 result: 'b,
                                 typeOps: {deArray: 'b -> 'b,
                                           deArrow: 'b -> 'b * 'b,
-                                          deHierarchicalHeap: 'b -> 'b,
                                           deRef: 'b -> 'b,
                                           deVector: 'b -> 'b,
                                           deWeak: 'b -> 'b}} -> 'b vector

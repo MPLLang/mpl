@@ -59,14 +59,14 @@ structure CFunction =
       val copyCurrentThread = fn () =>
          T {args = Vector.new1 (Type.gcState ()),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = true,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new1 CType.gcState, NONE),
             return = Type.unit,
             symbolScope = Private,
@@ -76,14 +76,14 @@ structure CFunction =
       val copyThread = fn () =>
          T {args = Vector.new2 (Type.gcState (), Type.thread ()),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = let
                            open CType
                         in
@@ -115,14 +115,14 @@ structure CFunction =
                                 Type.seqIndex (),
                                 Type.objptrHeader ()),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = SOME 1,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new4 (CType.gcState,
                                       CType.csize (),
                                       CType.seqIndex (),
@@ -159,34 +159,37 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_sequenceCopy"}
 
-      (* CHECK; hierarchicalHeap as objptr *)
-      fun newHierarchicalHeap {return} =
-         T {args = Vector.new1 (Type.gcState ()),
-            convention = Cdecl,
-	    kind = Kind.Runtime {bytesNeeded = NONE,
-				 ensuresBytesFree = NONE,
-				 mayGC = true,
-				 maySwitchThreadsFrom = false,
-				 maySwitchThreadsTo = false,
-				 modifiesFrontier = true,
-				 readsStackTop = false,
-				 writesStackTop = false},
-            prototype = (Vector.new1 CType.gcState, SOME CType.CPointer),
-            return = return,
-            symbolScope = Private,
-            target = Direct "HM_newHierarchicalHeap"}
+      fun writeBarrier {obj, dst, src} =
+        T {args = Vector.new4 (Type.gcState(), obj, dst, src),
+           convention = Cdecl,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = true,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new4 (CType.gcState,
+                                     CType.objptr,
+                                     CType.cpointer,
+                                     CType.objptr),
+                        NONE),
+          return = Type.unit,
+          symbolScope = Private,
+          target = Direct "GC_writeBarrier"}
 
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = true,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new0 (), NONE),
             return = Type.unit,
             symbolScope = Private,
@@ -196,14 +199,14 @@ structure CFunction =
       val threadSwitchTo = fn () =>
          T {args = Vector.new3 (Type.gcState (), Type.thread (), Type.csize ()),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = SOME 2,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = true,
                                  maySwitchThreadsTo = true,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new3 (CType.gcState,
                                       CType.thread,
                                       CType.csize ()),
@@ -216,14 +219,14 @@ structure CFunction =
       fun weakCanGet {arg} =
          T {args = Vector.new2 (Type.gcState (), arg),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = false,
+				 mayGC = false,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = false,
-                                 readsStackTop = false,
-                                 writesStackTop = false},
+				 modifiesFrontier = false,
+				 readsStackTop = false,
+				 writesStackTop = false},
             prototype = (Vector.new2 (CType.gcState, CType.cpointer),
                          SOME CType.bool),
             return = Type.bool,
@@ -234,14 +237,14 @@ structure CFunction =
       fun weakGet {arg, return} =
          T {args = Vector.new2 (Type.gcState (), arg),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = false,
+				 mayGC = false,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = false,
-                                 readsStackTop = false,
-                                 writesStackTop = false},
+				 modifiesFrontier = false,
+				 readsStackTop = false,
+				 writesStackTop = false},
             prototype = (Vector.new2 (CType.gcState, CType.cpointer),
                          SOME CType.cpointer),
             return = return,
@@ -252,14 +255,14 @@ structure CFunction =
       fun weakNew {arg, return} =
          T {args = Vector.new3 (Type.gcState (), Type.objptrHeader (), arg),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new3 (CType.gcState,
                                       CType.objptrHeader (),
                                       CType.cpointer),
@@ -271,14 +274,14 @@ structure CFunction =
       val worldSave = fn () =>
          T {args = Vector.new2 (Type.gcState (), Type.string ()),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true,
+				 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = true,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new2 (CType.gcState, CType.cpointer), NONE),
             return = Type.unit,
             symbolScope = Private,
@@ -288,18 +291,18 @@ structure CFunction =
       fun share t =
          T {args = Vector.new2 (Type.gcState (), t),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true, (* MLton.share works by tracing an object.
-                                                * Make sure all the GC invariants are true,
-                                                * because tracing might encounter the current
-                                                * stack in the heap.
-                                                *)
+				 mayGC = true, (* MLton.share works by tracing an object.
+						* Make sure all the GC invariants are true,
+						* because tracing might encounter the current
+						* stack in the heap.
+						*)
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = true, (* actually, just readsFrontier *)
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true, (* actually, just readsFrontier *)
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new2 (CType.gcState, CType.cpointer), NONE),
             return = Type.unit,
             symbolScope = Private,
@@ -309,18 +312,18 @@ structure CFunction =
       fun size t =
          T {args = Vector.new2 (Type.gcState (), t),
             convention = Cdecl,
-            kind = Kind.Runtime {bytesNeeded = NONE,
+	    kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = true, (* MLton.size works by tracing an object.
-                                                * Make sure all the GC invariants are true,
-                                                * because tracing might encounter the current
-                                                * stack in the heap.
-                                                *)
+				 mayGC = true, (* MLton.size works by tracing an object.
+						* Make sure all the GC invariants are true,
+						* because tracing might encounter the current
+						* stack in the heap.
+						*)
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = true,
-                                 readsStackTop = true,
-                                 writesStackTop = true},
+				 modifiesFrontier = true,
+				 readsStackTop = true,
+				 writesStackTop = true},
             prototype = (Vector.new2 (CType.gcState, CType.cpointer),
                          SOME (CType.csize ())),
             return = Type.csize (),
@@ -635,31 +638,6 @@ structure Type =
           | SOME s => s
    end
 
-val cardSizeLog2 : IntInf.t = 8 (* must agree with CARD_SIZE_LOG2 in gc.c *)
-
-fun updateCard (addr: Operand.t): Statement.t list =
-   let
-      val index = Var.newNoname ()
-      (* CHECK; WordSize.objptr or WordSize.cpointer? *)
-      val sz = WordSize.objptr ()
-      val indexTy = Type.word sz
-      val cardElemSize = WordSize.fromBits Bits.inByte
-   in
-      [PrimApp {args = (Vector.new2
-                        (Operand.cast (addr, Type.bits (WordSize.bits sz)),
-                         Operand.word
-                         (WordX.fromIntInf (cardSizeLog2, WordSize.shiftArg)))),
-                dst = SOME (index, indexTy),
-                prim = Prim.wordRshift (sz, {signed = false})},
-       Move {dst = (SequenceOffset
-                    {base = Runtime GCField.CardMapAbsolute,
-                     index = Var {ty = indexTy, var = index},
-                     offset = Bytes.zero,
-                     scale = Scale.One,
-                     ty = Type.word cardElemSize}),
-             src = Operand.word (WordX.one cardElemSize)}]
-   end
-
 fun convertWordSize (ws: WordSize.t): WordSize.t =
    WordSize.roundUpToPrim ws
 
@@ -671,6 +649,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
    let
       val {diagnostic, genCase, object, objectTypes, select, toRtype, update} =
          PackedRepresentation.compute program
+
+      val updateGetDstSrc = update
+      fun update x =
+        let
+          val {dst, src, ss} = updateGetDstSrc x
+        in
+          ss @ [Move {dst=dst, src=src}]
+        end
+
       val objectTypes = Vector.concat [ObjectType.basic (), objectTypes]
       val () =
          Vector.foreachi
@@ -934,33 +921,6 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      fun add2 (s1, s2) = loop (i - 1, s1 :: s2 :: ss, t)
                      fun adds ss' = loop (i - 1, ss' @ ss, t)
                      val s = Vector.sub (statements, i)
-                  in
-                     case s of
-                        S.Statement.Profile e => add (Statement.Profile e)
-                      | S.Statement.Update {base, offset, value} =>
-                           (case toRtype (varType value) of
-                               NONE => none ()
-                             | SOME t =>
-                                  let
-                                     val baseOp = Base.map (base, varOp)
-                                     val ss =
-                                        update
-                                        {base = baseOp,
-                                         baseTy = varType (Base.object base),
-                                         offset = offset,
-                                         value = varOp value}
-                                     val ss =
-                                        if !Control.markCards
-                                           andalso Type.isObjptr t
-                                           then
-                                              updateCard (Base.object baseOp)
-                                              @ ss
-                                        else ss
-                                  in
-                                     adds ss
-                                  end)
-                      | S.Statement.Bind {exp, ty, var} =>
-                  let
                      fun split (args, kind,
                                 ss: Statement.t list,
                                 make: Label.t -> Statement.t list * Transfer.t) =
@@ -973,6 +933,45 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                         in
                            loop (i - 1, ss, t)
                         end
+                  in
+                     case s of
+                        S.Statement.Profile e => add (Statement.Profile e)
+                      | S.Statement.Update {base, offset, value, writeBarrier} =>
+                           (case toRtype (varType value) of
+                               NONE => none ()
+                             | SOME t =>
+                                  let
+                                     val baseOp = Base.map (base, varOp)
+                                     val baseTy = varType (Base.object base)
+                                     val {dst, src, ss=ss'} =
+                                        updateGetDstSrc
+                                        {base = baseOp,
+                                         baseTy = baseTy,
+                                         offset = offset,
+                                         value = varOp value}
+                                     val theMove = Move {dst=dst, src=src}
+                                  in
+                                    if not (writeBarrier andalso Type.isObjptr t) then
+                                      adds (ss' @ [theMove])
+                                    else
+                                      let
+                                        val args = Vector.new4 (GCState, Base.object baseOp, Operand.Address dst, src)
+                                        val func = CFunction.writeBarrier
+                                          {obj = Operand.ty (Base.object baseOp),
+                                           dst = Operand.ty (Operand.Address dst),
+                                           src = Operand.ty src}
+                                      in
+                                        split
+                                        (Vector.new0 (), Kind.CReturn {func = func}, theMove :: ss,
+                                         fn l =>
+                                         (ss',
+                                          Transfer.CCall {args = args,
+                                                          func = func,
+                                                          return = SOME l}))
+                                      end
+                                  end)
+                      | S.Statement.Bind {exp, ty, var} =>
+                  let
                      fun maybeMove (f: Type.t -> Operand.t) =
                         case toRtype ty of
                            NONE => none ()
@@ -1038,10 +1037,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                     val ty = Type.word s
                                  in
                                     move (SequenceOffset {base = a 0,
-                                                          index = a 1,
-                                                          offset = Bytes.zero,
-                                                          scale = Type.scale ty,
-                                                          ty = ty})
+                                                       index = a 1,
+                                                       offset = Bytes.zero,
+                                                       scale = Type.scale ty,
+                                                       ty = ty})
                                  end
                               fun dst () =
                                  case var of
@@ -1114,20 +1113,20 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      fun cpointerGet () =
                         maybeMove (fn ty =>
                                    SequenceOffset {base = a 0,
-                                                   index = a 1,
-                                                   offset = Bytes.zero,
-                                                   scale = Type.scale ty,
-                                                   ty = ty})
+                                                index = a 1,
+                                                offset = Bytes.zero,
+                                                scale = Type.scale ty,
+                                                ty = ty})
                      fun cpointerSet () =
                         let
                            val src = a 2
                            val ty = Operand.ty src
                         in
                            add (Move {dst = SequenceOffset {base = a 0,
-                                                            index = a 1,
-                                                            offset = Bytes.zero,
-                                                            scale = Type.scale ty,
-                                                            ty = ty},
+                                                         index = a 1,
+                                                         offset = Bytes.zero,
+                                                         scale = Type.scale ty,
+                                                         ty = ty},
                                       src = a 2})
                         end
                      fun codegenOrC (p: Prim.t, args) =
@@ -1148,7 +1147,96 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      datatype z = datatype Prim.Name.t
                            in
                               case Prim.name prim of
-                                 Array_alloc {raw} =>
+                                 Ref_cas NONE =>
+                                    (case toRtype ty of
+                                       NONE => none ()
+                                     | SOME rty =>
+                                          let
+                                             val args' = varOps args
+                                             val theCAS =
+                                               PrimApp {dst = dst (),
+                                                        prim = Prim.cas (Type.toCType rty),
+                                                        args = args'}
+                                          in
+                                            if not (Type.isObjptr rty) then
+                                              add theCAS
+                                            else
+                                              let
+                                                val objOp = varOp (arg 0)
+                                                val srcOp = varOp (arg 2)
+                                                (* SAM_NOTE: this is correct as long as ref-flattening
+                                                 * is disabled for the refs that participate in a CAS *)
+                                                val fieldOp =
+                                                  Operand.Address
+                                                  (Operand.Offset {base = objOp,
+                                                                   offset = Bytes.zero,
+                                                                   ty = Operand.ty srcOp})
+                                                val wbArgs = Vector.new4 (GCState, objOp, fieldOp, srcOp)
+                                                val func = CFunction.writeBarrier
+                                                  {obj = Operand.ty objOp,
+                                                   dst = Operand.ty fieldOp,
+                                                   src = Operand.ty srcOp}
+                                              in
+                                                split
+                                                (Vector.new0 (), Kind.CReturn {func = func}, theCAS :: ss,
+                                                 fn l =>
+                                                 ([],
+                                                  Transfer.CCall {args = wbArgs,
+                                                                  func = func,
+                                                                  return = SOME l}))
+                                              end
+                                          end)
+                               | Array_cas NONE =>
+                                    (case toRtype ty of
+                                       NONE => none ()
+                                     | SOME rty =>
+                                          let
+                                             val args' = varOps args
+                                             val theCAS =
+                                               PrimApp {dst = dst (),
+                                                        prim = Prim.arrayCas (Type.toCType rty),
+                                                        args = args'}
+                                          in
+                                            if not (Type.isObjptr rty) then
+                                              add theCAS
+                                            else
+                                              let
+                                                val objOp = varOp (arg 0)
+                                                val idxOp = varOp (arg 1)
+                                                val srcOp = varOp (arg 3)
+                                                val sc =
+                                                  case Scale.fromBytes (Bits.toBytes (Type.width rty)) of
+                                                    SOME sc => sc
+                                                  | NONE => Error.bug (concat ["SsaToRssa.translateStatementsTransfer: ",
+                                                                               "PrimApp Array_cas: ",
+                                                                               "no valid scale for element width ",
+                                                                               Bytes.toString (Bits.toBytes (Type.width rty))])
+                                                (* SAM_NOTE: this is correct as long as deep-flattening
+                                                 * is disabled for the elements of arrays that participate
+                                                 * in a CAS *)
+                                                val fieldOp =
+                                                  Operand.Address
+                                                  (Operand.SequenceOffset {base = objOp,
+                                                                           index = idxOp,
+                                                                           offset = Bytes.zero,
+                                                                           scale = sc,
+                                                                           ty = Operand.ty srcOp})
+                                                val wbArgs = Vector.new4 (GCState, objOp, fieldOp, srcOp)
+                                                val func = CFunction.writeBarrier
+                                                  {obj = Operand.ty objOp,
+                                                   dst = Operand.ty fieldOp,
+                                                   src = Operand.ty srcOp}
+                                              in
+                                                split
+                                                (Vector.new0 (), Kind.CReturn {func = func}, theCAS :: ss,
+                                                 fn l =>
+                                                 ([],
+                                                  Transfer.CCall {args = wbArgs,
+                                                                  func = func,
+                                                                  return = SOME l}))
+                                              end
+                                          end)
+                               | Array_alloc {raw} =>
                                     let
                                        val allocOpt = fn () =>
                                           let
@@ -1245,8 +1333,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                  {index = index,
                                                                   sequence = sequence},
                                                           baseTy = sequenceTy,
-                                                          offset = offset,
-                                                          value = bogus elt})
+                                                                 offset = offset,
+                                                                 value = bogus elt})
                                     in
                                        adds (List.concat sss)
                                     end
@@ -1284,10 +1372,6 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
                                | GC_state => move GCState
-                               | HierarchicalHeap_new =>
-                                 simpleCCallWithGCState
-                                     (CFunction.newHierarchicalHeap
-                                          {return = valOf (toRtype ty)})
                                | IntInf_add =>
                                     simpleCCallWithGCState
                                     (CFunction.intInfBinary IntInf_add)
@@ -1390,11 +1474,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                            if not (Type.isObjptr t)
                                               then move (Operand.word (WordX.zero (WordSize.csize ())))
                                            else
-                                              simpleCCallWithGCState
+                                    simpleCCallWithGCState
                                               (CFunction.size (Operand.ty (a 0))))
                                | MLton_touch =>
                                     let
-                                       val a  = arg 0
+                                       val a = arg 0
                                     in
                                        if isSome (toRtype (varType a))
                                           then primApp (prim, Vector.new1 (varOp a))
@@ -1562,7 +1646,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | Word_equal s =>
                                     simpleCodegenOrC
                                     (Prim.wordEqual
-                                     (WordSize.roundUpToPrim s))
+                                               (WordSize.roundUpToPrim s))
                                | Word_toIntInf => cast ()
                                | Word_extdToWord (s1, s2, {signed}) =>
                                     if WordSize.equals (s1, s2)

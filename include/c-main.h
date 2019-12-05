@@ -62,7 +62,7 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
                                                                         \
   /* Do not set CPU affinity when running on a single processor  */     \
-  if (s->numberOfProcs > 1) {                                           \
+  if (s->controls->setAffinity && s->numberOfProcs > 1) {               \
       uint32_t num = Proc_processorNumber (s)                           \
           * s->controls->affinityStride                                 \
           + s->controls->affinityBase;                                  \
@@ -70,7 +70,9 @@ void MLton_threadFunc (void* arg) {                                     \
   }                                                                     \
                                                                         \
   /* Save our state locally */                                          \
-  pthread_setspecific (gcstate_key, s);                                 \
+  if (s->procNumber != 0) {                                             \
+    pthread_setspecific (gcstate_key, s);                               \
+  }                                                                     \
   if (s->amOriginal) {                                                  \
     real_Init();                                                        \
     nextBlock = ml;                                                     \
@@ -108,7 +110,7 @@ void MLton_threadFunc (void* arg) {                                     \
                                                                         \
       gcState = (GC_state) malloc (s.numberOfProcs * sizeof (struct GC_state)); \
       /* Create key */                                                  \
-      if (pthread_key_create(&gcstate_key, MLtonGCCleanup)) {                     \
+      if (pthread_key_create(&gcstate_key, MLtonGCCleanup)) {           \
         fprintf (stderr, "pthread_key_create failed: %s\n", strerror (errno)); \
         exit (1);                                                       \
       }                                                                 \
@@ -116,6 +118,7 @@ void MLton_threadFunc (void* arg) {                                     \
       memcpy (&gcState[0], &s, sizeof (struct GC_state));               \
       gcState[0].procStates = gcState;                                  \
       gcState[0].procNumber = 0;                                        \
+      pthread_setspecific(gcstate_key, &gcState[0]);                    \
       GC_lateInit (&gcState[0]);                                        \
     }                                                                   \
     /* Fill in per-processor data structures */                         \
@@ -150,7 +153,7 @@ PUBLIC void LIB_OPEN(LIBNAME) (int argc, char* argv[]) {                \
     nextBlock = *(uintptr_t*)(s->stackTop - GC_RETURNADDRESS_SIZE);     \
   }                                                                     \
   /* Trampoline */                                                      \
-   do {                                                                 \
+  do {                                                                  \
      nextBlock = (*(nextChunks[nextBlock]))(s, s->stackTop, s->frontier, nextBlock); \
    } while (nextBlock != (uintptr_t)-1);                                \
 }                                                                       \

@@ -40,7 +40,7 @@ structure CoreML = CoreML (open Atoms
                                              expandOpaque = true,
                                              var = var}
 
-                                 fun layout t = 
+                                 fun layout t =
                                     #1 (layoutPretty
                                         (t, {expandOpaque = true,
                                              layoutPrettyTycon = Tycon.layout,
@@ -172,7 +172,6 @@ fun setupRuntimeConstants() : unit =
             Runtime.GCField.setOffsets
             {
              atomicState = get "atomicState_Offset",
-             cardMapAbsolute = get "generationalMaps.cardMapAbsolute_Offset",
              curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Offset",
              exnStack = get "exnStack_Offset",
              frontier = get "frontier_Offset",
@@ -186,7 +185,6 @@ fun setupRuntimeConstants() : unit =
             Runtime.GCField.setSizes
             {
              atomicState = get "atomicState_Size",
-             cardMapAbsolute = get "generationalMaps.cardMapAbsolute_Size",
              curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Size",
              exnStack = get "exnStack_Size",
              frontier = get "frontier_Size",
@@ -213,7 +211,7 @@ fun setupRuntimeConstants() : unit =
       ()
    end
 
-(* ------------------------------------------------- *)   
+(* ------------------------------------------------- *)
 (*                   Primitive Env                   *)
 (* ------------------------------------------------- *)
 
@@ -387,12 +385,12 @@ structure MLBString:>
              "in\n",
              quoteFile input, "\n",
              "end\n"]
-         end
+   end
 
       val lexAndParseMLB = MLBFrontEnd.lexAndParseString
    end
 
-val lexAndParseMLB: MLBString.t -> Ast.Basdec.t = 
+val lexAndParseMLB: MLBString.t -> Ast.Basdec.t =
    fn input =>
    let
       val ast = MLBString.lexAndParseMLB input
@@ -406,8 +404,8 @@ fun parseAndElaborateMLB (input: MLBString.t): (CoreML.Dec.t list * bool) vector
       fun parseAndElaborateMLB input =
          let
             val _ = if !Control.keepAST
-                       then File.remove (concat [!Control.inputFile, ".ast"])
-                       else ()
+                 then File.remove (concat [!Control.inputFile, ".ast"])
+                 else ()
             val _ = Const.lookup := lookupConstant
             val (E, decs) = Elaborate.elaborateMLB (lexAndParseMLB input, {addPrim = addPrim})
             val _ = Control.checkForErrors ()
@@ -471,16 +469,16 @@ fun mkCompile {outputC, outputLL, outputS} =
       end
 
       fun deadCode decs =
-         let
+   let
             fun deadCode decs =
-               let
-                  val {prog = decs} =
-                     DeadCode.deadCode {prog = decs}
-                  val decs = Vector.concatV (Vector.map (decs, Vector.fromList))
-                  val coreML = CoreML.Program.T {decs = decs}
-               in
+                let
+                              val {prog = decs} =
+                                 DeadCode.deadCode {prog = decs}
+      val decs = Vector.concatV (Vector.map (decs, Vector.fromList))
+      val coreML = CoreML.Program.T {decs = decs}
+         in
                   coreML
-               end
+         end
             val coreML =
                Control.translatePass
                {arg = decs,
@@ -533,7 +531,7 @@ fun mkCompile {outputC, outputLL, outputS} =
       fun mkFrontend {parse, stats, toFile, typeCheck} =
          let
             val name = #suffix toFile
-         in
+   in
             fn input =>
             Ref.fluidLet
             (Control.typeCheck, true, fn () =>
@@ -555,7 +553,7 @@ fun mkCompile {outputC, outputLL, outputS} =
               tgtStats = SOME stats,
               tgtToFile = SOME toFile,
               tgtTypeCheck = SOME typeCheck})
-         end
+   end
       val xmlFrontend =
          mkFrontend
          {parse = Xml.Program.parse,
@@ -589,97 +587,97 @@ fun mkCompile {outputC, outputLL, outputS} =
                 doit = Xml.simplify,
                 execute = true,
                 keepIL = !Control.keepXML,
-                name = "xmlSimplify",
-                stats = Xml.Program.layoutStats,
+       name = "xmlSimplify",
+       stats = Xml.Program.layoutStats,
                 toFile = Xml.Program.toFile,
-                typeCheck = Xml.typeCheck}
-         in
-            xml
-         end
+       typeCheck = Xml.typeCheck}
+   in
+      xml
+   end
       fun toSxml xml =
          Control.translatePass
          {arg = xml,
           doit = Monomorphise.monomorphise,
           keepIL = false,
-          name = "monomorphise",
+    name = "monomorphise",
           srcToFile = SOME Xml.Program.toFile,
           tgtStats = SOME Sxml.Program.layoutStats,
           tgtToFile = SOME Sxml.Program.toFile,
           tgtTypeCheck = SOME Sxml.typeCheck}
       fun sxmlSimplify sxml =
-         let
-            val sxml =
+   let
+      val sxml =
                Control.simplifyPass
                {arg = sxml,
                 doit = Sxml.simplify,
                 execute = true,
                 keepIL = !Control.keepSXML,
-                name = "sxmlSimplify",
-                stats = Sxml.Program.layoutStats,
+          name = "sxmlSimplify",
+          stats = Sxml.Program.layoutStats,
                 toFile = Sxml.Program.toFile,
-                typeCheck = Sxml.typeCheck}
-         in
-            sxml
-         end
+          typeCheck = Sxml.typeCheck}
+   in
+      sxml
+   end
       fun toSsa sxml =
          Control.translatePass
          {arg = sxml,
           doit = ClosureConvert.closureConvert,
           keepIL = false,
-          name = "closureConvert",
+    name = "closureConvert",
           srcToFile = SOME Sxml.Program.toFile,
           tgtStats = SOME Ssa.Program.layoutStats,
           tgtToFile = SOME Ssa.Program.toFile,
           tgtTypeCheck = SOME Ssa.typeCheck}
       fun ssaSimplify ssa =
-         let
-            val ssa =
+   let
+      val ssa =
                Control.simplifyPass
                {arg = ssa,
                 doit = Ssa.simplify,
                 execute = true,
                 keepIL = !Control.keepSSA,
-                name = "ssaSimplify",
-                stats = Ssa.Program.layoutStats,
+          name = "ssaSimplify",
+          stats = Ssa.Program.layoutStats,
                 toFile = Ssa.Program.toFile,
-                typeCheck = Ssa.typeCheck}
-         in
-            ssa
-         end
+          typeCheck = Ssa.typeCheck}
+   in
+      ssa
+   end
       fun toSsa2 ssa =
          Control.translatePass
          {arg = ssa,
           doit = SsaToSsa2.convert,
           keepIL = false,
-          name = "toSsa2",
+    name = "toSsa2",
           srcToFile = SOME Ssa.Program.toFile,
           tgtStats = SOME Ssa2.Program.layoutStats,
           tgtToFile = SOME Ssa2.Program.toFile,
           tgtTypeCheck = SOME Ssa2.typeCheck}
       fun ssa2Simplify ssa2 =
-         let
-            val ssa2 =
+   let
+      val ssa2 =
                Control.simplifyPass
                {arg = ssa2,
                 doit = Ssa2.simplify,
                 execute = true,
                 keepIL = !Control.keepSSA2,
-                name = "ssa2Simplify",
-                stats = Ssa2.Program.layoutStats,
+          name = "ssa2Simplify",
+          stats = Ssa2.Program.layoutStats,
                 toFile = Ssa2.Program.toFile,
-                typeCheck = Ssa2.typeCheck}
-         in
-            ssa2
-         end
+          typeCheck = Ssa2.typeCheck}
+   in
+      ssa2
+   end
       fun toRssa ssa2 =
-         let
-            val _ = setupRuntimeConstants ()
-            val codegenImplementsPrim =
-               case !Control.codegen of
-                  Control.AMD64Codegen => amd64Codegen.implementsPrim
-                | Control.CCodegen => CCodegen.implementsPrim
-                | Control.LLVMCodegen => LLVMCodegen.implementsPrim
-                | Control.X86Codegen => x86Codegen.implementsPrim
+   let
+      val _ = setupRuntimeConstants ()
+      val codegenImplementsPrim =
+         case !Control.codegen of
+            Control.AMD64Codegen => amd64Codegen.implementsPrim
+          | Control.CCodegen => CCodegen.implementsPrim
+          | Control.LLVMCodegen => LLVMCodegen.implementsPrim
+          | Control.X86Codegen => x86Codegen.implementsPrim
             fun toRssa ssa2 =
                Ssa2ToRssa.convert
                (ssa2, {codegenImplementsPrim = codegenImplementsPrim})
@@ -695,7 +693,7 @@ fun mkCompile {outputC, outputLL, outputS} =
                 tgtTypeCheck = SOME Rssa.Program.typeCheck}
          in
             rssa
-         end
+   end
       fun rssaSimplify rssa =
          Control.simplifyPass
          {arg = rssa,
@@ -718,9 +716,9 @@ fun mkCompile {outputC, outputLL, outputS} =
                 tgtStats = SOME Machine.Program.layoutStats,
                 tgtToFile = SOME Machine.Program.toFile,
                 tgtTypeCheck = SOME Machine.Program.typeCheck}
-         in
+   in
             machine
-         end
+   end
       fun machineSimplify machine =
          Control.simplifyPass
          {arg = machine,
@@ -732,27 +730,27 @@ fun mkCompile {outputC, outputLL, outputS} =
           toFile = Machine.Program.toFile,
           typeCheck = Machine.Program.typeCheck}
       fun codegen machine =
-         let
+   let
             val _ = Machine.Program.clearLabelNames machine
             val _ = Machine.Label.printNameAlphaNumeric := true
             fun codegen machine =
-               case !Control.codegen of
-                  Control.AMD64Codegen =>
-                     amd64Codegen.output {program = machine,
-                                          outputC = outputC,
-                                          outputS = outputS}
-                | Control.CCodegen =>
-                     CCodegen.output {program = machine,
-                                      outputC = outputC}
-                | Control.LLVMCodegen =>
-                     LLVMCodegen.output {program = machine,
-                                         outputC = outputC,
-                                         outputLL = outputLL}
-                | Control.X86Codegen =>
-                     x86Codegen.output {program = machine,
+         case !Control.codegen of
+            Control.AMD64Codegen =>
+                   amd64Codegen.output {program = machine,
                                         outputC = outputC,
-                                        outputS = outputS}
-         in
+                                          outputS = outputS}
+          | Control.CCodegen =>
+                   CCodegen.output {program = machine,
+                                      outputC = outputC}
+          | Control.LLVMCodegen =>
+                   LLVMCodegen.output {program = machine,
+                                       outputC = outputC,
+                                         outputLL = outputLL}
+          | Control.X86Codegen =>
+                   x86Codegen.output {program = machine,
+                                      outputC = outputC,
+            outputS = outputS}
+      in
             Control.translatePass
             {arg = machine,
              doit = codegen,
@@ -762,7 +760,7 @@ fun mkCompile {outputC, outputLL, outputS} =
              tgtStats = NONE,
              tgtToFile = NONE,
              tgtTypeCheck = NONE}
-         end
+      end
 
       val goCodegen = codegen
       val goMachineSimplify = goCodegen o machineSimplify
