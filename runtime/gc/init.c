@@ -263,12 +263,13 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || 0 == strcmp (argv[i], "--"))
             die ("%s use-mmap missing argument.", atName);
           GC_setCygwinUseMmap (stringToBool (argv[i++]));
-        } else if (0 == strcmp (arg, "number-processors")) {
+        } else if ( (0 == strcmp (arg, "number-processors")) ||
+                    (0 == strcmp (arg, "procs")) ) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("%s number-processors missing argument.", atName);
+            die ("%s %s missing argument.", atName, arg);
           if (!s->amOriginal)
-            die ("%s number-processors incompatible with loaded worlds.", atName);
+            die ("%s %s incompatible with loaded worlds.", atName, arg);
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
