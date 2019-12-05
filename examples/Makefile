@@ -1,4 +1,4 @@
-MLTON=MLTON_JOBS=32 ../build/bin/mlton-parmem
+MLTON=MLTON_JOBS=32 ../build/bin/mpl
 MLTRACE=../build/bin/mltrace
 DBG=-keep g -debug true -debug-runtime true
 FLAGS=
