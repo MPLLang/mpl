@@ -384,7 +384,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->callFromCHandlerThread = BOGUS_OBJPTR;
 
   s->controls = (struct GC_controls *) malloc (sizeof (struct GC_controls));
-  s->controls->mayLoadWorld = TRUE;
+  s->controls->mayLoadWorld = FALSE; /* incompatible with mpl runtime */
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
   s->controls->HMMessages = FALSE;
