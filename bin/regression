@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 # This script runs the regression tests in src/regression.
-# It also compiles the tests in benchmark/tests
 
 # set -e
 
@@ -231,32 +230,6 @@ if $short || $testReg ; then
   fi
 fi
 
-"$src/bin/mmake" clean >/dev/null
-cd "$src/benchmark/tests"
-for f in *.sml; do
-        f=`basename "$f" .sml`
-        tmpf="/tmp/$f.$$"
-        case "$f" in
-        fxp)
-                echo "skipping $f"
-        ;;
-        *)
-                echo "testing $f"
-                echo "val _ = Main.doit 0" | cat "$f.sml" - > "$tmpf.sml"
-                $mlton -output "$tmpf" "${flags[@]}"            \
-                        -default-ann 'nonexhaustiveBind ignore'\
-                        -default-ann 'nonexhaustiveMatch ignore'\
-                        -default-ann 'redundantBind ignore'    \
-                        -default-ann 'redundantMatch ignore'    \
-                        "$tmpf.sml"
-                if [ $? -ne 0 ]; then
-                        compFail "$f"
-                        exitFail=true
-                fi
-                rm -f "$tmpf" "$tmpf.sml"
-        ;;
-        esac
-done
 "$src/bin/mmake" clean >/dev/null
 cd "$src"
 for f in mllex mlyacc mlprof; do
