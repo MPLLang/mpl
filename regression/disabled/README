@@ -1,0 +1,4 @@
+These regression tests are not supported in MPL.
+
+They are named *.disabled so that the scripts for running regression tests
+(which look for *.sml) will not find them.

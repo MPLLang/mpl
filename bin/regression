@@ -52,7 +52,7 @@ dir=`dirname "$0"`
 src=`cd "$dir/.." && pwd`
 bin="$src/build/bin"
 lib="$src/build/lib/mlton"
-mlton="$bin/mlton"
+mlton="$bin/mpl"
 # RAM_NOTE: Some are disabled with a '.disabled' suffix, so they will not be found
 cont='callcc.sml callcc2.sml callcc3.sml once.sml'
 flatArray='finalize.sml flat-array.sml flat-array.2.sml'
@@ -118,10 +118,6 @@ if [ $TARGET_OS = mingw ]; then
 	forMinGW='true'
 fi
 
-for f in *.sml.disabled; do
-    echo TEST ${f%.sml.disabled} IS DISABLED
-done
-
 for f in *.sml; do
         f=`basename "$f" .sml`
         if ($testReg); then
@@ -181,7 +177,7 @@ for f in *.sml; do
         echo "\$(SML_LIB)/basis/basis.mlb
                 \$(SML_LIB)/basis/mlton.mlb
                 \$(SML_LIB)/basis/sml-nj.mlb
-                ann 
+                ann
                         \"allowFFI true\"
                         \"allowOverload true\"
                         \"allowExtendedTextConsts true\"
@@ -189,7 +185,7 @@ for f in *.sml; do
                         \"nonexhaustiveMatch ignore\"
                         \"redundantBind ignore\"
                         \"redundantMatch ignore\"
-                in $f.sml 
+                in $f.sml
                 end" >"$mlb"
         "$mlton" "${flags[@]}" "${extraFlags[@]}" -output "$f" "$mlb"
         if [ "$?" -ne '0' ] || [ ! -x "$f" ]; then
@@ -203,7 +199,7 @@ for f in *.sml; do
                 if $forMinGW; then
                         nonZeroMsg="$nonZeroMsg"'\r'
                 fi
-                ( "./$f" || echo -e "$nonZeroMsg" ) >$tmp 2>&1 
+                ( "./$f" || echo -e "$nonZeroMsg" ) >$tmp 2>&1
                 if [ -r "$f.ok" ]; then
                         compare="$f.ok"
                         for x in "$OBJPTR_REP" "${OBJPTR_REP}a$ALIGN" "$TARGET_OS" "$TARGET_ARCH" "$TARGET_ARCH-$TARGET_OS"; do
