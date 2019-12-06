@@ -42,7 +42,6 @@ MPL extends SML with a number of primitives for parallelism and concurrency.
 For concrete examples, see the `examples/` subdirectory.
 
 ### The `ForkJoin` Structure
-MPL provides a structure, `ForkJoin`, which implements the following primitives.
 ```
 val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
 val alloc: int -> 'a array
@@ -51,48 +50,79 @@ The `fork` primitive takes two functions to execute in parallel and
 returns their results.
 
 The `alloc` primitive takes a length and returns a fresh, uninitialized array
-of that size. This is integrated with the scheduler and memory management
-system to perform allocation in parallel and be safe-for-GC.
-
-**Warning**: To guarantee no errors, the programmer must be careful to
-fully initialize the array (write at each index) before reading from it.
-The `alloc` function is intended to be used as a low-level primitive in the
-efficient implementation of high-performance libraries.
+of that size. **Warning**: To guarantee no errors, the programmer must be
+careful to initialize the array before reading from it. `alloc` is intended to
+be used as a low-level primitive in the efficient implementation of
+high-performance libraries. It is integrated with the scheduler and memory
+management system to perform allocation in parallel and be safe-for-GC.
 
 ### The `MLton.Parallel` Structure
-The `MLton.Parallel` structure provides the following concurrency primitives:
 ```
 val compareAndSwap : 'a ref -> ('a * 'a) -> 'a
 val arrayCompareAndSwap : ('a array * int) -> ('a * 'a) -> 'a
 ```
 
-## Compilation
+## Using MPL
 
 MPL uses `.mlb` files ([ML Basis](http://mlton.org/MLBasis)) to describe
-source files for compilation. A typical compilation file with MPL begins like
-this:
-```
-$(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/basis/mlton.mlb
-$(SML_LIB)/basis/schedulers/shh.mlb
-...
-```
-These respectively load:
+source files for compilation. A typical compilation file with MPL is shown
+below. The first three lines of this file respectively load:
 * The [SML Basis Library](http://sml-family.org/Basis/)
-* The `MLton.Parallel` as described above, as well as other
-  [MLton-specific features](http://mlton.org/MLtonStructure) (although many
-  of these are unsupported, see "Known Issues" below)
 * The `ForkJoin` structure, as described above
+* The `MLton` structure, which includes the MPL extension
+  `MLton.Parallel` as described above, as well as various
+  [MLton-specific features](http://mlton.org/MLtonStructure). Not all MLton
+  features are supported (see "Known Issues" below).
+```
+(* libraries *)
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/schedulers/shh.mlb
+$(SML_LIB)/basis/mlton.mlb
 
-### Compile-time Options
+(* your source files... *)
+A.sml
+B.sml
+```
 
-(TODO)
+The command to compile a file `XYZ.mlb` is as follows. By default, MPL
+produces an executable with the same base name as the source file, i.e.
+this would create an executable `XYZ`:
+```
+mpl [options...] XYZ.mlb
+```
 
-## Execution
+MPL has a number of command-line options derived from MLton, which are
+documented [here](http://mlton.org/CompileTimeOptions). Note that MPL only
+supports C codegen and does not support profiling.
+
+Some useful compile-time options are
+* `-output FOO` Give a specific name to the produced executable
+* `-default-type int64 -default-type word64` Use 64-bit integers and words
+by default.
+* `-debug true -debug-runtime true -keep g` For debugging, keeps the generated
+C files and uses the debug version of the runtime (with assertions enabled).
+The resulting executable is somewhat peruse-able with tools like `gdb`.
 
 ### Run-time Options
 
-(TODO)
+MPL executables can take arguments at the command line that control the runtime
+system. The syntax to run a program `XYZ` is
+```
+XYZ [@mpl [runtime args...] --] [program args...]
+```
+The runtime arguments must begin with `@mpl` and end with `--`, and these are
+not visible to the program via
+[CommandLine.arguments](http://sml-family.org/Basis/command-line.html).
+
+Some useful runtime arguments are
+* `number-processors N` Use N worker threads to run the program. Can also
+be given as `procs N`.
+* `set-affinity` Pin worker threads to processors. Can be used in combination
+with `affinity-base B` and `affinity-stride S` to pin thread i to processor
+number B + S*i.
+* `min-chunk X` Set the minimum heap chunk size to X bytes. This can be
+written with suffixes K, M, and G, e.g. `10M` is 10 megabytes. Chunks cannot be
+smaller than one page, typically 4K. The default size is one page.
 
 ## Disentanglement
 
