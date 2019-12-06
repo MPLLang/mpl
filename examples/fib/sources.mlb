@@ -1,3 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/schedulers/shh.mlb
-fib.sml
+
+../shared/lib.mlb
+main.sml

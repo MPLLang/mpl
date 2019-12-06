@@ -10,12 +10,7 @@ fun fib n =
       x + y
     end
 
-val nstr = List.hd (CommandLine.arguments ()) handle _ => "39"
-val n =
-  case Int.fromString nstr of
-    SOME x => x
-  | NONE => raise Fail ("cannot parse integer from " ^ nstr)
-
+val n = CommandLineArgs.parseInt "N" 39
 val _ = print ("fib " ^ Int.toString n ^ "\n")
 
 val t0 = Time.now ()
@@ -23,4 +18,4 @@ val result = fib n
 val t1 = Time.now ()
 
 val _ = print (Int.toString result ^ "\n")
-val _ = print (LargeInt.toString (Time.toMilliseconds (Time.- (t1, t0))) ^ " ms\n")
+val _ = print (Time.fmt 4 (Time.- (t1, t0)) ^ " s\n")

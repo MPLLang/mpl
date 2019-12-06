@@ -1,46 +1,13 @@
-MLTON=MLTON_JOBS=32 ../build/bin/mpl
-MLTRACE=../build/bin/mltrace
-DBG=-keep g -debug true -debug-runtime true
-FLAGS=
+MPL=../build/bin/mpl
+FLAGS=-default-type int64 -default-type word64
 
-.PHONY: tab tab.dbg fib fib.dbg fib.trc trace clean
+PROGRAMS= \
+  fib \
+	tab-tree
 
-cas-wb-check: cas-wb-check.sml cas-wb-check.mlb
-	$(MLTON) $(FLAGS) -output cas-wb-check cas-wb-check.mlb
+all: $(addprefix bin/, $(PROGRAMS))
 
-cas-wb-check.dbg: cas-wb-check.sml cas-wb-check.mlb
-	$(MLTON) $(FLAGS) $(DBG) -output cas-wb-check.dbg cas-wb-check.mlb
-
-tab: tab.sml tab.mlb
-	$(MLTON) $(FLAGS) -output tab tab.mlb
-
-tab.dbg: tab.sml tab.mlb
-	$(MLTON) $(FLAGS) $(DBG) -output tab.dbg tab.mlb
-
-badmap: badmap.sml badmap.mlb
-	$(MLTON) $(FLAGS) -output badmap badmap.mlb
-
-badmap.dbg: badmap.sml badmap.mlb
-	$(MLTON) $(FLAGS) $(DBG) -output badmap.dbg badmap.mlb
-
-prom: prom.sml prom.mlb
-	$(MLTON) $(FLAGS) -output prom prom.mlb
-
-prom.dbg: prom.sml prom.mlb
-	$(MLTON) $(FLAGS) $(DBG) -output prom.dbg prom.mlb
-
-fib: fib.sml fib.mlb
-	$(MLTON) $(FLAGS) -output fib fib.mlb
-
-fib.dbg: fib.sml fib.mlb
-	$(MLTON) $(FLAGS) $(DBG) -output fib.dbg fib.mlb
-
-fib.trc: fib.sml fib.mlb
-	$(MLTON) $(FLAGS) -trace true -trace-runtime true -output fib.trc fib.mlb
-
-trace: fib.trc
-	$(MLTRACE) record ./fib.trc @MLton number-processors 4 fixed-heap 2G --
-	@echo "To visualize: $(MLTRACE) export <file>.trace.gz; $(MLTRACE) visu <file>.sqlite"
-
-clean:
-	rm -f tab tab.dbg fib fib.dbg fib.trc tab.*.c fib.*.c
+bin/%: shared/* %/*.mlb %/*.sml
+	@mkdir -p bin
+	$(MPL) $(FLAGS) -output bin/$* $*/sources.mlb
+	@echo "successfully built bin/$*"
