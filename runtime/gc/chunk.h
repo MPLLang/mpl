@@ -64,7 +64,6 @@ struct HM_chunk {
 struct HM_chunkList {
   HM_chunkList representative;
   uint32_t depth;
-  HM_chunkList rememberedSet;
 
   HM_chunk firstChunk;
   HM_chunk lastChunk;

@@ -392,7 +392,6 @@ void HM_initChunkList(HM_chunkList list, uint32_t depth) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
   list->representative = NULL;
-  list->rememberedSet = NULL;
   list->size = 0;
   list->depth = depth;
 }
@@ -591,15 +590,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   list1->size += list2->size;
   list2->representative = list1;
 
-  if (list1->rememberedSet == NULL) {
-    list1->rememberedSet = list2->rememberedSet;
-  } else {
-    // recursive call will not recurse
-    HM_appendChunkList(list1->rememberedSet, list2->rememberedSet);
-  }
-
 #if ASSERT
-  list2->rememberedSet = NULL;
   list2->lastChunk = NULL;
 #endif
 
@@ -646,14 +637,6 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList) {
     }
     assert(chunk->nextChunk->prevChunk == chunk);
     chunk = chunk->nextChunk;
-  }
-
-  if (chunkList->rememberedSet != NULL) {
-    /* this call won't recurse again */
-    HM_assertChunkListInvariants(chunkList->rememberedSet);
-    assert(chunkList->size == size + chunkList->rememberedSet->size);
-  } else {
-    assert(chunkList->size == size);
   }
 
   assert(chunkList->lastChunk == chunk);

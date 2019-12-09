@@ -57,6 +57,12 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
     {
       HM_appendChunkList(hh1->chunkList, hh2->chunkList);
 
+      if (hh1->rememberedSet == NULL) {
+        hh1->rememberedSet = hh2->rememberedSet;
+      } else {
+        HM_appendChunkList(hh1->rememberedSet, hh2->rememberedSet);
+      }
+
       *cursor = hh1;
       cursor = &(hh1->nextAncestor);
 
@@ -189,6 +195,12 @@ void HM_HH_promoteChunks(
     assert(HM_getChunkListDepth(hh->nextAncestor->chunkList) == currentDepth-1);
     HM_appendChunkList(hh->nextAncestor->chunkList, leafList);
 
+    if (hh->nextAncestor->rememberedSet == NULL) {
+      hh->nextAncestor->rememberedSet = hh->rememberedSet;
+    } else {
+      HM_appendChunkList(hh->nextAncestor->rememberedSet, hh->rememberedSet);
+    }
+
     /* ...and then shortcut.
      *
      * TODO: this drops 'hh' on the floor, which is a space leak. This will
@@ -218,6 +230,7 @@ HM_HierarchicalHeap HM_HH_newFromChunkList(GC_state s, HM_chunkList list)
 
   hh->nextAncestor = NULL;
   hh->chunkList = list;
+  hh->rememberedSet = NULL;
 
   return hh;
 }

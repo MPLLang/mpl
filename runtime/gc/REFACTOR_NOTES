@@ -2,20 +2,11 @@
 STATUS
 =============================================================================
 
-Next todo:
-  - Intermediate goal, remove pre-allocated levels for hierarchical heap.
-    1. rename HM_chunkList->parent to representative
-    2. hijack HM_chunkList objects as heap objects
-        - reuse representative pointers
-        - give HM_chunkList a nextNonEmptyAncestor pointer
-          (ancestor in the heap hierarchy!)
-
-Done:
-  - thread->level, instead of hh->...
-  - renamed thread->level to thread->currentDepth
-  - thread->{bytesAllocated..., bytesSurvived...}, instead of hh->...
-  - move hh->lastAllocatedChunk to thread->lastAllocatedChunk
-  - renamed lastAllocatedChunk to currentChunk
+Intermediate goals:
+  1. (DONE) migrate chunkList::rememberedSet to hierarchicalHeap
+    - (DONE) change collection toSpace,fromSpace to arrays of heaps rather than array of chunklists
+  2. migrate chunkList::{representative,depth}
+  3. flatten chunkList into container (store struct directly, don't indirect)
 
 =============================================================================
 GOAL

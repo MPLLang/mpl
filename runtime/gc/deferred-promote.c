@@ -31,22 +31,21 @@ HM_chunkList HM_deferredPromote(
        (NULL != cursor) && (HM_getChunkListDepth(cursor->chunkList) >= args->minDepth);
        cursor = cursor->nextAncestor)
   {
-    HM_chunkList level = cursor->chunkList;
     HM_foreachRemembered(
       s,
-      level->rememberedSet,
+      cursor->rememberedSet,
       bucketIfValid,
       &(downPtrs[0]));
   }
 
   /* memoize the fromSpace chunkLists for quick access */
-  HM_chunkList fromSpace[numLevels];
+  HM_HierarchicalHeap fromSpace[numLevels];
   for (uint32_t i = 0; i < numLevels; i++) fromSpace[i] = NULL;
   for (HM_HierarchicalHeap cursor = args->hh;
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
-    fromSpace[HM_getChunkListDepth(cursor->chunkList)] = cursor->chunkList;
+    fromSpace[HM_getChunkListDepth(cursor->chunkList)] = cursor;
   }
   args->fromSpace = &(fromSpace[0]);
 
@@ -62,9 +61,9 @@ HM_chunkList HM_deferredPromote(
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
     if (NULL != fromSpace[i] &&
-        NULL != HM_getChunkListLastChunk(fromSpace[i]))
+        NULL != HM_getChunkListLastChunk(fromSpace[i]->chunkList))
     {
-      rootsBeginChunk = HM_getChunkListLastChunk(fromSpace[i]);
+      rootsBeginChunk = HM_getChunkListLastChunk(fromSpace[i]->chunkList);
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
     }
 
@@ -77,7 +76,7 @@ HM_chunkList HM_deferredPromote(
       args);
 
     if (NULL == fromSpace[i] ||
-        NULL == HM_getChunkListFirstChunk(fromSpace[i]))
+        NULL == HM_getChunkListFirstChunk(fromSpace[i]->chunkList))
     {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
@@ -85,7 +84,7 @@ HM_chunkList HM_deferredPromote(
 
     /* forward transitively reachable objects within local scope */
     if (rootsBegin == NULL) {
-      rootsBeginChunk = HM_getChunkListFirstChunk(fromSpace[i]);
+      rootsBeginChunk = HM_getChunkListFirstChunk(fromSpace[i]->chunkList);
       rootsBegin = HM_getChunkStart(rootsBeginChunk);
     }
 
@@ -124,13 +123,14 @@ HM_chunkList HM_deferredPromote(
     if (NULL != heaps[i])
     {
       assert(NULL != fromSpace[i]);
-      assert(heaps[i]->chunkList == fromSpace[i]);
+      assert(heaps[i] == fromSpace[i]);
       heaps[i]->nextAncestor = prevhh;
       prevhh = heaps[i];
     }
     else if (NULL != fromSpace[i])
     {
-      HM_HierarchicalHeap newhh = HM_HH_newFromChunkList(s, fromSpace[i]);
+      // HM_HierarchicalHeap newhh = HM_HH_newFromChunkList(s, fromSpace[i]);
+      HM_HierarchicalHeap newhh = fromSpace[i];
       newhh->nextAncestor = prevhh;
       prevhh = newhh;
     }
@@ -173,7 +173,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     downPtrs[dstDepth] = HM_newChunkList(CHUNK_INVALID_DEPTH);
   }
 
-  HM_remember(downPtrs[dstDepth], NULL, dst, field, src);
+  HM_remember(downPtrs[dstDepth], dst, field, src);
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,
@@ -208,11 +208,11 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
     HM_chunkList list = HM_newChunkList(args->toDepth);
     /* just need to allocate a valid chunk; the size is arbitrary */
     HM_allocateChunk(list, GC_HEAP_LIMIT_SLOP);
-    args->fromSpace[args->toDepth] = list;
+    args->fromSpace[args->toDepth] = HM_HH_newFromChunkList(s, list);
   }
 
   assert(args->fromSpace[args->toDepth] != NULL);
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth]->chunkList, args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }
 
@@ -254,6 +254,6 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth]->chunkList, args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }

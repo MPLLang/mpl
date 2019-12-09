@@ -219,7 +219,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
-  HM_chunkList toSpace[maxDepth+1];
+  HM_HierarchicalHeap toSpace[maxDepth+1];
   for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
@@ -323,12 +323,14 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   uint32_t depth = thread->currentDepth+1;
   while (depth > forwardHHObjptrArgs.minDepth) {
     depth--;
-    HM_chunkList toSpaceLevel = toSpace[depth];
-    if (NULL != toSpaceLevel && NULL != toSpaceLevel->firstChunk) {
+    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
+    assert(NULL == toSpaceLevel || NULL != toSpaceLevel->chunkList);
+    if (NULL != toSpaceLevel && NULL != toSpaceLevel->chunkList->firstChunk) {
+      HM_chunkList toSpaceList = toSpaceLevel->chunkList;
       HM_forwardHHObjptrsInChunkList(
         s,
-        toSpaceLevel->firstChunk,
-        HM_getChunkStart(toSpaceLevel->firstChunk),
+        toSpaceList->firstChunk,
+        HM_getChunkStart(toSpaceList->firstChunk),
         &skipStackAndThreadObjptrPredicate,
         &ssatoPredicateArgs,
         &forwardHHObjptr,
@@ -363,8 +365,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
       chunk = chunk->nextChunk;
     }
 
-    if (NULL != level->rememberedSet) {
-      chunk = level->rememberedSet->firstChunk;
+    if (NULL != cursor->rememberedSet) {
+      chunk = cursor->rememberedSet->firstChunk;
       while (chunk != NULL) {
         pointer start = HM_getChunkStart(chunk);
         size_t length = (size_t)(chunk->limit - start);
@@ -384,13 +386,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   {
     HM_chunkList level = hhTail->chunkList;
 
-    HM_chunkList remset = level->rememberedSet;
+    HM_chunkList remset = hhTail->rememberedSet;
     if (NULL != remset) {
-      level->size -= remset->size;
-      level->rememberedSet = NULL;
+      hhTail->rememberedSet = NULL;
       HM_appendChunkList(s->freeListSmall, remset);
     }
     HM_appendChunkList(s->freeListSmall, level);
+
+    /* SAM_NOTE: TODO: can hhTail be freed here?? if so, will need to change
+     * hh allocation to support this... */
   }
 
   /* Build the toSpace hh */
@@ -400,9 +404,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     if (NULL == toSpace[i])
       continue;
 
-    HM_HierarchicalHeap newhh = HM_HH_newFromChunkList(s, toSpace[i]);
-    newhh->nextAncestor = hhToSpace;
-    hhToSpace = newhh;
+    toSpace[i]->nextAncestor = hhToSpace;
+    hhToSpace = toSpace[i];
   }
 
   /* merge in toSpace */
@@ -525,7 +528,8 @@ bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
   assert(depth <= args->maxDepth);
   assert(NULL != levelHead);
 
-  return (args->toSpace[depth] == levelHead);
+  return (args->toSpace[depth] != NULL)
+      && (args->toSpace[depth]->chunkList == levelHead);
 }
 
 /* ========================================================================= */
@@ -711,18 +715,20 @@ void forwardHHObjptr (GC_state s,
         break;
     }
 
-    HM_chunkList tgtChunkList = args->toSpace[opDepth];
+    HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
 
-    if (tgtChunkList == NULL) {
+    if (tgtHeap == NULL) {
       /* Level does not exist, so create it */
-      tgtChunkList = HM_newChunkList(opDepth);
+      tgtHeap = HM_HH_newFromChunkList(s, HM_newChunkList(opDepth));
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
-      if (NULL == HM_allocateChunk(tgtChunkList, objectBytes)) {
+      if (NULL == HM_allocateChunk(tgtHeap->chunkList, objectBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      args->toSpace[opDepth] = tgtChunkList;
+      args->toSpace[opDepth] = tgtHeap;
     }
+
+    HM_chunkList tgtChunkList = tgtHeap->chunkList;
 
     assert (!hasFwdPtr(p));
 

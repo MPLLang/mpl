@@ -73,7 +73,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     return;
   }
 
-  HM_rememberAtLevel(hh->chunkList, dst, field, src);
+  HM_rememberAtLevel(hh, dst, field, src);
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */

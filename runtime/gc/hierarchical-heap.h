@@ -19,6 +19,8 @@ typedef struct HM_HierarchicalHeap {
    * refactor/simplify chunk lists. */
   HM_chunkList chunkList;
 
+  HM_chunkList rememberedSet;
+
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
    * Also, all threads have their own leaf-to-root path (essentially, path
    * copying) which is merged only at join points of the program. */
