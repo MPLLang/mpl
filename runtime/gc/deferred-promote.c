@@ -28,7 +28,7 @@ HM_chunkList HM_deferredPromote(
     downPtrs[i] = NULL;
   }
   for (HM_HierarchicalHeap cursor = args->hh;
-       NULL != cursor;
+       (NULL != cursor) && (HM_getChunkListDepth(cursor->chunkList) >= args->minDepth);
        cursor = cursor->nextAncestor)
   {
     HM_chunkList level = cursor->chunkList;
