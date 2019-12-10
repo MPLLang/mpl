@@ -16,11 +16,8 @@ typedef struct HM_HierarchicalHeap {
   struct HM_HierarchicalHeap *representative;
   uint32_t depth;
 
-  /* the data at this heap.
-   * TODO migrate the data stored at a chunkList into this structure, and
-   * refactor/simplify chunk lists. */
-  HM_chunkList chunkList;
-  HM_chunkList rememberedSet;
+  struct HM_chunkList *chunkList;
+  struct HM_chunkList *rememberedSet;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
    * Also, all threads have their own leaf-to-root path (essentially, path
@@ -39,6 +36,9 @@ typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh);
+HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh);
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);
 

@@ -61,9 +61,9 @@ HM_chunkList HM_deferredPromote(
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
     if (NULL != fromSpace[i] &&
-        NULL != HM_getChunkListLastChunk(fromSpace[i]->chunkList))
+        NULL != HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i])))
     {
-      rootsBeginChunk = HM_getChunkListLastChunk(fromSpace[i]->chunkList);
+      rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
     }
 
@@ -76,7 +76,7 @@ HM_chunkList HM_deferredPromote(
       args);
 
     if (NULL == fromSpace[i] ||
-        NULL == HM_getChunkListFirstChunk(fromSpace[i]->chunkList))
+        NULL == HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i])))
     {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
@@ -84,7 +84,7 @@ HM_chunkList HM_deferredPromote(
 
     /* forward transitively reachable objects within local scope */
     if (rootsBegin == NULL) {
-      rootsBeginChunk = HM_getChunkListFirstChunk(fromSpace[i]->chunkList);
+      rootsBeginChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkStart(rootsBeginChunk);
     }
 
@@ -206,7 +206,7 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   if (NULL == args->fromSpace[args->toDepth]) {
     HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
     /* just need to allocate a valid chunk; the size is arbitrary */
-    HM_chunk chunk = HM_allocateChunk(newhh->chunkList, GC_HEAP_LIMIT_SLOP);
+    HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(newhh), GC_HEAP_LIMIT_SLOP);
     chunk->levelHead = newhh;
     args->fromSpace[args->toDepth] = newhh;
   }

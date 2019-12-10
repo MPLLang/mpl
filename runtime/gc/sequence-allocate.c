@@ -68,7 +68,7 @@ pointer sequenceAllocateInHH(GC_state s,
     assert(thread->currentChunk->frontier == s->frontier);
     assert(thread->currentChunk->limit == s->limitPlusSlop);
     HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(thread->currentChunk);
-    HM_chunk sequenceChunk = HM_splitChunk(hh->chunkList, thread->currentChunk, sequenceChunkBytes);
+    HM_chunk sequenceChunk = HM_splitChunk(HM_HH_getChunkList(hh), thread->currentChunk, sequenceChunkBytes);
     assert(sequenceChunk != NULL);
     pointer result = sequenceChunk->frontier;
     sequenceChunk->frontier += sequenceSizeAligned;

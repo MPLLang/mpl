@@ -5,7 +5,7 @@ STATUS
 Intermediate goals:
   1. (DONE) migrate chunkList::rememberedSet to hierarchicalHeap
     - (DONE) change collection toSpace,fromSpace to arrays of heaps rather than array of chunklists
-  2. migrate chunkList::{representative,depth}
+  2. (DONE) migrate chunkList::{representative,depth}
   3. flatten chunkList into container (store struct directly, don't indirect)
 
 =============================================================================

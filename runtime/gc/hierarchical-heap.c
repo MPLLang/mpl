@@ -56,7 +56,7 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
 
     if (depth1 == depth2)
     {
-      HM_appendChunkList(hh1->chunkList, hh2->chunkList);
+      HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
 
       if (hh1->rememberedSet == NULL) {
         hh1->rememberedSet = hh2->rememberedSet;
@@ -112,18 +112,18 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
     if (NULL != heaps1[i] && NULL != heaps2[i])
     {
       assert(heapsResult[i] == heaps1[i]);
-      assert(heapsResult[i]->chunkList == heaps1[i]->chunkList);
+      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps1[i]));
       assert(heaps2[i]->representative == heaps1[i]);
     }
     else if (NULL != heaps1[i])
     {
       assert(heapsResult[i] == heaps1[i]);
-      assert(heapsResult[i]->chunkList == heaps1[i]->chunkList);
+      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps1[i]));
     }
     else if (NULL != heaps2[i])
     {
       assert(heapsResult[i] == heaps2[i]);
-      assert(heapsResult[i]->chunkList == heaps2[i]->chunkList);
+      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps2[i]));
     }
     else
     {
@@ -195,7 +195,7 @@ void HM_HH_promoteChunks(
     /* There is a heap immediately above the leaf, so merge into that heap. */
     assert(NULL != hh->nextAncestor);
     assert(HM_HH_getDepth(hh->nextAncestor) == currentDepth-1);
-    HM_appendChunkList(hh->nextAncestor->chunkList, hh->chunkList);
+    HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
 
     if (hh->nextAncestor->rememberedSet == NULL) {
       hh->nextAncestor->rememberedSet = hh->rememberedSet;
@@ -223,6 +223,16 @@ void HM_HH_promoteChunks(
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 {
   return (NULL != hh) && (NULL == hh->representative);
+}
+
+inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
+{
+  return hh->chunkList;
+}
+
+inline HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh)
+{
+  return hh->rememberedSet;
 }
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
@@ -290,8 +300,8 @@ void HM_HH_ensureNotEmpty(GC_state s, GC_thread thread) {
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
-    assert(NULL != cursor->chunkList);
-    assert(NULL == cursor->chunkList->firstChunk);
+    assert(NULL != HM_HH_getChunkList(cursor));
+    assert(NULL == HM_HH_getChunkList(cursor)->firstChunk);
   }
 #endif
 
@@ -307,7 +317,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   uint32_t currentDepth = thread->currentDepth;
 
   assert(NULL != hh);
-  assert(NULL != hh->chunkList);
+  assert(NULL != HM_HH_getChunkList(hh));
   assert(HM_HH_getDepth(hh) <= currentDepth);
 
   if (HM_HH_getDepth(hh) < currentDepth) {
@@ -318,7 +328,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     hh = newhh;
   }
 
-  HM_chunk chunk = HM_allocateChunk(hh->chunkList, bytesRequested);
+  HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
 
   if (NULL == chunk) {
     return FALSE;
@@ -384,19 +394,19 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
   if (budget < (1024L * 1024L) ||
       potentialLocalScope > thread->currentDepth ||
       potentialLocalScope > HM_HH_getDepth(hh) ||
-      HM_getChunkListSize(hh->chunkList) > budget)
+      HM_getChunkListSize(HM_HH_getChunkList(hh)) > budget)
   {
     return thread->currentDepth+1; /* don't collect */
   }
 
   HM_HierarchicalHeap cursor = hh;
-  size_t sz = HM_getChunkListSize(hh->chunkList);
+  size_t sz = HM_getChunkListSize(HM_HH_getChunkList(hh));
   while (NULL != cursor->nextAncestor &&
          HM_HH_getDepth(cursor->nextAncestor) >= potentialLocalScope &&
-         HM_getChunkListSize(cursor->nextAncestor->chunkList) + sz < budget)
+         HM_getChunkListSize(HM_HH_getChunkList(cursor->nextAncestor)) + sz < budget)
   {
     cursor = cursor->nextAncestor;
-    sz += HM_getChunkListSize(cursor->chunkList);
+    sz += HM_getChunkListSize(HM_HH_getChunkList(cursor));
   }
 
 #if ASSERT
@@ -410,12 +420,12 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
    * we can skip some of them without ignoring too much data. */
   size_t newBudget = 0.75 * sz;
   cursor = hh;
-  sz = HM_getChunkListSize(hh->chunkList);
+  sz = HM_getChunkListSize(HM_HH_getChunkList(hh));
   while (NULL != cursor->nextAncestor &&
-         HM_getChunkListSize(cursor->nextAncestor->chunkList) + sz < newBudget)
+         HM_getChunkListSize(HM_HH_getChunkList(cursor->nextAncestor)) + sz < newBudget)
   {
     cursor = cursor->nextAncestor;
-    sz += HM_getChunkListSize(cursor->chunkList);
+    sz += HM_getChunkListSize(HM_HH_getChunkList(cursor));
   }
   uint32_t desiredMinDepth = HM_HH_getDepth(cursor);
 
@@ -444,7 +454,7 @@ void assertInvariants(GC_thread thread)
        cursor = cursor->nextAncestor)
   {
     HM_HH_isLevelHead(cursor);
-    HM_chunkList list = cursor->chunkList;
+    HM_chunkList list = HM_HH_getChunkList(cursor);
     assert(NULL != list);
     HM_assertChunkListInvariants(list);
 
@@ -476,7 +486,7 @@ void assertInvariants(GC_thread thread)
   if (NULL != thread->currentChunk) {
     HM_HierarchicalHeap levelHead = HM_getLevelHead(thread->currentChunk);
     bool foundChunk = FALSE;
-    for (HM_chunk chunk = levelHead->chunkList->firstChunk;
+    for (HM_chunk chunk = HM_HH_getChunkList(levelHead)->firstChunk;
          chunk != NULL;
          chunk = chunk->nextChunk)
     {

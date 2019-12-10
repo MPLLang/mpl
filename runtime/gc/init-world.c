@@ -39,7 +39,7 @@ void initVectors(GC_state s, GC_thread thread) {
   limit = s->limitPlusSlop;
 
   currentChunk = HM_getChunkOf(frontier);
-  assert(currentChunk == HM_getChunkListLastChunk(thread->hierarchicalHeap->chunkList));
+  assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
@@ -75,7 +75,7 @@ void initVectors(GC_state s, GC_thread thread) {
       limit = s->limitPlusSlop;
 
       currentChunk = HM_getChunkOf(frontier);
-      assert(currentChunk == HM_getChunkListLastChunk(thread->hierarchicalHeap->chunkList));
+      assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
     }
 
     assert(isFrontierAligned(s, frontier));
@@ -133,7 +133,7 @@ void initVectors(GC_state s, GC_thread thread) {
     limit = s->limitPlusSlop;
 
     currentChunk = HM_getChunkOf(frontier);
-    assert(currentChunk == HM_getChunkListLastChunk(thread->hierarchicalHeap->chunkList));
+    assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   }
 
   assert(isFrontierAligned(s, s->frontier));
@@ -150,7 +150,7 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == depth);
-  assert(current == HM_getChunkListLastChunk(thread->hierarchicalHeap->chunkList));
+  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
@@ -173,7 +173,7 @@ void initWorld(GC_state s) {
    * s->{frontier,limit,limitPlusSlop} */
   initVectors(s, thread);
 
-  size_t currentSize = HM_getChunkListSize(hh->chunkList);
+  size_t currentSize = HM_getChunkListSize(HM_HH_getChunkList(hh));
 
   /* SAM_NOTE: some of these statistics may be maintained incorrectly
    * elsewhere in the runtime. */
@@ -183,7 +183,7 @@ void initWorld(GC_state s) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(hh) == 0);
-  assert(current == HM_getChunkListLastChunk(hh->chunkList));
+  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
