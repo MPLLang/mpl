@@ -134,6 +134,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   if (NULL == chunk) {
     DIE("Ran out of space for hierarchical heap!");
   }
+  chunk->levelHead = hh;
 
   /* Next, allocate+init the thread within the heap that we just created. */
 

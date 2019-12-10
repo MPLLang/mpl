@@ -149,7 +149,7 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
-  assert(HM_getChunkListDepth(thread->hierarchicalHeap->chunkList) == depth);
+  assert(HM_HH_getDepth(thread->hierarchicalHeap) == depth);
   assert(current == HM_getChunkListLastChunk(thread->hierarchicalHeap->chunkList));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
@@ -182,7 +182,7 @@ void initWorld(GC_state s) {
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
-  assert(HM_getChunkListDepth(hh->chunkList) == 0);
+  assert(HM_HH_getDepth(hh) == 0);
   assert(current == HM_getChunkListLastChunk(hh->chunkList));
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));

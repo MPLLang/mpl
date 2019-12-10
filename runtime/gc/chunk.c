@@ -11,24 +11,6 @@
 /* Static Function Prototypes */
 /******************************/
 
-#if ASSERT
-/**
- * This function asserts the chunk invariants
- *
- * @attention
- * If an assertion fails, this function aborts the program, as per the assert()
- * macro.
- *
- * @param chunk The chunk to assert invariants for.
- * @param hh The hierarchical heap 'chunk' belongs to.
- * @param levelHeadChunk The head chunk of the level 'chunk' belongs to
- */
-static void HM_assertChunkInvariants(HM_chunk chunk,
-                                     HM_chunkList levelHead);
-
-static HM_chunkList getLevelHead(HM_chunk chunk);
-#endif
-
 static void HM_assertChunkListInvariants(HM_chunkList chunkList);
 
 /**
@@ -78,43 +60,35 @@ void HM_configChunks(GC_state s) {
   if (list == NULL) {
     DIE("Out of memory. Unable to allocate new chunk list.");
   }
-  HM_initChunkList(list, CHUNK_INVALID_DEPTH);
+  HM_initChunkList(list);
   s->extraSmallObjects = list;
 
   HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
   HM_appendChunk(list, firstChunk);
 }
 
-void HM_prependChunk(HM_chunkList levelHead, HM_chunk chunk) {
-  assert(HM_isLevelHead(levelHead));
-  assert(HM_isUnlinked(chunk));
-
-  chunk->levelHead = levelHead;
-  chunk->nextChunk = levelHead->firstChunk;
-  if (levelHead->firstChunk != NULL) {
-    levelHead->firstChunk->prevChunk = chunk;
+static void HM_prependChunk(HM_chunkList list, HM_chunk chunk) {
+  chunk->nextChunk = list->firstChunk;
+  if (list->firstChunk != NULL) {
+    list->firstChunk->prevChunk = chunk;
   }
-  if (levelHead->lastChunk == NULL) {
-    levelHead->lastChunk = chunk;
+  if (list->lastChunk == NULL) {
+    list->lastChunk = chunk;
   }
-  levelHead->firstChunk = chunk;
-  levelHead->size += HM_getChunkSize(chunk);
+  list->firstChunk = chunk;
+  list->size += HM_getChunkSize(chunk);
 }
 
-void HM_appendChunk(HM_chunkList levelHead, HM_chunk chunk) {
-  assert(HM_isLevelHead(levelHead));
-  assert(HM_isUnlinked(chunk));
-
-  chunk->levelHead = levelHead;
-  chunk->prevChunk = levelHead->lastChunk;
-  if (levelHead->lastChunk != NULL) {
-    levelHead->lastChunk->nextChunk = chunk;
+void HM_appendChunk(HM_chunkList list, HM_chunk chunk) {
+  chunk->prevChunk = list->lastChunk;
+  if (list->lastChunk != NULL) {
+    list->lastChunk->nextChunk = chunk;
   }
-  if (levelHead->firstChunk == NULL) {
-    levelHead->firstChunk = chunk;
+  if (list->firstChunk == NULL) {
+    list->firstChunk = chunk;
   }
-  levelHead->lastChunk = chunk;
-  levelHead->size += HM_getChunkSize(chunk);
+  list->lastChunk = chunk;
+  list->size += HM_getChunkSize(chunk);
 }
 
 
@@ -144,16 +118,17 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   memset(chunk->frontier, 0xAE, (size_t)(chunk->limit - chunk->frontier));
 #endif
 
-  assert(HM_isUnlinked(chunk));
   return chunk;
 }
 
+/* SAM_NOTE: Disabled for now because I disabled chunk coalescing, so the
+ * function would be unused. But we could use this later if we re-enable
+ * coalescing, perhaps with a different freelist architecture. */
+#if 0
 void HM_coalesceChunks(HM_chunk left, HM_chunk right) {
   assert(left->nextAdjacent == right);
   assert(right->prevAdjacent == left);
   assert(left->limit == (pointer)right);
-  assert(HM_isUnlinked(left));
-  assert(HM_isUnlinked(right));
 
   left->limit = right->limit;
   left->nextAdjacent = right->nextAdjacent;
@@ -161,14 +136,10 @@ void HM_coalesceChunks(HM_chunk left, HM_chunk right) {
   if (right->nextAdjacent != NULL) {
     right->nextAdjacent->prevAdjacent = left;
   }
-
-// #if ASSERT
-//   memset((void*)right, 0xBF, sizeof(struct HM_chunk));
-// #endif
 }
+#endif
 
-HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint);
-HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
+static HM_chunk splitChunkAt(HM_chunkList list, HM_chunk chunk, pointer splitPoint) {
   assert(HM_getChunkStart(chunk) <= chunk->frontier);
   assert(chunk->frontier <= chunk->limit);
   assert(chunk->frontier <= splitPoint);
@@ -176,16 +147,14 @@ HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
   assert(isAligned((uintptr_t)splitPoint, HM_BLOCK_SIZE));
   assert(isAligned((uintptr_t)(chunk->limit - splitPoint), HM_BLOCK_SIZE));
 
-  HM_chunkList levelHead = HM_getLevelHeadPathCompress(chunk);
-
   pointer limit = chunk->limit;
   chunk->limit = splitPoint;
   HM_chunk result = HM_initializeChunk(splitPoint, limit);
-  result->levelHead = levelHead;
+  result->levelHead = chunk->levelHead;
 
   if (NULL == chunk->nextChunk) {
-    assert(levelHead->lastChunk == chunk);
-    levelHead->lastChunk = result;
+    assert(list->lastChunk == chunk);
+    list->lastChunk = result;
   } else {
     chunk->nextChunk->prevChunk = result;
   }
@@ -214,11 +183,10 @@ HM_chunk splitChunkAt(HM_chunk chunk, pointer splitPoint) {
   return result;
 }
 
-HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
+HM_chunk HM_splitChunk(HM_chunkList list, HM_chunk chunk, size_t bytesRequested) {
   assert(HM_getChunkStart(chunk) <= chunk->frontier);
   assert(chunk->frontier <= chunk->limit);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
-  assert(!HM_isUnlinked(chunk));
 
   size_t totalSize = bytesRequested + sizeof(struct HM_chunk);
   totalSize = align(totalSize, HM_BLOCK_SIZE);
@@ -231,15 +199,13 @@ HM_chunk HM_splitChunk(HM_chunk chunk, size_t bytesRequested) {
     return NULL;
   }
 
-  return splitChunkAt(chunk, splitPoint);
+  return splitChunkAt(list, chunk, splitPoint);
 }
 
-HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested);
-HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested) {
+static HM_chunk splitChunkFront(HM_chunkList list, HM_chunk chunk, size_t bytesRequested) {
   assert(HM_getChunkStart(chunk) <= chunk->frontier);
   assert(chunk->frontier <= chunk->limit);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
-  assert(!HM_isUnlinked(chunk));
 
   pointer splitPoint = (pointer)(uintptr_t)align((uintptr_t)(chunk->frontier + bytesRequested), HM_BLOCK_SIZE);
   assert(chunk->frontier <= splitPoint);
@@ -252,19 +218,27 @@ HM_chunk HM_splitChunkFront(HM_chunk chunk, size_t bytesRequested) {
     return NULL;
   }
 
-  return splitChunkAt(chunk, splitPoint);
+  return splitChunkAt(list, chunk, splitPoint);
 }
 
 static inline bool chunkHasBytesFree(HM_chunk chunk, size_t bytes) {
   return chunk != NULL && (size_t)(chunk->limit - HM_getChunkStart(chunk)) >= bytes;
 }
 
+/* SAM_NOTE: Disabled this for now, as well as chunk coalescing (see in
+ * HM_getFreeChunk below). In the past, HM_getLevelHead returned a chunklist,
+ * but now we identify level heads with heap records, and there is no
+ * associated heap for free lists. Of course, reusing chunk lists for freelists
+ * is already a hack, so maybe it would be better to have an alternative
+ * freelist representation. */
+/*
 static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
   assert(list != NULL);
   return chunk != NULL &&
          chunk->levelHead != NULL &&
          HM_getLevelHead(chunk) == list;
 }
+*/
 
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
@@ -273,6 +247,14 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   // can increase this number to cycle through more chunks
   int remainingToCheck = 2;
   while (chunk != NULL && remainingToCheck > 0) {
+    /* SAM_NOTE: Disabled for now, because chunkIsInList check has been
+     * deprecated.
+     *
+     * Coalescing wasn't getting much benefit anyway. Later, if we really need
+     * coalescing, a better approach would be to incrementally sort the freelist
+     * and look for physically adjacent chunks. The pointers {next,prev}Adjacent
+     * would still be necessary for this! So I'm leaving them in. */
+#if 0
     if (s->controls->freeListCoalesce) {
       HM_unlinkChunk(chunk);
       if (chunkIsInList(chunk->prevAdjacent, s->freeListSmall)) {
@@ -287,10 +269,21 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       }
       HM_prependChunk(s->freeListSmall, chunk);
     }
+#endif
     /* chunks in freeListSmall might have frontiers that haven't been reset */
     chunk->frontier = HM_getChunkStart(chunk);
-    if (chunkHasBytesFree(chunk, bytesRequested)) goto finish;
-    HM_unlinkChunk(chunk);
+
+    /* if this chunk is good, then we're done. */
+    if (chunkHasBytesFree(chunk, bytesRequested)) {
+      assert(chunk->frontier == HM_getChunkStart(chunk));
+      chunk->mightContainMultipleObjects = TRUE;
+      splitChunkFront(s->freeListSmall, chunk, bytesRequested);
+      HM_unlinkChunk(s->freeListSmall, chunk);
+      return chunk;
+    }
+
+    /* otherwise, rotate this chunk onto the end and keep searching. */
+    HM_unlinkChunk(s->freeListSmall, chunk);
     HM_appendChunk(s->freeListSmall, chunk);
     remainingToCheck--;
     chunk = s->freeListSmall->firstChunk;
@@ -299,10 +292,20 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   chunk = s->freeListLarge->firstChunk;
   /* chunks in freeListLarge should always have properly set frontiers */
   assert(chunk == NULL || chunk->frontier == HM_getChunkStart(chunk));
-  if (chunkHasBytesFree(chunk, bytesRequested)) goto finish;
+
+  /* if this chunk is good, we're done. */
+  if (chunkHasBytesFree(chunk, bytesRequested)) {
+    chunk->mightContainMultipleObjects = TRUE;
+    splitChunkFront(s->freeListLarge, chunk, bytesRequested);
+    HM_unlinkChunk(s->freeListLarge, chunk);
+    return chunk;
+  }
+
+  /* otherwise, dump it into the freelist of small chunks and mmap a fresh
+   * large chunk. */
 
   if (chunk != NULL) {
-    HM_unlinkChunk(chunk);
+    HM_unlinkChunk(s->freeListLarge, chunk);
     HM_appendChunk(s->freeListSmall, chunk);
   }
 
@@ -333,19 +336,17 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       s->nextChunkAllocSize /= 2;
     }
   }
-  HM_prependChunk(s->freeListLarge, chunk);
 
-finish:
-  // chunk->frontier = HM_getChunkStart(chunk);
+  HM_prependChunk(s->freeListLarge, chunk);
   assert(chunk->frontier == HM_getChunkStart(chunk));
+  assert(chunkHasBytesFree(chunk, bytesRequested));
   chunk->mightContainMultipleObjects = TRUE;
-  HM_splitChunkFront(chunk, bytesRequested);
-  HM_unlinkChunk(chunk);
+  splitChunkFront(s->freeListLarge, chunk, bytesRequested);
+  HM_unlinkChunk(s->freeListLarge, chunk);
   return chunk;
 }
 
-HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
-  assert(HM_isLevelHead(levelHead));
+HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
   GC_state s = pthread_getspecific(gcstate_key);
   HM_chunk chunk = HM_getFreeChunk(s, bytesRequested);
 
@@ -361,17 +362,12 @@ HM_chunk HM_allocateChunk(HM_chunkList levelHead, size_t bytesRequested) {
   assert(chunk->mightContainMultipleObjects);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
 
-  HM_appendChunk(levelHead, chunk);
-
-  LOG(LM_CHUNK, LL_DEBUG,
-      "Allocate chunk %p at depth %u",
-      (void*)chunk,
-      levelHead->depth);
+  HM_appendChunk(list, chunk);
 
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(uint32_t depth) {
+HM_chunkList HM_newChunkList(void) {
   GC_state s = pthread_getspecific(gcstate_key);
 
   size_t bytesNeeded = sizeof(struct HM_chunkList);
@@ -384,48 +380,44 @@ HM_chunkList HM_newChunkList(uint32_t depth) {
   HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
   HM_chunkList list = (HM_chunkList)frontier;
 
-  HM_initChunkList(list, depth);
+  HM_initChunkList(list);
   return list;
 }
 
-void HM_initChunkList(HM_chunkList list, uint32_t depth) {
+void HM_initChunkList(HM_chunkList list) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
-  list->representative = NULL;
   list->size = 0;
-  list->depth = depth;
 }
 
-void HM_unlinkChunk(HM_chunk chunk) {
-  HM_chunkList levelHead = HM_getLevelHeadPathCompress(chunk);
+void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
 
   if (NULL == chunk->prevChunk) {
-    assert(levelHead->firstChunk == chunk);
-    levelHead->firstChunk = chunk->nextChunk;
+    assert(list->firstChunk == chunk);
+    list->firstChunk = chunk->nextChunk;
   } else {
-    assert(levelHead->firstChunk != chunk);
+    assert(list->firstChunk != chunk);
     chunk->prevChunk->nextChunk = chunk->nextChunk;
   }
 
   if (NULL == chunk->nextChunk) {
-    assert(levelHead->lastChunk == chunk);
-    levelHead->lastChunk = chunk->prevChunk;
+    assert(list->lastChunk == chunk);
+    list->lastChunk = chunk->prevChunk;
   } else {
-    assert(levelHead->lastChunk != chunk);
+    assert(list->lastChunk != chunk);
     chunk->nextChunk->prevChunk = chunk->prevChunk;
   }
 
-  levelHead->size -= HM_getChunkSize(chunk);
+  list->size -= HM_getChunkSize(chunk);
 
   chunk->levelHead = NULL;
   chunk->prevChunk = NULL;
   chunk->nextChunk = NULL;
 
 #if ASSERT
-  HM_assertChunkListInvariants(levelHead);
+  HM_assertChunkListInvariants(list);
 #endif
 
-  assert(HM_isUnlinked(chunk));
 }
 
 void HM_forwardHHObjptrsInChunkList(
@@ -497,47 +489,39 @@ pointer HM_getChunkStart(HM_chunk chunk) {
   return (pointer)chunk + sizeof(struct HM_chunk);
 }
 
-uint32_t HM_getChunkListDepth(HM_chunkList levelHead) {
-  assert(HM_isLevelHead(levelHead));
-  return levelHead->depth;
-}
-
-HM_chunk HM_getChunkListLastChunk(HM_chunkList levelHead) {
-  if (NULL == levelHead) {
+HM_chunk HM_getChunkListLastChunk(HM_chunkList list) {
+  if (NULL == list) {
     return NULL;
   }
 
-  assert(HM_isLevelHead(levelHead));
-  return levelHead->lastChunk;
+  return list->lastChunk;
 }
 
-HM_chunk HM_getChunkListFirstChunk(HM_chunkList levelHead) {
-  if (NULL == levelHead) {
+HM_chunk HM_getChunkListFirstChunk(HM_chunkList list) {
+  if (NULL == list) {
     return NULL;
   }
 
-  assert(HM_isLevelHead(levelHead));
-  return levelHead->firstChunk;
+  return list->firstChunk;
 }
 
-size_t HM_getChunkListSize(HM_chunkList levelHead) {
-  assert(levelHead != NULL);
-  assert(HM_isLevelHead(levelHead));
-  return levelHead->size;
+size_t HM_getChunkListSize(HM_chunkList list) {
+  assert(list != NULL);
+  return list->size;
 }
 
-HM_chunkList HM_getLevelHead(HM_chunk chunk) {
+HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
-  HM_chunkList cursor = chunk->levelHead;
+  HM_HierarchicalHeap cursor = chunk->levelHead;
   while (cursor->representative != NULL) {
     cursor = cursor->representative;
   }
   return cursor;
 }
 
-HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
-  HM_chunkList levelHead = HM_getLevelHead(chunk);
+HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
+  HM_HierarchicalHeap levelHead = HM_getLevelHead(chunk);
   assert(levelHead != NULL);
 
   /* fast path */
@@ -545,12 +529,12 @@ HM_chunkList HM_getLevelHeadPathCompress(HM_chunk chunk) {
     return levelHead;
   }
 
-  HM_chunkList cursor = chunk->levelHead;
+  HM_HierarchicalHeap cursor = chunk->levelHead;
   chunk->levelHead = levelHead;
 
   /* SAM_NOTE: TODO: free levelheads with reference counting */
   while (cursor != levelHead) {
-    HM_chunkList representative = cursor->representative;
+    HM_HierarchicalHeap representative = cursor->representative;
     cursor->representative = levelHead;
     cursor = representative;
   }
@@ -565,14 +549,11 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
       ((void*)(list1)));
 
   assert(NULL != list1);
-  assert(HM_isLevelHead(list1));
 
   if (NULL == list2) {
     /* nothing to append */
     return;
   }
-
-  assert(HM_isLevelHead(list2));
 
   if (list1->lastChunk == NULL) {
     assert(list1->firstChunk == NULL);
@@ -588,7 +569,6 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   }
 
   list1->size += list2->size;
-  list2->representative = list1;
 
 #if ASSERT
   list2->lastChunk = NULL;
@@ -605,32 +585,12 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #if ASSERT
-HM_chunkList getLevelHead(HM_chunk chunk) {
-  HM_chunkList cursor = chunk->levelHead;
-  assert(NULL != cursor);
-  while (cursor->representative != NULL) {
-    cursor = cursor->representative;
-    assert(NULL != cursor);
-  }
-
-  assert(HM_isLevelHead(cursor));
-  return cursor;
-}
-#endif
-
-#if ASSERT
-void HM_assertChunkInvariants(HM_chunk chunk,
-                              HM_chunkList levelHead) {
-  assert(HM_getChunkStart(chunk) <= chunk->frontier && chunk->frontier <= chunk->limit);
-  assert(levelHead == getLevelHead(chunk));
-}
-
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
-  assert(HM_isLevelHead(chunkList));
   size_t size = 0;
   HM_chunk chunk = chunkList->firstChunk;
   while (NULL != chunk) {
-    HM_assertChunkInvariants(chunk, chunkList);
+    assert(HM_getChunkStart(chunk) <= chunk->frontier);
+    assert(chunk->frontier <= chunk->limit);
     size += HM_getChunkSize(chunk);
     if (chunk->nextChunk == NULL) {
       break;

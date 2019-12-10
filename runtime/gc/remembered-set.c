@@ -24,7 +24,7 @@ void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objpt
 
   HM_chunkList rememberedSet = hh->rememberedSet;
   if (NULL == rememberedSet) {
-    rememberedSet = HM_newChunkList(CHUNK_INVALID_DEPTH);
+    rememberedSet = HM_newChunkList();
     hh->rememberedSet = rememberedSet;
   }
 

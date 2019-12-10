@@ -47,13 +47,13 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (!isObjptr(src))
     return;
 
-  HM_chunkList dstList = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
+  HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
 
   pointer srcp = objptrToPointer(src, NULL);
-  HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
+  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* Internal or up-pointer. */
-  if (dstList->depth >= srcList->depth)
+  if (dstHH->depth >= srcHH->depth)
     return;
 
   /* deque down-pointers are handled separately during collection. */
@@ -61,7 +61,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     return;
 
   /* Otherwise, remember the down-pointer! */
-  uint32_t d = srcList->depth;
+  uint32_t d = srcHH->depth;
   GC_thread thread = getThreadCurrent(s);
   HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
 

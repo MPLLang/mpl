@@ -28,7 +28,7 @@ HM_chunkList HM_deferredPromote(
     downPtrs[i] = NULL;
   }
   for (HM_HierarchicalHeap cursor = args->hh;
-       (NULL != cursor) && (HM_getChunkListDepth(cursor->chunkList) >= args->minDepth);
+       (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
        cursor = cursor->nextAncestor)
   {
     HM_foreachRemembered(
@@ -45,7 +45,7 @@ HM_chunkList HM_deferredPromote(
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
-    fromSpace[HM_getChunkListDepth(cursor->chunkList)] = cursor;
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
   }
   args->fromSpace = &(fromSpace[0]);
 
@@ -115,7 +115,7 @@ HM_chunkList HM_deferredPromote(
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
-    heaps[HM_getChunkListDepth(cursor->chunkList)] = cursor;
+    heaps[HM_HH_getDepth(cursor)] = cursor;
   }
   HM_HierarchicalHeap prevhh = NULL;
   for (uint32_t i = 0; i < numLevels; i++)
@@ -129,7 +129,6 @@ HM_chunkList HM_deferredPromote(
     }
     else if (NULL != fromSpace[i])
     {
-      // HM_HierarchicalHeap newhh = HM_HH_newFromChunkList(s, fromSpace[i]);
       HM_HierarchicalHeap newhh = fromSpace[i];
       newhh->nextAncestor = prevhh;
       prevhh = newhh;
@@ -170,7 +169,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
   }
 
   if (downPtrs[dstDepth] == NULL) {
-    downPtrs[dstDepth] = HM_newChunkList(CHUNK_INVALID_DEPTH);
+    downPtrs[dstDepth] = HM_newChunkList();
   }
 
   HM_remember(downPtrs[dstDepth], dst, field, src);
@@ -205,14 +204,15 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   if (NULL == args->fromSpace[args->toDepth]) {
-    HM_chunkList list = HM_newChunkList(args->toDepth);
+    HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
     /* just need to allocate a valid chunk; the size is arbitrary */
-    HM_allocateChunk(list, GC_HEAP_LIMIT_SLOP);
-    args->fromSpace[args->toDepth] = HM_HH_newFromChunkList(s, list);
+    HM_chunk chunk = HM_allocateChunk(newhh->chunkList, GC_HEAP_LIMIT_SLOP);
+    chunk->levelHead = newhh;
+    args->fromSpace[args->toDepth] = newhh;
   }
 
   assert(args->fromSpace[args->toDepth] != NULL);
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth]->chunkList, args);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }
 
@@ -254,6 +254,6 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth]->chunkList, args);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }

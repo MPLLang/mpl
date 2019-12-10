@@ -405,7 +405,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
-  s->controls->freeListCoalesce = TRUE;
+  s->controls->freeListCoalesce = FALSE;
   s->controls->deferredPromotion = TRUE;
   s->controls->oldHHGCPolicy = FALSE;
 
@@ -500,8 +500,8 @@ void GC_lateInit (GC_state s) {
 
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
-  s->freeListSmall = HM_newChunkList(CHUNK_INVALID_DEPTH);
-  s->freeListLarge = HM_newChunkList(CHUNK_INVALID_DEPTH);
+  s->freeListSmall = HM_newChunkList();
+  s->freeListLarge = HM_newChunkList();
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   /* Initialize profiling.  This must occur after processing
@@ -531,9 +531,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
-  d->freeListSmall = HM_newChunkList(CHUNK_INVALID_DEPTH);
-  d->freeListLarge = HM_newChunkList(CHUNK_INVALID_DEPTH);
-  d->extraSmallObjects = HM_newChunkList(CHUNK_INVALID_DEPTH);
+  d->freeListSmall = HM_newChunkList();
+  d->freeListLarge = HM_newChunkList();
+  d->extraSmallObjects = HM_newChunkList();
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

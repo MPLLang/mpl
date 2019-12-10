@@ -39,20 +39,10 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
                                              size_t *copySize,
                                              size_t *metaDataSize);
 
-/**
- * Copies the object into the new level list of the hierarchical heap provided.
- *
- * @param p The pointer to copy
- * @param objectSize The size of the object
- * @param copySize The number of bytes to copy
- * @param tgtChunkList The ChunkList at which 'p' will be copied.
- *
- * @return pointer to the copied object
- */
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunkList tgtChunkList);
+                   HM_HierarchicalHeap tgtHeap);
 
 /**
  * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
@@ -175,7 +165,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
          NULL != cursor;
          cursor = cursor->nextAncestor)
     {
-      uint32_t d = HM_getChunkListDepth(cursor->chunkList);
+      uint32_t d = HM_HH_getDepth(cursor);
       sizesBefore[d] = HM_getChunkListSize(cursor->chunkList);
     }
   }
@@ -353,7 +343,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
   for (HM_HierarchicalHeap cursor = hh;
-       NULL != cursor && HM_getChunkListDepth(cursor->chunkList) >= minDepth;
+       NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
        cursor = cursor->nextAncestor)
   {
     HM_chunkList level = cursor->chunkList;
@@ -381,7 +371,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    * that will be merged with the toSpace */
   HM_HierarchicalHeap hhTail = hh;
   for (;
-       NULL != hhTail && HM_getChunkListDepth(hhTail->chunkList) >= minDepth;
+       NULL != hhTail && HM_HH_getDepth(hhTail) >= minDepth;
        hhTail = hhTail->nextAncestor)
   {
     HM_chunkList level = hhTail->chunkList;
@@ -461,7 +451,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
          NULL != cursor;
          cursor = cursor->nextAncestor)
     {
-      uint32_t i = HM_getChunkListDepth(cursor->chunkList);
+      uint32_t i = HM_HH_getDepth(cursor);
       size_t sizeBefore = sizesBefore[i];
 
       HM_chunkList lev = cursor->chunkList;
@@ -523,13 +513,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
 {
   HM_chunk c = HM_getChunkOf(objptrToPointer(op, NULL));
-  HM_chunkList levelHead = HM_getLevelHeadPathCompress(c);
-  uint32_t depth = HM_getChunkListDepth(levelHead);
+  HM_HierarchicalHeap levelHead = HM_getLevelHeadPathCompress(c);
+  uint32_t depth = HM_HH_getDepth(levelHead);
   assert(depth <= args->maxDepth);
   assert(NULL != levelHead);
 
-  return (args->toSpace[depth] != NULL)
-      && (args->toSpace[depth]->chunkList == levelHead);
+  return args->toSpace[depth] == levelHead;
 }
 
 /* ========================================================================= */
@@ -539,13 +528,15 @@ bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
 objptr relocateObject(
   GC_state s,
   objptr op,
-  HM_chunkList tgtChunkList,
+  HM_HierarchicalHeap tgtHeap,
   struct ForwardHHObjptrArgs *args)
 {
   pointer p = objptrToPointer(op, NULL);
 
   assert(!hasFwdPtr(p));
-  assert(HM_isLevelHead(tgtChunkList));
+  assert(HM_HH_isLevelHead(tgtHeap));
+
+  HM_chunkList tgtChunkList = tgtHeap->chunkList;
 
   size_t metaDataBytes;
   size_t objectBytes;
@@ -560,14 +551,19 @@ objptr relocateObject(
 
   if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
     /* This chunk contains *only* this object, so no need to copy. Instead,
-     * just move the chunk. */
+     * just move the chunk. Don't forget to update the levelHead, too! */
     HM_chunk chunk = HM_getChunkOf(p);
-    HM_unlinkChunk(chunk);
+    HM_unlinkChunk(HM_getLevelHead(chunk)->chunkList, chunk);
     HM_appendChunk(tgtChunkList, chunk);
+    chunk->levelHead = tgtHeap;
+
     /* SAM_NOTE: this is inefficient. unnecessary fragmentation. */
-    if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
+    HM_chunk newChunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
+    if (NULL == newChunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    newChunk->levelHead = tgtHeap;
+
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "Moved single-object chunk %p of size %zu",
       (void*)chunk,
@@ -580,7 +576,7 @@ objptr relocateObject(
   pointer copyPointer = copyObject(p - metaDataBytes,
                                    objectBytes,
                                    copyBytes,
-                                   tgtChunkList);
+                                   tgtHeap);
 
   /* Store the forwarding pointer in the old object metadata. */
   *(getFwdPtrp(p)) = pointerToObjptr (copyPointer + metaDataBytes,
@@ -719,12 +715,14 @@ void forwardHHObjptr (GC_state s,
 
     if (tgtHeap == NULL) {
       /* Level does not exist, so create it */
-      tgtHeap = HM_HH_newFromChunkList(s, HM_newChunkList(opDepth));
+      tgtHeap = HM_HH_new(s, opDepth);
       /* SAM_NOTE: TODO: This is inefficient, because the current object
        * might be a large object that just needs to be logically moved. */
-      if (NULL == HM_allocateChunk(tgtHeap->chunkList, objectBytes)) {
+      HM_chunk newChunk = HM_allocateChunk(tgtHeap->chunkList, objectBytes);
+      if (NULL == newChunk) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
+      newChunk->levelHead = tgtHeap;
       args->toSpace[opDepth] = tgtHeap;
     }
 
@@ -738,15 +736,14 @@ void forwardHHObjptr (GC_state s,
         opDepth,
         (void *)tgtChunkList);
 
-    /* SAM_NOTE: TODO: get this spaghetti code out of here.
-     * TODO: does this work with promotion? */
+    /* SAM_NOTE: TODO: get this spaghetti code out of here. */
     if (!HM_getChunkOf(p)->mightContainMultipleObjects) {
       // assert(FALSE);
       /* This chunk contains *only* this object, so no need to copy. Instead,
-       * just move the chunk. */
+       * just move the chunk. Don't forget to update the levelHead, too! */
       assert(!hasFwdPtr(p));
       HM_chunk chunk = HM_getChunkOf(p);
-      HM_unlinkChunk(chunk);
+      HM_unlinkChunk(HM_getLevelHead(chunk)->chunkList, chunk);
       /* SAM_NOTE: TODO: this is inefficient, because we have to abandon the
        * previous last chunk, resulting in unnecessary fragmentation. This can
        * be avoided by not relying upon using the tgtChunkList...lastChunk to
@@ -755,9 +752,14 @@ void forwardHHObjptr (GC_state s,
       /* SAM_NOTE: it is crucial that this is append and not prepend, because
        * traversing the to-space executes left-to-right. */
       HM_appendChunk(tgtChunkList, chunk);
-      if (!HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP)) {
+      chunk->levelHead = tgtHeap;
+
+      HM_chunk newChunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
+      if (NULL == newChunk) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
+      newChunk->levelHead = tgtHeap;
+
       LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
         "Moved single-object chunk %p of size %zu",
         (void*)chunk,
@@ -770,7 +772,7 @@ void forwardHHObjptr (GC_state s,
     pointer copyPointer = copyObject(p - metaDataBytes,
                                      objectBytes,
                                      copyBytes,
-                                     tgtChunkList);
+                                     tgtHeap);
 
     args->bytesCopied += copyBytes;
     args->objectsCopied++;
@@ -857,10 +859,12 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
 pointer copyObject(pointer p,
                    size_t objectSize,
                    size_t copySize,
-                   HM_chunkList tgtChunkList) {
-  assert(NULL != tgtChunkList);
+                   HM_HierarchicalHeap tgtHeap) {
+  assert(HM_HH_isLevelHead(tgtHeap));
   assert(copySize <= objectSize);
-  assert(HM_isLevelHead(tgtChunkList));
+
+  HM_chunkList tgtChunkList = tgtHeap->chunkList;
+  assert(NULL != tgtChunkList);
 
   /* get the chunk to allocate in */
   HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
@@ -877,6 +881,7 @@ pointer copyObject(pointer p,
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    chunk->levelHead = tgtHeap;
     frontier = HM_getChunkFrontier(chunk);
   }
 
@@ -884,12 +889,12 @@ pointer copyObject(pointer p,
   pointer newFrontier = frontier + objectSize;
   HM_updateChunkValues(chunk, newFrontier);
   if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
-  // if (blockOf(newFrontier) != (pointer)chunk) {
     /* size is arbitrary; just need a new chunk */
     chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    chunk->levelHead = tgtHeap;
   }
 
   return frontier;

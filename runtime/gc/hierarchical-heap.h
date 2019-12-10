@@ -13,12 +13,13 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 typedef struct HM_HierarchicalHeap {
+  struct HM_HierarchicalHeap *representative;
+  uint32_t depth;
 
   /* the data at this heap.
    * TODO migrate the data stored at a chunkList into this structure, and
    * refactor/simplify chunk lists. */
   HM_chunkList chunkList;
-
   HM_chunkList rememberedSet;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
@@ -40,7 +41,10 @@ typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);
-HM_HierarchicalHeap HM_HH_newFromChunkList(GC_state s, HM_chunkList list);
+
+uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh);
+
+bool HM_HH_isLevelHead(HM_HierarchicalHeap hh);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
