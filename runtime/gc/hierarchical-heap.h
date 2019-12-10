@@ -16,7 +16,8 @@ typedef struct HM_HierarchicalHeap {
   struct HM_HierarchicalHeap *representative;
   uint32_t depth;
 
-  struct HM_chunkList *chunkList;
+  struct HM_chunkList chunkList;
+
   struct HM_chunkList *rememberedSet;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
@@ -37,7 +38,11 @@ typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh);
+static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
+{
+  return &(hh->chunkList);
+}
+
 HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh);
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);

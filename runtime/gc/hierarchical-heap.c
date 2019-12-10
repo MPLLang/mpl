@@ -225,11 +225,6 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
   return (NULL != hh) && (NULL == hh->representative);
 }
 
-inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
-{
-  return hh->chunkList;
-}
-
 inline HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh)
 {
   return hh->rememberedSet;
@@ -251,8 +246,9 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->depth = depth;
 
   hh->nextAncestor = NULL;
-  hh->chunkList = HM_newChunkList();
   hh->rememberedSet = NULL;
+
+  HM_initChunkList(HM_HH_getChunkList(hh));
 
   return hh;
 }
