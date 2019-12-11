@@ -233,10 +233,10 @@ inline HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh)
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
-  HM_chunk sourceChunk = HM_getChunkListLastChunk(s->extraSmallObjects);
+  HM_chunk sourceChunk = HM_getChunkListLastChunk(getFreeListExtraSmall(s));
   if (NULL == sourceChunk ||
       (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
-    sourceChunk = HM_allocateChunk(s->extraSmallObjects, bytesNeeded);
+    sourceChunk = HM_allocateChunk(getFreeListExtraSmall(s), bytesNeeded);
   }
   pointer frontier = HM_getChunkFrontier(sourceChunk);
   HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);

@@ -425,6 +425,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
+  HM_initChunkList(getFreeListSmall(s));
+  HM_initChunkList(getFreeListLarge(s));
+  HM_initChunkList(getFreeListExtraSmall(s));
+
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
   s->signalsInfo.gcSignalHandled = FALSE;
@@ -500,8 +504,7 @@ void GC_lateInit (GC_state s) {
 
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
-  s->freeListSmall = HM_newChunkList();
-  s->freeListLarge = HM_newChunkList();
+
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   /* Initialize profiling.  This must occur after processing
@@ -531,9 +534,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
-  d->freeListSmall = HM_newChunkList();
-  d->freeListLarge = HM_newChunkList();
-  d->extraSmallObjects = HM_newChunkList();
+  HM_initChunkList(getFreeListSmall(d));
+  HM_initChunkList(getFreeListLarge(d));
+  HM_initChunkList(getFreeListExtraSmall(d));
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

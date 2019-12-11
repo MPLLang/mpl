@@ -23,9 +23,9 @@ HM_chunkList HM_deferredPromote(
   uint32_t numLevels = args->maxDepth+1;
 
   /* First, bucket in-scope downptrs by the level of the downptr origin */
-  HM_chunkList downPtrs[numLevels];
+  struct HM_chunkList downPtrs[numLevels];
   for (uint32_t i = 0; i < numLevels; i++) {
-    downPtrs[i] = NULL;
+    HM_initChunkList(&(downPtrs[i]));
   }
   for (HM_HierarchicalHeap cursor = args->hh;
        (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
@@ -71,7 +71,7 @@ HM_chunkList HM_deferredPromote(
     args->toDepth = i;
     HM_foreachRemembered(
       s,
-      downPtrs[i],
+      &(downPtrs[i]),
       promoteDownPtr,
       args);
 
@@ -104,7 +104,7 @@ HM_chunkList HM_deferredPromote(
 
   /* free the chunks that we used as temporary storage for bucketing */
   for (uint32_t i = 1; i < numLevels; i++) {
-    HM_appendChunkList(s->freeListSmall, downPtrs[i]);
+    HM_appendChunkList(getFreeListSmall(s), &(downPtrs[i]));
   }
 
   /* reinstantiate the hh linked list from new chunkLists that may have been
@@ -138,7 +138,11 @@ HM_chunkList HM_deferredPromote(
   thread->hierarchicalHeap = prevhh;
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
-  return downPtrs[0];
+
+  /* move downPtrs[0] to dynamically allocated memory, to return to parent */
+  HM_chunkList result = HM_newChunkList();
+  HM_appendChunkList(result, &(downPtrs[0]));
+  return result;
 }
 
 void bucketIfValid(__attribute__((unused)) GC_state s,
@@ -147,7 +151,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
                    objptr src,
                    void* arg)
 {
-  HM_chunkList* downPtrs = arg;
+  struct HM_chunkList* downPtrs = arg;
   // pointer dstp = objptrToPointer(dst, NULL);
   // pointer srcp = objptrToPointer(src, NULL);
 
@@ -168,11 +172,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     return;
   }
 
-  if (downPtrs[dstDepth] == NULL) {
-    downPtrs[dstDepth] = HM_newChunkList();
-  }
-
-  HM_remember(downPtrs[dstDepth], dst, field, src);
+  HM_remember(&(downPtrs[dstDepth]), dst, field, src);
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,

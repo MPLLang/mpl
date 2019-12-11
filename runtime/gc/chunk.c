@@ -56,15 +56,8 @@ void HM_configChunks(GC_state s) {
   HM_BLOCK_SIZE = s->controls->minChunkSize;
   HM_ALLOC_SIZE = s->controls->allocChunkSize;
 
-  HM_chunkList list = (HM_chunkList) malloc(sizeof(struct HM_chunkList));
-  if (list == NULL) {
-    DIE("Out of memory. Unable to allocate new chunk list.");
-  }
-  HM_initChunkList(list);
-  s->extraSmallObjects = list;
-
   HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
-  HM_appendChunk(list, firstChunk);
+  HM_appendChunk(getFreeListExtraSmall(s), firstChunk);
 }
 
 static void HM_prependChunk(HM_chunkList list, HM_chunk chunk) {
@@ -242,7 +235,7 @@ static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
 
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
-  HM_chunk chunk = s->freeListSmall->firstChunk;
+  HM_chunk chunk = getFreeListSmall(s)->firstChunk;
 
   // can increase this number to cycle through more chunks
   int remainingToCheck = 2;
@@ -277,27 +270,27 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
     if (chunkHasBytesFree(chunk, bytesRequested)) {
       assert(chunk->frontier == HM_getChunkStart(chunk));
       chunk->mightContainMultipleObjects = TRUE;
-      splitChunkFront(s->freeListSmall, chunk, bytesRequested);
-      HM_unlinkChunk(s->freeListSmall, chunk);
+      splitChunkFront(getFreeListSmall(s), chunk, bytesRequested);
+      HM_unlinkChunk(getFreeListSmall(s), chunk);
       return chunk;
     }
 
     /* otherwise, rotate this chunk onto the end and keep searching. */
-    HM_unlinkChunk(s->freeListSmall, chunk);
-    HM_appendChunk(s->freeListSmall, chunk);
+    HM_unlinkChunk(getFreeListSmall(s), chunk);
+    HM_appendChunk(getFreeListSmall(s), chunk);
     remainingToCheck--;
-    chunk = s->freeListSmall->firstChunk;
+    chunk = getFreeListSmall(s)->firstChunk;
   }
 
-  chunk = s->freeListLarge->firstChunk;
+  chunk = getFreeListLarge(s)->firstChunk;
   /* chunks in freeListLarge should always have properly set frontiers */
   assert(chunk == NULL || chunk->frontier == HM_getChunkStart(chunk));
 
   /* if this chunk is good, we're done. */
   if (chunkHasBytesFree(chunk, bytesRequested)) {
     chunk->mightContainMultipleObjects = TRUE;
-    splitChunkFront(s->freeListLarge, chunk, bytesRequested);
-    HM_unlinkChunk(s->freeListLarge, chunk);
+    splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
+    HM_unlinkChunk(getFreeListLarge(s), chunk);
     return chunk;
   }
 
@@ -305,8 +298,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
    * large chunk. */
 
   if (chunk != NULL) {
-    HM_unlinkChunk(s->freeListLarge, chunk);
-    HM_appendChunk(s->freeListSmall, chunk);
+    HM_unlinkChunk(getFreeListLarge(s), chunk);
+    HM_appendChunk(getFreeListSmall(s), chunk);
   }
 
   size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
@@ -337,12 +330,12 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
     }
   }
 
-  HM_prependChunk(s->freeListLarge, chunk);
+  HM_prependChunk(getFreeListLarge(s), chunk);
   assert(chunk->frontier == HM_getChunkStart(chunk));
   assert(chunkHasBytesFree(chunk, bytesRequested));
   chunk->mightContainMultipleObjects = TRUE;
-  splitChunkFront(s->freeListLarge, chunk, bytesRequested);
-  HM_unlinkChunk(s->freeListLarge, chunk);
+  splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
+  HM_unlinkChunk(getFreeListLarge(s), chunk);
   return chunk;
 }
 
@@ -371,10 +364,10 @@ HM_chunkList HM_newChunkList(void) {
   GC_state s = pthread_getspecific(gcstate_key);
 
   size_t bytesNeeded = sizeof(struct HM_chunkList);
-  HM_chunk sourceChunk = HM_getChunkListLastChunk(s->extraSmallObjects);
+  HM_chunk sourceChunk = HM_getChunkListLastChunk(getFreeListExtraSmall(s));
   if (NULL == sourceChunk ||
       (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
-    sourceChunk = HM_allocateChunk(s->extraSmallObjects, bytesNeeded);
+    sourceChunk = HM_allocateChunk(getFreeListExtraSmall(s), bytesNeeded);
   }
   pointer frontier = HM_getChunkFrontier(sourceChunk);
   HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);

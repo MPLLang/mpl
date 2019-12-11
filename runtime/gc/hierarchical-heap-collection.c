@@ -292,7 +292,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     HM_numRemembered(globalDownPtrs));
   HM_foreachRemembered(s, globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
-  HM_appendChunkList(s->freeListSmall, globalDownPtrs);
+  HM_appendChunkList(getFreeListSmall(s), globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -379,9 +379,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     HM_chunkList remset = hhTail->rememberedSet;
     if (NULL != remset) {
       hhTail->rememberedSet = NULL;
-      HM_appendChunkList(s->freeListSmall, remset);
+      HM_appendChunkList(getFreeListSmall(s), remset);
     }
-    HM_appendChunkList(s->freeListSmall, level);
+    HM_appendChunkList(getFreeListSmall(s), level);
 
     /* SAM_NOTE: TODO: can hhTail be freed here?? if so, will need to change
      * hh allocation to support this... */
