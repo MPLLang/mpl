@@ -88,8 +88,7 @@ HM_chunkList HM_deferredPromote(
       rootsBegin = HM_getChunkStart(rootsBeginChunk);
     }
 
-    /* SAM_NOTE: TODO:
-     * for each object beginning at rootsBegin, for each objptr field of that
+    /* for each object beginning at rootsBegin, for each objptr field of that
      * object, call
      *   promoteIfPointingDownIntoLocalScope(..., object, field, ...) */
     HM_forwardHHObjptrsInChunkList(
@@ -204,10 +203,8 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   if (NULL == args->fromSpace[args->toDepth]) {
+    /* note that new heaps are initialized with a free chunk. */
     HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
-    /* just need to allocate a valid chunk; the size is arbitrary */
-    HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(newhh), GC_HEAP_LIMIT_SLOP);
-    chunk->levelHead = newhh;
     args->fromSpace[args->toDepth] = newhh;
   }
 

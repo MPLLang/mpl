@@ -54,6 +54,14 @@ struct HM_chunk {
   HM_chunk nextAdjacent;
   HM_chunk prevAdjacent;
 
+  /* some chunks may be used to store other non-ML allocated objects, like
+   * heap records; if so, these will be stored at the front of the chunk, and
+   * the startGap will indicate the amount of space used.
+   * GC-traceable objects begin at
+   *   (pointer)chunk + sizeof(struct HM_chunk) + startGap
+   */
+  uint8_t startGap;
+
   bool mightContainMultipleObjects;
 
   // for padding and sanity checks
@@ -116,6 +124,8 @@ static inline HM_chunk HM_getChunkOf(pointer p) {
 void HM_configChunks(GC_state s);
 
 HM_chunk HM_initializeChunk(pointer start, pointer end);
+
+HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 
 /* Allocate and return a pointer to a new chunk in the list
  * Requires
@@ -208,6 +218,10 @@ size_t HM_getChunkSize(HM_chunk chunk);
  * @return start of the chunk
  */
 pointer HM_getChunkStart(HM_chunk chunk);
+
+/* shift the start of the chunk, to store e.g. a heap record.
+ * returns a pointer to the gap, or NULL if no more space is available. */
+pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes);
 
 /**
  * This function gets the last chunk in a list

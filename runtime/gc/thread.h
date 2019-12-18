@@ -49,8 +49,7 @@ typedef struct GC_thread {
 
   struct HM_HierarchicalHeap* hierarchicalHeap;
 
-  /* The "current" chunk of the heap.
-   * TODO: rename. This chunk is not necessarily the last allocated. */
+  /* The "current" chunk of the heap, where the frontier is pointing */
   HM_chunk currentChunk;
 
   objptr stack;

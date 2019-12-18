@@ -339,52 +339,46 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 	 forwardHHObjptrArgs.objectsCopied,
 	 forwardHHObjptrArgs.stacksCopied);
 
-
-#if ASSERT
-  /* clear out memory to quickly catch some memory safety errors */
-  for (HM_HierarchicalHeap cursor = hh;
-       NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
-       cursor = cursor->nextAncestor)
-  {
-    HM_chunkList level = HM_HH_getChunkList(cursor);
-    HM_chunk chunk = level->firstChunk;
-    while (chunk != NULL) {
-      pointer start = HM_getChunkStart(chunk);
-      size_t length = (size_t)(chunk->limit - start);
-      memset(start, 0xBF, length);
-      chunk = chunk->nextChunk;
-    }
-
-    if (NULL != cursor->rememberedSet) {
-      chunk = cursor->rememberedSet->firstChunk;
-      while (chunk != NULL) {
-        pointer start = HM_getChunkStart(chunk);
-        size_t length = (size_t)(chunk->limit - start);
-        memset(start, 0xBF, length);
-        chunk = chunk->nextChunk;
-      }
-    }
-  }
-#endif
-
   /* Free old chunks and find the tail (upper segment) of the original hh
    * that will be merged with the toSpace */
   HM_HierarchicalHeap hhTail = hh;
-  for (;
-       NULL != hhTail && HM_HH_getDepth(hhTail) >= minDepth;
-       hhTail = hhTail->nextAncestor)
+  while (NULL != hhTail && HM_HH_getDepth(hhTail) >= minDepth)
   {
-    HM_chunkList level = HM_HH_getChunkList(hhTail);
+    HM_HierarchicalHeap nextAncestor = hhTail->nextAncestor;
 
+    HM_chunkList level = HM_HH_getChunkList(hhTail);
     HM_chunkList remset = hhTail->rememberedSet;
     if (NULL != remset) {
+#if ASSERT
+      /* clear out memory to quickly catch some memory safety errors */
+      HM_chunk chunkCursor = remset->firstChunk;
+      while (chunkCursor != NULL) {
+        pointer start = HM_getChunkStart(chunkCursor);
+        size_t length = (size_t)(chunkCursor->limit - start);
+        memset(start, 0xBF, length);
+        chunkCursor = chunkCursor->nextChunk;
+      }
+#endif
       hhTail->rememberedSet = NULL;
       HM_appendChunkList(getFreeListSmall(s), remset);
     }
+
+#if ASSERT
+    /* clear out memory to quickly catch some memory safety errors */
+    HM_chunk chunkCursor = level->firstChunk;
+    while (chunkCursor != NULL) {
+      pointer start = HM_getChunkStart(chunkCursor);
+      size_t length = (size_t)(chunkCursor->limit - start);
+      memset(start, 0xBF, length);
+      chunkCursor = chunkCursor->nextChunk;
+    }
+#endif
+
+    /* This implicitly frees the heap records too, because they are stored in
+     * the level list. */
     HM_appendChunkList(getFreeListSmall(s), level);
 
-    /* SAM_NOTE: TODO: can hhTail be freed here?? if so, will need to change
-     * hh allocation to support this... */
+    hhTail = nextAncestor;
   }
 
   /* Build the toSpace hh */
@@ -715,14 +709,8 @@ void forwardHHObjptr (GC_state s,
 
     if (tgtHeap == NULL) {
       /* Level does not exist, so create it */
+      /* SAM_NOTE: new heaps are initialized with one free chunk. */
       tgtHeap = HM_HH_new(s, opDepth);
-      /* SAM_NOTE: TODO: This is inefficient, because the current object
-       * might be a large object that just needs to be logically moved. */
-      HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(tgtHeap), objectBytes);
-      if (NULL == newChunk) {
-        DIE("Ran out of space for Hierarchical Heap!");
-      }
-      newChunk->levelHead = tgtHeap;
       args->toSpace[opDepth] = tgtHeap;
     }
 

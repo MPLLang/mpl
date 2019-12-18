@@ -103,6 +103,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->nextAdjacent = NULL;
   chunk->prevAdjacent = NULL;
   chunk->levelHead = NULL;
+  chunk->startGap = 0;
   chunk->mightContainMultipleObjects = TRUE;
   chunk->magic = CHUNK_MAGIC;
 
@@ -233,7 +234,6 @@ static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
 }
 */
 
-HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   HM_chunk chunk = getFreeListSmall(s)->firstChunk;
 
@@ -263,7 +263,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       HM_prependChunk(s->freeListSmall, chunk);
     }
 #endif
-    /* chunks in freeListSmall might have frontiers that haven't been reset */
+    // chunks in freeListSmall might have frontiers/gaps that haven't been reset
+    chunk->startGap = 0;
     chunk->frontier = HM_getChunkStart(chunk);
 
     /* if this chunk is good, then we're done. */
@@ -479,7 +480,30 @@ size_t HM_getChunkSize(HM_chunk chunk) {
 }
 
 pointer HM_getChunkStart(HM_chunk chunk) {
-  return (pointer)chunk + sizeof(struct HM_chunk);
+  return (pointer)chunk + sizeof(struct HM_chunk) + chunk->startGap;
+}
+
+pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes) {
+  pointer oldStart = HM_getChunkStart(chunk);
+
+  /* if we've already committed to a particular chunk start (by allocating a
+   * GC-traceable object and moving the frontier) then the gap cannot be
+   * shifted. */
+  if (HM_getChunkFrontier(chunk) != oldStart)
+    return NULL;
+
+  /* the gap must end on an 8-byte boundary */
+  size_t bytesAligned8 = align(bytes, 8);
+
+  /* startGaps have to be small! */
+  if (bytesAligned8 > UINT8_MAX ||
+      bytesAligned8 + chunk->startGap > UINT8_MAX)
+    return NULL;
+
+  chunk->startGap = chunk->startGap + (uint8_t)bytesAligned8;
+  chunk->frontier = HM_getChunkStart(chunk);
+
+  return oldStart;
 }
 
 HM_chunk HM_getChunkListLastChunk(HM_chunkList list) {
@@ -525,7 +549,6 @@ HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   HM_HierarchicalHeap cursor = chunk->levelHead;
   chunk->levelHead = levelHead;
 
-  /* SAM_NOTE: TODO: free levelheads with reference counting */
   while (cursor != levelHead) {
     HM_HierarchicalHeap representative = cursor->representative;
     cursor->representative = levelHead;

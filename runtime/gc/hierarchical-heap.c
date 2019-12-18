@@ -205,14 +205,7 @@ void HM_HH_promoteChunks(
 
     hh->representative = hh->nextAncestor;
 
-    /* ...and then shortcut.
-     *
-     * TODO: this drops 'hh' on the floor, which is a space leak. This will
-     * be fixed when we properly handle freeing the objects in the path-
-     * compressing tree. (But first, need to combine the "hierarchical heap"
-     * objects with the current notion of a "chunk list" object. Do path
-     * compression on the heap objects, not on the chunk lists!!)
-     */
+    /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
   }
 
@@ -233,14 +226,10 @@ inline HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh)
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
-  HM_chunk sourceChunk = HM_getChunkListLastChunk(getFreeListExtraSmall(s));
-  if (NULL == sourceChunk ||
-      (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
-    sourceChunk = HM_allocateChunk(getFreeListExtraSmall(s), bytesNeeded);
-  }
-  pointer frontier = HM_getChunkFrontier(sourceChunk);
-  HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
-  HM_HierarchicalHeap hh = (HM_HierarchicalHeap) frontier;
+  HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
+  pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
+
+  HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
 
   hh->representative = NULL;
   hh->depth = depth;
@@ -249,6 +238,9 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->rememberedSet = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
+
+  HM_appendChunk(HM_HH_getChunkList(hh), chunk);
+  chunk->levelHead = hh;
 
   return hh;
 }
@@ -316,15 +308,30 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   assert(NULL != HM_HH_getChunkList(hh));
   assert(HM_HH_getDepth(hh) <= currentDepth);
 
-  if (HM_HH_getDepth(hh) < currentDepth) {
+  HM_chunk chunk;
+
+  if (HM_HH_getDepth(hh) < currentDepth)
+  {
     HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth);
     newhh->nextAncestor = hh;
     thread->hierarchicalHeap = newhh;
 
     hh = newhh;
+
+    /* note that new heaps are initialized with one free chunk */
+    chunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
+    if (((size_t)HM_getChunkLimit(chunk) - (size_t)HM_getChunkFrontier(chunk))
+        >= bytesRequested)
+    {
+      thread->currentChunk = chunk;
+      HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
+      return TRUE;
+    }
+    /* otherwise, we need to allocate a new chunk, so fall through to standard
+     * logic below. */
   }
 
-  HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
+  chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
 
   if (NULL == chunk) {
     return FALSE;
