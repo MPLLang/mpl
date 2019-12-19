@@ -4,10 +4,10 @@
  * See the file MLton-LICENSE for details.
  */
 
-void HM_remember(HM_chunkList remset, objptr dst, objptr* field, objptr src) {
-  HM_chunk chunk = HM_getChunkListLastChunk(remset);
+void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src) {
+  HM_chunk chunk = HM_getChunkListLastChunk(remSet);
   if (NULL == chunk || (size_t)(chunk->limit - chunk->frontier) < sizeof(struct HM_remembered)) {
-    chunk = HM_allocateChunk(remset, sizeof(struct HM_remembered));
+    chunk = HM_allocateChunk(remSet, sizeof(struct HM_remembered));
   }
 
   assert(NULL != chunk);
@@ -21,22 +21,17 @@ void HM_remember(HM_chunkList remset, objptr dst, objptr* field, objptr src) {
 
 void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objptr src) {
   assert(hh != NULL);
-
-  HM_chunkList rememberedSet = hh->rememberedSet;
-  if (NULL == rememberedSet) {
-    rememberedSet = HM_newChunkList();
-    hh->rememberedSet = rememberedSet;
-  }
-
-  HM_remember(rememberedSet, dst, field, src);
+  HM_remember(HM_HH_getRemSet(hh), dst, field, src);
 }
 
-void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs) {
-  if (rememberedSet == NULL) {
-    return;
-  }
-
-  HM_chunk chunk = rememberedSet->firstChunk;
+void HM_foreachRemembered(
+  GC_state s,
+  HM_chunkList remSet,
+  ForeachRememberedFunc f,
+  void* fArgs)
+{
+  assert(remSet != NULL);
+  HM_chunk chunk = HM_getChunkListFirstChunk(remSet);
   while (chunk != NULL) {
     pointer p = HM_getChunkStart(chunk);
     pointer frontier = HM_getChunkFrontier(chunk);
@@ -49,18 +44,14 @@ void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRemembe
   }
 }
 
-size_t HM_numRemembered(HM_chunkList rememberedSet) {
-  if (rememberedSet == NULL) return 0;
-
+size_t HM_numRemembered(HM_chunkList remSet) {
+  assert(remSet != NULL);
   size_t count = 0;
-
-  HM_chunk chunk = rememberedSet->firstChunk;
+  HM_chunk chunk = HM_getChunkListFirstChunk(remSet);
   while (chunk != NULL) {
     pointer p = HM_getChunkStart(chunk);
     pointer frontier = HM_getChunkFrontier(chunk);
-
     count += (size_t)((frontier - p)) / sizeof(struct HM_remembered);
-
     chunk = chunk->nextChunk;
   }
 

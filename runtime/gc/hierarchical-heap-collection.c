@@ -176,8 +176,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     timespec_now(&startTime);
   }
 
-  HM_chunkList globalDownPtrs =
-    HM_deferredPromote(s, thread, &forwardHHObjptrArgs);
+  struct HM_chunkList globalDownPtrs;
+  HM_initChunkList(&globalDownPtrs);
+  HM_deferredPromote(s, thread, &globalDownPtrs, &forwardHHObjptrArgs);
   hh = thread->hierarchicalHeap;
 
   assertInvariants(thread);
@@ -289,10 +290,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   /* preserve remaining down-pointers from global heap */
   LOG(LM_HH_COLLECTION, LL_DEBUG,
     "START forwarding %zu global down-pointers",
-    HM_numRemembered(globalDownPtrs));
-  HM_foreachRemembered(s, globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
+    HM_numRemembered(&globalDownPtrs));
+  HM_foreachRemembered(s, &globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
-  HM_appendChunkList(getFreeListSmall(s), globalDownPtrs);
+  HM_appendChunkList(getFreeListSmall(s), &globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -347,7 +348,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     HM_HierarchicalHeap nextAncestor = hhTail->nextAncestor;
 
     HM_chunkList level = HM_HH_getChunkList(hhTail);
-    HM_chunkList remset = hhTail->rememberedSet;
+    HM_chunkList remset = HM_HH_getRemSet(hhTail);
     if (NULL != remset) {
 #if ASSERT
       /* clear out memory to quickly catch some memory safety errors */
@@ -359,7 +360,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         chunkCursor = chunkCursor->nextChunk;
       }
 #endif
-      hhTail->rememberedSet = NULL;
       HM_appendChunkList(getFreeListSmall(s), remset);
     }
 

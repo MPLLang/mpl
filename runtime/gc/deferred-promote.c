@@ -13,9 +13,10 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 /* ========================================================================= */
 
-HM_chunkList HM_deferredPromote(
+void HM_deferredPromote(
   GC_state s,
   GC_thread thread,
+  HM_chunkList globalDownPtrs,
   struct ForwardHHObjptrArgs* args)
 {
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START deferred promotion");
@@ -33,7 +34,7 @@ HM_chunkList HM_deferredPromote(
   {
     HM_foreachRemembered(
       s,
-      cursor->rememberedSet,
+      HM_HH_getRemSet(cursor),
       bucketIfValid,
       &(downPtrs[0]));
   }
@@ -138,10 +139,9 @@ HM_chunkList HM_deferredPromote(
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
 
-  /* move downPtrs[0] to dynamically allocated memory, to return to parent */
-  HM_chunkList result = HM_newChunkList();
-  HM_appendChunkList(result, &(downPtrs[0]));
-  return result;
+  /* return downPtrs[0] to parent */
+  HM_appendChunkList(globalDownPtrs, &(downPtrs[0]));
+  return;
 }
 
 void bucketIfValid(__attribute__((unused)) GC_state s,

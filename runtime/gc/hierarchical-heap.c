@@ -57,12 +57,7 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
     if (depth1 == depth2)
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
-
-      if (hh1->rememberedSet == NULL) {
-        hh1->rememberedSet = hh2->rememberedSet;
-      } else {
-        HM_appendChunkList(hh1->rememberedSet, hh2->rememberedSet);
-      }
+      HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
 
       hh2->representative = hh1;
 
@@ -196,12 +191,7 @@ void HM_HH_promoteChunks(
     assert(NULL != hh->nextAncestor);
     assert(HM_HH_getDepth(hh->nextAncestor) == currentDepth-1);
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
-
-    if (hh->nextAncestor->rememberedSet == NULL) {
-      hh->nextAncestor->rememberedSet = hh->rememberedSet;
-    } else {
-      HM_appendChunkList(hh->nextAncestor->rememberedSet, hh->rememberedSet);
-    }
+    HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
     hh->representative = hh->nextAncestor;
 
@@ -218,11 +208,6 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
   return (NULL != hh) && (NULL == hh->representative);
 }
 
-inline HM_chunkList HM_HH_getRememberedSet(HM_HierarchicalHeap hh)
-{
-  return hh->rememberedSet;
-}
-
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
@@ -233,11 +218,10 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 
   hh->representative = NULL;
   hh->depth = depth;
-
   hh->nextAncestor = NULL;
-  hh->rememberedSet = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
+  HM_initChunkList(HM_HH_getRemSet(hh));
 
   HM_appendChunk(HM_HH_getChunkList(hh), chunk);
   chunk->levelHead = hh;
