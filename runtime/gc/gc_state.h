@@ -41,9 +41,9 @@ struct GC_state {
   objptr wsQueueBot;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
-  struct HM_chunkList* freeListSmall;
-  struct HM_chunkList* freeListLarge;
-  struct HM_chunkList* extraSmallObjects;
+  struct HM_chunkList freeListSmall;
+  struct HM_chunkList freeListLarge;
+  struct HM_chunkList extraSmallObjects;
   size_t nextChunkAllocSize;
   /* Ordinary globals */
   objptr *globals;
@@ -95,6 +95,10 @@ static void displayGCState (GC_state s, FILE *stream);
 
 static inline size_t sizeofGCStateCurrentStackUsed (GC_state s);
 static inline void setGCStateCurrentThreadAndStack (GC_state s);
+
+static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
+static inline struct HM_chunkList* getFreeListSmall(GC_state s);
+static inline struct HM_chunkList* getFreeListLarge(GC_state s);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

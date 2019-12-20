@@ -67,7 +67,8 @@ pointer sequenceAllocateInHH(GC_state s,
      * level-head which makes it easy to move it during a GC */
     assert(thread->currentChunk->frontier == s->frontier);
     assert(thread->currentChunk->limit == s->limitPlusSlop);
-    HM_chunk sequenceChunk = HM_splitChunk(thread->currentChunk, sequenceChunkBytes);
+    HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(thread->currentChunk);
+    HM_chunk sequenceChunk = HM_splitChunk(HM_HH_getChunkList(hh), thread->currentChunk, sequenceChunkBytes);
     assert(sequenceChunk != NULL);
     pointer result = sequenceChunk->frontier;
     sequenceChunk->frontier += sequenceSizeAligned;
@@ -89,7 +90,7 @@ pointer sequenceAllocateInHH(GC_state s,
     /* force a new chunk to be created so that no new objects lie after this
      * sequence, which crossed a block boundary. */
     HM_HH_updateValues(thread, s->frontier);
-    HM_HH_extend(thread, ensureBytesFree);
+    HM_HH_extend(s, thread, ensureBytesFree);
     s->frontier = HM_HH_getFrontier(thread);
     s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;

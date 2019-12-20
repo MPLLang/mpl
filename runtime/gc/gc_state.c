@@ -49,6 +49,18 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   s->stackLimit = getStackLimit (s, stack);
 }
 
+struct HM_chunkList* getFreeListExtraSmall(GC_state s) {
+  return &(s->extraSmallObjects);
+}
+
+struct HM_chunkList* getFreeListSmall(GC_state s) {
+  return &(s->freeListSmall);
+}
+
+struct HM_chunkList* getFreeListLarge(GC_state s) {
+  return &(s->freeListLarge);
+}
+
 bool GC_getAmOriginal (GC_state s) {
   return s->amOriginal;
 }

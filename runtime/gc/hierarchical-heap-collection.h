@@ -26,7 +26,8 @@ struct ForwardHHObjptrArgs {
   uint32_t minDepth;
   uint32_t maxDepth;
   uint32_t toDepth; /* if == HM_HH_INVALID_DEPTH, preserve level of the forwarded object */
-  HM_chunkList* toSpace;
+  HM_HierarchicalHeap* fromSpace;
+  HM_HierarchicalHeap* toSpace;
   objptr containingObject; /* a hack to keep track of which object is currently being traced */
 
   size_t bytesCopied;
@@ -39,15 +40,6 @@ struct ForwardHHObjptrArgs {
 };
 
 #define MAX_NUM_HOLES 512
-
-/**********/
-/* Macros */
-/**********/
-#if ASSERT
-#define COPY_OBJECT_HH_VALUE ((struct HM_HierarchicalHeap*)(0xb000deadfee1dead))
-#else
-#define COPY_OBJECT_HH_VALUE (NULL)
-#endif
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
@@ -70,7 +62,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force);
  */
 void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
 
-objptr relocateObject(GC_state s, objptr obj, HM_chunkList tgtChunkList, struct ForwardHHObjptrArgs *args);
+/* check if `op` is in args->toSpace[depth(op)] */
+bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args);
+
+objptr relocateObject(GC_state s, objptr obj, HM_HierarchicalHeap tgtHeap, struct ForwardHHObjptrArgs *args);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

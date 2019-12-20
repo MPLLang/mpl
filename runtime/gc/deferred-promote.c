@@ -1,4 +1,4 @@
-/* Copyright (C) 2018 Sam Westrick.
+/* Copyright (C) 2018-2019 Sam Westrick.
  *
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
@@ -13,21 +13,42 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 /* ========================================================================= */
 
-HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
+void HM_deferredPromote(
+  GC_state s,
+  GC_thread thread,
+  HM_chunkList globalDownPtrs,
+  struct ForwardHHObjptrArgs* args)
+{
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START deferred promotion");
 
+  uint32_t numLevels = args->maxDepth+1;
+
   /* First, bucket in-scope downptrs by the level of the downptr origin */
-  HM_chunkList downPtrs[HM_MAX_NUM_LEVELS];
-  for (uint32_t i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    downPtrs[i] = NULL;
+  struct HM_chunkList downPtrs[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) {
+    HM_initChunkList(&(downPtrs[i]));
   }
-  FOR_LEVEL_IN_RANGE(level, i, args->hh, args->minDepth, args->maxDepth+1, {
+  for (HM_HierarchicalHeap cursor = args->hh;
+       (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
+       cursor = cursor->nextAncestor)
+  {
     HM_foreachRemembered(
       s,
-      level->rememberedSet,
+      HM_HH_getRemSet(cursor),
       bucketIfValid,
       &(downPtrs[0]));
-  });
+  }
+
+  /* memoize the fromSpace chunkLists for quick access */
+  HM_HierarchicalHeap fromSpace[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) fromSpace[i] = NULL;
+  for (HM_HierarchicalHeap cursor = args->hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
+  args->fromSpace = &(fromSpace[0]);
 
   /* Next, promote objects to the appropriate level, beginning below the root and
    * working downwards towards to the leaf. Any resulting downptr that cannot
@@ -40,9 +61,10 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
      * promoting the roots */
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
-    if (NULL != HM_HH_LEVEL(args->hh, i) &&
-        NULL != HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i))) {
-      rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i));
+    if (NULL != fromSpace[i] &&
+        NULL != HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i])))
+    {
+      rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
     }
 
@@ -50,24 +72,24 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
     args->toDepth = i;
     HM_foreachRemembered(
       s,
-      downPtrs[i],
+      &(downPtrs[i]),
       promoteDownPtr,
       args);
 
-    if (NULL == HM_HH_LEVEL(args->hh, i) ||
-        NULL == HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i))) {
+    if (NULL == fromSpace[i] ||
+        NULL == HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i])))
+    {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
     }
 
     /* forward transitively reachable objects within local scope */
     if (rootsBegin == NULL) {
-      rootsBeginChunk = HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i));
+      rootsBeginChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkStart(rootsBeginChunk);
     }
 
-    /* SAM_NOTE: TODO:
-     * for each object beginning at rootsBegin, for each objptr field of that
+    /* for each object beginning at rootsBegin, for each objptr field of that
      * object, call
      *   promoteIfPointingDownIntoLocalScope(..., object, field, ...) */
     HM_forwardHHObjptrsInChunkList(
@@ -80,13 +102,46 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       args);
   }
 
-  /* Finally, free the chunks that we used as temporary storage for bucketing */
-  for (uint32_t i = 1; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_appendChunkList(s->freeListSmall, downPtrs[i]);
+  /* free the chunks that we used as temporary storage for bucketing */
+  for (uint32_t i = 1; i < numLevels; i++) {
+    HM_appendChunkList(getFreeListSmall(s), &(downPtrs[i]));
   }
 
+  /* reinstantiate the hh linked list from new chunkLists that may have been
+   * created during promotion */
+  HM_HierarchicalHeap heaps[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) heaps[i] = NULL;
+  for (HM_HierarchicalHeap cursor = args->hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    heaps[HM_HH_getDepth(cursor)] = cursor;
+  }
+  HM_HierarchicalHeap prevhh = NULL;
+  for (uint32_t i = 0; i < numLevels; i++)
+  {
+    if (NULL != heaps[i])
+    {
+      assert(NULL != fromSpace[i]);
+      assert(heaps[i] == fromSpace[i]);
+      heaps[i]->nextAncestor = prevhh;
+      prevhh = heaps[i];
+    }
+    else if (NULL != fromSpace[i])
+    {
+      HM_HierarchicalHeap newhh = fromSpace[i];
+      newhh->nextAncestor = prevhh;
+      prevhh = newhh;
+    }
+  }
+  args->hh = prevhh;
+  thread->hierarchicalHeap = prevhh;
+
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
-  return downPtrs[0];
+
+  /* return downPtrs[0] to parent */
+  HM_appendChunkList(globalDownPtrs, &(downPtrs[0]));
+  return;
 }
 
 void bucketIfValid(__attribute__((unused)) GC_state s,
@@ -95,7 +150,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
                    objptr src,
                    void* arg)
 {
-  HM_chunkList* downPtrs = arg;
+  struct HM_chunkList* downPtrs = arg;
   // pointer dstp = objptrToPointer(dst, NULL);
   // pointer srcp = objptrToPointer(src, NULL);
 
@@ -116,11 +171,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     return;
   }
 
-  if (downPtrs[dstDepth] == NULL) {
-    downPtrs[dstDepth] = HM_newChunkList(NULL, CHUNK_INVALID_DEPTH);
-  }
-
-  HM_remember(downPtrs[dstDepth], NULL, dst, field, src);
+  HM_remember(&(downPtrs[dstDepth]), dst, field, src);
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,
@@ -151,15 +202,14 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
     return;
   }
 
-  if (NULL == HM_HH_LEVEL(args->hh, args->toDepth)) {
-    HM_chunkList list = HM_newChunkList(args->hh, args->toDepth);
-    /* just need to allocate a valid chunk; the size is arbitrary */
-    HM_allocateChunk(list, GC_HEAP_LIMIT_SLOP);
-    HM_HH_LEVEL(args->hh, args->toDepth) = list;
+  if (NULL == args->fromSpace[args->toDepth]) {
+    /* note that new heaps are initialized with a free chunk. */
+    HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
+    args->fromSpace[args->toDepth] = newhh;
   }
 
-  assert(HM_HH_LEVEL(args->hh, args->toDepth) != NULL);
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toDepth), args);
+  assert(args->fromSpace[args->toDepth] != NULL);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }
 
@@ -193,14 +243,14 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  assert(HM_HH_LEVEL(args->hh, args->toDepth) != NULL);
+  assert(args->fromSpace[args->toDepth] != NULL);
 
   if (srcDepth < args->minDepth) {
     /* This is outside local scope; we just need to remember this new downptr */
-    HM_rememberAtLevel(HM_HH_LEVEL(args->hh, args->toDepth), args->containingObject, field, src);
+    HM_rememberAtLevel(args->fromSpace[args->toDepth], args->containingObject, field, src);
     return;
   }
 
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toDepth), args);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
   assert(HM_getObjptrDepth(*field) == args->toDepth);
 }

@@ -37,7 +37,7 @@ pointer newObject(GC_state s,
     assert(HM_getChunkOf(frontier) == thread->currentChunk);
     HM_HH_updateValues(thread, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
-    HM_HH_extend(thread, GC_HEAP_LIMIT_SLOP);
+    HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP);
     s->frontier = HM_HH_getFrontier(thread);
     s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
@@ -127,13 +127,20 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   size_t totalSize = stackSize + threadSize;
 
   /* Allocate and initialize the heap that will be assigned to this thread.
-   * Some of these lines are copied from HM_HH_extend, but cannot just use it
-   * directly because the corresponding thread doesn't exist yet. */
-  struct HM_HierarchicalHeap *hh = HM_HH_new(s);
-  HM_HH_LEVEL(hh, depth) = HM_newChunkList(hh, depth);
-  HM_chunk chunk = HM_allocateChunk(HM_HH_LEVEL(hh, depth), totalSize);
-  if (NULL == chunk) {
-    DIE("Ran out of space for hierarchical heap!");
+   * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
+   * yet. */
+  HM_HierarchicalHeap hh = HM_HH_new(s, depth);
+
+  /* note that new heaps are initialized with one free chunk */
+  HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
+  if (((size_t)HM_getChunkLimit(chunk) - (size_t)HM_getChunkFrontier(chunk))
+      < totalSize)
+  {
+    chunk = HM_allocateChunk(HM_HH_getChunkList(hh), totalSize);
+    if (NULL == chunk) {
+      DIE("Ran out of space for hierarchical heap!");
+    }
+    chunk->levelHead = hh;
   }
 
   /* Next, allocate+init the thread within the heap that we just created. */
