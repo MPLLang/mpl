@@ -14,39 +14,39 @@
 #include <stdlib.h>
 #include <strings.h>
 
-static bool stringToBool (char *s) {
+static bool stringToBool(char *s) {
   if (0 == strcmp (s, "false"))
     return FALSE;
   if (0 == strcmp (s, "true"))
     return TRUE;
-  die ("Invalid @MLton bool: %s.", s);
+  die ("Invalid @MLton/@mpl bool: %s.", s);
 }
 
 // From gdtoa/gdtoa.h.
 // Can't include the whole thing because it brings in too much junk.
 float gdtoa__strtof (const char *, char **);
 
-static float stringToFloat (char *s) {
+static float stringToFloat(char *s) {
   char *endptr;
   float f;
 
   f = gdtoa__strtof (s, &endptr);
   if (s == endptr)
-    die ("Invalid @MLton float: %s.", s);
+    die ("Invalid @MLton/@mpl float: %s.", s);
   return f;
 }
 
-static int32_t stringToInt (char *s) {
+static int32_t stringToInt(char *s) {
   char *endptr;
   int i;
 
   i = strtol (s, &endptr, 10);
   if (s == endptr)
-    die ("Invalid @MLton int: %s.", s);
+    die ("Invalid @MLton/@mpl int: %s.", s);
   return i;
 }
 
-static size_t stringToBytes (const char *s) {
+static size_t stringToBytes(const char *s) {
   double d;
   char *endptr;
   size_t factor;
@@ -77,7 +77,7 @@ static size_t stringToBytes (const char *s) {
     goto bad;
   return (size_t)d;
 bad:
-  die ("Invalid @MLton memory amount: %s.", s);
+  die ("Invalid @MLton/@mpl memory amount: %s.", s);
 }
 
 /* ---------------------------------------------------------------- */
@@ -91,14 +91,23 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
   i = start;
   while (s->controls->mayProcessAtMLton
          and i < argc
-         and (0 == strcmp (argv [i], "@MLton"))) {
+         and ( (0 == strcmp (argv[i], "@MLton"))
+               || (0 == strcmp (argv[i], "@mpl"))
+             )
+        )
+  {
     bool done;
+
+    const char *atName = "@MLton";
+    if (0 == strcmp (argv[i], "@mpl")) {
+      atName = "@mpl";
+    }
 
     i++;
     done = FALSE;
     while (!done) {
       if (i == argc)
-        die ("Missing -- at end of @MLton args.");
+        die ("Missing -- at end of %s args.", atName);
       else {
         char *arg;
 
@@ -115,21 +124,21 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "gc-summary-file")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton gc-summary-file missing argument.");
+            die ("%s gc-summary-file missing argument.", atName);
           const char* filePath = argv[i++];
           if (0 == strcmp(filePath, "-")) {
             s->controls->summaryFile = stdout;
           } else {
             s->controls->summaryFile = fopen(filePath, "w");
             if (s->controls->summaryFile == NULL) {
-              die ("Invalid @MLton gc-summary-file %s (%s).", filePath, strerror(errno));
+              die ("Invalid %s gc-summary-file %s (%s).", atName, filePath, strerror(errno));
             }
           }
         } else if (0 == strcmp (arg, "gc-summary-format")) {
           i++;
 
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton gc-summary-format missing argument.");
+            die ("%s gc-summary-format missing argument.", atName);
           }
 
           const char* format = argv[i++];
@@ -138,8 +147,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           } else if (0 == strcmp (format, "json")) {
             s->controls->summaryFormat = JSON;
           } else {
-            die ("@MLton gc-summary-format \"%s\" invalid. Must be one of "
+            die ("%s gc-summary-format \"%s\" invalid. Must be one of "
                  "human or json.",
+                 atName,
                  format);
           }
         } else if (0 == strcmp (arg, "set-affinity")) {
@@ -148,12 +158,12 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "affinity-base")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton affinity-base missing argument.");
+            die ("%s affinity-base missing argument.", atName);
           s->controls->affinityBase = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "affinity-stride")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton affinity-stride missing argument.");
+            die ("%s affinity-stride missing argument.", atName);
           s->controls->affinityStride = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
@@ -161,12 +171,12 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           i++;
           s->amOriginal = FALSE;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton load-world missing argument.");
+            die ("%s load-world missing argument.", atName);
           *worldFile = argv[i++];
         } else if (0 == strcmp(arg, "log-file")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die("@MLton log-file missing argument.");
+            die("%s log-file missing argument.", atName);
           }
 
           const char* filePath = argv[i++];
@@ -175,7 +185,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           } else {
             FILE* file = fopen(filePath, "w");
             if (NULL == file) {
-              diee("@MLton Could not open specified log file.");
+              diee("%s Could not open specified log file.", atName);
             } else {
               L_setFile(file);
             }
@@ -183,12 +193,12 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp(arg, "log-level")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die("@MLton log-level missing argument.");
+            die("%s log-level missing argument.", atName);
           }
 
           char* levelString = argv[i++];
           if (!initLogLevels(levelString)) {
-            die ("@MLton log-level invalid argument");
+            die ("%s log-level invalid argument", atName);
           }
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
@@ -196,7 +206,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "ram-slop")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton ram-slop missing argument.");
+            die ("%s ram-slop missing argument.", atName);
           s->controls->ratios.ramSlop = stringToFloat (argv[i++]);
         } else if (0 == strcmp (arg, "show-sources")) {
           showSources (s);
@@ -207,71 +217,72 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "stack-current-grow-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-current-grow-ratio missing argument.");
+            die ("%s stack-current-grow-ratio missing argument.", atName);
           s->controls->ratios.stackCurrentGrow = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.stackCurrentGrow)
-            die ("@MLton stack-current-grow-ratio argument must greater than 1.0.");
+            die ("%s stack-current-grow-ratio argument must greater than 1.0.", atName);
         } else if (0 == strcmp (arg, "stack-current-max-reserved-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-current-max-reserved-ratio missing argument.");
+            die ("%s stack-current-max-reserved-ratio missing argument.", atName);
           s->controls->ratios.stackCurrentMaxReserved = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.stackCurrentMaxReserved)
-            die ("@MLton stack-current-max-reserved-ratio argument must greater than 1.0.");
+            die ("%s stack-current-max-reserved-ratio argument must greater than 1.0.", atName);
         } else if (0 == strcmp (arg, "stack-current-permit-reserved-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-current-permit-reserved-ratio missing argument.");
+            die ("%s stack-current-permit-reserved-ratio missing argument.", atName);
           s->controls->ratios.stackCurrentPermitReserved = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.stackCurrentPermitReserved)
-            die ("@MLton stack-current-permit-reserved-ratio argument must greater than 1.0.");
+            die ("%s stack-current-permit-reserved-ratio argument must greater than 1.0.", atName);
         } else if (0 == strcmp (arg, "stack-current-shrink-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-current-shrink-ratio missing argument.");
+            die ("%s stack-current-shrink-ratio missing argument.", atName);
           s->controls->ratios.stackCurrentShrink = stringToFloat (argv[i++]);
           unless (0.0 <= s->controls->ratios.stackCurrentShrink
                   and s->controls->ratios.stackCurrentShrink <= 1.0)
-            die ("@MLton stack-current-shrink-ratio argument must be between 0.0 and 1.0.");
+            die ("%s stack-current-shrink-ratio argument must be between 0.0 and 1.0.", atName);
         } else if (0 == strcmp (arg, "stack-max-reserved-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-max-reserved-ratio missing argument.");
+            die ("%s stack-max-reserved-ratio missing argument.", atName);
           s->controls->ratios.stackMaxReserved = stringToFloat (argv[i++]);
           unless (1.0 < s->controls->ratios.stackMaxReserved)
-            die ("@MLton stack-max-reserved-ratio argument must greater than 1.0.");
+            die ("%s stack-max-reserved-ratio argument must greater than 1.0.", atName);
         } else if (0 == strcmp (arg, "stack-shrink-ratio")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton stack-shrink-ratio missing argument.");
+            die ("%s stack-shrink-ratio missing argument.", atName);
           s->controls->ratios.stackShrink = stringToFloat (argv[i++]);
           unless (0.0 <= s->controls->ratios.stackShrink
                   and s->controls->ratios.stackShrink <= 1.0)
-            die ("@MLton stack-shrink-ratio argument must be between 0.0 and 1.0.");
+            die ("%s stack-shrink-ratio argument must be between 0.0 and 1.0.", atName);
         } else if (0 == strcmp (arg, "use-mmap")) {
           i++;
           if (i == argc || 0 == strcmp (argv[i], "--"))
-            die ("@MLton use-mmap missing argument.");
+            die ("%s use-mmap missing argument.", atName);
           GC_setCygwinUseMmap (stringToBool (argv[i++]));
-        } else if (0 == strcmp (arg, "number-processors")) {
+        } else if ( (0 == strcmp (arg, "number-processors")) ||
+                    (0 == strcmp (arg, "procs")) ) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
-            die ("@MLton number-processors missing argument.");
+            die ("%s %s missing argument.", atName, arg);
           if (!s->amOriginal)
-            die ("@MLton number-processors incompatible with loaded worlds.");
+            die ("%s %s incompatible with loaded worlds.", atName, arg);
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
         } else if (0 == strcmp(arg, "min-chunk")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton min-chunk missing argument.");
+            die ("%s min-chunk missing argument.", atName);
           }
           s->controls->minChunkSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "alloc-chunk")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton alloc-chunk missing argument.");
+            die ("%s alloc-chunk missing argument.", atName);
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
@@ -280,17 +291,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-allocated-ratio missing argument.");
+            die ("%s hh-allocated-ratio missing argument.", atName);
           }
 
           s->controls->hhConfig.allocatedRatio = stringToFloat(argv[i++]);
           if (s->controls->hhConfig.allocatedRatio < 2.0) {
-            die("@MLton hh-allocated-ratio must be at least 2.0");
+            die("%s hh-allocated-ratio must be at least 2.0", atName);
           }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-collection-level missing argument.");
+            die ("%s hh-collection-level missing argument.", atName);
           }
           const char* level = argv[i++];
           if (0 == strcmp (level, "none")) {
@@ -300,38 +311,39 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           } else if (0 == strcmp (level, "local")) {
             s->controls->hhCollectionLevel = LOCAL;
           } else {
-            die ("@MLton hh-collection-level \"%s\" invalid. Must be one of "
+            die ("%s hh-collection-level \"%s\" invalid. Must be one of "
                  "none, superlocal, or local.",
+                 atName,
                  level);
           }
         } else if (0 == strcmp(arg, "hh-live-lc-ratio")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-live-lc-ratio missing argument.");
+            die ("%s hh-live-lc-ratio missing argument.", atName);
           }
 
           s->controls->hhConfig.liveLCRatio = stringToFloat(argv[i++]);
           if (s->controls->hhConfig.liveLCRatio < 1.0) {
-            die("@MLton hh-live-lc-ratio must be at least 2.0");
+            die("%s hh-live-lc-ratio must be at least 2.0", atName);
           }
         } else if (0 == strcmp(arg, "hh-initial-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-initial-lc-heap-size missing argument.");
+            die ("%s hh-initial-lc-heap-size missing argument.", atName);
           }
 
           s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-max-lc-heap-size missing argument.");
+            die ("%s hh-max-lc-heap-size missing argument.", atName);
           }
 
           s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "trace-buffer-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton trace-buffer-size missing argument.");
+            die ("%s trace-buffer-size missing argument.", atName);
           }
 
           s->controls->traceBufferSize = stringToInt(argv[i++]);
@@ -348,7 +360,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           i++;
           done = TRUE;
         } else if (i > 1)
-          die ("Strange @MLton arg: %s", argv[i]);
+          die ("Strange %s arg: %s", atName, argv[i]);
         else done = TRUE;
       }
     }
@@ -373,7 +385,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->callFromCHandlerThread = BOGUS_OBJPTR;
 
   s->controls = (struct GC_controls *) malloc (sizeof (struct GC_controls));
-  s->controls->mayLoadWorld = TRUE;
+  s->controls->mayLoadWorld = FALSE; /* incompatible with mpl runtime */
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
   s->controls->HMMessages = FALSE;
