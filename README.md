@@ -24,16 +24,16 @@ required.
 
 The following builds the compiler at `build/bin/mpl`.
 ```
-make all
+$ make all
 ```
 
 After building, MPL can then be installed to `/usr/local`:
 ```
-make install
+$ make install
 ```
 or to a custom directory with the `PREFIX` option:
 ```
-make PREFIX=/opt/mpl install
+$ make PREFIX=/opt/mpl install
 ```
 
 ## Parallel and Concurrent Extensions
@@ -62,6 +62,20 @@ val compareAndSwap : 'a ref -> ('a * 'a) -> 'a
 val arrayCompareAndSwap : ('a array * int) -> ('a * 'a) -> 'a
 ```
 
+`compareAndSwap r (x, y)` performs an atomic
+[CAS](https://en.wikipedia.org/wiki/Compare-and-swap)
+which attempts to atomically swap the contents of `r` from `x` to `y`,
+returning the original value stored in `r` before the CAS.
+Polymorphic equality is determined
+in the same way as [MLton.eq](http://mlton.org/MLtonStructure), which is a
+standard equality check for simple types (`char`, `int`, `word`, etc.) and
+a pointer equality check for other types (`array`, `string`, tuples, datatypes,
+etc.). The semantics are a bit murky.
+
+`arrayCompareAndSwap (a, i) (x, y)` behaves the same as `compareAndSwap` but
+on arrays instead of references. This performs a CAS at index `i` of array
+`a`, and does not read or write at any other locations of the array.
+
 ## Using MPL
 
 MPL uses `.mlb` files ([ML Basis](http://mlton.org/MLBasis)) to describe
@@ -72,7 +86,7 @@ below. The first three lines of this file respectively load:
 * The `MLton` structure, which includes the MPL extension
   `MLton.Parallel` as described above, as well as various
   [MLton-specific features](http://mlton.org/MLtonStructure). Not all MLton
-  features are supported (see "Known Issues" below).
+  features are supported (see "Unsupported MLton Features" below).
 ```
 (* libraries *)
 $(SML_LIB)/basis/basis.mlb
@@ -88,7 +102,7 @@ The command to compile a file `XYZ.mlb` is as follows. By default, MPL
 produces an executable with the same base name as the source file, i.e.
 this would create an executable `XYZ`:
 ```
-mpl [options...] XYZ.mlb
+$ mpl [options...] XYZ.mlb
 ```
 
 MPL has a number of command-line options derived from MLton, which are
@@ -106,9 +120,9 @@ The resulting executable is somewhat peruse-able with tools like `gdb`.
 ### Run-time Options
 
 MPL executables can take arguments at the command line that control the runtime
-system. The syntax to run a program `XYZ` is
+system. The syntax to run a program `foo` is
 ```
-XYZ [@mpl [runtime args...] --] [program args...]
+$ foo [@mpl [runtime args...] --] [program args...]
 ```
 The runtime arguments must begin with `@mpl` and end with `--`, and these are
 not visible to the program via
@@ -124,6 +138,12 @@ number B + S*i.
 written with suffixes K, M, and G, e.g. `10M` is 10 megabytes. Chunks cannot be
 smaller than one page, typically 4K. The default size is one page.
 
+For example, the following runs a program `hello` with a single command-line
+argument `world` using 4 pinned processors.
+```
+$ hello @mpl procs 4 set-affinity -- world
+```
+
 ## Disentanglement
 
 Currently, MPL only supports programs that are **disentangled**, which
@@ -137,17 +157,19 @@ This is typically not difficult, as disentanglement is fairly general.
 In particular, all race-free programs are disentangled, as are many
 programs that use shared memory to communicate between concurrent threads.
 
-## Known Issues
+## Bugs and Known Issues
 
-### Bugs
+### Basis Library
+In general, the basis library has not yet been thoroughly scrubbed, and many
+functions may not be safe for parallelism. Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
+
+### Other
 * Some programs that use `compareAndSwap` and `arrayCompareAndSwap` primitives
 may fail to compile.
 
-###
-
-### Unsupported Features
+## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
 unsupported, including (but not limited to):
 * `share`
