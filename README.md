@@ -58,8 +58,8 @@ management system to perform allocation in parallel and be safe-for-GC.
 
 ### The `MLton.Parallel` Structure
 ```
-val compareAndSwap : 'a ref -> ('a * 'a) -> 'a
-val arrayCompareAndSwap : ('a array * int) -> ('a * 'a) -> 'a
+val compareAndSwap: 'a ref -> ('a * 'a) -> 'a
+val arrayCompareAndSwap: ('a array * int) -> ('a * 'a) -> 'a
 ```
 
 `compareAndSwap r (x, y)` performs an atomic
