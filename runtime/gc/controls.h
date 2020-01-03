@@ -25,14 +25,15 @@ struct GC_ratios {
  * Ratios for Hierarchical Heap operations
  */
 struct HM_HierarchicalHeapConfig {
-  double allocatedRatio; /**< the ratio of PoolSize:AllocatedBytes under which a
-                          * collection is triggered */
-
   double liveLCRatio; /**< minimum LCHS:LCS ratio to maintain */
 
   size_t initialLCHS; /**< initial LCHS, in bytes */
 
   size_t maxLCHS; /**< maximum LCHS, in bytes. */
+
+  /* the shallowest depth that will be claimed for a local
+   * collection. */
+  uint32_t minLocalDepth;
 };
 
 enum HHCollectionLevel {

@@ -39,7 +39,19 @@ typedef struct GC_thread {
   int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
   size_t exnStack;
+
+  /* Current depth (fork depth) of the thread allocating in this heap.
+   * Fresh chunks are placed at this level. */
+  uint32_t currentDepth;
+
+  size_t bytesAllocatedSinceLastCollection;
+  size_t bytesSurvivedLastCollection;
+
   struct HM_HierarchicalHeap* hierarchicalHeap;
+
+  /* The "current" chunk of the heap, where the frontier is pointing */
+  HM_chunk currentChunk;
+
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
 
@@ -48,7 +60,11 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
+                    sizeof(uint32_t) + // currentDepth
+                    sizeof(size_t) +  // bytesAllocatedSinceLastCollection
+                    sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
+                    sizeof(void*) +   // currentCheck
                     sizeof(objptr));  // stack
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
@@ -61,20 +77,10 @@ typedef struct GC_thread *GC_thread;
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
-/**
- * This function sets the current thread to either use or not use the
- * hierarchical heap.
- *
- * @param use TRUE if using the Hierarchical Heap, FALSE otherwise.
- */
-// PRIVATE void T_setCurrentThreadUseHierarchicalHeap(Bool use);
 
-PRIVATE Pointer GC_HH_newHeap(void);
-PRIVATE void GC_HH_attachHeap(pointer thread, pointer hh);
-PRIVATE Word32 GC_HH_getLevel(pointer thread);
-PRIVATE void GC_HH_setLevel(pointer thread, Word32 level);
-PRIVATE void GC_HH_attachChild(pointer parent, pointer child, Word32 level);
-PRIVATE void GC_HH_mergeDeepestChild(pointer thread);
+PRIVATE Word32 GC_HH_getDepth(pointer thread);
+PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
+PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

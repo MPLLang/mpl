@@ -49,6 +49,18 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   s->stackLimit = getStackLimit (s, stack);
 }
 
+struct HM_chunkList* getFreeListExtraSmall(GC_state s) {
+  return &(s->extraSmallObjects);
+}
+
+struct HM_chunkList* getFreeListSmall(GC_state s) {
+  return &(s->freeListSmall);
+}
+
+struct HM_chunkList* getFreeListLarge(GC_state s) {
+  return &(s->freeListLarge);
+}
+
 bool GC_getAmOriginal (GC_state s) {
   return s->amOriginal;
 }
@@ -287,4 +299,22 @@ bool GC_getGCSignalPending (GC_state s) {
 
 void GC_setGCSignalPending (GC_state s, bool b) {
   s->signalsInfo.gcSignalPending = b;
+}
+
+void GC_registerQueue(uint32_t processor, pointer queuePointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
+  s->procStates[processor].wsQueue = pointerToObjptr(queuePointer, NULL);
+}
+
+void GC_registerQueueTop(uint32_t processor, pointer topPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
+  s->procStates[processor].wsQueueTop = pointerToObjptr(topPointer, NULL);
+}
+
+void GC_registerQueueBot(uint32_t processor, pointer botPointer) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
+  s->procStates[processor].wsQueueBot = pointerToObjptr(botPointer, NULL);
 }

@@ -37,10 +37,13 @@ struct GC_state {
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */
   objptr wsQueue; /* The work-stealing queue for this processor */
+  objptr wsQueueTop;
+  objptr wsQueueBot;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
-  struct HM_chunkList* freeListSmall;
-  struct HM_chunkList* freeListLarge;
+  struct HM_chunkList freeListSmall;
+  struct HM_chunkList freeListLarge;
+  struct HM_chunkList extraSmallObjects;
   size_t nextChunkAllocSize;
   /* Ordinary globals */
   objptr *globals;
@@ -93,6 +96,10 @@ static void displayGCState (GC_state s, FILE *stream);
 static inline size_t sizeofGCStateCurrentStackUsed (GC_state s);
 static inline void setGCStateCurrentThreadAndStack (GC_state s);
 
+static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
+static inline struct HM_chunkList* getFreeListSmall(GC_state s);
+static inline struct HM_chunkList* getFreeListLarge(GC_state s);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
@@ -124,6 +131,10 @@ PRIVATE pointer GC_getCurrentThread (GC_state s);
 PRIVATE pointer GC_getSavedThread (GC_state s);
 PRIVATE void GC_setSavedThread (GC_state s, pointer p);
 PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
+
+PRIVATE void GC_registerQueue(uint32_t processor, pointer queuePointer);
+PRIVATE void GC_registerQueueTop(uint32_t processor, pointer topPointer);
+PRIVATE void GC_registerQueueBot(uint32_t processor, pointer botPointer);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

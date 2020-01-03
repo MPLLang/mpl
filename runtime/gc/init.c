@@ -288,16 +288,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
           i++;
           s->controls->mayUseAncestorChunk = FALSE;
-        } else if (0 == strcmp(arg, "hh-allocated-ratio")) {
-          i++;
-          if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s hh-allocated-ratio missing argument.", atName);
-          }
-
-          s->controls->hhConfig.allocatedRatio = stringToFloat(argv[i++]);
-          if (s->controls->hhConfig.allocatedRatio < 2.0) {
-            die("%s hh-allocated-ratio must be at least 2.0", atName);
-          }
         } else if (0 == strcmp (arg, "hh-collection-level")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -333,6 +323,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "hh-min-collection-depth")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("@MLton hh-min-collection-depth missing argument.");
+          }
+
+          int minDepth = stringToInt(argv[i++]);
+          if (minDepth <= 0) {
+            die ("@MLton hh-min-collection-depth must be > 0");
+          }
+          s->controls->hhConfig.minLocalDepth = minDepth;
         } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -399,10 +400,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
-  s->controls->hhConfig.allocatedRatio = 2.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
   s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;
+  s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;
@@ -416,7 +417,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
 
   s->controls->mayUseAncestorChunk = TRUE;
-  s->controls->freeListCoalesce = TRUE;
+  s->controls->freeListCoalesce = FALSE;
   s->controls->deferredPromotion = TRUE;
   s->controls->oldHHGCPolicy = FALSE;
 
@@ -425,6 +426,8 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
+  s->wsQueueTop = BOGUS_OBJPTR;
+  s->wsQueueBot = BOGUS_OBJPTR;
 
   s->lastMajorStatistics = newLastMajorStatistics();
 
@@ -433,6 +436,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->roots = NULL;
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
+
+  HM_initChunkList(getFreeListSmall(s));
+  HM_initChunkList(getFreeListLarge(s));
+  HM_initChunkList(getFreeListExtraSmall(s));
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -502,16 +509,16 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
     die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
 
-  HM_configChunks(s);
-
-  s->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  s->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  s->nextChunkAllocSize = s->controls->allocChunkSize;
-
   return res;
 }
 
 void GC_lateInit (GC_state s) {
+
+  /* this has to happen AFTER pthread_setspecific for the main thread */
+  HM_configChunks(s);
+
+  s->nextChunkAllocSize = s->controls->allocChunkSize;
+
   /* Initialize profiling.  This must occur after processing
    * command-line arguments, because those may just be doing a
    * show-sources, in which case we don't want to initialize the
@@ -537,8 +544,11 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
   d->wsQueue = BOGUS_OBJPTR;
-  d->freeListSmall = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  d->freeListLarge = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
+  d->wsQueueTop = BOGUS_OBJPTR;
+  d->wsQueueBot = BOGUS_OBJPTR;
+  HM_initChunkList(getFreeListSmall(d));
+  HM_initChunkList(getFreeListLarge(d));
+  HM_initChunkList(getFreeListExtraSmall(d));
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
