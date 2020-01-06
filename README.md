@@ -39,7 +39,10 @@ $ make PREFIX=/opt/mpl install
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
-For concrete examples, see the `examples/` subdirectory.
+Take a look at `examples/` to see these primitives in action.
+
+**Note**: Before writing any of your own code, make sure to read the section
+"Disentanglement" below.
 
 ### The `ForkJoin` Structure
 ```
@@ -148,14 +151,28 @@ $ hello @mpl procs 4 set-affinity -- world
 
 Currently, MPL only supports programs that are **disentangled**, which
 (roughly speaking) is the property that concurrent threads remain oblivious
-to each other's allocations. For more information, see the POPL 2020 paper
-"Disentanglement in Nested-Parallel Programs" by Westrick et al.
+to each other's allocations.
 
-MPL does not yet have a checker to verify
-disentanglement, so the programmer must manually verify their own code.
-This is typically not difficult, as disentanglement is fairly general.
-In particular, all race-free programs are disentangled, as are many
-programs that use shared memory to communicate between concurrent threads.
+**MPL does not yet have a checker to verify
+disentanglement, so the programmer must manually check their own
+code**.
+
+Here are a number of different ways to guarantee that your code is
+disentangled.
+- (Option 1) Use only purely functional data (no `ref`s or `array`s). This is
+the simplest but most restrictive approach.
+- (Option 2) If using mutable data, use only non-pointer data. MPL guarantees
+that simple types (`int`, `word`, `char`, `real`, etc.) are never
+indirected through a
+pointer, so for example it is safe to use `int array`. Other types such as
+`int list array` and `int array array` should be avoided. This approach
+is very easy to check and is surprisingly general. Data races are fine!
+- (Option 3) Make sure that your program is race-free. This can be
+tricky to check but allows you to use any type of data. Many of our example
+programs are race-free.
+
+For more information about disentanglement, see the POPL 2020 paper
+"Disentanglement in Nested-Parallel Programs" by Westrick et al.
 
 ## Bugs and Known Issues
 
