@@ -29,10 +29,10 @@ $ ./random @mpl procs 8 -- -N 1000000000
 ## Primes
 
 Generate all primes up to a threshold. For example, all primes less than or
-equal to 100 million using 32 processors:
+equal to 100 million using 16 processors:
 ```
 $ make primes
-$ ./primes @mpl procs 32 -- -N 100000000
+$ ./primes @mpl procs 16 -- -N 100000000
 ```
 
 ## Mergesort
@@ -40,5 +40,7 @@ $ ./primes @mpl procs 32 -- -N 100000000
 Mergesort on an array of random integers. For example:
 ```
 $ make msort
-$ ./msort @mpl procs 16 -- -N 100000000
+$ ./msort @mpl procs 4 -- -N 100000000
 ```
+This program reverts to a fast
+in-place quicksort for small inputs, but does not modify the input array.
