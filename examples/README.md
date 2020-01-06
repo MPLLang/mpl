@@ -16,11 +16,20 @@ $ ./fib @mpl procs 4 -- -N 39
 ```
 This is not very practical but is a good demonstration of the basics of using MPL.
 
-## Tabulate
+## Random Bits
 
-Generate an array of pseudo-random characters. For example, 1 billion
-characters using 8 processors:
+Generate an array of pseudo-random 64-bit words. For example, 1 billion
+words using 4 processors:
 ```
-$ make tabulate
-$ ./tabulate @mpl procs 4 -- -N 1000000000
+$ make random
+$ ./random @mpl procs 8 -- -N 1000000000
+```
+
+## Primes
+
+Generate all primes up to a threshold. For example, all primes less than or
+equal to 100 million using 32 processors:
+```
+$ make random
+$ ./random @mpl procs 32 -- -N 1000000000
 ```

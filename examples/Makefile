@@ -3,7 +3,7 @@ FLAGS=-default-type int64 -default-type word64
 
 PROGRAMS= \
 	fib \
-	tabulate \
+	random \
 	primes
 
 all: $(PROGRAMS)

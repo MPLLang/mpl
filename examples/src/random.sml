@@ -7,6 +7,7 @@ fun tabulate (n, f) =
     arr
   end
 
+(* generate the ith element with a hash function *)
 fun gen seed i = Util.hash64 (Word64.xorb (Word64.fromInt i, seed))
 
 (* ==========================================================================
