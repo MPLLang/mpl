@@ -1,10 +1,11 @@
 # MPL Examples
 
-This directory contains examples of parallel programming with MPL. To build
-all examples, run `make` or `make -j`. Each example program is defined by
-a `.mlb` file in `src/`, typically with a corresponding `.sml` file of the same
-name. The directory `src/lib` contains common functions used across all
-examples.
+This directory contains examples of parallel programming using MPL.
+Each example program is defined by a `.mlb` file in `src/`, typically with a
+corresponding `.sml` file of the same name. The directory `src/lib/` contains
+common functions used across all examples.
+
+To build everything, run `make` or `make -j`.
 
 ## Fibonacci
 
