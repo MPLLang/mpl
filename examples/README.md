@@ -30,6 +30,6 @@ $ ./random @mpl procs 8 -- -N 1000000000
 Generate all primes up to a threshold. For example, all primes less than or
 equal to 100 million using 32 processors:
 ```
-$ make random
-$ ./random @mpl procs 32 -- -N 1000000000
+$ make primes
+$ ./primes @mpl procs 32 -- -N 100000000
 ```
