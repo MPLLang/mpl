@@ -2,12 +2,15 @@ MPL=../build/bin/mpl
 FLAGS=-default-type int64 -default-type word64
 
 PROGRAMS= \
-  fib \
-	tab-tree
+	fib \
+	tabulate
 
-all: $(addprefix bin/, $(PROGRAMS))
+all: $(PROGRAMS)
 
-bin/%: shared/* %/*.mlb %/*.sml
-	@mkdir -p bin
-	$(MPL) $(FLAGS) -output bin/$* $*/sources.mlb
-	@echo "successfully built bin/$*"
+$(PROGRAMS): %: src/*
+	$(MPL) $(FLAGS) -output $* src/$*.mlb
+	@echo "successfully built $*"
+
+.PHONY: clean
+clean:
+	rm -f $(PROGRAMS)

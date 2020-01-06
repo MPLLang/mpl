@@ -26,12 +26,16 @@ fun tabulate (n, f) =
   end
 
 val n = CommandLineArgs.parseInt "N" (1000 * 1000 * 1000)
+val seed = CommandLineArgs.parseInt "seed" 0
 val _ = print ("tabulate " ^ Int.toString n ^ " random characters\n")
 
-fun wfi x = Word64.fromInt x
-fun wti u = Word64.toInt u
 fun genCharacter i =
-  Char.chr (wti (Word64.mod (Util.hash64 (wfi i), wfi (Char.maxOrd+1))))
+  let
+    val hashed = Util.hash64 (Word64.fromInt (i + seed))
+    val limit = Word64.fromInt (Char.maxOrd+1)
+  in
+    Char.chr (Word64.toInt (Word64.mod (hashed, limit)))
+  end
 
 val t0 = Time.now ()
 val result = tabulate (n, genCharacter)
