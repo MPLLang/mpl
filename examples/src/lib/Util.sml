@@ -3,9 +3,12 @@ sig
   val getTime: (unit -> 'a) -> ('a * Time.time)
   val hash64: Word64.word -> Word64.word
 
+  val foreach: 'a ArraySlice.slice -> (int * 'a -> unit) -> unit
+
   (* if the array is short, then convert it to a string. otherwise only
    * show the first few elements and the last element *)
   val summarizeArray: int -> ('a -> string) -> 'a array -> string
+  val summarizeArraySlice: int -> ('a -> string) -> 'a ArraySlice.slice -> string
 
   (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi *)
   val for: (int * int) -> (int -> unit) -> unit
@@ -57,10 +60,13 @@ struct
         ()
       end
 
-  fun summarizeArray count toString xs =
+  fun foreach s f =
+    parfor 4096 (0, ArraySlice.length s) (fn i => f (i, ArraySlice.sub (s, i)))
+
+  fun summarizeArraySlice count toString xs =
     let
-      val n = Array.length xs
-      fun elem i = Array.sub (xs, i)
+      val n = ArraySlice.length xs
+      fun elem i = ArraySlice.sub (xs, i)
 
       val strs =
         if count <= 0 then raise Fail "summarizeArray needs count > 0"
@@ -72,5 +78,8 @@ struct
     in
       "[" ^ (String.concatWith ", " strs) ^ "]"
     end
+
+  fun summarizeArray count toString xs =
+    summarizeArraySlice count toString (ArraySlice.full xs)
 
 end

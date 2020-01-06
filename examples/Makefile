@@ -4,7 +4,8 @@ FLAGS=-default-type int64 -default-type word64
 PROGRAMS= \
 	fib \
 	random \
-	primes
+	primes \
+	msort
 
 all: $(PROGRAMS)
 

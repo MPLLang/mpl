@@ -34,3 +34,11 @@ equal to 100 million using 32 processors:
 $ make primes
 $ ./primes @mpl procs 32 -- -N 100000000
 ```
+
+## Mergesort
+
+Mergesort on an array of random integers. For example:
+```
+$ make msort
+$ ./msort @mpl procs 16 -- -N 100000000
+```

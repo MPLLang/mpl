@@ -4,3 +4,7 @@ $(SML_LIB)/basis/schedulers/shh.mlb
 CommandLineArgs.sml
 Util.sml
 SeqBasis.sml
+BinarySearch.sml
+Merge.sml
+Quicksort.sml
+Mergesort.sml
