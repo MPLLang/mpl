@@ -115,9 +115,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         if (0 == strcmp (arg, "gc-messages")) {
           i++;
           s->controls->messages = TRUE;
-        } else if (0 == strcmp (arg, "hm-messages")) {
-          i++;
-          s->controls->HMMessages = TRUE;
         } else if (0 == strcmp (arg, "gc-summary")) {
           i++;
           s->controls->summary = TRUE;
@@ -286,62 +283,52 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die ("%s alloc-chunk missing argument.", atName);
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
-        } else if (0 == strcmp (arg, "disable-ancestor-chunk-opt")) {
-          i++;
-          s->controls->mayUseAncestorChunk = FALSE;
-        } else if (0 == strcmp (arg, "hh-collection-level")) {
+        } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s hh-collection-level missing argument.", atName);
+            die ("%s collection-type missing argument.", atName);
           }
-          const char* level = argv[i++];
-          if (0 == strcmp (level, "none")) {
-            s->controls->hhCollectionLevel = NONE;
-          } else if (0 == strcmp (level, "superlocal")) {
-            s->controls->hhCollectionLevel = SUPERLOCAL;
-          } else if (0 == strcmp (level, "local")) {
-            s->controls->hhCollectionLevel = LOCAL;
+          const char* collectType = argv[i++];
+          if (0 == strcmp (collectType, "none")) {
+            s->controls->collectionType = NONE;
+          } else if (0 == strcmp (collectType, "superlocal")) {
+            s->controls->collectionType = SUPERLOCAL;
+          } else if (0 == strcmp (collectType, "local")) {
+            s->controls->collectionType = LOCAL;
           } else {
-            die ("%s hh-collection-level \"%s\" invalid. Must be one of "
+            die ("%s collection-type \"%s\" invalid. Must be one of "
                  "none, superlocal, or local.",
                  atName,
-                 level);
+                 collectType);
           }
-        } else if (0 == strcmp(arg, "hh-live-lc-ratio")) {
+        } else if (0 == strcmp(arg, "collection-threshold-ratio")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s hh-live-lc-ratio missing argument.", atName);
+            die ("%s collection-threshold-ratio missing argument.", atName);
           }
 
-          s->controls->hhConfig.liveLCRatio = stringToFloat(argv[i++]);
-          if (s->controls->hhConfig.liveLCRatio < 1.0) {
-            die("%s hh-live-lc-ratio must be at least 2.0", atName);
+          s->controls->hhConfig.collectionThresholdRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.collectionThresholdRatio < 1.0) {
+            die("%s collection-threshold-ratio must be at least 1.0", atName);
           }
-        } else if (0 == strcmp(arg, "hh-initial-lc-heap-size")) {
+        } else if (0 == strcmp(arg, "min-collection-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s hh-initial-lc-heap-size missing argument.", atName);
+            die ("%s min-collection-size missing argument.", atName);
           }
 
-          s->controls->hhConfig.initialLCHS = stringToBytes(argv[i++]);
-        } else if (0 == strcmp(arg, "hh-min-collection-depth")) {
+          s->controls->hhConfig.minCollectionSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("@MLton hh-min-collection-depth missing argument.");
+            die ("%s min-collection-depth missing argument.", atName);
           }
 
           int minDepth = stringToInt(argv[i++]);
           if (minDepth <= 0) {
-            die ("@MLton hh-min-collection-depth must be > 0");
+            die ("%s min-collection-depth must be > 0", atName);
           }
           s->controls->hhConfig.minLocalDepth = minDepth;
-        } else if (0 == strcmp(arg, "hh-max-lc-heap-size")) {
-          i++;
-          if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s hh-max-lc-heap-size missing argument.", atName);
-          }
-
-          s->controls->hhConfig.maxLCHS = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "trace-buffer-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -349,15 +336,6 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->traceBufferSize = stringToInt(argv[i++]);
-        } else if (0 == strcmp(arg, "disable-coalesce")) {
-          i++;
-          s->controls->freeListCoalesce = FALSE;
-        } else if (0 == strcmp(arg, "disable-promotion")) {
-          i++;
-          s->controls->deferredPromotion = FALSE;
-        } else if (0 == strcmp(arg, "use-old-hh-gc-policy")) {
-          i++;
-          s->controls->oldHHGCPolicy = TRUE;
         } else if (0 == strcmp (arg, "--")) {
           i++;
           done = TRUE;
@@ -390,7 +368,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->mayLoadWorld = FALSE; /* incompatible with mpl runtime */
   s->controls->mayProcessAtMLton = TRUE;
   s->controls->messages = FALSE;
-  s->controls->HMMessages = FALSE;
   s->controls->setAffinity = FALSE;
   s->controls->affinityBase = 0;
   s->controls->affinityStride = 1;
@@ -401,15 +378,14 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackCurrentShrink = 0.5f;
   s->controls->ratios.stackMaxReserved = 8.0f;
   s->controls->ratios.stackShrink = 0.5f;
-  s->controls->hhConfig.liveLCRatio = 8.0; /* RAM_NOTE: Arbitrary! */
-  s->controls->hhConfig.initialLCHS = 1 * 1024 * 1024; /* RAM_NOTE: Arbitrary! */
-  s->controls->hhConfig.maxLCHS = MAX_LCHS_INFINITE;
+  s->controls->hhConfig.collectionThresholdRatio = 8.0;
+  s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
   s->controls->summaryFormat = HUMAN;
   s->controls->summaryFile = stderr;
-  s->controls->hhCollectionLevel = ALL;
+  s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
 
   /* Not arbitrary; should be at least the page size and must also respect the
@@ -420,10 +396,7 @@ int GC_init (GC_state s, int argc, char **argv) {
    * a particular size, and if not, set to default. */
   s->controls->allocChunkSize = 0;
 
-  s->controls->mayUseAncestorChunk = TRUE;
   s->controls->freeListCoalesce = FALSE;
-  s->controls->deferredPromotion = TRUE;
-  s->controls->oldHHGCPolicy = FALSE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();

@@ -77,7 +77,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  if (NONE == s->controls->hhCollectionLevel) {
+  if (NONE == s->controls->collectionType) {
     /* collection disabled */
     return;
   }
@@ -137,7 +137,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   assertInvariants(thread);
 
-  if (SUPERLOCAL == s->controls->hhCollectionLevel) {
+  if (SUPERLOCAL == s->controls->collectionType) {
     minDepth = maxDepth;
   }
 
@@ -170,7 +170,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     }
   }
 
-  // if (s->controls->deferredPromotion) {
   Trace0(EVENT_PROMOTION_ENTER);
   if (needGCTime(s)) {
     timespec_now(&startTime);
@@ -189,7 +188,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
   }
   Trace0(EVENT_PROMOTION_LEAVE);
-  // }
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
@@ -214,10 +212,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
-
-  // if (!s->controls->deferredPromotion) {
-  //   HM_preserveDownPtrs(s, &forwardHHObjptrArgs);
-  // }
 
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;

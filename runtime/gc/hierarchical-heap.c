@@ -348,9 +348,9 @@ void HM_HH_updateValues(GC_thread thread, pointer frontier) {
 
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
   size_t threshold =
-    (size_t)((double)survivingSize * s->controls->hhConfig.liveLCRatio);
-  if (threshold < s->controls->hhConfig.initialLCHS) {
-    threshold = s->controls->hhConfig.initialLCHS;
+    (size_t)((double)survivingSize * s->controls->hhConfig.collectionThresholdRatio);
+  if (threshold < s->controls->hhConfig.minCollectionSize) {
+    threshold = s->controls->hhConfig.minCollectionSize;
   }
   return threshold;
 }
@@ -368,7 +368,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
     return thread->currentDepth+1; /* don't collect */
 
   if (thread->bytesAllocatedSinceLastCollection <
-      (s->controls->hhConfig.liveLCRatio * thread->bytesSurvivedLastCollection))
+      (s->controls->hhConfig.collectionThresholdRatio * thread->bytesSurvivedLastCollection))
   {
     return thread->currentDepth+1; /* don't collect */
   }
@@ -378,7 +378,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
 
   size_t budget = 4 * thread->bytesAllocatedSinceLastCollection;
 
-  if (budget < (1024L * 1024L) ||
+  if (budget < s->controls->hhConfig.minCollectionSize ||
       potentialLocalScope > thread->currentDepth ||
       potentialLocalScope > HM_HH_getDepth(hh) ||
       HM_getChunkListSize(HM_HH_getChunkList(hh)) > budget)
@@ -400,7 +400,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
   uint32_t minDepthOkayForBudget = HM_HH_getDepth(cursor);
 #endif
 
-  if (sz < (1024L * 1024L))
+  if (sz < s->controls->hhConfig.minCollectionSize)
     return thread->currentDepth+1; /* don't collect if too small */
 
   /* It's likely that the shallower levels are mostly empty, so let's see if
