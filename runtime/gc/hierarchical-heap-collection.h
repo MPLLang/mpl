@@ -1,7 +1,7 @@
 /* Copyright (C) 2019 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
