@@ -42,12 +42,12 @@ pointer sequenceAllocateInHH(GC_state s,
 pointer sequenceAllocateInHH(GC_state s,
                              size_t sequenceSizeAligned,
                              size_t ensureBytesFree) {
-  assert(ensureBytesFree <= s->controls->minChunkSize - sizeof(struct HM_chunk));
-  size_t sequenceChunkBytes = align(sequenceSizeAligned, s->controls->minChunkSize);
+  assert(ensureBytesFree <= s->controls->blockSize - sizeof(struct HM_chunk));
+  size_t sequenceChunkBytes = align(sequenceSizeAligned, s->controls->blockSize);
   size_t bytesRequested = sequenceSizeAligned + ensureBytesFree;
-  bool giveWholeChunk = sequenceSizeAligned >= s->controls->minChunkSize / 2;
+  bool giveWholeChunk = sequenceSizeAligned >= s->controls->blockSize / 2;
   if (giveWholeChunk) {
-    bytesRequested = sequenceChunkBytes + s->controls->minChunkSize;
+    bytesRequested = sequenceChunkBytes + s->controls->blockSize;
   }
 
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);

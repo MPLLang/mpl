@@ -50,10 +50,10 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
 }
 
 void HM_configChunks(GC_state s) {
-  assert(isAligned(s->controls->minChunkSize, GC_MODEL_MINALIGN));
-  assert(s->controls->minChunkSize >= GC_HEAP_LIMIT_SLOP);
-  assert(isAligned(s->controls->allocChunkSize, s->controls->minChunkSize));
-  HM_BLOCK_SIZE = s->controls->minChunkSize;
+  assert(isAligned(s->controls->blockSize, GC_MODEL_MINALIGN));
+  assert(s->controls->blockSize >= GC_HEAP_LIMIT_SLOP);
+  assert(isAligned(s->controls->allocChunkSize, s->controls->blockSize));
+  HM_BLOCK_SIZE = s->controls->blockSize;
   HM_ALLOC_SIZE = s->controls->allocChunkSize;
 
   HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);

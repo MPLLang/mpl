@@ -55,7 +55,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->minChunkSize);
+  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->blockSize);
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);

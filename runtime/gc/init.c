@@ -273,12 +273,13 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           s->numberOfProcs = stringToFloat (argv[i++]);
           /* Turn off loaded worlds -- they are unsuppoed in multi-proc mode */
           s->controls->mayLoadWorld = FALSE;
-        } else if (0 == strcmp(arg, "min-chunk")) {
+        } else if ( (0 == strcmp(arg, "min-chunk")) ||
+                    (0 == strcmp(arg, "block-size")) ) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s min-chunk missing argument.", atName);
+            die ("%s %s missing argument.", atName, arg);
           }
-          s->controls->minChunkSize = stringToBytes(argv[i++]);
+          s->controls->blockSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "alloc-chunk")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -413,8 +414,11 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
-  s->controls->minChunkSize = max(GC_pageSize(), 4096);
-  s->controls->allocChunkSize = 16 * s->controls->minChunkSize;
+  s->controls->blockSize = max(GC_pageSize(), 4096);
+
+  /* check if still equal to 0 after process @mpl to see if the user wants
+   * a particular size, and if not, set to default. */
+  s->controls->allocChunkSize = 0;
 
   s->controls->mayUseAncestorChunk = TRUE;
   s->controls->freeListCoalesce = FALSE;
@@ -503,11 +507,17 @@ int GC_init (GC_state s, int argc, char **argv) {
     }
   }
 
-  unless (isAligned(s->controls->minChunkSize, s->sysvals.pageSize))
-    die ("min-chunk must be a multiple of the system page size, %zu", s->sysvals.pageSize);
+  unless (isAligned(s->controls->blockSize, s->sysvals.pageSize))
+    die ("block-size must be a multiple of the system page size (%zu)", s->sysvals.pageSize);
 
-  unless (isAligned(s->controls->allocChunkSize, s->controls->minChunkSize))
-    die ("alloc-chunk must be a multiple of the minimum chunk size, %zu", s->controls->minChunkSize);
+  if (s->controls->allocChunkSize == 0) {
+    /* user didn't specify a specify alloc-chunk size, so set a default. */
+    size_t bs = s->controls->blockSize;
+    s->controls->allocChunkSize = min(align(16 * GC_pageSize(), bs), 2 * bs);
+  }
+
+  unless (isAligned(s->controls->allocChunkSize, s->controls->blockSize))
+    die ("alloc-chunk must be a multiple of the block-size (%zu)", s->controls->blockSize);
 
   return res;
 }

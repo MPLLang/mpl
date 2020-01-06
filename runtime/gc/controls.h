@@ -54,7 +54,7 @@ struct GC_controls {
   bool messages; /* Print a message at the start and end of each gc. */
   bool HMMessages; /* print messages regarding heap management */
   size_t allocChunkSize;
-  size_t minChunkSize;
+  size_t blockSize;
   bool deferredPromotion;
   bool freeListCoalesce;
   bool mayUseAncestorChunk;
