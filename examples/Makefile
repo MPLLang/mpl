@@ -3,11 +3,12 @@ FLAGS=-default-type int64 -default-type word64
 
 PROGRAMS= \
 	fib \
-	tabulate
+	tabulate \
+	primes
 
 all: $(PROGRAMS)
 
-$(PROGRAMS): %: src/*
+$(PROGRAMS): %: src/* src/lib/*
 	$(MPL) $(FLAGS) -output $* src/$*.mlb
 	@echo "successfully built $*"
 

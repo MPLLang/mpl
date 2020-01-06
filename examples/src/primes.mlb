@@ -1,6 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/schedulers/shh.mlb
 
-CommandLineArgs.sml
-Util.sml
-SeqBasis.sml
+lib/sources.mlb
+primes.sml

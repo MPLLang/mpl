@@ -17,5 +17,6 @@ val t0 = Time.now ()
 val result = fib n
 val t1 = Time.now ()
 
-val _ = print (Int.toString result ^ "\n")
-val _ = print (Time.fmt 4 (Time.- (t1, t0)) ^ " s\n")
+val _ = print ("finished in " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n")
+
+val _ = print ("result " ^ Int.toString result ^ "\n")
