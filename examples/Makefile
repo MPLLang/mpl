@@ -5,7 +5,8 @@ PROGRAMS= \
 	fib \
 	random \
 	primes \
-	msort
+	msort \
+	dmm
 
 all: $(PROGRAMS)
 

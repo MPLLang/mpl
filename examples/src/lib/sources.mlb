@@ -8,3 +8,4 @@ BinarySearch.sml
 Merge.sml
 Quicksort.sml
 Mergesort.sml
+TreeMatrix.sml

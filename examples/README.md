@@ -23,16 +23,16 @@ Generate an array of pseudo-random 64-bit words. For example, 1 billion
 words using 4 processors:
 ```
 $ make random
-$ ./random @mpl procs 8 -- -N 1000000000
+$ ./random @mpl procs 4 -- -N 1000000000
 ```
 
 ## Primes
 
 Generate all primes up to a threshold. For example, all primes less than or
-equal to 100 million using 16 processors:
+equal to 100 million:
 ```
 $ make primes
-$ ./primes @mpl procs 16 -- -N 100000000
+$ ./primes @mpl procs 4 -- -N 100000000
 ```
 
 ## Mergesort
@@ -42,5 +42,11 @@ Mergesort on an array of random integers. For example:
 $ make msort
 $ ./msort @mpl procs 4 -- -N 100000000
 ```
-This program reverts to a fast
-in-place quicksort for small inputs, but does not modify the input array.
+
+## Dense Matrix Multiplication
+
+Multiply two square matrices. For example:
+```
+$ make dmm
+$ ./dmm @mpl procs 4 -- -N 1024
+```

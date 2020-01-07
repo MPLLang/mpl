@@ -3,6 +3,11 @@ sig
   val getTime: (unit -> 'a) -> ('a * Time.time)
   val hash64: Word64.word -> Word64.word
 
+  val pow2: int -> int
+
+  (* boundPow2 n == smallest power of 2 that is less-or-equal-to n *)
+  val boundPow2: int -> int
+
   val foreach: 'a ArraySlice.slice -> (int * 'a -> unit) -> unit
 
   (* if the array is short, then convert it to a string. otherwise only
@@ -44,6 +49,11 @@ struct
     in
       v
     end
+
+  fun pow2 i = if (i<1) then 1 else 2*pow2(i-1)
+
+  fun searchPow2 n m = if m >= n then m else searchPow2 n (2*m)
+  fun boundPow2 n = searchPow2 n 1
 
   fun for (lo, hi) f =
     if lo >= hi then () else (f lo; for (lo+1, hi) f)
