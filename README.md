@@ -132,14 +132,14 @@ not visible to the program via
 [CommandLine.arguments](http://sml-family.org/Basis/command-line.html).
 
 Some useful runtime arguments are
-* `number-processors N` Use N worker threads to run the program. Can also
-be given as `procs N`.
+* `procs N` Use N worker threads to run the program.
 * `set-affinity` Pin worker threads to processors. Can be used in combination
 with `affinity-base B` and `affinity-stride S` to pin thread i to processor
 number B + S*i.
-* `min-chunk X` Set the minimum heap chunk size to X bytes. This can be
-written with suffixes K, M, and G, e.g. `10M` is 10 megabytes. Chunks cannot be
-smaller than one page, typically 4K. The default size is one page.
+* `block-size X` Set the heap block size to X bytes. This can be
+written with suffixes K, M, and G, e.g. `64K` is 64 kilobytes. The block-size
+must be a multiple of the system page size (typically 4K), and by default is
+set to be one page.
 
 For example, the following runs a program `hello` with a single command-line
 argument `world` using 4 pinned processors.
