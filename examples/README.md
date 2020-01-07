@@ -17,13 +17,13 @@ $ ./fib @mpl procs 4 -- -N 39
 ```
 This is not very practical but is a good demonstration of the basics of using MPL.
 
-## Random Bits
+## Random Data
 
-Generate an array of pseudo-random 64-bit words. For example, 1 billion
-words using 4 processors:
+Generate an array of pseudo-random 64-bit words. Seed the randomness with
+`-seed X`. For example, 1 billion words using 4 processors:
 ```
 $ make random
-$ ./random @mpl procs 4 -- -N 1000000000
+$ ./random @mpl procs 4 -- -N 1000000000 -seed 15210
 ```
 
 ## Primes
@@ -45,7 +45,8 @@ $ ./msort @mpl procs 4 -- -N 100000000
 
 ## Dense Matrix Multiplication
 
-Multiply two square matrices. For example:
+Multiply two square matrices of size N*N. The sidelength N must be a
+power-of-two. For example:
 ```
 $ make dmm
 $ ./dmm @mpl procs 4 -- -N 1024
