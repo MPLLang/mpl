@@ -23,8 +23,8 @@ struct
   type 'a seq = 'a AS.slice
 
   val for = Util.for
-  val parfor = Util.parfor
-  val par = ForkJoin.fork
+  val parfor = ForkJoin.parfor
+  val par = ForkJoin.par
   val allocate = ForkJoin.alloc
 
   fun sliceIdxs s i j = AS.subslice (s, i, SOME (j-i))

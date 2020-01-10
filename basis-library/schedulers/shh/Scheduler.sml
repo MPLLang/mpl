@@ -388,18 +388,21 @@ structure ForkJoin :> FORK_JOIN =
 struct
   open Scheduler.ForkJoin
 
-  fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
+  val par = fork
+
+  fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
 
   fun parfor grain (i, j) f =
-    let val n = j - i
-    in if n <= grain
-       then for (i, j) f
-       else ( fork ( fn _ => parfor grain (i, i + n div 2) f
-                   , fn _ => parfor grain (i + n div 2, j) f
-                   )
-            ; ()
-            )
-    end
+    if j - i <= grain then
+      for (i, j) f
+    else
+      let
+        val mid = i + (j-i) div 2
+      in
+        par (fn _ => parfor grain (i, mid) f,
+             fn _ => parfor grain (mid, j) f)
+        ; ()
+      end
 
   fun alloc n =
     let

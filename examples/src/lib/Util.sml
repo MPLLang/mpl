@@ -17,11 +17,6 @@ sig
 
   (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi *)
   val for: (int * int) -> (int -> unit) -> unit
-
-  (* `parfor grain (lo, hi) f`
-   * do f(i) in parallel for each lo <= i < hi
-   * control granularity with `grain` *)
-  val parfor: int -> (int * int) -> (int -> unit) -> unit
 end =
 struct
 
@@ -58,20 +53,9 @@ struct
   fun for (lo, hi) f =
     if lo >= hi then () else (f lo; for (lo+1, hi) f)
 
-  fun parfor grain (lo, hi) f =
-    if hi - lo <= grain then
-      for (lo, hi) f
-    else
-      let
-        val mid = lo + (hi - lo) div 2
-      in
-        ForkJoin.fork (fn _ => parfor grain (lo, mid) f,
-                       fn _ => parfor grain (mid, hi) f);
-        ()
-      end
-
   fun foreach s f =
-    parfor 4096 (0, ArraySlice.length s) (fn i => f (i, ArraySlice.sub (s, i)))
+    ForkJoin.parfor 4096 (0, ArraySlice.length s)
+    (fn i => f (i, ArraySlice.sub (s, i)))
 
   fun summarizeArraySlice count toString xs =
     let

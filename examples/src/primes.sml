@@ -13,16 +13,16 @@ fun primes n =
     fun isMarked i = Array.sub (flags, i) = 0w0
 
     (* initially, mark every number *)
-    val _ = Util.parfor 10000 (0, n+1) mark
+    val _ = ForkJoin.parfor 10000 (0, n+1) mark
 
     (* unmark every multiple of every prime in sqrtPrimes *)
     val _ =
-      Util.parfor 1 (0, Array.length sqrtPrimes) (fn i =>
+      ForkJoin.parfor 1 (0, Array.length sqrtPrimes) (fn i =>
         let
           val p = Array.sub (sqrtPrimes, i)
           val numMultiples = n div p - 1
         in
-          Util.parfor 4096 (0, numMultiples) (fn j => unmark ((j+2) * p))
+          ForkJoin.parfor 4096 (0, numMultiples) (fn j => unmark ((j+2) * p))
         end)
   in
     (* for every i in 2 <= i <= n, filter those that are still marked *)

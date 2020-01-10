@@ -99,7 +99,7 @@ struct
                (qsort (a, l-a);
                 (if doMid then qsort(l, m-l) else ());
                 qsort (m, a+n-m))
-           else let val par = ForkJoin.fork
+           else let val par = ForkJoin.par
                     val left = (fn () => qsort (a, l-a))
                     val mid = (fn () => qsort (l, m-l))
                     val right = (fn () => qsort (m, a+n-m))

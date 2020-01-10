@@ -46,11 +46,19 @@ Take a look at `examples/` to see these primitives in action.
 
 ### The `ForkJoin` Structure
 ```
-val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
+val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
+val parfor: int -> (int * int) -> (int -> unit) -> unit
 val alloc: int -> 'a array
 ```
-The `fork` primitive takes two functions to execute in parallel and
+The `par` primitive takes two functions to execute in parallel and
 returns their results.
+
+The `parfor` primitive is a "parallel for loop". It takes a grain-size `g`, a
+range `(i, j)`, and a function `f`, and executes `f(k)` in parallel for each
+`i <= k < j`. The grain-size `g` is for manual granularity
+control: `parfor` splits the input range into approximately `(j-i)/g` subranges,
+each of size at most `g`, and each subrange is processed sequentially. The
+grain-size must be at least 1, in which case the loop is "fully parallel".
 
 The `alloc` primitive takes a length and returns a fresh, uninitialized array
 of that size. **Warning**: To guarantee no errors, the programmer must be
@@ -82,7 +90,7 @@ on arrays instead of references. This performs a CAS at index `i` of array
 ## Using MPL
 
 MPL uses `.mlb` files ([ML Basis](http://mlton.org/MLBasis)) to describe
-source files for compilation. A typical compilation file with MPL is shown
+source files for compilation. A typical `.mlb` file for MPL is shown
 below. The first three lines of this file respectively load:
 * The [SML Basis Library](http://sml-family.org/Basis/)
 * The `ForkJoin` structure, as described above
@@ -93,7 +101,7 @@ below. The first three lines of this file respectively load:
 ```
 (* libraries *)
 $(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/basis/schedulers/shh.mlb
+$(SML_LIB)/basis/fork-join.mlb
 $(SML_LIB)/basis/mlton.mlb
 
 (* your source files... *)
@@ -101,50 +109,57 @@ A.sml
 B.sml
 ```
 
-The command to compile a file `XYZ.mlb` is as follows. By default, MPL
+### Compiling a Program
+
+The command to compile a `.mlb` is as follows. By default, MPL
 produces an executable with the same base name as the source file, i.e.
-this would create an executable `XYZ`:
+this would create an executable named `foo`:
 ```
-$ mpl [options...] XYZ.mlb
+$ mpl [compile-time options...] foo.mlb
 ```
 
-MPL has a number of command-line options derived from MLton, which are
+MPL has a number of compile-time options derived from MLton, which are
 documented [here](http://mlton.org/CompileTimeOptions). Note that MPL only
 supports C codegen and does not support profiling.
 
 Some useful compile-time options are
-* `-output FOO` Give a specific name to the produced executable
+* `-output <NAME>` Give a specific name to the produced executable.
 * `-default-type int64 -default-type word64` Use 64-bit integers and words
 by default.
 * `-debug true -debug-runtime true -keep g` For debugging, keeps the generated
 C files and uses the debug version of the runtime (with assertions enabled).
 The resulting executable is somewhat peruse-able with tools like `gdb`.
 
-### Run-time Options
-
-MPL executables can take arguments at the command line that control the runtime
-system. The syntax to run a program `foo` is
+For example:
 ```
-$ foo [@mpl [runtime args...] --] [program args...]
+$ mpl -default-type -int64 -output foo sources.mlb`
+```
+
+### Running a Program
+
+MPL executables can take options at the command line that control the run-time
+system. The syntax is
+```
+$ <program> [@mpl [run-time options...] --] [program args...]
 ```
 The runtime arguments must begin with `@mpl` and end with `--`, and these are
 not visible to the program via
 [CommandLine.arguments](http://sml-family.org/Basis/command-line.html).
 
-Some useful runtime arguments are
-* `procs N` Use N worker threads to run the program.
+Some useful run-time options are
+* `procs <N>` Use `N` worker threads to run the program.
 * `set-affinity` Pin worker threads to processors. Can be used in combination
-with `affinity-base B` and `affinity-stride S` to pin thread i to processor
-number B + S*i.
-* `block-size X` Set the heap block size to X bytes. This can be
+with `affinity-base <B>` and `affinity-stride <S>` to pin thread `i` to
+processor number `B + S*i`.
+* `block-size <X>` Set the heap block size to `X` bytes. This can be
 written with suffixes K, M, and G, e.g. `64K` is 64 kilobytes. The block-size
-must be a multiple of the system page size (typically 4K), and by default is
-set to be one page.
+must be a multiple of the system page size (typically 4K). By default it is
+set to one page.
 
-For example, the following runs a program `hello` with a single command-line
-argument `world` using 4 pinned processors.
+For example, the following runs a program `foo` with a single command-line
+argument `bar` using 4 pinned processors.
 ```
-$ hello @mpl procs 4 set-affinity -- world
+$ foo @mpl procs 4 set-affinity -- bar
 ```
 
 ## Disentanglement

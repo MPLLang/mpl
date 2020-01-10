@@ -45,8 +45,8 @@ struct
   fun upd a i x = A.update (a, i, x)
   fun nth a i   = A.sub (a, i)
 
-  val parfor = Util.parfor
-  val par = ForkJoin.fork
+  val parfor = ForkJoin.parfor
+  val par = ForkJoin.par
   val allocate = ForkJoin.alloc
 
   fun tabulate grain (lo, hi) f =

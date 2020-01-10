@@ -12,7 +12,7 @@ sig
 end =
 struct
 
-  val par = ForkJoin.fork
+  val par = ForkJoin.par
 
   fun par4 (a, b, c, d) =
     let

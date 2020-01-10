@@ -13,7 +13,7 @@ struct
   fun take s n = AS.subslice (s, 0, SOME n)
   fun drop s n = AS.subslice (s, n, NONE)
 
-  val par = ForkJoin.fork
+  val par = ForkJoin.par
   val allocate = ForkJoin.alloc
 
   (* in-place sort s, using t as a temporary array if needed *)

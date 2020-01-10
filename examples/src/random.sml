@@ -3,7 +3,7 @@ fun tabulate (n, f) =
   let
     val arr = ForkJoin.alloc n
   in
-    Util.parfor 10000 (0, n) (fn i => Array.update (arr, i, f i));
+    ForkJoin.parfor 10000 (0, n) (fn i => Array.update (arr, i, f i));
     arr
   end
 

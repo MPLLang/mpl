@@ -5,7 +5,7 @@ fun fib n =
   if n <= 20 then sfib n
   else
     let
-      val (x,y) = ForkJoin.fork (fn _ => fib (n-1), fn _ => fib (n-2))
+      val (x,y) = ForkJoin.par (fn _ => fib (n-1), fn _ => fib (n-2))
     in
       x + y
     end
