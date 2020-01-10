@@ -19,23 +19,24 @@ struct GC_ratios {
   float stackShrink;
 };
 
-#define MAX_LCHS_INFINITE ((size_t)-1)
-
 /**
  * Ratios for Hierarchical Heap operations
  */
 struct HM_HierarchicalHeapConfig {
-  double allocatedRatio; /**< the ratio of PoolSize:AllocatedBytes under which a
-                          * collection is triggered */
+  /* when (bytesAllocatedSinceLastCollection / bytesSurvivedLastCollection)
+   * crosses this threshold, a local collection may be triggered. */
+  double collectionThresholdRatio;
 
-  double liveLCRatio; /**< minimum LCHS:LCS ratio to maintain */
+  /* the smallest amount of allocated data that can be collected in a
+   * local collection */
+  size_t minCollectionSize;
 
-  size_t initialLCHS; /**< initial LCHS, in bytes */
-
-  size_t maxLCHS; /**< maximum LCHS, in bytes. */
+  /* the shallowest depth that will be claimed for a local
+   * collection. */
+  uint32_t minLocalDepth;
 };
 
-enum HHCollectionLevel {
+enum GC_CollectionType {
   ALL,
   LOCAL,
   SUPERLOCAL,
@@ -51,13 +52,9 @@ struct GC_controls {
   bool mayLoadWorld;
   bool mayProcessAtMLton;
   bool messages; /* Print a message at the start and end of each gc. */
-  bool HMMessages; /* print messages regarding heap management */
   size_t allocChunkSize;
-  size_t minChunkSize;
-  bool deferredPromotion;
-  bool freeListCoalesce;
-  bool mayUseAncestorChunk;
-  bool oldHHGCPolicy;
+  size_t blockSize;
+  bool freeListCoalesce;  /* disabled for now */
   bool setAffinity; /* whether or not to set processor affinity */
   int32_t affinityBase; /* First processor to use when setting affinity */
   int32_t affinityStride; /* Number of processors between first and second */
@@ -67,7 +64,7 @@ struct GC_controls {
   bool summary; /* Print a summary of gc info when program exits. */
   enum SummaryFormat summaryFormat;
   FILE* summaryFile;
-  enum HHCollectionLevel hhCollectionLevel;
+  enum GC_CollectionType collectionType;
   /* Size of the trace buffer */
   size_t traceBufferSize;
 };

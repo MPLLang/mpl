@@ -1,6 +1,6 @@
-/* Copyright (C) 2018 Sam Westrick
+/* Copyright (C) 2018,2019 Sam Westrick
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -25,10 +25,10 @@ typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, objptr* field, obj
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-void HM_remember(HM_chunkList rememberedSet, HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
-void HM_rememberAtLevel(HM_chunkList levelHead, objptr dst, objptr* field, objptr src);
-void HM_foreachRemembered(GC_state s, HM_chunkList rememberedSet, ForeachRememberedFunc f, void* fArgs);
-size_t HM_numRemembered(HM_chunkList rememberedSet);
+void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src);
+void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objptr src);
+void HM_foreachRemembered(GC_state s, HM_chunkList remSet, ForeachRememberedFunc f, void* fArgs);
+size_t HM_numRemembered(HM_chunkList remSet);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
 

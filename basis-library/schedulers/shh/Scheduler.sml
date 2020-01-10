@@ -10,7 +10,7 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
-  structure Queue = ArrayQueue
+  structure Queue = DequeABP (*ArrayQueue*)
 
   structure Thread = MLton.Thread.Basic
   fun threadSwitch t =
@@ -89,110 +89,6 @@ struct
   *)
 
   (* ========================================================================
-   * SCHEDULER PUBLIC DATA
-   *)
-
-  (* A request is either REQUEST_NONE, REQUEST_BLOCKED, or a processor id.
-   * Workers request work by writing their own id into another worker's
-   * request cell. If a worker is idle, it blocks requests from other workers
-   * by changing its own request cell to REQUEST_BLOCKED. *)
-  val REQUEST_NONE = ~1
-  val REQUEST_BLOCKED = ~2
-
-  val MAIL_WAITING = 0
-  val MAIL_RECEIVING = 1
-  val MAIL_REJECT = 2
-
-  (* val dummyTask = NONE *)
-  (* val dummyHeap = MLton.Pointer.null *)
-  (* val dummyThread = NONE *)
-
-  type worker_public_data =
-    { mailbox :
-        { thbox : Thread.t option ref
-        , tbox : (unit -> unit) option ref
-        , flag : int ref
-        }
-    , hasWork : bool ref
-    , request : int ref
-    }
-
-  fun wpdInit p : worker_public_data =
-    { mailbox =
-        { thbox = ref NONE
-        , tbox = ref NONE
-        , flag = ref MAIL_WAITING
-        }
-    , hasWork = ref false
-    , request = ref REQUEST_NONE
-    }
-
-  val workerPublicData = Vector.tabulate (P, wpdInit)
-
-  fun wpd p = vectorSub (workerPublicData, p)
-
-  fun checkHasWork p    = !(#hasWork (wpd p))
-  fun setHasWork (p, s) = #hasWork (wpd p) := s
-
-  fun getRequest p          = !(#request (wpd p))
-  fun setRequest (p, r)     = #request (wpd p) := r
-  fun casRequest (p, r, r') = casRef (#request (wpd p)) (r, r')
-
-  fun mailbox p = #mailbox (wpd p)
-
-  fun setThreadBox (p, h) =
-    #thbox (mailbox p) := SOME h
-
-  fun getThreadBox p =
-    let
-      val box = #thbox (mailbox p)
-      val t = !box
-    in
-      box := NONE;
-      t
-    end
-
-  fun setTaskBox (p, t) =
-    #tbox (mailbox p) := SOME t
-
-  fun getTaskBox p =
-    let
-      val box = #tbox (mailbox p)
-      val t = !box
-    in
-      box := NONE;
-      t
-    end
-
-  fun setMailReceiving p =
-    if casRef (#flag (mailbox p)) (MAIL_WAITING, MAIL_RECEIVING)
-    then ()
-    else die (fn _ => "scheduler error: set mailbox receiving failed")
-
-  fun setMailReject p =
-    if casRef (#flag (mailbox p)) (MAIL_WAITING, MAIL_REJECT)
-    then ()
-    else die (fn _ => "scheduler error: set mailbox reject failed")
-
-  fun waitForMail p =
-    let
-      val flag = #flag (mailbox p)
-      fun loop () =
-        let
-          val f = !flag
-        in
-          if f = MAIL_WAITING then
-            loop ()
-          else
-            f = MAIL_RECEIVING
-        end
-      val result = loop ()
-    in
-      flag := MAIL_WAITING;
-      result
-    end
-
-  (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
    *
    * this widget makes it possible to create new "user" threads by copying
@@ -202,18 +98,23 @@ struct
 
   local
     val amOriginal = ref true
+    val taskBoxes = Array.array (P, NONE)
+    fun upd i x = MLton.HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
     if !amOriginal then
       (amOriginal := false; Thread.savedPre ())
     else
-      case getTaskBox (myWorkerId ()) of
+      case Array.sub (taskBoxes, myWorkerId ()) of
         NONE => die (fn _ => "scheduler bug: task box is empty")
       | SOME t =>
-          ( t () handle _ => ()
+          ( upd (myWorkerId ()) NONE
+          ; t () handle _ => ()
           ; die (fn _ => "scheduler bug: child task didn't exit properly")
           )
+  fun setTaskBox p t =
+    upd p (SOME t)
   end
 
   (* ========================================================================
@@ -221,55 +122,50 @@ struct
    *)
 
   type worker_local_data =
-    { queue : ((unit -> unit) * int) Queue.t
+    { queue : (unit -> unit) Queue.t
     , schedThread : Thread.t option ref
     }
 
   fun wldInit p : worker_local_data =
-    { queue = Queue.new p
+    { queue = Queue.new ()
     , schedThread = ref NONE
     }
 
   val workerLocalData = Vector.tabulate (P, wldInit)
 
-  fun communicate () =
+  fun setQueueDepth p d =
     let
-      val myId = myWorkerId ()
-      val {queue=myQueue, ...} = vectorSub (workerLocalData, myId)
-      val r = getRequest myId
-
-      fun handleRequest () =
-        if r = REQUEST_NONE then
-          ()
-        else if r = REQUEST_BLOCKED then
-          die (fn _ => "scheduler bug: serve while blocked")
-        else
-          (* r is a friendly processor id which is requesting work *)
-          ( setRequest (myId, REQUEST_NONE)
-          ; case Queue.popBack myQueue of
-              NONE => setMailReject r
-            | SOME (task, level) =>
-                let
-                  val taskThread = Thread.copy prototypeThread
-                  (* val ch = HH.newHeap () *)
-                in
-                  HH.attachChild (Thread.current (), taskThread, level);
-                  setThreadBox (r, taskThread);
-                  setTaskBox (r, task);
-                  setMailReceiving r
-                end
-          )
+      val {queue, ...} = vectorSub (workerLocalData, p)
     in
-      handleRequest ();
-      setHasWork (myId, not (Queue.empty myQueue))
+      Queue.setDepth queue d
     end
+
+  fun trySteal p =
+    let
+      val {queue, ...} = vectorSub (workerLocalData, p)
+    in
+      if not (Queue.pollHasWork queue) then
+        NONE
+      else
+        Queue.tryPopTop queue
+    end
+
+  fun communicate () = ()
 
   fun push x =
     let
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      Queue.pushFront (x, queue)
+      Queue.pushBot queue x
+    end
+
+  fun clear () =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      Queue.clear queue
     end
 
   fun popDiscard () =
@@ -277,7 +173,7 @@ struct
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      case Queue.popFront queue of
+      case Queue.popBot queue of
           NONE => false
         | SOME _ => true
     end
@@ -315,37 +211,50 @@ struct
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread level (f : unit -> 'a, g : unit -> 'b) =
       let
-        val rightSide = ref (NONE : 'b result option)
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
+        val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
 
         fun g' () =
-          ( rightSide := SOME (result g)
-          ; communicate ()
-          ; if not (decrementHitsZero incounter) then
-              returnToSched ()
+          let
+            val gr = result g
+            val t = Thread.current ()
+          in
+            rightSide := SOME (gr, t);
+            if decrementHitsZero incounter then
+              ( setQueueDepth (myWorkerId ()) (depth+1)
+              ; threadSwitch thread
+              )
             else
-              threadSwitch thread
-          )
+              returnToSched ()
+          end
 
-        val _ = push (g', level)
-        val _ = HH.setLevel (thread, level + 1)
+        val _ = push g'
+        val _ = HH.setDepth (thread, depth + 1)
 
-        val _ = communicate ()
         val fr = result f
 
         val gr =
           if popDiscard () then
-            (communicate (); result g)
+            ( HH.promoteChunks thread
+            ; HH.setDepth (thread, depth)
+            ; result g
+            )
           else
-            ( if decrementHitsZero incounter then () else returnToSched ()
-            ; HH.mergeDeepestChild thread
+            ( clear () (* this should be safe after popDiscard fails? *)
+            ; if decrementHitsZero incounter then () else returnToSched ()
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME gr => gr
+              | SOME (gr, t) =>
+                  ( HH.mergeThreads (thread, t)
+                  ; setQueueDepth (myWorkerId ()) depth
+                  ; HH.promoteChunks thread
+                  ; HH.setDepth (thread, depth)
+                  ; gr
+                  )
             )
-
-        val _ = HH.promoteChunks thread
-        val _ = HH.setLevel (thread, level)
       in
         (extractResult fr, extractResult gr)
       end
@@ -375,55 +284,40 @@ struct
   fun setupSchedLoop () =
     let
       val myId = myWorkerId ()
-      val myRand = SimpleRandom.rand myId
+      val myRand = SMLNJRandom.rand (0, myId)
+      (*val myRand = SimpleRandom.rand myId*)
       val mySchedThread = Thread.current ()
-      val {queue=myQueue, schedThread} = vectorSub (workerLocalData, myId)
+      val {queue=myQueue, schedThread, ...} =
+        vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
-      val _ = MLton.HM.registerQueue (Word32.fromInt myId, #data myQueue)
+      val _ = Queue.setDepth myQueue 1
+      val _ = Queue.register myQueue myId
 
       (* ------------------------------------------------------------------- *)
 
-      fun verifyStatus () =
-        if checkHasWork myId = false then ()
-        else die (fn _ => "scheduler bug: status not set correctly while idle")
-
       fun randomOtherId () =
-        let val other = SimpleRandom.boundedInt (0, P-1) myRand
+        (*let val other = SimpleRandom.boundedInt (0, P-1) myRand*)
+        let val other = SMLNJRandom.randRange (0, P-2) myRand
         in if other < myId then other else other+1
         end
 
-      fun blockRequests () =
-        let
-          val r = getRequest myId
-        in
-          if r = REQUEST_NONE then
-            if casRequest (myId, REQUEST_NONE, REQUEST_BLOCKED) then ()
-            else blockRequests () (* recurs at most once *)
-          else if r = REQUEST_BLOCKED then
-            die (fn _ => "scheduler bug: attempted to block while already blocked")
-          else
-            ( setRequest (myId, REQUEST_BLOCKED)
-            ; setMailReject r
-            )
-        end
-
-      fun unblockRequests () = setRequest (myId, REQUEST_NONE)
-
       fun request idleTimer =
         let
-          val friend = randomOtherId ()
-          val hasWork = checkHasWork friend
-          val available = (getRequest friend = REQUEST_NONE)
+          fun loop tries it =
+            if tries = P * 100 then
+              (OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
+               loop 0 (tickTimer idleTimer))
+            else
+            let
+              val friend = randomOtherId ()
+            in
+              case trySteal friend of
+                NONE => loop (tries+1) (tickTimer idleTimer)
+              | SOME (task, depth) => (task, depth, tickTimer idleTimer)
+            end
         in
-          if not (available andalso hasWork andalso casRequest (friend, REQUEST_NONE, myId)) then
-            (verifyStatus (); request (tickTimer idleTimer))
-          else if not (waitForMail myId) then
-            (* mail request rejected *)
-            (verifyStatus (); request (tickTimer idleTimer))
-          else
-            (* mail request accepted *)
-            idleTimer
+          loop 0 idleTimer
         end
 
       (* ------------------------------------------------------------------- *)
@@ -431,26 +325,18 @@ struct
       fun acquireWork () : unit =
         let
           val idleTimer = startTimer myId
-          val _ = setHasWork (myId, false)
-          val _ = blockRequests ()
-
-          (* find work from another worker. Eventually we receive
-           *   - a heap to execute it in (taken out of the heap box now)
-           *   - a task to execute (taken out of the task box by the child
-           *     thread, to avoid entanglement.)
-           *)
-          val idleTimer' = request idleTimer
-          val t = getThreadBox myId
-
-          val _ = unblockRequests ()
-          val _ = stopTimer idleTimer'
-
-          (* val taskThread = Thread.copy prototypeThread
-          val _ = HH.attachHeap (taskThread, hh) *)
+          val (task, depth, idleTimer') = request idleTimer
+          val taskThread = Thread.copy prototypeThread
         in
-          case t of
-            NONE => die (fn _ => "scheduler bug: thread box is empty")
-          | SOME taskThread => (threadSwitch taskThread; acquireWork ())
+          if depth >= 1 then () else
+            die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
+          HH.setDepth (taskThread, depth+1);
+          Queue.setDepth myQueue (depth+1);
+          setTaskBox myId task;
+          stopTimer idleTimer';
+          threadSwitch taskThread;
+          Queue.setDepth myQueue 1;
+          acquireWork ()
         end
 
     in
@@ -472,9 +358,9 @@ struct
 
   val originalThread = Thread.current ()
   val _ =
-    if HH.getLevel originalThread = 0 then ()
-    else die (fn _ => "scheduler bug: root level <> 0")
-  val _ = HH.setLevel (originalThread, 1)
+    if HH.getDepth originalThread = 0 then ()
+    else die (fn _ => "scheduler bug: root depth <> 0")
+  val _ = HH.setDepth (originalThread, 1)
 
   (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
@@ -492,9 +378,9 @@ struct
         val schedThread = Thread.copy (Thread.savedPre ())
         (* val schedHeap = HH.newHeap () *)
       in
-        HH.attachChild (originalThread, schedThread, 0);
-        (* HH.attachHeap (schedThread, schedHeap); *)
         amOriginal := false;
+        HH.setDepth (schedThread, 1);
+        setQueueDepth (myWorkerId ()) 1;
         threadSwitch schedThread
       end
     else
@@ -502,6 +388,7 @@ struct
         val acquireWork = setupSchedLoop ()
       in
         threadSwitch originalThread;
+        setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end
@@ -512,18 +399,21 @@ structure ForkJoin :> FORK_JOIN =
 struct
   open Scheduler.ForkJoin
 
-  fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
+  val par = fork
+
+  fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
 
   fun parfor grain (i, j) f =
-    let val n = j - i
-    in if n <= grain
-       then for (i, j) f
-       else ( fork ( fn _ => parfor grain (i, i + n div 2) f
-                   , fn _ => parfor grain (i + n div 2, j) f
-                   )
-            ; ()
-            )
-    end
+    if j - i <= grain then
+      for (i, j) f
+    else
+      let
+        val mid = i + (j-i) div 2
+      in
+        par (fn _ => parfor grain (i, mid) f,
+             fn _ => parfor grain (mid, j) f)
+        ; ()
+      end
 
   fun alloc n =
     let

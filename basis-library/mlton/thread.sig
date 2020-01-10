@@ -45,19 +45,14 @@ signature MLTON_THREAD =
           type thread = Basic.t
 
           (* The level (depth) of a thread's heap in the hierarchy. *)
-          val getLevel : thread -> int
-          val setLevel : thread * int -> unit
-
-          (* `attachChild (parent, child, depth)`
-           * Attach child heap and implicitly set child's level to begin
-           * allocating at depth+1. *)
-          val attachChild : thread * thread * int -> unit
+          val getDepth : thread -> int
+          val setDepth : thread * int -> unit
 
           (* Merge the heap of the deepest child of this thread. Requires that
            * this child is inactive and has an associated heap. *)
-          val mergeDeepestChild : thread -> unit
+          val mergeThreads : thread * thread -> unit
 
-          (* Move all chunks at the current level up one level. *)
+          (* Move all chunks at the current depth up one level. *)
           val promoteChunks : thread -> unit
         end
 

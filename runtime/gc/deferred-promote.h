@@ -1,6 +1,6 @@
-/* Copyright (C) 2018 Sam Westrick.
+/* Copyright (C) 2018-2019 Sam Westrick.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -8,7 +8,11 @@
 #define DEFERRED_PROMOTE_H
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args);
+void HM_deferredPromote(
+  GC_state s,
+  GC_thread thread,
+  HM_chunkList globalDownPtrs,
+  struct ForwardHHObjptrArgs* args);
 
 #endif  /* defined (MLTON_GC_INTERNAL_FUNCS) */
 #endif  /* DEFERRED_PROMOTE_H */

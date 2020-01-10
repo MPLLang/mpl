@@ -3,7 +3,7 @@
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -47,79 +47,34 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (!isObjptr(src))
     return;
 
-  HM_chunkList dstList = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
+  HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
 
   pointer srcp = objptrToPointer(src, NULL);
-  HM_chunkList srcList = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
+  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
-  /* This creates a down pointer; must be remembered. */
-  if (dstList->level < srcList->level) {
-    if (dst != s->wsQueue) {
-      // assert(getHierarchicalHeapCurrent(s) != NULL);
-      struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
-      if (hh == NULL) {
-        LOG(LM_HH_PROMOTION, LL_WARNING,
-          "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
-          dst, src);
-      } else {
-        Word32 level = srcList->level;
-        if (NULL == HM_HH_LEVEL(hh, level)) {
-          HM_HH_LEVEL(hh, level) = HM_newChunkList(hh, level);
-        }
-        HM_rememberAtLevel(HM_HH_LEVEL(hh, level), dst, field, src);
-      }
-    }
+  /* Internal or up-pointer. */
+  if (dstHH->depth >= srcHH->depth)
+    return;
+
+  /* deque down-pointers are handled separately during collection. */
+  if (dst == s->wsQueue)
+    return;
+
+  /* Otherwise, remember the down-pointer! */
+  uint32_t d = srcHH->depth;
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
+
+  if (hh == NULL)
+  {
+    LOG(LM_HH_PROMOTION, LL_WARNING,
+      "Write down pointer without local hierarchical heap: "FMTOBJPTR " to "FMTOBJPTR,
+      dst, src);
+    return;
   }
+
+  HM_rememberAtLevel(hh, dst, field, src);
+
+  /* SAM_NOTE: TODO: track bytes allocated here in
+   * thread->bytesAllocatedSinceLast...? */
 }
-
-#if ASSERT
-void assertObjptrDisentangledForMe(GC_state s, objptr op) {
-  assert(threadAndHeapOkay(s));
-  if (!isObjptr(op)) return;
-
-  /* Don't call HM_getChunkOf() here, because it does additional asserts that
-   * we don't want. */
-  HM_chunk objectChunk = (HM_chunk)blockOf(objptrToPointer(op, NULL));
-  struct HM_HierarchicalHeap* hh = getHierarchicalHeapCurrent(s);
-  assert(hh != NULL);
-
-  /* Search all chunks in my own hierarchical heap. Off-by-one loop to
-   * prevent underflow. */
-  for (Word32 i = hh->level+1; i > 0; i--) {
-    HM_chunkList list = hh->levels[i-1];
-    if (list == NULL) continue;
-    for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
-         cursor != NULL;
-         cursor = cursor->nextChunk) {
-      if (cursor == objectChunk) return;
-    }
-  }
-
-  /* Search accessible chunks of each parent hh */
-  while (hh->parentHH != NULL) {
-    struct HM_HierarchicalHeap* phh = hh->parentHH;
-    assert(hh->stealLevel != HM_HH_INVALID_LEVEL);
-    Word32 start = hh->stealLevel+1;
-    Word32 stop = (phh->stealLevel == HM_HH_INVALID_LEVEL ? 1 : phh->stealLevel+1);
-    /* off-by-one to prevent underflow. This executes the body for each
-     * stop <= i < start, but in decreasing order. */
-    for (Word32 i = start; i > stop; i--) {
-      HM_chunkList list = phh->levels[i-1];
-      if (list == NULL) continue;
-      for (HM_chunk cursor = HM_getChunkListFirstChunk(list);
-           cursor != NULL;
-           cursor = cursor->nextChunk) {
-        if (cursor == objectChunk) return;
-      }
-    }
-    hh = phh;
-  }
-
-  /* None of my ancestors chunks contain this objptr */
-  DIE("entanglement detected: object "FMTOBJPTR" in chunk %p",
-      op,
-      (void*)objectChunk);
-
-  return;
-}
-#endif /* ASSERT */

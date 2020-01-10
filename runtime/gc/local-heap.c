@@ -1,6 +1,6 @@
 /* Copyright (C) 2014 Ram Raghunathan.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -15,24 +15,20 @@
 
 #include "local-heap.h"
 
-#include "heap-utils.h"
-
 /************************/
 /* Function Definitions */
 /************************/
 void HM_enterLocalHeap (GC_state s) {
-  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+  GC_thread thread = getThreadCurrent(s);
 
-  HM_HH_ensureNotEmpty(hh);
-  s->frontier = HM_HH_getFrontier(hh);
-  s->limitPlusSlop = HM_HH_getLimit(hh);
+  HM_HH_ensureNotEmpty(s, thread);
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 }
 
 void HM_exitLocalHeap (GC_state s) {
-  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
-
-  HM_HH_updateValues(hh, s->frontier);
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 }
 
 void HM_ensureHierarchicalHeapAssurances(GC_state s,
@@ -64,10 +60,10 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   }
 
   /* fetch after management heap GC to make sure that I get the updated value */
-  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
+  GC_thread thread = getThreadCurrent(s);
 
   /* update hh before modification */
-  HM_HH_updateValues(hh, s->frontier);
+  HM_HH_updateValues(thread, s->frontier);
 
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
@@ -75,29 +71,14 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  double allocatedRatio = HM_HH_getLCRatio(hh);
-  Trace3(EVENT_CHUNKP_RATIO,
-         hh->locallyCollectibleHeapSize,
-         hh->locallyCollectibleSize,
-         s->controls->hhConfig.allocatedRatio);
-  if (forceGC || (allocatedRatio < s->controls->hhConfig.allocatedRatio)) {
+  uint32_t desiredScope = HM_HH_desiredCollectionScope(s, thread);
+
+  if (forceGC || desiredScope <= thread->currentDepth) {
     /* too much allocated, so let's collect */
-    HM_HHC_collectLocal();
+    HM_HHC_collectLocal(desiredScope, forceGC);
 
-    double newAllocatedRatio = HM_HH_getLCRatio(hh);
-    Trace3(EVENT_CHUNKP_RATIO,
-           hh->locallyCollectibleHeapSize,
-           hh->locallyCollectibleSize,
-           s->controls->hhConfig.allocatedRatio);
-
-    LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
-        "Live Ratio %.2f < %.2f, performed local collection to increase "
-        "ratio to %.2f (%zu / %zu)",
-        allocatedRatio,
-        s->controls->hhConfig.allocatedRatio,
-        newAllocatedRatio,
-        hh->locallyCollectibleHeapSize,
-        hh->locallyCollectibleSize);
+    /* post-collection, the thread might have been moved? */
+    thread = getThreadCurrent(s);
 
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
@@ -109,21 +90,17 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
 
-    HM_HH_maybeResizeLCHS(s, hh);
-
     /* I may have reached a new maxHHLCS, so check */
-    if (s->cumulativeStatistics->maxHHLCS <
-        hh->locallyCollectibleSize) {
-      s->cumulativeStatistics->maxHHLCS =
-          hh->locallyCollectibleSize;
-    }
+    // if (s->cumulativeStatistics->maxHHLCS < newSize) {
+    //   s->cumulativeStatistics->maxHHLCS = newSize;
+    // }
 
     /* I may have reached a new maxHHLHCS, so check */
-    if (s->cumulativeStatistics->maxHHLCHS < hh->locallyCollectibleHeapSize) {
-      s->cumulativeStatistics->maxHHLCHS = hh->locallyCollectibleHeapSize;
-    }
+    // if (s->cumulativeStatistics->maxHHLCHS < hh->collectionThreshold) {
+    //   s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
+    // }
 
-    if (NULL == hh->lastAllocatedChunk) {
+    if (NULL == thread->currentChunk) {
       /* collected everything! */
       s->frontier = NULL;
       s->limitPlusSlop = NULL;
@@ -133,8 +110,8 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
       /* SAM_NOTE: I don't use HM_HH_getFrontier/Limit here, because these have
        * assertions for the chunk frontier invariant, which might be violated
        * here. */
-      s->frontier = HM_getChunkFrontier(hh->lastAllocatedChunk);
-      s->limitPlusSlop = HM_getChunkLimit(hh->lastAllocatedChunk);
+      s->frontier = HM_getChunkFrontier(thread->currentChunk);
+      s->limitPlusSlop = HM_getChunkLimit(thread->currentChunk);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
 
@@ -146,16 +123,16 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   if (growStack) {
     LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUG,
         "growing stack");
-    if (NULL == hh->lastAllocatedChunk ||
-        (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
-        HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
+    if (NULL == thread->currentChunk ||
+        (ensureCurrentLevel && HM_HH_getDepth(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+        HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
         (size_t)(s->limitPlusSlop - s->frontier) < stackBytes)
     {
-      if (!HM_HH_extend(hh, stackBytes)) {
+      if (!HM_HH_extend(s, thread, stackBytes)) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
-      s->frontier = HM_HH_getFrontier(hh);
-      s->limitPlusSlop = HM_HH_getLimit(hh);
+      s->frontier = HM_HH_getFrontier(thread);
+      s->limitPlusSlop = HM_HH_getLimit(thread);
       s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
     }
     /* SAM_NOTE: growStackCurrent triggers a stack allocation which will
@@ -166,23 +143,23 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
      * the saved frontier in the hh is synced. */
     /* SAM_NOTE: TODO: caching the frontier in so many different places is a
      * major headache. We need a refactor. */
-    assert(HM_getChunkOf(s->frontier) == hh->lastAllocatedChunk);
-    HM_HH_updateValues(hh, s->frontier);
+    assert(HM_getChunkOf(s->frontier) == thread->currentChunk);
+    HM_HH_updateValues(thread, s->frontier);
     setGCStateCurrentThreadAndStack(s);
   }
 
   /* Determine if we need to extend to accommodate bytesRequested (and possibly
    * ensureCurrentLevel */
-  if (NULL == hh->lastAllocatedChunk ||
-      (ensureCurrentLevel && HM_getChunkListLevel(HM_getLevelHead(hh->lastAllocatedChunk)) != hh->level) ||
-      HM_getChunkFrontier(hh->lastAllocatedChunk) >= (pointer)hh->lastAllocatedChunk + HM_BLOCK_SIZE ||
+  if (NULL == thread->currentChunk ||
+      (ensureCurrentLevel && HM_HH_getDepth(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
+      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {
-    if (!HM_HH_extend(hh, bytesRequested)) {
+    if (!HM_HH_extend(s, thread, bytesRequested)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    s->frontier = HM_HH_getFrontier(hh);
-    s->limitPlusSlop = HM_HH_getLimit(hh);
+    s->frontier = HM_HH_getFrontier(thread);
+    s->limitPlusSlop = HM_HH_getLimit(thread);
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 

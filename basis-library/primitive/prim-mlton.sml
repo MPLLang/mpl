@@ -154,8 +154,16 @@ structure GC =
 structure HM =
     struct
         val registerQueue: Word32.word * 'a array -> unit =
-            _import "HM_HHC_registerQueue" runtime private:
+            _import "GC_registerQueue" runtime private:
             Word32.word * 'a array -> unit;
+
+        val registerQueueTop: Word32.word * Word64.word ref -> unit =
+            _import "GC_registerQueueTop" runtime private:
+            Word32.word * Word64.word ref -> unit;
+
+        val registerQueueBot: Word32.word * Word32.word ref -> unit =
+            _import "GC_registerQueueBot" runtime private:
+            Word32.word * Word32.word ref -> unit;
 
         val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit =
             _prim "Array_update_noWriteBarrier" : 'a array * SeqIndex.int * 'a -> unit;
@@ -390,10 +398,9 @@ structure Thread =
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: GCState.t -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
-      val getLevel = _import "GC_HH_getLevel" runtime private: thread -> Word32.word;
-      val setLevel = _import "GC_HH_setLevel" runtime private: thread * Word32.word -> unit;
-      val attachChild = _import "GC_HH_attachChild" runtime private: thread * thread * Word32.word -> unit;
-      val mergeDeepestChild = _import "GC_HH_mergeDeepestChild" runtime private: thread -> unit;
+      val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
+      val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
+      val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
    end
 

@@ -1,6 +1,6 @@
-/* Copyright (C) 2018 Sam Westrick.
+/* Copyright (C) 2018-2019 Sam Westrick.
  *
- * MLton is released under a BSD-style license.
+ * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
 
@@ -13,21 +13,42 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 /* ========================================================================= */
 
-HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
+void HM_deferredPromote(
+  GC_state s,
+  GC_thread thread,
+  HM_chunkList globalDownPtrs,
+  struct ForwardHHObjptrArgs* args)
+{
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START deferred promotion");
 
+  uint32_t numLevels = args->maxDepth+1;
+
   /* First, bucket in-scope downptrs by the level of the downptr origin */
-  HM_chunkList downPtrs[HM_MAX_NUM_LEVELS];
-  for (Word32 i = 0; i < HM_MAX_NUM_LEVELS; i++) {
-    downPtrs[i] = NULL;
+  struct HM_chunkList downPtrs[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) {
+    HM_initChunkList(&(downPtrs[i]));
   }
-  FOR_LEVEL_IN_RANGE(level, i, args->hh, args->minLevel, args->maxLevel+1, {
+  for (HM_HierarchicalHeap cursor = args->hh;
+       (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
+       cursor = cursor->nextAncestor)
+  {
     HM_foreachRemembered(
       s,
-      level->rememberedSet,
+      HM_HH_getRemSet(cursor),
       bucketIfValid,
       &(downPtrs[0]));
-  });
+  }
+
+  /* memoize the fromSpace chunkLists for quick access */
+  HM_HierarchicalHeap fromSpace[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) fromSpace[i] = NULL;
+  for (HM_HierarchicalHeap cursor = args->hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
+  args->fromSpace = &(fromSpace[0]);
 
   /* Next, promote objects to the appropriate level, beginning below the root and
    * working downwards towards to the leaf. Any resulting downptr that cannot
@@ -35,41 +56,40 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
    * appropriate remembered-set.
    * Note that we skip down-pointers from the root heap; these are "preserved"
    * instead of promoted, and used as roots for collection. */
-  for (Word32 i = 1; i <= args->maxLevel; i++) {
+  for (uint32_t i = 1; i <= args->maxDepth; i++) {
     /* remember where the roots begin, so we know where to scan from after
      * promoting the roots */
     HM_chunk rootsBeginChunk = NULL;
     pointer rootsBegin = NULL;
-    size_t beforeSize = 0;
-    if (NULL != HM_HH_LEVEL(args->hh, i) &&
-        NULL != HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i))) {
-      rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_LEVEL(args->hh, i));
+    if (NULL != fromSpace[i] &&
+        NULL != HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i])))
+    {
+      rootsBeginChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkFrontier(rootsBeginChunk);
-      beforeSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
     }
 
     /* promote the roots, as indicated by the remembered downptrs */
-    args->toLevel = i;
+    args->toDepth = i;
     HM_foreachRemembered(
       s,
-      downPtrs[i],
+      &(downPtrs[i]),
       promoteDownPtr,
       args);
 
-    if (NULL == HM_HH_LEVEL(args->hh, i) ||
-        NULL == HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i))) {
+    if (NULL == fromSpace[i] ||
+        NULL == HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i])))
+    {
       /* No promotions occurred, so no forwardings necessary here. */
       continue;
     }
 
     /* forward transitively reachable objects within local scope */
     if (rootsBegin == NULL) {
-      rootsBeginChunk = HM_getChunkListFirstChunk(HM_HH_LEVEL(args->hh, i));
+      rootsBeginChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i]));
       rootsBegin = HM_getChunkStart(rootsBeginChunk);
     }
 
-    /* SAM_NOTE: TODO:
-     * for each object beginning at rootsBegin, for each objptr field of that
+    /* for each object beginning at rootsBegin, for each objptr field of that
      * object, call
      *   promoteIfPointingDownIntoLocalScope(..., object, field, ...) */
     HM_forwardHHObjptrsInChunkList(
@@ -80,21 +100,48 @@ HM_chunkList HM_deferredPromote(GC_state s, struct ForwardHHObjptrArgs* args) {
       NULL,
       promoteIfPointingDownIntoLocalScope,
       args);
+  }
 
-    if (i < args->minLevel) {
-      size_t afterSize = HM_getChunkListSize(HM_HH_LEVEL(args->hh, i));
-      assert(afterSize >= beforeSize);
-      HM_HH_LEVEL_OBP(args->hh, i) += (afterSize - beforeSize);
+  /* free the chunks that we used as temporary storage for bucketing */
+  for (uint32_t i = 1; i < numLevels; i++) {
+    HM_appendChunkList(getFreeListSmall(s), &(downPtrs[i]));
+  }
+
+  /* reinstantiate the hh linked list from new chunkLists that may have been
+   * created during promotion */
+  HM_HierarchicalHeap heaps[numLevels];
+  for (uint32_t i = 0; i < numLevels; i++) heaps[i] = NULL;
+  for (HM_HierarchicalHeap cursor = args->hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    heaps[HM_HH_getDepth(cursor)] = cursor;
+  }
+  HM_HierarchicalHeap prevhh = NULL;
+  for (uint32_t i = 0; i < numLevels; i++)
+  {
+    if (NULL != heaps[i])
+    {
+      assert(NULL != fromSpace[i]);
+      assert(heaps[i] == fromSpace[i]);
+      heaps[i]->nextAncestor = prevhh;
+      prevhh = heaps[i];
+    }
+    else if (NULL != fromSpace[i])
+    {
+      HM_HierarchicalHeap newhh = fromSpace[i];
+      newhh->nextAncestor = prevhh;
+      prevhh = newhh;
     }
   }
-
-  /* Finally, free the chunks that we used as temporary storage for bucketing */
-  for (Word32 i = 1; i < HM_MAX_NUM_LEVELS; i++) {
-    HM_appendChunkList(s->freeListSmall, downPtrs[i]);
-  }
+  args->hh = prevhh;
+  thread->hierarchicalHeap = prevhh;
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END deferred promotion");
-  return downPtrs[0];
+
+  /* return downPtrs[0] to parent */
+  HM_appendChunkList(globalDownPtrs, &(downPtrs[0]));
+  return;
 }
 
 void bucketIfValid(__attribute__((unused)) GC_state s,
@@ -103,7 +150,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
                    objptr src,
                    void* arg)
 {
-  HM_chunkList* downPtrs = arg;
+  struct HM_chunkList* downPtrs = arg;
   // pointer dstp = objptrToPointer(dst, NULL);
   // pointer srcp = objptrToPointer(src, NULL);
 
@@ -114,21 +161,17 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
     return;
   }
 
-  Word32 dstLevel = HM_getObjptrLevel(dst);
-  Word32 srcLevel = HM_getObjptrLevel(src);
+  uint32_t dstDepth = HM_getObjptrDepth(dst);
+  uint32_t srcDepth = HM_getObjptrDepth(src);
 
-  assert(dstLevel <= srcLevel);
+  assert(dstDepth <= srcDepth);
 
-  if (dstLevel == srcLevel) {
+  if (dstDepth == srcDepth) {
     /* levels have coincided due to joins, so ignore this entry. */
     return;
   }
 
-  if (downPtrs[dstLevel] == NULL) {
-    downPtrs[dstLevel] = HM_newChunkList(NULL, CHUNK_INVALID_LEVEL);
-  }
-
-  HM_remember(downPtrs[dstLevel], NULL, dst, field, src);
+  HM_remember(&(downPtrs[dstDepth]), dst, field, src);
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,
@@ -138,14 +181,14 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
                     void* rawArgs)
 {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(args->toLevel == HM_getObjptrLevel(dst));
+  assert(args->toDepth == HM_getObjptrDepth(dst));
 
   pointer srcp = objptrToPointer(src, NULL);
 
   /* It's possible that a previous promotion has already relocated the src object. */
   if (hasFwdPtr(srcp)) {
     assert(!hasFwdPtr(objptrToPointer(getFwdPtr(srcp), NULL)));
-    assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
+    assert(HM_getObjptrDepth(getFwdPtr(srcp)) <= args->toDepth);
     *field = getFwdPtr(srcp);
     return;
   }
@@ -154,27 +197,26 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
    * for large objects housed in single-object chunks, the chunk is logically
    * (but not physically) moved. It's incorrect to relocate the object again,
    * because this could create an unrecorded downptr. */
-  if (HM_getObjptrLevel(src) <= args->toLevel) {
+  if (HM_getObjptrDepth(src) <= args->toDepth) {
     /* src was logically moved in a previous promotion */
     return;
   }
 
-  if (NULL == HM_HH_LEVEL(args->hh, args->toLevel)) {
-    HM_chunkList list = HM_newChunkList(args->hh, args->toLevel);
-    /* just need to allocate a valid chunk; the size is arbitrary */
-    HM_allocateChunk(list, GC_HEAP_LIMIT_SLOP);
-    HM_HH_LEVEL(args->hh, args->toLevel) = list;
+  if (NULL == args->fromSpace[args->toDepth]) {
+    /* note that new heaps are initialized with a free chunk. */
+    HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
+    args->fromSpace[args->toDepth] = newhh;
   }
 
-  assert(HM_HH_LEVEL(args->hh, args->toLevel) != NULL);
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel));
-  assert(HM_getObjptrLevel(*field) == args->toLevel);
+  assert(args->fromSpace[args->toDepth] != NULL);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  assert(HM_getObjptrDepth(*field) == args->toDepth);
 }
 
 /* SAM_NOTE: TODO: DRY: very similar to promoteDownPtr */
 void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  assert(args->toLevel == HM_getObjptrLevel(args->containingObject));
+  assert(args->toDepth == HM_getObjptrDepth(args->containingObject));
 
   objptr src = *field;
   pointer srcp = objptrToPointer(src, NULL);
@@ -188,27 +230,27 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
    * already relocated the src object */
   if (hasFwdPtr(srcp)) {
     assert(!hasFwdPtr(objptrToPointer(getFwdPtr(srcp), NULL)));
-    assert(HM_getObjptrLevel(getFwdPtr(srcp)) <= args->toLevel);
+    //assert(HM_getObjptrDepth(getFwdPtr(srcp)) <= args->toDepth);
     *field = getFwdPtr(srcp);
     return;
   }
 
-  Word32 srcLevel = HM_getObjptrLevel(src);
-  assert(srcLevel <= args->maxLevel);
+  uint32_t srcDepth = HM_getObjptrDepth(src);
+  assert(srcDepth <= args->maxDepth);
 
-  if (srcLevel <= args->toLevel) {
+  if (srcDepth <= args->toDepth) {
     /* This is an up- or internal- pointer */
     return;
   }
 
-  assert(HM_HH_LEVEL(args->hh, args->toLevel) != NULL);
+  assert(args->fromSpace[args->toDepth] != NULL);
 
-  if (srcLevel < args->minLevel) {
+  if (srcDepth < args->minDepth) {
     /* This is outside local scope; we just need to remember this new downptr */
-    HM_rememberAtLevel(HM_HH_LEVEL(args->hh, args->toLevel), args->containingObject, field, src);
+    HM_rememberAtLevel(args->fromSpace[args->toDepth], args->containingObject, field, src);
     return;
   }
 
-  *field = relocateObject(s, src, HM_HH_LEVEL(args->hh, args->toLevel));
-  assert(HM_getObjptrLevel(*field) == args->toLevel);
+  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  assert(HM_getObjptrDepth(*field) == args->toDepth);
 }

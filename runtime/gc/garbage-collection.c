@@ -22,9 +22,10 @@ void growStackCurrent(GC_state s) {
              uintmaxToCommaString(getStackCurrent(s)->used));
 #if ASSERT
   assert(threadAndHeapOkay(s));
-  struct HM_HierarchicalHeap* hh = HM_HH_getCurrent(s);
-  assert(s->frontier == HM_HH_getFrontier(hh));
-  assert((size_t)(HM_HH_getLimit(hh) - HM_HH_getFrontier(hh)) >= sizeofStackWithMetaData(s, reserved));
+  GC_thread thread = getThreadCurrent(s);
+  assert(s->frontier == HM_HH_getFrontier(thread));
+  assert((size_t)(HM_HH_getLimit(thread) - HM_HH_getFrontier(thread))
+         >= sizeofStackWithMetaData(s, reserved));
 #endif
   stack = newStack(s, reserved);
   copyStack(s, getStackCurrent(s), stack);
@@ -54,7 +55,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->minChunkSize);
+  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->blockSize);
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);

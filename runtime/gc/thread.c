@@ -17,79 +17,38 @@
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-pointer GC_HH_newHeap() {
+Word32 GC_HH_getDepth(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
-  return (pointer)HM_HH_new(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+  return thread->currentDepth;
 }
 
-void GC_HH_attachHeap(pointer threadp, pointer hhp) {
+void GC_HH_setDepth(pointer threadp, Word32 depth) {
   GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+  thread->currentDepth = depth;
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+}
+
+void GC_HH_mergeThreads(pointer threadp, pointer childp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  assert(threadAndHeapOkay(s));
+
   objptr threadop = pointerToObjptr(threadp, NULL);
-  GC_thread thread = threadObjptrToStruct(s, threadop);
-
-#if ASSERT
-  assert(threadop != BOGUS_OBJPTR);
-  /* Make sure this is an inactive thread. */
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    assert(s->procStates[i].currentThread != threadop);
-  }
-#endif
-
-  if (thread->hierarchicalHeap != NULL) {
-    DIE("tried to assign hierarchical heap, but thread already has one");
-  }
-
-  thread->hierarchicalHeap = (struct HM_HierarchicalHeap *)hhp;
-}
-
-Word32 GC_HH_getLevel(pointer threadp) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-
-  assert(thread != NULL);
-  assert(thread->hierarchicalHeap != NULL);
-  return HM_HH_getLevel(s, thread->hierarchicalHeap);
-}
-
-void GC_HH_setLevel(pointer threadp, Word32 level) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-
-  assert(thread != NULL);
-  assert(thread->hierarchicalHeap != NULL);
-  HM_HH_setLevel(s, thread->hierarchicalHeap, level);
-}
-
-void GC_HH_attachChild(pointer parentp, pointer childp, Word32 level) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  objptr parentop = pointerToObjptr(parentp, NULL);
   objptr childop = pointerToObjptr(childp, NULL);
-  GC_thread parent = threadObjptrToStruct(s, parentop);
-  GC_thread child = threadObjptrToStruct(s, childop);
-
-  // struct HM_HierarchicalHeap* childhh = (struct HM_HierarchicalHeap*)childhhp;
-
-#if ASSERT
-  assert(parentop != BOGUS_OBJPTR);
-  assert(childop != BOGUS_OBJPTR);
-  /* Make sure child is an inactive thread. */
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    assert(s->procStates[i].currentThread != childop);
-  }
-  /* Make sure parent is either mine, or inactive */
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    if ((int32_t)i != s->procNumber)
-      assert(s->procStates[i].currentThread != parentop);
-  }
-#endif
-
-  HM_HH_appendChild(s, parent->hierarchicalHeap, child->hierarchicalHeap, level);
-}
-
-void GC_HH_mergeDeepestChild(pointer threadp) {
-  GC_state s = pthread_getspecific(gcstate_key);
-  objptr threadop = pointerToObjptr(threadp, NULL);
   GC_thread thread = threadObjptrToStruct(s, threadop);
+  GC_thread child = threadObjptrToStruct(s, childop);
 
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);
@@ -98,20 +57,52 @@ void GC_HH_mergeDeepestChild(pointer threadp) {
     if ((int32_t)i != s->procNumber)
       assert(s->procStates[i].currentThread != threadop);
   }
+
+  assert(childop != BOGUS_OBJPTR);
+  /* SAM_NOTE there is a race where the following check can raise
+   * a false alarm, if a worker delays to mark its current thread as
+   * BOGUS_OBJPTR after completing a thread and decrementing the incounter
+   * (in the scheduler). However, having the assert seems useful as a
+   * sanity check regardless.
+   *
+   * If this becomes a problem, we can either fix the incounter business
+   * (switch away before decrementing incounter) or just remove the sanity
+   * check and not worry about it.
+   */
+  // Make sure child is inactive
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    assert(s->procStates[i].currentThread != childop);
+  }
 #endif
 
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
-  HM_HH_mergeIntoParent(s, thread->hierarchicalHeap->childHHList);
+  assert(child != NULL);
+  assert(child->hierarchicalHeap != NULL);
+
+  beginAtomic(s);
+  /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
+   * level? */
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
+  endAtomic(s);
+
+  /*
+   * This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+  HM_HH_merge(s, thread, child);
 }
 
+#pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"
 void GC_HH_promoteChunks(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
-  HM_HH_promoteChunks(s, thread->hierarchicalHeap);
+  HM_HH_promoteChunks(s, thread);
 }
 
 
