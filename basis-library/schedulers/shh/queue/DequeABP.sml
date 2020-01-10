@@ -5,6 +5,8 @@ sig
   type 'a t
   exception Full
 
+  val capacity : int
+
   val new : unit -> 'a t
   val pollHasWork : 'a t -> bool
   val clear : 'a t -> unit
