@@ -39,6 +39,18 @@ struct
   val capacityPow = 8 (* DO NOT CHANGE THIS WITHOUT ALSO CHANGING runtime/gc/... *)
   val capacity = Word.toInt (Word.<< (0w1, Word.fromInt capacityPow)) - 1
 
+  fun myWorkerId () =
+    MLton.Parallel.processorNumber ()
+
+  fun die strfn =
+    ( print (strfn () ^ "\n")
+    ; OS.Process.exit OS.Process.failure
+    )
+
+  val capacityStr = Int.toString capacity
+  fun exceededCapacityError () =
+    die (fn _ => "Scheduler error: exceeded max fork depth (" ^ capacityStr ^ ")")
+
   (* we tag indices and pack into a single 64-bit word, to
    * compare-and-swap as a unit. *)
   structure TagIdx :
@@ -74,14 +86,6 @@ struct
         {tag=tag, idx=idx}
       end
   end
-
-  fun myWorkerId () =
-    MLton.Parallel.processorNumber ()
-
-  fun die strfn =
-    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
-    ; OS.Process.exit OS.Process.failure
-    )
 
   type 'a t = {data : 'a option array,
                top : TagIdx.t ref,
@@ -155,15 +159,19 @@ struct
     let
       val oldBot = Word32.toInt (!bot)
     in
-      arrayUpdate (data, oldBot, SOME x);
-      (* Normally we would now increment bot and then issue a memory fence.
+      if oldBot >= capacity then exceededCapacityError () else
+      (* Normally, an ABP deque would do this:
+       *   1. update array
+       *   2. increment bot
+       *   3. issue a memory fence
        * However we don't have memory fence primitives in Parallel ML yet.
        * So, let's hack it and do a compare-and-swap. Note that the CAS is
        * guaranteed to succeed, because multiple pushBot operations are never
        * executed concurrently. *)
-      cas32 bot (oldBot, oldBot+1);
-      (* bot := oldBot + 1; *)
-      ()
+      ( arrayUpdate (data, oldBot, SOME x)
+      ; cas32 bot (oldBot, oldBot+1)
+      ; ()
+      )
     end
 
   fun tryPopTop (q as {data, top, bot, depth}) =
