@@ -132,7 +132,7 @@ The resulting executable is somewhat peruse-able with tools like `gdb`.
 
 For example:
 ```
-$ mpl -default-type -int64 -output foo sources.mlb`
+$ mpl -default-type -int64 -output foo sources.mlb
 ```
 
 ### Running a Program
