@@ -374,8 +374,11 @@ ifeq ($(findstring $(TARGET_OS), openbsd solaris), $(TARGET_OS))
 GZIP_MAN := false
 endif
 
+# SAM_NOTE: mainline MLton also has install-docs here, but I'm removing
+# it because the docs mostly aren't relevant to MPL.
+# Also, install-docs target is currently broken for MPL.
 .PHONY: install
-install: install-no-strip install-strip install-docs
+install: install-no-strip install-strip
 
 MAN_PAGES :=  \
 	mllex.1 \
@@ -413,6 +416,9 @@ REGRESSION_EXAMPLES := \
 	signals.sml size.sml taut.sml thread1.sml thread2.sml		\
 	thread-switch.sml timeout.sml
 
+# SAM_NOTE: Need to update this for MPL.
+# It's also currently broken, because README.adoc doesn't exist anymore,
+# and some regression examples are gone.
 .PHONY: install-docs
 install-docs:
 	$(MKDIR) "$(TDOC)" "$(TDOC)/license"

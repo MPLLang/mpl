@@ -36,6 +36,16 @@ or to a custom directory with the `PREFIX` option:
 $ make PREFIX=/opt/mpl install
 ```
 
+## Docker
+
+A Docker image is available on Docker Hub.
+```
+$ docker pull shwestrick/mpl
+$ docker run -it shwestrick/mpl /bin/bash
+...# cd examples
+...# ./primes @mpl procs 4 --
+```
+
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
@@ -132,7 +142,7 @@ The resulting executable is somewhat peruse-able with tools like `gdb`.
 
 For example:
 ```
-$ mpl -default-type -int64 -output foo sources.mlb`
+$ mpl -default-type -int64 -output foo sources.mlb
 ```
 
 ### Running a Program
