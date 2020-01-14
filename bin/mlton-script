@@ -7,16 +7,25 @@ LIB_REL_BIN="../lib/mlton"
 
 EXE=
 
-CC="gcc"
+CC=""
 
 # SAM_NOTE: this is a hack to workaround the default gcc on
-# andrew unix machines is version 4.8. MLton needs at least gcc 5.
-# The gcc at this /opt... path is version 5.3, but the file only
-# exists on unix<N>.andrew.cmu.edu machines. So if we are running
-# the compiler elsewhere, just use gcc, and hope that the
-# environment is using gcc 5.
-USECC="/opt/rh/devtoolset-4/root/bin/gcc"
-if [ ! -f $USECC ]; then
+# andrew unix machines, which is version 4.8. MPL needs at least gcc 5.
+# We try a couple alternate GCCs:
+#   1. /opt/rh/devtoolset-4/root/bin/gcc is version 5.3, but only exists
+#   on unix<N>.andrew.cmu.edu machines
+#   2. /opt/rh/devtoolset-8/root/bin/gcc is version 8.3, but only exists
+#   on ghc<N>.ghc.andrew.cmu.edu
+# If neither of these exists, we default to gcc and hope for the best.
+ALTCC="/opt/rh/devtoolset-4/root/bin/gcc"
+if [ -z "$USECC" ] && [ -f $ALTCC ]; then
+  USECC="$ALTCC"
+fi
+ALTCC="/opt/rh/devtoolset-8/root/bin/gcc"
+if [ -z "$USECC" ] && [ -f $ALTCC ]; then
+  USECC="$ALTCC"
+fi
+if [ -z "$USECC" ]; then
   USECC="$CC"
 fi
 
