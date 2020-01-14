@@ -203,13 +203,13 @@ For more information about disentanglement, see the POPL 2020 paper
 
 ### Basis Library
 In general, the basis library has not yet been thoroughly scrubbed, and many
-functions may not be safe for parallelism. Some known issues:
+functions may not be safe for parallelism (Issue #41). Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
 
 ### Other
 * Some programs that use `compareAndSwap` and `arrayCompareAndSwap` primitives
-may fail to compile.
+may fail to compile (Issue #107).
 
 ## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
