@@ -288,6 +288,17 @@ fun image2ppm out ({pixels, height, width}: image) =
        before Array.app onPixel pixels
     end
 
+fun image2ppm6 out ({pixels, height, width}: image) =
+    let
+      fun onPixel (r,g,b) =
+        TextIO.output(out, String.implode (List.map Char.chr [r,g,b]))
+    in TextIO.output(out,
+                     "P6\n" ^
+                     Int.toString width ^ " " ^ Int.toString height ^ "\n" ^
+                     "255\n")
+       before Array.app onPixel pixels
+    end
+
 fun render objs width height cam : image =
     let val pixels = ForkJoin.alloc (height*width)
         fun pixel l =
@@ -296,7 +307,7 @@ fun render objs width height cam : image =
             in Array.update (pixels,
                              l,
                              colour_to_pixel (trace_ray objs width height cam j i)) end
-        val _ = ForkJoin.parfor 10000 (0,height*width) pixel
+        val _ = ForkJoin.parfor 256 (0,height*width) pixel
     in {width = width,
         height = height,
         pixels = pixels
@@ -385,6 +396,7 @@ val irreg : scene =
 val height = CommandLineArgs.parseInt "m" 200
 val width = CommandLineArgs.parseInt "n" 200
 val f = CommandLineArgs.parseString "f" ""
+val dop6 = CommandLineArgs.parseFlag "ppm6"
 val scene_name = CommandLineArgs.parseString "s" "rgbbox"
 val scene = case scene_name of
                 "rgbbox" => rgbbox
@@ -404,10 +416,12 @@ val t1 = Time.now ()
 
 val _ = print ("Rendering in " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
 
+val writeImage = if dop6 then image2ppm6 else image2ppm
+
 val _ = if f <> "" then
             let val out = TextIO.openOut f
             in print ("Writing image to " ^ f ^ ".\n")
-               before image2ppm out (render objs width height cam)
+               before writeImage out (render objs width height cam)
                before TextIO.closeOut out
             end
         else print ("-f not passed, so not writing image to file.\n")

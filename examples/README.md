@@ -55,9 +55,12 @@ $ ./dmm @mpl procs 4 -- -N 1024
 ## Ray Tracing
 
 A simple ray tracer that generates MxN images in PPM format.  Use
-`-m`/`-n` for output size, `-s` to select a scene, and `-f` to specific
-the output file.  For example:
+`-m`/`-n` for output size, `-s` to select a scene, and `-f` to specify
+the output file. By default, this outputs in P3 format (human readable);
+use `--ppm6` for P6 instead (smaller file size but not easily readable).
+For example:
 ```
 $ make ray
 $ ./ray -f out.ppm -m 400 -n 400 -s irreg
+$ ./ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox --ppm6
 ```
