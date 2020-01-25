@@ -6,7 +6,8 @@ PROGRAMS= \
 	random \
 	primes \
 	msort \
-	dmm
+	dmm \
+	ray
 
 all: $(PROGRAMS)
 

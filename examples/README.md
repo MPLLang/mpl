@@ -51,3 +51,13 @@ power-of-two. For example:
 $ make dmm
 $ ./dmm @mpl procs 4 -- -N 1024
 ```
+
+## Ray Tracing
+
+A simple ray tracer that generates MxN images in PPM format.  Use
+`-m`/`-n` for output size, `-s` to select a scene, and `-f` to specific
+the output file.  For example:
+```
+$ make ray
+$ ./ray -f out.ppm -m 400 -n 400 -s irreg
+```
