@@ -1,5 +1,11 @@
 $(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/basis/fork-join.mlb
+
+local
+  $(SML_LIB)/basis/build/sources.mlb
+in
+  structure ArrayExtra = Array
+end
+ForkJoin.mlton.sml
 
 CommandLineArgs.sml
 Util.sml
@@ -15,8 +21,3 @@ SampleSort.sml
 CountingSort.sml
 
 Geometry2D.sml
-
-ReadFile.sml
-Tokenize.sml
-
-PPM.sml

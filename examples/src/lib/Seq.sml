@@ -15,6 +15,8 @@ struct
 
   fun tabulate f n = AS.full (SeqBasis.tabulate gran (0, n) f)
 
+  fun map f s = tabulate (fn i => f (nth s i)) (length s)
+
   fun scan f b s =
     let
       val n = AS.length s
@@ -22,5 +24,10 @@ struct
     in
       (AS.slice (r, 0, SOME n), A.sub (r, n))
     end
+
+  fun reduce f b s =
+    SeqBasis.reduce 10000 f b (0, length s) (nth s)
+
+  fun fromList xs = ArraySlice.full (Array.fromList xs)
 
 end

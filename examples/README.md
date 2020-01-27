@@ -75,3 +75,16 @@ $ make tokens
 $ ./tokens FILE
 $ ./tokens @mpl procs 4 -- FILE --verbose --no-output
 ```
+
+## Nearest Neighbors
+
+For a set of 2d points, calculate the nearest neighbor of each point. This
+example generates random points in the unit square. Select the number of
+points with `-N`, and use `-output` to visualize the results (PPM format).
+For visualization, use `-resolution` to indicate the width (in pixels) of the
+output image. The resolution needs to be a similar order of magnitude as the
+number of points in order to see anything interesting.
+```
+$ make nn
+$ ./nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
+```

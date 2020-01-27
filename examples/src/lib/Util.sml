@@ -15,8 +15,14 @@ sig
   val summarizeArray: int -> ('a -> string) -> 'a array -> string
   val summarizeArraySlice: int -> ('a -> string) -> 'a ArraySlice.slice -> string
 
-  (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi *)
+  (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi
+   * forBackwards goes from hi-1 down to lo *)
   val for: (int * int) -> (int -> unit) -> unit
+  val forBackwards: (int * int) -> (int -> unit) -> unit
+
+  (* `loop (lo, hi) b f`
+   * for lo <= i < hi, iteratively do  b = f (b, i)  *)
+  val loop: (int * int) -> 'a -> ('a * int -> 'a) -> 'a
 end =
 struct
 
@@ -49,6 +55,12 @@ struct
 
   fun searchPow2 n m = if m >= n then m else searchPow2 n (2*m)
   fun boundPow2 n = searchPow2 n 1
+
+  fun loop (lo, hi) b f =
+    if lo >= hi then b else loop (lo+1, hi) (f (b, lo)) f
+
+  fun forBackwards (i, j) f =
+    if i >= j then () else (f (j-1); forBackwards (i, j-1) f)
 
   fun for (lo, hi) f =
     if lo >= hi then () else (f lo; for (lo+1, hi) f)

@@ -8,7 +8,8 @@ PROGRAMS= \
 	msort \
 	dmm \
 	ray \
-	tokens
+	tokens \
+	nn
 
 all: $(PROGRAMS)
 
