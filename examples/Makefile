@@ -7,7 +7,8 @@ PROGRAMS= \
 	primes \
 	msort \
 	dmm \
-	ray
+	ray \
+	tokens
 
 all: $(PROGRAMS)
 

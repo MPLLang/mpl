@@ -64,3 +64,14 @@ $ make ray
 $ ./ray -f out.ppm -m 400 -n 400 -s irreg
 $ ./ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox --ppm6
 ```
+
+## Tokenization
+
+Parse a file into tokens identified by whitespace, writing the tokens to stdout
+separated by newlines. Pass `--verbose` to print timing info and
+`--no-output` to not dump the result to stdout.
+```
+$ make tokens
+$ ./tokens FILE
+$ ./tokens @mpl procs 4 -- FILE --verbose --no-output
+```

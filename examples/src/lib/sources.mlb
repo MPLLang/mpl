@@ -4,8 +4,12 @@ $(SML_LIB)/basis/fork-join.mlb
 CommandLineArgs.sml
 Util.sml
 SeqBasis.sml
+Seq.sml
 BinarySearch.sml
 Merge.sml
 Quicksort.sml
 Mergesort.sml
 TreeMatrix.sml
+
+ReadFile.sml
+Tokenize.sml
