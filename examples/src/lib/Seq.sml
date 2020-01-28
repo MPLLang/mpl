@@ -7,6 +7,8 @@ struct
 
   val gran = 10000
 
+  fun empty () = AS.full (A.fromList [])
+
   fun length s = AS.length s
 
   fun subseq s (i, n) = AS.subslice (s, i, SOME n)

@@ -9,7 +9,8 @@ PROGRAMS= \
 	dmm \
 	ray \
 	tokens \
-	nn
+	nn \
+	dedup
 
 all: $(PROGRAMS)
 

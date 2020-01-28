@@ -5,6 +5,10 @@ sig
 
   val pow2: int -> int
 
+  (* this actually computes 1 + floor(log_2(n)), i.e. the number of
+   * bits required to represent n in binary *)
+  val log2: int -> int
+
   (* boundPow2 n == smallest power of 2 that is less-or-equal-to n *)
   val boundPow2: int -> int
 
@@ -50,6 +54,10 @@ struct
     in
       v
     end
+
+  (* NOTE: this actually computes 1 + floor(log_2(n)), i.e. the number of
+   * bits required to represent n in binary *)
+  fun log2 n = if (n < 1) then 0 else 1 + log2(n div 2)
 
   fun pow2 i = if (i<1) then 1 else 2*pow2(i-1)
 

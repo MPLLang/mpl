@@ -15,15 +15,15 @@ val filename =
 val beVerbose = CommandLineArgs.parseFlag "verbose"
 val noOutput = CommandLineArgs.parseFlag "no-output"
 
-val (contents, tm) = Util.getTime (fn _ => ReadFile.contentsSeq filename)
-val _ =
+fun vprint str =
   if not beVerbose then ()
-  else print ("read file in " ^ Time.fmt 4 tm ^ "s\n")
+  else TextIO.output (TextIO.stdErr, str)
 
-val (tokens, tm) = Util.getTime (fn _ => Tokenize.tokens Char.isSpace contents)
-val _ =
-  if not beVerbose then ()
-  else print ("tokenized in " ^ Time.fmt 4 tm ^ "s\n")
+val (contents, tm) = Util.getTime (fn _ => ReadFile.contentsSeq filename)
+val _ = vprint ("read file in " ^ Time.fmt 4 tm ^ "s\n")
+
+val (tokens, tm) = Util.getTime (fn _ => Tokenize.tokensSeq Char.isSpace contents)
+val _ = vprint ("tokenized in " ^ Time.fmt 4 tm ^ "s\n")
 
 fun put c = TextIO.output1 (TextIO.stdOut, c)
 fun putToken token =
@@ -31,4 +31,10 @@ fun putToken token =
 
 val _ =
   if noOutput then ()
-  else ArraySlice.app (fn token => (putToken token; put #"\n")) tokens
+  else
+    let
+      val (_, tm) = Util.getTime (fn _ =>
+        ArraySlice.app (fn token => (putToken token; put #"\n")) tokens)
+    in
+      vprint ("output in " ^ Time.fmt 4 tm ^ "s\n")
+    end
