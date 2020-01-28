@@ -69,11 +69,21 @@ $ ./ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox --ppm6
 
 Parse a file into tokens identified by whitespace, writing the tokens to stdout
 separated by newlines. Pass `--verbose` to print timing info and
-`--no-output` to not dump the result to stdout.
+`--no-output` to run the benchmark but not dump the result to stdout.
 ```
 $ make tokens
 $ ./tokens FILE
 $ ./tokens @mpl procs 4 -- FILE --verbose --no-output
+```
+
+## Deduplication
+
+Parse a file into tokens (identified by whitespace), deduplicate the tokens,
+and write to stdout separated by newlines. Pass `--verbose` to print timing
+info and `--no-output` to run the benchmark but not dump the result to stdout.
+```
+$ make dedup
+$ ./dedup @mpl procs 4 -- FILE --verbose > result
 ```
 
 ## Nearest Neighbors
@@ -88,3 +98,4 @@ number of points in order to see anything interesting.
 $ make nn
 $ ./nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
 ```
+
