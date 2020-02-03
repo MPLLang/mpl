@@ -8,11 +8,5 @@ RUN apt-get update -qq \
 COPY . /root/mpl
 WORKDIR /root/mpl
 
-# Build from source & install
-RUN make
-
-# Build the examples
-WORKDIR examples
-RUN make
-
-WORKDIR ../
+# Build from source, install, and make examples
+RUN make && make install && cd examples && make

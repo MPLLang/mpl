@@ -51,3 +51,51 @@ power-of-two. For example:
 $ make dmm
 $ ./dmm @mpl procs 4 -- -N 1024
 ```
+
+## Ray Tracing
+
+A simple ray tracer that generates MxN images in PPM format.  Use
+`-m`/`-n` for output size, `-s` to select a scene, and `-f` to specify
+the output file. By default, this outputs in P3 format (human readable);
+use `--ppm6` for P6 instead (smaller file size but not easily readable).
+For example:
+```
+$ make ray
+$ ./ray -f out.ppm -m 400 -n 400 -s irreg
+$ ./ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox --ppm6
+```
+
+## Tokenization
+
+Parse a file into tokens identified by whitespace, writing the tokens to stdout
+separated by newlines. Pass `--verbose` to print timing info and
+`--no-output` to run the benchmark but not dump the result to stdout.
+```
+$ make tokens
+$ ./tokens FILE
+$ ./tokens @mpl procs 4 -- FILE --verbose --no-output
+```
+
+## Deduplication
+
+Parse a file into tokens (identified by whitespace), deduplicate the tokens,
+and write to stdout separated by newlines. Pass `--verbose` to print timing
+info and `--no-output` to run the benchmark but not dump the result to stdout.
+```
+$ make dedup
+$ ./dedup @mpl procs 4 -- FILE --verbose > result
+```
+
+## Nearest Neighbors
+
+For a set of 2d points, calculate the nearest neighbor of each point. This
+example generates random points in the unit square. Select the number of
+points with `-N`, and use `-output` to visualize the results (PPM format).
+For visualization, use `-resolution` to indicate the width (in pixels) of the
+output image. The resolution needs to be a similar order of magnitude as the
+number of points in order to see anything interesting.
+```
+$ make nn
+$ ./nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
+```
+

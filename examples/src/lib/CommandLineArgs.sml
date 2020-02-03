@@ -8,6 +8,8 @@ sig
 
   (* parseFlag K returns true if --K given on command-line *)
   val parseFlag : string -> bool
+
+  val positional : unit -> string list
 end =
 struct
 
@@ -16,6 +18,9 @@ struct
     ; TextIO.flushOut TextIO.stdErr
     ; OS.Process.exit OS.Process.failure
     )
+
+  fun positional () =
+    List.filter (not o String.isPrefix "-") (CommandLine.arguments ())
 
   fun search key args =
     case args of

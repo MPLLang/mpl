@@ -5,6 +5,10 @@ sig
 
   val pow2: int -> int
 
+  (* this actually computes 1 + floor(log_2(n)), i.e. the number of
+   * bits required to represent n in binary *)
+  val log2: int -> int
+
   (* boundPow2 n == smallest power of 2 that is less-or-equal-to n *)
   val boundPow2: int -> int
 
@@ -15,8 +19,14 @@ sig
   val summarizeArray: int -> ('a -> string) -> 'a array -> string
   val summarizeArraySlice: int -> ('a -> string) -> 'a ArraySlice.slice -> string
 
-  (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi *)
+  (* `for (lo, hi) f` do f(i) sequentially for each lo <= i < hi
+   * forBackwards goes from hi-1 down to lo *)
   val for: (int * int) -> (int -> unit) -> unit
+  val forBackwards: (int * int) -> (int -> unit) -> unit
+
+  (* `loop (lo, hi) b f`
+   * for lo <= i < hi, iteratively do  b = f (b, i)  *)
+  val loop: (int * int) -> 'a -> ('a * int -> 'a) -> 'a
 end =
 struct
 
@@ -45,10 +55,20 @@ struct
       v
     end
 
+  (* NOTE: this actually computes 1 + floor(log_2(n)), i.e. the number of
+   * bits required to represent n in binary *)
+  fun log2 n = if (n < 1) then 0 else 1 + log2(n div 2)
+
   fun pow2 i = if (i<1) then 1 else 2*pow2(i-1)
 
   fun searchPow2 n m = if m >= n then m else searchPow2 n (2*m)
   fun boundPow2 n = searchPow2 n 1
+
+  fun loop (lo, hi) b f =
+    if lo >= hi then b else loop (lo+1, hi) (f (b, lo)) f
+
+  fun forBackwards (i, j) f =
+    if i >= j then () else (f (j-1); forBackwards (i, j-1) f)
 
   fun for (lo, hi) f =
     if lo >= hi then () else (f lo; for (lo+1, hi) f)
