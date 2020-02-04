@@ -209,11 +209,8 @@ struct
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    fun fork (f : unit -> 'a, g : unit -> 'b) =
+    fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
 
@@ -259,6 +256,17 @@ struct
         (extractResult fr, extractResult gr)
       end
 
+    fun fork (f, g) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+      in
+        (* don't let us hit an error, just sequentialize instead *)
+        if depth < Queue.capacity then
+          parfork thread depth (f, g)
+        else
+          (f (), g ())
+      end
   end
 
   (* ========================================================================
