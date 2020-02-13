@@ -159,7 +159,7 @@ structure ConRep =
 structure Result =
    struct
       datatype 'a t =
-         Bugg
+         Dead
        | Delete
        | Keep of 'a
 
@@ -167,7 +167,7 @@ structure Result =
          let
             open Layout
          in
-            fn Bugg => str "Bug"
+            fn Dead => str "Dead"
              | Delete => str "Delete"
              | Keep x => seq [str "Keep ", layoutX x]
          end
@@ -685,8 +685,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  | ConRep.Useful =>
                       Keep (ConApp {con = con,
                                     args = removeUselessVars args})
-                 | ConRep.Useless => Bugg
-                 | ConRep.FFI => Bugg)
+                 | ConRep.Useless => Dead
+                 | ConRep.FFI => Dead)
           | PrimApp {prim, targs, args} =>
                Keep
                (let
@@ -826,13 +826,13 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 * the vector of length 0; this `Vector_sub` is unreachable due
                 * to a dominating bounds check that must necessarily fail.
                 *)
-               Bugg
+               Dead
           | SOME ty =>
                (* It is wrong to omit calling simplifyExp when var = NONE because
                 * targs in a PrimApp may still need to be simplified.
                 *)
                (case simplifyExp exp of
-                   Bugg => Bugg
+                   Dead => Dead
                  | Delete => Delete
                  | Keep exp => Keep (Statement.T {var = var, ty = ty, exp = exp}))
       val simplifyStatement =
@@ -854,7 +854,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      Vector.fold'
                      (statements, 0, [], fn (_, statement, statements) =>
                       case simplifyStatement statement of
-                         Bugg => Vector.Done NONE
+                         Dead => Vector.Done NONE
                        | Delete => Vector.Continue statements
                        | Keep s => Vector.Continue (s :: statements),
                       SOME o Vector.fromListRev)
@@ -915,7 +915,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                     exp = Exp.unit}),
           Vector.keepAllMap (globals, fn s =>
                              case simplifyStatement s of
-                                Bugg => Error.bug "SimplifyTypes.globals: bind can't fail"
+                                Dead => Error.bug "SimplifyTypes.globals: Dead"
                               | Delete => NONE
                               | Keep b => SOME b)]
       val shrink = shrinkFunction {globals = globals}
