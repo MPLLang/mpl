@@ -381,8 +381,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   conCardinality con))
           in
              if Vector.isEmpty cons
-                then (setTyconReplacement (tycon, SOME Type.unit)
-                      ; NONE)
+                then NONE
                 else SOME (Datatype.T {tycon = tycon, cons = cons})
           end)
       (* diagnostic *)
@@ -472,9 +471,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  end)
           in
              case Vector.length cons of
-                0 => (setTyconNumCons (tycon, 0)
-                      ; setTyconReplacement (tycon, SOME Type.unit)
-                      ; (datatypes, unary))
+                0 => (datatypes, unary)
               | 1 =>
                    let
                       val {con, args} = Vector.first cons
