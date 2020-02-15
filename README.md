@@ -210,11 +210,6 @@ Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
 
-### Other
-* Some programs that use `compareAndSwap` and `arrayCompareAndSwap` primitives
-may fail to compile
-([#107](https://github.com/MPLLang/mpl/issues/107)).
-
 ## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
 unsupported, including (but not limited to):
