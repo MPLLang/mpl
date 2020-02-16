@@ -18,4 +18,7 @@ sig
   val readWord8: t -> int -> Word8.word
   val unsafeReadChar: t -> int -> char
   val unsafeReadWord8: t -> int -> Word8.word
+
+  val readChars: t -> int -> char ArraySlice.slice -> unit
+  val readWord8s: t -> int -> Word8.word ArraySlice.slice -> unit
 end

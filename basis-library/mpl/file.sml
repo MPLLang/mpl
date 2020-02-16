@@ -15,10 +15,17 @@ struct
 
   type t = MLton.Pointer.t * int * bool ref
 
+  val copyCharsToBuffer = _import "GC_memcpyToBuffer" runtime private:
+    MLton.Pointer.t * char array * C_Size.word * C_Size.word -> unit;
+  val copyWord8sToBuffer = _import "GC_memcpyToBuffer" runtime private:
+    MLton.Pointer.t * Word8.word array * C_Size.word * C_Size.word -> unit;
   val mmapFileReadable = _import "GC_mmapFileReadable" runtime private:
     C_Int.int * C_Size.word -> MLton.Pointer.t;
   val release = _import "GC_release" runtime private:
     MLton.Pointer.t * C_Size.word -> unit;
+
+  fun size (ptr, sz, stillOpen) =
+    if !stillOpen then sz else raise Closed
 
   fun openFile path =
     let
@@ -61,7 +68,30 @@ struct
     else
       raise Closed
 
-  fun size (ptr, sz, stillOpen) =
-    if !stillOpen then sz else raise Closed
+  fun readChars (ptr, size, stillOpen) i slice =
+    let
+      val (arr, j, n) = ArraySlice.base slice
+      val start = MLtonPointer.add (ptr, Word.fromInt i)
+    in
+      if !stillOpen andalso i >= 0 andalso i+n <= size then
+        copyCharsToBuffer (start, arr, C_Size.fromInt j, C_Size.fromInt n)
+      else if i < 0 orelse i+n > size then
+        raise Subscript
+      else
+        raise Closed
+    end
+
+  fun readWord8s (ptr, size, stillOpen) i slice =
+    let
+      val (arr, j, n) = ArraySlice.base slice
+      val start = MLtonPointer.add (ptr, Word.fromInt i)
+    in
+      if !stillOpen andalso i >= 0 andalso i+n <= size then
+        copyWord8sToBuffer (start, arr, C_Size.fromInt j, C_Size.fromInt n)
+      else if i < 0 orelse i+n > size then
+        raise Subscript
+      else
+        raise Closed
+    end
 
 end
