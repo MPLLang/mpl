@@ -1,0 +1,21 @@
+(* Copyright (C) 2020 Sam Westrick.
+ *
+ * MLton is released under a HPND-style license.
+ * See the file MLton-LICENSE for details.
+ *)
+
+ann
+   "deadCode true"
+   "nonexhaustiveBind warn" "nonexhaustiveMatch warn"
+   "redundantBind warn" "redundantMatch warn"
+   "sequenceNonUnit warn"
+   "warnUnused true" "forceUsed"
+in
+   local
+      libs/basis-extra/basis-extra.mlb
+   in
+      signature MPL_FILE
+      signature MPL
+      structure Mpl
+   end
+end

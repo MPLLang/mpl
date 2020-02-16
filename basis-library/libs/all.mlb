@@ -12,6 +12,7 @@ local
    ../basis-1997.mlb
    ../basis-none.mlb
    ../mlton.mlb
+   ../mpl.mlb
    ../sml-nj.mlb
    ../unsafe.mlb
    ../c-types.mlb

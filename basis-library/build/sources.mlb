@@ -393,6 +393,15 @@ in
    ../mlton/mlton.sig
    ../mlton/mlton.sml
 
+   ../mpl/file.sig
+   ann
+      "allowFFI true"
+   in
+      ../mpl/file.sml
+   end
+   ../mpl/mpl.sig
+   ../mpl/mpl.sml
+
    ../sml-nj/sml-nj.sig
    ../sml-nj/sml-nj.sml
    ../sml-nj/unsafe.sig

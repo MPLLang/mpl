@@ -116,3 +116,6 @@ signature MLTON_WORD = MLTON_WORD
 signature MLTON_WORLD = MLTON_WORLD
 signature SML_OF_NJ = SML_OF_NJ
 signature UNSAFE = UNSAFE
+
+signature MPL = MPL
+signature MPL_FILE = MPL_FILE
