@@ -16,6 +16,6 @@ in
    in
       signature MPL_FILE
       signature MPL
-      structure Mpl
+      structure MPL
    end
 end

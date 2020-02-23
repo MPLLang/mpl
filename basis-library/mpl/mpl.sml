@@ -4,7 +4,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure Mpl :> MPL =
+structure MPL :> MPL =
 struct
   structure File = MPLFile
 end

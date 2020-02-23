@@ -256,7 +256,7 @@ structure BasisExtra :> BASIS_EXTRA =
       structure MLton = MLton
       structure SMLofNJ = SMLofNJ
       structure Unsafe = Unsafe
-      structure Mpl = Mpl
+      structure MPL = MPL
 
       open ArrayGlobal
            BoolGlobal

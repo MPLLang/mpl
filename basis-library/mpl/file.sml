@@ -17,7 +17,7 @@ struct
 
   exception Closed
 
-  open Primitive.Mpl.File
+  open Primitive.MPL.File
 
   fun size (ptr, sz, stillOpen) =
     if !stillOpen then sz else raise Closed

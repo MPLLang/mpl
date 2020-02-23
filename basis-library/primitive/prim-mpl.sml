@@ -7,7 +7,7 @@
 structure Primitive = struct
 open Primitive
 
-structure Mpl =
+structure MPL =
 struct
 
   structure File =
