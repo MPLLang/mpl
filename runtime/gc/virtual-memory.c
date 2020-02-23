@@ -32,6 +32,10 @@ static inline void GC_memcpy (pointer src, pointer dst, size_t size) {
   memcpy (dst, src, size);
 }
 
+void GC_memcpyToBuffer(pointer src, pointer buffer, size_t offset, size_t length) {
+  GC_memcpy(src, buffer + offset, length);
+}
+
 static inline void GC_memmove (pointer src, pointer dst, size_t size) {
   if (DEBUG_DETAILED)
     fprintf (stderr, "GC_memmove ("FMTPTR", "FMTPTR", %"PRIuMAX")\n",

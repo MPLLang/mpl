@@ -1,5 +1,9 @@
+static inline void *mmapFileReadable (int fd, size_t size) {
+  return mmap (0, size, PROT_READ, MAP_PRIVATE, fd, 0);
+}
+
 static inline void *mmapAnonFlags (void *start, size_t length, int flags) {
-        return mmap (start, length, PROT_READ | PROT_WRITE, 
+        return mmap (start, length, PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANON | flags, -1, 0);
 }
 

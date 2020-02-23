@@ -327,6 +327,7 @@ signature BASIS_EXTRA =
       structure MLton: MLTON
       structure SMLofNJ: SML_OF_NJ
       structure Unsafe: UNSAFE
+      structure MPL: MPL
 
       sharing type MLton.IntInf.t = IntInf.int
       sharing type MLton.Process.pid = Posix.Process.pid

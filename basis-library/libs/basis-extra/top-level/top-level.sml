@@ -12,4 +12,5 @@ in
   structure MLton = MLton
   structure SMLofNJ = SMLofNJ
   structure Unsafe = Unsafe
+  structure MPL = MPL
 end
