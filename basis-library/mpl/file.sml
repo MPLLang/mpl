@@ -30,6 +30,7 @@ struct
       val fd = C_Int.fromInt (SysWord.toInt (fdToWord file))
       val ptr = mmapFileReadable (fd, C_Size.fromInt size)
     in
+      Posix.IO.close file;
       (ptr, size, ref true)
     end
 
