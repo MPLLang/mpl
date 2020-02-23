@@ -394,11 +394,7 @@ in
    ../mlton/mlton.sml
 
    ../mpl/file.sig
-   ann
-      "allowFFI true"
-   in
-      ../mpl/file.sml
-   end
+   ../mpl/file.sml
    ../mpl/mpl.sig
    ../mpl/mpl.sml
 

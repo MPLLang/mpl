@@ -15,14 +15,9 @@ struct
 
   type t = MLton.Pointer.t * int * bool ref
 
-  val copyCharsToBuffer = _import "GC_memcpyToBuffer" runtime private:
-    MLton.Pointer.t * char array * C_Size.word * C_Size.word -> unit;
-  val copyWord8sToBuffer = _import "GC_memcpyToBuffer" runtime private:
-    MLton.Pointer.t * Word8.word array * C_Size.word * C_Size.word -> unit;
-  val mmapFileReadable = _import "GC_mmapFileReadable" runtime private:
-    C_Int.int * C_Size.word -> MLton.Pointer.t;
-  val release = _import "GC_release" runtime private:
-    MLton.Pointer.t * C_Size.word -> unit;
+  exception Closed
+
+  open Primitive.Mpl.File
 
   fun size (ptr, sz, stillOpen) =
     if !stillOpen then sz else raise Closed
@@ -37,8 +32,6 @@ struct
     in
       (ptr, size, ref true)
     end
-
-  exception Closed
 
   fun closeFile (ptr, size, stillOpen) =
     if !stillOpen then
