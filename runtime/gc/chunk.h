@@ -63,6 +63,7 @@ struct HM_chunk {
   uint8_t startGap;
 
   bool mightContainMultipleObjects;
+  bool isInToSpace;
 
   // for padding and sanity checks
   uint32_t magic;
@@ -234,6 +235,10 @@ HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 size_t HM_getChunkListSize(HM_chunkList levelHead);
+
+bool HM_isChunkMarked(HM_chunk chunk);
+void HM_markChunk(HM_chunk chunk);
+void HM_unmarkChunk(HM_chunk chunk);
 
 /**
  * Updates the chunk's values to reflect mutator
