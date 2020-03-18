@@ -599,15 +599,15 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 }
 
 
-bool HM_isChunkMarked(HM_chunk chunk) {
-  return chunk->isInToSpace;
-}
-void HM_markChunk(HM_chunk chunk) {
-  chunk->isInToSpace = true;
-}
-void HM_unmarkChunk(HM_chunk chunk) {
-  chunk->isInToSpace = false;
-}
+// bool HM_isChunkMarked(HM_chunk chunk) {
+//   return chunk->isInToSpace;
+// }
+// void HM_markChunk(HM_chunk chunk) {
+//   chunk->isInToSpace = true;
+// }
+// void HM_unmarkChunk(HM_chunk chunk) {
+//   chunk->isInToSpace = false;
+// }
 
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
