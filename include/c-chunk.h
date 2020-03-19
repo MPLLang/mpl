@@ -245,4 +245,10 @@ static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr 
   Assignable_writeBarrier(s, obj, dst, src);
 }
 
+extern void Assignable_readBarrier(CPointer, Objptr, Objptr*);
+
+static inline void GC_readBarrier(CPointer s, Objptr obj, CPointer field) {
+  Assignable_readBarrier(s, obj, field);
+}
+
 #endif /* #ifndef _C_CHUNK_H_ */

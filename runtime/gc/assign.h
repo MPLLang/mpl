@@ -17,6 +17,10 @@ PRIVATE void Assignable_writeBarrier(
   GC_state s, objptr dst, objptr* field, objptr src
   );
 
+PRIVATE void Assignable_readBarrier(
+  GC_state s, objptr dst, objptr* field
+  );
+
 #endif  /* MLTON_GC_INTERNAL_BASIS */
 
 #endif  /* ASSIGN_H */
