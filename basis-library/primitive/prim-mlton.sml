@@ -1,4 +1,5 @@
-(* Copyright (C) 2010-2011,2013-2014,2017,2019 Matthew Fluet.
+(* Copyright (C) 2020 Sam Westrick
+ * Copyright (C) 2010-2011,2013-2014,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -170,6 +171,12 @@ structure HM =
 
         val refAssignNoBarrier : 'a ref * 'a -> unit =
             _prim "Ref_assign_noWriteBarrier" : 'a ref * 'a -> unit;
+
+        val arraySubNoBarrier : 'a array * SeqIndex.int -> 'a =
+            _prim "Array_sub_noReadBarrier" : 'a array * SeqIndex.int -> 'a;
+
+        val refDerefNoBarrier : 'a ref -> 'a =
+            _prim "Ref_deref_noReadBarrier" : 'a ref -> 'a;
     end
 
 structure Parallel =

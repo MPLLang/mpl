@@ -120,7 +120,8 @@ signature SSA_TREE2 =
              | PrimApp of {args: Var.t vector,
                            prim: Type.t Prim.t}
              | Select of {base: Var.t Base.t,
-                          offset: int}
+                          offset: int,
+                          readBarrier: bool}
              | Var of Var.t
 
             val equals: t * t -> bool

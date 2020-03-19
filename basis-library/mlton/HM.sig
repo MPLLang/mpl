@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Sam Westrick
+(* Copyright (C) 2019-2020 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan
  *
  * MLton is released under a HPND-style license.
@@ -12,4 +12,6 @@ sig
   val registerQueueBot: Word32.word * Word32.word ref -> unit
   val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit
   val refAssignNoBarrier : 'a ref * 'a -> unit
+  val arraySubNoBarrier : 'a array * SeqIndex.int -> 'a
+  val refDerefNoBarrier : 'a ref -> 'a
 end

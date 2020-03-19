@@ -179,6 +179,25 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_writeBarrier"}
 
+      fun readBarrier {obj, field} =
+        T {args = Vector.new3 (Type.gcState(), obj, field),
+           convention = Cdecl,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = true,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new3 (CType.gcState,
+                                     CType.objptr,
+                                     CType.cpointer),
+                        NONE),
+          return = Type.unit,
+          symbolScope = Private,
+          target = Direct "GC_readBarrier"}
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1689,7 +1708,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                     (CFunction.worldSave ())
                                | _ => simpleCodegenOrC prim
                            end
-                      | S.Exp.Select {base, offset} =>
+                      (* SAM_NOTE: TODO: READ BARRIER HERE *)
+                      | S.Exp.Select {base, offset, readBarrier} =>
                            (case var of
                                NONE => none ()
                              | SOME var =>

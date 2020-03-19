@@ -91,7 +91,7 @@ structure VarTree =
             T (info, Prod.map (ts, dropVars))
          end
 
-      fun fillInRoots (t: t, {base: Var.t Base.t, offset: int})
+      fun fillInRoots (t: t, {base: Var.t Base.t, offset: int, readBarrier})
          : t * Statement.t list =
          let
             fun loop (t as T (info, ts), offset, ac) =
@@ -122,7 +122,8 @@ structure VarTree =
                                     (T (NotFlat {ty = ty, var = SOME var}, ts),
                                      Bind
                                      {exp = Select {base = base,
-                                                    offset = offset},
+                                                    offset = offset,
+                                                    readBarrier = readBarrier},
                                       ty = ty,
                                       var = SOME var} :: ac)
                                  end
@@ -138,9 +139,10 @@ structure VarTree =
       val fillInRoots =
          Trace.trace2 ("DeepFlatten.VarTree.fillInRoots",
                        layout,
-                       fn {base, offset} =>
+                       fn {base, offset, readBarrier} =>
                        Layout.record [("base", Base.layout (base, Var.layout)),
-                                      ("offset", Int.layout offset)],
+                                      ("offset", Int.layout offset),
+                                      ("readBarrier", Bool.layout readBarrier)],
                        Layout.tuple2 (layout, List.layout Statement.layout))
          fillInRoots
    end
@@ -174,7 +176,8 @@ fun flatten {base: Var.t Base.t option,
                         in
                            (result,
                             [Bind {exp = Select {base = base,
-                                                 offset = offset},
+                                                 offset = offset,
+                                                 readBarrier = false},
                                    ty = ty,
                                    var = SOME result}])
                         end
@@ -971,7 +974,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                   end
                          end)
              | PrimApp _ => simple ()
-             | Select {base, offset} =>
+             | Select {base, offset, readBarrier} =>
                   (case var of
                       NONE => none ()
                     | SOME var =>
@@ -1005,7 +1008,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                                  (child,
                                                   {base = Base.map (base, replaceVar),
                                                    offset = (Object.finalOffset
-                                                             (obj, offset))})
+                                                             (obj, offset)),
+                                                   readBarrier = readBarrier})
                                               end
                                      val () = setVarTree (var, child)
                                   in

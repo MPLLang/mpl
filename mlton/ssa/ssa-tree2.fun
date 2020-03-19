@@ -622,7 +622,8 @@ structure Exp =
        | PrimApp of {prim: Type.t Prim.t,
                      args: Var.t vector}
        | Select of {base: Var.t Base.t,
-                    offset: int}
+                    offset: int,
+                    readBarrier: bool}
        | Var of Var.t
 
       val unit = Object {con = NONE, args = Vector.new0 ()}
@@ -649,8 +650,10 @@ structure Exp =
              | Inject {sum, variant} => Inject {sum = sum, variant = fx variant}
              | Object {con, args} => Object {con = con, args = fxs args}
              | PrimApp {prim, args} => PrimApp {args = fxs args, prim = prim}
-             | Select {base, offset} =>
-                  Select {base = Base.map (base, fx), offset = offset}
+             | Select {base, offset, readBarrier} =>
+                  Select {base = Base.map (base, fx),
+                          offset = offset,
+                          readBarrier = readBarrier}
              | Var x => Var (fx x)
          end
 
@@ -671,8 +674,12 @@ structure Exp =
                        layoutArgs args]
              | PrimApp {args, prim} =>
                   seq [str "prim ", Prim.layoutFull (prim, Type.layout), str " ", layoutArgs args]
-             | Select {base, offset} =>
-                  Base.layoutWithOffset (base, offset, layoutVar)
+             | Select {base, offset, readBarrier} =>
+                  if readBarrier then
+                     seq [str "RB ",
+                          Base.layoutWithOffset (base, offset, layoutVar)]
+                  else
+                     Base.layoutWithOffset (base, offset, layoutVar)
              | Var x => layoutVar x
          end
 
@@ -702,8 +709,12 @@ structure Exp =
               parseArgs >>= (fn args =>
               pure {prim = prim, args = args}))),
              Select <$>
+             (kw "RB" *>
+              Base.parseWithOffset Var.parse >>= (fn (base, offset) =>
+              pure {base = base, offset = offset, readBarrier = true})),
+             Select <$>
              (Base.parseWithOffset Var.parse >>= (fn (base, offset) =>
-              pure {base = base, offset = offset})),
+              pure {base = base, offset = offset, readBarrier = false})),
              Var <$> Var.parse]
          end
 
@@ -727,8 +738,11 @@ structure Exp =
           | (PrimApp {prim, args, ...},
              PrimApp {prim = prim', args = args', ...}) =>
                Prim.equals (prim, prim') andalso varsEquals (args, args')
-          | (Select {base = b1, offset = i1}, Select {base = b2, offset = i2}) =>
-               Base.equals (b1, b2, Var.equals) andalso i1 = i2
+          | (Select {base = b1, offset = i1, readBarrier = rb1},
+             Select {base = b2, offset = i2, readBarrier = rb2}) =>
+               Base.equals (b1, b2, Var.equals)
+               andalso i1 = i2
+               andalso rb1 = rb2
           | (Var x, Var x') => Var.equals (x, x')
           | _ => false
       (* quell unused warning *)
@@ -753,8 +767,13 @@ structure Exp =
                                NONE => tuple
                              | SOME c => Con.hash c)
              | PrimApp {args, ...} => hashVars (args, primApp)
-             | Select {base, offset} =>
-                  Hash.combine3 (select, Base.hash (base, Var.hash), Word.fromInt offset)
+             | Select {base, offset, readBarrier} =>
+                (* SAM_NOTE: do we actually need to care about the
+                 * readBarrier here? *)
+                  Hash.combine (if readBarrier then 0w1 else 0w0,
+                    Hash.combine3 (select,
+                                   Base.hash (base, Var.hash),
+                                   Word.fromInt offset))
              | Var x => Var.hash x
       end
       (* quell unused warning *)

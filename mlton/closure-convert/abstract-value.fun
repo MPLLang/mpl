@@ -464,7 +464,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                  | _ => typeError ())
                ; r
             end
-       | Array_sub =>
+       | Array_sub _ =>
             (case dest (#1 (twoArgs ())) of
                 Array x => x
               | Type _ => result ()
@@ -500,7 +500,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                  | _ => typeError ())
                ; result ()
             end
-       | Ref_deref => (case dest (oneArg ()) of
+       | Ref_deref _ => (case dest (oneArg ()) of
                           Ref v => v
                         | Type _ => result ()
                         | _ => typeError ())
