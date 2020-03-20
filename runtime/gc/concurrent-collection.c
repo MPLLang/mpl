@@ -1,4 +1,8 @@
 
+bool isPointerMarked (pointer p) {
+  return MARK_MASK & getHeader (p);
+}
+
 bool isInScope(HM_chunk chunk, HM_chunkList list) {
 	// Check that this chunk belongs to this list.
 	// I think we should path compress here because we will access the
@@ -16,13 +20,25 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
 	return isInScope (chunk, args->repList);
 }
 
-// Mark the object pointed to p
-void forwardObj(pointer p) {
+// Mark the object uniquely identified by p
+void markObj(pointer p) {
     GC_header* headerp = getHeaderp(p);
     GC_header header = *headerp;
     header ^= MARK_MASK;
     *headerp = header;
 }
+
+
+// void unmarkObjects (HM_chunkList repList) {
+// 	HM_chunk chunk = repList->firstChunk;
+
+//  	while (NULL != chunk) {
+
+//  		HM_unmarkChunk(chunk);
+//  		chunk = chunk->nextChunk;
+
+// }
+
 
 void saveChunk(HM_chunk chunk, void* rawArgs) {
 
@@ -44,14 +60,32 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 		if(!isChunkSaved(cand_chunk, args)) {
 			saveChunk(cand_chunk, args->repList);
 		}
-		if(!isObjForwarded(p)) {
-			forwardObj(p);
+
+		// !isChunkSaved => !isPointerMarked can merge into one
+		if(!isPointerMarked(p)) {
+			markObj(p);
 			foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
 							forwardPtrChunk, &args);
 		}
 	}
 }
 
+// Dual unmarking function -- can merge codes by adding another param to args
+void unmarkObjects(GC_state s, objptr *opp, void * rawArgs) {
+	objptr op = *opp;
+	pointer p = objptrToPointer (op, NULL);
+	ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
+
+	HM_chunk cand_chunk = HM_getChunkOf(p);
+
+	if(isInScope(cand_chunk, args->repList)) {
+		if(isPointerMarked(p)) {
+			unmarkObj(p);
+			foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
+							unmarkObjects, &args);
+		}
+	}
+}
 
 void collectWithRoots(INIT_ROOT_SET, HM_HierarchicalHeap targetHH) {
 	struct HM_chunkList _repList;
@@ -65,14 +99,16 @@ void collectWithRoots(INIT_ROOT_SET, HM_HierarchicalHeap targetHH) {
 	}
 
 	for(auto q: INIT_ROOT_SET) {
-		forwardPtrChunk(s, q, &args);
+		callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
 	}
 
 	// Free the chunks in the original list
 	HM_appendChunkList(getFreeListSmall(s), origList);
 
-	// unmarkChunkList(repList);
-	unmarkObjects(repList);
+	for(auto q: INIT_ROOT_SET) {
+		callIfIsObjptr(s, unmarkObjects, ((objptr*)(q)), &args);
+	}
+
 
 	// Update the original list
 	origList->firstChunk = repList->firstChunk;
