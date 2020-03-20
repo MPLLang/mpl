@@ -174,12 +174,12 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
 
          in
             case Prim.name prim of
-                 Prim.Name.Array_sub => derefPrim args
+                 Prim.Name.Array_sub _ => derefPrim args
                | Prim.Name.Array_toArray => Vector.sub (args, 0)
                | Prim.Name.Array_toVector => Vector.sub (args, 0)
                | Prim.Name.Array_update _ => updatePrim TypeInfo.Array args
                | Prim.Name.Ref_ref => refPrim TypeInfo.Ref args
-               | Prim.Name.Ref_deref => derefPrim args
+               | Prim.Name.Ref_deref _ => derefPrim args
                | Prim.Name.Ref_assign _ => assignPrim TypeInfo.Ref args
                | Prim.Name.Vector_sub => derefPrim args
                | Prim.Name.Vector_vector => TypeInfo.Heap

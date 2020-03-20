@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Sam Westrick
+(* Copyright (C) 2019-2020 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan
  *
  * MLton is released under a HPND-style license.
@@ -15,4 +15,7 @@ struct
 
   val arrayUpdateNoBarrier = PrimHM.arrayUpdateNoBarrier
   val refAssignNoBarrier = PrimHM.refAssignNoBarrier
+
+  val arraySubNoBarrier = PrimHM.arraySubNoBarrier
+  val refDerefNoBarrier = PrimHM.refDerefNoBarrier
 end

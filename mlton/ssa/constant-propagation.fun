@@ -1028,7 +1028,7 @@ fun transform (program: Program.t): Program.t =
                 | Array_copyVector =>
                      update (arg 0, devector (arg 2))
                 | Array_length => arrayLength (arg 0)
-                | Array_sub => dearray (arg 0)
+                | Array_sub _ => dearray (arg 0)
                 | Array_toArray => arrayFromArray (arg 0)
                 | Array_toVector => vectorFromArray (arg 0)
                 | Array_update _ => update (arg 0, arg 2)
@@ -1037,7 +1037,7 @@ fun transform (program: Program.t): Program.t =
                      ; dearray (arg 0))
                 | Ref_assign _ =>
                      (coerce {from = arg 1, to = deref (arg 0)}; unit ())
-                | Ref_deref => deref (arg 0)
+                | Ref_deref _ => deref (arg 0)
                 | Ref_ref =>
                      let
                         val v = arg 0

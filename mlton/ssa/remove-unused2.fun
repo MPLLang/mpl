@@ -505,7 +505,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                in
                   ()
                end
-          | Select {base, offset} =>
+          | Select {base, offset, readBarrier} =>
                let
                   datatype z = datatype Base.t
                   datatype z = datatype ObjectCon.t
@@ -1121,7 +1121,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                                  end
                          else #exp (ConInfo.dummy ci)
                       end)
-          | Select {base, offset} =>
+          | Select {base, offset, readBarrier} =>
                let
                   datatype z = datatype Base.t
                in
@@ -1147,7 +1147,8 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                                                else offset)
                                         in
                                            Select {base = Base.Object base,
-                                                   offset = offset}
+                                                   offset = offset,
+                                                   readBarrier = readBarrier}
                                         end
                                    | Sequence => Error.bug "RemoveUnused2.simplifyExp: Update:non-Con|Tuple"
                                    | Tuple => e)

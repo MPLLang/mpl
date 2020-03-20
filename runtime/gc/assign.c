@@ -8,8 +8,8 @@
  */
 
 /* For now, do nothing! */
-void Assignable_readBarrier(GC_state s, objptr obj, objptr* field) {
-  return;
+objptr Assignable_readBarrier(GC_state s, objptr obj, objptr* field) {
+  return *field;
 }
 
 void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {

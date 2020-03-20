@@ -231,7 +231,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                          construct
                          (Value.Object {args = Vector.map (args, varInfo),
                                         con = con})
-                    | Select {base, offset} =>
+                    | Select {base, offset, readBarrier} =>
                          (case base of
                              Base.Object x =>
                                 construct (Value.Select {object = varInfo x,
@@ -1217,7 +1217,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                          | Var vi => setVar vi
                          | _ => apply {args = args, prim = prim}
                      end
-                | Select {base, offset} =>
+                | Select {base, offset, readBarrier} =>
                      (case base of
                          Base.Object object =>
                             let
@@ -1229,7 +1229,8 @@ fun shrinkFunction {globals: Statement.t vector} =
                                                  offset = offset},
                                    fn () =>
                                    Select {base = Base.Object (use object),
-                                           offset = offset})
+                                           offset = offset,
+                                           readBarrier = readBarrier})
                             in
                                case (ty, !value) of
                                   (SOME ty, SOME (Value.Object {args, ...})) =>
@@ -1242,6 +1243,8 @@ fun shrinkFunction {globals: Statement.t vector} =
                                                 (Vector.sub
                                                  (Prod.dest targs, offset)))
                                                then dontChange ()
+                                            else if readBarrier
+                                               then Error.bug "Ssa2.Shrink2.evalBind: Select: read barrier on immutable"
                                             else setVar (Vector.sub
                                                          (args, offset))
                                        | _ => Error.bug "Ssa2.Shrink2.evalBind: Select:non object")
