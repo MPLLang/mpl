@@ -1,6 +1,6 @@
 
 bool isPointerMarked (pointer p) {
-  return MARK_MASK & getHeader (p);
+	return MARK_MASK & getHeader (p);
 }
 
 bool isInScope(HM_chunk chunk, HM_chunkList list) {
@@ -22,10 +22,10 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
 
 // Mark the object uniquely identified by p
 void markObj(pointer p) {
-    GC_header* headerp = getHeaderp(p);
-    GC_header header = *headerp;
-    header ^= MARK_MASK;
-    *headerp = header;
+	GC_header* headerp = getHeaderp(p);
+	GC_header header = *headerp;
+	header ^= MARK_MASK;
+	*headerp = header;
 }
 
 
@@ -38,6 +38,21 @@ void markObj(pointer p) {
 //  		chunk = chunk->nextChunk;
 
 // }
+
+void linearUnmark(GC_state s, HM_chunkList repList) {
+	HM_chunk = repList->firstChunk;
+
+	while(chunk!=NULL) {
+		pointer q = HM_getChunkStart(chunk);
+		while (q != HM_getChunkFrontier(chunk)) {
+			if (isPointerMarked(q))
+				markObj(q); // mark/unmark is just xor
+			q += sizeofObject(s, q);
+
+		}
+		chunk = chunk->nextChunk;
+	}
+}
 
 
 void saveChunk(HM_chunk chunk, void* rawArgs) {
@@ -56,12 +71,17 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 	ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
 	HM_chunk cand_chunk = HM_getChunkOf(p);
-	if(isInScope(cand_chunk, args->origList)) {
-		if(!isChunkSaved(cand_chunk, args)) {
-			saveChunk(cand_chunk, args->repList);
-		}
 
-		// !isChunkSaved => !isPointerMarked can merge into one
+	bool chunkOrig  = isInScope(cand_chunk, args->origList);
+	bool chunkSaved = isChunkSaved(cand_chunk, args);
+
+	// save this chunk if not saved already
+	if(chunkOrig && !chunkSaved) {
+		saveChunk(cand_chunk, args->repList);
+	}
+
+	// forward the object if in scope and not already forwarded.
+	if(chunkOrig || chunkSaved) {
 		if(!isPointerMarked(p)) {
 			markObj(p);
 			foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
@@ -87,31 +107,41 @@ void unmarkObjects(GC_state s, objptr *opp, void * rawArgs) {
 	}
 }
 
-void collectWithRoots(INIT_ROOT_SET, HM_HierarchicalHeap targetHH) {
+void collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
+							ConcurrentPackage args) {
 	struct HM_chunkList _repList;
 	HM_chunkList repList = &(_repList);
+	assert(args->repList == NULL);
+	args->repList = &(_repList);
 
 	HM_chunkList origList = HM_HH_getChunkList(targetHH);
 
-	ConcurrentCollectArgs args = {
+	ConcurrentCollectArgs lists = {
 		.origList = origList,
 		.repList  = repList
 	}
 
-	for(auto q: INIT_ROOT_SET) {
-		callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
+	concurrent_stack* workStack = args->rootList;
+
+	while(concurrent_stack_size(workStack) != 0) {
+		objptr * q = concurrent_stack_pop(workStack);
+		assert(isObjPtr(*q));
+		forwardPtrChunk(s, q, &lists);
+		// callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
 	}
 
 	// Free the chunks in the original list
 	HM_appendChunkList(getFreeListSmall(s), origList);
 
-	for(auto q: INIT_ROOT_SET) {
-		callIfIsObjptr(s, unmarkObjects, ((objptr*)(q)), &args);
-	}
-
+	// for(auto q: INIT_ROOT_SET) {
+	// 	callIfIsObjptr(s, unmarkObjects, ((objptr*)(q)), &lists);
+	// }
+	linearUnmark(repList);
 
 	// Update the original list
 	origList->firstChunk = repList->firstChunk;
 	origList->lastChunk = repList->lastChunk;
 	origList->size = repList->size;
+
+	args->repList = NULL;
 }
