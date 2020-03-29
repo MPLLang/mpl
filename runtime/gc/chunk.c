@@ -174,6 +174,8 @@ static HM_chunk splitChunkAt(HM_chunkList list, HM_chunk chunk, pointer splitPoi
     assert(result->nextAdjacent->prevAdjacent == result);
   }
 
+  result->decheckState = chunk->decheckState;
+
   return result;
 }
 
@@ -357,6 +359,9 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
 
   HM_appendChunk(list, chunk);
+
+  GC_thread thread = getThreadCurrent(s);
+  chunk->decheckState = thread->decheckState;
 
   return chunk;
 }

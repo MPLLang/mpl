@@ -34,6 +34,7 @@ typedef GC_state GCState_t;
 #include "gc/pointer.h"
 #include "gc/objptr.h"
 #include "gc/object.h"
+#include "gc/decheck.h"
 #include "gc/sequence.h"
 #include "gc/sources.h"
 #include "gc/frame.h"

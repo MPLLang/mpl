@@ -7,8 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
-/* For now, do nothing! */
 objptr Assignable_readBarrier(GC_state s, objptr obj, objptr* field) {
+  decheckRead(s, field);
   return *field;
 }
 

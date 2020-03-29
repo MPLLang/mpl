@@ -53,6 +53,8 @@ typedef struct GC_thread {
   HM_chunk currentChunk;
 
   objptr stack;
+
+  decheck_tid_t decheckState;
 } __attribute__ ((packed)) *GC_thread;
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
@@ -65,7 +67,8 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(void*) +   // currentCheck
-                    sizeof(objptr));  // stack
+                    sizeof(objptr) +  // stack
+                    sizeof(decheck_tid_t));  // disentanglement checker state
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
 

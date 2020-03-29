@@ -63,6 +63,8 @@ struct HM_chunk {
   uint8_t startGap;
 
   bool mightContainMultipleObjects;
+  
+  decheck_tid_t decheckState;
 
   // for padding and sanity checks
   uint32_t magic;
