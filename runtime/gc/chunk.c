@@ -275,6 +275,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
       chunk->mightContainMultipleObjects = TRUE;
       splitChunkFront(getFreeListSmall(s), chunk, bytesRequested);
       HM_unlinkChunk(getFreeListSmall(s), chunk);
+      GC_thread thread = getThreadCurrent(s);
+      chunk->decheckState = thread->decheckState;
       return chunk;
     }
 
@@ -294,6 +296,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
     chunk->mightContainMultipleObjects = TRUE;
     splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
     HM_unlinkChunk(getFreeListLarge(s), chunk);
+    GC_thread thread = getThreadCurrent(s);
+    chunk->decheckState = thread->decheckState;
     return chunk;
   }
 
@@ -339,6 +343,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   chunk->mightContainMultipleObjects = TRUE;
   splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
   HM_unlinkChunk(getFreeListLarge(s), chunk);
+  GC_thread thread = getThreadCurrent(s);
+  chunk->decheckState = thread->decheckState;
   return chunk;
 }
 

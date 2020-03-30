@@ -10,9 +10,12 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-typedef struct {
-    uint32_t path;
-    uint32_t depth;
+typedef union {
+    struct {
+        uint32_t path;
+        uint32_t depth;
+    } internal;
+    uint64_t bits;
 } decheck_tid_t;
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -20,9 +23,9 @@ typedef struct {
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
 void GC_HH_decheckInit(GC_state s);
-void GC_HH_decheckFork(GC_state s, decheck_tid_t *left, decheck_tid_t *right);
-void GC_HH_decheckSetTid(GC_state s, decheck_tid_t tid);
-void GC_HH_decheckJoin(GC_state s, decheck_tid_t t1, decheck_tid_t t2);
+void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right);
+void GC_HH_decheckSetTid(GC_state s, uint64_t tid);
+void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
