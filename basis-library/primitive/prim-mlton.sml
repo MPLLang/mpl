@@ -409,6 +409,15 @@ structure Thread =
       val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+
+      val decheckFork = _import "GC_HH_decheckFork" runtime private:
+        GCState.t * Word64.word ref * Word64.word ref -> unit;
+
+      val decheckSetTid = _import "GC_HH_decheckSetTid" runtime private:
+        GCState.t * Word64.word -> unit;
+
+      val decheckJoin = _import "GC_HH_decheckJoin" runtime private:
+        GCState.t * Word64.word * Word64.word -> unit;
    end
 
 structure Weak =

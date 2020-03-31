@@ -1,8 +1,7 @@
-/**
- * @file decheck.c
- * @brief Disentanglement checking
- * @author Lawrence Wang (lawrenc2)
- * @bug No known bugs
+/* Copyright (C) 2020 Lawrence Wang, Sam Westrick
+ *
+ * MLton is released under a HPND-style license.
+ * See the file MLton-LICENSE for details.
  */
 
 #define MAX(x, y) ((x) < (y) ? (x) : (y))
@@ -16,8 +15,8 @@
 
 static uint32_t synch_depths[MAX_PATHS];
 
-void GC_HH_decheckInit(GC_state s) {
-    if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE, 
+void decheckInit(GC_state s) {
+    if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
         perror("mmap error");
         exit(-1);
@@ -80,7 +79,7 @@ void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
     uint32_t p1 = norm_path(t1);
     uint32_t p2 = norm_path(t2);
     unsigned int td = tree_depth(t1) - 1;
-    unsigned int dd = MAX(synch_depths[p1], synch_depths[p2]) + 1; 
+    unsigned int dd = MAX(synch_depths[p1], synch_depths[p2]) + 1;
     decheck_tid_t tid;
     tid.internal.path = t1.internal.path | (1 << td);
     tid.internal.depth = (dd << 5) + td;

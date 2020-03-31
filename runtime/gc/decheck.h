@@ -1,8 +1,7 @@
-/**
- * @file decheck.h
- * @brief Disentanglement checking
- * @author Lawrence Wang (lawrenc2)
- * @bug No known bugs
+/* Copyright (C) 2020 Lawrence Wang, Sam Westrick
+ *
+ * MLton is released under a HPND-style license.
+ * See the file MLton-LICENSE for details.
  */
 
 #ifndef _DECHECK_H_
@@ -22,15 +21,15 @@ typedef union {
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-void GC_HH_decheckInit(GC_state s);
-void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right);
-void GC_HH_decheckSetTid(GC_state s, uint64_t tid);
-void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
+PRIVATE void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right);
+PRIVATE void GC_HH_decheckSetTid(GC_state s, uint64_t tid);
+PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+void decheckInit(GC_state s);
 void decheckRead(GC_state s, objptr *ptr);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

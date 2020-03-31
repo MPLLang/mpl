@@ -56,6 +56,19 @@ signature MLTON_THREAD =
           val promoteChunks : thread -> unit
         end
 
+      (* disentanglement checking *)
+      structure Disentanglement :
+        sig
+          (* fork the current thread ID, returning the two child IDs *)
+          val decheckFork : unit -> Word64.word * Word64.word
+
+          (* join two child IDs and update the current thread ID *)
+          val decheckJoin : Word64.word * Word64.word -> unit
+
+          (* set the current thread ID *)
+          val decheckSetTid : Word64.word -> unit
+        end
+
       type 'a t
 
       (* atomicSwitch f

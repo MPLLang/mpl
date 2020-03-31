@@ -44,6 +44,8 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  decheck_tid_t decheckState;
+
   size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
 
@@ -53,8 +55,6 @@ typedef struct GC_thread {
   HM_chunk currentChunk;
 
   objptr stack;
-
-  decheck_tid_t decheckState;
 } __attribute__ ((packed)) *GC_thread;
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
@@ -63,12 +63,12 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
+                    sizeof(decheck_tid_t) + // disentanglement checker state
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(void*) +   // currentCheck
-                    sizeof(objptr) +  // stack
-                    sizeof(decheck_tid_t));  // disentanglement checker state
+                    sizeof(objptr));  // stack
 
 #define BOGUS_EXN_STACK ((size_t)(-1))
 

@@ -77,6 +77,23 @@ struct
   fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
 end
 
+structure Disentanglement =
+struct
+  fun decheckFork () =
+    let
+      val left = ref (0w0: Word64.word)
+      val right = ref (0w0: Word64.word)
+    in
+      Prim.decheckFork (gcState (), left, right);
+      (!left, !right)
+    end
+
+  fun decheckJoin (left, right) =
+    Prim.decheckJoin (gcState (), left, right)
+
+  fun decheckSetTid tid = Prim.decheckSetTid (gcState (), tid)
+end
+
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
    let
       val t =
