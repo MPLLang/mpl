@@ -30,7 +30,7 @@ PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void decheckInit(GC_state s);
-void decheckRead(GC_state s, objptr *ptr);
+void decheckRead(GC_state s, objptr ptr);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

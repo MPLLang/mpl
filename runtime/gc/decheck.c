@@ -96,13 +96,13 @@ static bool isOrdered(decheck_tid_t t1, decheck_tid_t t2) {
     return norm_path(t1) == lca_path || dag_depth(t1) <= synch_depths[lca_path];
 }
 
-void decheckRead(GC_state s, objptr *ptr) {
+void decheckRead(GC_state s, objptr ptr) {
     GC_thread thread = getThreadCurrent(s);
     decheck_tid_t tid = thread->decheckState;
-    HM_chunk chunk = HM_getChunkOf((pointer) *ptr);
+    HM_chunk chunk = HM_getChunkOf((pointer) ptr);
     decheck_tid_t allocator = chunk->decheckState;
     if (!isOrdered(allocator, tid)) {
-        printf("Disentangelent detected: object at %p\n", (void *) *ptr);
+        printf("Disentangelent detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
         printf("Allocator path: 0x%x\n", allocator.internal.path);
         printf("Allocator dag depth: %d\n", dag_depth(allocator));

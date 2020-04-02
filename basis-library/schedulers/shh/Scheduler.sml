@@ -21,6 +21,8 @@ struct
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
 
+  structure DE = MLton.Thread.Disentanglement
+
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
 
@@ -214,8 +216,11 @@ struct
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
 
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
         fun g' () =
           let
+            val () = decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
           in
@@ -231,12 +236,14 @@ struct
         val _ = push g'
         val _ = HH.setDepth (thread, depth + 1)
 
+        val () = DE.decheckSetTid tidLeft
         val fr = result f
 
         val gr =
           if popDiscard () then
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
+            ; DE.decheckSetTid tidRight
             ; result g
             )
           else
@@ -252,6 +259,8 @@ struct
                   ; gr
                   )
             )
+
+        val () = DE.decheckJoin (tidLeft, tidRight)
       in
         (extractResult fr, extractResult gr)
       end

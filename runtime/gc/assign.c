@@ -8,8 +8,9 @@
  */
 
 objptr Assignable_readBarrier(GC_state s, objptr obj, objptr* field) {
-  decheckRead(s, field);
-  return *field;
+  objptr ptr = *field;
+  decheckRead(s, ptr);
+  return ptr;
 }
 
 void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {

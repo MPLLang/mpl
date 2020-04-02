@@ -159,6 +159,8 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 
   switchToThread(s, pointerToObjptr((pointer)thread - offsetofThread(s), NULL));
 
+  decheckInit(s);
+
   return thread;
 }
 
