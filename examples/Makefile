@@ -10,7 +10,8 @@ PROGRAMS= \
 	ray \
 	tokens \
 	nn \
-	dedup
+	dedup \
+	nqueens
 
 all: $(PROGRAMS)
 
