@@ -159,8 +159,6 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 
   switchToThread(s, pointerToObjptr((pointer)thread - offsetofThread(s), NULL));
 
-  decheckInit(s);
-
   return thread;
 }
 
@@ -181,6 +179,8 @@ void initWorld(GC_state s) {
    * elsewhere in the runtime. */
   s->cumulativeStatistics->bytesAllocated += currentSize;
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
+
+  decheckInit(s);
 
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);

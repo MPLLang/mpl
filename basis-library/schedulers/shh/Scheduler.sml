@@ -220,7 +220,7 @@ struct
 
         fun g' () =
           let
-            val () = decheckSetTid tidRight
+            val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
           in

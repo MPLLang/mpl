@@ -9,6 +9,8 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+#define DECHECK_BOGUS_BITS 0
+
 typedef union {
     struct {
         uint32_t path;

@@ -110,6 +110,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->hierarchicalHeap = NULL;
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->decheckState.bits = DECHECK_BOGUS_BITS;
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
