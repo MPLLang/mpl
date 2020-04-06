@@ -486,6 +486,22 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
   return desiredMinDepth;
 }
 
+
+bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
+  assert(hh!=NULL);
+  if (hh->concurrentPack != NULL)
+    return  ((hh->concurrentPack)->isCollecting);
+  return false;
+}
+
+void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
+  assert(hh!=NULL);
+  assert(hh->concurrentPack!=NULL);
+  CC_addToStack(hh->concurrentPack, p);
+}
+
+
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 /*******************************/

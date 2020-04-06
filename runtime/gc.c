@@ -40,6 +40,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/atomic.c"
 #include "gc/call-stack.c"
 #include "gc/chunk.c"
+#include "gc/concurrent-collection.c"
+#include "gc/concurrent-stack.c"
 #include "gc/controls.c"
 #include "gc/copy-thread.c"
 #include "gc/current.c"
