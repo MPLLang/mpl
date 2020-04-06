@@ -210,15 +210,26 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
+
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
+  bytesNeeded += sizeof(struct ConcurrentPackage);
+
   HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
   pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
 
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
 
-  hh->representative = NULL;
-  hh->depth = depth;
-  hh->nextAncestor = NULL;
+  hh->concurrentPack = (ConcurrentPackage)
+                      (start + sizeof(struct HM_HierarchicalHeap));
+  hh->concurrentPack->isCollecting = false;
+  hh->concurrentPack->repList = NULL;
+  hh->concurrentPack->rootList = NULL;
+  hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
+  hh->concurrentPack->snapRight = BOGUS_OBJPTR;
+  // hh->concurrentPack = NULL;
+  // hh->representative = NULL;
+  // hh->depth = depth;
+  // hh->nextAncestor = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
@@ -328,6 +339,58 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 
   return TRUE;
 }
+
+// Optimizing this function is important since it will be called at all forks
+void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp) {
+
+  GC_state sP = pthread_getspecific (gcstate_key);
+
+  assert(processor < sP->numberOfProcs);
+  GC_state s = &(sP->procStates[processor]);
+
+  assert(s==sP);
+
+  GC_MayTerminateThread(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic(s);
+
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  // JATIN_TODO: have a better bytesRequested here.
+  // Could possibly call HM_ensureHierarchicalHeapAssurances instead
+  size_t bytesRequested = GC_HEAP_LIMIT_SLOP;
+
+  if (!HM_HH_extend (s, thread, bytesRequested)){
+    assert(0);
+  }
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  endAtomic(s);
+
+}
+
+void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
+  return;
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
+  assert(hh->concurrentPack != NULL);
+
+  hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
+  hh->concurrentPack->snapRight = pointerToObjptr(kr, NULL);
+
+}
+
 
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;

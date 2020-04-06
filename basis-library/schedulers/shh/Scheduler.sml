@@ -232,7 +232,15 @@ struct
           end
 
         val _ = push g'
+        val cont_arr1 =  Array.array (1, SOME(f))
+        val cont_arr2 =  Array.array (1, SOME(g))
+
+        (*location?*)
+        val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
+
         val _ = HH.setDepth (thread, depth + 1)
+        (*force left heap must be after set Depth*)
+        val _ = HH.forceLeftHeap(myWorkerId(), thread)
 
         val fr = result f
 

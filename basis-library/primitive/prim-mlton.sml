@@ -398,6 +398,11 @@ structure Thread =
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: GCState.t -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
+      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
+      val registerCont: ('a array) * ('b array) * thread -> unit =
+            _import "HM_HH_registerCont" runtime private:
+            ('a array) * ('b array) * thread -> unit;
+
       val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
       val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
