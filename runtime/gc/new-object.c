@@ -169,6 +169,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->hierarchicalHeap = hh;
   thread->currentChunk = chunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->decheckState.bits = DECHECK_BOGUS_BITS;
 
   HM_HH_updateValues(thread, frontier + totalSize);
 

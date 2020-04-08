@@ -222,6 +222,7 @@ struct
           let
             val () = DE.decheckSetTid tidRight
             val gr = result g
+            val () = DE.decheckSetTid 0w0
             val t = Thread.current ()
           in
             rightSide := SOME (gr, t);
@@ -238,6 +239,7 @@ struct
 
         val () = DE.decheckSetTid tidLeft
         val fr = result f
+        val () = DE.decheckSetTid 0w0
 
         val gr =
           if popDiscard () then

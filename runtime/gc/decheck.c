@@ -13,11 +13,11 @@
 #define SYNCH_DEPTHS_BASE ((void *) 0x100000000000)
 #define SYNCH_DEPTHS_LEN (sizeof(uint32_t) * (MAX_PATHS))
 
-static uint32_t synch_depths[MAX_PATHS];
+static uint32_t *synch_depths = SYNCH_DEPTHS_BASE;
 
 void decheckInit(GC_state s) {
     if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
         perror("mmap error");
         exit(-1);
     }
@@ -45,6 +45,7 @@ static inline uint32_t norm_path(decheck_tid_t tid) {
 void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
     GC_thread thread = getThreadCurrent(s);
     decheck_tid_t tid = thread->decheckState;
+    assert(tid.bits != DECHECK_BOGUS_BITS);
     unsigned int h = tree_depth(tid);
     assert(h < MAX_FORK_DEPTH);
 
@@ -93,14 +94,25 @@ static bool isOrdered(decheck_tid_t t1, decheck_tid_t t2) {
     int x = t1.internal.path ^ t2.internal.path;
     int lca_mask = (x & -x) - 1;
     uint32_t lca_path = (t1.internal.path & lca_mask) + lca_mask + 1;
+    assert(lca_path < MAX_PATHS);
     return norm_path(t1) == lca_path || dag_depth(t1) <= synch_depths[lca_path];
 }
 
 void decheckRead(GC_state s, objptr ptr) {
     GC_thread thread = getThreadCurrent(s);
+    if (thread == NULL)
+        return;
     decheck_tid_t tid = thread->decheckState;
-    HM_chunk chunk = HM_getChunkOf((pointer) ptr);
+    if (tid.bits == DECHECK_BOGUS_BITS)
+        return;
+    if ((uint64_t) ptr > (1LL << 48))
+        return;
+    HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+    if (chunk == NULL)
+        return;
     decheck_tid_t allocator = chunk->decheckState;
+    if (allocator.bits == DECHECK_BOGUS_BITS)
+        return;
     if (!isOrdered(allocator, tid)) {
         printf("Disentangelent detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
