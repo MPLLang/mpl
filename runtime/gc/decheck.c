@@ -105,7 +105,7 @@ void decheckRead(GC_state s, objptr ptr) {
     decheck_tid_t tid = thread->decheckState;
     if (tid.bits == DECHECK_BOGUS_BITS)
         return;
-    if ((uint64_t) ptr > (1LL << 48))
+    if (!isObjptr(ptr))
         return;
     HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
     if (chunk == NULL)
