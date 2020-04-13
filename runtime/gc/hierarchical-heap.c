@@ -227,9 +227,9 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
   hh->concurrentPack->snapRight = BOGUS_OBJPTR;
   // hh->concurrentPack = NULL;
-  // hh->representative = NULL;
-  // hh->depth = depth;
-  // hh->nextAncestor = NULL;
+  hh->representative = NULL;
+  hh->depth = depth;
+  hh->nextAncestor = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
@@ -374,7 +374,7 @@ void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp) {
 }
 
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
-  return;
+  // return;
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
@@ -387,7 +387,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   assert(hh->concurrentPack != NULL);
 
   hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
-  hh->concurrentPack->snapRight = pointerToObjptr(kr, NULL);
+  hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
 
 }
 
