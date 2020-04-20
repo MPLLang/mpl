@@ -14,7 +14,10 @@
 
 
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
-  assert(cp->rootList!=NULL);
+  if(cp->rootList==NULL) {
+    LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
+    assert(0);
+  }
   concurrent_stack_push(cp->rootList, (void*)p);
 }
 
@@ -36,7 +39,7 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   // Alternative implementation that would require a bool in the chunks
   // check if it's already added in the toSpace/saved
   // return (HM_isChunkMarked(chunk));
-  return isInScope (chunk, args->repList);
+  return chunk->levelHead == args->toHead;
 }
 
 // Mark the object uniquely identified by p
@@ -58,45 +61,53 @@ void markObj(pointer p) {
 
 // }
 
-void linearUnmark(GC_state s, HM_chunkList repList) {
-  HM_chunk chunk = repList->firstChunk;
+void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
+
+  HM_chunk chunk = args->repList->firstChunk;
 
   while(chunk!=NULL) {
-    pointer q = HM_getChunkStart(chunk);
-    while (q != HM_getChunkFrontier(chunk)) {
-      if (CC_isPointerMarked(q))
-        markObj(q); // mark/unmark is just xor
-      q += sizeofObject(s, q);
 
+    pointer p = HM_getChunkStart(chunk);
+    chunk->levelHead = args->toHead;
+
+    while(p != chunk->frontier){
+      assert(p < chunk->frontier);
+      p = advanceToObjectData(s, p);
+
+      if (CC_isPointerMarked(p)) {
+        markObj(p); // mark/unmark is just xor
+      }
+
+      p += sizeofObjectNoMetaData(s, p);
     }
+
     chunk = chunk->nextChunk;
   }
 }
 
 
-void saveChunk(HM_chunk chunk, void* rawArgs) {
+void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
 
-  ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
   HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
+  chunk->levelHead = args->toHead;
   // HM_markChunk(chunk) = true;
 }
 
-// Takes in a pointer and adds the chunk that it points to
-// in the toSpace, if not added already.
-void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
+
+bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   pointer p = objptrToPointer (op, NULL);
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
   HM_chunk cand_chunk = HM_getChunkOf(p);
 
-  bool chunkOrig  = isInScope(cand_chunk, args->origList);
   bool chunkSaved = isChunkSaved(cand_chunk, args);
+  bool chunkOrig  = (chunkSaved)?true:isInScope(cand_chunk, args->origList);
 
   // save this chunk if not saved already
   if(chunkOrig && !chunkSaved) {
-    saveChunk(cand_chunk, args->repList);
+    saveChunk(cand_chunk, args);
   }
 
   // forward the object if in scope and not already forwarded.
@@ -104,9 +115,12 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
     if(!CC_isPointerMarked(p)) {
       markObj(p);
       foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
-              forwardPtrChunk, &args);
+              forwardPtrChunk, args);
+      return true;
     }
   }
+
+  return false;
 }
 
 // Dual unmarking function -- can merge codes by adding another param to args
@@ -187,69 +201,100 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     currentHeap = currentHeap->nextAncestor;
   }
 
-  ConcurrentPackage args = currentHeap->concurrentPack;
-  assert(args!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
-  if(args->isCollecting
-    || args->snapLeft == BOGUS_OBJPTR
-    || args->snapRight == BOGUS_OBJPTR) {
+  ConcurrentPackage cp = currentHeap->concurrentPack;
+  assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
+  if(cp->isCollecting
+    || cp->snapLeft == BOGUS_OBJPTR
+    || cp->snapRight == BOGUS_OBJPTR) {
     return;
   }
-
+  // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
-
+  // return ;
   CC_collectWithRoots(s, currentHeap, currentHeap->concurrentPack);
 
 }
 
 void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
-              ConcurrentPackage args) {
+              ConcurrentPackage cp) {
 
-  ensureCallSanity(s, targetHH, args);
+  ensureCallSanity(s, targetHH, cp);
 
 
   struct HM_chunkList _repList;
+
+  // This is a hack. dummyP is just some pointer I expect will be there throughout this collection
+  // The value of dummyP is important but *dummyP is useless to this procedure
+  struct HM_HierarchicalHeap * dummyP = (HM_HierarchicalHeap*) &(_repList) ;
+
   HM_chunkList repList = &(_repList);
-  assert(args->repList == NULL);
-  args->repList = &(_repList);
+  HM_initChunkList(repList);
+  assert(cp->repList == NULL);
+  cp->repList = repList;
 
   HM_chunkList origList = HM_HH_getChunkList(targetHH);
 
   ConcurrentCollectArgs lists = {
     .origList = origList,
-    .repList  = repList
+    .repList  = repList,
+    .toHead = dummyP,
   };
 
-  concurrent_stack* workStack = args->rootList;
+  concurrent_stack* workStack = cp->rootList;
 
   // clearing extraneous additions from previous collection
-  concurrent_stack_clear(workStack);
+  if(workStack!=NULL) {
+    concurrent_stack_clear(workStack);
+  }
 
 
-  args->isCollecting = true;
-
-  pointer pl = objptrToPointer (args->snapLeft, NULL);
-  markObj(pl);
-  foreachObjptrInObject(s, pl, false, trueObjptrPredicate, NULL,
-              forwardPtrChunk, &args);
-  pointer pr = objptrToPointer (args->snapRight, NULL);
-  markObj(pr);
-  foreachObjptrInObject(s, pr, false, trueObjptrPredicate, NULL,
-              forwardPtrChunk, &args);
+  cp->isCollecting = true;
 
 
-  while(concurrent_stack_size(workStack) != 0) {
-    objptr * q = concurrent_stack_pop(workStack);
-    // assert(isObjPtr(*q));
+  // pointer pl = objptrToPointer (args->snapLeft, NULL);
+  // markObj(pl);
+  // foreachObjptrInObject(s, pl, false, trueObjptrPredicate, NULL,
+              // forwardPtrChunk, &args);
 
-    forwardPtrChunk(s, q, &lists);
-    // callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
+  forwardPtrChunk(s, &(cp->snapLeft), &lists);
+  forwardPtrChunk(s, &(cp->snapRight), &lists);
+  forwardPtrChunk(s, &(s->currentThread), &lists);
+
+  objptr stackp = getStackCurrentObjptr(s);
+  bool scannedStack = forwardPtrChunk(s, &(stackp), &lists);
+
+// The stack is a root set. The stack itself might not be in scope and might not get scanned.
+  pointer stack = objptrToPointer(stackp, NULL);
+  if(!scannedStack) {
+    foreachObjptrInObject(s, stack, false, trueObjptrPredicate, NULL,
+                forwardPtrChunk, &lists);
+  }
+
+  // pointer pr = objptrToPointer (args->snapRight, NULL);
+  // markObj(pr);
+
+  // objptr threadp = getThreadCurrentObjptr(s);
+  // pointer thread = objptrToPointer(threadp, NULL);
+  // markObj(thread);
+  // foreachObjptrInObject(s, threadp, false, trueObjptrPredicate, NULL,
+  //             forwardPtrChunk, &args);
+
+
+  if(workStack!=NULL){
+    while(concurrent_stack_size(workStack) != 0 && origList->firstChunk!=NULL){
+      objptr * q = concurrent_stack_pop(workStack);
+      // assert(isObjPtr(*q));
+
+      forwardPtrChunk(s, q, &lists);
+      // callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
+    }
   }
 
 // JATIN_NOTE:
 //  Turn off collection as soon as tracing is complete. This might race with the write barrier
 //  the WB may end up adding stuff to the stack, because it sees that the collection is infact
 //  on. Might need to remove this race.
-  args->isCollecting = false;
+  cp->isCollecting = false;
 
   // Free the chunks in the original list
   HM_appendChunkList(getFreeListSmall(s), origList);
@@ -257,13 +302,14 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // for(auto q: INIT_ROOT_SET) {
   //  callIfIsObjptr(s, unmarkObjects, ((objptr*)(q)), &lists);
   // }
-  linearUnmark(s, repList);
+  lists.toHead = targetHH;
+  linearUnmarkChunkList(s, &lists);
 
   // Update the original list
   origList->firstChunk = repList->firstChunk;
   origList->lastChunk = repList->lastChunk;
   origList->size = repList->size;
 
-  args->repList = NULL;
+  cp->repList = NULL;
 }
 #endif

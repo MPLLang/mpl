@@ -53,13 +53,13 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   pointer srcp = objptrToPointer(src, NULL);
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
-
-  if (HM_HH_isCCollecting(dstHH)) {
-    if (!CC_isPointerMarked(dstp)) {
-      HM_HH_addRootForCollector(dstHH, dstp);
-    }
-  }
-
+  // if (dstHH->depth >= srcHH->depth) {
+    // if(HM_HH_isCCollecting(srcHH)) {
+      // if (!CC_isPointerMarked(srcp)) {
+        // HM_HH_addRootForCollector(srcHH, src);
+      // }
+    // }
+  // }
   /* Internal or up-pointer. */
   if (dstHH->depth >= srcHH->depth)
     return;

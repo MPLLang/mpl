@@ -21,6 +21,7 @@
 typedef struct ConcurrentCollectArgs {
 	HM_chunkList origList;
 	HM_chunkList repList;
+	struct HM_HierarchicalHeap* toHead;
 	// Can add this for faster isCandidateChunk test by checking for equality
 	// Similar to concurrent-collection.c:62
 	// HM_chunk cacheChunk;

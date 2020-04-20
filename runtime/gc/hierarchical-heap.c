@@ -216,6 +216,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 
   HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
   pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
+  assert(start!=NULL);
 
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
 

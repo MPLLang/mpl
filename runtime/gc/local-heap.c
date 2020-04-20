@@ -72,6 +72,7 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
   }
 
   uint32_t desiredScope = HM_HH_desiredCollectionScope(s, thread);
+  CC_collectAtPublicLevel(s, thread, desiredScope-1);
 
   if (forceGC || desiredScope <= thread->currentDepth) {
     /* too much allocated, so let's collect */
