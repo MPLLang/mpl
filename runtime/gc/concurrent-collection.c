@@ -63,7 +63,7 @@ void markObj(pointer p) {
 
 void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
 
-  HM_chunk chunk = args->repList->firstChunk;
+  HM_chunk chunk = HM_getChunkListFirstChunk (args->repList);
 
   while(chunk!=NULL) {
 
@@ -91,8 +91,12 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
   HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
   chunk->levelHead = args->toHead;
+  HM_assertChunkListInvariants(args->origList);
+  HM_assertChunkListInvariants(args->repList);
+
   // HM_markChunk(chunk) = true;
 }
+
 
 
 bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
@@ -123,6 +127,28 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   return false;
 }
 
+void forwardDownPtrChunk(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+  #if ASSERT
+  ConcurrentCollectArgs* args =  (ConcurrentCollectArgs*) rawArgs;
+  pointer p = objptrToPointer(src, NULL);
+
+  HM_chunk T = HM_getChunkOf((pointer)p);
+  assert(isInScope(T, args->origList) || isChunkSaved(T, args));
+  // assert(*field == src);
+  #endif
+
+  forwardPtrChunk(s, &src, rawArgs);
+}
+
+void forceScan(GC_state s, objptr *opp, void* rawArgs) {
+  bool scanned = forwardPtrChunk(s, opp, rawArgs);
+
+  pointer p = objptrToPointer(*opp, NULL);
+  if(!scanned) {
+    foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
+            forwardPtrChunk, rawArgs);
+  }
+}
 // Dual unmarking function -- can merge codes by adding another param to args
 void unmarkObjects(GC_state s, objptr *opp, void * rawArgs) {
   objptr op = *opp;
@@ -195,11 +221,18 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   if(depth > maxDepth) {
     LOG(LM_HH_COLLECTION, LL_Log, "Level is not public, skipping");
     return;
+    // if(depth == thread->currentDepth)
+      // return;
   }
 
+  if(depth>2)
+    return;
   while(HM_HH_getDepth(currentHeap) > depth) {
     currentHeap = currentHeap->nextAncestor;
   }
+
+  if(HM_HH_getDepth(currentHeap) < depth)
+    return;
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
   assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
@@ -210,10 +243,22 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
   // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
+  assert(s->currentThread == thread);
   // return ;
   CC_collectWithRoots(s, currentHeap, currentHeap->concurrentPack);
 
+  // assertInvariants(thread);
+
 }
+
+void CC_deferredPromote(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
+  // TODO: Don't know if pointers should be promoted while concurrent collection.
+  HM_chunkList y = HM_HH_getRemSet(hh);
+  x->firstChunk = y->firstChunk;
+  x->lastChunk = y->lastChunk;
+  x->size = y->size;
+}
+
 
 void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
               ConcurrentPackage cp) {
@@ -233,6 +278,16 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   cp->repList = repList;
 
   HM_chunkList origList = HM_HH_getChunkList(targetHH);
+  HM_assertChunkListInvariants(origList);
+
+#if ASSERT
+  int lenOrig = 0;
+  HM_chunk T = origList->firstChunk;
+  while(T!=NULL) {
+    lenOrig++;
+    T = T->nextChunk;
+  }
+#endif
 
   ConcurrentCollectArgs lists = {
     .origList = origList,
@@ -255,20 +310,38 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // markObj(pl);
   // foreachObjptrInObject(s, pl, false, trueObjptrPredicate, NULL,
               // forwardPtrChunk, &args);
+  HM_chunk baseChunk = HM_getChunkOf(targetHH);
+  if(isInScope(baseChunk, origList)) {
+    saveChunk(baseChunk, &lists);
+  }
+  else {
+    assert(0);
+  }
+
+  struct HM_chunkList downPtrs;
+  CC_deferredPromote(s, &downPtrs, targetHH);
+
+  HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
 
   forwardPtrChunk(s, &(cp->snapLeft), &lists);
   forwardPtrChunk(s, &(cp->snapRight), &lists);
-  forwardPtrChunk(s, &(s->currentThread), &lists);
+
+// The stack and thread are root sets.
+// The stack itself might not be in scope and might not get scanned.
+  forceScan(s, &(s->currentThread), &lists);
 
   objptr stackp = getStackCurrentObjptr(s);
-  bool scannedStack = forwardPtrChunk(s, &(stackp), &lists);
+  forceScan(s, &(stackp), &lists);
 
-// The stack is a root set. The stack itself might not be in scope and might not get scanned.
-  pointer stack = objptrToPointer(stackp, NULL);
-  if(!scannedStack) {
-    foreachObjptrInObject(s, stack, false, trueObjptrPredicate, NULL,
-                forwardPtrChunk, &lists);
-  }
+  // forwardPtrChunk(s, &(s->currentThread), &lists);
+
+  // bool scannedStack = forwardPtrChunk(s, &(stackp), &lists);
+
+  // pointer stack = objptrToPointer(stackp, NULL);
+  // if(!scannedStack) {
+    // foreachObjptrInObject(s, stack, false, trueObjptrPredicate, NULL,
+                // forwardPtrChunk, &lists);
+  // }
 
   // pointer pr = objptrToPointer (args->snapRight, NULL);
   // markObj(pr);
@@ -281,7 +354,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
 
   if(workStack!=NULL){
-    while(concurrent_stack_size(workStack) != 0 && origList->firstChunk!=NULL){
+    while(concurrent_stack_size(workStack) != 0 &&
+          HM_getChunkListFirstChunk(origList)!=NULL){
       objptr * q = concurrent_stack_pop(workStack);
       // assert(isObjPtr(*q));
 
@@ -296,6 +370,26 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 //  on. Might need to remove this race.
   cp->isCollecting = false;
 
+#if ASSERT
+  HM_assertChunkListInvariants(origList);
+  HM_assertChunkListInvariants(repList);
+
+  int lenFree = 0;
+  int lenRep = 0;
+  HM_chunk Q = origList->firstChunk;
+  while(Q!=NULL) {
+    lenFree++;
+    Q = Q->nextChunk;
+  }
+
+  Q = repList->firstChunk;
+  while(Q!=NULL){
+    lenRep++;
+    Q= Q->nextChunk;
+  }
+  assert(lenRep+lenFree == lenOrig);
+#endif
+
   // Free the chunks in the original list
   HM_appendChunkList(getFreeListSmall(s), origList);
 
@@ -304,11 +398,11 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // }
   lists.toHead = targetHH;
   linearUnmarkChunkList(s, &lists);
-
   // Update the original list
-  origList->firstChunk = repList->firstChunk;
-  origList->lastChunk = repList->lastChunk;
+  origList->firstChunk = HM_getChunkListFirstChunk(repList);
+  origList->lastChunk =  HM_getChunkListLastChunk(repList);
   origList->size = repList->size;
+  HM_assertChunkListInvariants(origList);
 
   cp->repList = NULL;
 }

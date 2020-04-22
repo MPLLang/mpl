@@ -4,7 +4,7 @@
  * @author Jatin Arora
  *
  * @brief
- * Definition of the Concurrent collection interface
+ * Definition of the concurrent collection interface
  */
 
 #ifndef CONCURRENT_COLLECTION_H_
