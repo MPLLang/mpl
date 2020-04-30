@@ -77,12 +77,13 @@ typedef GC_state GCState_t;
 #include "gc/share.h"
 #include "gc/parallel.h"
 #include "gc/processor.h"
+#include "gc/pin.h"
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/local-scope.h"
 #include "gc/local-heap.h"
 #include "gc/assign.h"
 #include "gc/remembered-set.h"
-#include "gc/deferred-promote.h"
+// #include "gc/deferred-promote.h"
 
 #endif /* _MLTON_GC_H_ */
