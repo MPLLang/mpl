@@ -344,34 +344,43 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 // Optimizing this function is important since it will be called at all forks
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp) {
 
-  GC_state sP = pthread_getspecific (gcstate_key);
-
-  assert(processor < sP->numberOfProcs);
-  GC_state s = &(sP->procStates[processor]);
-
-  assert(s==sP);
-
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
   GC_MayTerminateThread(s);
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+
   beginAtomic(s);
-
+  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
+  assert(threadAndHeapOkay(s));
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
-
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  // reflect changes done by the mutator into the runtime
+  HM_HH_updateValues(thread, s->frontier);
+
+  if (s->limitPlusSlop < s->frontier) {
+    DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
+        ((void*)(s->limit)),
+        ((void*)(s->frontier)));
+  }
+
+  //construct a new heap
   // JATIN_TODO: have a better bytesRequested here.
   // Could possibly call HM_ensureHierarchicalHeapAssurances instead
   size_t bytesRequested = GC_HEAP_LIMIT_SLOP;
-
   if (!HM_HH_extend (s, thread, bytesRequested)){
     assert(0);
   }
 
+  // Update allocation locations for the mutator
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  endAtomic(s);
 
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
+  endAtomic(s);
 }
 
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
