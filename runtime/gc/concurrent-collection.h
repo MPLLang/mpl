@@ -21,14 +21,9 @@
 typedef struct ConcurrentCollectArgs {
 	HM_chunkList origList;
 	HM_chunkList repList;
-	struct HM_HierarchicalHeap* toHead;
-	// Can add this for faster isCandidateChunk test by checking for equality
-	// Similar to concurrent-collection.c:62
-	// HM_chunk cacheChunk;
 } ConcurrentCollectArgs;
 
 typedef struct ConcurrentPackage {
-	HM_chunkList repList;
 //  It is possible that the collection turned off and the stack isn't empty
 //	This is a result of the non-atomicity in the write barrier implementation
 //	from checking of isCollecting to addition into the stack
