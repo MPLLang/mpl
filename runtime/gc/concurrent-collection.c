@@ -39,7 +39,8 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   // Alternative implementation that would require a bool in the chunks
   // check if it's already added in the toSpace/saved
   // return (HM_isChunkMarked(chunk));
-  return chunk->levelHead == args->toHead;
+  // return chunk->levelHead == args->toHead;
+  return chunk->isInToSpace;
 }
 
 // Mark the object uniquely identified by p
@@ -68,7 +69,11 @@ void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
   while(chunk!=NULL) {
 
     pointer p = HM_getChunkStart(chunk);
-    chunk->levelHead = args->toHead;
+    // chunk->levelHead = args->toHead;
+    chunk->isInToSpace = false;
+
+
+    assert(chunk->frontier <= chunk->limit);
 
     while(p != chunk->frontier){
       assert(p < chunk->frontier);
@@ -90,6 +95,9 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
 
   HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
+  assert(!chunk->isInToSpace);
+
+  chunk->isInToSpace = true;
   chunk->levelHead = args->toHead;
   HM_assertChunkListInvariants(args->origList);
   HM_assertChunkListInvariants(args->repList);
@@ -127,7 +135,9 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   return false;
 }
 
-void forwardDownPtrChunk(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
+                          __attribute__((unused)) objptr* field,
+                          objptr src, void* rawArgs) {
   #if ASSERT
   ConcurrentCollectArgs* args =  (ConcurrentCollectArgs*) rawArgs;
   pointer p = objptrToPointer(src, NULL);
@@ -169,8 +179,9 @@ void unmarkObjects(GC_state s, objptr *opp, void * rawArgs) {
 
 // TODO: This function will develop as the policy is added.
 // It is to document all integrity concerns and assert them.
-void ensureCallSanity(GC_state s, HM_HierarchicalHeap targetHH,
-              ConcurrentPackage args) {
+void ensureCallSanity(__attribute__((unused)) GC_state s,
+                      HM_HierarchicalHeap targetHH,
+                      ConcurrentPackage args) {
   assert(targetHH!=NULL);
   assert(args!=NULL);
 
@@ -197,10 +208,10 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
     return;
   }
-
-  if (thread->currentDepth == 0) {
+  if (thread->currentDepth == 0 || depth <= 0) {
     return;
   }
+  // printf("%s %d\n", "depth = ", depth);
 
   if(HM_HH_getDepth(currentHeap) < thread->currentDepth) {
     return;
@@ -219,14 +230,16 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   uint32_t maxDepth = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
 
   if(depth > maxDepth) {
-    LOG(LM_HH_COLLECTION, LL_Log, "Level is not public, skipping");
+    // LOG(LM_HH_COLLECTION, LL_Log, "Level is not public, skipping");
     return;
     // if(depth == thread->currentDepth)
       // return;
   }
-
-  if(depth>2)
+  else if (depth >= thread->currentDepth) {
+    // printf("%s\n", "disconnect between top and thread");
     return;
+  }
+
   while(HM_HH_getDepth(currentHeap) > depth) {
     currentHeap = currentHeap->nextAncestor;
   }
@@ -241,17 +254,29 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     || cp->snapRight == BOGUS_OBJPTR) {
     return;
   }
+  else if(casCC(&(cp->isCollecting), false, true)) {
+    printf("%s\n", "returning because someone else claimed collection");
+    assert(0);
+    return;
+  }
+  else{
+    LOG(LM_HH_COLLECTION, LL_FORCE, "collection turned on isCollect = & depth = ");
+    printf("%d %d\n", cp->isCollecting, depth);
+  }
+
+
   // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
   assert(s->currentThread == thread);
   // return ;
   CC_collectWithRoots(s, currentHeap, currentHeap->concurrentPack);
+  cp->isCollecting = false;
 
   // assertInvariants(thread);
 
 }
 
-void CC_deferredPromote(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
+void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){
   // TODO: Don't know if pointers should be promoted while concurrent collection.
   HM_chunkList y = HM_HH_getRemSet(hh);
   x->firstChunk = y->firstChunk;
@@ -292,24 +317,22 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   ConcurrentCollectArgs lists = {
     .origList = origList,
     .repList  = repList,
-    .toHead = dummyP,
+    .toHead = targetHH,
   };
 
   concurrent_stack* workStack = cp->rootList;
+
 
   // clearing extraneous additions from previous collection
   if(workStack!=NULL) {
     concurrent_stack_clear(workStack);
   }
 
-
-  cp->isCollecting = true;
-
-
   // pointer pl = objptrToPointer (args->snapLeft, NULL);
   // markObj(pl);
   // foreachObjptrInObject(s, pl, false, trueObjptrPredicate, NULL,
               // forwardPtrChunk, &args);
+  //TODO: Find the right pointer type here
   HM_chunk baseChunk = HM_getChunkOf(targetHH);
   if(isInScope(baseChunk, origList)) {
     saveChunk(baseChunk, &lists);
@@ -319,7 +342,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
 
   struct HM_chunkList downPtrs;
-  CC_deferredPromote(s, &downPtrs, targetHH);
+  CC_deferredPromote(&downPtrs, targetHH);
 
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
 
@@ -354,13 +377,13 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
 
   if(workStack!=NULL){
-    while(concurrent_stack_size(workStack) != 0 &&
-          HM_getChunkListFirstChunk(origList)!=NULL){
-      objptr * q = concurrent_stack_pop(workStack);
-      // assert(isObjPtr(*q));
-
+    objptr * q = concurrent_stack_pop(workStack);
+    while(q != NULL){
       forwardPtrChunk(s, q, &lists);
       // callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
+      q = concurrent_stack_pop(workStack);
+      if(HM_getChunkListFirstChunk(origList)==NULL)
+        break;
     }
   }
 
@@ -368,7 +391,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 //  Turn off collection as soon as tracing is complete. This might race with the write barrier
 //  the WB may end up adding stuff to the stack, because it sees that the collection is infact
 //  on. Might need to remove this race.
-  cp->isCollecting = false;
 
 #if ASSERT
   HM_assertChunkListInvariants(origList);
@@ -388,6 +410,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     Q= Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
+  printf("%s %d \n", "Chunks Collected = ", lenOrig);
 #endif
 
   // Free the chunks in the original list
@@ -401,7 +424,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // Update the original list
   origList->firstChunk = HM_getChunkListFirstChunk(repList);
   origList->lastChunk =  HM_getChunkListLastChunk(repList);
-  origList->size = repList->size;
+  origList->size = HM_getChunkListSize(repList);
   HM_assertChunkListInvariants(origList);
 
   cp->repList = NULL;
