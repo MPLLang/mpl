@@ -61,7 +61,14 @@ void unpinObject(objptr op) {
 
 bool isPinned(objptr op) {
   pointer p = objptrToPointer(op, NULL);
-  return 1 == ((getHeader(p) & MARK_MASK) >> MARK_SHIFT);
+  GC_header h = getHeader(p);
+
+  /* have to check first that the header is valid
+   * (otherwise, there could be a forward pointer in this spot)
+   * ...and then check the mark
+   */
+  return (1 == (h & GC_VALID_HEADER_MASK)) &&
+         (1 == ((h & MARK_MASK) >> MARK_SHIFT));
 }
 
 uint32_t unpinDepthOf(objptr op) {

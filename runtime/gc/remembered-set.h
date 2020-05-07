@@ -1,4 +1,4 @@
-/* Copyright (C) 2018,2019 Sam Westrick
+/* Copyright (C) 2018-2020 Sam Westrick
  *
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
