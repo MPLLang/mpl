@@ -7,6 +7,8 @@
  * See the file MLton-LICENSE for details.
  */
 
+#define cas(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
+
 void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
@@ -63,9 +65,12 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     // Need to remember for all levels
     HM_HierarchicalHeap currHH = HM_getLevelHeadPathCompress(HM_getChunkOf(currp));
 
-    if(currHH->depth == dstHH->depth) {
+    bool z = cas(&(dstHH->concurrentPack->isCollecting), false, false);
+    assert(!z);
+
+    if(currHH == dstHH) {
       printf("%s\n", "storing this");
-      HM_HH_addRootForCollector(srcHH, currp);
+      HM_HH_addRootForCollector(dstHH, currp);
     }
     //   bool saveReadVal = false;
     //   if(!isCasInst) {
@@ -97,6 +102,8 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (!isObjptr(src))
     return;
 
+  pointer srcp = objptrToPointer(src, NULL);
+  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
   // if (dstHH->depth >= srcHH->depth) {
   //   if(HM_HH_isCCollecting(srcHH)) {
   //     if (!CC_isPointerMarked(srcp)) {
@@ -124,9 +131,21 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
       dst, src);
     return;
   }
-
   HM_rememberAtLevel(hh, dst, field, src);
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */
 }
+
+// void Assignable_updateBarrier (GC_state s, objptr dst, objptr* field, objptr src) {
+//   Assignable_writeBarrier(s, dst, field, src, false);
+//   // *field = src;
+// }
+// void Assignable_casBarrier (GC_state s, objptr dst, objptr* field, objptr src) {
+//   Assignable_writeBarrier(s, dst, field, src, true);
+//   // cas(field, (*field), dst); //return?
+// }
+
+
+
+

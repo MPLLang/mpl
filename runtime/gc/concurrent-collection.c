@@ -19,6 +19,7 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
     LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     assert(0);
   }
+  printf("%s\n", "trying to add to stack");
   concurrent_stack_push(cp->rootList, (void*)p);
 }
 
@@ -163,8 +164,8 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
       markObj(p);
       foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
               forwardPtrChunk, args);
-      return true;
     }
+    return true;
   }
 
   return false;
@@ -232,7 +233,10 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // 3) construct arguments to the function call
   // 4) ensure the children can't join back until the collector is done -- not done
   // 5) Races with fork -- The heap could be in process of forking.
-  depth = (depth>0? depth -1: 0);
+  bool gdbArg = false;
+  if (gdbArg) {
+    depth = (depth>0? depth -1: 0);
+  }
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   // LOG(LM_HH_COLLECTION, LL_Log, "called func");
 
@@ -369,12 +373,14 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   CC_deferredPromote(&downPtrs, targetHH);
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
 
-  forwardPtrChunk(s, &(cp->snapLeft), &lists);
-  forwardPtrChunk(s, &(cp->snapRight), &lists);
-
+  bool q = forwardPtrChunk(s, &(cp->snapLeft), &lists);
+  assert(q);
+  q = forwardPtrChunk(s, &(cp->snapRight), &lists);
+  assert(q);
 // The stack and thread are root sets.
 // The stack itself might not be in scope and might not get scanned.
-  forceScan(s, &(getStackCurrentObjptr(s)), &lists);
+  objptr stackp = getStackCurrentObjptr(s);
+  forceScan(s, &(stackp), &lists);
   forceScan(s, &(s->currentThread), &lists);
 
   // forwardPtrChunk(s, &(s->currentThread), &lists);

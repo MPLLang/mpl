@@ -31,7 +31,8 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
 
   assert(thread != NULL);
   thread->currentDepth = depth;
-
+  // printf("%s %d\n", "setting thread depth to ", depth);
+  // printf("%s %d\n", "HH depth = ", thread->hierarchicalHeap->depth);
   /* SAM_NOTE: not super relevant here, but if we do eventually decide to
    * control the "use ancestor chunk" optimization, a good sanity check. */
   assert(inSameBlock(s->frontier, s->limitPlusSlop-1));

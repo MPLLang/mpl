@@ -627,8 +627,11 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList) {
     assert(chunk->nextChunk->prevChunk == chunk);
     chunk = chunk->nextChunk;
   }
-
-  assert(chunkList->lastChunk == chunk);
+  if(chunkList->lastChunk != chunk) {
+    printf("%s\n", "this is failing");
+    assert(0);
+  }
+  // assert(chunkList->lastChunk == chunk);
 }
 #else
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
