@@ -84,6 +84,7 @@ typedef GC_state GCState_t;
 #include "gc/local-heap.h"
 #include "gc/assign.h"
 #include "gc/remembered-set.h"
+#include "gc/gap.h"
 // #include "gc/deferred-promote.h"
 
 #endif /* _MLTON_GC_H_ */

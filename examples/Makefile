@@ -15,6 +15,10 @@ PROGRAMS= \
 
 all: $(PROGRAMS)
 
+$(PROGRAMS:=.dbg): %.dbg: src/* src/lib/*
+	$(MPL) $(FLAGS) -debug true -debug-runtime true -keep g -output $@ src/$*.mlb
+	@echo "successfully built $@"
+
 $(PROGRAMS): %: src/* src/lib/*
 	$(MPL) $(FLAGS) -output $* src/$*.mlb
 	@echo "successfully built $*"

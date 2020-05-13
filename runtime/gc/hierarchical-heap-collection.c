@@ -28,6 +28,7 @@ void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, objptr object, void* args);
+bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
 #endif
 
 /**
@@ -477,7 +478,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   for (HM_HierarchicalHeap cursor = hh;
        cursor != NULL && HM_HH_getDepth(cursor) >= minDepth;
        cursor = cursor->nextAncestor) {
-    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &checkRememberedEntry, hh);
+    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &checkRememberedEntry, cursor);
   }
 #endif
 
@@ -719,17 +720,7 @@ void scavengeChunkOfPinnedObject(
 
 #if ASSERT
   /* make sure we're removing the chunk from the correct list!! */
-  bool foundChunk = FALSE;
-  for (HM_chunk cursor = HM_HH_getChunkList(args->fromSpace[opDepth])->firstChunk;
-       cursor != NULL;
-       cursor = cursor->nextChunk)
-  {
-    if (cursor == chunk) {
-      foundChunk = TRUE;
-      break;
-    }
-  }
-  assert(foundChunk);
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
 #endif
 
   /* Can't do HM_getLevelHead here! We broke that by moving chunks around! */
@@ -783,38 +774,8 @@ void scavengeChunkOfPinnedObject(
     }
 
     /* fill garbage object with a gap */
-    size_t gapSize = (size_t)(objEnd - p);
-    assert(gapSize >= GC_NORMAL_METADATA_SIZE);
-
-    if (gapSize >= GC_SEQUENCE_METADATA_SIZE) {
-      /* the gap is big enough to use a vector object to fill it */
-      pointer fillObjStart = p + GC_SEQUENCE_METADATA_SIZE;
-      size_t vectorLen = gapSize - GC_SEQUENCE_METADATA_SIZE;
-
-      *(getHeaderp(fillObjStart)) = GC_WORD8_VECTOR_HEADER;
-      *(getSequenceCounterp(fillObjStart)) = 0;
-      *(getSequenceLengthp(fillObjStart)) = vectorLen;
-
-      assert(fillObjStart + objectSize(s, fillObjStart) == objEnd);
-      p = objEnd;
-    }
-    else if (gapSize == GC_NORMAL_METADATA_SIZE + 8) {
-      /* gap is perfect for a FILL8 object */
-      pointer fillObjStart = p + GC_NORMAL_METADATA_SIZE;
-      *(getHeaderp(fillObjStart)) = GC_FILL8_NORMAL_HEADER;
-      assert(fillObjStart + objectSize(s, fillObjStart) == objEnd);
-      p = objEnd;
-    }
-    else {
-      /* use as many FILL0 objects as needed to fill this gap. */
-      assert(isAligned(gapSize, GC_NORMAL_METADATA_SIZE));
-      while (p < objEnd) {
-        p += GC_NORMAL_METADATA_SIZE;
-        *(getHeaderp(p)) = GC_FILL0_NORMAL_HEADER;
-      }
-    }
-
-    assert(p == objEnd);
+    fillGap(s, p, objEnd);
+    p = objEnd;
   }
 
   assert(p == HM_getChunkFrontier(chunk));
@@ -1185,19 +1146,22 @@ void checkRememberedEntry(
 
   HM_chunk theChunk = HM_getChunkOf(objptrToPointer(object, NULL));
 
-  bool foundChunk = FALSE;
+  assert(hhContainsChunk(hh, theChunk));
+  assert(HM_getLevelHead(theChunk) == hh);
+}
+
+bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
+{
   for (HM_chunk chunk = HM_HH_getChunkList(hh)->firstChunk;
        chunk != NULL;
        chunk = chunk->nextChunk)
   {
     if (chunk == theChunk) {
-      foundChunk = TRUE;
-      break;
+      return TRUE;
     }
   }
-  assert(foundChunk);
 
-  assert(HM_getLevelHead(theChunk) == hh);
+  return FALSE;
 }
 
 #endif
