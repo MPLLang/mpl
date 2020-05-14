@@ -24,7 +24,7 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
 }
 
 bool CC_isPointerMarked (pointer p) {
-  return MARK_MASK & getHeader (p);
+  return ((MARK_MASK & getHeader (p)) == MARK_MASK);
 }
 
 bool isInScope(HM_chunk chunk, HM_chunkList list) {
@@ -73,7 +73,7 @@ void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
   while(chunk!=NULL) {
 
     pointer p = HM_getChunkStart(chunk);
-    chunk->isInToSpace = false;
+    chunk->tmpHeap = NULL;
 
 
     assert(chunk->frontier <= chunk->limit);
@@ -95,9 +95,30 @@ void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
   HM_assertChunkListInvariants(args->repList);
 }
 
+#if ASSERT
+bool isChunkInList(HM_chunkList chunkList, HM_chunk T) {
+  HM_chunk chunk = chunkList->firstChunk;
+  while (chunk != NULL) {
+    if(chunk == T) {
+      return true;
+    }
+    chunk = chunk->nextChunk;
+  }
+  return false;
+}
+#else
+void assertChunkInList(HM_chunkList chunkList, HM_chunk chunk) {
+  return true;
+}
+#endif /* ASSERT */
+
 // This function is exactly the same as in chunk.c.
 // The only difference is, it doesn't NULL the levelHead of the unlinking chunk.
 void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+
+  #if ASSERT
+    assert(isChunkInList(list, chunk));
+  #endif
 
   if (NULL == chunk->prevChunk) {
     assert(list->firstChunk == chunk);
@@ -122,24 +143,28 @@ void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
 
 #if ASSERT
   HM_assertChunkListInvariants(list);
+    assert(!isChunkInList(list, chunk));
 #endif
 
 }
 
+
+
 void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
   CC_HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
-  assert(!chunk->isInToSpace);
-  chunk->isInToSpace = true;
+
+  assert(chunk->tmpHeap == NULL);
+  chunk->tmpHeap = args->toHead;
 
   HM_assertChunkListInvariants(args->origList);
   HM_assertChunkListInvariants(args->repList);
 }
 
 
-
 bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
+  assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
@@ -155,15 +180,26 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   bool chunkOrig  = (chunkSaved)?true:isInScope(cand_chunk, args->origList);
 
   if(chunkOrig && !chunkSaved) {
+    #if ASSERT
+      assert(isChunkInList(args->origList, cand_chunk) ||
+              isChunkInList (args->repList, cand_chunk));
+    #endif
     saveChunk(cand_chunk, args);
   }
-
   // forward the object, if in scope (chunkSaved => chunkOrig)
   if(chunkOrig || chunkSaved) {
+    #if ASSERT
+      if(!isChunkInList (args->repList, cand_chunk)) {
+        printf("%s\n", "this is failing\n");
+        assert(0);
+      }
+    #endif
     if(!CC_isPointerMarked(p)) {
       markObj(p);
+      assert(CC_isPointerMarked(p));
       foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
               forwardPtrChunk, args);
+      return true;
     }
     return true;
   }
@@ -237,6 +273,8 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   if (gdbArg) {
     depth = (depth>0? depth -1: 0);
   }
+  // depth = (depth==1)?(depth+1):depth;
+
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   // LOG(LM_HH_COLLECTION, LL_Log, "called func");
 
@@ -279,6 +317,9 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     // printf("%s\n", "disconnect between top and thread");
     return;
   }
+  #if ASSERT
+    HM_HierarchicalHeap oldStart = currentHeap;
+  #endif
 
   while(HM_HH_getDepth(currentHeap) > depth) {
     currentHeap = currentHeap->nextAncestor;
@@ -295,13 +336,22 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     return;
   }
   else if(casCC(&(cp->isCollecting), false, true)) {
-    printf("%s\n", "returning because someone else claimed collection");
+    printf("\t %s\n", "returning because someone else claimed collection");
     assert(0);
     return;
   }
   else{
-    LOG(LM_HH_COLLECTION, LL_FORCE, "collection turned on isCollect = & depth = ");
+    LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
     printf("%d %d\n", cp->isCollecting, depth);
+
+  #if ASSERT
+    while(oldStart!=currentHeap) {
+      printf(" %p => ", (void*) oldStart);
+      oldStart = oldStart->nextAncestor;
+    }
+    printf("FIN: %p\n", currentHeap);
+  #endif
+
   }
 
 
@@ -352,6 +402,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   ConcurrentCollectArgs lists = {
     .origList = origList,
     .repList  = repList,
+    .toHead = (void*)repList,
   };
 
   concurrent_stack* workStack = cp->rootList;
@@ -408,6 +459,18 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
         break;
     }
   }
+// temporary code commented for debugging
+HM_chunk chunk= origList->firstChunk;
+while ( chunk!=NULL ) {
+	if(1) { // save all chunks
+		HM_chunk currNextChunk = chunk->nextChunk;
+		saveChunk(chunk, &lists);
+		chunk = currNextChunk;
+	}
+	else
+		chunk=chunk->nextChunk;
+}
+assert(origList->firstChunk==NULL);
 
 #if ASSERT
   HM_assertChunkListInvariants(origList);
@@ -416,6 +479,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   int lenFree = 0;
   int lenRep = 0;
   HM_chunk Q = origList->firstChunk;
+  assert(Q==NULL);
   while(Q!=NULL) {
     lenFree++;
     Q = Q->nextChunk;
@@ -427,9 +491,22 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     Q= Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
-  printf("%s %d \n", "Chunks Collected = ", lenOrig);
+  printf("%s %d \n", "Chunks Collected = ", lenFree);
 #endif
 
+
+#if ASSERT
+	for(HM_chunk chunk = repList->firstChunk;
+		chunk!=NULL;
+		chunk=chunk->nextChunk) {
+		// assert(chunk->levelHead == targetHH);
+	}
+	for(HM_chunk chunk = origList->firstChunk;
+		chunk!=NULL;
+		chunk= chunk->nextChunk) {
+		assert(chunk->startGap == 0);
+	}
+#endif
   HM_appendChunkList(getFreeListSmall(s), origList);
   linearUnmarkChunkList(s, &lists);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);
