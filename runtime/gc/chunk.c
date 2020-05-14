@@ -105,7 +105,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->levelHead = NULL;
   chunk->startGap = 0;
   chunk->mightContainMultipleObjects = TRUE;
-  chunk->isInToSpace = false;
+  chunk->tmpHeap = NULL;
   chunk->magic = CHUNK_MAGIC;
 
 #if ASSERT

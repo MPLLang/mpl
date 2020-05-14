@@ -63,7 +63,7 @@ struct HM_chunk {
   uint8_t startGap;
 
   bool mightContainMultipleObjects;
-  bool isInToSpace;
+  void* tmpHeap;
 
   // for padding and sanity checks
   uint32_t magic;
