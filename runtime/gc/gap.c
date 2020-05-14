@@ -6,6 +6,11 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+/* SAM_NOTE: This code hasn't been tested much. I used it briefly for objptr
+ * pinning, but then switched to a different implementation strategy.
+ *
+ * Use with caution.
+ */
 void fillGap(ARG_USED_FOR_ASSERT GC_state s, pointer start, pointer end) {
   assert(start < end);
 

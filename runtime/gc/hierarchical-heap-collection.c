@@ -22,9 +22,9 @@
 
 // void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
-void tryUnpinOrKeepRemembered(GC_state s, objptr op, void* rawArgs);
+void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs);
 void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs);
-void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
+// void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, objptr object, void* args);
@@ -158,11 +158,18 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     .toDepth = HM_HH_INVALID_DEPTH,
     .fromSpace = NULL,
     .toSpace = NULL,
+    .pinned = NULL,
     .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
     .objectsCopied = 0,
-    .stacksCopied = 0
+    .stacksCopied = 0,
+    .bytesMoved = 0,
+    .objectsMoved = 0
   };
+
+  struct HM_chunkList pinned[maxDepth+1];
+  forwardHHObjptrArgs.pinned = &(pinned[0]);
+  for (uint32_t i = 0; i <= maxDepth; i++) HM_initChunkList(&(pinned[i]));
 
   HM_HierarchicalHeap toSpace[maxDepth+1];
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
@@ -211,11 +218,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   {
     forwardHHObjptrArgs.toDepth = HM_HH_getDepth(cursor);
     HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
-      &tryUnpinOrKeepRemembered, &forwardHHObjptrArgs);
+      &tryUnpinOrKeepPinned, &forwardHHObjptrArgs);
   }
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
-  assertInvariants(thread);
+  // assertInvariants(thread);
 
   if (needGCTime(s)) {
     timespec_now(&stopTime);
@@ -366,13 +373,27 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     depth--;
     HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
     if (NULL == toSpaceLevel) {
+      /* check that there are also no pinned chunks at this level
+       * (if there was pinned chunk, then we would have also created a
+       * toSpace HH at this depth, because we would have scavenged the
+       * remembered entry) */
+      assert(pinned[depth].firstChunk == NULL);
       continue;
     }
-    forwardHHObjptrArgs.toDepth = depth;
-    HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel),
-      &scavengeChunkOfPinnedObject, &forwardHHObjptrArgs);
+
+    /* unset the flags on pinned chunks and update their HH pointer */
+    for (HM_chunk chunkCursor = pinned[depth].firstChunk;
+         chunkCursor != NULL;
+         chunkCursor = chunkCursor->nextChunk)
+    {
+      assert(chunkCursor->pinnedDuringCollection);
+      chunkCursor->pinnedDuringCollection = FALSE;
+      chunkCursor->levelHead = toSpaceLevel;
+    }
+
+    /* put the pinned chunks into the toSpace */
+    HM_appendChunkList(HM_HH_getChunkList(toSpaceLevel), &(pinned[depth]));
   }
-  forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
@@ -665,7 +686,7 @@ void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* raw
 
 /* ========================================================================= */
 
-void tryUnpinOrKeepRemembered(GC_state s, objptr op, void* rawArgs) {
+void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
   assert(isPinned(op));
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
 
@@ -690,11 +711,24 @@ void tryUnpinOrKeepRemembered(GC_state s, objptr op, void* rawArgs) {
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
 
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+
+  if (chunk->pinnedDuringCollection) {
+    return;
+  }
+
   chunk->pinnedDuringCollection = TRUE;
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
+
+  /* SAM_NOTE: unlinkChunk unsets levelHead, which is a little strange. */
+  HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
+  HM_appendChunk(&(args->pinned[opDepth]), chunk);
+  chunk->levelHead = args->fromSpace[opDepth];
 }
 
 /* ========================================================================= */
 
+#if 0
 void scavengeChunkOfPinnedObject(
   GC_state s,
   objptr op,
@@ -781,6 +815,7 @@ void scavengeChunkOfPinnedObject(
   assert(p == HM_getChunkFrontier(chunk));
   assert(isObjptrInToSpace(op, args));
 }
+#endif
 
 /* ========================================================================= */
 
@@ -867,17 +902,19 @@ void forwardHHObjptr (GC_state s,
     return;
   }
 
-  /* assert is in from space */
+  /* Assert is in from space. This holds for pinned objects, too, because
+   * their levelHead is still set to the fromSpace HH. (Pinned objects are
+   * stored in a different chunklist during collection through.) */
   assert( HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))
           ==
           args->fromSpace[HM_getObjptrDepth(op)] );
 
   if (hasFwdPtr(p)) {
-    op = getFwdPtr(p);
-    assert(!hasFwdPtr(objptrToPointer(op, NULL)));
-    assert(isObjptrInToSpace(op, args));
-    assert(HM_getObjptrDepth(op) == opDepth);
-    *opp = op;
+    objptr fop = getFwdPtr(p);
+    assert(!hasFwdPtr(objptrToPointer(fop, NULL)));
+    assert(isObjptrInToSpace(fop, args));
+    assert(HM_getObjptrDepth(fop) == opDepth);
+    *opp = fop;
     return;
   }
 
