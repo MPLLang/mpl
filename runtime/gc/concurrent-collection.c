@@ -42,7 +42,7 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   // check if it's already added in the toSpace/saved
   // return (HM_isChunkMarked(chunk));
   // return chunk->levelHead == args->toHead;
-  return chunk->isInToSpace;
+  return (chunk->tmpHeap==args->toHead);
 }
 
 // Mark the object uniquely identified by p
@@ -51,19 +51,11 @@ void markObj(pointer p) {
   GC_header header = *headerp;
   header ^= MARK_MASK;
   *headerp = header;
+  /* GC_header header_old = *headerp;
+  GC_header header_new = header_old ^ MARK_MASK;
+  GC_header q = casCC(headerp, header_old, header_new);
+  assert(q==header_old);*/ // commented out cas implementation
 }
-
-
-
-// void unmarkObjects (HM_chunkList repList) {
-//  HM_chunk chunk = repList->firstChunk;
-
-//    while (NULL != chunk) {
-
-//      HM_unmarkChunk(chunk);
-//      chunk = chunk->nextChunk;
-
-// }
 
 void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args) {
 
@@ -329,6 +321,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     return;
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
+
   assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
   if(cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
@@ -426,6 +419,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   bool q = forwardPtrChunk(s, &(cp->snapLeft), &lists);
   assert(q);
+
   q = forwardPtrChunk(s, &(cp->snapRight), &lists);
   assert(q);
 // The stack and thread are root sets.
@@ -460,17 +454,17 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     }
   }
 // temporary code commented for debugging
-HM_chunk chunk= origList->firstChunk;
-while ( chunk!=NULL ) {
-	if(1) { // save all chunks
-		HM_chunk currNextChunk = chunk->nextChunk;
-		saveChunk(chunk, &lists);
-		chunk = currNextChunk;
-	}
-	else
-		chunk=chunk->nextChunk;
-}
-assert(origList->firstChunk==NULL);
+// HM_chunk chunk= origList->firstChunk;
+// while ( chunk!=NULL ) {
+// 	if(1) { // save all chunks
+// 		HM_chunk currNextChunk = chunk->nextChunk;
+// 		saveChunk(chunk, &lists);
+// 		chunk = currNextChunk;
+// 	}
+// 	else
+// 		chunk=chunk->nextChunk;
+// }
+// // assert(origList->firstChunk==NULL);
 
 #if ASSERT
   HM_assertChunkListInvariants(origList);
@@ -479,7 +473,7 @@ assert(origList->firstChunk==NULL);
   int lenFree = 0;
   int lenRep = 0;
   HM_chunk Q = origList->firstChunk;
-  assert(Q==NULL);
+  // assert(Q==NULL);
   while(Q!=NULL) {
     lenFree++;
     Q = Q->nextChunk;
@@ -488,7 +482,8 @@ assert(origList->firstChunk==NULL);
   Q = repList->firstChunk;
   while(Q!=NULL){
     lenRep++;
-    Q= Q->nextChunk;
+    assert(Q->levelHead == targetHH);
+    Q = Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
   printf("%s %d \n", "Chunks Collected = ", lenFree);
@@ -499,12 +494,7 @@ assert(origList->firstChunk==NULL);
 	for(HM_chunk chunk = repList->firstChunk;
 		chunk!=NULL;
 		chunk=chunk->nextChunk) {
-		// assert(chunk->levelHead == targetHH);
-	}
-	for(HM_chunk chunk = origList->firstChunk;
-		chunk!=NULL;
-		chunk= chunk->nextChunk) {
-		assert(chunk->startGap == 0);
+		assert(chunk->levelHead == targetHH);
 	}
 #endif
   HM_appendChunkList(getFreeListSmall(s), origList);
