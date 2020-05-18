@@ -4,7 +4,7 @@
  * See the file MLton-LICENSE for details.
  */
 
-#define MAX(x, y) ((x) < (y) ? (x) : (y))
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
 
 #define MAX_FORK_DEPTH 31
 #define MAX_PATHS ((unsigned int) 1 << (MAX_FORK_DEPTH))
