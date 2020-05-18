@@ -1,4 +1,4 @@
-/* Copyright (C) 2019 Sam Westrick
+/* Copyright (C) 2019-2020 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
@@ -26,9 +26,15 @@ struct ForwardHHObjptrArgs {
   uint32_t minDepth;
   uint32_t maxDepth;
   uint32_t toDepth; /* if == HM_HH_INVALID_DEPTH, preserve level of the forwarded object */
+
+  /* arrays of HH objects, e.g. HM_HH_getDepth(toSpace[i]) == i */
   HM_HierarchicalHeap* fromSpace;
   HM_HierarchicalHeap* toSpace;
-  objptr containingObject; /* a hack to keep track of which object is currently being traced */
+  /* an array of pinned chunklists */
+  struct HM_chunkList *pinned;
+
+  /* a hack to keep track of which object is currently being traced */
+  objptr containingObject;
 
   size_t bytesCopied;
   uint64_t objectsCopied;

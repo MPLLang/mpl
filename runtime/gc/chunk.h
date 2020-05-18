@@ -62,6 +62,10 @@ struct HM_chunk {
    */
   uint8_t startGap;
 
+  /* this bool is only used during local collections, to mark which chunks
+   * have pinned objects. outside of a collection, it is always false. */
+  bool pinnedDuringCollection;
+
   bool mightContainMultipleObjects;
   
   decheck_tid_t decheckState;

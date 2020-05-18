@@ -1,0 +1,8 @@
+Local collections:
+  - New chunks need their TIDs set. How do we do this correctly?
+  The most obviously correct thing would be to preserve all TIDs: for each
+  object x that we are copying to the to-space, we would look up if there
+  is an existing chunk in the to-space that already has TID(x), and
+  copy into that chunk, or create a new chunk otherwise. More fragmentation,
+  but unavoidable.
+  - Debug decheck... nn benchmark is failing

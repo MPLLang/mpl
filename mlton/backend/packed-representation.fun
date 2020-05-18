@@ -1582,11 +1582,16 @@ structure Objptrs =
                                          offset = Runtime.headerOffset (),
                                          ty = Type.objptrHeader ()},
                                  shift)
+            (* We mask 19 bits, because header words reserve 19 bits for the
+             * type index. See runtime/gc/object.h *)
+            val mask =
+              Operand.word (WordX.fromIntInf (0x7ffff, WordSize.shiftArg))
+            val (s2, tag2) = Statement.andb (tag, mask)
          in
-            ([s], Switch (Switch.T {cases = cases,
+            ([s, s2], Switch (Switch.T {cases = cases,
                                     default = default,
                                     size = WordSize.objptrHeader (),
-                                    test = tag}))
+                                    test = tag2}))
          end
    end
    end

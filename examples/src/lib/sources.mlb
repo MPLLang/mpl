@@ -5,6 +5,7 @@ CommandLineArgs.sml
 Util.sml
 SeqBasis.sml
 Seq.sml
+FuncSequence.sml
 BinarySearch.sml
 Merge.sml
 Quicksort.sml
