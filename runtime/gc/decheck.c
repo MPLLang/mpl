@@ -114,7 +114,7 @@ void decheckRead(GC_state s, objptr ptr) {
     if (allocator.bits == DECHECK_BOGUS_BITS)
         return;
     if (!isOrdered(allocator, tid)) {
-        printf("Disentangelent detected: object at %p\n", (void *) ptr);
+        printf("Entanglement detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
         printf("Allocator path: 0x%x\n", allocator.internal.path);
         printf("Allocator dag depth: %d\n", dag_depth(allocator));
