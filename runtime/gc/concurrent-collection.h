@@ -9,8 +9,9 @@
 
 #ifndef CONCURRENT_COLLECTION_H_
 #define CONCURRENT_COLLECTION_H_
-#include "hierarchical-heap.h"
+
 #include "concurrent-stack.h"
+#include "hierarchical-heap.h"
 #include "objptr.h"
 // #include "logger.h"
 
@@ -28,7 +29,7 @@ typedef struct ConcurrentPackage {
 //  It is possible that the collection turned off and the stack isn't empty
 //	This is a result of the non-atomicity in the write barrier implementation
 //	from checking of isCollecting to addition into the stack
-	concurrent_stack* rootList;
+	CC_stack* rootList;
 	//children roots
 	objptr snapLeft;
 	objptr snapRight;

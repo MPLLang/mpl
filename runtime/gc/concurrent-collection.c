@@ -16,11 +16,12 @@
 
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
-    LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
-    assert(0);
+    // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
+    // assert(0);
+    CC_stack_init(cp->rootList, 2);
   }
   printf("%s\n", "trying to add to stack");
-  concurrent_stack_push(cp->rootList, (void*)p);
+  CC_stack_push(cp->rootList, (void*)p);
 }
 
 bool CC_isPointerMarked (pointer p) {
@@ -173,8 +174,18 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 
   if(chunkOrig && !chunkSaved) {
     #if ASSERT
-      assert(isChunkInList(args->origList, cand_chunk) ||
-              isChunkInList (args->repList, cand_chunk));
+      assert(cand_chunk->tmpHeap == NULL);
+
+      if(isChunkInList(args->origList, cand_chunk) ||
+              isChunkInList (args->repList, cand_chunk)) {
+
+      }
+    else {
+      printf("%s\n", "this is failing");
+      isChunkInList(args->origList, cand_chunk);
+      assert(0);
+    }
+
     #endif
     saveChunk(cand_chunk, args);
   }
@@ -214,13 +225,21 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
   forwardPtrChunk(s, &src, rawArgs);
 }
 
+void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
+  printf("\t %p", opp);
+}
+
 void forceScan(GC_state s, objptr *opp, void* rawArgs) {
+  pointer p = objptrToPointer(*opp, NULL);
+  foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
+          printObjPtrFunction, rawArgs);
   bool scanned = forwardPtrChunk(s, opp, rawArgs);
 
-  pointer p = objptrToPointer(*opp, NULL);
+  printf("Stack Roots:: ");
   if(!scanned) {
     foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
             forwardPtrChunk, rawArgs);
+    printf("\n");
   }
 }
 
@@ -398,11 +417,10 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     .toHead = (void*)repList,
   };
 
-  concurrent_stack* workStack = cp->rootList;
   // clearing extraneous additions from previous collection : TODO
-  if(workStack!=NULL) {
-    concurrent_stack_clear(workStack);
-  }
+  /*if(workStack!=NULL) {
+    CC_stack_clear(workStack);
+  }*/
 
   //TODO: Find the right pointer type here
   HM_chunk baseChunk = HM_getChunkOf(targetHH);
@@ -425,46 +443,35 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 // The stack and thread are root sets.
 // The stack itself might not be in scope and might not get scanned.
   objptr stackp = getStackCurrentObjptr(s);
+  printf("stack scanned = %p\n", stackp);
   forceScan(s, &(stackp), &lists);
   forceScan(s, &(s->currentThread), &lists);
 
-  // forwardPtrChunk(s, &(s->currentThread), &lists);
-  // bool scannedStack = forwardPtrChunk(s, &(stackp), &lists);
-  // pointer stack = objptrToPointer(stackp, NULL);
-  // if(!scannedStack) {
-    // foreachObjptrInObject(s, stack, false, trueObjptrPredicate, NULL,
-                // forwardPtrChunk, &lists);
-  // }
-  // pointer pr = objptrToPointer (args->snapRight, NULL);
-  // markObj(pr);
-  // objptr threadp = getThreadCurrentObjptr(s);
-  // pointer thread = objptrToPointer(threadp, NULL);
-  // markObj(thread);
-  // foreachObjptrInObject(s, threadp, false, trueObjptrPredicate, NULL,
-  //             forwardPtrChunk, &args);
+  forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
+  /*forwardPtrChunk(s, &(s->currentThread), &lists);
   if(workStack!=NULL){
-    objptr * q = concurrent_stack_pop(workStack);
-    while(q != NULL){
+    size_t size = CC_stack_size(workStack);
+    while(size!=0){
+      void* q = CC_stack_pop(workStack);
       forwardPtrChunk(s, q, &lists);
       // callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
-      q = concurrent_stack_pop(workStack);
+      q = CC_stack_pop(workStack);
       if(HM_getChunkListFirstChunk(origList)==NULL)
         break;
     }
   }
-// temporary code commented for debugging
-// HM_chunk chunk= origList->firstChunk;
-// while ( chunk!=NULL ) {
-// 	if(1) { // save all chunks
-// 		HM_chunk currNextChunk = chunk->nextChunk;
-// 		saveChunk(chunk, &lists);
-// 		chunk = currNextChunk;
-// 	}
-// 	else
-// 		chunk=chunk->nextChunk;
-// }
-// // assert(origList->firstChunk==NULL);
+
+  HM_chunk chunk= origList->firstChunk;
+  while ( chunk!=NULL ) {
+  	if(chunk->startGap!=0) { // save all chunks
+  		HM_chunk currNextChunk = chunk->nextChunk;
+  		saveChunk(chunk, &lists);
+  		chunk = currNextChunk;
+  	}
+  	else
+  		chunk=chunk->nextChunk;
+  }*/
 
 #if ASSERT
   HM_assertChunkListInvariants(origList);
@@ -487,16 +494,18 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   assert(lenRep+lenFree == lenOrig);
   printf("%s %d \n", "Chunks Collected = ", lenFree);
-#endif
 
-
-#if ASSERT
 	for(HM_chunk chunk = repList->firstChunk;
 		chunk!=NULL;
 		chunk=chunk->nextChunk) {
 		assert(chunk->levelHead == targetHH);
 	}
 #endif
+
+  for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
+    chunk->levelHead = NULL;
+  }
+
   HM_appendChunkList(getFreeListSmall(s), origList);
   linearUnmarkChunkList(s, &lists);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);

@@ -112,8 +112,9 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   //   }
   // }
   /* Internal or up-pointer. */
-  if (dstHH->depth >= srcHH->depth)
+  if (dstHH->depth >= srcHH->depth){
     return;
+  }
 
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
