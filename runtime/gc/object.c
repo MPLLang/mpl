@@ -113,3 +113,38 @@ pointer advanceToObjectData (ARG_USED_FOR_ASSERT GC_state s, pointer p) {
              (uintptr_t)res, (uintptr_t)p);
   return res;
 }
+
+/* return the size of the object pointed to by p */
+size_t objectSize(GC_state s, pointer p) {
+  GC_header header;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  GC_objectTypeTag tag;
+  size_t result;
+
+  header = getHeader(p);
+  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+
+  if (NORMAL_TAG == tag || WEAK_TAG == tag) {
+    result = (size_t)bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+  }
+  else if (SEQUENCE_TAG == tag) {
+    size_t bytesPerElement;
+    size_t dataBytes;
+    GC_sequenceLength numElements;
+
+    numElements = getSequenceLength(p);
+    bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+    dataBytes = numElements * bytesPerElement;
+
+    result = alignWithExtra(s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
+  }
+  else if (STACK_TAG == tag) {
+    result = sizeof(struct GC_stack) + ((GC_stack)p)->reserved;
+  }
+  else {
+    DIE("objectSize: cannot handle tag %u", tag);
+  }
+
+  return result;
+}

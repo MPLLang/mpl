@@ -80,19 +80,22 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   assert(child != NULL);
   assert(child->hierarchicalHeap != NULL);
 
-  beginAtomic(s);
+  HM_HH_merge(s, thread, child);
+
   /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
    * level? */
-  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, true);
+  /* SAM_NOTE: It is important that this happens after the merge completes,
+   * because the stack may contain a pointer into the child's heap (we merge
+   * right after reading from the "right branch" result ref).
+   */
+  beginAtomic(s);
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, TRUE);
   endAtomic(s);
 
-  /*
-   * This should be true, otherwise our call to
+  /* This should be true, otherwise our call to
    * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
    */
   assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
-
-  HM_HH_merge(s, thread, child);
 }
 
 #pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"

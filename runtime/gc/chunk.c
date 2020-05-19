@@ -104,6 +104,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->prevAdjacent = NULL;
   chunk->levelHead = NULL;
   chunk->startGap = 0;
+  chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
   chunk->decheckState.bits = DECHECK_BOGUS_BITS;
   chunk->magic = CHUNK_MAGIC;
@@ -335,6 +336,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   HM_prependChunk(getFreeListLarge(s), chunk);
   assert(chunk->frontier == HM_getChunkStart(chunk));
   assert(chunkHasBytesFree(chunk, bytesRequested));
+  chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
   splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
   HM_unlinkChunk(getFreeListLarge(s), chunk);

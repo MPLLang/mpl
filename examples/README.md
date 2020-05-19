@@ -17,6 +17,17 @@ $ ./fib @mpl procs 4 -- -N 39
 ```
 This is not very practical but is a good demonstration of the basics of using MPL.
 
+## N Queens
+
+Calculate the number of unique solutions to the
+[N Queens problem](https://en.wikipedia.org/wiki/Eight_queens_puzzle).
+For example, the number of solutions on a board of size 13x13 using 4
+processors:
+```
+$ make nqueens
+$ ./nqueens @mpl procs 4 -- -N 13
+```
+
 ## Random Data
 
 Generate an array of pseudo-random 64-bit words. Seed the randomness with

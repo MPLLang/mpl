@@ -6,14 +6,22 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-
-objptr Assignable_readBarrier(GC_state s, objptr obj, objptr* field) {
+objptr Assignable_readBarrier(
+  GC_state s,
+  __attribute__((unused)) objptr obj,
+  objptr* field)
+{
   objptr ptr = *field;
   decheckRead(s, ptr);
   return ptr;
 }
 
-void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {
+void Assignable_writeBarrier(
+  GC_state s,
+  objptr dst,
+  ARG_USED_FOR_ASSERT objptr* field,
+  objptr src)
+{
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
 
@@ -79,7 +87,14 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     return;
   }
 
-  HM_rememberAtLevel(hh, dst, field, src);
+  if (pinObject(src, dstHH->depth)) {
+    HM_rememberAtLevel(hh, src);
+  }
+
+  LOG(LM_HH_PROMOTION, LL_INFO,
+    "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+    dstHH->depth, srcHH->depth,
+    dst, src);
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */

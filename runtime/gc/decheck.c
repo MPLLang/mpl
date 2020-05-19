@@ -4,7 +4,7 @@
  * See the file MLton-LICENSE for details.
  */
 
-#define MAX(x, y) ((x) < (y) ? (x) : (y))
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
 
 #define MAX_FORK_DEPTH 31
 #define MAX_PATHS ((unsigned int) 1 << (MAX_FORK_DEPTH))
@@ -116,7 +116,7 @@ void decheckRead(GC_state s, objptr ptr) {
     if (allocator.bits == DECHECK_BOGUS_BITS)
         return;
     if (!isOrdered(allocator, tid)) {
-        printf("Disentangelent detected: object at %p\n", (void *) ptr);
+        printf("Entanglement detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
         printf("Allocator path: 0x%x\n", allocator.internal.path);
         printf("Allocator dag depth: %d\n", dag_depth(allocator));
