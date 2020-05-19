@@ -89,13 +89,15 @@ void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
 }
 
 static bool isOrdered(decheck_tid_t t1, decheck_tid_t t2) {
-    if (t1.internal.path == t2.internal.path)
+    uint32_t p1 = norm_path(t1);
+    uint32_t p2 = norm_path(t2);
+    if (p1 == p2)
         return true;
-    int x = t1.internal.path ^ t2.internal.path;
+    int x = p1 ^ p2;
     int lca_mask = (x & -x) - 1;
-    uint32_t lca_path = (t1.internal.path & lca_mask) + lca_mask + 1;
+    uint32_t lca_path = (p1 & lca_mask) + lca_mask + 1;
     assert(lca_path < MAX_PATHS);
-    return norm_path(t1) == lca_path || dag_depth(t1) <= synch_depths[lca_path];
+    return p1 == lca_path || dag_depth(t1) <= synch_depths[lca_path];
 }
 
 void decheckRead(GC_state s, objptr ptr) {
