@@ -34,6 +34,7 @@ typedef struct ConcurrentPackage {
 	objptr snapLeft;
 	objptr snapRight;
 	bool isCollecting;
+	objptr stack;
 } * ConcurrentPackage;
 
 // Assume complete access in this function
@@ -51,7 +52,7 @@ void CC_addToStack(ConcurrentPackage cp, pointer p);
 bool CC_isPointerMarked (pointer p);
 
 
-
+void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs);
 #endif
 
 #endif

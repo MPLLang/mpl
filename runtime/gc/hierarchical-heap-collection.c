@@ -776,6 +776,50 @@ void forwardHHObjptr (GC_state s,
       ((uintptr_t)(opp)),
       *opp);
 }
+
+pointer copyObject(pointer p,
+                   size_t objectSize,
+                   size_t copySize,
+                   HM_HierarchicalHeap tgtHeap) {
+  assert(HM_HH_isLevelHead(tgtHeap));
+  assert(copySize <= objectSize);
+
+  HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
+  assert(NULL != tgtChunkList);
+
+  /* get the chunk to allocate in */
+  HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
+  pointer frontier = HM_getChunkFrontier(chunk);
+  pointer limit = HM_getChunkLimit(chunk);
+  assert(frontier <= limit);
+
+  bool mustExtend = ((size_t)(limit - frontier) < objectSize) ||
+                    (frontier >= (pointer)chunk + HM_BLOCK_SIZE);
+
+  if (mustExtend) {
+    /* need to allocate a new chunk */
+    chunk = HM_allocateChunk(tgtChunkList, objectSize);
+    if (NULL == chunk) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+    chunk->levelHead = tgtHeap;
+    frontier = HM_getChunkFrontier(chunk);
+  }
+
+  GC_memcpy(p, frontier, copySize);
+  pointer newFrontier = frontier + objectSize;
+  HM_updateChunkValues(chunk, newFrontier);
+  if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
+    /* size is arbitrary; just need a new chunk */
+    chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
+    if (NULL == chunk) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+    chunk->levelHead = tgtHeap;
+  }
+
+  return frontier;
+}
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
@@ -837,50 +881,6 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
     *copySize += *metaDataSize;
 
     return tag;
-}
-
-pointer copyObject(pointer p,
-                   size_t objectSize,
-                   size_t copySize,
-                   HM_HierarchicalHeap tgtHeap) {
-  assert(HM_HH_isLevelHead(tgtHeap));
-  assert(copySize <= objectSize);
-
-  HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
-  assert(NULL != tgtChunkList);
-
-  /* get the chunk to allocate in */
-  HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
-  pointer frontier = HM_getChunkFrontier(chunk);
-  pointer limit = HM_getChunkLimit(chunk);
-  assert(frontier <= limit);
-
-  bool mustExtend = ((size_t)(limit - frontier) < objectSize) ||
-                    (frontier >= (pointer)chunk + HM_BLOCK_SIZE);
-
-  if (mustExtend) {
-    /* need to allocate a new chunk */
-    chunk = HM_allocateChunk(tgtChunkList, objectSize);
-    if (NULL == chunk) {
-      DIE("Ran out of space for Hierarchical Heap!");
-    }
-    chunk->levelHead = tgtHeap;
-    frontier = HM_getChunkFrontier(chunk);
-  }
-
-  GC_memcpy(p, frontier, copySize);
-  pointer newFrontier = frontier + objectSize;
-  HM_updateChunkValues(chunk, newFrontier);
-  if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
-    /* size is arbitrary; just need a new chunk */
-    chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
-    if (NULL == chunk) {
-      DIE("Ran out of space for Hierarchical Heap!");
-    }
-    chunk->levelHead = tgtHeap;
-  }
-
-  return frontier;
 }
 
 bool skipStackAndThreadObjptrPredicate(GC_state s,
