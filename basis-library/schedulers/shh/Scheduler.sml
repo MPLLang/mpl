@@ -319,6 +319,7 @@ struct
 
     fun fork (f : unit -> 'a, g : unit -> 'b) =
       let
+        val thread = Thread.current()
         val depth = HH.getDepth thread
       in
         if(depth > 1) then
