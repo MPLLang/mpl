@@ -288,28 +288,23 @@ void ensureCallSanity(__attribute__((unused)) GC_state s,
 
 }
 
-// Assuming that state doesn't really matter
-void CC_collectAtRoot(GC_thread thread) {
-  GC_state s = pthread_getspecific (gcstate_key);
 
+bool checkLocalScheduler (GC_state s) {
+  return !( NONE == s->controls->collectionType ||
+           s->wsQueueTop == BOGUS_OBJPTR ||
+           s->wsQueueBot == BOGUS_OBJPTR
+         );
+}
+
+HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
-  int depth = 1;
-
-  if (NONE == s->controls->collectionType) {
-    return;
-  }
-  if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
-    assert(0);
-  }
-  if (thread->currentDepth == 0) {
-    assert(0);
-  }
   while(HM_HH_getDepth(currentHeap) > depth) {
     currentHeap = currentHeap->nextAncestor;
   }
 
   if(HM_HH_getDepth(currentHeap) < depth) {
-    assert(0);
+    LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
+    return NULL;
   }
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
@@ -317,30 +312,62 @@ void CC_collectAtRoot(GC_thread thread) {
   assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
   if(cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
-    || cp->snapRight == BOGUS_OBJPTR) {
-    return;
+    || cp->snapRight == BOGUS_OBJPTR
+    || cp->stack == BOGUS_OBJPTR ) {
+    return NULL;
   }
   else if(casCC(&(cp->isCollecting), false, true)) {
     printf("\t %s\n", "returning because someone else claimed collection");
     assert(0);
-    return;
+    return NULL;
   }
-  else{
+  else {
     LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
     printf("%d %d\n", cp->isCollecting, depth);
+    // #if ASSERT
+    //   while(oldStart!=currentHeap) {
+    //     printf(" %p => ", (void*) oldStart);
+    //     oldStart = oldStart->nextAncestor;
+    //   }
+    //   printf("FIN: %p\n", currentHeap);
+    // #endif
+    assert(HM_HH_getDepth(currentHeap) == depth);
+    return currentHeap;
   }
 
+
+  // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
-  CC_collectWithRoots(s, currentHeap, thread);
-  cp->isCollecting = false;
+
+  return currentHeap;
+}
+
+void CC_collectAtRoot(GC_thread thread) {
+  GC_state s = pthread_getspecific (gcstate_key);
+  HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
+  int depth = 1;
+
+  if (!checkLocalScheduler(s)) {
+    return;
+  }
+
+  assert(thread->currentDepth!=0);
+
+  HM_HierarchicalHeap heap = claimHeap(thread, depth);
+  if (heap == NULL) {
+    return;
+  }
+
+  CC_collectWithRoots(s, heap, thread);
+  heap->concurrentPack->isCollecting = false;
 }
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // 1) ensure the depth is indeed a public depth
   // 2) it is not being collected somewhere already
   // 3) construct arguments to the function call
-  // 4) ensure the children can't join back until the collector is done -- not done
-  // 5) Races with fork -- The heap could be in process of forking.
+  // 4) ensure the children can't join back until the collector is done -- done by construction
+  // 5) Races with fork -- does not matter if the force left heap has been done.
   // bool gdbArg = false;
   // if (gdbArg) {
   //   depth = (depth>0? depth -1: 0);
@@ -348,96 +375,47 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   return;
   // depth = (depth==1)?(depth+1):depth;
 
-  HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   // LOG(LM_HH_COLLECTION, LL_Log, "called func");
 
-  // Copied the ifs from HM_HHC_collectLocal.
-  if (NONE == s->controls->collectionType) {
-    return;
-  }
+  checkLocalScheduler(s);
 
-  if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
-    return;
-  }
   if (thread->currentDepth == 0 || depth <= 0) {
-    return;
-  }
-  // printf("%s %d\n", "depth = ", depth);
-
-  if(HM_HH_getDepth(currentHeap) < thread->currentDepth) {
     return;
   }
 
   // uint32_t originalLocalScope = pollCurrentLocalScope(s);
-
   // if(originalLocalScope > thread->currentDepth) {
   //   return;
   // }
-
   // assert(originalLocalScope == thread->currentDepth);
   // uint32_t maxDepth = (originalLocalScope>0)?originalLocalScope - 1 : 0;
+
+  // ensure collection is at a public level (1)
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t shallowestPrivateLevel = UNPACK_IDX(topval);
   uint32_t maxDepth = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
-
   if(depth > maxDepth) {
-    // LOG(LM_HH_COLLECTION, LL_Log, "Level is not public, skipping");
     return;
     // if(depth == thread->currentDepth)
       // return;
   }
   else if (depth >= thread->currentDepth) {
-    // printf("%s\n", "disconnect between top and thread");
     return;
   }
-  #if ASSERT
-    HM_HierarchicalHeap oldStart = currentHeap;
-  #endif
-
-  while(HM_HH_getDepth(currentHeap) > depth) {
-    currentHeap = currentHeap->nextAncestor;
-  }
-
-  if(HM_HH_getDepth(currentHeap) < depth)
-    return;
-
-  ConcurrentPackage cp = currentHeap->concurrentPack;
-
-  assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
-  if(cp->isCollecting
-    || cp->snapLeft == BOGUS_OBJPTR
-    || cp->snapRight == BOGUS_OBJPTR) {
-    return;
-  }
-  else if(casCC(&(cp->isCollecting), false, true)) {
-    printf("\t %s\n", "returning because someone else claimed collection");
-    assert(0);
-    return;
-  }
-  else{
-    LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
-    printf("%d %d\n", cp->isCollecting, depth);
 
   #if ASSERT
-    while(oldStart!=currentHeap) {
-      printf(" %p => ", (void*) oldStart);
-      oldStart = oldStart->nextAncestor;
-    }
-    printf("FIN: %p\n", currentHeap);
+    HM_HierarchicalHeap oldStart = thread->hierarchicalHeap;
   #endif
 
+  // checks (2, 3)
+  HM_HierarchicalHeap heap = claimHeap(thread, depth);
+  if(heap == NULL){
+    return;
   }
 
-
-  // This point is reachable only after the fork is completed.
-  assert(HM_HH_getDepth(currentHeap) == depth);
   assert(s->currentThread == thread);
-  // return ;
-  CC_collectWithRoots(s, currentHeap, thread);
-  cp->isCollecting = false;
-
-  // assertInvariants(thread);
-
+  CC_collectWithRoots(s, heap, thread);
+  heap->concurrentPack->isCollecting = false;
 }
 
 void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){

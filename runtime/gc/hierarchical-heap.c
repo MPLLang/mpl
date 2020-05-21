@@ -428,6 +428,8 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
   stackCopy += metaDataSize;
 
+  ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
+
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 
   #if ASSERT
