@@ -52,6 +52,9 @@ signature MLTON_THREAD =
           val forceLeftHeap : int * thread -> unit
 
           val registerCont : (('a) array) * (('b) array)  * thread -> unit
+
+          (*Collect the depth = 1 HH of this thread*)
+          val collectThreadRoot : thread -> unit
           (* Merge the heap of the deepest child of this thread. Requires that
            * this child is inactive and has an associated heap. *)
           val mergeThreads : thread * thread -> unit

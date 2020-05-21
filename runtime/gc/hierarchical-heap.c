@@ -573,6 +573,7 @@ void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
 
 void assertInvariants(GC_thread thread)
 {
+  return;
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
 

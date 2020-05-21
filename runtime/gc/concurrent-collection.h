@@ -44,7 +44,7 @@ typedef struct ConcurrentPackage {
 // in the chunk is live then the whole chunk is. However, tracing is at the granularity of objects.
 // Objects in chunks that are preserved may point to chunks that are not. But such objects aren't
 // reachable.
-void CC_collectWithRoots(GC_state s, struct HM_HierarchicalHeap * targetHH, ConcurrentPackage args);
+void CC_collectWithRoots(GC_state s, struct HM_HierarchicalHeap * targetHH, GC_thread thread);
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth);
 void CC_addToStack(ConcurrentPackage cp, pointer p);

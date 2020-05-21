@@ -209,14 +209,12 @@ struct
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    fun fork (f : unit -> 'a, g : unit -> 'b) =
+    fun fork2 (f : unit -> 'a, g : unit -> 'b) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
-
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
-
         fun g' () =
           let
             val gr = result g
@@ -230,20 +228,16 @@ struct
             else
               returnToSched ()
           end
-
         val _ = push g'
-        val cont_arr1 =  Array.array (1, SOME(f))
+        (*val cont_arr1 =  Array.array (1, SOME(f))*)
         (*val cont_arr2 =  Array.array (1, SOME(g))*)
-        val cont_arr2 =  Array.array (1, SOME(g'))
-
+        (*val cont_arr2 =  Array.array (1, SOME(g'))*)
         (*location?*)
-        val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
+        (*val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)*)
         val _ = HH.setDepth (thread, depth + 1)
         (*force left heap must be after set Depth*)
-        val _ = HH.forceLeftHeap(myWorkerId(), thread)
-
+        (*val _ = HH.forceLeftHeap(myWorkerId(), thread)*)
         val fr = result f
-
         val gr =
           if popDiscard () then
             ( HH.promoteChunks thread
@@ -267,6 +261,71 @@ struct
         (extractResult fr, extractResult gr)
       end
 
+    fun forkGC (f : unit -> 'a, g : unit -> 'b) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
+        val rightSide = ref (NONE : (unit) option)
+        val incounter = ref 2
+        fun gcFunc() =
+          let
+            val _ = HH.collectThreadRoot(thread)
+          in
+            rightSide := SOME (());
+            if decrementHitsZero incounter then
+              ( setQueueDepth (myWorkerId ()) (depth+1)
+              ; threadSwitch thread
+              )
+            else
+              returnToSched ()
+          end
+
+        val cont_arr1 =  Array.array (1, SOME(f))
+        val cont_arr2 =  Array.array (1, SOME(g))
+
+        val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
+        val _ = HH.setDepth (thread, depth + 1)
+        (*force left heap must be after set Depth*)
+        val _ = HH.forceLeftHeap(myWorkerId(), thread)
+        val _ = push gcFunc
+
+        val fr = fork2(f, g)
+
+        val gr =
+          if popDiscard() then
+            let
+              val _ = HH.collectThreadRoot(thread)
+              val _ = HH.promoteChunks thread
+            in
+              HH.setDepth (thread, depth)
+              ; ()
+            end
+          else
+            ( clear()
+            ; if decrementHitsZero incounter then () else returnToSched ()
+            ; case !rightSide of
+                NONE => die (fn _ => "scheduler bug: GC-joinfailed")
+              | SOME(a) =>
+                  ( setQueueDepth (myWorkerId ()) depth
+                  ; HH.promoteChunks thread
+                  ; HH.setDepth (thread, depth)
+                  ; ()
+                  )
+            )
+      in
+        fr
+      end
+
+    fun fork (f : unit -> 'a, g : unit -> 'b) =
+      let
+        val depth = HH.getDepth thread
+      in
+        if(depth > 1) then
+          fork2(f, g)
+        else
+          forkGC(f, g)
+      end
   end
 
   (* ========================================================================
