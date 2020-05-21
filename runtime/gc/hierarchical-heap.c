@@ -418,9 +418,9 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   // compute object size and bytes to be copied
   size_t objectSize, copySize, metaDataSize;
   metaDataSize = GC_STACK_METADATA_SIZE;
-  objectSize = sizeofObject(s, stackPtr);
   copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
-
+  // objectSize = sizeofObject(s, stackPtr);
+  objectSize = copySize;
   // copyObject can add a chunk to the list. It updates the frontier but not the
   // thread current chunk. Also it returns the pointer to the header part.
   pointer stackCopy = copyObject(stackPtr - metaDataSize,
