@@ -208,7 +208,10 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
   return (NULL != hh) && (NULL == hh->representative);
 }
 
-HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
+HM_HierarchicalHeap HM_HH_new(
+  GC_state s,
+  uint32_t depth,
+  decheck_tid_t decheckState)
 {
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
   HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
@@ -225,6 +228,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 
   HM_appendChunk(HM_HH_getChunkList(hh), chunk);
   chunk->levelHead = hh;
+  chunk->decheckState = decheckState;
 
   return hh;
 }
@@ -235,7 +239,7 @@ uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh)
 }
 
 HM_HierarchicalHeap HM_HH_getHeapAtDepth(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   GC_thread thread,
   uint32_t depth)
 {
@@ -257,7 +261,9 @@ HM_HierarchicalHeap HM_HH_getHeapAtDepth(
   /* otherwise, either missed it or at end of list. */
   assert(NULL == hh || HM_HH_getDepth(hh) < depth);
 
-  HM_HierarchicalHeap newhh = HM_HH_new(s, depth);
+  /* SAM_NOTE: TODO: how to compute an appropriate thread id for this
+   * missing ancestor?? */
+  HM_HierarchicalHeap newhh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
   newhh->nextAncestor = hh;
   *cursor = newhh;
   return newhh;
@@ -296,7 +302,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 
   if (HM_HH_getDepth(hh) < currentDepth)
   {
-    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth);
+    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth, thread->decheckState);
     newhh->nextAncestor = hh;
     thread->hierarchicalHeap = newhh;
 
@@ -321,6 +327,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
+  chunk->decheckState = thread->decheckState;
   chunk->levelHead = hh;
 
   thread->currentChunk = chunk;

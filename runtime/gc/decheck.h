@@ -9,8 +9,6 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-#define DECHECK_BOGUS_BITS 0
-
 typedef union {
     struct {
         uint32_t path;
@@ -18,6 +16,9 @@ typedef union {
     } internal;
     uint64_t bits;
 } decheck_tid_t;
+
+#define DECHECK_BOGUS_BITS ((uint64_t)0)
+#define DECHECK_BOGUS_TID ((decheck_tid_t){ .bits = DECHECK_BOGUS_BITS })
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 

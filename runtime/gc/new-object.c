@@ -110,7 +110,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->hierarchicalHeap = NULL;
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->decheckState.bits = DECHECK_BOGUS_BITS;
+  thread->decheckState = DECHECK_BOGUS_TID;
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -130,7 +130,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   /* Allocate and initialize the heap that will be assigned to this thread.
    * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
    * yet. */
-  HM_HierarchicalHeap hh = HM_HH_new(s, depth);
+  HM_HierarchicalHeap hh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
 
   /* note that new heaps are initialized with one free chunk */
   HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
@@ -169,7 +169,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->hierarchicalHeap = hh;
   thread->currentChunk = chunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->decheckState.bits = DECHECK_BOGUS_BITS;
+  thread->decheckState = DECHECK_BOGUS_TID;
 
   HM_HH_updateValues(thread, frontier + totalSize);
 

@@ -703,14 +703,13 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
 
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
 
   if (NULL == args->toSpace[opDepth]) {
-    args->toSpace[opDepth] = HM_HH_new(s, opDepth);
+    args->toSpace[opDepth] = HM_HH_new(s, opDepth, chunk->decheckState);
   }
 
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
-
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
 
   if (chunk->pinnedDuringCollection) {
     return;
@@ -965,7 +964,7 @@ void forwardHHObjptr (GC_state s,
     if (tgtHeap == NULL) {
       /* Level does not exist, so create it */
       /* SAM_NOTE: new heaps are initialized with one free chunk. */
-      tgtHeap = HM_HH_new(s, opDepth);
+      tgtHeap = HM_HH_new(s, opDepth, HM_getChunkOf(p)->decheckState);
       args->toSpace[opDepth] = tgtHeap;
     }
 
@@ -1001,6 +1000,10 @@ void forwardHHObjptr (GC_state s,
       if (NULL == newChunk) {
         DIE("Ran out of space for Hierarchical Heap!");
       }
+      /* Safe to use the same dechecker state as the moved chunk, because all
+       * dechecker states within the same heap are equivalent from the
+       * perspective of future disentanglement checks. */
+      newChunk->decheckState = chunk->decheckState;
       newChunk->levelHead = tgtHeap;
 
       LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
@@ -1121,11 +1124,14 @@ pointer copyObject(pointer p,
                     (frontier >= (pointer)chunk + HM_BLOCK_SIZE);
 
   if (mustExtend) {
-    /* need to allocate a new chunk */
+    /* Need to allocate a new chunk. Safe to use the dechecker state of where
+     * the object came from, as all objects in the same heap can be safely
+     * reassigned to any dechecker state of that heap. */
     chunk = HM_allocateChunk(tgtChunkList, objectSize);
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    chunk->decheckState = HM_getChunkOf(p)->decheckState;
     chunk->levelHead = tgtHeap;
     frontier = HM_getChunkFrontier(chunk);
   }
@@ -1139,6 +1145,7 @@ pointer copyObject(pointer p,
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    chunk->decheckState = HM_getChunkOf(p)->decheckState;
     chunk->levelHead = tgtHeap;
   }
 
