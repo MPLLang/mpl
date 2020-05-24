@@ -289,8 +289,8 @@ struct
         (*force left heap must be after set Depth*)
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val _ = push gcFunc
-
         val fr = fork2(f, g)
+        val start = ref(NONE : (Time.time) option)
 
         val gr =
           if popDiscard() then
@@ -303,15 +303,31 @@ struct
             end
           else
             ( clear()
-            ; if decrementHitsZero incounter then () else returnToSched ()
+            ; if decrementHitsZero incounter then
+              ()
+              else
+                (start := SOME(Time.now())
+                ; returnToSched ()
+                )
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: GC-joinfailed")
               | SOME(a) =>
-                  ( setQueueDepth (myWorkerId ()) depth
-                  ; HH.promoteChunks thread
-                  ; HH.setDepth (thread, depth)
-                  ; ()
-                  )
+                  let
+                    val _ = case (!start) of
+                                SOME(t) => print (  "waited for the GC: " ^
+                                                    LargeInt.toString (
+                                                      Time.toMilliseconds (Time.- (Time.now(), t))
+                                                    )
+                                                    ^"\n"
+                                                  )
+                              | NONE => ()
+                  in
+                    ( setQueueDepth (myWorkerId ()) depth
+                    ; HH.promoteChunks thread
+                    ; HH.setDepth (thread, depth)
+                    ; ()
+                    )
+                end
             )
       in
         fr

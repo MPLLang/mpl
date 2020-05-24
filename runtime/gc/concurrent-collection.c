@@ -17,6 +17,7 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
     // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     // assert(0);
+    cp->rootList = (struct CC_stack*) malloc(sizeof(struct CC_stack));
     CC_stack_init(cp->rootList, 2);
   }
   printf("%s\n", "trying to add to stack");
@@ -548,8 +549,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 		chunk=chunk->nextChunk) {
 		assert(chunk->levelHead == targetHH);
 	}
-#endif
-
   printf("%s", "collected chunks: ");
   for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
     printf("%p", chunk);
@@ -558,6 +557,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   printf("\n");
   printf("Chunk list collected = %p \n", origList);
+#endif
+
   HM_appendChunkList(getFreeListSmall(s), origList);
   linearUnmarkChunkList(s, &lists);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);
