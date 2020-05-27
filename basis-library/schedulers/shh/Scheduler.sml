@@ -259,7 +259,6 @@ struct
         (extractResult fr, extractResult gr)
       end
 
-<<<<<<< HEAD
     fun forkGC (f : unit -> 'a, g : unit -> 'b) =
       let
         val thread = Thread.current ()
@@ -332,7 +331,7 @@ struct
         fr
       end
 
-    fun fork (f, g) =
+    and fork (f, g) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
