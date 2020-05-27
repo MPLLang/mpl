@@ -32,10 +32,12 @@ bool isInScope(HM_chunk chunk, HM_chunkList list) {
   // Check that this chunk belongs to this list.
   // I think we should path compress here because we will access the
   // levelHead fairly regularly during collection.
-  if(HM_HH_getChunkList(HM_getLevelHeadPathCompress(chunk)) == list) {
+  return chunk->tmpHeap == (void*) list;
+/*  if(HM_HH_getChunkList(HM_getLevelHeadPathCompress(chunk)) == list) {
     return true;
   }
   return false;
+*/
 }
 
 bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
@@ -166,7 +168,7 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
   CC_HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
 
-  assert(chunk->tmpHeap == NULL);
+  assert(chunk->tmpHeap == args->fromHead);
   chunk->tmpHeap = args->toHead;
 
   HM_assertChunkListInvariants(args->origList);
@@ -183,7 +185,7 @@ bool saveNoForward(GC_state s, pointer p, void* rawArgs) {
 
   if(chunkOrig && !chunkSaved) {
     #if ASSERT
-      assert(cand_chunk->tmpHeap == NULL);
+      assert(cand_chunk->tmpHeap == args->fromHead);
       assert(isChunkInList(args->origList, cand_chunk));
     #endif
     saveChunk(cand_chunk, args);
@@ -440,7 +442,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);
   HM_initChunkList(repList);
-  HM_chunkList origList = HM_HH_getChunkList(targetHH);
+  HM_chunkList origList = HM_HH_getFromList(targetHH);
   HM_assertChunkListInvariants(origList);
 
 #if ASSERT
@@ -458,8 +460,12 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     .origList = origList,
     .repList  = repList,
     .toHead = (void*)repList,
+    .fromHead = (void*) origList
   };
 
+  for(HM_chunk T = origList->firstChunk; T!=origList->lastChunk; T = T->nextChunk) {
+    T->tmpHeap = lists.origList;
+  }
   // clearing extraneous additions from previous collection : TODO
   /*if(workStack!=NULL) {
     CC_stack_clear(workStack);

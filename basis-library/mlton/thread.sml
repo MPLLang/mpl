@@ -75,6 +75,8 @@ struct
 
   fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
   fun registerCont (kl, kr, t) = Prim.registerCont(kl, kr, t)
+  fun resetList (t) = Prim.resetList(t)
+
   fun collectThreadRoot t = Prim.collectThreadRoot t
   fun getDepth t = Word32.toInt (Prim.getDepth t)
   fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)

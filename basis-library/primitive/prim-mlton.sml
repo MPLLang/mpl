@@ -402,6 +402,7 @@ structure Thread =
       val registerCont: ('a array) * ('b array) * thread -> unit =
             _import "HM_HH_registerCont" runtime private:
             ('a array) * ('b array) * thread -> unit;
+      val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread -> unit;
 
       val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;

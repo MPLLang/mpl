@@ -233,6 +233,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->nextAncestor = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
+  HM_initChunkList(HM_HH_getFromList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
 
   HM_appendChunk(HM_HH_getChunkList(hh), chunk);
@@ -383,6 +384,24 @@ void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp) {
   endAtomic(s);
 }
 
+void HM_HH_resetList(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  assert(thread->currentDepth == 2);
+  assert(thread->hierarchicalHeap->nextAncestor!=NULL);
+
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap->nextAncestor;
+  assert(HM_HH_getDepth(hh) == 1);
+  assert(!HM_HH_isCCollecting(hh));
+
+  HM_appendChunkList(HM_HH_getFromList(hh), HM_HH_getChunkList(hh));
+  struct HM_chunkList temp = hh->fromList;
+  hh->fromList = hh->chunkList;
+  hh->chunkList = temp;
+}
+
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   // return;
   GC_state s = pthread_getspecific(gcstate_key);
@@ -432,6 +451,22 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 
+
+  HM_chunkList chunkList = HM_HH_getChunkList(hh);
+  HM_chunkList fromList = HM_HH_getFromList(hh);
+  HM_chunk lastChunk = thread->currentChunk;
+  HM_chunk firstChunk = chunkList->firstChunk;
+  if(firstChunk!=lastChunk) {
+    size_t sizeLastChunk = (HM_getChunkSize(lastChunk));
+
+    fromList->firstChunk = chunkList->firstChunk;
+    fromList->lastChunk =  lastChunk->prevChunk;
+    fromList->size = chunkList->size - sizeLastChunk;
+
+    chunkList->firstChunk = lastChunk;
+    chunkList->size = sizeLastChunk;
+  }
+
   #if ASSERT
   // printf("%s", "original stack: ");
   // foreachObjptrInObject(s, stackPtr, false, trueObjptrPredicate, NULL,
@@ -453,6 +488,8 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   endAtomic(s);
 
 }
+
+
 
 
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {

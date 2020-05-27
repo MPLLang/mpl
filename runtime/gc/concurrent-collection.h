@@ -23,6 +23,7 @@ typedef struct ConcurrentCollectArgs {
 	HM_chunkList origList;
 	HM_chunkList repList;
 	void* toHead;
+	void* fromHead;
 } ConcurrentCollectArgs;
 
 typedef struct ConcurrentPackage {

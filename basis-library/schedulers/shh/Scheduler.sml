@@ -321,6 +321,7 @@ struct
                               | NONE => ()
                   in
                     ( setQueueDepth (myWorkerId ()) depth
+                    ; HH.resetList (thread)
                     ; HH.promoteChunks thread
                     ; HH.setDepth (thread, depth)
                     ; ()
@@ -494,4 +495,8 @@ struct
       val a = ArrayExtra.Raw.alloc n
       val _ =
         if ArrayExtra.Raw.uninitIsNop a then ()
-        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a,
+        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
+    in
+      ArrayExtra.Raw.unsafeToArray a
+    end
+end

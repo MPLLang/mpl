@@ -18,6 +18,7 @@ typedef struct HM_HierarchicalHeap {
   uint32_t depth;
 
   struct HM_chunkList chunkList;
+  struct HM_chunkList fromList;
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage* concurrentPack;
@@ -44,6 +45,12 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
 {
   return &(hh->chunkList);
 }
+
+static inline HM_chunkList HM_HH_getFromList(HM_HierarchicalHeap hh)
+{
+  return &(hh->fromList);
+}
+
 
 static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
 {
@@ -84,7 +91,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp);
-
+void HM_HH_resetList(pointer threadp);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
