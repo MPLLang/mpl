@@ -70,6 +70,7 @@ in
    prim-pack-real.sml
 
    prim-mlton.sml
+   prim-mpl.sml
 
    basis-ffi.sml
    prim2.sml

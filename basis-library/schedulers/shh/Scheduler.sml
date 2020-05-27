@@ -209,10 +209,8 @@ struct
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    fun fork2 (f : unit -> 'a, g : unit -> 'b) =
+    fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
         fun g' () =
@@ -261,6 +259,7 @@ struct
         (extractResult fr, extractResult gr)
       end
 
+<<<<<<< HEAD
     fun forkGC (f : unit -> 'a, g : unit -> 'b) =
       let
         val thread = Thread.current ()
@@ -289,7 +288,7 @@ struct
         (*force left heap must be after set Depth*)
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val _ = push gcFunc
-        val fr = fork2(f, g)
+        val fr = fork(f, g)
         val start = ref(NONE : (Time.time) option)
 
         val gr =
@@ -333,15 +332,18 @@ struct
         fr
       end
 
-    fun fork (f : unit -> 'a, g : unit -> 'b) =
+    fun fork (f, g) =
       let
-        val thread = Thread.current()
+        val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
-        if(depth > 1) then
-          fork2(f, g)
-        else
+        (* don't let us hit an error, just sequentialize instead *)
+        if depth = 1 then
           forkGC(f, g)
+        else if depth < Queue.capacity then
+          parfork thread depth (f, g)
+        else
+          (f (), g ())
       end
   end
 

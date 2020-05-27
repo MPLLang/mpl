@@ -5,6 +5,8 @@ sig
   type 'a t
   exception Full
 
+  val capacity : int
+
   val new : unit -> 'a t
   val pollHasWork : 'a t -> bool
   val clear : 'a t -> unit
@@ -36,7 +38,7 @@ struct
    * We also subtract 1 so that we can use index ranges of the form
    * [lo, hi) where 0 <= lo,hi < capacity
    *)
-  val capacityPow = 8 (* DO NOT CHANGE THIS WITHOUT ALSO CHANGING runtime/gc/... *)
+  val capacityPow = 10 (* DO NOT CHANGE THIS WITHOUT ALSO CHANGING runtime/gc/... *)
   val capacity = Word.toInt (Word.<< (0w1, Word.fromInt capacityPow)) - 1
 
   fun myWorkerId () =
