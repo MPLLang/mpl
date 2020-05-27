@@ -6,7 +6,12 @@ PROGRAMS= \
 	random \
 	primes \
 	msort \
-	dmm
+	dmm \
+	ray \
+	tokens \
+	nn \
+	dedup \
+	nqueens
 
 all: $(PROGRAMS)
 

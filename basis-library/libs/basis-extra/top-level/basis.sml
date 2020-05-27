@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure BasisExtra :> BASIS_EXTRA = 
+structure BasisExtra :> BASIS_EXTRA =
    struct
       (* Required structures *)
       structure Array = Array
@@ -256,6 +256,7 @@ structure BasisExtra :> BASIS_EXTRA =
       structure MLton = MLton
       structure SMLofNJ = SMLofNJ
       structure Unsafe = Unsafe
+      structure MPL = MPL
 
       open ArrayGlobal
            BoolGlobal

@@ -5,6 +5,16 @@ compiler for Standard ML which implements support for nested parallelism.
 
 MPL is research software and is being actively developed.
 
+## Docker
+
+Try out MPL with Docker:
+```
+$ docker pull shwestrick/mpl
+$ docker run -it shwestrick/mpl /bin/bash
+...# cd examples
+...# ./primes @mpl procs 4 --
+```
+
 ## Build and Install (from source)
 
 ### Requirements
@@ -17,8 +27,8 @@ required.
  * binutils (`ar`, `ranlib`, `strip`, ...)
  * miscellaneous Unix utilities (`diff`, `find`, `grep`, `gzip`, `patch`, `sed`, `tar`, `xargs`, ...)
  * Standard ML compiler and tools:
-   - [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`) recommended.  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
-   - [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`) supported, but not recommended.
+   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
+   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
 
 ### Instructions
 
@@ -34,16 +44,6 @@ $ make install
 or to a custom directory with the `PREFIX` option:
 ```
 $ make PREFIX=/opt/mpl install
-```
-
-## Docker
-
-A Docker image is available on Docker Hub.
-```
-$ docker pull shwestrick/mpl
-$ docker run -it shwestrick/mpl /bin/bash
-...# cd examples
-...# ./primes @mpl procs 4 --
 ```
 
 ## Parallel and Concurrent Extensions
@@ -197,7 +197,8 @@ tricky to check but allows you to use any type of data. Many of our example
 programs are race-free.
 
 For more information about disentanglement, see the POPL 2020 paper
-"Disentanglement in Nested-Parallel Programs" by Westrick et al.
+[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf)
+by Westrick et al.
 
 ## Bugs and Known Issues
 
@@ -209,10 +210,12 @@ Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
 
-### Other
-* Some programs that use `compareAndSwap` and `arrayCompareAndSwap` primitives
-may fail to compile
-([#107](https://github.com/MPLLang/mpl/issues/107)).
+### Garbage Collection
+* ([#115](https://github.com/MPLLang/mpl/issues/115)) The GC is currently
+disabled at the "top level" (outside any calls to `ForkJoin.par`).
+For highly parallel programs, this has generally not been a problem so far,
+but it can cause a memory explosion for programs that are mostly (or entirely)
+sequential.
 
 ## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
