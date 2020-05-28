@@ -294,6 +294,7 @@ struct
           if popDiscard() then
             let
               val _ = HH.collectThreadRoot(thread)
+              val _ = HH.resetList(thread)
               val _ = HH.promoteChunks thread
             in
               HH.setDepth (thread, depth)

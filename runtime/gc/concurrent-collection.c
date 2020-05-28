@@ -125,7 +125,7 @@ bool isChunkInList(HM_chunkList chunkList, HM_chunk T) {
   return false;
 }
 #else
-void assertChunkInList(HM_chunkList chunkList, HM_chunk chunk) {
+void isChunkInList(HM_chunkList chunkList, HM_chunk chunk) {
   return true;
 }
 #endif /* ASSERT */
@@ -255,7 +255,7 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
   ConcurrentCollectArgs* args =  (ConcurrentCollectArgs*) rawArgs;
   pointer p = objptrToPointer(src, NULL);
   HM_chunk T = HM_getChunkOf((pointer)p);
-  assert(isInScope(T, args->origList) || isChunkSaved(T, args));
+  // assert(isInScope(T, args->origList) || isChunkSaved(T, args));
   #endif
 
   forwardPtrChunk(s, &src, rawArgs);
@@ -463,9 +463,18 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     .fromHead = (void*) origList
   };
 
-  for(HM_chunk T = origList->firstChunk; T!=origList->lastChunk; T = T->nextChunk) {
+  printf("%s", "chunks: ");
+  for(HM_chunk T = HM_getChunkListFirstChunk(origList); T!=NULL; T = T->nextChunk) {
+      printf("%p ", T);
+      if (HM_getLevelHeadPathCompress(T) != targetHH) {
+        printf("%s\n", "this is failing");
+        assert(0);
+      }
+
+
     T->tmpHeap = lists.origList;
   }
+  printf("\n");
   // clearing extraneous additions from previous collection : TODO
   /*if(workStack!=NULL) {
     CC_stack_clear(workStack);
@@ -476,6 +485,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   if(isInScope(baseChunk, origList)) {
     saveChunk(baseChunk, &lists);
   }
+  else if (baseChunk == (targetHH->chunkList).firstChunk) {}
+
   else {
     assert(0);
   }
@@ -484,11 +495,26 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   CC_deferredPromote(&downPtrs, targetHH);
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
 
-  bool q = forwardPtrChunk(s, &(cp->snapLeft), &lists);
-  assert(q);
 
-  q = forwardPtrChunk(s, &(cp->snapRight), &lists);
-  assert(q);
+  {
+    HM_chunk soleChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(targetHH));
+    assert(soleChunk->tmpHeap == NULL);
+
+    pointer p =  HM_getChunkStart(soleChunk);
+    assert(soleChunk->frontier <= soleChunk->limit);
+    while(p != soleChunk->frontier){
+      assert(p < soleChunk->frontier);
+      p = advanceToObjectData(s, p);
+      objptr ob = pointerToObjptr(p, NULL);
+      forceForward(s, &(ob), &lists);
+      p += sizeofObjectNoMetaData(s, p);
+    }
+  }
+
+
+  forceForward(s, &(cp->snapLeft), &lists);
+  forceForward(s, &(cp->snapRight), &lists);
+
 // The stack and thread are root sets.
 // The stack itself might not be in scope and might not get scanned.
   objptr stackp = cp->stack;
@@ -544,27 +570,29 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   Q = repList->firstChunk;
   while(Q!=NULL){
     lenRep++;
-    assert(Q->levelHead == targetHH);
+    assert(Q->tmpHeap == lists.toHead);
+    assert(HM_getLevelHeadPathCompress(Q) == targetHH);
     Q = Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
   printf("%s %d \n", "Chunks Collected = ", lenFree);
 
-	for(HM_chunk chunk = repList->firstChunk;
-		chunk!=NULL;
-		chunk=chunk->nextChunk) {
-		assert(chunk->levelHead == targetHH);
-	}
   printf("%s", "collected chunks: ");
   for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
     printf("%p", chunk);
+    assert(chunk->tmpHeap == lists.fromHead);
     assert(HM_getLevelHeadPathCompress(chunk) == targetHH);
     chunk->levelHead = NULL;
   }
-  printf("\n");
+  // printf("\n");
   printf("Chunk list collected = %p \n", origList);
 #endif
 
+  for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
+    assert(chunk->tmpHeap == lists.fromHead);
+    chunk->levelHead = NULL;
+    chunk->tmpHeap  = NULL;
+  }
   HM_appendChunkList(getFreeListSmall(s), origList);
   linearUnmarkChunkList(s, &lists);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);

@@ -52,6 +52,7 @@ signature MLTON_THREAD =
           val forceLeftHeap : int * thread -> unit
 
           val registerCont : (('a) array) * (('b) array)  * thread -> unit
+          val resetList    : thread -> unit
 
           (*Collect the depth = 1 HH of this thread*)
           val collectThreadRoot : thread -> unit

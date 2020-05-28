@@ -395,11 +395,14 @@ void HM_HH_resetList(pointer threadp) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap->nextAncestor;
   assert(HM_HH_getDepth(hh) == 1);
   assert(!HM_HH_isCCollecting(hh));
+  HM_assertChunkListInvariants(HM_HH_getFromList(hh));
+  HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
 
   HM_appendChunkList(HM_HH_getFromList(hh), HM_HH_getChunkList(hh));
-  struct HM_chunkList temp = hh->fromList;
-  hh->fromList = hh->chunkList;
-  hh->chunkList = temp;
+  hh->chunkList = hh->fromList;
+  HM_initChunkList(HM_HH_getFromList(hh));
+  HM_assertChunkListInvariants(HM_HH_getFromList(hh));
+  HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
 }
 
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
@@ -461,12 +464,25 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
     fromList->firstChunk = chunkList->firstChunk;
     fromList->lastChunk =  lastChunk->prevChunk;
+    fromList->lastChunk->nextChunk = NULL;
     fromList->size = chunkList->size - sizeLastChunk;
 
     chunkList->firstChunk = lastChunk;
     chunkList->size = sizeLastChunk;
+    lastChunk->prevChunk = NULL;
+    HM_assertChunkListInvariants(chunkList);
+    HM_assertChunkListInvariants(fromList);
   }
-
+  printf("%s", "chunks_cont: ");
+  for(HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getFromList(hh));
+      chunk != NULL;
+      chunk = chunk->nextChunk
+    ) {
+     printf("%p ", chunk);
+    assert(HM_getLevelHeadPathCompress(chunk) == hh);
+  }
+  printf("\n");
+  assert(HM_getLevelHeadPathCompress((hh->chunkList).firstChunk) == hh);
   #if ASSERT
   // printf("%s", "original stack: ");
   // foreachObjptrInObject(s, stackPtr, false, trueObjptrPredicate, NULL,
