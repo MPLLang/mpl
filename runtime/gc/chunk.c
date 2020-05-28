@@ -110,7 +110,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
 
 #if ASSERT
   /* clear out memory to quickly catch some memory safety errors */
-  memset(chunk->frontier, 0xAE, (size_t)(chunk->limit - chunk->frontier));
+  // memset(chunk->frontier, 0xAE, (size_t)(chunk->limit - chunk->frontier));
 #endif
 
   return chunk;
@@ -272,6 +272,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
     if (chunkHasBytesFree(chunk, bytesRequested)) {
       assert(chunk->frontier == HM_getChunkStart(chunk));
       chunk->mightContainMultipleObjects = TRUE;
+      chunk->tmpHeap = NULL;
       splitChunkFront(getFreeListSmall(s), chunk, bytesRequested);
       HM_unlinkChunk(getFreeListSmall(s), chunk);
       return chunk;
@@ -291,6 +292,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   /* if this chunk is good, we're done. */
   if (chunkHasBytesFree(chunk, bytesRequested)) {
     chunk->mightContainMultipleObjects = TRUE;
+    chunk->tmpHeap = NULL;
     splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
     HM_unlinkChunk(getFreeListLarge(s), chunk);
     return chunk;
@@ -336,6 +338,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   assert(chunk->frontier == HM_getChunkStart(chunk));
   assert(chunkHasBytesFree(chunk, bytesRequested));
   chunk->mightContainMultipleObjects = TRUE;
+  chunk->tmpHeap = NULL;
   splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
   HM_unlinkChunk(getFreeListLarge(s), chunk);
   return chunk;

@@ -454,36 +454,51 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 
-
+// Separate the list into two. From list will be collected by the CC and chunkList will be used
+// as it is always used by the mutator -- for promotions or allocations at depth 1
   HM_chunkList chunkList = HM_HH_getChunkList(hh);
   HM_chunkList fromList = HM_HH_getFromList(hh);
   HM_chunk lastChunk = thread->currentChunk;
-  HM_chunk firstChunk = chunkList->firstChunk;
-  if(firstChunk!=lastChunk) {
-    size_t sizeLastChunk = (HM_getChunkSize(lastChunk));
 
-    fromList->firstChunk = chunkList->firstChunk;
-    fromList->lastChunk =  lastChunk->prevChunk;
-    fromList->lastChunk->nextChunk = NULL;
-    fromList->size = chunkList->size - sizeLastChunk;
-
-    chunkList->firstChunk = lastChunk;
-    chunkList->size = sizeLastChunk;
-    lastChunk->prevChunk = NULL;
-    HM_assertChunkListInvariants(chunkList);
-    HM_assertChunkListInvariants(fromList);
+  // split chunk at frontier. add the original one to the fromList and the empty one to chunkList
+  // If the split fails, append a new chunk of the same size(size can be made better?).
+  // Either way the lastChunk is empty and does not have any pointers into the others.
+  HM_chunk splitChunk = splitChunkFront(chunkList, lastChunk, 0);
+  if(splitChunk!=NULL) {
+    lastChunk = splitChunk;
   }
-  printf("%s", "chunks_cont: ");
+  else {
+    lastChunk = HM_allocateChunk(chunkList, HM_getChunkSize(lastChunk));
+    lastChunk->levelHead = hh;
+  }
+
+  // The lastChunk remains in the chunkList and others are added to the fromList for CC
+  HM_chunk firstChunk = chunkList->firstChunk;
+  assert(firstChunk!=lastChunk);
+  size_t sizeLastChunk = (HM_getChunkSize(lastChunk));
+
+  fromList->firstChunk = chunkList->firstChunk;
+  fromList->lastChunk =  lastChunk->prevChunk;
+  fromList->lastChunk->nextChunk = NULL;
+  fromList->size = chunkList->size - sizeLastChunk;
+
+  chunkList->firstChunk = lastChunk;
+  chunkList->size = sizeLastChunk;
+  lastChunk->prevChunk = NULL;
+
+  HM_assertChunkListInvariants(chunkList);
+  HM_assertChunkListInvariants(fromList);
+  #if ASSERT
+  // printf("%s", "chunks_cont: ");
   for(HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getFromList(hh));
       chunk != NULL;
       chunk = chunk->nextChunk
     ) {
-     printf("%p ", chunk);
+     // printf("%p ", chunk);
     assert(HM_getLevelHeadPathCompress(chunk) == hh);
   }
-  printf("\n");
+  // printf("\n");
   assert(HM_getLevelHeadPathCompress((hh->chunkList).firstChunk) == hh);
-  #if ASSERT
   // printf("%s", "original stack: ");
   // foreachObjptrInObject(s, stackPtr, false, trueObjptrPredicate, NULL,
   //         printObjPtrFunction, NULL);
