@@ -794,7 +794,8 @@ pointer copyObject(pointer p,
   assert(frontier <= limit);
 
   bool mustExtend = ((size_t)(limit - frontier) < objectSize) ||
-                    (frontier >= (pointer)chunk + HM_BLOCK_SIZE);
+                    (frontier  + GC_SEQUENCE_METADATA_SIZE
+                      >= (pointer)chunk + HM_BLOCK_SIZE);
 
   if (mustExtend) {
     /* need to allocate a new chunk */
