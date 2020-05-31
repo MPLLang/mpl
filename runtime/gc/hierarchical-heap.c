@@ -194,7 +194,6 @@ void HM_HH_promoteChunks(
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
     hh->representative = hh->nextAncestor;
-
     /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
   }
@@ -451,54 +450,64 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   stackCopy += metaDataSize;
 
   ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
-
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 
-// Separate the list into two. From list will be collected by the CC and chunkList will be used
-// as it is always used by the mutator -- for promotions or allocations at depth 1
+  // Separate the list into two. From list will be collected by the CC and chunkList will be used
+  // as it is always used by the mutator -- for promotions or allocations at depth 1
   HM_chunkList chunkList = HM_HH_getChunkList(hh);
   HM_chunkList fromList = HM_HH_getFromList(hh);
-  HM_chunk lastChunk = thread->currentChunk;
+  // HM_chunk lastChunk = thread->currentChunk;
 
-  // split chunk at frontier. add the original one to the fromList and the empty one to chunkList
-  // If the split fails, append a new chunk of the same size(size can be made better?).
-  // Either way the lastChunk is empty and does not have any pointers into the others.
-  HM_chunk splitChunk = splitChunkFront(chunkList, lastChunk, 0);
-  if(splitChunk!=NULL) {
-    lastChunk = splitChunk;
-  }
-  else {
-    lastChunk = HM_allocateChunk(chunkList, HM_getChunkSize(lastChunk));
-    lastChunk->levelHead = hh;
+  // this is important because cc will collect the heaps that are not needed
+  // there is no way to tell otherwise.
+  // JATIN_NOTE:  Maybe cc could do it before it starts.
+  for (HM_chunk chunk = chunkList->firstChunk; chunk !=NULL; chunk = chunk->nextChunk) {
+    assert(HM_getLevelHead(chunk) == hh);
+    chunk->levelHead = hh;
   }
 
-  // The lastChunk remains in the chunkList and others are added to the fromList for CC
-  HM_chunk firstChunk = chunkList->firstChunk;
-  assert(firstChunk!=lastChunk);
-  size_t sizeLastChunk = (HM_getChunkSize(lastChunk));
+  *(fromList) = *(chunkList);
+  HM_initChunkList(chunkList);
 
-  fromList->firstChunk = chunkList->firstChunk;
-  fromList->lastChunk =  lastChunk->prevChunk;
-  fromList->lastChunk->nextChunk = NULL;
-  fromList->size = chunkList->size - sizeLastChunk;
-
-  chunkList->firstChunk = lastChunk;
-  chunkList->size = sizeLastChunk;
-  lastChunk->prevChunk = NULL;
+  // HM_chunk stackChunk = HM_getChunkOf(getStackCurrent(s));
+  // if(HM_getLevelHead(stackChunk) == hh) {
+  //   HM_unlinkChunk(fromList, stackChunk);
+  //   HM_appendChunk(chunkList, stackChunk);
+  //   stackChunk->levelHead = hh;
+  // }
+  HM_chunk newChunk = HM_allocateChunk(chunkList, GC_HEAP_LIMIT_SLOP);
+  newChunk->levelHead = hh;
+  thread->currentChunk = HM_getChunkListLastChunk(chunkList);
 
   HM_assertChunkListInvariants(chunkList);
   HM_assertChunkListInvariants(fromList);
+  /* The lastChunk remains in the chunkList and others are added to the fromList for CC
+  // HM_chunk firstChunk = chunkList->firstChunk;
+  // assert(firstChunk!=lastChunk);
+  // size_t sizeLastChunk = (HM_getChunkSize(lastChunk));
+
+  // fromList->firstChunk = chunkList->firstChunk;
+  // fromList->lastChunk =  lastChunk->prevChunk;
+  // fromList->lastChunk->nextChunk = NULL;
+  // fromList->size = chunkList->size - sizeLastChunk;
+
+  // chunkList->firstChunk = lastChunk;
+  // chunkList->size = sizeLastChunk;
+  // lastChunk->prevChunk = NULL;
+
+  // printf("stackChunk = %p\n", stackChunk);
+  */
   #if ASSERT
-  // printf("%s", "chunks_cont: ");
-  for(HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getFromList(hh));
-      chunk != NULL;
-      chunk = chunk->nextChunk
-    ) {
-     // printf("%p ", chunk);
-    assert(HM_getLevelHeadPathCompress(chunk) == hh);
-  }
-  // printf("\n");
-  assert(HM_getLevelHeadPathCompress((hh->chunkList).firstChunk) == hh);
+  // for(HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getFromList(hh));
+  //     chunk != NULL;
+  //     chunk = chunk->nextChunk
+  //   ) {
+    // if (chunk!=stackChunk) {
+      // assert(HM_getLevelHead(chunk) == hh);
+    // }
+  // }
+  // assert(chunk==stackChunk || HM_getLevelHead((hh->chunkList).firstChunk) == hh);
+  // assert((hh->chunkList).firstChunk == (hh->chunkList).lastChunk);
   // printf("%s", "original stack: ");
   // foreachObjptrInObject(s, stackPtr, false, trueObjptrPredicate, NULL,
   //         printObjPtrFunction, NULL);
@@ -506,7 +515,6 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   // foreachObjptrInObject(s, stackCopy, false, trueObjptrPredicate, NULL,
   //         printObjPtrFunction, NULL);
   // printf("\n");
-
   // assert(hh->concurrentPack->stack==BOGUS_OBJPTR);
   #endif
 

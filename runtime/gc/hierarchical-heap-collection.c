@@ -68,7 +68,7 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
-  return;
+  // return;
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
@@ -138,9 +138,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   assertInvariants(thread);
 
-  if (SUPERLOCAL == s->controls->collectionType) {
+  // if (SUPERLOCAL == s->controls->collectionType) {
     minDepth = maxDepth;
-  }
+  // }
 
   /* copy roots */
   struct ForwardHHObjptrArgs forwardHHObjptrArgs = {
@@ -545,7 +545,6 @@ objptr relocateObject(
     HM_unlinkChunk(HM_HH_getChunkList(HM_getLevelHead(chunk)), chunk);
     HM_appendChunk(tgtChunkList, chunk);
     chunk->levelHead = tgtHeap;
-
     /* SAM_NOTE: this is inefficient. unnecessary fragmentation. */
     HM_chunk newChunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
     if (NULL == newChunk) {
@@ -575,6 +574,15 @@ objptr relocateObject(
   args->bytesCopied += copyBytes;
   args->objectsCopied++;
 
+  #if ASSERT
+  pointer temp = objptrToPointer(getFwdPtr(p), NULL);
+  HM_chunk tChunk = (HM_chunk)blockOf(temp);
+  if(tChunk->magic != CHUNK_MAGIC) {
+    printf("%s\n", "this is farling");
+    assert(0);
+  }
+  #endif
+  assert(HM_getObjptrDepth(getFwdPtr(p)) == args->toDepth);
   /* use the forwarding pointer */
   return getFwdPtr(p);
 }

@@ -51,8 +51,6 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth);
 void CC_addToStack(ConcurrentPackage cp, pointer p);
 
 bool CC_isPointerMarked (pointer p);
-
-
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs);
 #endif
 
