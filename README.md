@@ -9,3 +9,7 @@ POSSIBLE OPTIMISATIONS ON THIS COMMIT:
 4) For simplicity reasons I made the LC SUPER_LOCAL. I am keeping it enabled because this impl. looks like it works and I don't want to change it for this commit. But there is no evidence or reason why the LC needs to be SUPER_LOCAL
 
 5) there is some cleanup required in concurrent-collection.c
+
+
+
+This commit now has solved 2, 3, 4. 1 and 5 are pending. CC does not preserve the objects that had fwd pointers. Technically one would have to update the path via which this fwd pointer was reached but that is deemed out of scope of this implementation.
