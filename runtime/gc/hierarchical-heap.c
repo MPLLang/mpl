@@ -458,10 +458,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   HM_chunkList fromList = HM_HH_getFromList(hh);
   // HM_chunk lastChunk = thread->currentChunk;
 
-  // this is important because cc will collect the heaps that are not needed
-  // there is no way to tell otherwise.
-
-  // JATIN_NOTE: NOW CC does it before collection
+  // JATIN_NOTE: NOW CC does it before collection, so this is not needed
   // for (HM_chunk chunk = chunkList->firstChunk; chunk !=NULL; chunk = chunk->nextChunk) {
   //   assert(HM_getLevelHead(chunk) == hh);
   //   chunk->levelHead = hh;

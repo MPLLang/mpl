@@ -41,9 +41,12 @@ bool isInScope(HM_chunk chunk, ConcurrentCollectArgs* args) {
 }
 
 
-//JATIN_NOTE: this function should be called only for in scope objects.
+// JATIN_NOTE: this function should be called only for in scope objects.
 // for out of scope objects the assertion and sanctity of *p is uncertain
-// This is because of local collection
+// This is because of local collection. In general, CC assumes that the access to chunk level info
+// about p is safe since it does not depend on (*p). Once it is established that p is in scope,
+// we can call getTransitivePtr on it. Only after the transitive p is reached can we begin to inspect
+// (*p). Otherwise, all bets are off because of races
 pointer getTransitivePtr(GC_state s, pointer p) {
   objptr op;
 
@@ -112,7 +115,6 @@ bool isInExtraChunk(objptr q, HM_HierarchicalHeap hh) {return true;}
 
 void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args,
                             HM_HierarchicalHeap hh) {
-  return;
   #if ASSERT2
   HM_assertChunkListInvariants(args->repList);
   HM_chunk chunk = HM_getChunkListFirstChunk (args->repList);
@@ -289,7 +291,6 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
   forwardPtrChunk(s, &src, rawArgs);
 }
 
-
 void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
@@ -302,8 +303,6 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
     return;
   }
   p = getTransitivePtr(s, p);
-
-
 
   if(CC_isPointerMarked (p)) {
     assert(chunk->tmpHeap == ((ConcurrentCollectArgs*)rawArgs)->toHead);
@@ -331,8 +330,12 @@ void unmarkDownPtrChunk (GC_state s, objptr dst, objptr* field, objptr src, void
 // Recursively however it only calls forwardPtrChunk and not itself
 void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   pointer p = objptrToPointer(*opp, NULL);
+
+  // forceForward is called manually. So those things should not have forwarding pointers installed
   assert(getTransitivePtr(s, p) == p);
   bool saved = saveNoForward(s, p, rawArgs);
+
+  // Inlined markAndScan here since we don't want to mark if not in scope
   if(saved && !CC_isPointerMarked(p)) {
     markObj(p);
   }
@@ -554,13 +557,13 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     assert(0);
   }
 
+  // forward down pointers
   struct HM_chunkList downPtrs;
   CC_deferredPromote(&downPtrs, targetHH);
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
-
+  // forward closures and stack
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
-
   objptr stackp = cp->stack;
   forceForward(s, &(stackp), &lists);
 
@@ -570,11 +573,11 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // Not forwarding the stack is okay, since we've preserved the stack from before.
   saveNoForward(s, (pointer)(thread->stack), &lists);
 
-  // forwardPtrChunk(s, &(cp->stack))
+  // forward reachability altering writes
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
 
-
+  // unmark in the exact same order
   HM_foreachRemembered(s, &downPtrs, unmarkDownPtrChunk, &lists);
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
@@ -646,9 +649,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   printf("\n");
   // printf("Chunk list collected = %p \n", origList);
-  #endif
 
-  #if ASSERT2
   // JATIN_NOTE: This loop is not needed if tmpHeap is made NULL in HM_getFreeChunk.
   // Adding it here so that this runs in debug and the difference is evident if reasoning is flawed
   int countStopGapChunks = 0;
