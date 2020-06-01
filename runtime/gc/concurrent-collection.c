@@ -393,7 +393,8 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
   if(cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
-    || cp->stack == BOGUS_OBJPTR ) {
+    || cp->stack == BOGUS_OBJPTR
+    || cp->shouldCollect == false) {
     return NULL;
   }
   else if(casCC(&(cp->isCollecting), false, true)) {

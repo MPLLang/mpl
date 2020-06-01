@@ -223,6 +223,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
                       (start + sizeof(struct HM_HierarchicalHeap));
   hh->concurrentPack->isCollecting = false;
   hh->concurrentPack->rootList = NULL;
+  hh->concurrentPack->shouldCollect = true;
   hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
   hh->concurrentPack->snapRight = BOGUS_OBJPTR;
   hh->concurrentPack->stack = BOGUS_OBJPTR;
@@ -393,9 +394,18 @@ void HM_HH_resetList(pointer threadp) {
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap->nextAncestor;
   assert(HM_HH_getDepth(hh) == 1);
-  assert(!HM_HH_isCCollecting(hh));
+  // assert(!HM_HH_isCCollecting(hh));
   HM_assertChunkListInvariants(HM_HH_getFromList(hh));
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
+
+  if(HM_HH_isCCollecting(hh)) {
+    HM_HH_setCollection(hh, false);
+    return;
+  }
+  else {
+    HM_HH_setCollection(hh, true);
+  }
+
 
   HM_appendChunkList(HM_HH_getFromList(hh), HM_HH_getChunkList(hh));
   hh->chunkList = hh->fromList;
@@ -426,6 +436,9 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  if(!(hh->concurrentPack->shouldCollect)) {
+    return;
+  }
 
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
@@ -623,6 +636,9 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
   return desiredMinDepth;
 }
 
+void HM_HH_setCollection(HM_HierarchicalHeap hh, bool on) {
+  hh->concurrentPack->shouldCollect = on;
+}
 
 bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
   assert(hh!=NULL);

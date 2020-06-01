@@ -92,6 +92,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp);
 void HM_HH_resetList(pointer threadp);
+void HM_HH_setCollection(HM_HierarchicalHeap hh, bool on);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

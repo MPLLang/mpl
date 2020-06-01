@@ -271,12 +271,13 @@ struct
             val _ = HH.collectThreadRoot(thread)
           in
             rightSide := SOME (());
-            if decrementHitsZero incounter then
+            (* if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (depth+1)
               ; threadSwitch thread
               )
-            else
-              returnToSched ()
+              else
+            *)
+            returnToSched ()
           end
 
         val cont_arr1 =  Array.array (1, SOME(f))
@@ -303,10 +304,11 @@ struct
           else
             ( clear()
             ; if decrementHitsZero incounter then
-              ()
+                ()
               else
                 (start := SOME(Time.now())
-                ; returnToSched ()
+                ; rightSide := SOME(())
+                (*; returnToSched ()*)
                 )
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: GC-joinfailed")
