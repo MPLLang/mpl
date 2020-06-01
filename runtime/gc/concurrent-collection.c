@@ -11,6 +11,9 @@
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 #define casCC(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
 bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
+
+// ASSERT2 is for saving code in case I need it later. It is not for debugging purposes since
+// the code is not read only and may change state.
 #define ASSERT2 0
 
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
@@ -583,7 +586,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceUnmark(s, &(cp->snapRight), &lists);
   forceUnmark(s, &(stackp), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
-
 
   /*
   #if ASSERT2
