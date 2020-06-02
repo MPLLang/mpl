@@ -439,8 +439,11 @@ void CC_collectAtRoot(GC_thread thread) {
     return;
   }
 
+  assert(!s->amInCC);
+  s->amInCC = true;
   CC_collectWithRoots(s, heap, thread);
   heap->concurrentPack->isCollecting = false;
+  s->amInCC = false;
 }
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {

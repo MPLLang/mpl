@@ -360,6 +360,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   assert (sizeofWeak (s) == sizeofWeak (s));
 
   s->amInGC = TRUE;
+  s->amInCC = FALSE;
   s->amOriginal = TRUE;
   s->atomicState = 0;
   s->callFromCHandlerThread = BOGUS_OBJPTR;
@@ -519,6 +520,7 @@ void GC_lateInit (GC_state s) {
 void GC_duplicate (GC_state d, GC_state s) {
   // GC_init
   d->amInGC = s->amInGC;
+  d->amInCC = s->amInCC;
   d->amOriginal = s->amOriginal;
   d->atomicState = 0;
   d->callFromCHandlerThread = BOGUS_OBJPTR;
