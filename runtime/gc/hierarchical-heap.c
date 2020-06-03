@@ -210,23 +210,32 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
 
+  bool createCP = (depth == 1);
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
-  bytesNeeded += sizeof(struct ConcurrentPackage);
+  if (createCP){
+    bytesNeeded += sizeof(struct ConcurrentPackage);
+  }
 
   HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
   pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
   assert(start!=NULL);
 
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
-
-  hh->concurrentPack = (ConcurrentPackage)
-                      (start + sizeof(struct HM_HierarchicalHeap));
-  hh->concurrentPack->isCollecting = false;
-  hh->concurrentPack->rootList = NULL;
-  hh->concurrentPack->shouldCollect = true;
-  hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
-  hh->concurrentPack->snapRight = BOGUS_OBJPTR;
-  hh->concurrentPack->stack = BOGUS_OBJPTR;
+  if(createCP) {
+    hh->concurrentPack = (ConcurrentPackage)
+                        (start + sizeof(struct HM_HierarchicalHeap));
+    hh->concurrentPack->isCollecting = false;
+    hh->concurrentPack->rootList = NULL;
+    hh->concurrentPack->shouldCollect = (s->numberOfProcs > 1);
+    hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
+    hh->concurrentPack->snapRight = BOGUS_OBJPTR;
+    hh->concurrentPack->stack = BOGUS_OBJPTR;
+    hh->concurrentPack->bytesSurvivedLastCollection = 0;
+    hh->concurrentPack->bytesAllocatedSinceLastCollection = 0;
+  }
+  else {
+    hh->concurrentPack = NULL;
+  }
   // hh->concurrentPack = NULL;
   hh->representative = NULL;
   hh->depth = depth;
@@ -402,7 +411,7 @@ void HM_HH_resetList(pointer threadp) {
     HM_HH_setCollection(hh, false);
     return;
   }
-  else {
+  else if(s->numberOfProcs > 1)  {
     HM_HH_setCollection(hh, true);
   }
 
@@ -436,7 +445,35 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
   if(!(hh->concurrentPack->shouldCollect)) {
+    return;
+  }
+
+
+  pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
+  GC_stack stackP = (GC_stack) stackPtr;
+
+  size_t stackSize = stackP->reserved;
+  size_t threadSize = sizeofThread(s);
+  // return;
+  hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
+  hh->concurrentPack->bytesSurvivedLastCollection +=
+      thread->bytesSurvivedLastCollection;
+
+  thread->bytesAllocatedSinceLastCollection = 0;
+  thread->bytesSurvivedLastCollection = (hh->concurrentPack->bytesSurvivedLastCollection)/2;
+  hh->concurrentPack->bytesSurvivedLastCollection/=2;
+  // hh->concurrentPack->bytesAllocatedSinceLastCollection;
+
+  if((4*hh->concurrentPack->bytesSurvivedLastCollection) >
+      (hh->concurrentPack->bytesAllocatedSinceLastCollection)
+    || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
+    if (!hh->concurrentPack->shouldCollect) {
+      hh->concurrentPack->bytesSurvivedLastCollection/=4;
+    }
+
+    hh->concurrentPack->shouldCollect = false;
     return;
   }
 
@@ -445,9 +482,6 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   assert(hh->concurrentPack != NULL);
   hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
-
-  pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
-  GC_stack stackP = (GC_stack) stackPtr;
 
   // compute object size and bytes to be copied
   size_t objectSize, copySize, metaDataSize;
