@@ -89,6 +89,14 @@ size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (GC_state s) {
   return s->globalCumulativeStatistics->maxHeapOccupancy;
 }
 
+uintmax_t GC_getCumulativeStatisticsBytesAllocatedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesAllocated;
+}
+
+uintmax_t GC_getCumulativeStatisticsLocalBytesReclaimedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByLocal;
+}
+
 uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s) {
   /* return sum across all processors */
   size_t retVal = 0;
@@ -150,6 +158,10 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s) {
   }
 
   return retVal;
+}
+
+uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->numHHLocalGCs;
 }
 
 uintmax_t GC_getLocalGCMillisecondsOfProc(GC_state s, uint32_t proc) {
