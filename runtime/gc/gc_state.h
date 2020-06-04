@@ -44,6 +44,8 @@ struct GC_state {
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct HM_chunkList freeListSmall;
   struct HM_chunkList freeListLarge;
+  HM_chunkList sharedfreeList;
+  bool* freeListLock;
   struct HM_chunkList extraSmallObjects;
   size_t nextChunkAllocSize;
   /* Ordinary globals */
@@ -100,6 +102,8 @@ static inline void setGCStateCurrentThreadAndStack (GC_state s);
 static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListLarge(GC_state s);
+struct HM_chunkList* HM_getsharedFreeList(GC_state s);
+
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

@@ -57,6 +57,11 @@ struct HM_chunkList* getFreeListSmall(GC_state s) {
   return &(s->freeListSmall);
 }
 
+struct HM_chunkList* HM_getsharedFreeList(GC_state s)  {
+  return s->sharedfreeList;
+}
+
+
 struct HM_chunkList* getFreeListLarge(GC_state s) {
   return &(s->freeListLarge);
 }

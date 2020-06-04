@@ -418,6 +418,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   HM_initChunkList(getFreeListSmall(s));
   HM_initChunkList(getFreeListLarge(s));
   HM_initChunkList(getFreeListExtraSmall(s));
+  s->sharedfreeList = (HM_chunkList) (malloc (sizeof(struct HM_chunkList)));
+  HM_initChunkList(s->sharedfreeList);
+  s->freeListLock = (bool*) (malloc(sizeof(bool)));
+  *(s->freeListLock) = false;
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -534,6 +538,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   HM_initChunkList(getFreeListSmall(d));
   HM_initChunkList(getFreeListLarge(d));
   HM_initChunkList(getFreeListExtraSmall(d));
+  d->sharedfreeList = s->sharedfreeList;
+  d->freeListLock = s->freeListLock;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

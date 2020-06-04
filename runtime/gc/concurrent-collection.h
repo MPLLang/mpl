@@ -37,6 +37,8 @@ typedef struct ConcurrentPackage {
 	bool isCollecting;
 	bool shouldCollect;
 	objptr stack;
+	size_t bytesAllocatedSinceLastCollection;
+	size_t bytesSurvivedLastCollection
 } * ConcurrentPackage;
 
 // Assume complete access in this function

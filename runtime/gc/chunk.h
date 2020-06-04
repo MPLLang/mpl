@@ -137,6 +137,7 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
 void HM_initChunkList(HM_chunkList list);
 HM_chunkList HM_newChunkList(void);
 
+void HM_appendToSharedList(GC_state s, HM_chunkList list);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);

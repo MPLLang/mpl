@@ -234,6 +234,82 @@ static inline bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
          HM_getLevelHead(chunk) == list;
 }
 */
+bool tryLockSharedList (GC_state s) {
+  return !(__sync_val_compare_and_swap(s->freeListLock, false, true));
+}
+
+void unlockSharedList (GC_state s) {
+  assert(*(s->freeListLock));
+  *(s->freeListLock) = false;
+
+}
+
+HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
+  HM_chunkList sharedfreeList = HM_getsharedFreeList(s);
+  uint64_t bytesTotal = HM_getChunkListSize(sharedfreeList);
+
+// this might race but we can't sit around waiting for someone to populate the list
+  if (bytesTotal < bytesRequested)
+    return NULL;
+
+  struct HM_chunkList _tempList;
+  struct HM_chunkList _tempListLarge;
+  HM_chunkList tempList = &(_tempList);
+  HM_chunkList tempListLarge = &(_tempListLarge);
+  HM_initChunkList(tempList);
+  HM_initChunkList(tempListLarge);
+  bytesTotal/=(s->numberOfProcs);
+  uint64_t bytesVisited = 0;
+
+// for now I do not intend to have the proc waiting
+  if (!tryLockSharedList(s)) {
+    printf("%s\n", "left for not waiting");
+    return NULL;
+  }
+
+
+  HM_chunk chunk = HM_getChunkListFirstChunk(sharedfreeList);
+  HM_chunk foundChunk = NULL;
+  bool foundChunkB = false;
+  bool traverseList = true;
+  uint64_t largListThresh = s->nextChunkAllocSize;
+
+  while((traverseList || !foundChunkB) && chunk!=NULL) {
+    // HM_unlinkChunk(sharedfreeList, chunk);
+    // HM_appendChunk(tempList, chunk);
+    bytesVisited+=HM_getChunkSize(chunk);
+
+    if(chunkHasBytesFree(chunk, bytesRequested)) {
+      HM_unlinkChunk(sharedfreeList, chunk);
+      HM_appendChunk(tempList, chunk);
+      foundChunk = chunk;
+      foundChunkB = true;
+      chunk = HM_getChunkListFirstChunk(sharedfreeList);
+      bytesTotal = min(bytesTotal, HM_getChunkSize(foundChunk)*4);
+    }
+    else if (traverseList) {
+      HM_unlinkChunk(sharedfreeList, chunk);
+      if (HM_getChunkSize(chunk) >= largListThresh) {
+        HM_prependChunk(tempListLarge, chunk);
+      }
+      else {
+        HM_prependChunk(tempList, chunk);
+      }
+      chunk = HM_getChunkListFirstChunk(sharedfreeList);
+    }
+    else {
+      chunk = chunk->nextChunk;
+    }
+    traverseList = (bytesVisited < bytesTotal);
+  }
+  unlockSharedList(s);
+  HM_appendChunkList(getFreeListSmall(s), tempList);
+  for (HM_chunk chunk = tempListLarge->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
+    chunk->frontier = HM_getChunkStart(chunk);
+  }
+  HM_appendChunkList(getFreeListLarge(s), tempListLarge);
+  return foundChunk;
+}
 
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   HM_chunk chunk = getFreeListSmall(s)->firstChunk;
@@ -304,6 +380,27 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   if (chunk != NULL) {
     HM_unlinkChunk(getFreeListLarge(s), chunk);
     HM_appendChunk(getFreeListSmall(s), chunk);
+  }
+
+  chunk = HM_checkSharedListForChunk(s, bytesRequested);
+
+  if(chunk!=NULL) {
+    chunk->startGap = 0;
+    chunk->frontier = HM_getChunkStart(chunk);
+    chunk->mightContainMultipleObjects = TRUE;
+    chunk->tmpHeap = NULL;
+    assert(chunkHasBytesFree(chunk, bytesRequested));
+
+    HM_chunkList lis = getFreeListSmall(s);
+
+    if(HM_getChunkSize(chunk) > s->nextChunkAllocSize ) {
+      HM_unlinkChunk(getFreeListSmall(s), chunk);
+      HM_prependChunk(getFreeListLarge(s), chunk);
+      lis = getFreeListLarge(s);
+    }
+    splitChunkFront(lis, chunk, bytesRequested);
+    HM_unlinkChunk(lis, chunk);
+    return chunk;
   }
 
   size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
@@ -562,6 +659,14 @@ HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
+void HM_appendToSharedList(GC_state s, HM_chunkList list) {
+  HM_chunkList sharedList = HM_getsharedFreeList(s);
+  while (!tryLockSharedList(s)) {}
+  assert(*(s->freeListLock));
+  HM_appendChunkList(s->sharedfreeList, list);
+  unlockSharedList(s);
+}
+
 void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   LOG(LM_CHUNK, LL_DEBUGMORE,
       "Appending %p into %p",
@@ -618,6 +723,7 @@ void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
 
 #if ASSERT
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
+  return;
   size_t size = 0;
   HM_chunk chunk = chunkList->firstChunk;
   while (NULL != chunk) {

@@ -289,7 +289,7 @@ struct
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val _ = push gcFunc
         val fr = fork(f, g)
-        val start = ref(NONE : (Time.time) option)
+        (*val start = ref(NONE : (Time.time) option)*)
 
         val gr =
           if popDiscard() then
@@ -306,22 +306,23 @@ struct
             ; if decrementHitsZero incounter then
                 ()
               else
-                (start := SOME(Time.now())
-                ; rightSide := SOME(())
+                (
+                  (*start := SOME(Time.now()); *)
+                  rightSide := SOME(())
                 (*; returnToSched ()*)
                 )
             ; case !rightSide of
                 NONE => die (fn _ => "scheduler bug: GC-joinfailed")
               | SOME(a) =>
                   let
-                    val _ = case (!start) of
+(*                    val _ = case (!start) of
                                 SOME(t) => print (  "waited for the GC: " ^
                                                     LargeInt.toString (
                                                       Time.toMilliseconds (Time.- (Time.now(), t))
                                                     )
                                                     ^"\n"
                                                   )
-                              | NONE => ()
+                              | NONE => ()*)
                   in
                     ( setQueueDepth (myWorkerId ()) depth
                     ; HH.resetList (thread)

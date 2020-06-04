@@ -674,7 +674,23 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   #endif
 
-  HM_appendChunkList(getFreeListSmall(s), origList);
+  float ratio;
+
+  if(cp->bytesSurvivedLastCollection > 0){
+    ratio = ((float)(cp->bytesAllocatedSinceLastCollection))
+              /(cp->bytesSurvivedLastCollection);
+  }
+  else{
+    ratio= 0;
+  }
+  uint32_t bytesSaved =  HM_getChunkListSize(repList);
+  uint32_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
+
+  printf("collected = %d %d and at %f\n", (bytesScanned-bytesSaved), bytesScanned, ratio);
+  cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
+  cp->bytesAllocatedSinceLastCollection = 0;
+
+  HM_appendToSharedList(s, origList);
   // linearUnmarkChunkList(s, &lists, targetHH);
   *(origList) = *(repList);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);
