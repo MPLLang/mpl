@@ -466,7 +466,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
 
-  if((4*hh->concurrentPack->bytesSurvivedLastCollection) >
+  if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
       (hh->concurrentPack->bytesAllocatedSinceLastCollection)
     || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
     if (!hh->concurrentPack->shouldCollect) {

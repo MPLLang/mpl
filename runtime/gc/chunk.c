@@ -271,7 +271,8 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
   HM_chunk chunk = HM_getChunkListFirstChunk(sharedfreeList);
   HM_chunk foundChunk = NULL;
   bool foundChunkB = false;
-  bool traverseList = true;
+  bool traverseList = HM_getChunkListFirstChunk(getFreeListSmall(s)) == NULL;
+  int count = 3;
   uint64_t largListThresh = s->nextChunkAllocSize;
 
   while((traverseList || !foundChunkB) && chunk!=NULL) {
@@ -279,7 +280,7 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
     // HM_appendChunk(tempList, chunk);
     bytesVisited+=HM_getChunkSize(chunk);
 
-    if(chunkHasBytesFree(chunk, bytesRequested)) {
+    if(!foundChunkB && chunkHasBytesFree(chunk, bytesRequested)) {
       HM_unlinkChunk(sharedfreeList, chunk);
       HM_appendChunk(tempList, chunk);
       foundChunk = chunk;
@@ -296,11 +297,12 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
         HM_prependChunk(tempList, chunk);
       }
       chunk = HM_getChunkListFirstChunk(sharedfreeList);
+      count --;
+      traverseList = (count>0);
     }
     else {
       chunk = chunk->nextChunk;
     }
-    traverseList = (bytesVisited < bytesTotal);
   }
   unlockSharedList(s);
   HM_appendChunkList(getFreeListSmall(s), tempList);
@@ -402,6 +404,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
     HM_unlinkChunk(lis, chunk);
     return chunk;
   }
+
 
   size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
   size_t allocSize = max(bytesNeeded, s->nextChunkAllocSize);
