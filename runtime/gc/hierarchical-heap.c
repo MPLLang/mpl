@@ -210,7 +210,7 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
 
-  bool createCP = (depth == 1);
+  bool createCP = (depth >= 1);
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
   if (createCP){
     bytesNeeded += sizeof(struct ConcurrentPackage);
@@ -411,7 +411,7 @@ void HM_HH_resetList(pointer threadp) {
     HM_HH_setCollection(hh, false);
     return;
   }
-  else if(s->numberOfProcs > 1)  {
+  else if(s->numberOfProcs >= 1)  {
     HM_HH_setCollection(hh, true);
   }
 
@@ -423,34 +423,8 @@ void HM_HH_resetList(pointer threadp) {
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
 }
 
-void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
-  // return;
-  GC_state s = pthread_getspecific(gcstate_key);
-
-  GC_MayTerminateThread(s);
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  beginAtomic(s);
-  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
-  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-  assert(thread != NULL);
-
-  HM_HH_updateValues(thread, s->frontier);
-
-  if (s->limitPlusSlop < s->frontier) {
-    DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
-        ((void*)(s->limit)),
-        ((void*)(s->frontier)));
-  }
-
-
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-
-  if(!(hh->concurrentPack->shouldCollect)) {
-    return;
-  }
-
-
+bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
+  assert(HM_HH_getDepth(hh) == 1);
   pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   GC_stack stackP = (GC_stack) stackPtr;
 
@@ -473,17 +447,12 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
       hh->concurrentPack->bytesSurvivedLastCollection/=4;
     }
 
+    hh->concurrentPack->bytesSurvivedLastCollection +=4;
     hh->concurrentPack->shouldCollect = false;
-    return;
+    return false;
   }
 
-  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
-  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
-  assert(hh->concurrentPack != NULL);
-  hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
-  hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
 
-  // compute object size and bytes to be copied
   size_t objectSize, copySize, metaDataSize;
   metaDataSize = GC_STACK_METADATA_SIZE;
   copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
@@ -526,6 +495,93 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
 
   HM_assertChunkListInvariants(chunkList);
   HM_assertChunkListInvariants(fromList);
+  return true;
+}
+
+void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
+  // return;
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  GC_MayTerminateThread(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  beginAtomic(s);
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+
+  HM_HH_updateValues(thread, s->frontier);
+
+  if (s->limitPlusSlop < s->frontier) {
+    DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
+        ((void*)(s->limit)),
+        ((void*)(s->frontier)));
+  }
+
+
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  if(!(hh->concurrentPack->shouldCollect)) {
+    return;
+  }
+
+
+  if (HM_HH_getDepth(hh) == 1) {
+    bool willCollect = checkPolicyforRoot(s, hh, thread);
+    if(!willCollect) {
+      return;
+    }
+  }
+
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
+  assert(hh->concurrentPack != NULL);
+  hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
+  hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
+
+  // compute object size and bytes to be copied
+  // size_t objectSize, copySize, metaDataSize;
+  // metaDataSize = GC_STACK_METADATA_SIZE;
+  // copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
+  // // objectSize = sizeofObject(s, stackPtr);
+  // objectSize = copySize;
+  // // copyObject can add a chunk to the list. It updates the frontier but not the
+  // // thread current chunk. Also it returns the pointer to the header part.
+  // pointer stackCopy = copyObject(stackPtr - metaDataSize,
+  //                                objectSize, copySize, hh);
+  // thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
+  // stackCopy += metaDataSize;
+
+  // ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
+  // hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
+
+  // // Separate the list into two. From list will be collected by the CC and chunkList will be used
+  // // as it is always used by the mutator -- for promotions or allocations at depth 1
+  // HM_chunkList chunkList = HM_HH_getChunkList(hh);
+  // HM_chunkList fromList = HM_HH_getFromList(hh);
+  // // HM_chunk lastChunk = thread->currentChunk;
+
+  // // JATIN_NOTE: NOW CC does it before collection, so this is not needed
+  // // for (HM_chunk chunk = chunkList->firstChunk; chunk !=NULL; chunk = chunk->nextChunk) {
+  // //   assert(HM_getLevelHead(chunk) == hh);
+  // //   chunk->levelHead = hh;
+  // // }
+
+  // *(fromList) = *(chunkList);
+  // HM_initChunkList(chunkList);
+
+  // // HM_chunk stackChunk = HM_getChunkOf(getStackCurrent(s));
+  // // if(HM_getLevelHead(stackChunk) == hh) {
+  // //   HM_unlinkChunk(fromList, stackChunk);
+  // //   HM_appendChunk(chunkList, stackChunk);
+  // //   stackChunk->levelHead = hh;
+  // // }
+  // HM_chunk newChunk = HM_allocateChunk(chunkList, GC_HEAP_LIMIT_SLOP);
+  // newChunk->levelHead = hh;
+  // thread->currentChunk = HM_getChunkListLastChunk(chunkList);
+
+  // HM_assertChunkListInvariants(chunkList);
+  // HM_assertChunkListInvariants(fromList);
   /* The lastChunk remains in the chunkList and others are added to the fromList for CC
   // HM_chunk firstChunk = chunkList->firstChunk;
   // assert(firstChunk!=lastChunk);
