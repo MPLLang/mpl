@@ -383,7 +383,7 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
   }
 
   if(HM_HH_getDepth(currentHeap) < depth) {
-    LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
+    // LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
     return NULL;
   }
 
@@ -393,7 +393,7 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
   if(cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
-    || cp->stack == BOGUS_OBJPTR
+    || (cp->stack == BOGUS_OBJPTR && depth !=1 )
     || cp->shouldCollect == false) {
     return NULL;
   }
@@ -456,14 +456,16 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // if (gdbArg) {
   //   depth = (depth>0? depth -1: 0);
   // }
-  return;
+  // return;
   // depth = (depth==1)?(depth+1):depth;
 
   // LOG(LM_HH_COLLECTION, LL_Log, "called func");
 
   checkLocalScheduler(s);
 
-  if (thread->currentDepth == 0 || depth <= 0) {
+  if (thread->currentDepth == 0
+    || depth <= 0
+    || thread->currentDepth < depth) {
     return;
   }
 
@@ -498,8 +500,10 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   assert(s->currentThread == thread);
+  printf("collecting seq : %p\n", heap);
   CC_collectWithRoots(s, heap, thread);
   heap->concurrentPack->isCollecting = false;
+  heap->concurrentPack->shouldCollect = false;
 }
 
 void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){
@@ -555,11 +559,15 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     T->levelHead = targetHH;
   }
 
+
+// depth 1 heap is collected completely concurrently and does not wait for a join
+  bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
+
   HM_chunk baseChunk = HM_getChunkOf(targetHH);
   if(isInScope(baseChunk, &lists)) {
     saveChunk(baseChunk, &lists);
   }
-  else if (baseChunk == (targetHH->chunkList).firstChunk) {}
+  else if (baseChunk == (targetHH->chunkList).firstChunk && isConcurrent) {}
   else {
     assert(0);
   }
@@ -571,7 +579,9 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // forward closures and stack
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
-  objptr stackp = cp->stack;
+
+// if at depth 1, use the copied stack. Otherwise, use the current thread's stack.
+  objptr stackp = isConcurrent?(cp->stack):(getStackCurrentObjptr(s));
   forceForward(s, &(stackp), &lists);
 
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
@@ -689,11 +699,11 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   printf("collected = %d %d and at %f\n", (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
-  // printf("sizes released: ");
   struct HM_chunkList _deleteList;
   HM_chunkList deleteList = &(_deleteList);
   HM_initChunkList(deleteList);
 
+  printf("sizes released: ");
   HM_chunk chunk = HM_getChunkListFirstChunk(origList);
   while (chunk!=NULL) {
     if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE)) {
@@ -701,23 +711,30 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
       chunk = chunk->nextChunk;
       HM_unlinkChunk(origList, q);
       HM_appendChunk(deleteList, q);
-      // printf("%d ", HM_getChunkSize(q));
+      printf("%d ", HM_getChunkSize(q));
       // GC_release (q, HM_getChunkSize(q));
     }
     else {
       chunk = chunk->nextChunk;
     }
   }
-  // printf("\n");
+  printf("\n");
 
   // HM_appendChunkList(getFreeListSmall(s), origList);
-  HM_appendToSharedList(s, origList);
+
+  // if not at root, no need to add to the shared list. It's like a local collection
+  if (isConcurrent) {
+    HM_appendToSharedList(s, origList);
+  }
+  else {
+    HM_appendChunkList(getFreeListSmall(s), origList);
+  }
   HM_deleteChunks(s, deleteList);
   // linearUnmarkChunkList(s, &lists, targetHH);
   *(origList) = *(repList);
-  origList->firstChunk = HM_getChunkListFirstChunk(repList);
-  origList->lastChunk =  HM_getChunkListLastChunk(repList);
-  origList->size = HM_getChunkListSize(repList);
+  // origList->firstChunk = HM_getChunkListFirstChunk(repList);
+  // origList->lastChunk =  HM_getChunkListLastChunk(repList);
+  // origList->size = HM_getChunkListSize(repList);
   HM_assertChunkListInvariants(origList);
 
   linearTraverseChunkList(s, origList, NULL);
