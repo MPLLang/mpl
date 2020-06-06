@@ -689,24 +689,30 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   printf("collected = %d %d and at %f\n", (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
-  printf("sizes released: ");
+  // printf("sizes released: ");
+  struct HM_chunkList _deleteList;
+  HM_chunkList deleteList = &(_deleteList);
+  HM_initChunkList(deleteList);
+
   HM_chunk chunk = HM_getChunkListFirstChunk(origList);
   while (chunk!=NULL) {
     if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE)) {
       pointer q = chunk;
       chunk = chunk->nextChunk;
       HM_unlinkChunk(origList, q);
-      printf("%d ", HM_getChunkSize(q));
-      GC_release (q, HM_getChunkSize(q));
+      HM_appendChunk(deleteList, q);
+      // printf("%d ", HM_getChunkSize(q));
+      // GC_release (q, HM_getChunkSize(q));
     }
     else {
       chunk = chunk->nextChunk;
     }
   }
-  printf("\n");
+  // printf("\n");
 
   // HM_appendChunkList(getFreeListSmall(s), origList);
   HM_appendToSharedList(s, origList);
+  HM_deleteChunks(s, deleteList);
   // linearUnmarkChunkList(s, &lists, targetHH);
   *(origList) = *(repList);
   origList->firstChunk = HM_getChunkListFirstChunk(repList);

@@ -662,6 +662,19 @@ HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
+void HM_deleteChunks(GC_state s, HM_chunkList deleteList) {
+  while(!tryLockSharedList(s)) {}
+  assert(*(s->freeListLock));
+  HM_chunk chunk = deleteList->firstChunk;
+  while (chunk!=NULL) {
+    pointer q= chunk;
+    chunk = chunk->nextChunk;
+    HM_unlinkChunk(deleteList, q);
+    GC_release (q, HM_getChunkSize(q));
+  }
+  unlockSharedList(s);
+}
+
 void HM_appendToSharedList(GC_state s, HM_chunkList list) {
   HM_chunkList sharedList = HM_getsharedFreeList(s);
   while (!tryLockSharedList(s)) {}
