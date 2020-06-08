@@ -393,7 +393,7 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     || cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
-    || (cp->stack == BOGUS_OBJPTR && depth !=1 )
+    || (cp->stack == BOGUS_OBJPTR && depth ==1 )
     || cp->shouldCollect == false) {
     return NULL;
   }
@@ -523,10 +523,14 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // some object that is reachable from the roots. origList will contain the
   // chunks in which all objects are garbage. Before exiting, chunks in
   // origList are added to the free list and origList is made equal to repList
+
+// depth 1 heap is collected completely concurrently and does not wait for a join
+  bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
+
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);
   HM_initChunkList(repList);
-  HM_chunkList origList = HM_HH_getFromList(targetHH);
+  HM_chunkList origList = (isConcurrent)?HM_HH_getFromList(targetHH):HM_HH_getChunkList(targetHH);
   HM_assertChunkListInvariants(origList);
 
   #if ASSERT2
@@ -560,8 +564,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
 
 
-// depth 1 heap is collected completely concurrently and does not wait for a join
-  bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
 
   HM_chunk baseChunk = HM_getChunkOf(targetHH);
   if(isInScope(baseChunk, &lists)) {
@@ -696,7 +698,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   uint32_t bytesSaved =  HM_getChunkListSize(repList);
   uint32_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
 
-  printf("collected = %d %d and at %f\n", (bytesScanned-bytesSaved), bytesScanned, ratio);
+  printf("collected %s = %d %d and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
   struct HM_chunkList _deleteList;

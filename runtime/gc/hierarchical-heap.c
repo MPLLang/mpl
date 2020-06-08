@@ -398,16 +398,17 @@ void HM_HH_resetList(pointer threadp) {
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
-  assert(thread->currentDepth == 2);
+  // assert(thread->currentDepth == 2);
   assert(thread->hierarchicalHeap->nextAncestor!=NULL);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap->nextAncestor;
-  assert(HM_HH_getDepth(hh) == 1);
+  // assert(HM_HH_getDepth(hh) == 1);
   // assert(!HM_HH_isCCollecting(hh));
   HM_assertChunkListInvariants(HM_HH_getFromList(hh));
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
 
   if(HM_HH_isCCollecting(hh)) {
+    assert(HM_HH_getDepth(hh) == 1);
     HM_HH_setCollection(hh, false);
     return;
   }
@@ -421,6 +422,24 @@ void HM_HH_resetList(pointer threadp) {
   HM_initChunkList(HM_HH_getFromList(hh));
   HM_assertChunkListInvariants(HM_HH_getFromList(hh));
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
+}
+
+void copyCurrentStack(pointer stackPtr, HM_HierarchicalHeap hh, GC_thread thread) {
+  GC_stack stackP = (GC_stack) stackPtr;
+
+  size_t objectSize, copySize, metaDataSize;
+  metaDataSize = GC_STACK_METADATA_SIZE;
+  copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
+  // objectSize = sizeofObject(s, stackPtr);
+  objectSize = copySize;
+  // copyObject can add a chunk to the list. It updates the frontier but not the
+  // thread current chunk. Also it returns the pointer to the header part.
+  pointer stackCopy = copyObject(stackPtr - metaDataSize,
+                                 objectSize, copySize, hh);
+  thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
+  stackCopy += metaDataSize;
+  ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
+  hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 }
 
 bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
@@ -452,21 +471,22 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
     return false;
   }
 
+  copyCurrentStack(stackPtr, hh, thread);
 
-  size_t objectSize, copySize, metaDataSize;
-  metaDataSize = GC_STACK_METADATA_SIZE;
-  copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
-  // objectSize = sizeofObject(s, stackPtr);
-  objectSize = copySize;
-  // copyObject can add a chunk to the list. It updates the frontier but not the
-  // thread current chunk. Also it returns the pointer to the header part.
-  pointer stackCopy = copyObject(stackPtr - metaDataSize,
-                                 objectSize, copySize, hh);
-  thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
-  stackCopy += metaDataSize;
+  // size_t objectSize, copySize, metaDataSize;
+  // metaDataSize = GC_STACK_METADATA_SIZE;
+  // copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
+  // // objectSize = sizeofObject(s, stackPtr);
+  // objectSize = copySize;
+  // // copyObject can add a chunk to the list. It updates the frontier but not the
+  // // thread current chunk. Also it returns the pointer to the header part.
+  // pointer stackCopy = copyObject(stackPtr - metaDataSize,
+  //                                objectSize, copySize, hh);
+  // thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
+  // stackCopy += metaDataSize;
 
-  ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
-  hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
+  // ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
+  // hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 
   // Separate the list into two. From list will be collected by the CC and chunkList will be used
   // as it is always used by the mutator -- for promotions or allocations at depth 1
@@ -503,9 +523,10 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
 
   GC_MayTerminateThread(s);
+  beginAtomic(s);
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  beginAtomic(s);
+  getThreadCurrent(s)->currentChunk->frontier = s->frontier;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
