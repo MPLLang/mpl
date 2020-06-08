@@ -389,8 +389,8 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
 
-  assert(cp!=NULL); // it has to be the case that the currentHeap is well-formed from (HM_HH_new)
-  if(cp->isCollecting
+  if(cp == NULL
+    || cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
     || (cp->stack == BOGUS_OBJPTR && depth !=1 )
