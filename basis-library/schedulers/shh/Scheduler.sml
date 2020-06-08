@@ -22,6 +22,8 @@ struct
   structure HH = MLton.Thread.HierarchicalHeap
 
   val P = MLton.Parallel.numberOfProcessors
+  val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
+                          ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
   val myWorkerId = MLton.Parallel.processorNumber
 
   (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
@@ -227,14 +229,26 @@ struct
               returnToSched ()
           end
         val _ = push g'
-        val cont_arr1 =  Array.array (1, SOME(f))
-        val cont_arr2 =  Array.array (1, SOME(g))
+        val _ =
+              if (depth < internalGCThresh) then
+                let
+                  val cont_arr1 =  Array.array (1, SOME(f))
+                  val cont_arr2 =  Array.array (1, SOME(g))
+                  val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
+                  val _ = HH.setDepth (thread, depth + 1)
+                  val _ = HH.forceLeftHeap(myWorkerId(), thread)
+                in
+                  ()
+                end
+              else
+                let
+                  val _  = (HH.setDepth (thread, depth + 1))
+                in
+                  ()
+                end
         (*val cont_arr2 =  Array.array (1, SOME(g'))*)
         (*location?*)
-        val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
-        val _ = HH.setDepth (thread, depth + 1)
         (*force left heap must be after set Depth*)
-        val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val fr = result f
         val gr =
           if popDiscard () then
@@ -250,6 +264,7 @@ struct
               | SOME (gr, t) =>
                   ( HH.mergeThreads (thread, t)
                   ; setQueueDepth (myWorkerId ()) depth
+                  ; HH.resetList (thread)
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
                   ; gr
