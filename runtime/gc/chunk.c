@@ -100,8 +100,8 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->limit = end;
   chunk->nextChunk = NULL;
   chunk->prevChunk = NULL;
-  chunk->nextAdjacent = NULL;
-  chunk->prevAdjacent = NULL;
+  // chunk->nextAdjacent = NULL;
+  // chunk->prevAdjacent = NULL;
   chunk->levelHead = NULL;
   chunk->startGap = 0;
   chunk->mightContainMultipleObjects = TRUE;
@@ -158,22 +158,22 @@ static HM_chunk splitChunkAt(HM_chunkList list, HM_chunk chunk, pointer splitPoi
   result->nextChunk = chunk->nextChunk;
   chunk->nextChunk = result;
 
-  if (chunk->nextAdjacent != NULL) {
-    chunk->nextAdjacent->prevAdjacent = result;
-  }
-  result->nextAdjacent = chunk->nextAdjacent;
-  result->prevAdjacent = chunk;
-  chunk->nextAdjacent = result;
+  // if (chunk->nextAdjacent != NULL) {
+    // chunk->nextAdjacent->prevAdjacent = result;
+  // }
+  // result->nextAdjacent = chunk->nextAdjacent;
+  // result->prevAdjacent = chunk;
+  // chunk->nextAdjacent = result;
 
   assert(chunk->nextChunk == result);
-  assert(chunk->nextAdjacent == result);
+  // assert(chunk->nextAdjacent == result);
   assert(result->prevChunk == chunk);
-  assert(result->prevAdjacent == chunk);
+  // assert(result->prevAdjacent == chunk);
   assert(chunk->limit == (pointer)result);
-  if (result->nextAdjacent != NULL) {
-    assert(result->limit == (pointer)result->nextAdjacent);
-    assert(result->nextAdjacent->prevAdjacent == result);
-  }
+  // if (result->nextAdjacent != NULL) {
+    // assert(result->limit == (pointer)result->nextAdjacent);
+    // assert(result->nextAdjacent->prevAdjacent == result);
+  // }
 
   return result;
 }
@@ -263,7 +263,7 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
 
 // for now I do not intend to have the proc waiting
   if (!tryLockSharedList(s)) {
-    printf("%s\n", "left for not waiting");
+    // printf("%s\n", "left for not waiting");
     return NULL;
   }
 

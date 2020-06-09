@@ -51,8 +51,8 @@ struct HM_chunk {
   HM_chunk nextChunk;
   HM_chunk prevChunk;
 
-  HM_chunk nextAdjacent;
-  HM_chunk prevAdjacent;
+  // HM_chunk nextAdjacent;
+  // HM_chunk prevAdjacent;
 
   /* some chunks may be used to store other non-ML allocated objects, like
    * heap records; if so, these will be stored at the front of the chunk, and
