@@ -403,8 +403,8 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     return NULL;
   }
   else {
-    LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
-    printf("%d %d\n", cp->isCollecting, depth);
+    // LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
+    // printf("%d %d\n", cp->isCollecting, depth);
     // #if ASSERT2
     //   while(oldStart!=currentHeap) {
     //     printf(" %p => ", (void*) oldStart);
@@ -695,8 +695,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   else{
     ratio= 0;
   }
-  uint32_t bytesSaved =  HM_getChunkListSize(repList);
-  uint32_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
+  uint64_t bytesSaved =  HM_getChunkListSize(repList);
+  uint64_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
 
   printf("collected %s = %d %d and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
@@ -705,22 +705,29 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_chunkList deleteList = &(_deleteList);
   HM_initChunkList(deleteList);
 
-  printf("sizes released: ");
+  // printf("sizes released: ");
   HM_chunk chunk = HM_getChunkListFirstChunk(origList);
+  uint64_t bytesCollected = HM_getChunkListSize(origList);
+  bytesCollected = bytesCollected>0?bytesCollected:0;
+  bytesCollected/=2;
+  uint64_t bytesFreed = 0;
+
   while (chunk!=NULL) {
+    // if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE) || (bytesFreed < bytesCollected)) {
     if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE)) {
       pointer q = chunk;
       chunk = chunk->nextChunk;
       HM_unlinkChunk(origList, q);
       HM_appendChunk(deleteList, q);
-      printf("%d ", HM_getChunkSize(q));
+      bytesFreed+= HM_getChunkSize(q);
+      // printf("%d ", HM_getChunkSize(q));
       // GC_release (q, HM_getChunkSize(q));
     }
     else {
       chunk = chunk->nextChunk;
     }
   }
-  printf("\n");
+  // printf("\n");
 
   // HM_appendChunkList(getFreeListSmall(s), origList);
 
