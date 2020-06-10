@@ -63,21 +63,15 @@ pointer getTransitivePtr(GC_state s, pointer p, ConcurrentCollectArgs* args) {
 
   assert(isInScope(HM_getChunkOf(p), args) ||
           isChunkSaved(HM_getChunkOf(p), args));
-  bool tr = hasFwdPtr(p);
-  if(tr) {
-    // printf("traversing %p ", p);
-  }
   while (hasFwdPtr(p)) {
     HM_chunk chunk = HM_getChunkOf(p);
     if(chunk->tmpHeap == args->fromHead){
+      // they need to be saved because of LC issues.
       saveChunk(chunk, args);
     }
     op = getFwdPtr(p);
     p = objptrToPointer(op, NULL);
     // printf("%p %d", p, HM_getLevelHead(chunk)->depth);
-  }
-  if(tr){
-    // printf("\n");
   }
   assert(sizeofObject(s, p) >=0);
   return p;
@@ -316,6 +310,8 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
 
 
   forwardPtrChunk(s, &src, rawArgs);
+  // the runtime needs dst to be saved in case it is in the scope of collection.
+  // can potentially remove the downPointer, but there are some race issues with the write Barrier
   forwardPtrChunk(s, &dst, rawArgs);
   #if ASSERT
   if(inScope) {
@@ -357,6 +353,8 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
 
 void unmarkDownPtrChunk (GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
   unmarkPtrChunk(s, &src, rawArgs);
+  unmarkPtrChunk(s, &dst, rawArgs);
+
 }
 
 // this function does more than forwardPtrChunk and is safer. It forwards even if not in scope.
@@ -546,11 +544,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
 }
 
 void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){
-  // TODO: Don't know if pointers should be promoted while concurrent collection.
-  // HM_chunkList y = HM_HH_getRemSet(hh);
-  // x->firstChunk = y->firstChunk;
-  // x->lastChunk = y->lastChunk;
-  // x->size = y->size;
+  // Since the root collection is truly concurrent the depth 1 remSet is separated at the time of fork.
   if (hh->depth == 1) {
     *x = hh->concurrentPack->remSet;
   }
