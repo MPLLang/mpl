@@ -7,7 +7,6 @@
 #include "remembered-set.h"
 #include "hierarchical-heap-collection.h"
 
-void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 void promoteDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs);
 void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArgs);
 

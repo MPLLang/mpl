@@ -13,6 +13,7 @@
 #include "concurrent-stack.h"
 #include "hierarchical-heap.h"
 #include "objptr.h"
+#include "deferred-promote.h"
 // #include "logger.h"
 
 

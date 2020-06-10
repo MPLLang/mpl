@@ -312,7 +312,7 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
   forwardPtrChunk(s, &src, rawArgs);
   // the runtime needs dst to be saved in case it is in the scope of collection.
   // can potentially remove the downPointer, but there are some race issues with the write Barrier
-  forwardPtrChunk(s, &dst, rawArgs);
+  // forwardPtrChunk(s, &dst, rawArgs);
   #if ASSERT
   if(inScope) {
     // assert(isChunkSaved(HM_getChunkOf, args));
@@ -543,15 +543,21 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   heap->concurrentPack->isCollecting = false;
 }
 
-void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){
+
+
+void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   // Since the root collection is truly concurrent the depth 1 remSet is separated at the time of fork.
+  HM_chunkList y;
   if (hh->depth == 1) {
-    *x = hh->concurrentPack->remSet;
+    y = &(hh->concurrentPack->remSet);
   }
   else {
-    HM_chunkList y = HM_HH_getRemSet(hh);
-    *x = *y;
+    y = HM_HH_getRemSet(hh);
   }
+
+  HM_foreachRemembered(s, y, bucketIfValid, (void*)x);
+  HM_appendChunkList(getFreeListSmall(s), y);
+  *y = *x;
 }
 
 
@@ -616,7 +622,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   // forward down pointers
   struct HM_chunkList downPtrs;
-  CC_deferredPromote(&downPtrs, targetHH);
+  HM_initChunkList(&downPtrs);
+  CC_filterDownPointers(s, &downPtrs, targetHH);
   // if(HM_HH_getDepth(targetHH) == 3) {
   //   printf("downPtrs: ");
   //   HM_foreachRemembered(s, &downPtrs, printDownPtrs, &lists);

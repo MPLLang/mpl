@@ -13,6 +13,6 @@ void HM_deferredPromote(
   GC_thread thread,
   HM_chunkList globalDownPtrs,
   struct ForwardHHObjptrArgs* args);
-
+void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 #endif  /* defined (MLTON_GC_INTERNAL_FUNCS) */
 #endif  /* DEFERRED_PROMOTE_H */
