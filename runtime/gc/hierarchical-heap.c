@@ -232,6 +232,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
     hh->concurrentPack->stack = BOGUS_OBJPTR;
     hh->concurrentPack->bytesSurvivedLastCollection = 0;
     hh->concurrentPack->bytesAllocatedSinceLastCollection = 0;
+    HM_initChunkList(&(hh->concurrentPack->remSet));
   }
   else {
     hh->concurrentPack = NULL;
@@ -473,6 +474,8 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
 
   copyCurrentStack(stackPtr, hh, thread);
 
+  HM_appendChunkList(&(hh->concurrentPack->remSet), HM_HH_getRemSet(hh));
+  HM_initChunkList(HM_HH_getRemSet(hh));
   // size_t objectSize, copySize, metaDataSize;
   // metaDataSize = GC_STACK_METADATA_SIZE;
   // copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;

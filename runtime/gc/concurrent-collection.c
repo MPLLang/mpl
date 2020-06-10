@@ -11,7 +11,7 @@
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 #define casCC(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
 bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
-
+void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 // ASSERT2 is for saving code in case I need it later. It is not for debugging purposes since
 // the code is not read only and may change state.
 #define ASSERT2 0
@@ -43,24 +43,6 @@ bool isInScope(HM_chunk chunk, ConcurrentCollectArgs* args) {
 */
 }
 
-
-// JATIN_NOTE: this function should be called only for in scope objects.
-// for out of scope objects the assertion and sanctity of *p is uncertain
-// This is because of local collection. In general, CC assumes that the access to chunk level info
-// about p is safe since it does not depend on (*p). Once it is established that p is in scope,
-// we can call getTransitivePtr on it. Only after the transitive p is reached can we begin to inspect
-// (*p). Otherwise, all bets are off because of races
-pointer getTransitivePtr(GC_state s, pointer p) {
-  objptr op;
-
-  while (hasFwdPtr(p)) {
-    op = getFwdPtr(p);
-    p = objptrToPointer(op, NULL);
-  }
-  assert(sizeofObject(s, p) >=0);
-  return p;
-}
-
 bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   // Alternative implementation that would require a bool in the chunks
   // check if it's already added in the toSpace/saved
@@ -68,6 +50,39 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   // return chunk->levelHead == args->toHead;
   return (chunk->tmpHeap==args->toHead);
 }
+
+
+// JATIN_NOTE: this function should be called only for in scope objects.
+// for out of scope objects the assertion and sanctity of *p is uncertain
+// This is because of local collection. In general, CC assumes that the access to chunk level info
+// about p is safe since it does not depend on (*p). Once it is established that p is in scope,
+// we can call getTransitivePtr on it. Only after the transitive p is reached can we begin to inspect
+// (*p). Otherwise, all bets are off because of races
+pointer getTransitivePtr(GC_state s, pointer p, ConcurrentCollectArgs* args) {
+  objptr op;
+
+  assert(isInScope(HM_getChunkOf(p), args) ||
+          isChunkSaved(HM_getChunkOf(p), args));
+  bool tr = hasFwdPtr(p);
+  if(tr) {
+    // printf("traversing %p ", p);
+  }
+  while (hasFwdPtr(p)) {
+    HM_chunk chunk = HM_getChunkOf(p);
+    if(chunk->tmpHeap == args->fromHead){
+      saveChunk(chunk, args);
+    }
+    op = getFwdPtr(p);
+    p = objptrToPointer(op, NULL);
+    // printf("%p %d", p, HM_getLevelHead(chunk)->depth);
+  }
+  if(tr){
+    // printf("\n");
+  }
+  assert(sizeofObject(s, p) >=0);
+  return p;
+}
+
 
 // Mark the object uniquely identified by p
 void markObj(pointer p) {
@@ -217,14 +232,13 @@ bool saveNoForward(GC_state s, pointer p, void* rawArgs) {
   bool chunkOrig  = (chunkSaved)?true:isInScope(cand_chunk, args);
 
   if(chunkOrig && !chunkSaved) {
-    assert(getTransitivePtr(s, p) == p);
+    assert(getTransitivePtr(s, p, rawArgs) == p);
     #if ASSERT2
       assert(cand_chunk->tmpHeap == args->fromHead);
       assert(isChunkInList(args->origList, cand_chunk));
     #endif
     saveChunk(cand_chunk, args);
   }
-
   return (chunkSaved || chunkOrig);
 }
 
@@ -254,8 +268,9 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
-  if (isInScope(HM_getChunkOf(p), (ConcurrentCollectArgs*)rawArgs)) {
-    p = getTransitivePtr(s, p);
+  if (isInScope(HM_getChunkOf(p), rawArgs)
+     || isChunkSaved(HM_getChunkOf(p), rawArgs)) {
+    p = getTransitivePtr(s, p, rawArgs);
   }
   // JATIN_NOTE: Optimisation, to be enabled later.
   // if(args->rootList->firstChunk == NULL) {
@@ -275,7 +290,7 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
       //   assert(0);
       // }
     #endif
-    p = getTransitivePtr(s, p);
+    // p = getTransitivePtr(s, p, rawArgs);
     markAndScan(s, p, rawArgs);
   }
   return saved;
@@ -305,7 +320,7 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
   if (!isChunkSaved(chunk, rawArgs)) {
     return;
   }
-  p = getTransitivePtr(s, p);
+  p = getTransitivePtr(s, p, rawArgs);
 
   if(CC_isPointerMarked (p)) {
     assert(chunk->tmpHeap == ((ConcurrentCollectArgs*)rawArgs)->toHead);
@@ -335,11 +350,11 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   pointer p = objptrToPointer(*opp, NULL);
 
   // forceForward is called manually. So those things should not have forwarding pointers installed
-  assert(getTransitivePtr(s, p) == p);
   bool saved = saveNoForward(s, p, rawArgs);
 
   // Inlined markAndScan here since we don't want to mark if not in scope
   if(saved && !CC_isPointerMarked(p)) {
+    assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
   }
   foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
@@ -348,8 +363,8 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
 
 void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
   pointer p = objptrToPointer(*opp, NULL);
-  assert(getTransitivePtr(s, p) == p);
   if(CC_isPointerMarked(p)){
+    assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
   }
   foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
@@ -412,10 +427,10 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     //   }
     //   printf("FIN: %p\n", currentHeap);
     // #endif
+    assert(currentHeap->concurrentPack->isCollecting);
     assert(HM_HH_getDepth(currentHeap) == depth);
     return currentHeap;
   }
-
 
   // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
@@ -498,20 +513,35 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   if(heap == NULL){
     return;
   }
+  else if (HM_getChunkListSize(&(heap->chunkList)) <= 2 * HM_BLOCK_SIZE) {
+    heap->concurrentPack->isCollecting = false;
+    heap->concurrentPack->shouldCollect = false;
+    return;
+  }
 
   assert(s->currentThread == thread);
-  printf("collecting seq : %p\n", heap);
+  // printf("collecting seq : %p\n", heap);
+  assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
-  heap->concurrentPack->isCollecting = false;
+  // printf("turning off for %p \n", heap);
   heap->concurrentPack->shouldCollect = false;
+  // printf("turned off for %p \n", heap);
+  heap->concurrentPack->isCollecting = false;
 }
 
 void CC_deferredPromote(HM_chunkList x, HM_HierarchicalHeap hh){
   // TODO: Don't know if pointers should be promoted while concurrent collection.
-  HM_chunkList y = HM_HH_getRemSet(hh);
-  x->firstChunk = y->firstChunk;
-  x->lastChunk = y->lastChunk;
-  x->size = y->size;
+  // HM_chunkList y = HM_HH_getRemSet(hh);
+  // x->firstChunk = y->firstChunk;
+  // x->lastChunk = y->lastChunk;
+  // x->size = y->size;
+  if (hh->depth == 1) {
+    *x = hh->concurrentPack->remSet;
+  }
+  else {
+    HM_chunkList y = HM_HH_getRemSet(hh);
+    *x = *y;
+  }
 }
 
 
@@ -685,6 +715,13 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     }
   }
   #endif
+
+  // HM_chunk Q = origList->firstChunk;
+  // while (Q!=NULL) {
+  //   pointer q = Q;
+  //   Q = Q->nextChunk;
+  //   saveChunk(q, &lists);
+  // }
 
   float ratio;
 

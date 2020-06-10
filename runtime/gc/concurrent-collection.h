@@ -38,7 +38,8 @@ typedef struct ConcurrentPackage {
 	bool shouldCollect;
 	objptr stack;
 	size_t bytesAllocatedSinceLastCollection;
-	size_t bytesSurvivedLastCollection
+	size_t bytesSurvivedLastCollection;
+	struct HM_chunkList remSet;
 } * ConcurrentPackage;
 
 // Assume complete access in this function
