@@ -414,7 +414,9 @@ void HM_HH_resetList(pointer threadp) {
     return;
   }
   else if(s->numberOfProcs >= 1)  {
-    HM_HH_setCollection(hh, true);
+    // if (HM_HH_getDepth(hh) == 1){
+      HM_HH_setCollection(hh, true);
+    // }
   }
 
 
@@ -563,6 +565,9 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
 
+  pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
+  GC_stack stackP = (GC_stack) stackPtr;
+  copyCurrentStack(stackPtr, hh, thread);
   // compute object size and bytes to be copied
   // size_t objectSize, copySize, metaDataSize;
   // metaDataSize = GC_STACK_METADATA_SIZE;

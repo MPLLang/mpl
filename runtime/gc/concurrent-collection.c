@@ -256,6 +256,10 @@ void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
   printf("\t %p", *opp);
 }
 
+void printDownPtrs (GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+  printf("(%p, %p, %p) ", dst, field, src);
+}
+
 bool isChunkInList(HM_chunk chunk, HM_chunkList list) {
   for(HM_chunk c = list->firstChunk; c!=NULL; c=c->nextChunk) {
     if(c == chunk)
@@ -299,14 +303,25 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
                           __attribute__((unused)) objptr* field,
                           objptr src, void* rawArgs) {
-  #if ASSERT2
+  #if ASSERT
   ConcurrentCollectArgs* args =  (ConcurrentCollectArgs*) rawArgs;
-  HM_chunk T = HM_getChunkOf((pointer)p);
-  // assert(isInScope(T, args->origList) || isChunkSaved(T, args));
-    pointer p = objptrToPointer(src, NULL);
+  HM_chunk T = HM_getChunkOf((pointer)dst);
+  bool inScope = false;
+  // if (isInScope(T, args) || isChunkSaved(T, args)) {
+  //   printDownPtrs(s, dst, field, src, rawArgs);
+  //   inScope = true;
+  // }
+  // pointer p = objptrToPointer(src, NULL);
   #endif
 
+
   forwardPtrChunk(s, &src, rawArgs);
+  forwardPtrChunk(s, &dst, rawArgs);
+  #if ASSERT
+  if(inScope) {
+    // assert(isChunkSaved(HM_getChunkOf, args));
+  }
+  #endif
 }
 
 void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
@@ -329,7 +344,7 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
     uint16_t bytesNonObjptrs;
     uint16_t numObjptrs;
     GC_objectTypeTag tag;
-    printf("%p %p\n", header, p);
+    // printf("%p %p\n", header, p);
     splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
     #endif
     markObj(p);
@@ -439,6 +454,7 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
 }
 
 void CC_collectAtRoot(GC_thread thread) {
+  // return;
   GC_state s = pthread_getspecific (gcstate_key);
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   int depth = 1;
@@ -520,7 +536,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   assert(s->currentThread == thread);
-  // printf("collecting seq : %p\n", heap);
+  printf("collecting seq : %p\n", heap);
   assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
   // printf("turning off for %p \n", heap);
@@ -607,13 +623,19 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // forward down pointers
   struct HM_chunkList downPtrs;
   CC_deferredPromote(&downPtrs, targetHH);
+  // if(HM_HH_getDepth(targetHH) == 3) {
+  //   printf("downPtrs: ");
+  //   HM_foreachRemembered(s, &downPtrs, printDownPtrs, &lists);
+  //   printf("\n");
+  // }
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
   // forward closures and stack
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
 
 // if at depth 1, use the copied stack. Otherwise, use the current thread's stack.
-  objptr stackp = isConcurrent?(cp->stack):(getStackCurrentObjptr(s));
+  objptr stackp = (cp->stack);
+  // objptr stackp = isConcurrent?(cp->stack):(getStackCurrentObjptr(s));
   forceForward(s, &(stackp), &lists);
 
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
