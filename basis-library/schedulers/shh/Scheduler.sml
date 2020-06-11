@@ -284,6 +284,7 @@ struct
         fun gcFunc() =
           let
             val _ = HH.collectThreadRoot(thread)
+            val _ = decrementHitsZero incounter
           in
             rightSide := SOME (());
             (* if decrementHitsZero incounter then
