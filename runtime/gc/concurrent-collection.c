@@ -73,7 +73,8 @@ pointer getTransitivePtr(GC_state s, pointer p, ConcurrentCollectArgs* args) {
   while (hasFwdPtr(p)) {
     HM_chunk chunk = HM_getChunkOf(p);
     if(chunk->tmpHeap == args->fromHead){
-      // they need to be saved because of LC issues.
+      // they need to be saved because of LC issues. See issue 6 in README of
+      // e9d8e56e4ad69631c17c11f1bf27370b1db0cfdc for more detail.
       saveChunk(chunk, args);
     }
     op = getFwdPtr(p);

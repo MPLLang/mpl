@@ -57,6 +57,7 @@ void CC_addToStack(ConcurrentPackage cp, pointer p);
 
 bool CC_isPointerMarked (pointer p);
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs);
+void CC_clearMutationStack(ConcurrentPackage cp);
 #endif
 
 #endif

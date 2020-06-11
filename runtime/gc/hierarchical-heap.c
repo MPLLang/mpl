@@ -523,6 +523,17 @@ void copyCurrentStack(GC_state s, GC_thread thread) {
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 }
 
+
+// Story: shouldCollect is a flag set by the following three entities:
+// 1) CC_collectAtRoot/CC_collectAtPublicLevel -> after the collection is over, there is no sense in collecting
+//    again until the root set changes. The root set changes only after the program joins back to the depth of
+//    the heap. For internal heaps this is essential because CC_collectAtPublicLevel is called at each local collection.
+//    It is more of a performance safety thing for CC_collectAtRoot.
+// 2) The moment the process joins back, resetList is called on the heap and the function checks that the CC
+//    on the corresponding heap is finished. This is guaranteed for Internal heaps but not for root heap. resetList
+//    makes shouldCollect true if the collection is done and false otherwise.
+// 3) For the root heap, the checkPolicyForRoot, checks the policy and assigns shouldCollect accordingly.
+//    For internal heaps, shouldCollect is left untouched and the roots
 void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   // return;
   GC_state s = pthread_getspecific(gcstate_key);
