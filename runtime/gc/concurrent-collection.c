@@ -472,6 +472,7 @@ void CC_collectAtRoot(GC_thread thread) {
   s->amInCC = true;
   CC_collectWithRoots(s, heap, thread);
   heap->concurrentPack->isCollecting = false;
+  heap->concurrentPack->shouldCollect = false;
   s->amInCC = false;
 }
 
