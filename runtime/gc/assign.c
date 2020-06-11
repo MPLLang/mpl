@@ -56,17 +56,17 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
 
   // bool saveReadVal = false;
 
-  if (dstHH->depth == 1 && isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
+  if (isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
     // check for the case where this is laggy
     // uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
     // uint32_t shallowestPrivateLevel = UNPACK_IDX(topval);
     // uint32_t minDepth = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
-
+    // printf("%d\n", dstHH->depth);
     // Need to remember for all levels
     HM_HierarchicalHeap currHH = HM_getLevelHeadPathCompress(HM_getChunkOf(currp));
 
     bool z = cas(&(dstHH->concurrentPack->isCollecting), false, false);
-    assert(!z);
+    // assert(!z);
 
     if(currHH == dstHH) {
       printf("%s\n", "storing this");

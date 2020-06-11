@@ -23,8 +23,15 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
     cp->rootList = (struct CC_stack*) malloc(sizeof(struct CC_stack));
     CC_stack_init(cp->rootList, 2);
   }
-  printf("%s\n", "trying to add to stack");
+  // printf("%s\n", "trying to add to stack");
   CC_stack_push(cp->rootList, (void*)p);
+}
+
+void CC_clearMutationStack(ConcurrentPackage cp) {
+  assert(!cp->isCollecting);
+  if(cp->rootList!=NULL) {
+    CC_stack_clear(cp->rootList);
+  }
 }
 
 bool CC_isPointerMarked (pointer p) {
@@ -470,10 +477,26 @@ void CC_collectAtRoot(GC_thread thread) {
 
   assert(!s->amInCC);
   s->amInCC = true;
+
+  // pid_t childPid = fork();
+  // if(childPid >= 0) {
+  //   if(childPid == 0) {
+  //     printf("child created \n");
+  //   }
+  //   else {
+  //     printf("continuing parent\n");
+  //     s->amInCC = false;
+  //     return;
+  //   }
+  // }
+
+
   CC_collectWithRoots(s, heap, thread);
   heap->concurrentPack->isCollecting = false;
   heap->concurrentPack->shouldCollect = false;
   s->amInCC = false;
+  // printf("child completed collection\n");
+  // exit(1);
 }
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {

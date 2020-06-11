@@ -564,6 +564,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   // GC_stack stackP = (GC_stack) stackPtr;
   copyCurrentStack(s, thread);
+  CC_clearMutationStack(hh->concurrentPack);
   // compute object size and bytes to be copied
   // size_t objectSize, copySize, metaDataSize;
   // metaDataSize = GC_STACK_METADATA_SIZE;
