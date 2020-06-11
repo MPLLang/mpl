@@ -284,9 +284,9 @@ struct
         fun gcFunc() =
           let
             val _ = HH.collectThreadRoot(thread)
+            val _ = rightSide := SOME (())
             val _ = decrementHitsZero incounter
           in
-            rightSide := SOME (());
             (* if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (depth+1)
               ; threadSwitch thread
@@ -321,8 +321,7 @@ struct
             ( clear()
             ; if decrementHitsZero incounter then
               (
-                HH.collectThreadRoot(thread)
-                ; ()
+                ()
               )
               else
                 (
