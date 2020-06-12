@@ -65,7 +65,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     // Need to remember for all levels
     HM_HierarchicalHeap currHH = HM_getLevelHeadPathCompress(HM_getChunkOf(currp));
 
-    bool z = cas(&(dstHH->concurrentPack->isCollecting), false, false);
+    // bool z = cas(&(dstHH->concurrentPack->isCollecting), false, false);
     // assert(!z);
 
     if(currHH == dstHH) {
