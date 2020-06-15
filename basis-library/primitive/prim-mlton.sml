@@ -399,9 +399,9 @@ structure Thread =
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
-      val registerCont: ('a array) * ('b array) * thread -> unit =
+      val registerCont: ('a array) * ('b array) * ('c array) * thread -> unit =
             _import "HM_HH_registerCont" runtime private:
-            ('a array) * ('b array) * thread -> unit;
+            ('a array) * ('b array) * ('c array) * thread -> unit;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread -> unit;
 

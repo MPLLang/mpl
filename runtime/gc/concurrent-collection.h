@@ -35,6 +35,7 @@ typedef struct ConcurrentPackage {
 	//children roots
 	objptr snapLeft;
 	objptr snapRight;
+	objptr snapTemp;
 	bool isCollecting;
 	bool shouldCollect;
 	objptr stack;

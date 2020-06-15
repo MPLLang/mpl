@@ -234,7 +234,7 @@ struct
                 let
                   val cont_arr1 =  Array.array (1, SOME(f))
                   val cont_arr2 =  Array.array (1, SOME(g))
-                  val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)
+                  (*val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)*)
                   val _ = HH.setDepth (thread, depth + 1)
                   val _ = HH.forceLeftHeap(myWorkerId(), thread)
                 in
@@ -297,8 +297,9 @@ struct
           end
 
         val cont_arr1 =  Array.array (1, SOME(f))
-        val cont_arr2 =  Array.array (1, SOME(g))
-        val _ = HH.registerCont(cont_arr1, cont_arr2, thread)
+        val cont_arr2 =  Array.array (1, SOME(f))
+        val cont_arr3 =  Array.array (1, SOME(fn _ => gcFunc()))
+        val _ = HH.registerCont(cont_arr1, cont_arr2, cont_arr3, thread)
         val _ = HH.setDepth (thread, depth + 1)
 
         (*force left heap must be after set Depth*)

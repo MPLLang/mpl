@@ -28,7 +28,7 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
 }
 
 void CC_clearMutationStack(ConcurrentPackage cp) {
-  assert(!cp->isCollecting);
+  // assert(!cp->isCollecting);
   if(cp->rootList!=NULL) {
     CC_stack_clear(cp->rootList);
   }
@@ -562,8 +562,8 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   printf("collecting seq : %p\n", heap);
   assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
-  // printf("turning off for %p \n", heap);
   heap->concurrentPack->shouldCollect = false;
+  // printf("turning off for %p \n", heap);
   // printf("turned off for %p \n", heap);
   heap->concurrentPack->isCollecting = false;
 }
@@ -585,6 +585,13 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   *y = *x;
 }
 
+void printChunkListSize(HM_chunkList list) {
+  printf("sizes: ");
+  for(HM_chunk chunk = list->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
+    printf("%d ", HM_getChunkSize(chunk));
+  }
+  printf("\n");
+}
 
 void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
@@ -658,6 +665,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // forward closures and stack
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
+  forceForward(s, &(cp->snapTemp), &lists);
+  forceForward(s, &(s->wsQueue), &lists);
 
 // if at depth 1, use the copied stack. Otherwise, use the current thread's stack.
   objptr stackp = (cp->stack);
@@ -678,7 +687,9 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_foreachRemembered(s, &downPtrs, unmarkDownPtrChunk, &lists);
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
+  forceUnmark(s, &(cp->snapTemp), &lists);
   forceUnmark(s, &(stackp), &lists);
+  forceUnmark(s, &(s->wsQueue), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
   /*
@@ -783,7 +794,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   uint64_t bytesSaved =  HM_getChunkListSize(repList);
   uint64_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
 
-  printf("collected %s = %d %d and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
+  printf("collected %s = %ld %ld and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
   struct HM_chunkList _deleteList;
@@ -794,7 +805,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_chunk chunk = HM_getChunkListFirstChunk(origList);
   uint64_t bytesCollected = HM_getChunkListSize(origList);
   bytesCollected = bytesCollected>0?bytesCollected:0;
-  bytesCollected/=2;
+  bytesCollected/=4;
   uint64_t bytesFreed = 0;
 
   while (chunk!=NULL) {

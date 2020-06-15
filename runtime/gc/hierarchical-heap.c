@@ -437,8 +437,8 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
   hh->concurrentPack->bytesSurvivedLastCollection +=
       thread->bytesSurvivedLastCollection;
 
-  thread->bytesAllocatedSinceLastCollection = 0;
-  thread->bytesSurvivedLastCollection = (hh->concurrentPack->bytesSurvivedLastCollection)/2;
+  // thread->bytesAllocatedSinceLastCollection = 0;
+  // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
   hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
 
@@ -534,7 +534,7 @@ void copyCurrentStack(GC_state s, GC_thread thread) {
 //    makes shouldCollect true if the collection is done and false otherwise.
 // 3) For the root heap, the checkPolicyForRoot, checks the policy and assigns shouldCollect accordingly.
 //    For internal heaps, shouldCollect is left untouched and the roots
-void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
+void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   // return;
   GC_state s = pthread_getspecific(gcstate_key);
 
@@ -555,15 +555,18 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   }
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  if(!(hh->concurrentPack->shouldCollect)) {
+  if(!(hh->concurrentPack->shouldCollect) || __sync_val_compare_and_swap(&(hh->concurrentPack->isCollecting), false, true)) {
     return;
   }
+  assert(hh->concurrentPack->isCollecting);
 
   if (HM_HH_getDepth(hh) == 1) {
     bool willCollect = checkPolicyforRoot(s, hh, thread);
     if(!willCollect) {
+      hh->concurrentPack->isCollecting = false;
       return;
     }
+
   }
 
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
@@ -571,11 +574,14 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer threadp) {
   assert(hh->concurrentPack != NULL);
   hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
+  hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
 
   // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   // GC_stack stackP = (GC_stack) stackPtr;
+  // assert(!hh->concurrentPack->isCollecting);
   copyCurrentStack(s, thread);
-  CC_clearMutationStack(hh->concurrentPack);
+  // CC_clearMutationStack(hh->concurrentPack);
+  hh->concurrentPack->isCollecting = false;
   // compute object size and bytes to be copied
   // size_t objectSize, copySize, metaDataSize;
   // metaDataSize = GC_STACK_METADATA_SIZE;

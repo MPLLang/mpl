@@ -71,9 +71,9 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
    * check and not worry about it.
    */
   // Make sure child is inactive
-  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    assert(s->procStates[i].currentThread != childop);
-  }
+  // for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+  //   assert(s->procStates[i].currentThread != childop);
+  // }
 #endif
 
   assert(thread != NULL);
