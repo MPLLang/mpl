@@ -776,8 +776,9 @@ bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
 
 void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
   assert(hh!=NULL);
-  assert(hh->concurrentPack!=NULL);
-  CC_addToStack(hh->concurrentPack, p);
+  if(hh->concurrentPack!=NULL){
+    CC_addToStack(hh->concurrentPack, p);
+  }
 }
 
 
