@@ -280,10 +280,12 @@ struct
 
   fun setupSchedLoop () =
     let
+      val mySchedThread = Thread.current ()
+      val _ = HH.setDepth (mySchedThread, 1)
+
       val myId = myWorkerId ()
       val myRand = SMLNJRandom.rand (0, myId)
       (*val myRand = SimpleRandom.rand myId*)
-      val mySchedThread = Thread.current ()
       val {queue=myQueue, schedThread, ...} =
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
@@ -376,7 +378,6 @@ struct
         (* val schedHeap = HH.newHeap () *)
       in
         amOriginal := false;
-        HH.setDepth (schedThread, 1);
         setQueueDepth (myWorkerId ()) 1;
         threadSwitch schedThread
       end
