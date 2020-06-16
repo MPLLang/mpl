@@ -588,6 +588,11 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 
 void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
+  struct timespec startTime;
+  struct timespec stopTime;
+
+  timespec_now(&startTime);
+
   ConcurrentPackage cp = targetHH->concurrentPack;
   ensureCallSanity(s, targetHH, cp);
   // At the end of collection, repList will contain all the chunks that have
@@ -832,6 +837,22 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_assertChunkListInvariants(origList);
 
   linearTraverseChunkList(s, origList, NULL);
+
+  timespec_now(&stopTime);
+  timespec_sub(&stopTime, &startTime);
+  size_t msTotal =
+    (size_t)stopTime.tv_sec * 1000 + (size_t)stopTime.tv_nsec / 1000000;
+  printf("collection time: %zu ms\n", msTotal);
+
+  if (isConcurrent) {
+    timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);
+    s->cumulativeStatistics->numRootCCs++;
+    s->cumulativeStatistics->bytesReclaimedByRootCC += bytesScanned-bytesSaved;
+  } else {
+    timespec_add(&(s->cumulativeStatistics->timeInternalCC), &stopTime);
+    s->cumulativeStatistics->numInternalCCs++;
+    s->cumulativeStatistics->bytesReclaimedByInternalCC += bytesScanned-bytesSaved;
+  }
 
 }
 #endif

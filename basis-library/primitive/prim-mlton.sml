@@ -154,6 +154,13 @@ structure GC =
       val getCumulativeStatisticsBytesAllocatedOfProc = _import "GC_getCumulativeStatisticsBytesAllocatedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
       val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
       "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+
+      val getNumRootCCsOfProc = _import "GC_getNumRootCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getNumInternalCCsOfProc = _import "GC_getNumInternalCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCMillisecondsOfProc = _import "GC_getRootCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
    end
 
 structure HM =

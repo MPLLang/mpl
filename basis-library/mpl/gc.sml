@@ -24,6 +24,18 @@ struct
       GC.getCumulativeStatisticsBytesAllocatedOfProc (gcState (), Word32.fromInt p)
     fun getCumulativeStatisticsLocalBytesReclaimedOfProc p =
       GC.getCumulativeStatisticsLocalBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+    fun getNumRootCCsOfProc p =
+      GC.getNumRootCCsOfProc (gcState (), Word32.fromInt p)
+    fun getNumInternalCCsOfProc p =
+      GC.getNumInternalCCsOfProc (gcState (), Word32.fromInt p)
+    fun getRootCCMillisecondsOfProc p =
+      GC.getRootCCMillisecondsOfProc (gcState (), Word32.fromInt p)
+    fun getInternalCCMillisecondsOfProc p =
+      GC.getInternalCCMillisecondsOfProc (gcState (), Word32.fromInt p)
+    fun getRootCCBytesReclaimedOfProc p =
+      GC.getRootCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+    fun getInternalCCBytesReclaimedOfProc p =
+      GC.getInternalCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
   end
 
   exception NotYetImplemented of string
@@ -65,6 +77,36 @@ struct
     ; millisecondsToTime (getPromoMillisecondsOfProc p)
     )
 
+  fun numRootCCsOfProc p =
+    ( checkProcNum p
+    ; C_UIntmax.toLargeInt (getNumRootCCsOfProc p)
+    )
+
+  fun numInternalCCsOfProc p =
+    ( checkProcNum p
+    ; C_UIntmax.toLargeInt (getNumInternalCCsOfProc p)
+    )
+
+  fun rootCCTimeOfProc p =
+    ( checkProcNum p
+    ; millisecondsToTime (getRootCCMillisecondsOfProc p)
+    )
+
+  fun internalCCTimeOfProc p =
+    ( checkProcNum p
+    ; millisecondsToTime (getInternalCCMillisecondsOfProc p)
+    )
+
+  fun rootBytesReclaimedOfProc p =
+    ( checkProcNum p
+    ; C_UIntmax.toLargeInt (getRootCCBytesReclaimedOfProc p)
+    )
+
+  fun internalBytesReclaimedOfProc p =
+    ( checkProcNum p
+    ; C_UIntmax.toLargeInt (getInternalCCBytesReclaimedOfProc p)
+    )
+
   fun sumAllProcs (f: 'a * 'a -> 'a) (perProc: int -> 'a) =
     let
       fun loop b i =
@@ -90,5 +132,29 @@ struct
 
   fun promoTime () =
     millisecondsToTime (sumAllProcs C_UIntmax.+ getPromoMillisecondsOfProc)
+
+  fun numRootCCs () =
+    C_UIntmax.toLargeInt
+    (sumAllProcs C_UIntmax.+ getNumRootCCsOfProc)
+
+  fun numInternalCCs () =
+    C_UIntmax.toLargeInt
+    (sumAllProcs C_UIntmax.+ getNumInternalCCsOfProc)
+
+  fun rootCCTime () =
+    millisecondsToTime
+    (sumAllProcs C_UIntmax.+ getRootCCMillisecondsOfProc)
+
+  fun internalCCTime () =
+    millisecondsToTime
+    (sumAllProcs C_UIntmax.+ getInternalCCMillisecondsOfProc)
+
+  fun rootBytesReclaimed () =
+    C_UIntmax.toLargeInt
+    (sumAllProcs C_UIntmax.+ getRootCCBytesReclaimedOfProc)
+
+  fun internalBytesReclaimed () =
+    C_UIntmax.toLargeInt
+    (sumAllProcs C_UIntmax.+ getInternalCCBytesReclaimedOfProc)
 
 end

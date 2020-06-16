@@ -133,6 +133,13 @@ PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(GC_state s, uint32_t proc);
 
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc);
 
+PRIVATE uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+
 PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
 PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);
 PRIVATE pointer GC_getCurrentThread (GC_state s);
