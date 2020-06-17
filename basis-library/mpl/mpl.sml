@@ -7,4 +7,5 @@
 structure MPL :> MPL =
 struct
   structure File = MPLFile
+  structure GC = MPLGC
 end

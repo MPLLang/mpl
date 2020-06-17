@@ -14,8 +14,10 @@ in
    local
       libs/basis-extra/basis-extra.mlb
    in
+      signature MPL_GC
       signature MPL_FILE
       signature MPL
+
       structure MPL
    end
 end
