@@ -234,7 +234,8 @@ struct
                 let
                   val cont_arr1 =  Array.array (1, SOME(f))
                   val cont_arr2 =  Array.array (1, SOME(g))
-                  (*val _ = HH.registerCont(cont_arr1,  cont_arr2, thread)*)
+                  val cont_arr3 =  Array.array (0, NONE)
+                  val _ = HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
                   val _ = HH.setDepth (thread, depth + 1)
                   val _ = HH.forceLeftHeap(myWorkerId(), thread)
                 in
@@ -279,13 +280,9 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
 
-        val rightSide = ref (NONE : (unit) option)
-        val incounter = ref 2
         fun gcFunc() =
           let
             val _ = HH.collectThreadRoot(thread)
-            val _ = rightSide := SOME (())
-            val _ = decrementHitsZero incounter
           in
             (* if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (depth+1)
@@ -297,7 +294,7 @@ struct
           end
 
         val cont_arr1 =  Array.array (1, SOME(f))
-        val cont_arr2 =  Array.array (1, SOME(f))
+        val cont_arr2 =  Array.array (1, SOME(g))
         val cont_arr3 =  Array.array (1, SOME(fn _ => gcFunc()))
         val _ = HH.registerCont(cont_arr1, cont_arr2, cont_arr3, thread)
         val _ = HH.setDepth (thread, depth + 1)
@@ -320,20 +317,7 @@ struct
             end
           else
             ( clear()
-            ; if decrementHitsZero incounter then
-              (
-                ()
-              )
-              else
-                (
-                  (*start := SOME(Time.now()); *)
-                  rightSide := SOME(())
-                (*; returnToSched ()*)
-                )
-            ; case !rightSide of
-                NONE => die (fn _ => "scheduler bug: GC-joinfailed")
-              | SOME(a) =>
-                  let
+            ;   let
 (*                    val _ = case (!start) of
                                 SOME(t) => print (  "waited for the GC: " ^
                                                     LargeInt.toString (
@@ -342,13 +326,13 @@ struct
                                                     ^"\n"
                                                   )
                               | NONE => ()*)
-                  in
-                    ( setQueueDepth (myWorkerId ()) depth
-                    ; HH.resetList (thread)
-                    ; HH.promoteChunks thread
-                    ; HH.setDepth (thread, depth)
-                    ; ()
-                    )
+                in
+                  ( setQueueDepth (myWorkerId ()) depth
+                  ; HH.resetList (thread)
+                  ; HH.promoteChunks thread
+                  ; HH.setDepth (thread, depth)
+                  ; ()
+                  )
                 end
             )
       in

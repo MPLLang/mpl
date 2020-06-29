@@ -439,10 +439,10 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
 
   // thread->bytesAllocatedSinceLastCollection = 0;
   // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
-  hh->concurrentPack->bytesSurvivedLastCollection/=2;
+  // hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
 
-  if((8*hh->concurrentPack->bytesSurvivedLastCollection) >
+  if((4*hh->concurrentPack->bytesSurvivedLastCollection) >
       (hh->concurrentPack->bytesAllocatedSinceLastCollection)
     || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
     // if (!hh->concurrentPack->shouldCollect) {
@@ -555,7 +555,8 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   }
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  if(!(hh->concurrentPack->shouldCollect) || __sync_val_compare_and_swap(&(hh->concurrentPack->isCollecting), false, true)) {
+  if(!(hh->concurrentPack->shouldCollect)
+    || __sync_val_compare_and_swap(&(hh->concurrentPack->isCollecting), false, true)) {
     return;
   }
   assert(hh->concurrentPack->isCollecting);
@@ -566,7 +567,6 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
       hh->concurrentPack->isCollecting = false;
       return;
     }
-
   }
 
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
@@ -580,7 +580,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   // GC_stack stackP = (GC_stack) stackPtr;
   // assert(!hh->concurrentPack->isCollecting);
   copyCurrentStack(s, thread);
-  // CC_clearMutationStack(hh->concurrentPack);
+  CC_clearMutationStack(hh->concurrentPack);
   hh->concurrentPack->isCollecting = false;
   // compute object size and bytes to be copied
   // size_t objectSize, copySize, metaDataSize;
