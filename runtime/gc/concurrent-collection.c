@@ -823,7 +823,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   // if not at root, no need to add to the shared list. It's like a local collection
   if (isConcurrent) {
-    HM_appendToSharedList(s, origList);
+    HM_appendChunkList(getFreeListSmall(s), origList);
+    // HM_appendToSharedList(s, origList);
   }
   else {
     HM_appendChunkList(getFreeListSmall(s), origList);
