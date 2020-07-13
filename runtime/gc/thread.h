@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2019 Sam Westrick
+/* Copyright (C) 2018-2020 Sam Westrick
  * Copyright (C) 2014-2016 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
@@ -44,6 +44,8 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  uint32_t minLocalCollectionDepth;
+
   size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
 
@@ -61,6 +63,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
+                    sizeof(uint32_t) + // minLocalCollectionDepth
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
@@ -82,6 +85,7 @@ PRIVATE Word32 GC_HH_getDepth(pointer thread);
 PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
 PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
+PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

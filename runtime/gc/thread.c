@@ -38,6 +38,12 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
+void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  thread->minLocalCollectionDepth = depth;
+}
+
 void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
 

@@ -282,6 +282,7 @@ struct
     let
       val mySchedThread = Thread.current ()
       val _ = HH.setDepth (mySchedThread, 1)
+      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 1)
 
       val myId = myWorkerId ()
       val myRand = SMLNJRandom.rand (0, myId)

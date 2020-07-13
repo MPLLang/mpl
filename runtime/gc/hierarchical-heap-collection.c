@@ -87,10 +87,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  if (!force && thread->currentDepth <= 1) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
-    return;
-  }
+  // if (!force && thread->currentDepth <= 1) {
+  //   LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
+  //   return;
+  // }
 
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
@@ -99,7 +99,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   uint32_t minDepth = originalLocalScope;
   // claim as many levels as we can, but only as far as desired
   while (minDepth > desiredScope &&
-         minDepth > s->controls->hhConfig.minLocalDepth &&
+         minDepth > thread->minLocalCollectionDepth &&
          tryClaimLocalScope(s)) {
     minDepth--;
   }
