@@ -35,6 +35,7 @@ struct GC_cumulativeStatistics {
   uintmax_t bytesMarkCompacted;
   uintmax_t bytesScannedMinor;
   uintmax_t bytesHHLocaled;
+  uintmax_t bytesReclaimedByLocal;
 
   size_t maxBytesLive;
   size_t maxBytesLiveSinceReset;

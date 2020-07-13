@@ -119,3 +119,4 @@ signature UNSAFE = UNSAFE
 
 signature MPL = MPL
 signature MPL_FILE = MPL_FILE
+signature MPL_GC = MPL_GC
