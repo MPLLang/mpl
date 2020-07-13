@@ -55,6 +55,9 @@ signature MLTON_THREAD =
 
           (* Move all chunks at the current depth up one level. *)
           val promoteChunks : thread -> unit
+
+          (* "put a new thread in the hierarchy *)
+          val moveNewThreadToDepth : thread * int -> unit
         end
 
       type 'a t

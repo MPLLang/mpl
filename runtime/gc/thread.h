@@ -86,6 +86,13 @@ PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
 PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
+
+/* Moves a "new" thread to the appropriate depth, before we switch to it.
+ * This essentially puts the thread (and its stack) into the hierarchy.
+ * Also sets the depth of the thread.
+ */
+PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word32 depth);
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

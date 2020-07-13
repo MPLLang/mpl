@@ -330,8 +330,9 @@ struct
         in
           if depth >= 1 then () else
             die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
-          HH.setDepth (taskThread, depth+1);
           Queue.setDepth myQueue (depth+1);
+          HH.moveNewThreadToDepth (taskThread, depth);
+          HH.setDepth (taskThread, depth+1);
           setTaskBox myId task;
           stopTimer idleTimer';
           threadSwitch taskThread;

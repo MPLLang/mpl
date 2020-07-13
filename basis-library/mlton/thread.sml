@@ -77,6 +77,8 @@ struct
   fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
   fun setMinLocalCollectionDepth (t, d) =
     Prim.setMinLocalCollectionDepth (t, Word32.fromInt d)
+  fun moveNewThreadToDepth (t, d) =
+    Prim.moveNewThreadToDepth (t, Word32.fromInt d)
 end
 
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
