@@ -105,6 +105,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->currentDepth = HM_HH_INVALID_DEPTH;
+  thread->minLocalCollectionDepth = s->controls->hhConfig.minLocalDepth;
   thread->bytesAllocatedSinceLastCollection = 0;
   thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = NULL;
@@ -163,6 +164,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
   thread->currentDepth = depth;
+  thread->minLocalCollectionDepth = s->controls->hhConfig.minLocalDepth;
   thread->bytesAllocatedSinceLastCollection = totalSize;
   thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = hh;
