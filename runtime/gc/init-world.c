@@ -197,7 +197,7 @@ void duplicateWorld (GC_state d, GC_state s) {
   /* SAM_NOTE: TODO:
    * initWorld calls switchToThread, but duplicateWorld does not. Why?
    * Is this safe? */
-  initThreadAndHeap(d, 1);
+  initThreadAndHeap(d, 0);
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;
