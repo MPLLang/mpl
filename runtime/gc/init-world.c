@@ -39,7 +39,8 @@ void initVectors(GC_state s, GC_thread thread) {
   limit = s->limitPlusSlop;
 
   currentChunk = HM_getChunkOf(frontier);
-  assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+  assert(currentChunk == thread->currentChunk);
+  // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
@@ -61,7 +62,7 @@ void initVectors(GC_state s, GC_thread thread) {
     /* Extend with a new chunk, if there is not enough free space or if we have
      * crossed a block boundary. */
     if ((size_t)(limit - frontier) < objectSize ||
-        !inFirstBlockOfChunk(currentChunk, frontier))
+        !inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
     {
       HM_HH_updateValues(thread, frontier);
       if (!HM_HH_extend(s, thread, objectSize)) {
@@ -75,12 +76,13 @@ void initVectors(GC_state s, GC_thread thread) {
       limit = s->limitPlusSlop;
 
       currentChunk = HM_getChunkOf(frontier);
-      assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+      assert(currentChunk == thread->currentChunk);
+      // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
     }
 
     assert(isFrontierAligned(s, frontier));
     assert((size_t)(limit - frontier) >= objectSize);
-    assert(inFirstBlockOfChunk(currentChunk, frontier));
+    assert(inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE));
 
     *((GC_sequenceCounter*)(frontier)) = 0;
     frontier = frontier + GC_SEQUENCE_COUNTER_SIZE;
@@ -119,7 +121,7 @@ void initVectors(GC_state s, GC_thread thread) {
 
   /* If the last allocation passed a block boundary, we need to extend to have
    * a valid frontier. Extending with GC_HEAP_LIMIT_SLOP is arbitrary. */
-  if (!inFirstBlockOfChunk(currentChunk, frontier))
+  if (!inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
   {
     HM_HH_updateValues(thread, frontier);
     if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
@@ -133,11 +135,12 @@ void initVectors(GC_state s, GC_thread thread) {
     limit = s->limitPlusSlop;
 
     currentChunk = HM_getChunkOf(frontier);
-    assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+    assert(currentChunk == thread->currentChunk);
+    // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   }
 
   assert(isFrontierAligned(s, s->frontier));
-  assert(inFirstBlockOfChunk(currentChunk, s->frontier));
+  assert(inFirstBlockOfChunk(currentChunk, s->frontier + GC_SEQUENCE_METADATA_SIZE));
 }
 
 GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
@@ -150,7 +153,9 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == depth);
-  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+  // assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+  assert(current == thread->currentChunk);
+  assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
@@ -183,7 +188,9 @@ void initWorld(GC_state s) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(hh) == 0);
-  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+  assert(current == thread->currentChunk);
+  // assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+  assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));

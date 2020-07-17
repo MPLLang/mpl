@@ -313,7 +313,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         toSpaceList->firstChunk,
         HM_getChunkStart(toSpaceList->firstChunk),
         &skipStackAndThreadObjptrPredicate,
+        // trueObjptrPredicate,
         &ssatoPredicateArgs,
+        // NULL,
         &forwardHHObjptr,
         &forwardHHObjptrArgs);
     }
@@ -819,6 +821,12 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *metaDataSize = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
+      /* SAM_NOTE:
+       * I am disabling shrinking here because it assumes that
+       * the stack is going to be copied, which doesn't work with the
+       * "stacks-in-their-own-chunks" strategy.
+       */
+#if 0
       /* RAM_NOTE: This changes with non-local collection */
       /* Check if the pointer is the current stack of my processor. */
       current = getStackCurrent(s) == stack;
@@ -833,6 +841,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
             uintmaxToCommaString(stack->used));
         stack->reserved = reservedNew;
       }
+#endif
       *objectSize = sizeof (struct GC_stack) + stack->reserved;
       *copySize = sizeof (struct GC_stack) + stack->used;
     }

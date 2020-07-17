@@ -126,11 +126,11 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
    * checks are good enough for now... */
   assert(hh != NULL);
   assert(HM_HH_getDepth(hh) == 0);
-  assert(HM_getChunkListFirstChunk(HM_HH_getChunkList(hh)) ==
+  assert(HM_getChunkListFirstChunk(HM_HH_getChunkList(hh))->nextChunk ==
          HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
   assert(HM_getChunkOf(threadp) == HM_getChunkListFirstChunk(HM_HH_getChunkList(hh)));
   assert(HM_getChunkOf(objptrToPointer(thread->stack, NULL)) ==
-         HM_getChunkListFirstChunk(HM_HH_getChunkList(hh)));
+         HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
 
   thread->currentDepth = depth;
   hh->depth = depth;
