@@ -154,7 +154,7 @@ structure CLA = CommandLineArgs
 fun usage () =
   let
     val msg =
-      "usage: dedup [--verbose] [--no-output] FILE\n"
+      "usage: dedup [--benchmark] FILE\n"
   in
     TextIO.output (TextIO.stdErr, msg);
     OS.Process.exit OS.Process.failure
@@ -165,8 +165,11 @@ val filename =
     [x] => x
   | _ => usage ()
 
-val beVerbose = CommandLineArgs.parseFlag "verbose"
-val noOutput = CommandLineArgs.parseFlag "no-output"
+val doBenchmark = CommandLineArgs.parseFlag "benchmark"
+
+fun bprint str =
+  if not doBenchmark then ()
+  else print (str ^ "\n")
 
 fun toWord str =
   let
@@ -183,26 +186,28 @@ fun toWord str =
 fun hash1 str = Util.hash64 (toWord str)
 fun hash2 str = Util.hash64 (toWord str + 0w1111111)
 
-fun vprint str =
-  if not beVerbose then ()
-  else TextIO.output (TextIO.stdErr, str)
-
 val (contents, tm) = Util.getTime (fn _ => ReadFile.contentsSeq filename)
-val _ = vprint ("read file in " ^ Time.fmt 4 tm ^ "s\n")
+val _ = bprint ("read file in " ^ Time.fmt 4 tm ^ "s")
 
 val (tokens, tm) = Util.getTime (fn _ => Tokenize.tokens Char.isSpace contents)
-val _ = vprint ("tokenized in " ^ Time.fmt 4 tm ^ "s\n")
+val _ = bprint ("tokenized in " ^ Time.fmt 4 tm ^ "s")
 
 val (result, tm) = Util.getTime (fn _ => dedup op= hash1 hash2 tokens)
-val _ = vprint ("deduplicated in " ^ Time.fmt 4 tm ^ "s\n")
+val _ = bprint ("deduplicated in " ^ Time.fmt 4 tm ^ "s")
 
 fun put c = TextIO.output1 (TextIO.stdOut, c)
 val _ =
-  if noOutput then ()
+  if doBenchmark then
+    let
+    in
+      bprint ("number of tokens: " ^ Int.toString (Seq.length tokens));
+      bprint ("number of unique tokens: " ^ Int.toString (Seq.length result))
+    end
   else
     let
       val (_, tm) = Util.getTime (fn _ =>
         ArraySlice.app (fn token => (print token; put #"\n")) result)
     in
-      vprint ("output in " ^ Time.fmt 4 tm ^ "s\n")
+      (* bprint ("output in " ^ Time.fmt 4 tm ^ "s") *)
+      ()
     end

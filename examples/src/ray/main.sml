@@ -396,7 +396,6 @@ val irreg : scene =
 val height = CommandLineArgs.parseInt "m" 200
 val width = CommandLineArgs.parseInt "n" 200
 val f = CommandLineArgs.parseString "f" ""
-val dop6 = CommandLineArgs.parseFlag "ppm6"
 val scene_name = CommandLineArgs.parseString "s" "rgbbox"
 val scene = case scene_name of
                 "rgbbox" => rgbbox
@@ -416,7 +415,7 @@ val t1 = Time.now ()
 
 val _ = print ("Rendering in " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
 
-val writeImage = if dop6 then image2ppm6 else image2ppm
+val writeImage = image2ppm6
 
 val _ = if f <> "" then
             let val out = TextIO.openOut f
