@@ -11,7 +11,8 @@ PROGRAMS= \
 	tokens \
 	nn \
 	dedup \
-	nqueens
+	nqueens \
+	reverb
 
 all: $(PROGRAMS)
 
