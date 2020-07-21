@@ -1,4 +1,5 @@
-/* Copyright (C) 2011-2012,2014,2016 Matthew Fluet.
+/* Copyright (C) 2020 Sam Westrick.
+ * Copyright (C) 2011-2012,2014,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -40,7 +41,6 @@ void initVectors(GC_state s, GC_thread thread) {
 
   currentChunk = HM_getChunkOf(frontier);
   assert(currentChunk == thread->currentChunk);
-  // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
@@ -77,7 +77,6 @@ void initVectors(GC_state s, GC_thread thread) {
 
       currentChunk = HM_getChunkOf(frontier);
       assert(currentChunk == thread->currentChunk);
-      // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
     }
 
     assert(isFrontierAligned(s, frontier));
@@ -136,7 +135,6 @@ void initVectors(GC_state s, GC_thread thread) {
 
     currentChunk = HM_getChunkOf(frontier);
     assert(currentChunk == thread->currentChunk);
-    // assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   }
 
   assert(isFrontierAligned(s, s->frontier));
@@ -153,7 +151,6 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == depth);
-  // assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
   assert(current == thread->currentChunk);
   assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
@@ -189,7 +186,6 @@ void initWorld(GC_state s) {
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(hh) == 0);
   assert(current == thread->currentChunk);
-  // assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
   assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
@@ -201,9 +197,6 @@ void initWorld(GC_state s) {
 void duplicateWorld (GC_state d, GC_state s) {
   d->lastMajorStatistics->bytesLive = 0;
 
-  /* SAM_NOTE: TODO:
-   * initWorld calls switchToThread, but duplicateWorld does not. Why?
-   * Is this safe? */
   initThreadAndHeap(d, 0);
 
   /* Now copy stats, heap data from original */

@@ -1,4 +1,5 @@
-/* Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
+/* Copyright (C) 2020 Sam Westrick.
+ * Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -8,29 +9,6 @@
  */
 
 #include "hierarchical-heap.h"
-
-// void growStackCurrent(GC_state s) {
-//   size_t reserved;
-//   GC_stack stack;
-
-//   reserved = sizeofStackGrowReserved(s, getStackCurrent(s));
-//   if (DEBUG_STACKS or s->controls->messages)
-//     fprintf (stderr,
-//              "[GC: Growing stack of size %s bytes to size %s bytes, using %s bytes.]\n",
-//              uintmaxToCommaString(getStackCurrent(s)->reserved),
-//              uintmaxToCommaString(reserved),
-//              uintmaxToCommaString(getStackCurrent(s)->used));
-// #if ASSERT
-//   assert(threadAndHeapOkay(s));
-//   GC_thread thread = getThreadCurrent(s);
-//   assert(s->frontier == HM_HH_getFrontier(thread));
-//   assert((size_t)(HM_HH_getLimit(thread) - HM_HH_getFrontier(thread))
-//          >= sizeofStackWithMetaData(s, reserved));
-// #endif
-//   stack = newStack(s, reserved);
-//   copyStack(s, getStackCurrent(s), stack);
-//   getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, NULL);
-// }
 
 void growStackCurrent(GC_state s) {
   size_t reserved;

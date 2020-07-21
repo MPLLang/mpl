@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2019 Sam Westrick
+/* Copyright (C) 2018-2020 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
@@ -67,8 +67,8 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void HM_HHC_collectLocal(uint32_t desiredScope) {
+  GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
@@ -87,11 +87,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  // if (!force && thread->currentDepth <= 1) {
-  //   LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
-  //   return;
-  // }
-
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
@@ -106,7 +101,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   if (minDepth == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -116,7 +110,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         "Skipping collection because minDepth > current depth (%u > %u)",
         minDepth,
         thread->currentDepth);
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -313,9 +306,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         toSpaceList->firstChunk,
         HM_getChunkStart(toSpaceList->firstChunk),
         &skipStackAndThreadObjptrPredicate,
-        // trueObjptrPredicate,
         &ssatoPredicateArgs,
-        // NULL,
         &forwardHHObjptr,
         &forwardHHObjptrArgs);
     }
@@ -498,7 +489,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
 
-// unlock_local_scope_and_return:
   releaseLocalScope(s, originalLocalScope);
   return;
 }
@@ -813,8 +803,8 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *copySize = *objectSize;
     } else {
       /* Stack. */
-      bool current;
-      size_t reservedNew;
+      // bool current;
+      // size_t reservedNew;
       GC_stack stack;
 
       assert (STACK_TAG == tag);

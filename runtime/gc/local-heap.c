@@ -1,4 +1,5 @@
-/* Copyright (C) 2014 Ram Raghunathan.
+/* Copyright (C) 2020 Sam Westrick.
+ * Copyright (C) 2014 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
@@ -31,31 +32,21 @@ void HM_exitLocalHeap (GC_state s) {
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 }
 
-void HM_ensureHierarchicalHeapAssurances(GC_state s,
-                                         bool forceGC,
-                                         size_t bytesRequested,
-                                         bool ensureCurrentLevel) {
-
+void HM_ensureHierarchicalHeapAssurances(
+  GC_state s,
+  bool forceGC,
+  size_t bytesRequested,
+  bool ensureCurrentLevel)
+{
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
-  // bool emptyHH = FALSE;
-  // bool extend = FALSE;
   bool growStack = FALSE;
-  // size_t stackBytes = 0;
 
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
       "bytesRequested: %zu, heapBytesFree: %zu",
       bytesRequested,
       heapBytesFree);
 
-  // trace pre-collection occupancy before doing anything
-  // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
-  // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
-
   if (!invariantForMutatorStack(s)) {
-    /* need to grow stack */
-    // stackBytes =
-    //     sizeofStackWithMetaData(s,
-    //                             sizeofStackGrowReserved (s, getStackCurrent (s)));
     growStack = TRUE;
   }
 
@@ -71,41 +62,28 @@ void HM_ensureHierarchicalHeapAssurances(GC_state s,
         ((void*)(s->frontier)));
   }
 
-  uint32_t desiredScope = HM_HH_desiredCollectionScope(s, thread);
+  /* If we want to force a collection, then using a desired scope
+   * of 1 will try to collect as much as possible. Otherwise, compute
+   * a desired scope based on number of allocations performed. If we
+   * haven't allocated too much, then the computed desired scope will
+   * be larger than thread->currentDepth, indicating that we should
+   * NOT collect right now.
+   */
+  uint32_t desiredScope = 1;
+  if (!forceGC) desiredScope = HM_HH_desiredCollectionScope(s, thread);
 
-  if (forceGC || desiredScope <= thread->currentDepth) {
-    /* too much allocated, so let's collect */
-    HM_HHC_collectLocal(desiredScope, forceGC);
+  if (desiredScope <= thread->currentDepth) {
+
+    HM_HHC_collectLocal(desiredScope);
 
     /* post-collection, the thread might have been moved? */
     thread = getThreadCurrent(s);
-
-    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
-    // LOG(LM_GLOBAL_LOCAL_HEAP, LL_INFO,
-    //     "%zu/%zu bytes allocated in Chunk Pool after collection",
-    //     ChunkPool_allocated(),
-    //     ChunkPool_size());
-
-    /* trace post-collection occupancy */
-    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
-    // Trace2(EVENT_CHUNKP_OCCUPANCY, ChunkPool_size(), ChunkPool_allocated());
-
-    /* I may have reached a new maxHHLCS, so check */
-    // if (s->cumulativeStatistics->maxHHLCS < newSize) {
-    //   s->cumulativeStatistics->maxHHLCS = newSize;
-    // }
-
-    /* I may have reached a new maxHHLHCS, so check */
-    // if (s->cumulativeStatistics->maxHHLCHS < hh->collectionThreshold) {
-    //   s->cumulativeStatistics->maxHHLCHS = hh->collectionThreshold;
-    // }
 
     if (NULL == thread->currentChunk) {
       /* collected everything! */
       s->frontier = NULL;
       s->limitPlusSlop = NULL;
       s->limit = NULL;
-      // emptyHH = TRUE;
     } else {
       /* SAM_NOTE: I don't use HM_HH_getFrontier/Limit here, because these have
        * assertions for the chunk frontier invariant, which might be violated
