@@ -1,11 +1,11 @@
 # MPL Examples
 
 This directory contains examples of parallel programming using MPL.
-Each example program is defined by a `.mlb` file in `src/`, typically with a
-corresponding `.sml` file of the same name. The directory `src/lib/` contains
-common functions used across all examples.
+Each example program has a corresponding subdirectory in `src/`.
+The `lib/` directory contains common functions used across all examples.
 
-To build everything, run `make` or `make -j`.
+To build everything, run `make` or `make -j`. Compiled programs are
+put into a `bin/`.
 
 ## Fibonacci
 
@@ -13,7 +13,7 @@ Calculate Fibonacci numbers with the standard recursive formula.
 For example, Fib(39) using 4 processors:
 ```
 $ make fib
-$ ./fib @mpl procs 4 -- -N 39
+$ bin/fib @mpl procs 4 -- -N 39
 ```
 This is not very practical but is a good demonstration of the basics of using MPL.
 
@@ -25,7 +25,7 @@ For example, the number of solutions on a board of size 13x13 using 4
 processors:
 ```
 $ make nqueens
-$ ./nqueens @mpl procs 4 -- -N 13
+$ bin/nqueens @mpl procs 4 -- -N 13
 ```
 
 ## Random Data
@@ -34,7 +34,7 @@ Generate an array of pseudo-random 64-bit words. Seed the randomness with
 `-seed X`. For example, 1 billion words using 4 processors:
 ```
 $ make random
-$ ./random @mpl procs 4 -- -N 1000000000 -seed 15210
+$ bin/random @mpl procs 4 -- -N 1000000000 -seed 15210
 ```
 
 ## Primes
@@ -43,7 +43,7 @@ Generate all primes up to a threshold. For example, all primes less than or
 equal to 100 million:
 ```
 $ make primes
-$ ./primes @mpl procs 4 -- -N 100000000
+$ bin/primes @mpl procs 4 -- -N 100000000
 ```
 
 ## Mergesort
@@ -51,7 +51,7 @@ $ ./primes @mpl procs 4 -- -N 100000000
 Mergesort on an array of random integers. For example:
 ```
 $ make msort
-$ ./msort @mpl procs 4 -- -N 100000000
+$ bin/msort @mpl procs 4 -- -N 100000000
 ```
 
 ## Dense Matrix Multiplication
@@ -60,41 +60,39 @@ Multiply two square matrices of size N*N. The sidelength N must be a
 power-of-two. For example:
 ```
 $ make dmm
-$ ./dmm @mpl procs 4 -- -N 1024
+$ bin/dmm @mpl procs 4 -- -N 1024
 ```
 
 ## Ray Tracing
 
 A simple ray tracer that generates MxN images in PPM format.  Use
 `-m`/`-n` for output size, `-s` to select a scene, and `-f` to specify
-the output file. By default, this outputs in P3 format (human readable);
-use `--ppm6` for P6 instead (smaller file size but not easily readable).
-For example:
+the output file. For example:
 ```
 $ make ray
-$ ./ray -f out.ppm -m 400 -n 400 -s irreg
-$ ./ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox --ppm6
+$ bin/ray -f out.ppm -m 400 -n 400 -s irreg
+$ bin/ray @mpl procs 4 -- -f out.ppm -m 1000 -n 1000 -s rgbbox
 ```
 
 ## Tokenization
 
 Parse a file into tokens identified by whitespace, writing the tokens to stdout
-separated by newlines. Pass `--verbose` to print timing info and
-`--no-output` to run the benchmark but not dump the result to stdout.
+separated by newlines. Pass `--benchmark` to print timing info and
+not dump the result to stdout.
 ```
 $ make tokens
-$ ./tokens FILE
-$ ./tokens @mpl procs 4 -- FILE --verbose --no-output
+$ bin/tokens FILE
+$ bin/tokens @mpl procs 4 -- FILE --benchmark
 ```
 
 ## Deduplication
 
 Parse a file into tokens (identified by whitespace), deduplicate the tokens,
-and write to stdout separated by newlines. Pass `--verbose` to print timing
-info and `--no-output` to run the benchmark but not dump the result to stdout.
+and write to stdout separated by newlines. Pass `--benchmark` to print timing
+info and not dump the result to stdout.
 ```
 $ make dedup
-$ ./dedup @mpl procs 4 -- FILE --verbose > result
+$ bin/dedup @mpl procs 4 -- FILE --benchmark
 ```
 
 ## Nearest Neighbors
@@ -107,6 +105,6 @@ output image. The resolution needs to be a similar order of magnitude as the
 number of points in order to see anything interesting.
 ```
 $ make nn
-$ ./nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
+$ bin/nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
 ```
 
