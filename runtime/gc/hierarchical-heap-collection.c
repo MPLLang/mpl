@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2019 Sam Westrick
+/* Copyright (C) 2018-2020 Sam Westrick
  * Copyright (C) 2015 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
@@ -67,8 +67,8 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void HM_HHC_collectLocal(uint32_t desiredScope) {
+  GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
@@ -87,11 +87,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  // if (!force && thread->currentDepth <= 1) {
-  //   LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection during sequential section");
-  //   return;
-  // }
-
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
@@ -106,7 +101,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   if (minDepth == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -116,7 +110,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         "Skipping collection because minDepth > current depth (%u > %u)",
         minDepth,
         thread->currentDepth);
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -496,7 +489,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
 
-// unlock_local_scope_and_return:
   releaseLocalScope(s, originalLocalScope);
   return;
 }
@@ -811,14 +803,20 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *copySize = *objectSize;
     } else {
       /* Stack. */
-      bool current;
-      size_t reservedNew;
+      // bool current;
+      // size_t reservedNew;
       GC_stack stack;
 
       assert (STACK_TAG == tag);
       *metaDataSize = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
+      /* SAM_NOTE:
+       * I am disabling shrinking here because it assumes that
+       * the stack is going to be copied, which doesn't work with the
+       * "stacks-in-their-own-chunks" strategy.
+       */
+#if 0
       /* RAM_NOTE: This changes with non-local collection */
       /* Check if the pointer is the current stack of my processor. */
       current = getStackCurrent(s) == stack;
@@ -833,6 +831,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
             uintmaxToCommaString(stack->used));
         stack->reserved = reservedNew;
       }
+#endif
       *objectSize = sizeof (struct GC_stack) + stack->reserved;
       *copySize = sizeof (struct GC_stack) + stack->used;
     }

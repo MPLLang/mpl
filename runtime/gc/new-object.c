@@ -127,35 +127,35 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
 
+  if (reserved > s->cumulativeStatistics->maxStackSize)
+    s->cumulativeStatistics->maxStackSize = reserved;
+
   /* Allocate and initialize the heap that will be assigned to this thread.
    * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
    * yet. */
   HM_HierarchicalHeap hh = HM_HH_new(s, depth);
 
   /* note that new heaps are initialized with one free chunk */
-  HM_chunk chunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
-  if (((size_t)HM_getChunkLimit(chunk) - (size_t)HM_getChunkFrontier(chunk))
-      < totalSize)
-  {
-    chunk = HM_allocateChunk(HM_HH_getChunkList(hh), totalSize);
-    if (NULL == chunk) {
-      DIE("Ran out of space for hierarchical heap!");
-    }
-    chunk->levelHead = hh;
+  HM_chunk tChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
+  HM_chunk sChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  if (NULL == sChunk) {
+    DIE("Ran out of space for stack allocation!");
   }
+  sChunk->levelHead = hh;
+  sChunk->mightContainMultipleObjects = FALSE;
+
+  assert(threadSize < HM_getChunkSizePastFrontier(tChunk));
+  assert(stackSize < HM_getChunkSizePastFrontier(sChunk));
+
+  pointer tFrontier = HM_getChunkFrontier(tChunk);
+  pointer sFrontier = HM_getChunkFrontier(sChunk);
 
   /* Next, allocate+init the thread within the heap that we just created. */
+  *((GC_header*)tFrontier) = GC_THREAD_HEADER;
+  GC_thread thread = (GC_thread)(tFrontier + GC_HEADER_SIZE + offsetofThread(s));
 
-  pointer frontier = HM_getChunkFrontier(chunk);
-
-  assert((size_t)(HM_getChunkLimit(chunk) - frontier) >= totalSize);
-  assert(inFirstBlockOfChunk(chunk, frontier+totalSize));
-
-  *((GC_header*)(frontier)) = GC_THREAD_HEADER;
-  GC_thread thread = (GC_thread)(frontier + GC_HEADER_SIZE + offsetofThread(s));
-
-  *((GC_header*)(frontier + threadSize)) = GC_STACK_HEADER;
-  GC_stack stack = (GC_stack)(frontier + threadSize + GC_HEADER_SIZE);
+  *((GC_header*)sFrontier) = GC_STACK_HEADER;
+  GC_stack stack = (GC_stack)(sFrontier + GC_HEADER_SIZE);
 
   stack->reserved = reserved;
   stack->used = 0;
@@ -168,10 +168,11 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->bytesAllocatedSinceLastCollection = totalSize;
   thread->bytesSurvivedLastCollection = 0;
   thread->hierarchicalHeap = hh;
-  thread->currentChunk = chunk;
+  thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
 
-  HM_HH_updateValues(thread, frontier + totalSize);
+  HM_updateChunkValues(tChunk, tFrontier + threadSize);
+  HM_updateChunkValues(sChunk, sFrontier + stackSize);
 
   return thread;
 }

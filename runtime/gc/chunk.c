@@ -479,6 +479,11 @@ size_t HM_getChunkSize(HM_chunk chunk) {
   return chunk->limit - (pointer)chunk;
 }
 
+size_t HM_getChunkSizePastFrontier(HM_chunk chunk) {
+  assert(chunk->frontier < chunk->limit);
+  return (size_t)chunk->limit - (size_t)chunk->frontier;
+}
+
 pointer HM_getChunkStart(HM_chunk chunk) {
   return (pointer)chunk + sizeof(struct HM_chunk) + chunk->startGap;
 }
