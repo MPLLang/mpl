@@ -1,5 +1,6 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/fork-join.mlb
+$(SML_LIB)/basis/mpl.mlb
 
 CommandLineArgs.sml
 Util.sml
@@ -21,3 +22,7 @@ ReadFile.sml
 Tokenize.sml
 
 PPM.sml
+
+Parse.sml
+NewWaveIO.sml
+Signal.sml

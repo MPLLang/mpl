@@ -108,3 +108,12 @@ $ make nn
 $ bin/nn @mpl procs 4 -- -N 10000 -output result.ppm -resolution 1000
 ```
 
+## Reverb
+
+Applies an artificial reverberation effect to a `.wav` sound file. At the
+moment, it only supports either 8-bit or 16-bit PCM, and if there
+are multiple channels, these will be mixed into a mono-channel output.
+```
+$ make reverb
+$ bin/reverb @mpl procs 4 -- INPUT.wav -output OUTPUT.wav
+```
