@@ -117,3 +117,16 @@ are multiple channels, these will be mixed into a mono-channel output.
 $ make reverb
 $ bin/reverb @mpl procs 4 -- INPUT.wav -output OUTPUT.wav
 ```
+
+## Seam-carving
+
+Seam-carving is a content-aware image resizing algorithm that
+rescales an image while attempting to preserve the interesting
+features of the image. This implementation removes vertical seams
+from a `.ppm` given as input. Use `-num-seams` to specify
+how many seams to remove, and `-output` to see a visualization of
+the process.
+```
+$ make seam-carve
+$ bin/seam-carve @mpl procs 4 -- INPUT.ppm -output OUTPUT.gif -num-seams 100
+```

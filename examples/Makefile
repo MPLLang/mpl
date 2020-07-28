@@ -12,7 +12,8 @@ PROGRAMS= \
 	nn \
 	dedup \
 	nqueens \
-	reverb
+	reverb \
+	seam-carve
 
 all: $(PROGRAMS)
 
