@@ -413,18 +413,21 @@ bool checkLocalScheduler (GC_state s) {
 }
 
 HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
+
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
-  while(HM_HH_getDepth(currentHeap) > depth) {
+  while(currentHeap!=NULL && HM_HH_getDepth (currentHeap) != depth) {
     currentHeap = currentHeap->nextAncestor;
   }
 
-  if(HM_HH_getDepth(currentHeap) < depth) {
-    // LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
+  if(currentHeap==NULL)
     return NULL;
-  }
+  assert(HM_HH_getDepth(currentHeap) == depth);
+  // if(HM_HH_getDepth(currentHeap) < depth) {
+    // LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
+    // return NULL;
+  // }
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
-
   if(cp == NULL
     || cp->isCollecting
     || cp->snapLeft == BOGUS_OBJPTR
@@ -452,16 +455,18 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     assert(HM_HH_getDepth(currentHeap) == depth);
     return currentHeap;
   }
-
   // This point is reachable only after the fork is completed.
   assert(HM_HH_getDepth(currentHeap) == depth);
 
   return currentHeap;
 }
 
-void CC_collectAtRoot(GC_thread thread) {
-  // return;
+void CC_collectAtRoot(pointer threadp) {
   GC_state s = pthread_getspecific (gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+
+
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   int depth = 1;
 
@@ -469,7 +474,8 @@ void CC_collectAtRoot(GC_thread thread) {
     return;
   }
 
-  assert(thread->currentDepth!=0);
+  if(thread->currentDepth<=0)
+    return;
 
   HM_HierarchicalHeap heap = claimHeap(thread, depth);
   if (heap == NULL) {
@@ -558,7 +564,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     return;
   }
 
-  assert(s->currentThread == thread);
+  assert(getThreadCurrent(s) == thread)
   printf("collecting seq : %p\n", heap);
   assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
