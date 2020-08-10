@@ -238,13 +238,18 @@ struct
 
         val () = DE.decheckSetTid tidLeft
         val fr = result f
+        val tidLeft = DE.decheckGetTid thread
 
-        val gr =
+        val (gr, tidRight) =
           if popDiscard () then
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
             ; DE.decheckSetTid tidRight
-            ; result g
+            ; let
+                val gr = result g
+              in
+                (gr, DE.decheckGetTid thread)
+              end
             )
           else
             ( clear () (* this should be safe after popDiscard fails? *)
@@ -252,12 +257,15 @@ struct
             ; case HM.refDerefNoBarrier rightSide of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME (gr, t) =>
-                  ( HH.mergeThreads (thread, t)
-                  ; setQueueDepth (myWorkerId ()) depth
-                  ; HH.promoteChunks thread
-                  ; HH.setDepth (thread, depth)
-                  ; gr
-                  )
+                  let
+                    val tr = DE.decheckGetTid t
+                  in
+                    HH.mergeThreads (thread, t);
+                    setQueueDepth (myWorkerId ()) depth;
+                    HH.promoteChunks thread;
+                    HH.setDepth (thread, depth);
+                    (gr, tr)
+                  end
             )
 
         val () = DE.decheckJoin (tidLeft, tidRight)

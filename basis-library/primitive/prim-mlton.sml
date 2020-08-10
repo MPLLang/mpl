@@ -416,6 +416,9 @@ structure Thread =
       val decheckSetTid = _import "GC_HH_decheckSetTid" runtime private:
         GCState.t * Word64.word -> unit;
 
+      val decheckGetTid = _import "GC_HH_decheckGetTid" runtime private:
+        GCState.t * thread -> Word64.word;
+
       val decheckJoin = _import "GC_HH_decheckJoin" runtime private:
         GCState.t * Word64.word * Word64.word -> unit;
    end

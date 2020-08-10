@@ -59,6 +59,8 @@ signature MLTON_THREAD =
       (* disentanglement checking *)
       structure Disentanglement :
         sig
+          type thread = Basic.t
+
           (* fork the current thread ID, returning the two child IDs *)
           val decheckFork : unit -> Word64.word * Word64.word
 
@@ -67,6 +69,9 @@ signature MLTON_THREAD =
 
           (* set the current thread ID *)
           val decheckSetTid : Word64.word -> unit
+
+          (* get the current thread ID of a thread *)
+          val decheckGetTid : thread -> Word64.word
         end
 
       type 'a t

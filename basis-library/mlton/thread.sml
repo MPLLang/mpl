@@ -79,6 +79,8 @@ end
 
 structure Disentanglement =
 struct
+  type thread = Basic.t
+
   fun decheckFork () =
     let
       val left = ref (0w0: Word64.word)
@@ -92,6 +94,8 @@ struct
     Prim.decheckJoin (gcState (), left, right)
 
   fun decheckSetTid tid = Prim.decheckSetTid (gcState (), tid)
+
+  fun decheckGetTid thread = Prim.decheckGetTid (gcState (), thread)
 end
 
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =

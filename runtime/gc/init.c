@@ -406,6 +406,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->wsQueueTop = BOGUS_OBJPTR;
   s->wsQueueBot = BOGUS_OBJPTR;
 
+  // s->decheckSyncDepthsLen = 64;
+  // s->decheckSyncDepths =
+  //   (uint32_t*) malloc(s->decheckSyncDepthsLen * sizeof(uint32_t));
+
   s->lastMajorStatistics = newLastMajorStatistics();
 
   s->numberOfProcs = 1;
@@ -529,6 +533,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
+  // d->decheckSyncDepthsLen = s->decheckSyncDepthsLen;
+  // d->decheckSyncDepths =
+  //   (uint32_t*) malloc(d->decheckSyncDepthsLen * sizeof(uint32_t));
   HM_initChunkList(getFreeListSmall(d));
   HM_initChunkList(getFreeListLarge(d));
   HM_initChunkList(getFreeListExtraSmall(d));

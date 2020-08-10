@@ -26,7 +26,9 @@ typedef union {
 
 PRIVATE void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right);
 PRIVATE void GC_HH_decheckSetTid(GC_state s, uint64_t tid);
+PRIVATE uint64_t GC_HH_decheckGetTid(GC_state s, objptr thread);
 PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
+// PRIVATE void GC_HH_copySyncDepthsFrom(GC_state s, uint32_t victim, uint32_t stealDepth);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
@@ -34,6 +36,9 @@ PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
 
 void decheckInit(GC_state s);
 void decheckRead(GC_state s, objptr ptr);
+
+// void     decheckSetSyncDepth(GC_state s, uint32_t pathLen, uint32_t syncDepth);
+// uint32_t decheckGetSyncDepth(GC_state s, uint32_t pathLen);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

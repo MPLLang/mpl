@@ -42,6 +42,9 @@ static inline uint32_t norm_path(decheck_tid_t tid) {
     return tid.internal.path & ((1 << (td+1)) - 1);
 }
 
+/* SAM_NOTE: TODO: implement this in SML and avoid needing to allocate
+ * refs just to pass values by destination-passing through the FFI.
+ */
 void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
     GC_thread thread = getThreadCurrent(s);
     decheck_tid_t tid = thread->decheckState;
@@ -70,6 +73,11 @@ void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
     synch_depths[p] = dag_depth(tid);
 }
 
+uint64_t GC_HH_decheckGetTid(GC_state s, objptr threadp) {
+  GC_thread thread = threadObjptrToStruct(s, threadp);
+  return thread->decheckState.bits;
+}
+
 void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
     decheck_tid_t t1;
     t1.bits = left;
@@ -81,11 +89,15 @@ void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
     uint32_t p2 = norm_path(t2);
     unsigned int td = tree_depth(t1) - 1;
     unsigned int dd = MAX(synch_depths[p1], synch_depths[p2]) + 1;
+    assert(dag_depth(t1) == synch_depths[p1]);
+    assert(dag_depth(t2) == synch_depths[p2]);
     decheck_tid_t tid;
     tid.internal.path = t1.internal.path | (1 << td);
     tid.internal.depth = (dd << 5) + td;
     thread->decheckState = tid;
     synch_depths[norm_path(tid)] = dd;
+
+    // decheckSetSyncDepth(s, tree_depth(tid), dd);
 }
 
 static bool isOrdered(decheck_tid_t t1, decheck_tid_t t2) {
@@ -126,3 +138,28 @@ void decheckRead(GC_state s, objptr ptr) {
         exit(-1);
     }
 }
+
+#if 0
+void GC_HH_copySyncDepthsFrom(GC_state s, uint32_t victim, uint32_t stealDepth) {
+  if (stealDepth > s->decheckSyncDepthsLen) {
+    DIE("attempted to copy sync depths up to %"PRIu32, stealDepth);
+  }
+  uint32_t* from = s->procStates[victim].decheckSyncDepths;
+  uint32_t* to = s->decheckSyncDepths;
+  memcpy(to, from, stealDepth * sizeof(uint32_t));
+}
+
+void decheckSetSyncDepth(GC_state s, uint32_t pathLen, uint32_t syncDepth) {
+  if (pathLen >= s->decheckSyncDepthsLen) {
+    DIE("attempted to set syncDepths[%"PRIu32"] := %"PRIu32, pathLen, syncDepth);
+  }
+  s->decheckSyncDepths[pathLen] = syncDepth;
+}
+
+uint32_t decheckGetSyncDepth(GC_state s, uint32_t pathLen) {
+  if (pathLen >= s->decheckSyncDepthsLen) {
+    DIE("attempted to get syncDepths[%"PRIu32"]", pathLen);
+  }
+  return s->decheckSyncDepths[pathLen];
+}
+#endif
