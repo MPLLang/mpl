@@ -136,14 +136,7 @@ void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
     assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
 }
 
-// static inline uint32_t maskSize(uint32_t x) {
-//   uint32_t count = 0;
-//   while (x != 0) {
-//     x = x >> 1;
-//     count++;
-//   }
-//   return count;
-// }
+#if ASSERT
 
 static inline int msbPosition(uint32_t x) {
   int i = 0;
@@ -167,16 +160,50 @@ static inline int lcaLen(uint32_t p1, uint32_t p2) {
   return i;
 }
 
+#endif
+
+/* Very fancy bit hack. Finds the index of one set bit. From
+ *   https://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
+ * Based on info from the paper:
+ *   Using de Bruijn Sequences to Index 1 in a Computer Word
+ *   by Charles E. Leiserson, Harald Prokof, and Keith H. Randall.
+ */
+// static const int DeBruijnBitPosition[32] =
+// {
+//   0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+//   31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+// };
+// static inline int bitIndex(uint32_t v) {
+//   return DeBruijnBitPosition[(v * 0x077CB531U) >> 27];
+// }
+
+// static inline int bitIndex(uint32_t x) {
+//   return 31 - __builtin_clz(x);
+// }
+
+static inline int bitIndex(uint32_t x) {
+  return __builtin_ctz(x);
+}
+
 static bool isOrdered(GC_thread thread, decheck_tid_t t1)
 {
   uint32_t p1 = norm_path(t1);
+  uint32_t p1mask = (1 << tree_depth(t1)) - 1;
   uint32_t p2 = norm_path(thread->decheckState);
+  uint32_t p2mask = (1 << tree_depth(thread->decheckState)) - 1;
+
   if (p1 == p2)
     return TRUE;
-  int llen = lcaLen(p1, p2);
-  int lca_mask = (1 << llen) - 1;
-  // int x = p1 ^ p2;
-  // int lca_mask = (x & -x) - 1;
+
+  uint32_t shared_mask = p1mask & p2mask;
+  uint32_t shared_upper_bit = shared_mask+1;
+
+  uint32_t x = ((p1 ^ p2) & shared_mask) | shared_upper_bit;
+  uint32_t lca_bit = x & -x;
+  uint32_t lca_mask = lca_bit-1;
+  int llen = bitIndex(lca_bit);
+  assert(llen == lcaLen(p1, p2));
+
   uint32_t lca_path = (p1 & lca_mask) | (lca_mask + 1);
   assert(lca_path < MAX_PATHS);
   assert(decheckGetSyncDepth(thread, llen) == synch_depths[lca_path]);
