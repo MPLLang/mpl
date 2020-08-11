@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2019 Sam Westrick
+/* Copyright (C) 2018-2020 Sam Westrick
  * Copyright (C) 2014-2016 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
@@ -12,6 +12,8 @@
 #define THREAD_H_
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+
+#define DECHECK_DEPTHS_LEN 32
 
 /*
  * Thread objects are normal objects with the following layout:
@@ -45,6 +47,7 @@ typedef struct GC_thread {
   uint32_t currentDepth;
 
   decheck_tid_t decheckState;
+  uint32_t decheckSyncDepths[DECHECK_DEPTHS_LEN];
 
   size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
@@ -64,6 +67,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
                     sizeof(decheck_tid_t) + // disentanglement checker state
+                    DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap

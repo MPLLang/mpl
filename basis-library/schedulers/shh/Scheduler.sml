@@ -220,6 +220,7 @@ struct
 
         fun g' () =
           let
+            val () = DE.copySyncDepthsFromThread (thread, depth+1)
             val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()

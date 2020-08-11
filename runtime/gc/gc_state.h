@@ -39,8 +39,6 @@ struct GC_state {
   objptr wsQueue; /* The work-stealing queue for this processor */
   objptr wsQueueTop;
   objptr wsQueueBot;
-  // uint32_t *decheckSyncDepths;
-  // uint32_t decheckSyncDepthsLen;
   GC_frameInfo frameInfos; /* Array of frame infos. */
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct HM_chunkList freeListSmall;

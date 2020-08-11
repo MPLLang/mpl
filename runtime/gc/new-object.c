@@ -111,6 +111,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->decheckState = DECHECK_BOGUS_TID;
+  memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -170,6 +171,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->currentChunk = chunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->decheckState = DECHECK_BOGUS_TID;
+  memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
 
   HM_HH_updateValues(thread, frontier + totalSize);
 

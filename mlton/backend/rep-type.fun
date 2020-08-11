@@ -411,6 +411,16 @@ structure ObjectType =
 
       val thread = fn () =>
          let
+            (* see in runtime/gc/thread.h:
+             * #define DECHECK_DEPTHS_LEN 32
+             *)
+            val numDecheckSyncDepths = 32
+
+            val bytesDecheckSyncDepths =
+               Bytes.fromIntInf (IntInf.*
+                 (numDecheckSyncDepths,
+                  Bytes.toIntInf (Bits.toBytes (Type.width Type.word32))))
+
             val padding =
                let
                   val align =
@@ -451,6 +461,7 @@ structure ObjectType =
                         bytesExnStack +
                         bytesCurrentDepth +
                         bytesDecheckState +
+                        bytesDecheckSyncDepths +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
@@ -473,6 +484,7 @@ structure ObjectType =
                                                Type.exnStack (),
                                                Type.word32,
                                                Type.word64,
+                                               Type.bits (Bytes.toBits bytesDecheckSyncDepths),
                                                Type.csize (),
                                                Type.csize (),
                                                Type.cpointer (),

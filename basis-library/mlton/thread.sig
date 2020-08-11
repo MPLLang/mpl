@@ -72,6 +72,9 @@ signature MLTON_THREAD =
 
           (* get the current thread ID of a thread *)
           val decheckGetTid : thread -> Word64.word
+
+          (* arguments are (victim thread, steal depth) *)
+          val copySyncDepthsFromThread : thread * int -> unit
         end
 
       type 'a t

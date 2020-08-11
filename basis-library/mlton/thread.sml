@@ -96,6 +96,9 @@ struct
   fun decheckSetTid tid = Prim.decheckSetTid (gcState (), tid)
 
   fun decheckGetTid thread = Prim.decheckGetTid (gcState (), thread)
+
+  fun copySyncDepthsFromThread (victim, stealDepth) =
+    Prim.copySyncDepthsFromThread (gcState (), victim, Word32.fromInt stealDepth)
 end
 
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
