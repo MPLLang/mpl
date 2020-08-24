@@ -212,6 +212,8 @@ pointer HM_getChunkLimit(HM_chunk chunk);
  */
 size_t HM_getChunkSize(HM_chunk chunk);
 
+size_t HM_getChunkSizePastFrontier(HM_chunk chunk);
+
 /**
  * This function returns the start of allocable area of the chunk (pointer to
  * the first byte that can be allocated), usually used as the initial heap

@@ -6,10 +6,6 @@ void Parallel_init (void) {
   GC_state s = pthread_getspecific (gcstate_key);
 
   if (!Proc_isInitialized (s)) {
-    for (uint32_t proc = 1; proc < s->numberOfProcs; proc++) {
-      getThreadCurrent(&(s->procStates[proc]))->currentDepth = 1;
-    }
-
     /* Now wake them up! */
     Proc_signalInitialization (s);
   }

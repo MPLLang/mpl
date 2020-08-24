@@ -46,6 +46,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->bytesMarkCompacted = 0;
   cumulativeStatistics->bytesScannedMinor = 0;
   cumulativeStatistics->bytesHHLocaled = 0;
+  cumulativeStatistics->bytesReclaimedByLocal = 0;
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
   cumulativeStatistics->maxHeapSize = 0;

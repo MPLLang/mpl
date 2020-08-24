@@ -11,18 +11,25 @@ PROGRAMS= \
 	tokens \
 	nn \
 	dedup \
-	nqueens
+	nqueens \
+	reverb \
+	seam-carve
 
 all: $(PROGRAMS)
 
-$(PROGRAMS:=.dbg): %.dbg: src/* src/lib/*
-	$(MPL) $(FLAGS) -debug true -debug-runtime true -keep g -output $@ src/$*.mlb
+$(PROGRAMS): %: phony
+	@mkdir -p bin
+	$(MPL) $(FLAGS) -output bin/$* src/$*/sources.mlb
+	@echo "successfully built bin/$*"
+
+$(PROGRAMS:=.dbg): %.dbg: phony
+	@mkdir -p bin
+	$(MPL) $(FLAGS) -debug true -debug-runtime true -keep g -output bin/$*.dbg src/$*/sources.mlb
 	@echo "successfully built $@"
 
-$(PROGRAMS): %: src/* src/lib/*
-	$(MPL) $(FLAGS) -output $* src/$*.mlb
-	@echo "successfully built $*"
+.PHONY: clean phony
 
-.PHONY: clean
+phony:
+
 clean:
-	rm -f $(PROGRAMS)
+	rm -rf bin/

@@ -16,7 +16,8 @@ bool invariantForGC(__attribute__((unused)) GC_state s) {
 
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
-  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier));
+  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
+      && (TRUE == HM_getChunkOf(s->frontier)->mightContainMultipleObjects);
 }
 
 #if ASSERT
@@ -31,7 +32,8 @@ bool strongInvariantForMutatorFrontier (GC_state s) {
 bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
   return (getStackTop (s, stack)
-          <= getStackLimit (s, stack) + getStackTopFrameSize (s, stack));
+          <= getStackLimit (s, stack) + getStackTopFrameSize (s, stack))
+      && (FALSE == HM_getChunkOf((pointer)stack)->mightContainMultipleObjects);
 }
 
 #if ASSERT
