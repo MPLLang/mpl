@@ -7,4 +7,5 @@
 signature MPL =
 sig
   structure File: MPL_FILE
+  structure GC: MPL_GC
 end

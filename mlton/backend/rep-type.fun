@@ -439,6 +439,8 @@ structure ObjectType =
                      Bits.toBytes (Type.width Type.word32)
                   val bytesDecheckState =
                      Bits.toBytes (Type.width Type.word64)
+                  val bytesMinLocalCollectionDepth =
+                     Bits.toBytes (Type.width Type.word32)
                   val bytesAllocatedSinceLastCollection =
                      Bits.toBytes (Control.Target.Size.csize ())
                   val bytesSurvivedLastCollection =
@@ -462,6 +464,7 @@ structure ObjectType =
                         bytesCurrentDepth +
                         bytesDecheckState +
                         bytesDecheckSyncDepths +
+                        bytesMinLocalCollectionDepth +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
@@ -485,6 +488,7 @@ structure ObjectType =
                                                Type.word32,
                                                Type.word64,
                                                Type.bits (Bytes.toBits bytesDecheckSyncDepths),
+                                               Type.word32,
                                                Type.csize (),
                                                Type.csize (),
                                                Type.cpointer (),

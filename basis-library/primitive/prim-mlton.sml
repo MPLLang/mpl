@@ -148,8 +148,13 @@ structure GC =
       val setSummary = _import "GC_setControlsSummary" runtime private: GCState.t * bool -> unit;
       val unpack = _import "GC_unpack" runtime private: GCState.t -> unit;
 
+      (* SAM_NOTE: TODO: move these to prim-mpl.sml *)
       val getLocalGCMillisecondsOfProc = _import "GC_getLocalGCMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
       val getPromoMillisecondsOfProc = _import "GC_getPromoMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsNumLocalGCsOfProc = _import "GC_getCumulativeStatisticsNumLocalGCsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsBytesAllocatedOfProc = _import "GC_getCumulativeStatisticsBytesAllocatedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
+      "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
    end
 
 structure HM =
@@ -407,6 +412,7 @@ structure Thread =
 
       val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
       val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
+      val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
 
@@ -424,6 +430,8 @@ structure Thread =
 
       val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
         runtime private: GCState.t * thread * Word32.word -> unit;
+
+      val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word32.word -> unit;
    end
 
 structure Weak =

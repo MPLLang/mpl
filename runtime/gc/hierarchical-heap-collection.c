@@ -76,8 +76,8 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void HM_HHC_collectLocal(uint32_t desiredScope) {
+  GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
 
@@ -96,11 +96,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     return;
   }
 
-  if (!force && thread->currentDepth <= 1) {
-    LOG(LM_HH_COLLECTION, LL_DEBUG, "Skipping collection during sequential section");
-    return;
-  }
-
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
@@ -108,14 +103,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   uint32_t minDepth = originalLocalScope;
   // claim as many levels as we can, but only as far as desired
   while (minDepth > desiredScope &&
-         minDepth > s->controls->hhConfig.minLocalDepth &&
+         minDepth > thread->minLocalCollectionDepth &&
          tryClaimLocalScope(s)) {
     minDepth--;
   }
 
   if (minDepth == 0) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -125,7 +119,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         "Skipping collection because minDepth > current depth (%u > %u)",
         minDepth,
         thread->currentDepth);
-    // goto unlock_local_scope_and_return;
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -187,18 +180,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   /* =====================================================================
    * logging */
   size_t sizesBefore[maxDepth+1];
-  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO))
+  for (uint32_t i = 0; i <= maxDepth; i++)
+    sizesBefore[i] = 0;
+  size_t totalSizeBefore = 0;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
   {
-    for (uint32_t i = 0; i <= maxDepth; i++)
-      sizesBefore[i] = 0;
-
-    for (HM_HierarchicalHeap cursor = hh;
-         NULL != cursor;
-         cursor = cursor->nextAncestor)
-    {
-      uint32_t d = HM_HH_getDepth(cursor);
-      sizesBefore[d] = HM_getChunkListSize(HM_HH_getChunkList(cursor));
-    }
+    uint32_t d = HM_HH_getDepth(cursor);
+    size_t sz = HM_getChunkListSize(HM_HH_getChunkList(cursor));
+    sizesBefore[d] = sz;
+    totalSizeBefore += sz;
   }
 
   /* ===================================================================== */
@@ -206,9 +198,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   /* SAM_NOTE: the name "promotion" is no longer true but these trace
    * events are hardcoded, ugh. */
   Trace0(EVENT_PROMOTION_ENTER);
-  if (needGCTime(s)) {
-    timespec_now(&startTime);
-  }
+  timespec_now(&startTime);
 
   /* For each remembered entry, if possible, unpin and discard the entry.
    * otherwise, copy the remembered entry to the toSpace remembered set. */
@@ -224,19 +214,18 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   // assertInvariants(thread);
 
-  if (needGCTime(s)) {
-    timespec_now(&stopTime);
-    timespec_sub(&stopTime, &startTime);
-    timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
-  }
+  timespec_now(&stopTime);
+  timespec_sub(&stopTime, &startTime);
+  timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
   Trace0(EVENT_PROMOTION_LEAVE);
 
   /* ===================================================================== */
 
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
-    timespec_now(&startTime);
   }
+
+  timespec_now(&startTime);
 
   LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
@@ -328,12 +317,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
    * I skip the stack and thread since they are already forwarded as roots
    * above
    */
-  struct SSATOPredicateArgs ssatoPredicateArgs = {
-    .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
-                                            NULL),
-    .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
-                                             NULL)
-  };
+  // struct SSATOPredicateArgs ssatoPredicateArgs = {
+  //   .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
+  //                                           NULL),
+  //   .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
+  //                                            NULL)
+  // };
 
   /* off-by-one to prevent underflow */
   uint32_t depth = thread->currentDepth+1;
@@ -360,8 +349,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
         s,
         toSpaceList->firstChunk,
         HM_getChunkStart(toSpaceList->firstChunk),
-        &skipStackAndThreadObjptrPredicate,
-        &ssatoPredicateArgs,
+        // &skipStackAndThreadObjptrPredicate,
+        // &ssatoPredicateArgs,
+        &trueObjptrPredicate,
+        NULL,
         &forwardHHObjptr,
         &forwardHHObjptrArgs);
     }
@@ -516,23 +507,23 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
 
   thread->bytesAllocatedSinceLastCollection = 0;
 
-  /* ===================================================================== */
+  // sizes info and stats
+  size_t totalSizeAfter = 0;
 
-  if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO))
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
   {
-    for (HM_HierarchicalHeap cursor = hh;
-         NULL != cursor;
-         cursor = cursor->nextAncestor)
+    uint32_t i = HM_HH_getDepth(cursor);
+
+    HM_chunkList lev = HM_HH_getChunkList(cursor);
+    size_t sizeAfter = HM_getChunkListSize(lev);
+    totalSizeAfter += sizeAfter;
+
+    if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO) &&
+        (sizesBefore[i] != 0 || sizeAfter != 0))
     {
-      uint32_t i = HM_HH_getDepth(cursor);
       size_t sizeBefore = sizesBefore[i];
-
-      HM_chunkList lev = HM_HH_getChunkList(cursor);
-      size_t sizeAfter = HM_getChunkListSize(lev);
-
-      if (sizeBefore == 0 && sizeAfter == 0)
-        continue;
-
       const char *sign;
       size_t diff;
       if (sizeBefore > sizeAfter) {
@@ -553,21 +544,28 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
     }
   }
 
+  if (totalSizeAfter > totalSizeBefore) {
+    // whoops?
+  } else {
+    s->cumulativeStatistics->bytesReclaimedByLocal +=
+      (totalSizeBefore - totalSizeAfter);
+  }
+
   /* enter statistics if necessary */
+
+  timespec_now(&stopTime);
+  timespec_sub(&stopTime, &startTime);
+  timespec_add(&(s->cumulativeStatistics->timeLocalGC), &stopTime);
+
   if (needGCTime(s)) {
     if (detailedGCTime(s)) {
       stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
     }
-
     /*
      * RAM_NOTE: small extra here since I recompute delta, but probably not a
      * big deal...
      */
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
-
-    timespec_now(&stopTime);
-    timespec_sub(&stopTime, &startTime);
-    timespec_add(&(s->cumulativeStatistics->timeLocalGC), &stopTime);
   }
 
   TraceResetCopy();
@@ -576,7 +574,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope, bool force) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
 
-// unlock_local_scope_and_return:
   releaseLocalScope(s, originalLocalScope);
   return;
 }
@@ -1072,14 +1069,20 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
       *copySize = *objectSize;
     } else {
       /* Stack. */
-      bool current;
-      size_t reservedNew;
+      // bool current;
+      // size_t reservedNew;
       GC_stack stack;
 
       assert (STACK_TAG == tag);
       *metaDataSize = GC_STACK_METADATA_SIZE;
       stack = (GC_stack)p;
 
+      /* SAM_NOTE:
+       * I am disabling shrinking here because it assumes that
+       * the stack is going to be copied, which doesn't work with the
+       * "stacks-in-their-own-chunks" strategy.
+       */
+#if 0
       /* RAM_NOTE: This changes with non-local collection */
       /* Check if the pointer is the current stack of my processor. */
       current = getStackCurrent(s) == stack;
@@ -1094,6 +1097,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
             uintmaxToCommaString(stack->used));
         stack->reserved = reservedNew;
       }
+#endif
       *objectSize = sizeof (struct GC_stack) + stack->reserved;
       *copySize = sizeof (struct GC_stack) + stack->used;
     }

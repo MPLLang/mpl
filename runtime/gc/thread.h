@@ -49,6 +49,8 @@ typedef struct GC_thread {
   decheck_tid_t decheckState;
   uint32_t decheckSyncDepths[DECHECK_DEPTHS_LEN];
 
+  uint32_t minLocalCollectionDepth;
+
   size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
 
@@ -68,6 +70,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(uint32_t) + // currentDepth
                     sizeof(decheck_tid_t) + // disentanglement checker state
                     DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
+                    sizeof(uint32_t) + // minLocalCollectionDepth
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
@@ -89,6 +92,14 @@ PRIVATE Word32 GC_HH_getDepth(pointer thread);
 PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
 PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
+PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
+
+/* Moves a "new" thread to the appropriate depth, before we switch to it.
+ * This essentially puts the thread (and its stack) into the hierarchy.
+ * Also sets the depth of the thread.
+ */
+PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word32 depth);
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

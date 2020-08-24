@@ -1,4 +1,5 @@
-/* Copyright (C) 2011-2012,2014,2016 Matthew Fluet.
+/* Copyright (C) 2020 Sam Westrick.
+ * Copyright (C) 2011-2012,2014,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -39,7 +40,7 @@ void initVectors(GC_state s, GC_thread thread) {
   limit = s->limitPlusSlop;
 
   currentChunk = HM_getChunkOf(frontier);
-  assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+  assert(currentChunk == thread->currentChunk);
   assert(0 == thread->currentDepth);
 
   for (i = 0; i < s->vectorInitsLength; i++) {
@@ -61,7 +62,7 @@ void initVectors(GC_state s, GC_thread thread) {
     /* Extend with a new chunk, if there is not enough free space or if we have
      * crossed a block boundary. */
     if ((size_t)(limit - frontier) < objectSize ||
-        !inFirstBlockOfChunk(currentChunk, frontier))
+        !inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
     {
       HM_HH_updateValues(thread, frontier);
       if (!HM_HH_extend(s, thread, objectSize)) {
@@ -75,12 +76,12 @@ void initVectors(GC_state s, GC_thread thread) {
       limit = s->limitPlusSlop;
 
       currentChunk = HM_getChunkOf(frontier);
-      assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+      assert(currentChunk == thread->currentChunk);
     }
 
     assert(isFrontierAligned(s, frontier));
     assert((size_t)(limit - frontier) >= objectSize);
-    assert(inFirstBlockOfChunk(currentChunk, frontier));
+    assert(inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE));
 
     *((GC_sequenceCounter*)(frontier)) = 0;
     frontier = frontier + GC_SEQUENCE_COUNTER_SIZE;
@@ -119,7 +120,7 @@ void initVectors(GC_state s, GC_thread thread) {
 
   /* If the last allocation passed a block boundary, we need to extend to have
    * a valid frontier. Extending with GC_HEAP_LIMIT_SLOP is arbitrary. */
-  if (!inFirstBlockOfChunk(currentChunk, frontier))
+  if (!inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
   {
     HM_HH_updateValues(thread, frontier);
     if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
@@ -133,11 +134,11 @@ void initVectors(GC_state s, GC_thread thread) {
     limit = s->limitPlusSlop;
 
     currentChunk = HM_getChunkOf(frontier);
-    assert(currentChunk == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+    assert(currentChunk == thread->currentChunk);
   }
 
   assert(isFrontierAligned(s, s->frontier));
-  assert(inFirstBlockOfChunk(currentChunk, s->frontier));
+  assert(inFirstBlockOfChunk(currentChunk, s->frontier + GC_SEQUENCE_METADATA_SIZE));
 }
 
 GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
@@ -150,7 +151,8 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == depth);
-  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(thread->hierarchicalHeap)));
+  assert(current == thread->currentChunk);
+  assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
@@ -185,7 +187,8 @@ void initWorld(GC_state s) {
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(hh) == 0);
-  assert(current == HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+  assert(current == thread->currentChunk);
+  assert(current->mightContainMultipleObjects);
   assert(inFirstBlockOfChunk(current, s->frontier));
   assert(s->frontier >= HM_getChunkFrontier(current));
   assert(s->limitPlusSlop == HM_getChunkLimit(current));
@@ -196,10 +199,7 @@ void initWorld(GC_state s) {
 void duplicateWorld (GC_state d, GC_state s) {
   d->lastMajorStatistics->bytesLive = 0;
 
-  /* SAM_NOTE: TODO:
-   * initWorld calls switchToThread, but duplicateWorld does not. Why?
-   * Is this safe? */
-  initThreadAndHeap(d, 1);
+  initThreadAndHeap(d, 0);
 
   /* Now copy stats, heap data from original */
   d->cumulativeStatistics->maxHeapSize = s->cumulativeStatistics->maxHeapSize;

@@ -38,6 +38,12 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
+void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  thread->minLocalCollectionDepth = depth;
+}
+
 void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
 
@@ -108,6 +114,30 @@ void GC_HH_promoteChunks(pointer threadp) {
   HM_HH_promoteChunks(s, thread);
 }
 
+void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  /* A few sanity checks. The thread should be a "new" thread that was
+   * just created by a call to copyThreadWithHeap.
+   *
+   * We could put in assertions to check this more thoroughly, for example
+   * we could check that the only stuff currently in the chunk of the thread
+   * is exactly the thread and its stack, and nothing else. But these sanity
+   * checks are good enough for now... */
+  assert(hh != NULL);
+  assert(HM_HH_getDepth(hh) == 0);
+  assert(HM_getChunkListFirstChunk(HM_HH_getChunkList(hh))->nextChunk ==
+         HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+  assert(HM_getChunkOf(threadp) == HM_getChunkListFirstChunk(HM_HH_getChunkList(hh)));
+  assert(HM_getChunkOf(objptrToPointer(thread->stack, NULL)) ==
+         HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+
+  thread->currentDepth = depth;
+  hh->depth = depth;
+}
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

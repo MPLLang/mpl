@@ -395,6 +395,8 @@ in
 
    ../mpl/file.sig
    ../mpl/file.sml
+   ../mpl/gc.sig
+   ../mpl/gc.sml
    ../mpl/mpl.sig
    ../mpl/mpl.sml
 
