@@ -586,7 +586,7 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
     y = HM_HH_getRemSet(hh);
   }
 
-  HM_foreachRemembered(s, y, bucketIfValid, (void*)x);
+  HM_foreachRemembered(s, y, bucketIfValidAtList, (void*)x);
   HM_appendChunkList(getFreeListSmall(s), y);
   *y = *x;
 }
