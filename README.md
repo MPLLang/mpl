@@ -178,10 +178,6 @@ Currently, MPL only supports programs that are **disentangled**, which
 (roughly speaking) is the property that concurrent threads remain oblivious
 to each other's allocations.
 
-**MPL does not yet have a checker to verify
-disentanglement, so the programmer must manually check their own
-code**.
-
 Here are a number of different ways to guarantee that your code is
 disentangled.
 - (Option 1) Use only purely functional data (no `ref`s or `array`s). This is
@@ -195,6 +191,15 @@ is very easy to check and is surprisingly general. Data races are fine!
 - (Option 3) Make sure that your program is race-free. This can be
 tricky to check but allows you to use any type of data. Many of our example
 programs are race-free.
+
+**To check that your program is disentangled**, you can use the experimental
+disentanglement checker which is currently in development. To do so, checkout
+the branch `new-de-check` and then build MPL from source. This version of
+MPL has the checker always turned on, so to check a program for disentanglement,
+you just need to compile and run your program as usual. Note that the checker
+is execution-dependent, so if your program is non-deterministic (e.g. racy),
+it's possible that the checker will not detect entanglement. **The checker is
+a work-in-progress**, so at the moment it doesn't come with any guarantees.
 
 For more information about disentanglement, see the POPL 2020 paper
 [Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf)
