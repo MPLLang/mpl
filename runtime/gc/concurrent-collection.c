@@ -564,7 +564,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
     return;
   }
 
-  assert(getThreadCurrent(s) == thread)
+  assert(getThreadCurrent(s) == thread);
   printf("collecting seq : %p\n", heap);
   assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
