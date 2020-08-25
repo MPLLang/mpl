@@ -670,10 +670,13 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
 
-// if at depth 1, use the copied stack. Otherwise, use the current thread's stack.
-  objptr stackp = (cp->stack);
+  // comment from a previous impl. which did not store stack for each level.
+  // This was done because sometimes the stack does not have all the roots, for some
+  // reason I couldn't figure out.
   // objptr stackp = isConcurrent?(cp->stack):(getStackCurrentObjptr(s));
+  objptr stackp = (cp->stack);
   forceForward(s, &(stackp), &lists);
+
 
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
   // often changes the level it is at. So it might in fact be at depth = 1. It is important that we
