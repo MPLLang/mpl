@@ -130,13 +130,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
 
-  #if ASSERT
-  HM_chunk sChunk = HM_getChunkOf(getStackCurrent(s));
-    assert(HM_getChunkFrontier(sChunk) == HM_getChunkStart(sChunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
-    assert(!sChunk->mightContainMultipleObjects);
-  #endif
-
   assertInvariants(thread);
 
   if (SUPERLOCAL == s->controls->collectionType) {
@@ -181,22 +174,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   struct HM_chunkList globalDownPtrs;
   HM_initChunkList(&globalDownPtrs);
 
-  #if ASSERT
-    sChunk = HM_getChunkOf(getStackCurrent(s));
-    assert(!sChunk->mightContainMultipleObjects);
-    assert(HM_getChunkFrontier(sChunk) == HM_getChunkStart(sChunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
-  #endif
 
   HM_deferredPromote(s, thread, &globalDownPtrs, &forwardHHObjptrArgs);
 
 
-  #if ASSERT
-    sChunk = HM_getChunkOf(getStackCurrent(s));
-    assert(!sChunk->mightContainMultipleObjects);
-    assert(HM_getChunkFrontier(sChunk) == HM_getChunkStart(sChunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
-  #endif
 
 
   hh = thread->hierarchicalHeap;
@@ -232,12 +213,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
-  #if ASSERT
-    sChunk = HM_getChunkOf(getStackCurrent(s));
-    assert(!sChunk->mightContainMultipleObjects);
-    assert(HM_getChunkFrontier(sChunk) == HM_getChunkStart(sChunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
-  #endif
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
@@ -259,12 +234,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   /* forward contents of thread (hence including stack) */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
 
-  #if ASSERT
-    assert(!sChunk->mightContainMultipleObjects);
-    sChunk = HM_getChunkOf(getStackCurrent(s));
-    assert(HM_getChunkFrontier(sChunk) == HM_getChunkStart(sChunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
-  #endif
   foreachObjptrInObject(s,
                         objptrToPointer(getThreadCurrentObjptr(s),
                                         NULL),
