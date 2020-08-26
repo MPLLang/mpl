@@ -69,7 +69,6 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 
 void HM_HHC_collectLocal(uint32_t desiredScope) {
-  // return;
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap* hh = thread->hierarchicalHeap;
@@ -150,10 +149,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     .stacksCopied = 0
   };
 
-  if(forwardHHObjptrArgs.minDepth == 9 && forwardHHObjptrArgs.maxDepth ==9 ) {
-    printf("collecting at depth 9\n");
-  }
-
   size_t sizesBefore[maxDepth+1];
   for (uint32_t i = 0; i <= maxDepth; i++)
     sizesBefore[i] = 0;
@@ -173,12 +168,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   struct HM_chunkList globalDownPtrs;
   HM_initChunkList(&globalDownPtrs);
-
-
   HM_deferredPromote(s, thread, &globalDownPtrs, &forwardHHObjptrArgs);
-
-
-
 
   hh = thread->hierarchicalHeap;
 
@@ -502,9 +492,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       "END");
 
   releaseLocalScope(s, originalLocalScope);
-
-
-
   return;
 }
 
@@ -579,14 +566,6 @@ objptr relocateObject(
   args->bytesCopied += copyBytes;
   args->objectsCopied++;
 
-  #if ASSERT
-  pointer temp = objptrToPointer(getFwdPtr(p), NULL);
-  HM_chunk tChunk = (HM_chunk)blockOf(temp);
-  if(tChunk->magic != CHUNK_MAGIC) {
-    printf("%s\n", "this is farling");
-    assert(0);
-  }
-  #endif
   /* use the forwarding pointer */
   return getFwdPtr(p);
 }
