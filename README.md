@@ -1,7 +1,8 @@
 # MPL
 
 MaPLe (MPL) is an extension of the [MLton](http://mlton.org)
-compiler for Standard ML which implements support for nested parallelism.
+compiler for Standard ML which implements support for
+nested (fork-join) parallelism.
 
 MPL is research software and is being actively developed.
 
@@ -11,8 +12,7 @@ Try out MPL with Docker:
 ```
 $ docker pull shwestrick/mpl
 $ docker run -it shwestrick/mpl /bin/bash
-...# cd examples
-...# ./primes @mpl procs 4 --
+...# examples/bin/primes @mpl procs 4 --
 ```
 
 ## Build and Install (from source)
