@@ -1,4 +1,5 @@
-## Copyright (C) 2009,2011,2013,2017-2019 Matthew Fluet.
+## Copyright (C) 2020 Sam Westrick
+ # Copyright (C) 2009,2011,2013,2017-2019 Matthew Fluet.
  # Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  #    Jagannathan, and Stephen Weeks.
  # Copyright (C) 1997-2000 NEC Research Institute.
@@ -17,13 +18,13 @@ all:
 	$(MAKE) dirs runtime
 	$(MAKE) compiler CHECK_FIXPOINT=false                     # tools0 + mlton0 -> mlton1
 	$(MAKE) script basis-no-check constants basis-check libraries
-	$(MAKE) tools    CHECK_FIXPOINT=false                     # tools0 + mlton1 -> tools1
+	# $(MAKE) tools    CHECK_FIXPOINT=false                     # tools0 + mlton1 -> tools1
 ifeq (2, $(firstword $(sort $(BOOTSTRAP_STYLE) 2)))
 	$(MAKE) compiler-clean
 	$(MAKE) compiler SELF_COMPILE=true  CHECK_FIXPOINT=false  # tools1 + mlton1 -> mlton2
 ifeq (3, $(firstword $(sort $(BOOTSTRAP_STYLE) 3)))
-	$(MAKE) tools-clean
-	$(MAKE) tools    CHECK_FIXPOINT=true                      # tools1 + mlton1 -> tools2; tools2 == tools1
+	# $(MAKE) tools-clean
+	# $(MAKE) tools    CHECK_FIXPOINT=true                      # tools1 + mlton1 -> tools2; tools2 == tools1
 	$(MAKE) compiler-clean
 	$(MAKE) compiler SELF_COMPILE=true  CHECK_FIXPOINT=true   # tools2 + mlton2 -> mlton3; mlton3 == mlton2
 endif
@@ -93,11 +94,11 @@ dirs:
 	$(MKDIR) "$(LIB)/targets/$(TARGET)/include"
 	$(MKDIR) "$(LIB)/targets/$(TARGET)/sml"
 
-.PHONY: docs
-docs:
-	$(MAKE) -C "$(SRC)/mllex" docs
-	$(MAKE) -C "$(SRC)/mlyacc" docs
-	$(MAKE) -C "$(SRC)/doc/guide"
+# .PHONY: docs
+# docs:
+# 	$(MAKE) -C "$(SRC)/mllex" docs
+# 	$(MAKE) -C "$(SRC)/mlyacc" docs
+# 	$(MAKE) -C "$(SRC)/doc/guide"
 
 define LIBRARIES_NO_CHECK_TEMPLATE
 	$(RM) "$(LIB)/sml/$(1)"
@@ -113,15 +114,9 @@ endef
 
 .PHONY: libraries-no-check
 libraries-no-check:
-	$(MAKE) -C "$(SRC)/lib/ckit-lib"
-	$(call LIBRARIES_NO_CHECK_TEMPLATE,ckit-lib,/ckit/src,)
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,cml,,'!' -path '*/tests/*')
 	$(MAKE) -C "$(SRC)/lib/mllpt-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mllpt-lib,/ml-lpt/lib,)
-	$(MAKE) -C "$(SRC)/lib/mlnlffi-lib"
-	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlnlffi-lib,,)
-	$(MAKE) -C "$(SRC)/lib/mlrisc-lib"
-	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlrisc-lib,/MLRISC,'!' -path '*/demo/*' '!' -path '*/Tools/*' '!' -path './autoload.sml' '!' -path './make*.sml')
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlyacc-lib,,)
 	$(MAKE) -C "$(SRC)/lib/smlnj-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,smlnj-lib,/smlnj-lib,'!' -path '*/examples/*' '!' -path '*/tests/*' '!' -path '*/Tests/*')
@@ -133,12 +128,7 @@ endef
 
 .PHONY: libraries-check
 libraries-check:
-	$(call LIBRARIES_CHECK_TEMPLATE,ckit-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,cml)
-	$(call LIBRARIES_CHECK_TEMPLATE,mllpt-lib)
-	$(call LIBRARIES_CHECK_TEMPLATE,mlnlffi-lib)
-	$(call LIBRARIES_CHECK_TEMPLATE,mlrisc-lib)
-	$(call LIBRARIES_CHECK_TEMPLATE,mlyacc-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,smlnj-lib)
 
 .PHONY: libraries
@@ -184,34 +174,34 @@ ifeq (mingw, $(TARGET_OS))
 	$(CP) "$(SRC)/bin/static-library.bat" "$(LIB)"
 endif
 
-ifeq (true, $(CHECK_FIXPOINT))
-define TOOLS_TEMPLATE_CHECK_FIXPOINT
-	$(DIFF) -b "$(SRC)/$(1)/$(1)$(EXE)" "$(BIN)/$(1)$(EXE)"
-endef
-else
-define TOOLS_TEMPLATE_CHECK_FIXPOINT
-endef
-endif
+# ifeq (true, $(CHECK_FIXPOINT))
+# define TOOLS_TEMPLATE_CHECK_FIXPOINT
+# 	$(DIFF) -b "$(SRC)/$(1)/$(1)$(EXE)" "$(BIN)/$(1)$(EXE)"
+# endef
+# else
+# define TOOLS_TEMPLATE_CHECK_FIXPOINT
+# endef
+# endif
 
-define TOOLS_TEMPLATE
-	$(MAKE) -C "$(SRC)/$(1)"
-	$(call TOOLS_TEMPLATE_CHECK_FIXPOINT,$(1))
-	$(CP) "$(1)/$(1)$(EXE)" "$(BIN)/"
-endef
+# define TOOLS_TEMPLATE
+# 	$(MAKE) -C "$(SRC)/$(1)"
+# 	$(call TOOLS_TEMPLATE_CHECK_FIXPOINT,$(1))
+# 	$(CP) "$(1)/$(1)$(EXE)" "$(BIN)/"
+# endef
 
-.PHONY: tools
-tools:
-	$(call TOOLS_TEMPLATE,mllex)
-	$(call TOOLS_TEMPLATE,mlyacc)
-	$(call TOOLS_TEMPLATE,mlprof)
-	$(call TOOLS_TEMPLATE,mlnlffigen)
+# .PHONY: tools
+# tools:
+# 	$(call TOOLS_TEMPLATE,mllex)
+# 	$(call TOOLS_TEMPLATE,mlyacc)
+# 	$(call TOOLS_TEMPLATE,mlprof)
+# 	$(call TOOLS_TEMPLATE,mlnlffigen)
 
-.PHONY: tools-clean
-tools-clean:
-	$(MAKE) -C "$(SRC)/mllex" clean
-	$(MAKE) -C "$(SRC)/mlyacc" clean
-	$(MAKE) -C "$(SRC)/mlprof" clean
-	$(MAKE) -C "$(SRC)/mlnlffigen" clean
+# .PHONY: tools-clean
+# tools-clean:
+# 	$(MAKE) -C "$(SRC)/mllex" clean
+# 	$(MAKE) -C "$(SRC)/mlyacc" clean
+# 	$(MAKE) -C "$(SRC)/mlprof" clean
+# 	$(MAKE) -C "$(SRC)/mlnlffigen" clean
 
 ######################################################################
 
@@ -336,17 +326,17 @@ polyml-mlton:
 
 # version target
 
-.PHONY: version
-version:
-	@echo 'Instantiating version numbers.'
-	for f in							\
-		"$(SRC)/Makefile"					\
-		"$(SRC)/mlton/Makefile"					\
-		"$(SRC)/doc/guide/Makefile"				\
-	; do								\
-		$(SED) -e "s/^MLTON_VERSION := .*/MLTON_VERSION := $(MLTON_VERSION)/" <"$$f" >z && 	\
-		mv z "$$f";						\
-	done
+# .PHONY: version
+# version:
+# 	@echo 'Instantiating version numbers.'
+# 	for f in							\
+# 		"$(SRC)/Makefile"					\
+# 		"$(SRC)/mlton/Makefile"					\
+# 		"$(SRC)/doc/guide/Makefile"				\
+# 	; do								\
+# 		$(SED) -e "s/^MLTON_VERSION := .*/MLTON_VERSION := $(MLTON_VERSION)/" <"$$f" >z && 	\
+# 		mv z "$$f";						\
+# 	done
 
 ######################################################################
 
@@ -355,24 +345,24 @@ version:
 prefix := $(PREFIX)
 exec_prefix := $(prefix)
 bindir := $(exec_prefix)/bin
-datarootdir := $(prefix)/share
-docdir := $(datarootdir)/doc/mlton
+# datarootdir := $(prefix)/share
+# docdir := $(datarootdir)/doc/mlton
 libdir := $(exec_prefix)/lib
-mandir := $(datarootdir)/man
-man1dir := $(mandir)/man1
+# mandir := $(datarootdir)/man
+# man1dir := $(mandir)/man1
 
 TBIN := $(DESTDIR)$(bindir)
 TLIB := $(DESTDIR)$(libdir)/mlton
-TMAN := $(DESTDIR)$(man1dir)
-TDOC := $(DESTDIR)$(docdir)
-TEXM := $(TDOC)/examples
+# TMAN := $(DESTDIR)$(man1dir)
+# TDOC := $(DESTDIR)$(docdir)
+# TEXM := $(TDOC)/examples
 
 TLIB_REL_TBIN := $(shell $(call TGT_REL_SRC,$(TLIB),$(TBIN)))
 
-GZIP_MAN := true
-ifeq ($(findstring $(TARGET_OS), openbsd solaris), $(TARGET_OS))
-GZIP_MAN := false
-endif
+# GZIP_MAN := true
+# ifeq ($(findstring $(TARGET_OS), openbsd solaris), $(TARGET_OS))
+# GZIP_MAN := false
+# endif
 
 # SAM_NOTE: mainline MLton also has install-docs here, but I'm removing
 # it because the docs mostly aren't relevant to MPL.
@@ -380,126 +370,120 @@ endif
 .PHONY: install
 install: install-no-strip install-strip
 
-MAN_PAGES :=  \
-	mllex.1 \
-	mlnlffigen.1 \
-	mlprof.1 \
-	mlton.1 \
-	mlyacc.1
+# MAN_PAGES :=  \
+# 	mlton.1
 
 .PHONY: install-no-strip
 install-no-strip:
-	$(MKDIR) "$(TBIN)" "$(TLIB)" "$(TMAN)"
+	$(MKDIR) "$(TBIN)" "$(TLIB)"
+	# $(MKDIR) "$(TBIN)" "$(TLIB)" "$(TMAN)"
 	$(CP) "$(BIN)/." "$(TBIN)/"
 	$(SED) \
 		-e "s;^LIB_REL_BIN=.*;LIB_REL_BIN=\"$(TLIB_REL_TBIN)\";" \
 		< "$(BIN)/$(MLTON)" > "$(TBIN)/$(MLTON)"
 	chmod a+x "$(TBIN)/$(MLTON)"
 	$(CP) "$(LIB)/." "$(TLIB)/"
-	cd "$(SRC)/man" && $(CP) $(MAN_PAGES) "$(TMAN)/"
-ifeq (true, $(GZIP_MAN))
-	cd "$(TMAN)" && $(GZIP) --force --best $(MAN_PAGES);
-endif
+# 	cd "$(SRC)/man" && $(CP) $(MAN_PAGES) "$(TMAN)/"
+# ifeq (true, $(GZIP_MAN))
+# 	cd "$(TMAN)" && $(GZIP) --force --best $(MAN_PAGES);
+# endif
 
 .PHONY: install-strip
 install-strip: install-no-strip
-	for f in "$(TLIB)/$(MLTON_OUTPUT)$(EXE)" 		\
-		"$(TBIN)/mllex$(EXE)"				\
-		"$(TBIN)/mlyacc$(EXE)"				\
-		"$(TBIN)/mlprof$(EXE)" 				\
-		"$(TBIN)/mlnlffigen$(EXE)"; do			\
+	for f in "$(TLIB)/$(MLTON_OUTPUT)$(EXE)"; do			\
 		$(STRIP) "$$f";					\
 	done
 
-REGRESSION_EXAMPLES := \
-	callcc.sml command-line.sml hello-world.sml same-fringe.sml	\
-	signals.sml size.sml taut.sml thread1.sml thread2.sml		\
-	thread-switch.sml timeout.sml
+# REGRESSION_EXAMPLES := \
+# 	callcc.sml command-line.sml hello-world.sml same-fringe.sml	\
+# 	signals.sml size.sml taut.sml thread1.sml thread2.sml		\
+# 	thread-switch.sml timeout.sml
 
 # SAM_NOTE: Need to update this for MPL.
 # It's also currently broken, because README.adoc doesn't exist anymore,
 # and some regression examples are gone.
-.PHONY: install-docs
-install-docs:
-	$(MKDIR) "$(TDOC)" "$(TDOC)/license"
-	(								\
-		cd "$(SRC)" &&						\
-		$(CP) CHANGELOG.adoc README.adoc "$(TDOC)/" &&		\
-		$(CP) LICENSE "$(TDOC)/license/MLton-LICENSE"		\
-	)
-	(								\
-		cd "$(SRC)/doc" &&					\
-		$(FIND) examples -type f '!' -name .gitignore		\
-			| $(XARGS) $(TAR) cf -				\
-			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
-	)
-	(								\
-		cd "$(SRC)/doc" &&					\
-		$(FIND) license -type f '!' -name .gitignore		\
-			| $(XARGS) $(TAR) cf -				\
-			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
-	)
-	if [ -d "$(SRC)/doc/guide/localhost" ]; then			\
-		$(CP) "$(SRC)/doc/guide/localhost" "$(TDOC)/guide";	\
-	fi
-	if [ -r "$(SRC)/doc/guide/mlton-guide.pdf" ]; then		\
-		$(CP) "$(SRC)/doc/guide/mlton-guide.pdf" "$(TDOC)/";	\
-	fi
-	if [ -r "mllex/mllex.pdf" ]; then				\
-		$(CP) "mllex/mllex.pdf" "$(TDOC)/";			\
-	fi
-	if [ -r "mlyacc/mlyacc.pdf" ]; then				\
-		$(CP) "mlyacc/mlyacc.pdf" "$(TDOC)/";			\
-	fi
-	(								\
-		cd "$(SRC)/util" &&					\
-		$(FIND) cm2mlb -type f '!' -name .gitignore		\
-			| $(XARGS) $(TAR) cf -				\
-			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
-	)
-	(								\
-		cd "$(SRC)/regression" &&				\
-		$(CP) $(REGRESSION_EXAMPLES) "$(TEXM)/"			\
-	)
+
+# .PHONY: install-docs
+# install-docs:
+# 	$(MKDIR) "$(TDOC)" "$(TDOC)/license"
+# 	(								\
+# 		cd "$(SRC)" &&						\
+# 		$(CP) CHANGELOG.adoc README.adoc "$(TDOC)/" &&		\
+# 		$(CP) LICENSE "$(TDOC)/license/MLton-LICENSE"		\
+# 	)
+# 	(								\
+# 		cd "$(SRC)/doc" &&					\
+# 		$(FIND) examples -type f '!' -name .gitignore		\
+# 			| $(XARGS) $(TAR) cf -				\
+# 			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
+# 	)
+# 	(								\
+# 		cd "$(SRC)/doc" &&					\
+# 		$(FIND) license -type f '!' -name .gitignore		\
+# 			| $(XARGS) $(TAR) cf -				\
+# 			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
+# 	)
+# 	if [ -d "$(SRC)/doc/guide/localhost" ]; then			\
+# 		$(CP) "$(SRC)/doc/guide/localhost" "$(TDOC)/guide";	\
+# 	fi
+# 	if [ -r "$(SRC)/doc/guide/mlton-guide.pdf" ]; then		\
+# 		$(CP) "$(SRC)/doc/guide/mlton-guide.pdf" "$(TDOC)/";	\
+# 	fi
+# 	if [ -r "mllex/mllex.pdf" ]; then				\
+# 		$(CP) "mllex/mllex.pdf" "$(TDOC)/";			\
+# 	fi
+# 	if [ -r "mlyacc/mlyacc.pdf" ]; then				\
+# 		$(CP) "mlyacc/mlyacc.pdf" "$(TDOC)/";			\
+# 	fi
+# 	(								\
+# 		cd "$(SRC)/util" &&					\
+# 		$(FIND) cm2mlb -type f '!' -name .gitignore		\
+# 			| $(XARGS) $(TAR) cf -				\
+# 			| ( cd "$(TDOC)/" && $(TAR) xf - )		\
+# 	)
+# 	(								\
+# 		cd "$(SRC)/regression" &&				\
+# 		$(CP) $(REGRESSION_EXAMPLES) "$(TEXM)/"			\
+# 	)
 
 
-.PHONY: source-release
-source-release:
-	$(MAKE) clean
-	$(MAKE) MLTON_VERSION=$(MLTON_VERSION) version
-	( cd "$(SRC)/mllex" ; latexmk -pdf lexgen ; latexmk -c lexgen )
-	$(MAKE) -C "$(SRC)/mllex" mllex.pdf
-	( cd "$(SRC)/mlyacc/doc"; latexmk -pdf mlyaccc ; latexmk -c mlyacc )
-	$(MAKE) -C "$(SRC)/mlyacc" mlyacc.pdf
-	$(MAKE) -C doc/guide
-	$(TAR) cvzf ../mlton-$(MLTON_VERSION).src.tgz \
-		--exclude .git --exclude package \
-		--transform "s@^@mlton-$(MLTON_VERSION)/@S" \
-		*
+# .PHONY: source-release
+# source-release:
+# 	$(MAKE) clean
+# 	$(MAKE) MLTON_VERSION=$(MLTON_VERSION) version
+# 	( cd "$(SRC)/mllex" ; latexmk -pdf lexgen ; latexmk -c lexgen )
+# 	$(MAKE) -C "$(SRC)/mllex" mllex.pdf
+# 	( cd "$(SRC)/mlyacc/doc"; latexmk -pdf mlyaccc ; latexmk -c mlyacc )
+# 	$(MAKE) -C "$(SRC)/mlyacc" mlyacc.pdf
+# 	$(MAKE) -C doc/guide
+# 	$(TAR) cvzf ../mlton-$(MLTON_VERSION).src.tgz \
+# 		--exclude .git --exclude package \
+# 		--transform "s@^@mlton-$(MLTON_VERSION)/@S" \
+# 		*
 
-MLTON_BINARY_RELEASE := 1
-MLTON_BINARY_RELEASE_SUFFIX :=
-.PHONY: binary-release
-binary-release:
-	$(MAKE) all docs
-	$(RM) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
-	$(MKDIR) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
-	$(MAKE) DESTDIR="$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)" PREFIX="" install
-	$(CP) "$(SRC)/Makefile.binary" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/Makefile"
-	$(CP) "$(SRC)/CHANGELOG.adoc" "$(SRC)/LICENSE" "$(SRC)/README.adoc" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/"
-	$(TAR) cvzf ../mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX).tgz \
-		mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
-	$(RM) mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
+# MLTON_BINARY_RELEASE := 1
+# MLTON_BINARY_RELEASE_SUFFIX :=
+# .PHONY: binary-release
+# binary-release:
+# 	$(MAKE) all docs
+# 	$(RM) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
+# 	$(MKDIR) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
+# 	$(MAKE) DESTDIR="$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)" PREFIX="" install
+# 	$(CP) "$(SRC)/Makefile.binary" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/Makefile"
+# 	$(CP) "$(SRC)/CHANGELOG.adoc" "$(SRC)/LICENSE" "$(SRC)/README.adoc" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/"
+# 	$(TAR) cvzf ../mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX).tgz \
+# 		mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
+# 	$(RM) mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
 
-BSDSRC := /tmp/mlton-$(MLTON_VERSION)
-MLTON_FREEBSD_RELEASE := 1
-.PHONY: freebsd
-freebsd:
-	$(MAKE) clean clean-git version
-	$(RM) "$(BSDSRC)"
-	$(MKDIR) "$(BSDSRC)"
-	( cd $(SRC) && tar -cpf - . ) | ( cd "$(BSDSRC)" && tar -xpf - )
-	cd /tmp && tar -cpf - mlton-$(MLTON_VERSION) | \
-		 $(GZIP) --force --best >/usr/ports/distfiles/mlton-$(MLTON_VERSION)-$(MLTON_FREEBSD_RELEASE).freebsd.src.tgz
-        # do not change "make" to "$(MAKE)" in the following line
-	cd "$(BSDSRC)/package/freebsd" && MAINTAINER_MODE=yes make build-package
+# BSDSRC := /tmp/mlton-$(MLTON_VERSION)
+# MLTON_FREEBSD_RELEASE := 1
+# .PHONY: freebsd
+# freebsd:
+# 	$(MAKE) clean clean-git version
+# 	$(RM) "$(BSDSRC)"
+# 	$(MKDIR) "$(BSDSRC)"
+# 	( cd $(SRC) && tar -cpf - . ) | ( cd "$(BSDSRC)" && tar -xpf - )
+# 	cd /tmp && tar -cpf - mlton-$(MLTON_VERSION) | \
+# 		 $(GZIP) --force --best >/usr/ports/distfiles/mlton-$(MLTON_VERSION)-$(MLTON_FREEBSD_RELEASE).freebsd.src.tgz
+#         # do not change "make" to "$(MAKE)" in the following line
+# 	cd "$(BSDSRC)/package/freebsd" && MAINTAINER_MODE=yes make build-package
