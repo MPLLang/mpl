@@ -30,9 +30,11 @@ val buildConstants: (string * (unit -> string)) list =
                                             | Align8 => 8)),
        ("MLton_Codegen_codegen", fn () => int (case !codegen of
                                                   CCodegen => 0
+                                                (*
                                                 | X86Codegen => 1
                                                 | AMD64Codegen => 2
-                                                | LLVMCodegen => 3)),
+                                                | LLVMCodegen => 3
+                                                *))),
        ("MLton_FFI_numExports", fn () => int (Ffi.numExports ())),
        ("MLton_Platform_Format", fn () => case !format of
                                              Archive => "archive"

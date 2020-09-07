@@ -164,8 +164,10 @@ fun hasCodegen (cg) =
    in
       case cg of
         CCodegen => true
+      (*
       | LLVMCodegen => true
       | _ => false
+      *)
    end
 fun hasNativeCodegen () = false
 
@@ -1013,6 +1015,9 @@ fun commandLine (args: string list): unit =
                       NONE => if defaultAlignIs8 () then Align8 else Align4
                     | SOME a => a)
       val () =
+         codegen := CCodegen
+(* SAM_NOTE: removing unsupported codegens *)
+(*
          codegen := (case !explicitCodegen of
                         NONE =>
                            if hasCodegen AMD64Codegen
@@ -1029,12 +1034,14 @@ fun commandLine (args: string list): unit =
                                                MLton.Platform.Arch.toString targetArch,
                                                " target"])
                       | SOME (Explicit cg) => cg)
+*)
       val () = MLton.Rusage.measureGC (!verbosity <> Silent)
       val () = if !profileTimeSet
                   then (case !codegen of
+                         (*
                            X86Codegen => profile := ProfileTimeLabel
                          | AMD64Codegen => profile := ProfileTimeLabel
-                         | _ => profile := ProfileTimeField)
+                         | *) _ => profile := ProfileTimeField)
                   else ()
       val () = if !exnHistory
                   then (case !profile of
@@ -1191,15 +1198,22 @@ fun commandLine (args: string list): unit =
          chunkify :=
          (case !explicitChunkify of
              NONE => (case !codegen of
-                         AMD64Codegen => Chunkify.PerFunc
-                       | CCodegen => Chunkify.Coalesce {limit = 4096}
+                         CCodegen => Chunkify.Coalesce {limit = 4096}
+                      (*
+                       | AMD64Codegen => Chunkify.PerFunc
                        | LLVMCodegen => Chunkify.Coalesce {limit = 4096}
                        | X86Codegen => Chunkify.PerFunc
-                       )
+                      *) )
            | SOME c => c)
+      (*
       val _ = if not (!Control.codegen = X86Codegen) andalso !Native.IEEEFP
                  then usage "must use x86 codegen with -ieee-fp true"
               else ()
+      *)
+      val _ =
+        if !Native.IEEEFP then
+          usage "cannot use '-ieee-fp true' because x86 codegen is unsupported"
+        else ()
       val _ =
          if !keepDot andalso List.isEmpty (!keepPasses)
             then keepSSA := true
