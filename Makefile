@@ -127,6 +127,8 @@ endef
 
 .PHONY: libraries-check
 libraries-check:
+	$(call LIBRARIES_CHECK_TEMPLATE,mllpt-lib)
+	$(call LIBRARIES_CHECK_TEMPLATE,mlyacc-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,smlnj-lib)
 
 .PHONY: libraries
