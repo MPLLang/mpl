@@ -114,7 +114,6 @@ endef
 
 .PHONY: libraries-no-check
 libraries-no-check:
-	$(call LIBRARIES_NO_CHECK_TEMPLATE,cml,,'!' -path '*/tests/*')
 	$(MAKE) -C "$(SRC)/lib/mllpt-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mllpt-lib,/ml-lpt/lib,)
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlyacc-lib,,)
@@ -128,7 +127,6 @@ endef
 
 .PHONY: libraries-check
 libraries-check:
-	$(call LIBRARIES_CHECK_TEMPLATE,cml)
 	$(call LIBRARIES_CHECK_TEMPLATE,smlnj-lib)
 
 .PHONY: libraries

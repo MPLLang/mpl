@@ -1,6 +1,0 @@
-Group 
-  structure Main
-is
-  $cml/basis.cm
-  $cml/cml.cm
-  timeout.sml
