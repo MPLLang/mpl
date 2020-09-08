@@ -222,6 +222,8 @@ for f in *.sml; do
         fi
 done
 
+"$src/bin/mmake" clean >/dev/null
+
 if [ "$exitFail" = true ] ; then
   exit 1
 else
