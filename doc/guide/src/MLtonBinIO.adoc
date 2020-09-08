@@ -1,9 +1,0 @@
-MLtonBinIO
-==========
-
-[source,sml]
-----
-signature MLTON_BIN_IO = MLTON_IO
-----
-
-See <:MLtonIO:>.

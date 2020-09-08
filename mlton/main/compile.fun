@@ -93,12 +93,16 @@ structure Backend = Backend (structure Machine = Machine
                              structure Rssa = Rssa
                              fun funcToLabel f = f)
 structure CCodegen = CCodegen (structure Machine = Machine)
+
+(* SAM_NOTE: removing unsupported codegens *)
+(*
 structure LLVMCodegen = LLVMCodegen (structure CCodegen = CCodegen
                                      structure Machine = Machine)
 structure x86Codegen = x86Codegen (structure CCodegen = CCodegen
                                    structure Machine = Machine)
 structure amd64Codegen = amd64Codegen (structure CCodegen = CCodegen
                                        structure Machine = Machine)
+*)
 
 
 (* ------------------------------------------------- *)
@@ -674,10 +678,13 @@ fun mkCompile {outputC, outputLL, outputS} =
       val _ = setupRuntimeConstants ()
       val codegenImplementsPrim =
          case !Control.codegen of
+            Control.CCodegen => CCodegen.implementsPrim
+(* SAM_NOTE: removing unsupported codegens *)
+(*
             Control.AMD64Codegen => amd64Codegen.implementsPrim
-          | Control.CCodegen => CCodegen.implementsPrim
           | Control.LLVMCodegen => LLVMCodegen.implementsPrim
           | Control.X86Codegen => x86Codegen.implementsPrim
+*)
             fun toRssa ssa2 =
                Ssa2ToRssa.convert
                (ssa2, {codegenImplementsPrim = codegenImplementsPrim})
@@ -735,13 +742,15 @@ fun mkCompile {outputC, outputLL, outputS} =
             val _ = Machine.Label.printNameAlphaNumeric := true
             fun codegen machine =
          case !Control.codegen of
+            Control.CCodegen =>
+                   CCodegen.output {program = machine,
+                                      outputC = outputC}
+(* SAM_NOTE: removing unsupported codegens *)
+(*
             Control.AMD64Codegen =>
                    amd64Codegen.output {program = machine,
                                         outputC = outputC,
                                           outputS = outputS}
-          | Control.CCodegen =>
-                   CCodegen.output {program = machine,
-                                      outputC = outputC}
           | Control.LLVMCodegen =>
                    LLVMCodegen.output {program = machine,
                                        outputC = outputC,
@@ -750,6 +759,7 @@ fun mkCompile {outputC, outputLL, outputS} =
                    x86Codegen.output {program = machine,
                                       outputC = outputC,
             outputS = outputS}
+*)
       in
             Control.translatePass
             {arg = machine,

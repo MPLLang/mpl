@@ -9,14 +9,14 @@
 
 Group
 
-functor amd64Codegen
+(*functor amd64Codegen*)
 functor CCodegen
-functor LLVMCodegen
-functor x86Codegen
+(*functor LLVMCodegen*)
+(*functor x86Codegen*)
 
 is
 
-amd64-codegen/sources.cm
+(*amd64-codegen/sources.cm*)
 c-codegen/sources.cm
-llvm-codegen/sources.cm
-x86-codegen/sources.cm
+(*llvm-codegen/sources.cm*)
+(*x86-codegen/sources.cm*)

@@ -324,10 +324,12 @@ structure Type =
                   CPointer => C.CPointer
                 | Label _ =>
                      (case !Control.codegen of
-                         Control.Codegen.AMD64Codegen => C.CPointer
-                       | Control.Codegen.CCodegen => C.fromBits (width t)
+                         Control.Codegen.CCodegen => C.fromBits (width t)
+                      (*
+                       | Control.Codegen.AMD64Codegen => C.CPointer
                        | Control.Codegen.LLVMCodegen => C.fromBits (width t)
-                       | Control.Codegen.X86Codegen => C.CPointer)
+                       | Control.Codegen.X86Codegen => C.CPointer
+                      *))
                 | Real s =>
                      (case s of
                          RealSize.R32 => C.Real32

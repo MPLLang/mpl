@@ -1,8 +1,0 @@
-Changelog
-=========
-
-* <!ViewGitFile(mlton,master,CHANGELOG.adoc)>
-
-----
-sys::[./bin/InclGitFile.py mlton master CHANGELOG.adoc]
-----

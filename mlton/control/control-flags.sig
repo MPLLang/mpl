@@ -12,7 +12,7 @@ signature CONTROL_FLAGS =
       (* set all flags to their default values *)
       val defaults: unit -> unit
 
-      val all : unit -> {name: string, 
+      val all : unit -> {name: string,
                          value: string} list
 
       val layout': {pre: string, suf: string} -> Layout.t
@@ -49,11 +49,14 @@ signature CONTROL_FLAGS =
 
       structure Codegen:
          sig
-            datatype t =
+            (* SAM_NOTE: removing unsupported codegens *)
+            datatype t = CCodegen
+            (*
                AMD64Codegen
              | CCodegen
              | LLVMCodegen
              | X86Codegen
+            *)
             val all: t list
             val toString: t -> string
          end
@@ -190,7 +193,7 @@ signature CONTROL_FLAGS =
             val all: t list
             val toString: t -> string
          end
-      
+
       datatype format = datatype Format.t
 
       val format: Format.t ref
@@ -225,7 +228,7 @@ signature CONTROL_FLAGS =
 
       (* Whether or not the elaborator keeps def-use information. *)
       val keepDefUse: bool ref
-         
+
       (* Keep dot files for whatever SSA files are produced. *)
       val keepDot: bool ref
 
@@ -259,7 +262,7 @@ signature CONTROL_FLAGS =
 
       (* lib/mlton/target directory *)
       val libTargetDir: Dir.t ref
-      
+
       (* name of the output library *)
       val libname : string ref
 
@@ -286,7 +289,7 @@ signature CONTROL_FLAGS =
             val elimALRedundant: bool ref
 
             (* whether or not to track liveness of stack slots *)
-            val liveStack: bool ref 
+            val liveStack: bool ref
 
             (* level of optimization to use in native codegen *)
             val optimize: int ref
@@ -301,10 +304,10 @@ signature CONTROL_FLAGS =
             val copyPropCutoff: int ref
 
             (* live transfer cutoff distance *)
-            val cutoff: int ref 
+            val cutoff: int ref
 
             (* whether or not to use live transfer in native codegen *)
-            val liveTransfer: int ref 
+            val liveTransfer: int ref
 
             (* whether or not to shuffle registers around C-calls *)
             val shuffle: bool ref
@@ -322,7 +325,7 @@ signature CONTROL_FLAGS =
 
       val optimizationPasses:
          {il: string, set: string -> unit Result.t, get: unit -> string} list ref
-      
+
       val positionIndependent : bool ref
 
       (* Only duplicate big functions when
