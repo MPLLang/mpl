@@ -147,8 +147,20 @@ structure GC =
       val setSummary = _import "GC_setControlsSummary" runtime private: GCState.t * bool -> unit;
       val unpack = _import "GC_unpack" runtime private: GCState.t -> unit;
 
+      (* SAM_NOTE: TODO: move these to prim-mpl.sml *)
       val getLocalGCMillisecondsOfProc = _import "GC_getLocalGCMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
       val getPromoMillisecondsOfProc = _import "GC_getPromoMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsNumLocalGCsOfProc = _import "GC_getCumulativeStatisticsNumLocalGCsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsBytesAllocatedOfProc = _import "GC_getCumulativeStatisticsBytesAllocatedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
+      "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+
+      val getNumRootCCsOfProc = _import "GC_getNumRootCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getNumInternalCCsOfProc = _import "GC_getNumInternalCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCMillisecondsOfProc = _import "GC_getRootCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
    end
 
 structure HM =

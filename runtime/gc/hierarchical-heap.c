@@ -446,7 +446,7 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
       (hh->concurrentPack->bytesAllocatedSinceLastCollection)
     || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
     // if (!hh->concurrentPack->shouldCollect) {
-    //   hh->concurrentPack->bytesSurvivedLastCollection/=4;
+      // hh->concurrentPack->bytesSurvivedLastCollection/=2;
     // }
 
     hh->concurrentPack->bytesSurvivedLastCollection +=4;
