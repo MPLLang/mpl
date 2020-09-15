@@ -224,12 +224,13 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   if(createCP) {
     hh->concurrentPack = (ConcurrentPackage)
                         (start + sizeof(struct HM_HierarchicalHeap));
-    hh->concurrentPack->isCollecting = false;
+    // hh->concurrentPack->isCollecting = false;
     hh->concurrentPack->rootList = NULL;
     hh->concurrentPack->shouldCollect = (s->numberOfProcs > 1);
     hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
     hh->concurrentPack->snapRight = BOGUS_OBJPTR;
     hh->concurrentPack->stack = BOGUS_OBJPTR;
+    hh->concurrentPack->ccstate = CC_UNREG;
     hh->concurrentPack->bytesSurvivedLastCollection = 0;
     hh->concurrentPack->bytesAllocatedSinceLastCollection = 0;
     HM_initChunkList(&(hh->concurrentPack->remSet));
@@ -556,15 +557,17 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   if(!(hh->concurrentPack->shouldCollect)
-    || __sync_val_compare_and_swap(&(hh->concurrentPack->isCollecting), false, true)) {
+    || hh->concurrentPack->ccstate != CC_UNREG
+    // || __sync_val_compare_and_swap(&(hh->concurrentPack->isCollecting), false, true)
+    ) {
     return;
   }
-  assert(hh->concurrentPack->isCollecting);
+  // assert(hh->concurrentPack->isCollecting);
 
   if (HM_HH_getDepth(hh) == 1) {
     bool willCollect = checkPolicyforRoot(s, hh, thread);
     if(!willCollect) {
-      hh->concurrentPack->isCollecting = false;
+      // hh->concurrentPack->isCollecting = false;
       return;
     }
   }
@@ -581,7 +584,9 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   // assert(!hh->concurrentPack->isCollecting);
   copyCurrentStack(s, thread);
   CC_clearMutationStack(hh->concurrentPack);
-  hh->concurrentPack->isCollecting = false;
+
+  hh->concurrentPack->ccstate = CC_REG;
+  // hh->concurrentPack->isCollecting = false;
   // compute object size and bytes to be copied
   // size_t objectSize, copySize, metaDataSize;
   // metaDataSize = GC_STACK_METADATA_SIZE;
@@ -776,7 +781,7 @@ void HM_HH_setCollection(HM_HierarchicalHeap hh, bool on) {
 bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
   assert(hh!=NULL);
   if (hh->concurrentPack != NULL)
-    return  ((hh->concurrentPack)->isCollecting);
+    return  ((hh->concurrentPack)->ccstate == CC_COLLECTING);
   return false;
 }
 

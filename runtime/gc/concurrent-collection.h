@@ -27,6 +27,13 @@ typedef struct ConcurrentCollectArgs {
 	void* fromHead;
 } ConcurrentCollectArgs;
 
+
+enum CCState{
+	CC_UNREG,
+	CC_REG,
+	CC_COLLECTING
+};
+
 typedef struct ConcurrentPackage {
 //  It is possible that the collection turned off and the stack isn't empty
 //	This is a result of the non-atomicity in the write barrier implementation
@@ -36,8 +43,9 @@ typedef struct ConcurrentPackage {
 	objptr snapLeft;
 	objptr snapRight;
 	objptr snapTemp;
-	bool isCollecting;
+	// bool isCollecting;
 	bool shouldCollect;
+	enum CCState ccstate;
 	objptr stack;
 	size_t bytesAllocatedSinceLastCollection;
 	size_t bytesSurvivedLastCollection;

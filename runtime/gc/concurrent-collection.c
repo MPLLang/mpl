@@ -429,18 +429,23 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
 
   ConcurrentPackage cp = currentHeap->concurrentPack;
   if(cp == NULL
-    || cp->isCollecting
+    // || cp->isCollecting
+    || cp->ccstate != CC_REG
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
     || (cp->stack == BOGUS_OBJPTR && depth ==1 )
     || cp->shouldCollect == false) {
     return NULL;
   }
-  else if(casCC(&(cp->isCollecting), false, true)) {
+  else if (casCC (&(cp->ccstate), CC_REG, CC_COLLECTING) != CC_REG) {
     printf("\t %s\n", "returning because someone else claimed collection");
-    assert(0);
     return NULL;
   }
+  // else if(casCC(&(cp->isCollecting), false, true)) {
+  //   printf("\t %s\n", "returning because someone else claimed collection");
+  //   assert(0);
+  //   return NULL;
+  // }
   else {
     // LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
     // printf("%d %d\n", cp->isCollecting, depth);
@@ -451,7 +456,8 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     //   }
     //   printf("FIN: %p\n", currentHeap);
     // #endif
-    assert(currentHeap->concurrentPack->isCollecting);
+    // assert(currentHeap->concurrentPack->isCollecting);
+    assert(currentHeap->concurrentPack->ccstate == CC_COLLECTING);
     assert(HM_HH_getDepth(currentHeap) == depth);
     return currentHeap;
   }
@@ -497,10 +503,11 @@ void CC_collectAtRoot(pointer threadp) {
   //   }
   // }
 
-
+  assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
-  heap->concurrentPack->isCollecting = false;
-  heap->concurrentPack->shouldCollect = false;
+  // heap->concurrentPack->shouldCollect = false;
+  // heap->concurrentPack->isCollecting = false;
+  heap->concurrentPack->ccstate = CC_UNREG;
   s->amInCC = false;
   // printf("child completed collection\n");
   // exit(1);
@@ -558,20 +565,17 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   if(heap == NULL){
     return;
   }
-  else if (HM_getChunkListSize(&(heap->chunkList)) <= 2 * HM_BLOCK_SIZE) {
-    heap->concurrentPack->isCollecting = false;
-    heap->concurrentPack->shouldCollect = false;
-    return;
+  else if (HM_getChunkListSize(&(heap->chunkList)) >= 2 * HM_BLOCK_SIZE) {
+    // just a casually checking if it is worth it to collect at all.
+    assert(getThreadCurrent(s) == thread);
+    assert(heap->concurrentPack->shouldCollect);
+    CC_collectWithRoots(s, heap, thread);
   }
 
-  assert(getThreadCurrent(s) == thread);
-  printf("collecting seq : %p\n", heap);
-  assert(heap->concurrentPack->shouldCollect);
-  CC_collectWithRoots(s, heap, thread);
-  heap->concurrentPack->shouldCollect = false;
-  // printf("turning off for %p \n", heap);
-  // printf("turned off for %p \n", heap);
-  heap->concurrentPack->isCollecting = false;
+  // heap->concurrentPack->shouldCollect = false;
+  // heap->concurrentPack->isCollecting = false;
+  heap->concurrentPack->ccstate = CC_UNREG;
+
 }
 
 
@@ -648,6 +652,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
         assert(0);
       }
     #endif
+    assert(T->tmpHeap == NULL);
     T->tmpHeap = lists.fromHead;
     T->levelHead = targetHH;
   }
@@ -771,6 +776,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   printf("\n");
   // printf("Chunk list collected = %p \n", origList);
 
+  #endif
   // JATIN_NOTE: This loop is not needed if tmpHeap is made NULL in HM_getFreeChunk.
   // Adding it here so that this runs in debug and the difference is evident if reasoning is flawed
   int countStopGapChunks = 0;
@@ -816,13 +822,14 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_initChunkList(deleteList);
 
   // printf("sizes released: ");
-  HM_chunk chunk = HM_getChunkListFirstChunk(origList);
-  uint64_t bytesCollected = HM_getChunkListSize(origList);
+  uint64_t bytesCollected = HM_getChunkListSize(origList), bytesFreed = 0;
   bytesCollected = bytesCollected>0?bytesCollected:0;
   bytesCollected/=4;
-  uint64_t bytesFreed = 0;
 
+  HM_chunk chunk = HM_getChunkListFirstChunk(origList);
   while (chunk!=NULL) {
+    chunk->levelHead = NULL;
+    chunk->tmpHeap  = NULL;
     // if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE) || (bytesFreed < bytesCollected)) {
     if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE)) {
       pointer q = chunk;
