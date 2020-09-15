@@ -265,7 +265,7 @@ struct
               | SOME (gr, t) =>
                   ( HH.mergeThreads (thread, t)
                   ; setQueueDepth (myWorkerId ()) depth
-                  ; HH.resetList (thread)
+                  (*; HH.resetList (thread)*)
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
                   ; gr
@@ -309,7 +309,7 @@ struct
           if popDiscard() then
             let
               val _ = HH.collectThreadRoot(thread)
-              val _ = HH.resetList(thread)
+              (*val _ = HH.resetList(thread)*)
               val _ = HH.promoteChunks thread
             in
               HH.setDepth (thread, depth)
@@ -328,7 +328,7 @@ struct
                               | NONE => ()*)
                 in
                   ( setQueueDepth (myWorkerId ()) depth
-                  ; HH.resetList (thread)
+                  (*; HH.resetList (thread)*)
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
                   ; ()

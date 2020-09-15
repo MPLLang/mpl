@@ -52,6 +52,10 @@ typedef struct GC_thread {
   /* The "current" chunk of the heap, where the frontier is pointing */
   HM_chunk currentChunk;
 
+  // temporary
+  struct HM_HierarchicalHeap* tempRootHeap;
+
+
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
 
@@ -64,6 +68,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
+                    sizeof(void*) +   // currentCheck
                     sizeof(void*) +   // currentCheck
                     sizeof(objptr));  // stack
 
