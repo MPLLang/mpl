@@ -59,7 +59,8 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     // uint32_t minDepth = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
     // printf("%d\n", dstHH->depth);
     // Need to remember for all levels
-    HM_HierarchicalHeap currHH = HM_getLevelHeadPathCompress(HM_getChunkOf(currp));
+    pointer currp = objptrToPointer(readVal, NULL);
+    HM_HierarchicalHeap currHH = HM_getLevelHead(HM_getChunkOf(currp));
 
     // bool z = cas(&(dstHH->concurrentPack->isCollecting), false, false);
     // assert(!z);

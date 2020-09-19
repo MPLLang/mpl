@@ -546,18 +546,20 @@ pointer HM_HH_getRoot(pointer threadp) {
     DIE("not root heap");
   }
 
-// Story: shouldCollect is a flag set by the following three entities:
-// 1) CC_collectAtRoot/CC_collectAtPublicLevel -> after the collection is over, there is no sense in collecting
-//    again until the root set changes. The root set changes only after the program joins back to the depth of
-//    the heap. For internal heaps this is essential because CC_collectAtPublicLevel is called at each local collection.
-//    It is more of a performance safety thing for CC_collectAtRoot.
-// 2) The moment the process joins back, resetList is called on the heap and the function checks that the CC
-//    on the corresponding heap is finished. This is guaranteed for Internal heaps but not for root heap. resetList
-//    makes shouldCollect true if the collection is done and false otherwise.
-// 3) For the root heap, the checkPolicyForRoot, checks the policy and assigns shouldCollect accordingly.
-//    For internal heaps, shouldCollect is left untouched and the roots
+  return (thread->hierarchicalHeap);
+}
+// Story: ccstate for each hh has three values
+// 1. CC_UNREG: This means that the root-set for the next collection (if we want to collect) needs to be constructed.
+//              Either the previous root-set has already been used for a collection (which has finished) or this
+//              is the first time a root-set is being made for this hh.
+// 2. CC_REG:   This means that the root-set has been constructed but the collection hasn't started
+// 3. CC_COLLECTING: The collector sets this value to ccstate when it starts collecting using cas.
+//                   After its finished, the flag is set to CC_UNREG indicating that a new root set is needed.
 void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
-  // return;
+    // check if reg
+    // return;
+  // cas here -- unregistered {0}, registered but not collected{1} --cas by cc-- collecting{2}, collected {3}
+
   GC_state s = pthread_getspecific(gcstate_key);
 
   GC_MayTerminateThread(s);
@@ -584,16 +586,18 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   // assert(hh->concurrentPack->isCollecting);
   HM_HH_resetList2(hh);
 
+
+
+
   if (HM_HH_getDepth(hh) == 1) {
     bool willCollect = checkPolicyforRoot(s, hh, thread);
-    thread->tempRootHeap = hh;
     if(!willCollect) {
-      hh->concurrentPack->shouldCollect = false;
+      // hh->concurrentPack->shouldCollect = false;
       return;
     }
   }
 
-  hh->concurrentPack->shouldCollect = true;
+  // hh->concurrentPack->shouldCollect = true;
 
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
@@ -602,6 +606,9 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
   hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
 
+  if(hh->concurrentPack->rootList == NULL && HM_HH_getDepth(hh) == 1) {
+    CC_addToStack(hh->concurrentPack, hh->concurrentPack->snapRight);
+  }
   // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   // GC_stack stackP = (GC_stack) stackPtr;
   // assert(!hh->concurrentPack->isCollecting);

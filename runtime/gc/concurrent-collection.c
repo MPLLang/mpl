@@ -18,10 +18,11 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
-    // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
+    LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     // assert(0);
-    cp->rootList = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-    CC_stack_init(cp->rootList, 2);
+    CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
+    CC_stack_init(temp, 2);
+    cp->rootList = temp;
   }
   // printf("%s\n", "trying to add to stack");
   CC_stack_push(cp->rootList, (void*)p);
@@ -434,7 +435,8 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
     || cp->snapLeft == BOGUS_OBJPTR
     || cp->snapRight == BOGUS_OBJPTR
     || (cp->stack == BOGUS_OBJPTR && depth ==1 )
-    || cp->shouldCollect == false) {
+    // || cp->shouldCollect == false
+    ) {
     return NULL;
   }
   else if (casCC (&(cp->ccstate), CC_REG, CC_COLLECTING) != CC_REG) {
@@ -505,7 +507,7 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   //   }
   // }
 
-  assert(heap->concurrentPack->shouldCollect);
+  // assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
   // heap->concurrentPack->shouldCollect = false;
   // heap->concurrentPack->isCollecting = false;
@@ -570,7 +572,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   else if (HM_getChunkListSize(&(heap->chunkList)) >= 2 * HM_BLOCK_SIZE) {
     // just a casually checking if it is worth it to collect at all.
     assert(getThreadCurrent(s) == thread);
-    assert(heap->concurrentPack->shouldCollect);
+    // assert(heap->concurrentPack->shouldCollect);
     CC_collectWithRoots(s, heap, thread);
   }
 
@@ -701,6 +703,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   saveNoForward(s, (pointer)(thread->stack), &lists);
 
   // forward reachability altering writes
+  // racy, discuss with Sam
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
 
@@ -711,6 +714,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceUnmark(s, &(cp->snapTemp), &lists);
   forceUnmark(s, &(stackp), &lists);
   forceUnmark(s, &(s->wsQueue), &lists);
+
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
   /*
@@ -745,6 +749,10 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     }
   }
   */
+
+  // HM_appendChunkList(repList, origList);
+  // *(origList) = *(repList);
+  // return;
 
   #if ASSERT2
   HM_assertChunkListInvariants(origList);
@@ -795,7 +803,10 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
       chunk->tmpHeap  = NULL;
     }
   }
-  #endif
+
+  for(HM_chunk chunk = repList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
+    chunk->tmpHeap = NULL;
+  }
 
   // HM_chunk Q = origList->firstChunk;
   // while (Q!=NULL) {
