@@ -456,17 +456,17 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
   // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
   // hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
+  if (false) {
+    if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
+        (hh->concurrentPack->bytesAllocatedSinceLastCollection)
+      || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
+      // if (!hh->concurrentPack->shouldCollect) {
+        // hh->concurrentPack->bytesSurvivedLastCollection/=2;
+      // }
 
-  if((4*hh->concurrentPack->bytesSurvivedLastCollection) >
-      (hh->concurrentPack->bytesAllocatedSinceLastCollection)
-    || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
-    // if (!hh->concurrentPack->shouldCollect) {
-      // hh->concurrentPack->bytesSurvivedLastCollection/=2;
-    // }
-
-    hh->concurrentPack->bytesSurvivedLastCollection +=4;
-    hh->concurrentPack->shouldCollect = false;
-    return false;
+      hh->concurrentPack->bytesSurvivedLastCollection +=4;
+      return false;
+    }
   }
 
   // copyCurrentStack(stackPtr, hh, thread);
@@ -538,6 +538,13 @@ void copyCurrentStack(GC_state s, GC_thread thread) {
   hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
 }
 
+pointer HM_HH_getRoot(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  if (HM_HH_getDepth(thread->hierarchicalHeap)!= 1) {
+    DIE("not root heap");
+  }
 
 // Story: shouldCollect is a flag set by the following three entities:
 // 1) CC_collectAtRoot/CC_collectAtPublicLevel -> after the collection is over, there is no sense in collecting

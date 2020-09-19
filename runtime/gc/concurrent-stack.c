@@ -28,8 +28,9 @@ bool increaseCapacity(CC_stack* stack, int factor){
         stack->capacity*=factor;
         return true;
     }
-    else
+    else {
         return false;
+    }
 }
 
 // return false if the push failed. true if push succeeds
@@ -39,6 +40,7 @@ bool CC_stack_push(CC_stack* stack, void* datum){
     if (stack->size == stack->capacity){
         bool capIncrease = increaseCapacity(stack, 2);
         if(!capIncrease){
+            DIE("Ran out of space for CC_stack!\n");
             assert(0);
         }
     }
@@ -84,7 +86,7 @@ void* CC_stack_top(CC_stack* stack){
 
 size_t CC_stack_size(CC_stack* stack){
     size_t size;
-
+    // Not sure if we need mutex here
     pthread_mutex_lock(&stack->mutex);
     size = stack->size;
     pthread_mutex_unlock(&stack->mutex);
@@ -117,21 +119,29 @@ void forEachObjptrinStack(GC_state s,
     // size can only increase while iterating.
     // CC_stack_size function requires mutex, therefore it is more efficient to have two loops
     // the inner loop does not query size and once it's done, we can re-check size
-    size_t i = 0, size = CC_stack_size(stack);
+    // There should be a mutex here. It is present in CC_stack_size, so its okay for now. (not good though)
+
+    // temporary assurance changes ==> haven't proved to be useful so far.
+    pthread_mutex_lock(&stack->mutex);
+    size_t i = 0, size = stack->size;
+    // size_t i = 0, size = CC_stack_size(stack);
     while(i!=size){
 
         while(i!=size){
-            callIfIsObjptr(s, f, &(stack->storage[i++]), rawArgs);
+            callIfIsObjptr(s, f, &(stack->storage[i]), rawArgs);
+            i++;
         }
 
-        #if ASSERT
-            size_t size_new = CC_stack_size(stack);
-            assert(size_new>=size);
-            size = size_new;
-        #else
-            size = CC_stack_size(stack);
-        #endif
+        // unsure about this code too.
+        // #if ASSERT
+        //     size_t size_new = CC_stack_size(stack);
+        //     assert(size_new>=size);
+        //     size = size_new;
+        // #else
+        //     size = CC_stack_size(stack);
+        // #endif
     }
+    pthread_mutex_unlock(&stack->mutex);
 }
 
 #endif

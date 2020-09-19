@@ -280,9 +280,11 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
 
+        val rootHH = HH.getRoot thread
+
         fun gcFunc() =
           let
-            val _ = HH.collectThreadRoot(thread)
+            val _ = HH.collectThreadRoot(thread, rootHH)
           in
             (* if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (depth+1)
@@ -308,7 +310,7 @@ struct
         val gr =
           if popDiscard() then
             let
-              val _ = HH.collectThreadRoot(thread)
+              val _ = HH.collectThreadRoot(thread, rootHH)
               (*val _ = HH.resetList(thread)*)
               val _ = HH.promoteChunks thread
             in

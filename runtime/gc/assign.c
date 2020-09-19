@@ -52,10 +52,6 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
 
 
   objptr readVal = *field;
-  pointer currp = objptrToPointer(readVal, NULL);
-
-  // bool saveReadVal = false;
-
   if (dstHH->depth >= 1 && isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
     // check for the case where this is laggy
     // uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);

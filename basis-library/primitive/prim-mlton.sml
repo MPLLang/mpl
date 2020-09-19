@@ -415,9 +415,11 @@ structure Thread =
             _import "HM_HH_registerCont" runtime private:
             ('a array) * ('b array) * ('c array) * thread -> unit;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
-      val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread -> unit;
+      val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 
       val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
+      val getRoot = _import "HM_HH_getRoot" runtime private: thread -> Word64.word;
+
       val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;

@@ -467,25 +467,27 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
   return currentHeap;
 }
 
-void CC_collectAtRoot(pointer threadp) {
+void CC_collectAtRoot(pointer threadp, pointer hhp) {
+  // return;
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-
+  HM_HierarchicalHeap hh = (HM_HierarchicalHeap)hhp;
 
 
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
-  int depth = 1;
 
-  if (!checkLocalScheduler(s)) {
+  if (!checkLocalScheduler(s) || thread->currentDepth<=0) {
     return;
   }
 
-  if(thread->currentDepth<=0)
-    return;
-
+  int depth = 1;
   HM_HierarchicalHeap heap = claimHeap(thread, depth);
   if (heap == NULL) {
     return;
+  }
+
+  if(heap!= hh) {
+    DIE("heap != hh, the bug is caused by race with LC");
   }
 
   assert(!s->amInCC);

@@ -90,6 +90,7 @@ size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
+pointer HM_HH_getRoot(pointer threadp);
 void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
 void HM_HH_resetList(pointer threadp);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
