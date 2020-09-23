@@ -66,7 +66,7 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     // assert(!z);
 
     if(currHH == dstHH) {
-      printf("%s\n", "storing this");
+      // printf("%s\n", "storing this");
       HM_HH_addRootForCollector(dstHH, currp);
     }
     //   bool saveReadVal = false;

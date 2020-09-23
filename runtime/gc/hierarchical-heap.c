@@ -606,12 +606,14 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
   hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
 
-  if(hh->concurrentPack->rootList == NULL && HM_HH_getDepth(hh) == 1) {
-    CC_addToStack(hh->concurrentPack, hh->concurrentPack->snapRight);
+  // Initialize write barrier stack
+  if(hh->concurrentPack->rootList == NULL) {
+    CC_initStack(hh->concurrentPack);
   }
   // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   // GC_stack stackP = (GC_stack) stackPtr;
   // assert(!hh->concurrentPack->isCollecting);
+  // store thread stack
   copyCurrentStack(s, thread);
   CC_clearMutationStack(hh->concurrentPack);
 

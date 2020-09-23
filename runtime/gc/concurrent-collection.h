@@ -63,6 +63,8 @@ void CC_collectWithRoots(GC_state s, struct HM_HierarchicalHeap * targetHH, GC_t
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth);
 void CC_addToStack(ConcurrentPackage cp, pointer p);
+void CC_initStack(ConcurrentPackage cp);
+
 
 bool CC_isPointerMarked (pointer p);
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs);

@@ -16,13 +16,16 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 // the code is not read only and may change state.
 #define ASSERT2 0
 
+void CC_initStack(ConcurrentPackage cp) {
+  CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
+  CC_stack_init(temp, 2);
+  cp->rootList = temp;
+}
+
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
     LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
-    // assert(0);
-    CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-    CC_stack_init(temp, 2);
-    cp->rootList = temp;
+    CC_initStack(cp);
   }
   // printf("%s\n", "trying to add to stack");
   CC_stack_push(cp->rootList, (void*)p);
@@ -827,7 +830,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   uint64_t bytesSaved =  HM_getChunkListSize(repList);
   uint64_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
 
-  printf("collected %s = %ld %ld and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
+  // printf("collected %s = %ld %ld and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
   struct HM_chunkList _deleteList;
@@ -883,7 +886,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   timespec_sub(&stopTime, &startTime);
   size_t msTotal =
     (size_t)stopTime.tv_sec * 1000 + (size_t)stopTime.tv_nsec / 1000000;
-  printf("collection time: %zu ms\n", msTotal);
+  // printf("collection time: %zu ms\n", msTotal);
 
   if (isConcurrent) {
     timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);
