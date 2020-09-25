@@ -1,4 +1,5 @@
-(* Copyright (C) 2004-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019-2020 Matthew Fluet.
+ * Copyright (C) 2004-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a HPND-style license.
@@ -95,6 +96,17 @@ structure Type =
        | Unit 
        | Vector of t
 
+      local
+         fun make s t =
+            case t of
+               Base name =>
+                  Name.compare (name, Name.T [s, "t"]) = EQUAL
+             | _ => false
+      in
+         val isString = make "String8"
+         val isBool = make "Bool"
+      end
+
       fun toC t =
          case t of
             Array t => concat ["Array(", toC t, ")"]
@@ -165,6 +177,8 @@ structure Entry =
                     name: Name.t,
                     ty: {args: Type.t list,
                          ret: Type.t}}
+       | SymConst of {name: Name.t,
+                      ty: Type.t}
        | Symbol of {name: Name.t,
                     ty: Type.t}
 
@@ -172,6 +186,7 @@ structure Entry =
          case entry of
             Const {name,...} => name
           | Import {name,...} => name
+          | SymConst {name, ...} => name
           | Symbol {name,...} => name
 
       fun compare (entry1, entry2) =
@@ -188,7 +203,8 @@ structure Entry =
                 ";"]
           | Import {attrs, name, ty = {args, ret}} =>
                String.concat
-               [attrs, 
+               ["PRIVATE ",
+                attrs,
                 if String.size attrs > 0 then " " else "",
                 Type.toC ret,
                 " ",
@@ -196,6 +212,13 @@ structure Entry =
                 "(",
                 String.concatWith "," (List.map Type.toC args),
                 ");"]
+          | SymConst {name, ty} =>
+               String.concat
+               ["PRIVATE extern const ",
+                Type.toC ty,
+                " ",
+                Name.toC name,
+                ";"]
           | Symbol {name, ty} =>
                String.concat
                ["PRIVATE extern ",
@@ -220,11 +243,25 @@ structure Entry =
                 Name.last name,
                 " = _import \"",
                 Name.toC name,
-                "\" private : ",
+                "\" private ",
+                if List.exists (fn s => s = "INLINE") (String.tokens Char.isSpace attrs)
+                   then "inline " else "",
+                ": ",
                 String.concatWith " * " (List.map Type.toML args),
                 " -> ",
                 Type.toML ret,
                 ";"]
+          | SymConst {name, ty} =>
+               String.concat
+               ["val ",
+                Name.last name,
+                " = #1 (_symbol \"",
+                Name.toC name,
+                "\" private : (unit -> (",
+                Type.toML ty,
+                ")) * ((",
+                Type.toML ty,
+                ") -> unit);) ()"]
           | Symbol {name, ty} =>
                String.concat
                ["val (",
@@ -239,20 +276,28 @@ structure Entry =
                 Type.toML ty, 
                 ") -> unit);"]
 
-      fun parseConst (s, name) =
+      fun parseType (s, kw) =
          let
-            val s = #2 (Substring.splitAt (s, 6))
+            val s = #2 (Substring.splitAt (s, 1 + String.size kw))
             val s = Substring.droplSpace s
             val s = if Substring.isPrefix ":" s
-                      then #2 (Substring.splitAt (s, 1))
-                       else raise Fail (concat ["Entry.parseConst: \"", Substring.string s, "\""])
+                       then #2 (Substring.splitAt (s, 1))
+                       else raise Fail (concat ["Entry.parse", kw, ": \"", Substring.string s, "\""])
             val (ret, rest) = Type.parse s
             val () = if Substring.isEmpty rest
                         then ()
-                        else raise Fail (concat ["Entry.parseConst: \"", Substring.string s, "\""])
+                        else raise Fail (concat ["Entry.parse", kw, ": \"", Substring.string s, "\""])
+         in
+            ret
+         end
+
+
+      fun parseConst (s, name) =
+         let
+            val ty = parseType (s, "Const")
          in
             Const {name = name,
-                   ty = ret}
+                   ty = ty}
          end
 
       fun parseImport (s, name) =
@@ -277,20 +322,20 @@ structure Entry =
                     ty = {args = args, ret = ret}}
          end
 
+      fun parseSymConst (s, name) =
+         let
+            val ty = parseType (s, "SymConst")
+         in
+            SymConst {name = name,
+                      ty = ty}
+         end
+
       fun parseSymbol (s, name) =
          let
-            val s = #2 (Substring.splitAt (s, 7))
-            val s = Substring.droplSpace s
-            val s = if Substring.isPrefix ":" s
-                      then #2 (Substring.splitAt (s, 1))
-                       else raise Fail (concat ["Entry.parseSymbol: \"", Substring.string s, "\""])
-            val (ret, rest) = Type.parse s
-            val () = if Substring.isEmpty rest
-                        then ()
-                        else raise Fail (concat ["Entry.parseSymbol: \"", Substring.string s, "\""])
+            val ty = parseType (s, "Symbol")
          in
             Symbol {name = name,
-                    ty = ret}
+                    ty = ty}
          end
 
       fun parse s =
@@ -306,6 +351,8 @@ structure Entry =
                              then parseConst (rest, name)
                           else if Substring.isPrefix "_import" rest
                              then parseImport (rest, name)
+                          else if Substring.isPrefix "_symconst" rest
+                             then parseSymConst (rest, name)
                           else if Substring.isPrefix "_symbol" rest
                              then parseSymbol (rest, name)
                           else raise Fail (concat ["Entry.parse: \"", Substring.string s, "\""])
@@ -315,7 +362,7 @@ structure Entry =
 
 val entries =
    let
-      val f = TextIO.openIn "basis-ffi.def"
+      val f = TextIO.stdIn
       fun loop entries =
          case TextIO.inputLine f of
             NONE => List.rev entries
@@ -336,24 +383,19 @@ val entries =
 
 fun outputC entries =
    let
-      val f = TextIO.openOut "basis-ffi.h"
-      fun print s = TextIO.output (f, s)
       fun println s = if s <> "" then (print s; print "\n") else ()
 
-      val () = println "/* This file is automatically generated.  Do not edit. */\n\n"
-      val () = println "#ifndef _MLTON_BASIS_FFI_H_\n"
-      val () = println "#define _MLTON_BASIS_FFI_H_\n"
+      val () = println "/* This file is automatically generated.  Do not edit. */\n"
+      val () = println "#ifndef _MLTON_BASIS_FFI_H_"
+      val () = println "#define _MLTON_BASIS_FFI_H_"
       val () = List.app (fn entry => println (Entry.toC entry)) entries
       val () = println "#endif /* _MLTON_BASIS_FFI_H_ */"
-      val () = TextIO.closeOut f
    in
       ()
    end
 
 fun outputML entries =
    let
-      val f = TextIO.openOut "basis-ffi.sml"
-      fun print s = TextIO.output (f, s)
       fun println s = if s <> "" then (print s; print "\n") else ()
 
       val primStrs = 
@@ -400,10 +442,44 @@ fun outputML entries =
       val () = List.app (fn _ => println "end") cur
       val () = println "end"
       val () = println "end"
-      val () = TextIO.closeOut f
    in
       ()
    end
 
-val () = outputC entries
-val () = outputML entries
+fun outputGenConsts entries =
+   let
+      fun println s = if s <> "" then (print s; print "\n") else ()
+
+      val () = println "/* This file is automatically generated.  Do not edit. */\n"
+      val () = List.app (fn entry =>
+                         case entry of
+                            Entry.Const {name, ty} =>
+                               if Type.isBool ty
+                                  then println (concat ["MkBoolConst (",
+                                                        Name.toC name,
+                                                        ");"])
+                               else if Type.isString ty
+                                  then println (concat ["MkStrConst (",
+                                                        Name.toC name,
+                                                        ");"])
+                               else println (concat ["MkNumConst (",
+                                                     Name.toC name,
+                                                     ", ",
+                                                     Type.toC ty,
+                                                     ");"])
+                          | _ => ())
+                        entries
+   in
+      ()
+   end
+
+val () =
+   case CommandLine.arguments () of
+      ["basis-ffi.h"] => outputC entries
+    | ["basis-ffi.sml"] => outputML entries
+    | ["gen-basis-ffi-consts.c"] => outputGenConsts entries
+    | _ => (TextIO.output (TextIO.stdErr,
+                           concat ["usage: ",
+                                   CommandLine.name (),
+                                   " basis-ffi.h|basis-ffi.sml|gen-basis-ffi-consts.c\n"])
+            ; OS.Process.exit OS.Process.failure)

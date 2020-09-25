@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2019 Matthew Fluet.
+(* Copyright (C) 2009,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -98,9 +98,9 @@ structure Statement =
    struct
       open Statement
 
-      fun bytesAllocated (s: t): Bytes.t =
+      fun bytesAllocated (s: t, {tyconTy}): Bytes.t =
          case s of
-            Object {size, ...} => size
+            Object {obj, ...} => Object.size (obj, {tyconTy = tyconTy})
           | _ => Bytes.zero
    end
 
@@ -143,27 +143,29 @@ structure Block =
    struct
       open Block
 
-      fun objectBytesAllocated (T {statements, transfer, ...}): Bytes.t =
+      fun objectBytesAllocated (T {statements, transfer, ...}, {tyconTy}): Bytes.t =
          Bytes.+
          (Vector.fold (statements, Bytes.zero, fn (s, ac) =>
-                       Bytes.+ (ac, Statement.bytesAllocated s)),
+                       let
+                          val b = Statement.bytesAllocated (s, {tyconTy = tyconTy})
+                       in
+                          Bytes.+ (ac, b)
+                       end),
           case Transfer.bytesAllocated transfer of
              Transfer.Big _ => Bytes.zero
            | Transfer.Small b => b)
    end
 
-val extraGlobals: Var.t list ref = ref []
-
 fun insertFunction (f: Function.t,
                     handlesSignals: bool,
+                    newFlag: unit -> Operand.t,
                     (* how many bytes do I need to ensure free (for each block? *)
                     blockCheckAmount: {blockIndex: int} -> Bytes.t,
                     (* for c primitives that need ensureFree arg *)
                     ensureFree: Label.t -> Bytes.t) =
    let
-     val {args, blocks, name, raises, returns, start} = Function.dest f
-
-      val lessThan = Prim.wordLt (WordSize.csize (), {signed = false})
+      val {args, blocks, name, raises, returns, start} = Function.dest f
+      val lessThan = Prim.Word_lt (WordSize.csize (), {signed = false})
       val newBlocks = ref []
       local
          val r: Label.t option ref = ref NONE
@@ -178,6 +180,7 @@ fun insertFunction (f: Function.t,
                      val cfunc =
                         CFunction.T {args = Vector.new0 (),
                                      convention = CFunction.Convention.Cdecl,
+                                     inline = false,
                                      kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
                                                                     ensuresBytesFree = NONE,
                                                                     mayGC = false,
@@ -220,10 +223,9 @@ fun insertFunction (f: Function.t,
                                      (args, fn (j, arg) =>
                                       if i = j
                                          then Operand.word
-                                             (WordX.fromIntInf
-                                              (Bytes.toIntInf
-                                               (ensureFree (valOf return)),
-                                               WordSize.csize ()))
+                                              (WordX.fromBytes
+                                               (ensureFree (valOf return),
+                                                WordSize.csize ()))
                                          else arg),
                               func = func,
                               return = return})
@@ -238,11 +240,7 @@ fun insertFunction (f: Function.t,
                       case !Control.gcCheck of
                          Control.First =>
                             let
-                               val global = Var.newNoname ()
-                               val _ = List.push (extraGlobals, global)
-                               val global =
-                                  Operand.Var {var = global,
-                                               ty = Type.bool}
+                               val flag = newFlag ()
                                val dontCollect' = Label.newNoname ()
                                val _ =
                                   List.push
@@ -253,15 +251,17 @@ fun insertFunction (f: Function.t,
                                     label = dontCollect',
                                     statements = Vector.new0 (),
                                     transfer =
-                                    Transfer.ifBool
-                                    (global, {falsee = dontCollect,
-                                              truee = collect})})
+                                    Transfer.ifBoolE
+                                    (flag,
+                                     !Control.gcExpect,
+                                     {falsee = dontCollect,
+                                      truee = collect})})
                             in
                                (dontCollect',
                                 Vector.new1
-                                (Statement.Move {dst = global,
+                                (Statement.Move {dst = flag,
                                                  src = Operand.bool false}),
-                                global)
+                                flag)
                             end
                        | Control.Limit =>
                             (dontCollect, Vector.new0 (), Operand.bool false)
@@ -297,129 +297,6 @@ fun insertFunction (f: Function.t,
                    {collect = collect,
                     dontCollect = dontCollect'}
                 end
-(*
-             fun insert (amount: Operand.t (* of type word *)) =
-                let
-                   val collect = Label.newNoname ()
-                   val collectZero = Label.newNoname ()
-                   val collectReturn = Label.newNoname ()
-                   val tisCCall = Label.newNoname ()
-                   val tisBranch = Label.newNoname ()
-                   val continue = Label.newNoname ()
-
-                   val (dontCollect', collectReturnStatements, force) =
-                      case !Control.gcCheck of
-                         Control.First =>
-                            let
-                               val global = Var.newNoname ()
-                               val _ = List.push (extraGlobals, global)
-                               val global =
-                                  Operand.Var {var = global,
-                                               ty = Type.bool}
-                               val dontCollect' = Label.newNoname ()
-                               val _ =
-                                  List.push
-                                  (newBlocks,
-                                   Block.T
-                                   {args = Vector.new0 (),
-                                    kind = Kind.Jump,
-                                    label = dontCollect',
-                                    statements = Vector.new0 (),
-                                    transfer =
-                                    Transfer.ifBool
-                                    (global, {falsee = tisCCall,
-                                              truee = collect})})
-                            in
-                               (dontCollect',
-                                Vector.new1
-                                (Statement.Move {dst = global,
-                                                 src = Operand.bool false}),
-                                global)
-                            end
-                       | Control.Limit =>
-                            (tisCCall, Vector.new0 (), Operand.bool false)
-                       | Control.Every =>
-                            (collect, Vector.new0 (), Operand.bool true)
-                   val gcFunc = CFunction.gc {maySwitchThreads = handlesSignals}
-
-                   val tisFunc =
-                       CFunction.T {args = Vector.new0 (),
-                                    convention = CFunction.Convention.Cdecl,
-                                    kind = CFunction.Kind.Runtime {bytesNeeded = NONE,
-                                                                   ensuresBytesFree = NONE,
-				                                   mayGC = false,
-				                                   maySwitchThreadsFrom = false,
-				                                   maySwitchThreadsTo = false,
-				                                   modifiesFrontier = false,
-				                                   readsStackTop = false,
-				                                   writesStackTop = false},
-                                    prototype = (Vector.new0 (), SOME CType.bool),
-                                    return = Type.bool,
-                                    symbolScope = CFunction.SymbolScope.Private,
-                                    target = CFunction.Target.Direct "Proc_threadInSection"}
-
-                   val _ =
-                      newBlocks :=
-                      Block.T {args = Vector.new0 (),
-                               kind = Kind.Jump,
-                               label = collect,
-                               statements = Vector.new0 (),
-                               transfer = (Transfer.CCall
-                                           {args = Vector.new3 (Operand.GCState,
-                                                                amount,
-                                                                force),
-                                            func = gcFunc,
-                                            return = SOME collectReturn})}
-                      :: (Block.T {args = Vector.new0 (),
-                                   kind = Kind.Jump,
-                                   label = collectZero,
-                                   statements = Vector.new0 (),
-                                   transfer = (Transfer.CCall
-                                                   {args = Vector.new3 (Operand.GCState,
-                                                                        Operand.word
-                                                                            (WordX.zero (WordSize.csize ())),
-                                                                        Operand.bool false),
-                                                    func = gcFunc,
-                                                    return = SOME collectReturn})})
-                      :: (Block.T
-                          {args = Vector.new0 (),
-                           kind = Kind.CReturn {func = gcFunc},
-                           label = collectReturn,
-                           statements = collectReturnStatements,
-                           transfer = Transfer.Goto {dst = continue,
-                                                     args = Vector.new0 ()}})
-                      :: (Block.T {args = Vector.new0 (),
-                                   kind = Kind.Jump,
-                                   label = tisCCall,
-                                   statements = Vector.new0 (),
-                                   transfer =
-                                   Transfer.CCall {args = Vector.new0 (),
-                                                   func = tisFunc,
-                                                   return = SOME tisBranch}})
-                      :: (let
-                           val res = Var.newNoname ()
-                         in
-                           Block.T {args = Vector.new1 (res, Type.bool),
-                                    kind = Kind.CReturn {func = tisFunc},
-                                    label = tisBranch,
-                                    statements = Vector.new0 (),
-                                    transfer =
-                                    Transfer.ifBool
-                                        (Operand.Var {var = res, ty = Type.bool},
-                                         {falsee = continue,
-                                          truee = collectZero})}
-                         end)
-                      :: (Block.T {args = Vector.new0 (),
-                                   kind = Kind.Jump,
-                                   label = continue,
-                                   statements = statements,
-                                   transfer = transfer})
-                      :: !newBlocks
-                in
-                   {collect = collect,
-                    dontCollect = dontCollect'}
-                end
-*)
              fun newBlock (isFirst, statements, transfer) =
                 let
                    val (args, kind, label) =
@@ -451,19 +328,19 @@ fun insertFunction (f: Function.t,
                                          dst = SOME (res, Type.bool),
                                          prim = prim}
                    val transfer =
-                      Transfer.ifBool
+                      Transfer.ifBoolE
                       (Operand.Var {var = res, ty = Type.bool},
+                       !Control.gcExpect,
                        {falsee = dontCollect,
                         truee = collect})
                 in
                    (Vector.new1 s, transfer)
                 end
              datatype z = datatype Runtime.GCField.t
-             val () = () (* to avoid stupid code highlighting bug *)
              fun stackCheck (maybeFirst, z): Label.t =
                 let
                    val (statements, transfer) =
-                      primApp (Prim.cpointerLt,
+                      primApp (Prim.CPointer_lt,
                                Operand.Runtime StackLimit,
                                Operand.Runtime StackTop,
                                z)
@@ -509,7 +386,7 @@ fun insertFunction (f: Function.t,
                       {args = Vector.new2 (Operand.Runtime LimitPlusSlop,
                                            Operand.Runtime Frontier),
                        dst = SOME (res, Type.csize ()),
-                       prim = Prim.cpointerDiff}
+                       prim = Prim.CPointer_diff}
                    val (statements, transfer) =
                       primApp (lessThan,
                                Operand.Var {var = res, ty = Type.csize ()},
@@ -520,7 +397,7 @@ fun insertFunction (f: Function.t,
                    if handlesSignals
                       then
                          frontierCheck (isFirst,
-                                        Prim.cpointerEqual,
+                                        Prim.CPointer_equal,
                                         Operand.Runtime Limit,
                                         Operand.null,
                                         {collect = collect,
@@ -540,21 +417,15 @@ fun insertFunction (f: Function.t,
                 ignore
                 (if Bytes.<= (bytes, Runtime.limitSlop)
                     then frontierCheck (true,
-                                        Prim.cpointerLt,
+                                        Prim.CPointer_lt,
                                         Operand.Runtime Limit,
                                         Operand.Runtime Frontier,
                                         insert (Operand.zero (WordSize.csize ())))
                  else
                     let
                        val bytes =
-                          let
-                             val bytes =
-                                WordX.fromIntInf
-                                (Bytes.toIntInf bytes,
-                                 WordSize.csize ())
-                          in
-                             SOME bytes
-                          end handle Overflow => NONE
+                          SOME (WordX.fromBytes (bytes, WordSize.csize ()))
+                          handle Overflow => NONE
                     in
                        case bytes of
                           NONE => gotoHeapCheckTooLarge ()
@@ -588,9 +459,7 @@ fun insertFunction (f: Function.t,
                             val extraBytes =
                                let
                                   val extraBytes =
-                                     WordX.fromIntInf
-                                     (Bytes.toIntInf extraBytes,
-                                      WordSize.csize ())
+                                     WordX.fromBytes (extraBytes, WordSize.csize ())
                                in
                                   SOME extraBytes
                                end handle Overflow => NONE
@@ -606,17 +475,18 @@ fun insertFunction (f: Function.t,
                                             (Operand.word extraBytes,
                                              bytesNeeded),
                                      dst = SOME (bytes, Type.csize ()),
-                                     prim = Prim.wordAdd (WordSize.csize ())},
+                                     prim = Prim.Word_add (WordSize.csize ())},
                                     Statement.PrimApp
                                     {args = Vector.new2
                                             (Operand.word extraBytes,
                                                         bytesNeeded),
                                      dst = SOME (test, Type.bool),
-                                     prim = Prim.wordAddCheckP
+                                     prim = Prim.Word_addCheckP
                                             (WordSize.csize (),
                                              {signed = false})}),
-                                   Transfer.ifBool
+                                   Transfer.ifBoolE
                                    (Operand.Var {var = test, ty = Type.bool},
+                                    !Control.gcExpect,
                                     {falsee = heapCheck (false,
                                                 Operand.Var
                                                 {var = bytes,
@@ -625,9 +495,9 @@ fun insertFunction (f: Function.t,
                          end
                 end
           in
-            (case Transfer.bytesAllocated transfer of
-                 Transfer.Big z => bigAllocation z
-               | Transfer.Small _ => smallAllocation ())
+             case Transfer.bytesAllocated transfer of
+                Transfer.Big z => bigAllocation z
+              | Transfer.Small _ => smallAllocation ()
           end)
    in
       Function.new {args = args,
@@ -638,13 +508,15 @@ fun insertFunction (f: Function.t,
                     start = start}
    end
 
-fun insertPerBlock (f: Function.t, handlesSignals) =
+fun insertPerBlock (f: Function.t, handlesSignals, newFlag, tyconTy) =
    let
       val {blocks, ...} = Function.dest f
       fun blockCheckAmount {blockIndex} =
-         Block.objectBytesAllocated (Vector.sub (blocks, blockIndex))
+         Block.objectBytesAllocated
+         (Vector.sub (blocks, blockIndex),
+          {tyconTy = tyconTy})
    in
-      insertFunction (f, handlesSignals, blockCheckAmount, fn _ => Bytes.zero)
+      insertFunction (f, handlesSignals, newFlag, blockCheckAmount, fn _ => Bytes.zero)
    end
 
 structure Graph = DirectedGraph
@@ -698,24 +570,25 @@ fun isolateBigTransfers (f: Function.t): Function.t =
  * Assumes big transfers have already been isolated. *)
 fun restrictAllocInBlock
   (originalBlock as
-    Block.T {args=originalArgs,
-             kind=originalKind,
-             label=originalLabel,
-             statements=originalStatements,
-             transfer=originalTransfer},
-   maxAlloc : Bytes.t) : Block.t list =
+   Block.T {args=originalArgs,
+            kind=originalKind,
+            label=originalLabel,
+            statements=originalStatements,
+            transfer=originalTransfer},
+   maxAlloc: Bytes.t,
+   tyconTy: ObjptrTycon.t -> ObjectType.t) : Block.t list =
   case Transfer.bytesAllocated originalTransfer of
     (* In this case, it should be an isolated transfer, i.e. no statements. *)
     Transfer.Big _ => [originalBlock]
     (* Otherwise we take into account the bytes needed for the transfer. *)
   | Transfer.Small transferBytes =>
-      if Bytes.<= (Block.objectBytesAllocated originalBlock, maxAlloc)
+      if Bytes.<= (Block.objectBytesAllocated (originalBlock, {tyconTy = tyconTy}), maxAlloc)
       then [originalBlock]
       else
       let
         fun prependStatement (s, (ss, ssAlloc, groups)) =
           let
-            val b = Statement.bytesAllocated s
+            val b = Statement.bytesAllocated (s, {tyconTy = tyconTy})
             (* val _ =
               if Bytes.<= (sAlloc, maxAlloc) then ()
               else Error.bug ("LimitCheck.restrictAllocInBlock: single statement " ^
@@ -803,10 +676,10 @@ fun restrictAllocInBlock
         blocks
       end
 
-fun restrictAllocInEachBlock (f: Function.t, maxAlloc: Bytes.t) =
+fun restrictAllocInEachBlock (f: Function.t, maxAlloc: Bytes.t, tyconTy) =
   let
     val {args, blocks, name, raises, returns, start} = Function.dest f
-    val expandedBlocks = Vector.map (blocks, fn b => restrictAllocInBlock (b, maxAlloc))
+    val expandedBlocks = Vector.map (blocks, fn b => restrictAllocInBlock (b, maxAlloc, tyconTy))
     val blocks' = Vector.foldr (expandedBlocks, [], fn (acc, bs) => List.append (bs, acc))
   in
     Function.new {args = args,
@@ -817,10 +690,10 @@ fun restrictAllocInEachBlock (f: Function.t, maxAlloc: Bytes.t) =
                   start = start}
   end
 
-fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
+fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals, newFlag, tyconTy) =
    let
       val f = isolateBigTransfers f
-      val f = restrictAllocInEachBlock (f, maxAlloc)
+      val f = restrictAllocInEachBlock (f, maxAlloc, tyconTy)
       val {blocks, start, ...} = Function.dest f
       val n = Vector.length blocks
       val {get = labelIndex, set = setLabelIndex, ...} =
@@ -916,7 +789,9 @@ fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
                       else addEdge from
               end)
           end)
-      val objectBytesAllocated = Vector.map (blocks, Block.objectBytesAllocated)
+      val objectBytesAllocated =
+         Vector.map (blocks, fn b =>
+                     Block.objectBytesAllocated (b, {tyconTy = tyconTy}))
       fun insertCoalesceExtBasicBlocks () =
          let
             val preds = Array.new (n, 0)
@@ -1059,12 +934,11 @@ fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
                          let
                             val i' = nodeIndex (Edge.to e)
                          in
-                            if Array.sub (mayHaveCheck, i') then
-                              max
-                            else if Bytes.> (Bytes.+ (x, maxPath i'), maxAlloc) then
-                              (Array.update (mayHaveCheck, i', true); max)
-                            else
-                              Bytes.max (max, maxPath i')
+                            if Array.sub (mayHaveCheck, i')
+                               then max
+                            else if Bytes.> (Bytes.+ (x, maxPath i'), maxAlloc)
+                               then (Array.update (mayHaveCheck, i', true); max)
+                            else Bytes.max (max, maxPath i')
                          end)
                      val x = Bytes.+ (x, max)
                      val _ = Array.update (a, i, SOME x)
@@ -1085,8 +959,7 @@ fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
          if Array.sub (mayHaveCheck, blockIndex)
             then maxPath blockIndex
          else Bytes.zero
-
-      val f = insertFunction (f, handlesSignals, blockCheckAmount,
+      val f = insertFunction (f, handlesSignals, newFlag, blockCheckAmount,
                               maxPath o labelIndex)
       val _ =
          Control.diagnostics
@@ -1102,9 +975,54 @@ fun insertCoalesce (f: Function.t, maxAlloc: Bytes.t, handlesSignals) =
       f
    end
 
-fun transform (Program.T {functions, handlesSignals, main, objectTypes, profileInfo}) =
+fun transform (Program.T {functions, handlesSignals, main, objectTypes, profileInfo, statics}) =
    let
+      fun tyconTy tycon =
+         Vector.sub (objectTypes, ObjptrTycon.index tycon)
+
       val _ = Control.diagnostic (fn () => Layout.str "Limit Check maxPaths")
+
+      val (newFlag, finishFlags) =
+         let
+            val flagsTycon = ObjptrTycon.new ()
+            val flagsVar = Var.newString "flags"
+            val flagsTy = Type.objptr flagsTycon
+            val flags = Operand.Var {ty = flagsTy, var = flagsVar}
+
+            val flagWS = WordSize.bool
+            val flagScale = valOf (Scale.fromBytes (WordSize.bytes flagWS))
+            val flagTy = Type.word flagWS
+
+            val c = Counter.new 0
+         in
+            (fn () => Operand.SequenceOffset
+                      {base = flags,
+                       index = Operand.word (WordX.fromInt (Counter.next c,
+                                                            WordSize.seqIndex ())),
+                       offset = Bytes.zero,
+                       scale = flagScale,
+                       ty = flagTy},
+             fn () =>
+             if Counter.value c > 0
+                then (ObjptrTycon.setIndex (flagsTycon, Vector.length objectTypes)
+                      ; (Vector.concat
+                         [objectTypes,
+                          Vector.new1 (ObjectType.Sequence
+                                       {components = Prod.new1Mutable flagTy,
+                                        hasIdentity = true})],
+                         Vector.concat
+                         [statics,
+                          Vector.new1 {dst = (flagsVar, flagsTy),
+                                       obj = Object.Sequence
+                                             {init = Vector.tabulate
+                                                     (Counter.value c, fn _ =>
+                                                      Vector.new1
+                                                      {offset = Bytes.zero,
+                                                       src = Operand.one flagWS}),
+                                              tycon = flagsTycon}}]))
+                else (objectTypes, statics))
+         end
+
       datatype z = datatype Control.limitCheck
       fun insert f =
          case !Control.limitCheck of
@@ -1125,40 +1043,21 @@ fun transform (Program.T {functions, handlesSignals, main, objectTypes, profileI
                 val maxBytesAlloc =
                   Bytes.- (Bytes.fromInt (512*7), Runtime.limitSlop)
               in
-                insertCoalesce (f, maxBytesAlloc, handlesSignals)
+                insertCoalesce (f, maxBytesAlloc, handlesSignals, newFlag, tyconTy)
               end
 
       (* insert limit checks into all functions *)
+      val main = insert main
       val functions = List.revMap (functions, insert)
-      val {args, blocks, name, raises, returns, start} =
-         Function.dest (insert main)
-      val newStart = Label.newNoname ()
-      val block =
-         Block.T {args = Vector.new0 (),
-                  kind = Kind.Jump,
-                  label = newStart,
-                  statements = (Vector.fromListMap
-                                (!extraGlobals, fn x =>
-                                 Statement.Bind
-                                 {dst = (x, Type.bool),
-                                  isMutable = true,
-                                  src = Operand.cast (Operand.bool true,
-                                                      Type.bool)})),
-                  transfer = Transfer.Goto {args = Vector.new0 (),
-                                            dst = start}}
-      val blocks = Vector.concat [Vector.new1 block, blocks]
-      val main = Function.new {args = args,
-                               blocks = blocks,
-                               name = name,
-                               raises = raises,
-                               returns = returns,
-                               start = newStart}
+
+      val (objectTypes, statics) = finishFlags ()
    in
       Program.T {functions = functions,
                  handlesSignals = handlesSignals,
                  main = main,
                  objectTypes = objectTypes,
-                 profileInfo = profileInfo}
+                 profileInfo = profileInfo,
+                 statics = statics}
    end
 
 end

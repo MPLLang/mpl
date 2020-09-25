@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2017 Matthew Fluet.
+(* Copyright (C) 2009,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -132,7 +132,7 @@ structure VarTree =
                      end
             val (t, _, ac) = loop (t, offset, [])
          in
-            (t, ac)
+            (t, List.rev ac)
          end
 
       val fillInRoots =
@@ -691,7 +691,6 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                 | Make _ => Value.weak v
             fun arg i = Vector.sub (args, i)
             fun result () = typeValue resultType
-            datatype z = datatype Prim.Name.t
             fun dontFlatten () =
                (Vector.foreach (args, Value.dontFlatten)
                 ; result ())
@@ -700,8 +699,17 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                 ; Value.dontFlatten (arg 0)
                 ; result ())
          in
-            case Prim.name prim of
-               Array_toArray =>
+            case prim of
+               Prim.Array_cas _ =>
+                 let
+                    val c = select {base = arg 0, offset = 0}
+                 in
+                    Value.dontFlatten c
+                    ; Value.unify (arg 2, c)
+                    ; Value.unify (arg 3, c)
+                    ; c
+                 end
+             | Prim.Array_toArray =>
                   let
                      val res = result ()
                      val () =
@@ -716,7 +724,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                   in
                      res
                   end
-             | Array_toVector =>
+             | Prim.Array_toVector =>
                   let
                      val res = result ()
                      val () =
@@ -731,13 +739,16 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                   in
                      res
                   end
-             | FFI _ =>
+             | Prim.CFunction _ =>
                   (* Some imports, like Real64.modf, take ref cells that can not
                    * be flattened.
                    *)
                   dontFlatten ()
-
-             | Ref_cas _ =>
+             | Prim.MLton_eq => equal ()
+             | Prim.MLton_equal => equal ()
+             | Prim.MLton_size => dontFlatten ()
+             | Prim.MLton_share => dontFlatten ()
+             | Prim.Ref_cas _ =>
                  let
                     val c = select {base = arg 0, offset = 0}
                  in
@@ -746,21 +757,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                     ; Value.unify (arg 2, c)
                     ; c
                  end
-             | Array_cas _ =>
-                 let
-                    val c = select {base = arg 0, offset = 0}
-                 in
-                    Value.dontFlatten c
-                    ; Value.unify (arg 2, c)
-                    ; Value.unify (arg 3, c)
-                    ; c
-                 end
-             | MLton_eq => equal ()
-             | MLton_equal => equal ()
-             | MLton_size => dontFlatten ()
-             | MLton_share => dontFlatten ()
-             | Weak_get => deWeak (arg 0)
-             | Weak_new =>
+             | Prim.Weak_get => deWeak (arg 0)
+             | Prim.Weak_new =>
                   let val a = arg 0
                   in (Value.dontFlatten a; weak a)
                   end
@@ -787,6 +785,21 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
          coerce {from = value,
                  to = select {base = base, offset = offset}}
       fun const c = typeValue (Type.ofConst c)
+      fun sequence {args, resultType} =
+         let
+            val v = typeValue resultType
+            val _ =
+               Vector.foreach
+               (args, fn args =>
+                Vector.foreachi
+                (Prod.dest args, fn (offset, {elt, ...}) =>
+                 update {base = v,
+                         offset = offset,
+                         value = elt,
+                         writeBarrier = false}))
+         in
+            v
+         end
       val {func, value = varValue, ...} =
          analyze {base = base,
                   coerce = coerce,
@@ -801,6 +814,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                   program = program,
                   select = fn {base, offset, ...} => select {base = base,
                                                              offset = offset},
+                  sequence = sequence,
                   update = update,
                   useFromTypeOnBinds = false}
       (* Don't flatten outermost part of formal parameters. *)
@@ -1010,6 +1024,59 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                      val () = setVarTree (var, child)
                                   in
                                      ss
+                                  end
+                         end)
+             | Sequence {args} =>
+                  (case var of
+                      NONE => none ()
+                    | SOME var =>
+                         let
+                            val v = varValue var
+                         in
+                            case Value.deObject v of
+                               NONE => simple ()
+                             | SOME {args = expects, flat, ...} =>
+                                  let
+                                     val z =
+                                        Vector.map
+                                        (args, fn args =>
+                                         Vector.map2
+                                         (args, Prod.dest expects,
+                                          fn (arg, {elt, ...}) =>
+                                          let
+                                             val (vt, ss) =
+                                                coerceTree
+                                                {from = varTree arg,
+                                                 to = Value.finalTree elt}
+                                          in
+                                             (vt, ss)
+                                          end))
+                                     val () = simpleVarTree var
+                                  in
+                                     case !flat of
+                                        Flat => Error.bug "DeepFlatten.transformBind: Sequence, Flat"
+                                      | NotFlat =>
+                                           let
+                                              val ty = Value.finalType v
+                                              val args =
+                                                 Vector.map
+                                                 (z, fn z =>
+                                                  Vector.fromList
+                                                  (Vector.foldr
+                                                   (z, [], fn ((vt, _), ac) =>
+                                                    VarTree.rootsOnto (vt, ac))))
+                                              val obj =
+                                                 Bind
+                                                 {exp = Sequence {args = args},
+                                                  ty = ty,
+                                                  var = SOME var}
+                                           in
+                                              Vector.foldr
+                                              (z, [obj], fn (z, ac) =>
+                                               Vector.foldr
+                                               (z, ac, fn ((_, ss), ac) =>
+                                                ss @ ac))
+                                           end
                                   end
                          end)
              | Var x =>

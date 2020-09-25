@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2011,2017,2019 Matthew Fluet.
+(* Copyright (C) 2009,2011,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -104,6 +104,7 @@ fun checkScopes (program as
                 | Object {args, con, ...} => (Option.app (con, getCon); getVars args)
                 | PrimApp {args, ...} => getVars args
                 | Select {base, ...} => Base.foreach (base, getVar)
+                | Sequence {args} => Vector.foreach (args, getVars)
                 | Var x => getVar x
          in
             ()
@@ -137,16 +138,15 @@ fun checkScopes (program as
                             hash: 'a -> word,
                             numExhaustiveCases: IntInf.t) =
                      let
-                        val table = HashSet.new {hash = hash}
+                        val table = HashTable.new {equals = equals, hash = hash}
                         val _ =
                            Vector.foreach
                            (cases, fn (x, _) =>
                             let
                                val _ =
-                                  HashSet.insertIfNew
-                                  (table, hash x, fn y => equals (x, y),
-                                   fn () => x,
-                                   fn _ => Error.bug "Ssa2.TypeCheck2.loopTransfer: redundant branch in case")
+                                  HashTable.insertIfNew
+                                  (table, x, ignore, fn _ =>
+                                   Error.bug "Ssa2.TypeCheck2.loopTransfer: redundant branch in case")
                             in
                                ()
                             end)
@@ -476,6 +476,23 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
          case Type.dest base of
             Type.Object {args, ...} => Prod.elt (args, offset)
           | _ => Error.bug "Ssa2.TypeCheck2.select (non object)"
+      fun sequence {args, resultType} =
+         let
+            fun err () = Error.bug "Ssa2.TypeCheck2.sequence (bad sequence)"
+         in
+            case Type.dest resultType of
+               Type.Object {args = args', con = ObjectCon.Sequence} =>
+                  (if (Vector.foreach
+                       (args, fn args =>
+                        Vector.foreach2
+                        (Prod.dest args, Prod.dest args',
+                         fn ({elt = t, isMutable = _}, {elt = t', ...}) =>
+                         coerce {from = t, to = t'}))
+                       ; true)
+                      then resultType
+                   else err ())
+             | _ => err ()
+         end
       fun update {base, offset, value, writeBarrier = _} =
          case Type.dest base of
             Type.Object {args, ...} =>
@@ -501,7 +518,6 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
       fun filterWord (from, s) = coerce {from = from, to = Type.word s}
       fun primApp {args, prim, resultType, resultVar = _} =
          let
-            datatype z = datatype Prim.Name.t
             val () =
                if Type.checkPrimApp {args = args,
                                      prim = prim,
@@ -533,6 +549,7 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
                   primApp = primApp,
                   program = program,
                   select = select,
+                  sequence = sequence,
                   update = update,
                   useFromTypeOnBinds = true}
       val _ = Program.clear program

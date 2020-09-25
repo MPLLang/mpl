@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2015,2017 Matthew Fluet.
+(* Copyright (C) 2009-2012,2015,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -127,14 +127,14 @@ local
    open CoreML
 in
    structure CFunction = CFunction
+   structure CKind = CFunction.Kind
+   structure CSymbol = CSymbol
+   structure SymbolScope = CSymbolScope
    structure CType = CType
    structure CharSize = CharSize
-   structure Convention  = CFunction.Convention
-   structure SymbolScope  = CFunction.SymbolScope
-   structure CKind = CFunction.Kind
    structure Con = Con
    structure Const = Const
-   structure ConstType = Const.ConstType
+   structure Convention = CFunction.Convention
    structure Cdec = Dec
    structure Cexp = Exp
    structure Ffi = Ffi
@@ -472,6 +472,88 @@ fun 'a elabConst (c: Aconst.t,
                      (if WordSize.isInRange (s, w, {signed = false})
                          then WordX.fromIntInf (w, s)
                       else (error ("word constant", ty); WordX.zero s))))
+   end
+
+fun lookConst {default: string option, expandedTy, name, region}: unit -> Const.t =
+   let
+      fun badType () =
+         let
+            val _ =
+               Control.error
+               (region,
+                seq [str "strange constant type: ",
+                     Type.layout expandedTy],
+                empty)
+         in
+            Error.bug "ElaborateCore.lookConst"
+         end
+      fun notFound () =
+         Error.bug
+         (concat ["ElaborateCore.lookConst: constant ", name,
+                  " not found"])
+      fun badConversion (value, ty) =
+         Error.bug
+         (concat ["ElaborateCore.lookConst: constant ", name,
+                  " expects a ", ty, " but got ", value])
+      fun boolConstFromString v =
+         case Bool.fromString v of
+            NONE => badConversion (v, "bool")
+          | SOME b => Const.Word (WordX.fromIntInf (if b then 1 else 0, WordSize.bool))
+      fun realConstFromString rs v =
+         case RealX.make (v, rs) of
+            NONE => badConversion (v, "real")
+          | SOME r => Const.Real r
+      fun strConstFromString v = Const.string v
+      fun wordConstFromString ws v =
+         case IntInf.fromString v of
+            NONE => badConversion (v, "word")
+          | SOME ii => Const.Word (WordX.fromIntInf (ii, ws))
+      fun intInfConstFromString v =
+         case IntInf.fromString v of
+            NONE => badConversion (v, "intInf")
+          | SOME ii => Const.IntInf ii
+   in
+      case Type.deConOpt expandedTy of
+         NONE => badType ()
+       | SOME (c, ts) =>
+            let
+               val constFromString =
+                  if Tycon.equals (c, Tycon.bool)
+                     then boolConstFromString
+                  else if Tycon.isIntX c
+                     then (case Tycon.deIntX c of
+                              NONE => intInfConstFromString
+                            | SOME is => wordConstFromString (WordSize.fromBits (IntSize.bits is)))
+                  else if Tycon.isRealX c
+                     then realConstFromString (Tycon.deRealX c)
+                  else if Tycon.isWordX c
+                     then wordConstFromString (Tycon.deWordX c)
+                  else if Tycon.equals (c, Tycon.vector)
+                          andalso 1 = Vector.length ts
+                          andalso (case Type.deConOpt (Vector.first ts) of
+                                      NONE => false
+                                    | SOME (c, _) =>
+                                         Tycon.isCharX c
+                                         andalso (Tycon.deCharX c = CharSize.C8))
+                     then strConstFromString
+                  else badType ()
+            in
+               fn () =>
+               let
+                  val value =
+                     case List.peekMap ([Control.commandLineConsts,
+                                         Promise.force Control.buildConsts,
+                                         Promise.force Control.Target.consts], fn consts =>
+                                        Control.StrMap.peek (consts, name)) of
+                        NONE => (case default of
+                                    NONE => notFound ()
+                                  | SOME value => value)
+                      | SOME value => value
+                  val const = constFromString value
+               in
+                  const
+               end
+            end
    end
 
 local
@@ -1146,6 +1228,19 @@ fun parseIEAttributesConvention (attributes: ImportExportAttribute.t list)
            | _ => NONE)
     | _ => NONE
 
+val isIEAttributeInline =
+   fn ImportExportAttribute.Inline => true
+    | _ => false
+
+fun parseIEAttributesInline (attributes: ImportExportAttribute.t list)
+    : bool option =
+   case attributes of
+      [] => SOME false
+    | [a] => (case a of
+                 ImportExportAttribute.Inline => SOME true
+               | _ => NONE)
+    | _ => NONE
+
 val isIEAttributeKind =
    fn ImportExportAttribute.Impure => true
     | ImportExportAttribute.Pure => true
@@ -1223,7 +1318,7 @@ fun import {attributes: ImportExportAttribute.t list,
             let
                val () = invalidType ()
             in
-               Prim.bogus
+               Prim.MLton_bogus
             end
        | SOME (args, result) =>
             let
@@ -1235,6 +1330,20 @@ fun import {attributes: ImportExportAttribute.t list,
                      NONE => (invalidAttributes ()
                               ; Convention.Cdecl)
                    | SOME c => c
+               val inline =
+                  List.keepAll (attributes, isIEAttributeInline)
+               val inline =
+                  case name of
+                     NONE =>
+                        (if List.isEmpty inline
+                            then ()
+                            else invalidAttributes ()
+                         ; false)
+                   | SOME _ =>
+                        (case parseIEAttributesInline inline of
+                            NONE => (invalidAttributes ()
+                                     ; false)
+                          | SOME i => i)
                val kind =
                   List.keepAll (attributes, isIEAttributeKind)
                val kind =
@@ -1276,7 +1385,8 @@ fun import {attributes: ImportExportAttribute.t list,
                                                  [Vector.new1 addrTy, args]
                                       end,
                                convention = convention,
-			       kind = kind,
+                               inline = inline,
+                               kind = kind,
                                prototype = (Vector.map (args, #ctype),
                                             Option.map (result, #ctype)),
                                return = (case result of
@@ -1287,7 +1397,7 @@ fun import {attributes: ImportExportAttribute.t list,
                                             NONE => Indirect
                                           | SOME name => Direct name)}
             in
-               Prim.ffi func
+               Prim.CFunction func
             end
    end
 
@@ -1326,11 +1436,11 @@ local
                   name: string,
                   cty: CType.t option,
                   symbolScope: SymbolScope.t }: Cexp.t =
-      primApp {args = Vector.new0 (),
-               prim = Prim.ffiSymbol {name = name,
-                                      cty = cty,
-                                      symbolScope = symbolScope},
-               result = expandedPtrTy}
+      Cexp.make (Cexp.Const
+                 (fn () => Const.csymbol (CSymbol.T {name = name,
+                                                     cty = cty,
+                                                     symbolScope = symbolScope})),
+                 expandedPtrTy)
 
    fun mkFetch {ctypeCbTy, isBool,
                 expandedCbTy,
@@ -1346,7 +1456,7 @@ local
          if not isBool then fetchExp else
          Cexp.iff (primApp
                    {args = Vector.new2 (fetchExp, zeroExpBool),
-                    prim = Prim.wordEqual WordSize.bool,
+                    prim = Prim.Word_equal WordSize.bool,
                     result = expandedCbTy},
                    Cexp.falsee,
                    Cexp.truee)
@@ -3321,56 +3431,15 @@ fun elaborateDec (d, {env = E, nest}) =
                          wrap (etaNoWrap {expandedTy = expandedTy,
                                           prim = prim},
                                elabedTy)
-                      fun lookConst {default: string option,
-                                     elabedTy, expandedTy,
-                                     name: string} =
+                      val lookConst = fn {default, elabedTy, expandedTy, name} =>
                          let
-                            fun bug () =
-                               let
-                                  val _ =
-                                     Control.error
-                                     (region,
-                                      seq [str "strange constant type: ",
-                                           Type.layout expandedTy],
-                                      empty)
-                               in
-                                  Error.bug "ElaborateCore.elabExp.lookConst"
-                               end
+                            val finish =
+                               lookConst {default = default,
+                                          expandedTy = expandedTy,
+                                          name = name,
+                                          region = region}
                          in
-                            case Type.deConOpt expandedTy of
-                               NONE => bug ()
-                             | SOME (c, ts) =>
-                                  let
-                                     val ct =
-                                        if Tycon.equals (c, Tycon.bool)
-                                           then ConstType.Bool
-                                        else if Tycon.isIntX c
-                                           then case Tycon.deIntX c of
-                                                   NONE => bug ()
-                                                 | SOME is =>
-                                                      ConstType.Word
-                                                      (WordSize.fromBits (IntSize.bits is))
-                                        else if Tycon.isRealX c
-                                           then ConstType.Real (Tycon.deRealX c)
-                                        else if Tycon.isWordX c
-                                           then ConstType.Word (Tycon.deWordX c)
-                                        else if Tycon.equals (c, Tycon.vector)
-                                           andalso 1 = Vector.length ts
-                                           andalso
-                                           (case (Type.deConOpt
-                                                  (Vector.first ts)) of
-                                               NONE => false
-                                             | SOME (c, _) =>
-                                                  Tycon.isCharX c
-                                                  andalso (Tycon.deCharX c = CharSize.C8))
-                                           then ConstType.String
-                                        else bug ()
-                                  val finish =
-                                     fn () => ! Const.lookup ({default = default,
-                                                               name = name}, ct)
-                                  in
-                                     Cexp.make (Cexp.Const finish, elabedTy)
-                                  end
+                            Cexp.make (Cexp.Const finish, elabedTy)
                          end
                       val check = fn (c, n) => check (c, n, region)
                       datatype z = datatype Ast.PrimKind.t
@@ -3401,7 +3470,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                lookConst {default = NONE,
                                           elabedTy = elabedTy,
                                           expandedTy = expandedTy,
-                                          name = name}
+                                          name = "buildConst::" ^ name}
                             end
                        | CommandLineConst {name, ty, value} =>
                             let
@@ -3424,7 +3493,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                lookConst {default = SOME value,
                                           elabedTy = elabedTy,
                                           expandedTy = expandedTy,
-                                          name = name}
+                                          name = "cmdLineConst::" ^ name}
                             end
                        | Const {name, ty} =>
                             let
@@ -3437,7 +3506,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                lookConst {default = NONE,
                                           elabedTy = elabedTy,
                                           expandedTy = expandedTy,
-                                          name = name}
+                                          name = "const::" ^ name}
                             end
                        | Export {attributes, name, ty} =>
                             let
@@ -3589,7 +3658,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                           str (concat ["unknown primitive: ",
                                                        name]),
                                           empty)
-                                         ; Prim.bogus)
+                                         ; Prim.MLton_bogus)
                                    | SOME p => p
                             in
                                eta {elabedTy = elabedTy,

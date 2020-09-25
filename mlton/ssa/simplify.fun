@@ -134,10 +134,10 @@ local
    type passGen = string -> pass option
 
    fun mkSimplePassGen (name, doit): passGen =
-      let val count = Counter.new 1
+      let val count = Counter.generator 1
       in fn s => if s = name
                     then SOME {name = concat [name, "#",
-                                              Int.toString (Counter.next count)],
+                                              Int.toString (count ())],
                                doit = doit,
                                execute = true}
                     else NONE
@@ -146,7 +146,7 @@ local
    val inlinePassGen =
       let
          datatype t = Bool of bool | IntOpt of int option
-         val count = Counter.new 1
+         val count = Counter.generator 1
          fun nums s =
             Exn.withEscape
             (fn escape =>
@@ -184,7 +184,7 @@ local
                        SOME {name = concat ["inlineNonRecursive(", 
                                             Int.toString product, ",",
                                             Int.toString small, ")#",
-                                            Int.toString (Counter.next count)],
+                                            Int.toString (count ())],
                              doit = (fn p => 
                                      Inline.inlineNonRecursive 
                                      (p, {small = small, product = product})),
@@ -203,7 +203,7 @@ local
                                             Bool.toString loops, ",",
                                             Bool.toString repeat, ",",
                                             Option.toString Int.toString size, ")#",
-                                            Int.toString (Counter.next count)],
+                                            Int.toString (count ())],
                              doit = (fn p => 
                                      Inline.inlineLeaf
                                      (p, {loops = loops, repeat = repeat, size = size})),
@@ -267,21 +267,15 @@ in
         end))
 end
 
-val ssaPassesString = ref "default"
-val ssaPassesGet = fn () => !ssaPassesString
-val ssaPassesSet = fn s =>
-   let
-      val _ = ssaPassesString := s
-   in
-      case s of
-         "default" => (ssaPasses := ssaPassesDefault
-                       ; Result.Yes ())
-       | "minimal" => (ssaPasses := ssaPassesMinimal
-                       ; Result.Yes ())
-       | _ => ssaPassesSetCustom s
-   end
-val _ = List.push (Control.optimizationPasses,
-                   {il = "ssa", get = ssaPassesGet, set = ssaPassesSet})
+fun ssaPassesSet s =
+   case s of
+      "default" => (ssaPasses := ssaPassesDefault
+                    ; Result.Yes ())
+    | "minimal" => (ssaPasses := ssaPassesMinimal
+                    ; Result.Yes ())
+    | _ => ssaPassesSetCustom s
+val _ = Control.OptimizationPasses.register
+        {il = "ssa", set = ssaPassesSet}
 
 fun simplify p =
    let

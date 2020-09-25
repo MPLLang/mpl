@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2019 Matthew Fluet.
+(* Copyright (C) 2009,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -83,7 +83,7 @@ fun insertInFunction (f: Function.t): Function.t =
                          (Operand.Runtime Runtime.GCField.Limit,
                           Operand.null)),
                  dst = SOME (res, Type.bool),
-                 prim = Prim.cpointerEqual})
+                 prim = Prim.CPointer_equal})
             val compareTransfer =
                Transfer.ifBool
                (Operand.Var {var = res, ty = Type.bool},
@@ -295,7 +295,7 @@ fun insertInFunction (f: Function.t): Function.t =
 
 fun transform p =
    let
-      val Program.T {functions, handlesSignals, main, objectTypes, profileInfo} = p
+      val Program.T {functions, handlesSignals, main, objectTypes, profileInfo, statics} = p
    in
       if not handlesSignals
          then p
@@ -304,7 +304,8 @@ fun transform p =
                     handlesSignals = handlesSignals,
                     main = main,
                     objectTypes = objectTypes,
-                    profileInfo = profileInfo}
+                    profileInfo = profileInfo,
+                    statics = statics}
    end
 
 end

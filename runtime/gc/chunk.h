@@ -176,9 +176,9 @@ static inline void HM_forwardHHObjptrsInChunkList(
   GC_state s,
   HM_chunk chunk,
   pointer start,
-  ObjptrPredicateFunction predicate,
-  void* predicateArgs,
-  ForeachObjptrFunction forwardHHObjptrFunc,
+  GC_objptrPredicateFun predicate,
+  void *predicateArgs,
+  GC_foreachObjptrFun forwardHHObjptrFunc,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
 
 /**

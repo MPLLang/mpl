@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Matthew Fluet.
+(* Copyright (C) 2019-2020 Matthew Fluet.
  * Copyright (C) 2002-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -25,6 +25,7 @@ structure CFunction =
          fun make {args, name, prototype} =
             T {args = args,
                convention = Convention.Cdecl,
+               inline = false,
                kind = Kind.Runtime {bytesNeeded = NONE,
                                     ensuresBytesFree = NONE,
                                     mayGC = false,
@@ -142,7 +143,9 @@ fun transform program =
       then program
    else
    let
-      val Program.T {functions, handlesSignals, main, objectTypes, ...} = program
+      val Program.T {functions, handlesSignals, main, objectTypes, statics, ...} = program
+      fun tyconTy tycon =
+         Vector.sub (objectTypes, ObjptrTycon.index tycon)
       val debug = false
       datatype z = datatype Control.profile
       val profile = !Control.profile
@@ -154,7 +157,7 @@ fun transform program =
       val infoNodes: InfoNode.t list ref = ref []
       val sourceNames: string list ref = ref []
       local
-         val sourceNameCounter = Counter.new 0
+         val nextSourceName = Counter.generator 0
          val sep =
             if profile = ProfileCallStack
                then " "
@@ -164,15 +167,15 @@ fun transform program =
                           Property.initFun
                           (fn si =>
                            (List.push (sourceNames, SourceInfo.toString' (si, sep))
-                            ; Counter.next sourceNameCounter)))
-         val sourceCounter = Counter.new 0
-      in         
+                            ; nextSourceName ())))
+         val nextSource = Counter.generator 0
+      in
          fun sourceInfoNode (si: SourceInfo.t) =
             let
                val infoNode =
                   InfoNode.T {info = si,
                               sourceNameIndex = sourceNameIndex si,
-                              sourceIndex = Counter.next sourceCounter,
+                              sourceIndex = nextSource (),
                               successors = ref []}
                val _ = List.push (infoNodes, infoNode)
             in
@@ -270,7 +273,7 @@ fun transform program =
                {equals = equals,
                 hash = hash}
             end
-         val c = Counter.new 0
+         val nextSourceSeqIndex = Counter.generator 0
       in
          fun sourceSeqIndex (s: sourceSeq): int =
             let
@@ -279,7 +282,7 @@ fun transform program =
                HashTable.lookupOrInsert
                (table, s, fn () =>
                 (List.push (sourceSeqs, s)
-                 ; Counter.next c))
+                 ; nextSourceSeqIndex ()))
             end
       end
       (* Ensure that [SourceInfo.unknown] is index 0. *)
@@ -325,9 +328,7 @@ fun transform program =
          in
             Statement.Move
             {dst = curSourceSeqIndex,
-             src = Operand.word (WordX.fromIntInf 
-                                 (IntInf.fromInt sourceSeqIndex,
-                                  WordSize.word32))}
+             src = Operand.word (WordX.fromInt (sourceSeqIndex, WordSize.word32))}
          end
       fun codeCoverageStatementFromSourceSeqIndex (sourceSeqIndex: int): Statement.t =
          if needProfileLabels
@@ -477,8 +478,7 @@ fun transform program =
                       (leaves, true, sourceSeq, []),
                       fn (s, (leaves, ncc, sourceSeq, ss)) =>
                       case s of
-                         Object _ => (leaves, true, sourceSeq, s :: ss)
-                       | Profile ps =>
+                         Profile ps =>
                             let
                                val (ncc, ss) =
                                   if needCodeCoverage
@@ -698,9 +698,7 @@ fun transform program =
                                     {args = (Vector.new2
                                              (Operand.GCState,
                                               Operand.word
-                                              (WordX.fromIntInf
-                                               (IntInf.fromInt amount,
-                                                WordSize.csize ())))),
+                                              (WordX.fromInt (amount, WordSize.csize ())))),
                                      func = func,
                                      return = SOME newLabel}
                                  val sourceSeq = Push.toSourceSeq pushes
@@ -749,9 +747,12 @@ fun transform program =
                                 end
                              ;
                             case s of
-                               Object {size, ...} =>
+                               Object {obj, ...} =>
                                   {args = args,
-                                   bytesAllocated = Bytes.+ (bytesAllocated, size),
+                                   bytesAllocated = Bytes.+ (bytesAllocated,
+                                                             Object.size
+                                                             (obj,
+                                                              {tyconTy = tyconTy})),
                                    kind = kind,
                                    label = label,
                                    leaves = leaves,
@@ -936,7 +937,8 @@ fun transform program =
                  main = main,
                  objectTypes = objectTypes,
                  profileInfo = SOME {sourceMaps = sourceMaps,
-                                     getFrameSourceSeqIndex = getFrameSourceSeqIndex}}
+                                     getFrameSourceSeqIndex = getFrameSourceSeqIndex},
+                 statics = statics}
    end
 
 end

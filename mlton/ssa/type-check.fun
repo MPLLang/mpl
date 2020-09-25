@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2011,2017,2019 Matthew Fluet.
+(* Copyright (C) 2009,2011,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -113,16 +113,15 @@ fun checkScopes (program as
                             hash: 'a -> word,
                             numExhaustiveCases: IntInf.t) =
                      let
-                        val table = HashSet.new {hash = hash}
+                        val table = HashTable.new {equals = equals, hash = hash}
                         val _ =
                            Vector.foreach
                            (cases, fn (x, _) =>
                             let
                                val _ =
-                                  HashSet.insertIfNew
-                                  (table, hash x, fn y => equals (x, y),
-                                   fn () => x,
-                                   fn _ => Error.bug "Ssa.TypeCheck.loopTransfer: redundant branch in case")
+                                  HashTable.insertIfNew
+                                  (table, x, ignore, fn _ =>
+                                   Error.bug "Ssa.TypeCheck.loopTransfer: redundant branch in case")
                             in
                                ()
                             end)
@@ -415,7 +414,6 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
          end
       fun primApp {args, prim, resultType, resultVar = _, targs} =
          let
-            datatype z = datatype Prim.Name.t
             val () =
                if Type.checkPrimApp {args = args,
                                      prim = prim,

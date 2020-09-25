@@ -418,9 +418,10 @@ void HM_forwardHHObjptrsInChunkList(
   GC_state s,
   HM_chunk chunk,
   pointer start,
-  ObjptrPredicateFunction predicate,
-  void* predicateArgs,
-  ForeachObjptrFunction forwardHHObjptrFunc,
+
+  GC_objptrPredicateFun predicate,
+  void *predicateArgs,
+  GC_foreachObjptrFun forwardHHObjptrFunc,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs)
 {
   assert(NULL != chunk);
@@ -429,6 +430,11 @@ void HM_forwardHHObjptrsInChunkList(
 
   pointer p = start;
   size_t i = 0;
+
+  struct GC_foreachObjptrClosure forwardHHObjptrClosure =
+    {.fun = forwardHHObjptrFunc, .env = forwardHHObjptrArgs};
+  struct GC_objptrPredicateClosure predicateClosure =
+    {.fun = predicate, .env = predicateArgs};
 
   while (NULL != chunk) {
 
@@ -440,11 +446,9 @@ void HM_forwardHHObjptrsInChunkList(
       forwardHHObjptrArgs->containingObject = pointerToObjptr(p, NULL);
       p = foreachObjptrInObject(s,
                                 p,
-                                FALSE,
-                                predicate,
-                                predicateArgs,
-                                forwardHHObjptrFunc,
-                                forwardHHObjptrArgs);
+                                &predicateClosure,
+                                &forwardHHObjptrClosure,
+                                FALSE);
       if ((i++ % 1024) == 0) {
         Trace3(EVENT_COPY,
                (EventInt)forwardHHObjptrArgs->bytesCopied,

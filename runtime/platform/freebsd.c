@@ -1,10 +1,10 @@
 #include "platform.h"
 
-#include "diskBack.unix.c"
-#include "mmap-protect.c"
-#include "nonwin.c"
-#include "sysctl.c"
-#include "use-mmap.c"
+#include "platform/diskBack.unix.c"
+#include "platform/mmap-protect.c"
+#include "platform/nonwin.c"
+#include "platform/sysctl.c"
+#include "platform/use-mmap.c"
 
 void GC_displayMem (void) {
         static char buffer[256];
@@ -21,6 +21,10 @@ static void catcher (__attribute__ ((unused)) int signo,
         GC_handleSigProf ((code_pointer) ucp->uc_mcontext.mc_rip);
 #elif (defined (__i386__))
         GC_handleSigProf ((code_pointer) ucp->uc_mcontext.mc_eip);
+#elif (defined (__arm__))
+        GC_handleSigProf ((code_pointer) ucp->uc_mcontext.__gregs[_REG_PC]);
+#elif (defined (__aarch64__))
+        GC_handleSigProf ((code_pointer) ucp->uc_mcontext.mc_gpregs.gp_elr);
 #else
 #error Profiling handler is missing for this architecture
 #endif

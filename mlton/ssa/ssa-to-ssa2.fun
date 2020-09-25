@@ -1,4 +1,4 @@
-(* Copyright (C) 2017,2019 Matthew Fluet.
+(* Copyright (C) 2017,2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -115,16 +115,18 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
              | S.Exp.PrimApp {args, prim, ...} =>
                   let
                      fun arg i = Vector.sub (args, i)
+                     fun sequence () =
+                        simple (S2.Exp.Sequence {args = Vector.map (args, Vector.new1)})
                      fun sub () =
                         simple
                         (S2.Exp.Select {base = Base.SequenceSub {index = arg 1,
                                                                  sequence = arg 0},
                                         offset = 0})
-                     datatype z = datatype Prim.Name.t
                    in
-                      case Prim.name prim of
-                         Array_sub => sub ()
-                       | Array_update {writeBarrier} =>
+                      case prim of
+                         Prim.Array_array => sequence ()
+                       | Prim.Array_sub => sub ()
+                       | Prim.Array_update {writeBarrier} =>
                             maybeBindUnit
                             (S2.Statement.Update
                              {base = Base.SequenceSub {index = arg 1,
@@ -132,68 +134,24 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                               offset = 0,
                               value = arg 2,
                               writeBarrier = writeBarrier})
-                       | Ref_assign {writeBarrier} =>
+                       | Prim.Ref_assign {writeBarrier} =>
                             maybeBindUnit
                             (S2.Statement.Update
                              {base = Base.Object (arg 0),
                               offset = 0,
                               value = arg 1,
                               writeBarrier = writeBarrier})
-                       | Ref_deref =>
+                       | Prim.Ref_deref =>
                             simple (S2.Exp.Select {base = Base.Object (arg 0),
                                                    offset = 0})
-                       | Ref_ref =>
+                       | Prim.Ref_ref =>
                             simple (S2.Exp.Object {args = Vector.new1 (arg 0),
                                                    con = NONE})
-                       | Vector_length =>
+                       | Prim.Vector_length =>
                             simple (S2.Exp.PrimApp {args = args,
-                                                    prim = Prim.arrayLength})
-                       | Vector_sub => sub ()
-                       | Vector_vector =>
-                            let
-                               val siws = S2.WordSize.seqIndex ()
-                               fun mkIStmt (iVar, i) =
-                                  S2.Statement.Bind
-                                  {exp = (S2.Exp.Const o S2.Const.word o S2.WordX.fromIntInf)
-                                         (IntInf.fromInt i, siws),
-                                   ty = S2.Type.word siws,
-                                   var = SOME iVar}
-                               val nVar = Var.newString "n"
-                               val aVar = Var.newString "a"
-                               val vStmt =
-                                  S2.Statement.Bind
-                                  {exp = S2.Exp.PrimApp {args = Vector.new1 aVar,
-                                                         prim = Prim.arrayToVector},
-                                   ty = ty,
-                                   var = var}
-                               val stmts =
-                                  Vector.foldri
-                                  (args, [vStmt], fn (i, arg, stmts) =>
-                                   let
-                                      val iVar = Var.newString "i"
-                                      val iStmt = mkIStmt (iVar, i)
-                                      val uStmt =
-                                         S2.Statement.Update
-                                         {base = Base.SequenceSub {index = iVar,
-                                                                   sequence = aVar},
-                                          offset = 0,
-                                          value = arg,
-                                          writeBarrier = false}
-                                   in
-                                      iStmt::uStmt::stmts
-                                   end)
-                               val nStmt = mkIStmt (nVar, Vector.length args)
-                               val aStmt =
-                                  S2.Statement.Bind
-                                  {exp = S2.Exp.PrimApp {args = Vector.new1 nVar,
-                                                         prim = Prim.arrayAlloc
-                                                                {raw = false}},
-                                   ty = S2.Type.array1 (S2.Type.deSequence1 ty),
-                                   var = SOME aVar}
-                               val stmts = nStmt::aStmt::stmts
-                            in
-                               Vector.fromList stmts
-                            end
+                                                    prim = Prim.Array_length})
+                       | Prim.Vector_sub => sub ()
+                       | Prim.Vector_vector => sequence ()
                        | _ =>
                             simple (S2.Exp.PrimApp {args = args,
                                                     prim = convertPrim prim})

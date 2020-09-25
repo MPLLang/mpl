@@ -1266,9 +1266,7 @@ structure Time:>
 
       val op >= : t * t -> bool = op >=
 
-      val c = Counter.new 0
-
-      fun next () = Counter.next c
+      val next = Counter.generator 0
 
       val next = 
          Trace.trace 
@@ -2057,10 +2055,9 @@ datatype t =
 
 fun sizeMessage (E: t): Layout.t =
    let
-      val size = MLton.size
       open Layout
    in
-      record [("total", Int.layout (size E))]
+      record [("total", IntInf.layout (MLton.size E))]
    end
 (* quell unused warning *)
 val _ = sizeMessage

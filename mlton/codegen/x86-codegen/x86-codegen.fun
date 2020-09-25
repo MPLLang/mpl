@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2010,2014,2019 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -107,12 +107,12 @@ struct
                     {chunks, 
                      frameInfos,
                      frameOffsets, 
+                     globals,
                      handlesSignals, 
                      main, 
                      maxFrameSize, 
                      objectTypes, 
-                     reals, 
-                     vectors, ...} =
+                     staticHeaps, ...} =
                   program
               in
                 val program =
@@ -120,13 +120,13 @@ struct
                   {chunks = chunks, 
                    frameInfos = frameInfos,
                    frameOffsets = frameOffsets, 
+                   globals = globals,
                    handlesSignals = handlesSignals, 
                    main = main, 
                    maxFrameSize = maxFrameSize, 
                    objectTypes = objectTypes, 
-                   reals = reals, 
                    sourceMaps = getSourceMaps (),
-                   vectors = vectors}
+                   staticHeaps = staticHeaps}
               end
               val {print, done, ...} = makeC ()
               val additionalMainArgs =
@@ -147,8 +147,8 @@ struct
                   let
                      val m =
                         List.fold
-                        (chunks, ~1, fn (Machine.Chunk.T {regMax, ...}, max) =>
-                         Int.max (max, regMax t))
+                        (chunks, ~1, fn (Machine.Chunk.T {tempsMax, ...}, max) =>
+                         Int.max (max, tempsMax t))
                      val m = m + 1
                   in
                      print (concat ["PRIVATE ", CType.toString t, 

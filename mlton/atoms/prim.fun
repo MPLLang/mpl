@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2010,2014,2016-2017,2019 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2016-2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -35,6 +35,7 @@ structure Kind =
 
 datatype 'a t =
    Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
+ | Array_array (* to ssa2 *)
  | Array_cas of CType.t option (* codegen *)
  | Array_copyArray (* to rssa (as runtime C fn) *)
  | Array_copyVector (* to rssa (as runtime C fn) *)
@@ -45,6 +46,7 @@ datatype 'a t =
  | Array_uninit (* to rssa *)
  | Array_uninitIsNop (* to rssa *)
  | Array_update of {writeBarrier : bool} (* to ssa2 *)
+ | CFunction of 'a CFunction.t (* to rssa *)
  | CPointer_add (* codegen *)
  | CPointer_diff (* codegen *)
  | CPointer_equal (* codegen *)
@@ -63,10 +65,6 @@ datatype 'a t =
  | Exn_extra (* implement exceptions *)
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
- | FFI of 'a CFunction.t (* to rssa *)
- | FFI_Symbol of {name: string,
-                  cty: CType.t option,
-                  symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* to rssa (as runtime C fn) *)
  | GC_state (* to rssa (as operand) *)
  | IntInf_add (* to rssa (as runtime C fn) *)
@@ -199,8 +197,6 @@ datatype 'a t =
  | Word8Vector_toString (* defunctorize *)
  | World_save (* to rssa (as runtime C fn) *)
 
-fun name p = p
-
 (* The values of these strings are important since they are referred to
  * in the basis library code.  See basis-library/misc/primitive.sml.
  *)
@@ -228,6 +224,7 @@ fun toString (n: 'a t): string =
    in
       case n of
          Array_alloc {raw} => if raw then "Array_allocRaw" else "Array_alloc"
+       | Array_array => "Array_array"
        | Array_cas NONE => "Array_cas"
        | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
@@ -240,6 +237,7 @@ fun toString (n: 'a t): string =
        | Array_uninitIsNop => "Array_uninitIsNop"
        | Array_update {writeBarrier=true} => "Array_update"
        | Array_update {writeBarrier=false} => "Array_update_noWriteBarrier"
+       | CFunction f => (CFunction.Target.toString o CFunction.target) f
        | CPointer_add => "CPointer_add"
        | CPointer_diff => "CPointer_diff"
        | CPointer_equal => "CPointer_equal"
@@ -258,8 +256,6 @@ fun toString (n: 'a t): string =
        | Exn_extra => "Exn_extra"
        | Exn_name => "Exn_name"
        | Exn_setExtendExtra => "Exn_setExtendExtra"
-       | FFI f => (CFunction.Target.toString o CFunction.target) f
-       | FFI_Symbol {name, ...} => name
        | GC_collect => "GC_collect"
        | GC_state => "GC_state"
        | IntInf_add => "IntInf_add"
@@ -383,17 +379,12 @@ fun layout p = Layout.str (toString p)
 
 fun layoutFull (p, layoutX) =
    case p of
-      FFI f => Layout.seq [Layout.str "FFI ", CFunction.layout (f, layoutX)]
-    | FFI_Symbol {name, cty, symbolScope} =>
-         Layout.seq [Layout.str "FFI_Symbol ",
-                     Layout.record
-                     [("name", Layout.str name),
-                      ("cty", Option.layout CType.layout cty),
-                      ("symbolScope", CFunction.SymbolScope.layout symbolScope)]]
+      CFunction f => Layout.seq [Layout.str "CFunction ", CFunction.layout (f, layoutX)]
     | p => layout p
 
 val equals: 'a t * 'a t -> bool =
    fn (Array_alloc {raw = r}, Array_alloc {raw = r'}) => Bool.equals (r, r')
+    | (Array_array, Array_array) => true
     | (Array_cas NONE, Array_cas NONE) => true
     | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (Array_copyArray, Array_copyArray) => true
@@ -405,6 +396,7 @@ val equals: 'a t * 'a t -> bool =
     | (Array_uninit, Array_uninit) => true
     | (Array_uninitIsNop, Array_uninitIsNop) => true
     | (Array_update wb1, Array_update wb2) => wb1 = wb2
+    | (CFunction f, CFunction f') => CFunction.equals (f, f')
     | (CPointer_add, CPointer_add) => true
     | (CPointer_diff, CPointer_diff) => true
     | (CPointer_equal, CPointer_equal) => true
@@ -423,8 +415,6 @@ val equals: 'a t * 'a t -> bool =
     | (Exn_extra, Exn_extra) => true
     | (Exn_name, Exn_name) => true
     | (Exn_setExtendExtra, Exn_setExtendExtra) => true
-    | (FFI f, FFI f') => CFunction.equals (f, f')
-    | (FFI_Symbol {name = n, ...}, FFI_Symbol {name = n', ...}) => n = n'
     | (GC_collect, GC_collect) => true
     | (GC_state, GC_state) => true
     | (IntInf_add, IntInf_add) => true
@@ -576,6 +566,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
    fn (p, f) =>
    case p of
       Array_alloc {raw} => Array_alloc {raw = raw}
+    | Array_array => Array_array
     | Array_cas cty => Array_cas cty
     | Array_copyArray => Array_copyArray
     | Array_copyVector => Array_copyVector
@@ -586,6 +577,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_uninit => Array_uninit
     | Array_uninitIsNop => Array_uninitIsNop
     | Array_update wb => Array_update wb
+    | CFunction func => CFunction (CFunction.map (func, f))
     | CPointer_add => CPointer_add
     | CPointer_diff => CPointer_diff
     | CPointer_equal => CPointer_equal
@@ -604,9 +596,6 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Exn_extra => Exn_extra
     | Exn_name => Exn_name
     | Exn_setExtendExtra => Exn_setExtendExtra
-    | FFI func => FFI (CFunction.map (func, f))
-    | FFI_Symbol {name, cty, symbolScope} =>
-        FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
     | GC_state => GC_state
     | IntInf_add => IntInf_add
@@ -722,20 +711,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
 
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
-val arrayAlloc = fn {raw} => Array_alloc {raw = raw}
-fun arrayCas ctype = Array_cas (SOME ctype)
-val arrayLength = Array_length
-val arrayToVector = Array_toVector
-val arrayUpdate = Array_update {writeBarrier=true}
-(* SAM_NOTE: seems safe to assume a writeBarrier here. *)
-val assign = Ref_assign {writeBarrier=true}
-val bogus = MLton_bogus
-val bug = MLton_bug
-fun cas ctype = Ref_cas (SOME ctype)
-val cpointerAdd = CPointer_add
-val cpointerDiff = CPointer_diff
-val cpointerEqual = CPointer_equal
-fun cpointerGet ctype =
+fun cpointerGet ctype = 
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -752,8 +728,7 @@ fun cpointerGet ctype =
        | Word32 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 32))
        | Word64 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 64))
    end
-val cpointerLt = CPointer_lt
-fun cpointerSet ctype =
+fun cpointerSet ctype = 
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -770,43 +745,6 @@ fun cpointerSet ctype =
        | Word32 => CPointer_setWord (WordSize.fromBits (Bits.fromInt 32))
        | Word64 => CPointer_setWord (WordSize.fromBits (Bits.fromInt 64))
    end
-val cpointerSub = CPointer_sub
-val cpointerToWord = CPointer_toWord
-val deref = Ref_deref
-val eq = MLton_eq
-val equal = MLton_equal
-val ffi = FFI
-val ffiSymbol = FFI_Symbol
-val hash = MLton_hash
-val intInfToVector = IntInf_toVector
-val intInfToWord = IntInf_toWord
-val intInfNeg = IntInf_neg
-val intInfNotb = IntInf_notb
-val realCastToWord = Real_castToWord
-val reff = Ref_ref
-val touch = MLton_touch
-val vector = Vector_vector
-val vectorLength = Vector_length
-val vectorSub = Vector_sub
-val wordAdd = Word_add
-val wordAddCheckP = Word_addCheckP
-val wordAndb = Word_andb
-val wordCastToReal = Word_castToReal
-val wordEqual = Word_equal
-val wordExtdToWord = Word_extdToWord
-val wordLshift = Word_lshift
-val wordLt = Word_lt
-val wordMul = Word_mul
-val wordMulCheckP = Word_mulCheckP
-val wordNeg = Word_neg
-val wordNegCheckP = Word_negCheckP
-val wordNotb = Word_notb
-val wordOrb = Word_orb
-val wordQuot = Word_quot
-val wordRshift = Word_rshift
-val wordSub = Word_sub
-val wordSubCheckP = Word_subCheckP
-val wordXorb = Word_xorb
 
 val isCommutative =
    fn MLton_eq => true
@@ -832,6 +770,7 @@ val kind: 'a t -> Kind.t =
    in
       case p of
          Array_alloc _ => Moveable
+       | Array_array => Moveable
        | Array_cas _ => SideEffect
        | Array_copyArray => SideEffect
        | Array_copyVector => SideEffect
@@ -842,6 +781,10 @@ val kind: 'a t -> Kind.t =
        | Array_uninit => SideEffect
        | Array_uninitIsNop => Functional
        | Array_update _ => SideEffect
+       | CFunction (CFunction.T {kind, ...}) => (case kind of
+                                                    CFunction.Kind.Impure => SideEffect
+                                                  | CFunction.Kind.Pure => Functional
+                                                  | CFunction.Kind.Runtime _ => SideEffect)
        | CPointer_add => Functional
        | CPointer_diff => Functional
        | CPointer_equal => Functional
@@ -860,11 +803,6 @@ val kind: 'a t -> Kind.t =
        | Exn_extra => Functional
        | Exn_name => Functional
        | Exn_setExtendExtra => SideEffect
-       | FFI (CFunction.T {kind, ...}) => (case kind of
-                                              CFunction.Kind.Impure => SideEffect
-                                            | CFunction.Kind.Pure => Functional
-                                            | CFunction.Kind.Runtime _ => SideEffect)
-       | FFI_Symbol _ => Functional
        | GC_collect => SideEffect
        | GC_state => DependsOnState
        | IntInf_add => Functional
@@ -1045,6 +983,7 @@ in
    val all: unit t list =
       [Array_alloc {raw = false},
        Array_alloc {raw = true},
+       Array_array,
        Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
@@ -1184,31 +1123,22 @@ in
 end
 
 local
-   val table: {hash: word,
-               prim: unit t,
-               string: string} HashSet.t =
-      HashSet.new {hash = #hash}
+   val table : (string, unit t) HashTable.t =
+      HashTable.new {hash = String.hash, equals = String.equals}
    val () =
       List.foreach (all, fn prim =>
                     let
                        val string = toString prim
-                       val hash = String.hash string
-                       val _ =
-                          HashSet.lookupOrInsert (table, hash,
-                                                  fn _ => false,
-                                                  fn () => {hash = hash,
-                                                            prim = prim,
-                                                            string = string})
                     in
-                       ()
+                       (ignore o HashTable.lookupOrInsert)
+                       (table, string, fn () => prim)
                     end)
 in
    val fromString: string -> 'a t option =
       fn name =>
       Option.map
-      (HashSet.peek
-       (table, String.hash name, fn {string, ...} => name = string),
-       fn {prim, ...} => cast prim)
+      (HashTable.peek (table, name),
+       cast)
 end
 
 local
@@ -1226,12 +1156,7 @@ fun parse () = fromString <$?> (spaces *> name)
 fun parseFull parseX =
    name >>= (fn pname =>
    case pname of
-      "FFI_Symbol" => FFI_Symbol <$>
-                      cbrack (ffield ("name", name) >>= (fn name =>
-                              nfield ("cty", option CType.parse) >>= (fn cty =>
-                              nfield ("symbolScope", CFunction.SymbolScope.parse) >>= (fn symbolScope =>
-                              pure {name = name, cty = cty, symbolScope = symbolScope}))))
-    | "FFI" => FFI <$> CFunction.parse parseX
+      "CFunction" => CFunction <$> CFunction.parse parseX
     | _ => (case fromString pname of
                NONE => fail "prim"
              | SOME p => pure p))
@@ -1355,6 +1280,7 @@ fun 'a checkApp (prim: 'a t,
   in
       case prim of
          Array_alloc _ => oneTarg (fn targ => (oneArg seqIndex, array targ))
+       | Array_array => oneTarg (fn targ => (nArgs (Vector.map (args, fn _ => targ)), array targ))
        | Array_cas _ =>
             oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
        | Array_copyArray => oneTarg (fn t => (fiveArgs (array t, seqIndex, array t, seqIndex, seqIndex), unit))
@@ -1369,6 +1295,8 @@ fun 'a checkApp (prim: 'a t,
             oneTarg (fn t => (oneArg (array t), bool))
        | Array_update _ =>
             oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
+       | CFunction f =>
+            noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
        | CPointer_add =>
             noTargs (fn () => (twoArgs (cpointer, cptrdiff), cpointer))
        | CPointer_diff =>
@@ -1401,9 +1329,6 @@ fun 'a checkApp (prim: 'a t,
        | Exn_extra => oneTarg (fn t => (oneArg exn, t))
        | Exn_name => noTargs (fn () => (oneArg exn, string))
        | Exn_setExtendExtra => oneTarg (fn t => (oneArg (arrow (t, t)), unit))
-       | FFI f =>
-             noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
-       | FFI_Symbol _ => noTargs (fn () => (noArgs, cpointer))
        | GC_collect => noTargs (fn () => (noArgs, unit))
        | GC_state => noTargs (fn () => (noArgs, cpointer))
        | IntInf_add => intInfBinary ()
@@ -1554,6 +1479,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
    in
       case prim of
          Array_alloc _ => one (deArray result)
+       | Array_array => one (deArray result)
        | Array_cas _ => one (deArray (arg 0))
        | Array_copyArray => one (deArray (arg 0))
        | Array_copyVector => one (deArray (arg 0))
@@ -1900,8 +1826,8 @@ fun ('a, 'b) apply (p: 'a t,
             datatype z = datatype ApplyResult.t
             fun varIntInf (x, i: IntInf.t, space, inOrder) =
                let
-                  fun neg () = Apply (intInfNeg, [x, space])
-                  fun notb () = Apply (intInfNotb, [x, space])
+                  fun neg () = Apply (IntInf_neg, [x, space])
+                  fun notb () = Apply (IntInf_notb, [x, space])
                   val i = IntInf.toInt i
                in
                   case p of
@@ -2013,10 +1939,7 @@ fun ('a, 'b) apply (p: 'a t,
                            if WordX.isZero
                               (WordX.rem
                                (w,
-                                WordX.fromIntInf
-                                (IntInf.fromInt
-                                 (Bits.toInt (WordSize.bits s)),
-                                 WordX.size w),
+                                WordX.fromBits (WordSize.bits s, WordX.size w),
                                 {signed = false}))
                               then Var x
                            else Unknown
@@ -2030,9 +1953,7 @@ fun ('a, 'b) apply (p: 'a t,
                                 then Var x
                              else if (WordX.ge
                                       (w,
-                                       WordX.fromIntInf (Bits.toIntInf
-                                                         (WordSize.bits s),
-                                                         WordSize.shiftArg),
+                                       WordX.fromBits (WordSize.bits s, WordSize.shiftArg),
                                        {signed = false}))
                                      then zero s
                                   else Unknown
@@ -2075,7 +1996,7 @@ fun ('a, 'b) apply (p: 'a t,
                         else if WordX.isOne w
                                 then Var x
                              else if signed andalso WordX.isNegOne w
-                                     then Apply (wordNeg s, [x])
+                                     then Apply (Word_neg s, [x])
                                   else Unknown
                    | Word_mulCheckP _ =>
                         if WordX.isZero w orelse WordX.isOne w
@@ -2093,7 +2014,7 @@ fun ('a, 'b) apply (p: 'a t,
                               if WordX.isOne w
                                  then Var x
                               else if signed andalso WordX.isNegOne w
-                                      then Apply (wordNeg s, [x])
+                                      then Apply (Word_neg s, [x])
                                    else Unknown
                         else Unknown
                    | Word_rem (s, {signed}) =>
@@ -2118,7 +2039,7 @@ fun ('a, 'b) apply (p: 'a t,
                         if WordX.isZero w
                            then if inOrder
                                    then Var x
-                                else Apply (wordNeg s, [x])
+                                else Apply (Word_neg s, [x])
                         else Unknown
                    | Word_subCheckP _ =>
                         if WordX.isZero w andalso inOrder
@@ -2128,7 +2049,7 @@ fun ('a, 'b) apply (p: 'a t,
                         if WordX.isZero w
                            then Var x
                         else if WordX.isAllOnes w
-                                then Apply (wordNotb s, [x])
+                                then Apply (Word_notb s, [x])
                              else Unknown
                    | _ => Unknown
                end
@@ -2221,62 +2142,6 @@ fun ('a, 'b) apply (p: 'a t,
             (List.map
              (args, fn ApplyArg.Const c => c | _ => Error.bug "Prim.apply"))
       else someVars ()
-   end
-
-fun ('a, 'b) layoutApp (p: 'a t,
-                        args: 'b vector,
-                        layoutArg: 'b -> Layout.t): Layout.t =
-   let
-      fun arg i = layoutArg (Vector.sub (args, i))
-      open Layout
-      fun one name = seq [str name, str " ", arg 0]
-      fun two name = seq [arg 0, str " ", str name, str " ", arg 1]
-   in
-      case p of
-         Array_length => one "length"
-       | Real_Math_acos _ => one "acos"
-       | Real_Math_asin _ => one "asin"
-       | Real_Math_atan _ => one "atan"
-       | Real_Math_cos _ => one "cos"
-       | Real_Math_exp _ => one "exp"
-       | Real_Math_ln _ => one "ln"
-       | Real_Math_log10  _ => one "log10"
-       | Real_Math_sin _ => one "sin"
-       | Real_Math_sqrt _ => one "sqrt"
-       | Real_Math_tan _ => one "tan"
-       | Real_add _ => two "+"
-       | Real_div _ => two "/"
-       | Real_equal _ => two "=="
-       | Real_le _ => two "<="
-       | Real_lt _ => two "<"
-       | Real_mul _ => two "*"
-       | Real_neg _ => one "-"
-       | Real_qequal _ => two "?="
-       | Real_sub _ => two "-"
-       | Ref_assign _ => two ":="
-       | Ref_deref => one "!"
-       | Ref_ref => one "ref"
-       | Vector_length => one "length"
-       | Word_add _ => two "+"
-       | Word_andb _ => two "&"
-       | Word_equal _ => two "="
-       | Word_lshift _ => two "<<"
-       | Word_lt _ => two "<"
-       | Word_mul _ => two "*"
-       | Word_neg _ => one "-"
-       | Word_orb _ => two "|"
-       | Word_rol _ => two "rol"
-       | Word_ror _ => two "ror"
-       | Word_rshift (_, {signed}) => two (if signed then "~>>" else ">>")
-       | Word_sub _ => two "-"
-       | Word_xorb _ => two "^"
-       | _ => seq [layout p, str " ", Vector.layout layoutArg args]
-   end
-
-structure Name =
-   struct
-      datatype t = datatype t
-      val toString = toString
    end
 
 end

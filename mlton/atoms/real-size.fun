@@ -1,4 +1,5 @@
-(* Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2019 Matthew Fluet.
+ * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a HPND-style license.
@@ -15,6 +16,15 @@ datatype t = R32 | R64
 val all = [R32, R64]
 
 val equals: t * t -> bool = op =
+
+local
+   val r32 = Random.word ()
+   val r64 = Random.word ()
+in
+val hash: t -> word =
+   fn R32 => r32
+    | R64 => r64
+end
 
 val memoize: (t -> 'a) -> t -> 'a =
    fn f =>
@@ -35,5 +45,11 @@ val bytes: t -> Bytes.t =
     | R64 => Bytes.fromInt 8
 
 val bits: t -> Bits.t = Bytes.toBits o bytes
+
+val compare =
+   fn (R32, R32) => EQUAL
+    | (R32, R64) => LESS
+    | (R64, R32) => GREATER
+    | (R64, R64) => EQUAL
 
 end

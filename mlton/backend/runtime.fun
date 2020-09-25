@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2016-2017,2019 Matthew Fluet.
+(* Copyright (C) 2009,2016-2017,2019-2020 Matthew Fluet.
  * Copyright (C) 2002-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -25,79 +25,25 @@ structure GCField =
        | StackLimit
        | StackTop
 
-      val atomicStateOffset: Bytes.t ref = ref Bytes.zero
-      val curSourceSeqIndexOffset: Bytes.t ref = ref Bytes.zero
-      val exnStackOffset: Bytes.t ref = ref Bytes.zero
-      val frontierOffset: Bytes.t ref = ref Bytes.zero
-      val limitOffset: Bytes.t ref = ref Bytes.zero
-      val limitPlusSlopOffset: Bytes.t ref = ref Bytes.zero
-      val signalIsPendingOffset: Bytes.t ref = ref Bytes.zero
-      val stackBottomOffset: Bytes.t ref = ref Bytes.zero
-      val stackLimitOffset: Bytes.t ref = ref Bytes.zero
-      val stackTopOffset: Bytes.t ref = ref Bytes.zero
-
-      fun setOffsets {atomicState, curSourceSeqIndex,
-                      exnStack, frontier, limit, limitPlusSlop,
-                      signalIsPending, stackBottom, stackLimit, stackTop} =
-         (atomicStateOffset := atomicState
-          ; curSourceSeqIndexOffset := curSourceSeqIndex
-          ; exnStackOffset := exnStack
-          ; frontierOffset := frontier
-          ; limitOffset := limit
-          ; limitPlusSlopOffset := limitPlusSlop
-          ; signalIsPendingOffset := signalIsPending
-          ; stackBottomOffset := stackBottom
-          ; stackLimitOffset := stackLimit
-          ; stackTopOffset := stackTop)
-
-      val offset =
-         fn AtomicState => !atomicStateOffset
-          | CurSourceSeqIndex => !curSourceSeqIndexOffset
-          | ExnStack => !exnStackOffset
-          | Frontier => !frontierOffset
-          | Limit => !limitOffset
-          | LimitPlusSlop => !limitPlusSlopOffset
-          | SignalIsPending => !signalIsPendingOffset
-          | StackBottom => !stackBottomOffset
-          | StackLimit => !stackLimitOffset
-          | StackTop => !stackTopOffset
-
-      val atomicStateSize: Bytes.t ref = ref Bytes.zero
-      val curSourceSeqIndexSize: Bytes.t ref = ref Bytes.zero
-      val exnStackSize: Bytes.t ref = ref Bytes.zero
-      val frontierSize: Bytes.t ref = ref Bytes.zero
-      val limitSize: Bytes.t ref = ref Bytes.zero
-      val limitPlusSlopSize: Bytes.t ref = ref Bytes.zero
-      val signalIsPendingSize: Bytes.t ref = ref Bytes.zero
-      val stackBottomSize: Bytes.t ref = ref Bytes.zero
-      val stackLimitSize: Bytes.t ref = ref Bytes.zero
-      val stackTopSize: Bytes.t ref = ref Bytes.zero
-
-      fun setSizes {atomicState, curSourceSeqIndex,
-                    exnStack, frontier, limit, limitPlusSlop,
-                    signalIsPending, stackBottom, stackLimit, stackTop} =
-         (atomicStateSize := atomicState
-          ; curSourceSeqIndexSize := curSourceSeqIndex
-          ; exnStackSize := exnStack
-          ; frontierSize := frontier
-          ; limitSize := limit
-          ; limitPlusSlopSize := limitPlusSlop
-          ; signalIsPendingSize := signalIsPending
-          ; stackBottomSize := stackBottom
-          ; stackLimitSize := stackLimit
-          ; stackTopSize := stackTop)
-
-      val size =
-         fn AtomicState => !atomicStateSize
-          | CurSourceSeqIndex => !curSourceSeqIndexSize
-          | ExnStack => !exnStackSize
-          | Frontier => !frontierSize
-          | Limit => !limitSize
-          | LimitPlusSlop => !limitPlusSlopSize
-          | SignalIsPending => !signalIsPendingSize
-          | StackBottom => !stackBottomSize
-          | StackLimit => !stackLimitSize
-          | StackTop => !stackTopSize
+      local
+         fun make name =
+            Bytes.fromIntInf
+            (Control.StrMap.lookupIntInf
+             (Promise.force Control.Target.consts,
+              "offset::gcState." ^ name))
+      in
+         val offset =
+            fn AtomicState => make "atomicState"
+             | CurSourceSeqIndex => make "sourceMaps.curSourceSeqIndex"
+             | ExnStack => make "exnStack"
+             | Frontier => make "frontier"
+             | Limit => make "limit"
+             | LimitPlusSlop => make "limitPlusSlop"
+             | SignalIsPending => make "signalsInfo.signalIsPending"
+             | StackBottom => make "stackBottom"
+             | StackLimit => make "stackLimit"
+             | StackTop => make "stackTop"
+      end
 
       val toString =
          fn AtomicState => "AtomicState"
@@ -160,8 +106,6 @@ in
                       0 <= typeIndex
                       andalso typeIndex < maxTypeIndex)
        ; Word.orb (0w1, Word.<< (Word.fromInt typeIndex, 0w1)))
-
-   fun headerToTypeIndex w = Word.toInt (Word.>> (w, 0w1))
 end
 
 (* see gc/object.h *)
@@ -180,6 +124,14 @@ val sequenceLengthSize : unit -> Bytes.t =
 val sequenceLengthOffset : unit -> Bytes.t =
    Promise.lazy (fn () => Bytes.~ (Bytes.+ (headerSize (),
                                             sequenceLengthSize ())))
+
+(* see gc/sequence.h *)
+val sequenceCounterSize : unit -> Bytes.t =
+   Promise.lazy (Bits.toBytes o Control.Target.Size.seqIndex)
+val sequenceCounterOffset : unit -> Bytes.t =
+   Promise.lazy (fn () => Bytes.~ (Bytes.+ (Bytes.+ (headerSize (),
+                                                     sequenceLengthSize ()),
+                                            sequenceCounterSize ())))
 
 (* see gc/object.h and gc/sequence.h *)
 val sequenceMetaDataSize : unit -> Bytes.t =

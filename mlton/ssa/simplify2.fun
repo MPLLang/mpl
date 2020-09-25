@@ -26,7 +26,7 @@ val ssa2PassesDefault =
    {name = "deepFlatten", doit = DeepFlatten.transform2, execute = true} ::
    {name = "refFlatten", doit = RefFlatten.transform2, execute = true} ::
    {name = "removeUnused5", doit = RemoveUnused2.transform2, execute = true} ::
-   {name = "zone", doit = Zone.transform2, execute = true} ::
+   {name = "zone", doit = Zone.transform2, execute = false} ::
    nil
 
 val ssa2PassesMinimal =
@@ -38,10 +38,10 @@ local
    type passGen = string -> pass option
 
    fun mkSimplePassGen (name, doit): passGen =
-      let val count = Counter.new 1
+      let val count = Counter.generator 1
       in fn s => if s = name
                     then SOME {name = concat [name, "#",
-                                              Int.toString (Counter.next count)],
+                                              Int.toString (count ())],
                                doit = doit,
                                execute = true}
                     else NONE
@@ -75,21 +75,14 @@ in
         end))
 end
 
-val ssa2PassesString = ref "default"
-val ssa2PassesGet = fn () => !ssa2PassesString
-val ssa2PassesSet = fn s =>
-   let
-      val _ = ssa2PassesString := s
-   in
-      case s of
-         "default" => (ssa2Passes := ssa2PassesDefault
-                       ; Result.Yes ())
-       | "minimal" => (ssa2Passes := ssa2PassesMinimal
-                       ; Result.Yes ())
-       | _ => ssa2PassesSetCustom s
-   end
-val _ = List.push (Control.optimizationPasses,
-                   {il = "ssa2", get = ssa2PassesGet, set = ssa2PassesSet})
+fun ssa2PassesSet s =
+   case s of
+      "default" => (ssa2Passes := ssa2PassesDefault
+                    ; Result.Yes ())
+    | "minimal" => (ssa2Passes := ssa2PassesMinimal
+                    ; Result.Yes ())
+    | _ => ssa2PassesSetCustom s
+val _ = Control.OptimizationPasses.register {il = "ssa2", set = ssa2PassesSet}
 
 fun simplify p =
    let

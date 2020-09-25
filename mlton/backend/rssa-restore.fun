@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Jason Carr, Matthew Fluet.
+(* Copyright (C) 2019-2020 Jason Carr, Matthew Fluet.
  * Copyright (C) 2009,2017 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
@@ -29,12 +29,6 @@
 
 functor RssaRestore (S: RSSA_RESTORE_STRUCTS): RSSA_RESTORE =
 struct
-
-structure Control =
-   struct
-      open Control
-      fun diagnostics _ = ()
-   end
 
 open S
 open Transfer
@@ -106,6 +100,7 @@ structure Cardinality =
     val makeOne = makeMid
     val isMany = isTop
     val makeMany = makeTop
+    val whenMany = whenTop
 
     val inc: t -> unit
       = fn c => if isZero c
@@ -147,6 +142,7 @@ structure VarInfo =
     fun addDefSite (T {defSites, ...}, l) = List.push(defSites, l)
     fun addUseSite (T {useSites, ...}, l) = List.push(useSites, l)
     val violates = Cardinality.isMany o defs
+    fun whenViolates (T {defs, ...}, th) = Cardinality.whenMany (defs, th)
 
     fun new (): t = T {defs = Cardinality.new (),
                        index = ref ~1,
@@ -162,16 +158,13 @@ structure VarInfo =
                                      | h::_ => SOME h
   end
 
-fun restoreFunction {main: Function.t}
+fun restoreFunction {main: Function.t, statics: {dst: Var.t * Type.t, obj: Object.t} vector}
   = let
       exception NoViolations
 
-      val {get = varInfo: Var.t -> VarInfo.t, ...}
+      val {get = varInfo: Var.t -> VarInfo.t, rem = remVarInfo, ...}
         = Property.get
           (Var.plist, Property.initFun (fn _ => VarInfo.new ()))
-
-      val _ = Function.foreachDef (main,
-        fn (var, ty) => VarInfo.ty (varInfo var) := ty)
 
       val {get = labelInfo: Label.t -> LabelInfo.t, ...}
         = Property.get
@@ -204,7 +197,8 @@ fun restoreFunction {main: Function.t}
             {addPost = fn th => List.push (post, th),
              post = fn () => List.foreach(!post, fn th => th ())}
           end
-    in
+
+      val restore =
       fn (f: Function.t) =>
       let
         val {args, blocks, name, returns, raises, start} = Function.dest f
@@ -238,18 +232,18 @@ fun restoreFunction {main: Function.t}
                   else ()
 
         (* init violations *)
-        val index = ref 0
+        val index = Counter.new 0
         val violations
           = Vector.fromListMap
             (!violations, fn x =>
              let
                val vi = varInfo x
-               val _ = VarInfo.index vi := (!index)
-               val _ = Int.inc index
+               val i = Counter.next index
+               val _ = VarInfo.index vi := i
              in
                x
              end)
-        val numViolations = !index
+        val numViolations = Counter.value index
 
         (* Diagnostics *)
         val _ = Control.diagnostics
@@ -520,12 +514,12 @@ fun restoreFunction {main: Function.t}
              val tupleDst = (dstVar, dstTy)
           in
            case st of
-                Statement.Bind {src, isMutable, ...} =>
-                   Statement.Bind {dst=tupleDst, isMutable=isMutable, src=src}
+                Statement.Bind {src, pinned, ...} =>
+                   Statement.Bind {dst=tupleDst, pinned=pinned, src=src}
               | Statement.Move {src, ...} =>
                    Statement.Move {dst=Operand.Var dst, src=src}
-              | Statement.Object {header, size, ...} =>
-                   Statement.Object {dst=tupleDst, header=header, size=size}
+              | Statement.Object {obj, ...} =>
+                   Statement.Object {dst=tupleDst, obj = obj}
               | Statement.PrimApp {args, prim, ...} =>
                    Statement.PrimApp {args=args, dst=SOME tupleDst, prim=prim}
               | _ => st
@@ -598,7 +592,8 @@ fun restoreFunction {main: Function.t}
         end
         fun rewriteStatement addPost st
           = let
-               val st = Statement.replaceUses (st, rewriteVar)
+               val st = Statement.replace (st, {const = Operand.Const,
+                                                var = rewriteVar o #var})
                val st =
                  case st of
                       Statement.SetHandler l => Statement.SetHandler (route false l)
@@ -621,6 +616,11 @@ fun restoreFunction {main: Function.t}
                         return=Return.NonTail
                         {cont, handler=Handler.Handle h}} =>
                      let
+                       val args =
+                          Vector.map
+                          (args, fn arg =>
+                           Operand.replace (arg, {const = Operand.Const,
+                                                  var = rewriteVar o #var}))
                        val h' = route false h
                        val cont = route true cont
                      in
@@ -629,8 +629,9 @@ fun restoreFunction {main: Function.t}
                              return=Return.NonTail
                               {cont=cont, handler=Handler.Handle h'}}
                      end
-                 | _ => Transfer.replaceLabels (t, route false)
-              val t = Transfer.replaceUses (t, rewriteVar)
+                 | _ => Transfer.replace (t, {const = Operand.Const,
+                                              label = route false,
+                                              var = rewriteVar o #var})
            in
               t
            end
@@ -679,7 +680,7 @@ fun restoreFunction {main: Function.t}
                 val args = args
                 val post = post
               end
-              val _ = Tree.traverse (Function.dominatorTree f, visitBlock)
+              val _ = Tree.traverse (dt, visitBlock)
               val _ = post ()
             in
               Function.new {args = args,
@@ -694,29 +695,49 @@ fun restoreFunction {main: Function.t}
         f
       end
       handle NoViolations => f
+
+      val main = restore main
+
+      (* check for violations in statics/main *)
+      fun addDef msg (x, ty)
+        = let
+             val () = remVarInfo x
+             val vi = varInfo x
+          in
+             VarInfo.ty vi := ty ;
+             VarInfo.addDef vi ;
+             VarInfo.whenViolates
+             (vi, fn () => Error.bug ("RssaRestore.restore: violation in " ^ msg))
+          end
+      val _ = Vector.foreach (statics, addDef "statics" o #dst)
+      val _ = Function.foreachDef (main, addDef "main")
+    in
+       {main = main,
+        restore = restore}
     end
 
 val traceRestoreFunction
-  = Trace.trace ("RestoreR.restoreFunction",
+  = Trace.trace ("RssaRestore.restoreFunction",
                  Func.layout o Function.name,
                  Func.layout o Function.name)
 
 val restoreFunction
-  = fn main =>
+  = fn {main, statics} =>
     let
-      val r = restoreFunction main
+      val {main, restore} = restoreFunction {main = main, statics = statics}
     in
-      fn f => traceRestoreFunction r f
+      {main = main, restore = fn f => traceRestoreFunction restore f}
    end
 
-fun restore (Program.T {functions, handlesSignals, main, objectTypes, profileInfo})
+fun restore (Program.T {functions, handlesSignals, main, objectTypes, profileInfo, statics})
   = let
-      val r = restoreFunction {main=main}
+      val {main, restore} = restoreFunction {main = main, statics = statics}
     in
       Program.T {handlesSignals = handlesSignals,
-                 functions = List.map (functions, r),
+                 functions = List.revMap (functions, restore),
                  main = main,
                  objectTypes = objectTypes,
-                 profileInfo = profileInfo}
+                 profileInfo = profileInfo,
+                 statics = statics}
     end
 end
