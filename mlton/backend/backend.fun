@@ -373,14 +373,14 @@ fun toMachine (rssa: Rssa.Program.t) =
                    ({offset = offset, src = src},
                     hasDynamic' orelse hasDynamic)
                 end)
-            fun translateObject obj =
+            fun translateObject (obj, {forceDynamic}) =
                case obj of
                   R.Object.Normal {init, tycon} =>
                      let
                         val {components, ...} = ObjectType.deNormal (tyconTy tycon)
                         val (init, hasDynamic) = translateInit init
                         val kind =
-                           if hasDynamic
+                           if forceDynamic orelse hasDynamic
                               then Kind.Dynamic
                               else if Prod.someIsMutable components
                                       then if Vector.exists (Prod.dest components,
@@ -414,7 +414,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                (init, hasDynamic' orelse hasDynamic)
                             end)
                         val kind =
-                           if hasDynamic
+                           if forceDynamic orelse hasDynamic
                               then Kind.Dynamic
                               else if hasIdentity
                                       then if Vector.isEmpty init
@@ -448,10 +448,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                                          nextIndex = Counter.generator 0,
                                          nextOffset = ref Bytes.zero})
 
-            fun add obj =
+            fun add (obj, forceDynamic) =
                let
                   val {kind, obj, offset, size, tycon} =
-                     translateObject obj
+                     translateObject (obj, forceDynamic)
                   val {objs, nextIndex, nextOffset} = kindAcc kind
                   val r = Ref.T {index = nextIndex (),
                                  kind = kind,
@@ -481,7 +481,7 @@ fun toMachine (rssa: Rssa.Program.t) =
 
       val () = Vector.foreach (statics, fn {dst = (dstVar, dstTy), obj} =>
                                let
-                                  val oper = addToStaticHeaps obj
+                                  val oper = addToStaticHeaps (obj, {forceDynamic = true})
                                in
                                   setVarInfo (dstVar, {operand = VarOperand.Const oper, ty = dstTy})
                                end)
@@ -519,7 +519,10 @@ fun toMachine (rssa: Rssa.Program.t) =
          val globalWordVector =
             make {equals = WordXVector.equals,
                   hash = WordXVector.hash,
-                  oper = addToStaticHeaps o R.Object.fromWordXVector}
+                  oper = (fn wxv =>
+                          addToStaticHeaps
+                          (R.Object.fromWordXVector wxv,
+                           {forceDynamic = true}))}
       end
       fun constOperand (c: Const.t): M.Operand.t =
          let

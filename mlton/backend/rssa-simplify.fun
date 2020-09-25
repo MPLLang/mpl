@@ -23,10 +23,10 @@ val rssaPasses =
     execute = true} ::
    {name = "collectStatics.Globals",
     doit = CollectStatics.Globals.transform,
-    execute = true} ::
+    execute = false} ::
    {name = "collectStatics.RealConsts",
     doit = CollectStatics.RealConsts.transform,
-    execute = true} ::
+    execute = false} ::
    {name = "insertLimitChecks", doit = LimitCheck.transform, execute = true} ::
    {name = "insertSignalChecks", doit = SignalCheck.transform, execute = true} ::
    (* must be before implementHandlers *)
