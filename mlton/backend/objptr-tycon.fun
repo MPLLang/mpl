@@ -1,4 +1,4 @@
-(* Copyright (C) 2009 Matthew Fluet.
+(* Copyright (C) 2009,2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -20,9 +20,9 @@ in
 end
 
 local
-   val c = Counter.new 0
+   val c = Counter.generator 0
 in
-   fun new () = T {index = ref (Counter.next c)}
+   fun new () = T {index = ref (c ())}
 end
 
 fun setIndex (T {index = r}, i) = r := i
@@ -40,11 +40,22 @@ fun toString (opt: t): string =
 
 val layout = Layout.str o toString
 
-(* RAM_NOTE: This declarative style is a *terrible* way to do this *)
+fun toHeader (opt: t): WordX.t =
+   WordX.fromWord (Runtime.typeIndexToHeader (index opt), WordSize.objptrHeader ())
 
 val stack = new ()
 val thread = new ()
 val weakGone = new ()
+
+local
+   val real32Vector = new ()
+   val real64Vector = new ()
+in
+   fun realVector (rs: RealSize.t): t =
+      case rs of
+         RealSize.R32 => real32Vector
+       | RealSize.R64 => real64Vector
+end
 
 local
    val word8Vector = new ()
@@ -52,16 +63,18 @@ local
    val word32Vector = new ()
    val word64Vector = new ()
 in
-   fun wordVector (b: Bits.t): t =
-      case Bits.toInt b of
-         8 => word8Vector
-       | 16 => word16Vector
-       | 32 => word32Vector
-       | 64 => word64Vector
+   fun wordVector (ws: WordSize.t): t =
+      case WordSize.primOpt ws of
+         SOME WordSize.W8 => word8Vector
+       | SOME WordSize.W16 => word16Vector
+       | SOME WordSize.W32 => word32Vector
+       | SOME WordSize.W64 => word64Vector
        | _ => Error.bug "ObjptrTycon.wordVector"
 end
 
 val fill0Normal = new ()
 val fill8Normal = new ()
+
+fun hash (T {index}) = (Hash.permute o Word.fromInt o !) index
 
 end

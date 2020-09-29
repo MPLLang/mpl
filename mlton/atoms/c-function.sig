@@ -9,6 +9,7 @@
 signature C_FUNCTION_STRUCTS = 
    sig
       structure CType: C_TYPE
+      structure SymbolScope: C_SYMBOL_SCOPE
    end
 
 signature C_FUNCTION = 
@@ -72,15 +73,6 @@ signature C_FUNCTION =
             val writesStackTop: t -> bool
          end
 
-      structure SymbolScope:
-         sig
-            datatype t = External | Private | Public
-
-            val layout: t -> Layout.t
-            val toString: t -> string
-            val parse: t Parse.t
-         end
-
       structure Target:
          sig
             datatype t = Direct of string | Indirect
@@ -90,16 +82,17 @@ signature C_FUNCTION =
          end
 
       datatype 'a t = T of {args: 'a vector,
-			     convention: Convention.t,
-			     kind: Kind.t,
-                             prototype: CType.t vector * CType.t option,
-                             return: 'a,
-                             symbolScope: SymbolScope.t,
-                             (* target = Indirect means that the 0'th
-                              * argument to the function is a word
-                              * that specifies the target.
-                              *)
-                             target: Target.t}
+                            convention: Convention.t,
+                            inline: bool,
+                            kind: Kind.t,
+                            prototype: CType.t vector * CType.t option,
+                            return: 'a,
+                            symbolScope: SymbolScope.t,
+                            (* target = Indirect means that the 0'th
+                             * argument to the function is a word
+                             * that specifies the target.
+                             *)
+                            target: Target.t}
 
       val args: 'a t -> 'a vector
       val bytesNeeded: 'a t -> int option

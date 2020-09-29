@@ -1,5 +1,5 @@
 /* Copyright (C) 2018-2019 Sam Westrick
- * Copyright (C) 2016 Matthew Fluet.
+ * Copyright (C) 2016,2019 Matthew Fluet.
  * Copyright (C) 2014-2015 Ram Raghunathan
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
@@ -143,11 +143,11 @@ void displayThread (GC_state s,
                     GC_thread thread,
                     FILE *stream) {
   fprintf(stream,
-          "\t\texnStack = %"PRIuMAX"\n"
+          "\t\texnStack = %"PRIiMAX"\n"
           "\t\tbytesNeeded = %"PRIuMAX"\n"
           "\t\thierarchicalHeap = %p\n"
           "\t\tstack = "FMTOBJPTR"\n",
-          (uintmax_t)thread->exnStack,
+          (intmax_t)thread->exnStack,
           (uintmax_t)thread->bytesNeeded,
           (void*)thread->hierarchicalHeap,
           thread->stack);

@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014,2019 Matthew Fluet.
+(* Copyright (C) 2009,2014,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -16,25 +16,7 @@ signature MACHINE =
    sig
       include MACHINE_STRUCTS
 
-      structure Switch: SWITCH
-
-      sharing Atoms = Switch
-
       structure ChunkLabel: ID
-
-      structure Register:
-         sig
-            type t
-
-            val equals: t * t -> bool
-            val index: t -> int
-            val indexOpt: t -> int option
-            val layout: t -> Layout.t
-            val new: Type.t * int option -> t
-            val setIndex: t * int -> unit
-            val toString: t -> string
-            val ty: t -> Type.t
-         end
 
       structure Global:
          sig
@@ -56,22 +38,77 @@ signature MACHINE =
             val ty: t -> Type.t
          end
 
+      structure StaticHeap:
+         sig
+            structure Kind:
+               sig
+                  datatype t = Dynamic | Immutable | Mutable | Root
+
+                  val all: t list
+                  val isDynamic: t -> bool
+                  val label: t -> Label.t
+                  val layout: t -> Layout.t
+                  val memoize: (t -> 'a) -> t -> 'a
+                  val name: t -> string
+               end
+
+            structure Ref:
+               sig
+                  datatype t = T of {index: int,
+                                     kind: Kind.t,
+                                     offset: Bytes.t,
+                                     ty: Type.t}
+
+                  val index: t -> int
+                  val kind: t -> Kind.t
+                  val layout: t -> Layout.t
+                  val offset: t -> Bytes.t
+                  val ty: t -> Type.t
+               end
+
+            structure Elem:
+               sig
+                  datatype t =
+                     Cast of t * Type.t
+                   | Const of Const.t
+                   | Ref of Ref.t
+
+                  val layout: t -> Layout.t
+                  val ty: t -> Type.t
+               end
+
+            structure Object: OBJECT
+            (* sharing Object = BackendAtoms *)
+            sharing Object.Use = Elem
+         end
+      sharing StaticHeap.Object = BackendAtoms
+
+      structure Temporary:
+         sig
+            type t
+
+            val equals: t * t -> bool
+            val index: t -> int
+            val indexOpt: t -> int option
+            val layout: t -> Layout.t
+            val new: Type.t * int option -> t
+            val setIndex: t * int -> unit
+            val toString: t -> string
+            val ty: t -> Type.t
+         end
+
       structure Operand:
          sig
             datatype t =
                Cast of t * Type.t
-             | Contents of {oper: t,
-                            ty: Type.t}
+             | Const of Const.t
              | Frontier
              | GCState
              | Global of Global.t
              | Label of Label.t
-             | Null
              | Offset of {base: t,
                           offset: Bytes.t,
                           ty: Type.t}
-             | Real of RealX.t
-             | Register of Register.t
              | SequenceOffset of {base: t,
                                   index: t,
                                   offset: Bytes.t,
@@ -79,25 +116,27 @@ signature MACHINE =
                                   ty: Type.t}
              | StackOffset of StackOffset.t
              | StackTop
-             | Word of WordX.t
+             | StaticHeapRef of StaticHeap.Ref.t
+             | Temporary of Temporary.t
              | Address of t
 
             val equals: t * t -> bool
             val interfere: t * t -> bool
-            val isLocation: t -> bool
+            val isDestination: t -> bool
             val layout: t -> Layout.t
             val stackOffset: {offset: Bytes.t, ty: Type.t} -> t
+            val gcField: Runtime.GCField.t -> t
             val toString: t -> string
             val ty: t -> Type.t
+            val word: WordX.t -> t
          end
-      sharing Operand = Switch.Use
 
       structure Live:
          sig
             datatype t =
                Global of Global.t
-             | Register of Register.t
              | StackOffset of StackOffset.t
+             | Temporary of Temporary.t
 
             val equals: t * t -> bool
             val fromOperand: Operand.t -> t option
@@ -109,13 +148,12 @@ signature MACHINE =
       structure Statement:
          sig
             datatype t =
-             (* When registers or offsets appear in operands, there is an
+             (* When temporaries or offsets appear in operands, there is an
               * implicit contents of.
               * When they appear as locations, there is not.
               *)
                Move of {dst: Operand.t,
                         src: Operand.t}
-             | Noop
              | PrimApp of {args: Operand.t vector,
                            dst: Operand.t option,
                            prim: Type.t Prim.t}
@@ -123,12 +161,14 @@ signature MACHINE =
 
             val foldOperands: t * 'a * (Operand.t * 'a -> 'a) -> 'a
             val layout: t -> Layout.t
-            val move: {dst: Operand.t, src: Operand.t} -> t
-            (* Error if dsts and srcs aren't of same length. *)
-            val moves: {dsts: Operand.t vector,
-                        srcs: Operand.t vector} -> t vector
-            val object: {dst: Operand.t, header: word, size: Bytes.t} -> t vector
+            val move: {dst: Operand.t, src: Operand.t} -> t option
+            val object: {dst: Operand.t, header: WordX.t, size: Bytes.t} -> t vector
+            val sequence: {dst: Operand.t, header: WordX.t, length: int, size: Bytes.t} -> t vector
          end
+
+      structure Switch: SWITCH
+      sharing Switch = Atoms
+      sharing Switch.Use = Operand
 
       structure Transfer:
          sig
@@ -143,8 +183,8 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
-             | Raise
-             | Return
+             | Raise of {raisesTo: Label.t list}
+             | Return of {returnsTo: Label.t list}
              | Switch of Switch.t
 
             val foldOperands: t * 'a * (Operand.t * 'a -> 'a) -> 'a
@@ -214,7 +254,7 @@ signature MACHINE =
             datatype t =
                T of {kind: Kind.t,
                      label: Label.t,
-                     (* Live registers and stack offsets at start of block. *)
+                     (* Live temporaries and stack offsets at start of block. *)
                      live: Live.t vector,
                      raises: Live.t vector option,
                      returns: Live.t vector option,
@@ -230,13 +270,14 @@ signature MACHINE =
             datatype t =
                T of {blocks: Block.t vector,
                      chunkLabel: ChunkLabel.t,
-                     (* Register.index r
-                      *    <= regMax (Type.toCType (Register.ty r))
-                      * for all registers in the chunk.
+                     (* Temporary.index r
+                      *    <= tempsMax (Type.toCType (Temporary.ty r))
+                      * for all temporaries in the chunk.
                       *)
-                     regMax: CType.t -> int}
+                     tempsMax: CType.t -> int}
             val chunkLabel: t -> ChunkLabel.t
          end
+
 
       structure Program:
          sig
@@ -244,14 +285,15 @@ signature MACHINE =
                T of {chunks: Chunk.t list,
                      frameInfos: FrameInfo.t vector,
                      frameOffsets: FrameOffsets.t vector,
+                     globals: {objptrs: (StaticHeap.Ref.t * Global.t) list,
+                               reals: (RealX.t * Global.t) list},
                      handlesSignals: bool,
                      main: {chunkLabel: ChunkLabel.t,
                             label: Label.t},
                      maxFrameSize: Bytes.t,
                      objectTypes: Type.ObjectType.t vector,
-                     reals: (Global.t * RealX.t) list,
                      sourceMaps: SourceMaps.t option,
-                     vectors: (Global.t * WordXVector.t) list}
+                     staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 
             val clearLabelNames: t -> unit
             val layouts: t * (Layout.t -> unit) -> unit

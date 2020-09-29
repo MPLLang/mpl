@@ -1,4 +1,4 @@
-(* Copyright (C) 2014,2017,2019 Matthew Fluet.
+(* Copyright (C) 2014,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -11,11 +11,6 @@ functor Const (S: CONST_STRUCTS): CONST =
 struct
 
 open S
-
-structure ConstType = ConstType (struct
-                                    structure RealSize = RealX.RealSize
-                                    structure WordSize = WordX.WordSize
-                                 end)
 
 structure IntInfRep =
    struct
@@ -83,12 +78,14 @@ structure IntInfRep =
    end
 
 datatype t =
-   IntInf of IntInf.t
+   CSymbol of CSymbol.t
+ | IntInf of IntInf.t
  | Null
  | Real of RealX.t
  | Word of WordX.t
  | WordVector of WordXVector.t
 
+val csymbol = CSymbol
 val intInf = IntInf
 val null = Null
 val real = Real
@@ -114,7 +111,8 @@ val string = wordVector o WordXVector.fromString
 
 fun layout c =
    case c of
-      IntInf i => Layout.seq [IntInf.layout i, Layout.str ":ii"]
+      CSymbol s => Layout.seq [Layout.str "CSymbol ", CSymbol.layout s]
+    | IntInf i => Layout.seq [IntInf.layout i, Layout.str ":ii"]
     | Null => Layout.str "NULL"
     | Real r => RealX.layout (r, {suffix = true})
     | Word w => WordX.layout (w, {suffix = true})
@@ -125,11 +123,12 @@ val toString = Layout.toString o layout
 val parse =
    let
       open Parse
-      infix  3 <*
+      infix  3 <* *>
       infixr 4 <$> <$
    in
       any
-      [IntInf <$> (fromScan (Function.curry IntInf.scan StringCvt.DEC) <* str ":ii"),
+      [CSymbol <$> (kw "CSymbol" *> CSymbol.parse),
+       IntInf <$> (fromScan (Function.curry IntInf.scan StringCvt.DEC) <* str ":ii"),
        Null <$ kw "NULL",
        Real <$> RealX.parse,
        Word <$> WordX.parse,
@@ -138,7 +137,8 @@ val parse =
 
 fun hash (c: t): word =
    case c of
-      IntInf i => IntInf.hash i
+      CSymbol s => CSymbol.hash s
+    | IntInf i => IntInf.hash i
     | Null => 0wx0
     | Real r => RealX.hash r
     | Word w => WordX.hash w
@@ -146,7 +146,8 @@ fun hash (c: t): word =
 
 fun equals (c, c') =
    case (c, c') of
-      (IntInf i, IntInf i') => IntInf.equals (i, i')
+      (CSymbol s, CSymbol s') => CSymbol.equals (s, s')
+    | (IntInf i, IntInf i') => IntInf.equals (i, i')
     | (Null, Null) => true
     | (Real r, Real r') => RealX.equals (r, r')
     | (Word w, Word w') => WordX.equals (w, w')
@@ -154,8 +155,5 @@ fun equals (c, c') =
     | _ => false
 
 val equals = Trace.trace2 ("Const.equals", layout, layout, Bool.layout) equals
-
-val lookup: ({default: string option, name: string} * ConstType.t -> t) ref =
-   ref (fn _ => Error.bug "Const.lookup: not set")
 
 end

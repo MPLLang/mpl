@@ -1,4 +1,4 @@
-/* Copyright (C) 2012,2014,2019 Matthew Fluet.
+/* Copyright (C) 2012,2014,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -21,7 +21,7 @@ struct GC_state {
   pointer limit;
   pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */
-  size_t exnStack;
+  ptrdiff_t exnStack;
   /* Alphabetized fields follow. */
   size_t alignment; /* */
   bool amInGC;
@@ -31,7 +31,6 @@ struct GC_state {
   uint32_t atomicState;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
   pointer callFromCOpArgsResPtr; /* Pass op, args, and res from exported C call */
-  struct GC_callStackState callStackState;
   struct GC_controls *controls;
   struct GC_globalCumulativeStatistics* globalCumulativeStatistics;
   struct GC_cumulativeStatistics *cumulativeStatistics;
@@ -77,10 +76,9 @@ struct GC_state {
   struct GC_sourceMaps sourceMaps;
   pointer stackBottom; /* Bottom of stack in current thread. */
   pthread_t self; /* thread owning the GC_state */
-  uint32_t terminationLeader;
+  struct GC_staticHeaps staticHeaps;
   struct GC_sysvals sysvals;
-  struct GC_vectorInit *vectorInits;
-  uint32_t vectorInitsLength;
+  uint32_t terminationLeader;
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
   struct TracingContext *trace;

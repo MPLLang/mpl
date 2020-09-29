@@ -1,5 +1,5 @@
 /* Copyright (C) 2020 Sam Westrick.
- * Copyright (C) 2011-2012,2014,2016 Matthew Fluet.
+ * Copyright (C) 2011-2012,2014,2016,2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -13,129 +13,108 @@
 /* ---------------------------------------------------------------- */
 
 size_t sizeofInitialBytesLive (GC_state s) {
-  uint32_t i;
-  size_t dataBytes;
   size_t total;
 
   total = 0;
-  for (i = 0; i < s->vectorInitsLength; ++i) {
-    dataBytes =
-      s->vectorInits[i].elementSize
-      * s->vectorInits[i].length;
-    total += align (GC_SEQUENCE_METADATA_SIZE + dataBytes, s->alignment);
-  }
+  total += s->staticHeaps.dynamic.size;
+  total += sizeofStackWithMetaData (s, sizeofStackInitialReserved (s)) + sizeofThread (s);
   return total;
 }
 
-void initVectors(GC_state s, GC_thread thread) {
-  struct GC_vectorInit *inits;
-  HM_chunk currentChunk;
-  pointer frontier;
-  pointer limit;
-  uint32_t i;
-
-  assert(isFrontierAligned(s, s->frontier));
-  inits = s->vectorInits;
-  frontier = s->frontier;
-  limit = s->limitPlusSlop;
-
-  currentChunk = HM_getChunkOf(frontier);
-  assert(currentChunk == thread->currentChunk);
+void initDynHeap(GC_state s, GC_thread thread) {
   assert(0 == thread->currentDepth);
 
-  for (i = 0; i < s->vectorInitsLength; i++) {
-    size_t elementSize;
-    size_t dataBytes;
-    size_t objectSize;
-    uint32_t typeIndex;
+  HM_chunk currentChunk;
+  pointer frontier, limit;
+  pointer start = s->staticHeaps.dynamic.start;
+  pointer end = start + s->staticHeaps.dynamic.size;
+  pointer p = start;
+  size_t metaDataSize = 0, objectSize = 0;
 
-    elementSize = inits[i].elementSize;
-    dataBytes = elementSize * inits[i].length;
-    objectSize = align(GC_SEQUENCE_METADATA_SIZE + dataBytes, s->alignment);
-
-#if ASSERT
-    assert(limit == HM_getChunkLimit(currentChunk));
-    assert(frontier >= HM_getChunkFrontier(currentChunk));
-    assert(frontier <= limit);
-#endif
-
-    /* Extend with a new chunk, if there is not enough free space or if we have
-     * crossed a block boundary. */
-    if ((size_t)(limit - frontier) < objectSize ||
-        !inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
-    {
-      HM_HH_updateValues(thread, frontier);
-      if (!HM_HH_extend(s, thread, objectSize)) {
-        DIE("Ran out of space for Hierarchical Heap!");
-      }
-      s->frontier = HM_HH_getFrontier(thread);
-      s->limitPlusSlop = HM_HH_getLimit(thread);
-      s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-
-      frontier = s->frontier;
-      limit = s->limitPlusSlop;
-
-      currentChunk = HM_getChunkOf(frontier);
-      assert(currentChunk == thread->currentChunk);
-    }
-
+  // While there are segments of the initial dynamic heap to be copied
+  // into the root hierarchical heap.
+  while (1) {
+    currentChunk = thread->currentChunk;
+    frontier = HM_getChunkFrontier(currentChunk);
     assert(isFrontierAligned(s, frontier));
-    assert((size_t)(limit - frontier) >= objectSize);
-    assert(inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE));
+    limit = HM_getChunkLimit(currentChunk);
+    assert(frontier <= limit);
 
-    *((GC_sequenceCounter*)(frontier)) = 0;
-    frontier = frontier + GC_SEQUENCE_COUNTER_SIZE;
-    *((GC_sequenceLength*)(frontier)) = inits[i].length;
-    frontier = frontier + GC_SEQUENCE_LENGTH_SIZE;
-    switch (elementSize) {
-    case 1:
-      typeIndex = WORD8_VECTOR_TYPE_INDEX;
-      break;
-    case 2:
-      typeIndex = WORD16_VECTOR_TYPE_INDEX;
-      break;
-    case 4:
-      typeIndex = WORD32_VECTOR_TYPE_INDEX;
-      break;
-    case 8:
-      typeIndex = WORD64_VECTOR_TYPE_INDEX;
-      break;
-    default:
-      die ("unknown element size in vectorInit: %"PRIuMAX"",
-           (uintmax_t)elementSize);
+    // Find the end of this segement of the initial dynamic heap to
+    // copy into the current chunk of the root hierarchical heap.
+    // `start` is the start of the segment.
+    // `p` is the candidate end of segment.
+    while (1) {
+      if (p >= end) {
+        // This segment is the last to be copied.
+        break;
+      }
+      pointer q = advanceToObjectData (s, p);
+#if ASSERT
+      GC_header header = getHeader (q);
+      assert (header == GC_REAL32_VECTOR_HEADER
+              || header == GC_REAL64_VECTOR_HEADER
+              || header == GC_WORD8_VECTOR_HEADER
+              || header == GC_WORD16_VECTOR_HEADER
+              || header == GC_WORD32_VECTOR_HEADER
+              || header == GC_WORD64_VECTOR_HEADER);
+#endif
+      sizeofObjectAux (s, q, &metaDataSize, &objectSize);
+      pointer r = q + objectSize;
+      if (!inFirstBlockOfChunk(currentChunk, frontier + (q - start))
+          || frontier + (r - start) > limit) {
+        // Next object does not fit into current chunk.
+        break;
+      }
+      // Next object fits into current chunk; advance `p`.
+      p = r;
     }
-    *((GC_header*)(frontier)) = buildHeaderFromTypeIndex (typeIndex);
-    frontier = frontier + GC_HEADER_SIZE;
-    // *((objptr*)(frontier)) = BOGUS_OBJPTR;
-    // frontier = frontier + OBJPTR_SIZE;
-    s->globals[inits[i].globalIndex] = pointerToObjptr(frontier, NULL);
-    if (DEBUG_DETAILED)
-      fprintf (stderr, "allocated vector at "FMTPTR"\n",
-               (uintptr_t)(s->globals[inits[i].globalIndex]));
-    memcpy (frontier, inits[i].words, dataBytes);
-    frontier += objectSize - GC_SEQUENCE_METADATA_SIZE;
-  }
 
-  s->frontier = frontier;
+    // Copy segment `[start,p)` into current segment.
+    memcpy (frontier, start, p - start);
+    // Adjust global objptrs that referenced an object in the segment.
+    for (uint32_t i = 0; i < s->globalsLength; i++) {
+      pointer g = objptrToPointer(s->globals[i], NULL);
+      if (start <= g && g < p) {
+        g = (g - start) + frontier;
+        s->globals[i] = pointerToObjptr(g, NULL);
+      }
+    }
+    // Advance frontier.
+    frontier += p - start;
+    HM_updateChunkValues(currentChunk, frontier);
+
+    if (p >= end) {
+      // This segment was the last to be copied.
+      break;
+    }
+
+    // Initialize search for next segment.
+    start = p;
+    // `p` points to the beginning of an object that did not fit in
+    // the last chunk; extend hierarchical heap with a chunk
+    // sufficient to hold the next object.
+    if (!HM_HH_extend(s, thread, metaDataSize + objectSize)) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+  }
 
   /* If the last allocation passed a block boundary, we need to extend to have
    * a valid frontier. Extending with GC_HEAP_LIMIT_SLOP is arbitrary. */
-  if (!inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE))
-  {
-    HM_HH_updateValues(thread, frontier);
+  if (!inFirstBlockOfChunk(currentChunk, frontier + GC_SEQUENCE_METADATA_SIZE)) {
     if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    s->frontier = HM_HH_getFrontier(thread);
-    s->limitPlusSlop = HM_HH_getLimit(thread);
-    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-
-    frontier = s->frontier;
-    limit = s->limitPlusSlop;
-
-    currentChunk = HM_getChunkOf(frontier);
-    assert(currentChunk == thread->currentChunk);
+    currentChunk = thread->currentChunk;
+    frontier = HM_getChunkFrontier(currentChunk);
+    assert(isFrontierAligned(s, frontier));
+    limit = HM_getChunkLimit(currentChunk);
+    assert(frontier <= limit);
   }
+
+  s->frontier = frontier;
+  s->limitPlusSlop = limit;
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   assert(isFrontierAligned(s, s->frontier));
   assert(inFirstBlockOfChunk(currentChunk, s->frontier + GC_SEQUENCE_METADATA_SIZE));
@@ -164,16 +143,14 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
   return thread;
 }
 
-void initWorld(GC_state s) {
-  for (uint32_t i = 0; i < s->globalsLength; ++i)
-    s->globals[i] = BOGUS_OBJPTR;
 
+void initWorld(GC_state s) {
   GC_thread thread = initThreadAndHeap(s, 0);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 
-  /* Copy vectors into the heap, implicitly updating
+  /* Copy initial dynamic heap, implicitly updating
    * s->{frontier,limit,limitPlusSlop} */
-  initVectors(s, thread);
+  initDynHeap(s, thread);
 
   size_t currentSize = HM_getChunkListSize(HM_HH_getChunkList(hh));
 

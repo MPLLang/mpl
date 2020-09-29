@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Matthew Fluet.
+(* Copyright (C) 2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -24,7 +24,17 @@ structure Atoms =
                                            structure WordX = WordX)
       structure RealX = RealX (structure RealSize = RealSize
                                structure WordX = WordX)
-      structure Const = Const (structure RealX = RealX
+
+      structure CSymbolScope = CSymbolScope ()
+      structure CType = CType (structure RealSize = RealSize
+                               structure WordSize = WordSize)
+      structure CFunction = CFunction (structure SymbolScope = CSymbolScope
+                                       structure CType = CType)
+      structure CSymbol = CSymbol (structure CSymbolScope = CSymbolScope
+                                   structure CType = CType)
+
+      structure Const = Const (structure CSymbol = CSymbol
+                               structure RealX = RealX
                                structure WordX = WordX
                                structure WordXVector = WordXVector)
 
@@ -57,9 +67,6 @@ structure Atoms =
             fun newNoname () = newString "L"
          end
 
-      structure CType = CType (structure RealSize = RealSize
-                               structure WordSize = WordSize)
-      structure CFunction = CFunction (structure CType = CType)
       structure Ffi = Ffi (structure CFunction = CFunction
                            structure CType = CType)
 
@@ -73,6 +80,7 @@ structure Atoms =
                              structure RealSize = RealSize
                              structure WordSize = WordSize)
 
+      structure Prod = Prod ()
       structure Handler = Handler (structure Label = Label)
       structure Return = Return (structure Label = Label
                                  structure Handler = Handler)

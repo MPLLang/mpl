@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Matthew Fluet.
+(* Copyright (C) 2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -18,6 +18,8 @@ signature ATOMS' =
       structure AdmitsEquality: ADMITS_EQUALITY
       structure Cases: CASES
       structure CFunction: C_FUNCTION
+      structure CSymbol: C_SYMBOL
+      structure CSymbolScope: C_SYMBOL_SCOPE
       structure CType: C_TYPE
       structure CharSize: CHAR_SIZE
       structure Con: CON
@@ -29,6 +31,7 @@ signature ATOMS' =
       structure IntSize: INT_SIZE
       structure Label: LABEL
       structure Prim: PRIM
+      structure Prod: PROD
       structure ProfileExp: PROFILE_EXP
       structure ProfileLabel: PROFILE_LABEL
       structure RealSize: REAL_SIZE
@@ -49,7 +52,9 @@ signature ATOMS' =
 
       sharing AdmitsEquality = Tycon.AdmitsEquality
       sharing CFunction = Ffi.CFunction = Prim.CFunction
-      sharing CType = CFunction.CType = Ffi.CType = Prim.CType
+      sharing CSymbol = Const.CSymbol
+      sharing CSymbolScope = CFunction.SymbolScope = CSymbol.CSymbolScope
+      sharing CType = CFunction.CType = CSymbol.CType = Ffi.CType = Prim.CType
       sharing CharSize = Tycon.CharSize
       sharing Con = Prim.Con
       sharing Const = Prim.Const
@@ -85,6 +90,8 @@ signature ATOMS =
        *)
       sharing AdmitsEquality = Atoms.AdmitsEquality
       sharing CFunction = Atoms.CFunction
+      sharing CSymbol = Atoms.CSymbol
+      sharing CSymbolScope = Atoms.CSymbolScope
       sharing CType = Atoms.CType
       sharing CharSize = Atoms.CharSize
       sharing Cases = Atoms.Cases
@@ -97,6 +104,7 @@ signature ATOMS =
       sharing IntSize = Atoms.IntSize
       sharing Label = Atoms.Label
       sharing Prim = Atoms.Prim
+      sharing Prod = Atoms.Prod
       sharing ProfileExp = Atoms.ProfileExp
       sharing ProfileLabel = Atoms.ProfileLabel
       sharing RealSize = Atoms.RealSize

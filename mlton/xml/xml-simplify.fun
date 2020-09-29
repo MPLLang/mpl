@@ -33,10 +33,10 @@ local
    type passGen = string -> pass option
 
    fun mkSimplePassGen (name, doit): passGen =
-      let val count = Counter.new 1
+      let val count = Counter.generator 1
       in fn s => if s = name
                     then SOME {name = concat [name, "#",
-                                              Int.toString (Counter.next count)],
+                                              Int.toString (count ())],
                                doit = doit,
                                execute = true}
                     else NONE
@@ -61,21 +61,14 @@ in
         end))
 end
 
-val xmlPassesString = ref "default"
-val xmlPassesGet = fn () => !xmlPassesString
-val xmlPassesSet = fn s =>
-   let
-      val _ = xmlPassesString := s
-   in
-      case s of
-         "default" => (xmlPasses := xmlPassesDefault
-                       ; Result.Yes ())
-       | "minimal" => (xmlPasses := xmlPassesMinimal
-                       ; Result.Yes ())
-       | _ => xmlPassesSetCustom s
-   end
-val _ = List.push (Control.optimizationPasses,
-                   {il = "xml", get = xmlPassesGet, set = xmlPassesSet})
+fun xmlPassesSet s =
+   case s of
+      "default" => (xmlPasses := xmlPassesDefault
+                    ; Result.Yes ())
+    | "minimal" => (xmlPasses := xmlPassesMinimal
+                    ; Result.Yes ())
+    | _ => xmlPassesSetCustom s
+val _ = Control.OptimizationPasses.register {il = "xml", set = xmlPassesSet}
 
 fun simplify p =
    let

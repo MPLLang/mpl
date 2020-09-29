@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2019 Matthew Fluet.
+(* Copyright (C) 2009,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -27,7 +27,7 @@ struct
   val ones : int * WordSize.t -> WordX.t
     = fn (i, ws) => (WordX.notb o WordX.lshift) 
                     (WordX.allOnes ws,
-                     WordX.fromIntInf (IntInf.fromInt i, ws))
+                     WordX.fromInt (i, ws))
 
   val tracerTop = x86.tracerTop
 
@@ -465,25 +465,17 @@ struct
                                    {registers = [Register.esp]})
 
         local
-           val set: (word * String.t * Label.t) HashSet.t =
-              HashSet.new {hash = #1}
+           val set: (String.t, Label.t) HashTable.t =
+              HashTable.new {hash = String.hash, equals = String.equals}
         in
            fun makeDarwinSymbolStubLabel name =
-              let
-                 val hash = String.hash name
-              in
-                 (#3 o HashSet.lookupOrInsert)
-                 (set, hash,
-                  fn (hash', name', _) =>
-                  hash = hash' andalso name = name',
-                  fn () =>
-                  (hash, name,
-                   Label.newString (concat ["L_", name, "_stub"])))
-              end
+               (HashTable.lookupOrInsert)
+               (set, name, fn () =>
+                Label.newString (concat ["L_", name, "_stub"]))
 
            fun makeDarwinSymbolStubs () =
-              HashSet.fold
-              (set, [], fn ((_, name, label), assembly) =>
+              HashTable.foldi
+              (set, [], fn (name, label, assembly) =>
                  (Assembly.pseudoop_symbol_stub ()) ::
                  (Assembly.label label) ::
                  (Assembly.pseudoop_indirect_symbol (Label.fromString name)) ::
@@ -732,11 +724,11 @@ struct
                                   end))]
                      val pre
                        = AppendList.appends
-                         [if !Control.Native.commented > 1
+                         [if !Control.codegenComments > 1
                             then AppendList.single
                                  (Assembly.comment (Entry.toString entry))
                             else AppendList.empty,
-                          if !Control.Native.commented > 2
+                          if !Control.codegenComments > 2
                             then AppendList.single
                                  (Assembly.comment 
                                   (LiveSet.fold
@@ -790,7 +782,7 @@ struct
         and effectDefault (gef as GEF {fall,...})
                           {label, transfer} : Assembly.t AppendList.t
           = AppendList.append
-            (if !Control.Native.commented > 1
+            (if !Control.codegenComments > 1
                then AppendList.single
                     (Assembly.comment
                      (Transfer.toString transfer))
@@ -1401,7 +1393,7 @@ struct
                               in
                                 case (symbolScope,
                                       !Control.Target.os,
-                                      !Control.positionIndependent) of
+                                      !Control.Native.pic) of
                                    (* Private functions can be easily reached
                                     * with a direct (eip-relative) call.
                                     *)
@@ -1851,7 +1843,7 @@ struct
                           if length >= 8 
                              andalso
                              WordX.lt (WordX.div(rangeK,two,{signed=false}),
-                                       WordX.fromIntInf (IntInf.fromInt length, ws),
+                                       WordX.fromInt (length, ws),
                                        {signed = false})
                             then let
                                    val cases 

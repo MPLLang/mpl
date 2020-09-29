@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2017 Matthew Fluet.
+(* Copyright (C) 2009,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -246,18 +246,17 @@ fun restoreFunction {globals: Statement.t vector}
                   else ()
 
         (* init violations *)
-        val index = ref 0
+        val index = Counter.new 0
         val violations
           = Vector.fromListMap
             (!violations, fn x =>
              let
                val vi = varInfo x
-               val _ = VarInfo.index vi := (!index)
-               val _ = Int.inc index
+               val _ = VarInfo.index vi := (Counter.next index)
              in
                x
              end)
-        val numViolations = !index
+        val numViolations = Counter.value index
 
         (* Diagnostics *)
         val _ = Control.diagnostics
@@ -524,11 +523,14 @@ fun restoreFunction {globals: Statement.t vector}
                            exp = exp}
             end
         local
-          type t = {dst: Label.t,
-                    phiArgs: Var.t vector,
-                    route: Label.t,
-                    hash: Word.t}
-          val routeTable : t HashSet.t = HashSet.new {hash = #hash}
+          val routeTable: ({dst: Label.t, phiArgs: Var.t vector}, Label.t) HashTable.t =
+             HashTable.new {equals = (fn ({dst = dst1, phiArgs = phiArgs1},
+                                          {dst = dst2, phiArgs = phiArgs2}) =>
+                                      Label.equals (dst1, dst2)
+                                      andalso
+                                      Vector.equals (phiArgs1, phiArgs2, Var.equals)),
+                            hash = (fn {dst, phiArgs} =>
+                                    Hash.combine (Label.hash dst, Hash.vectorMap (phiArgs, Var.hash)))}
         in
           fun route dst
             = let
@@ -540,38 +542,28 @@ fun restoreFunction {globals: Statement.t vector}
                   else let
                          val phiArgs = Vector.map
                                         (phiArgs, valOf o VarInfo.peekVar o varInfo)
-                         val hash = Hash.combine (Label.hash dst, Hash.vectorMap (phiArgs, Var.hash))
-                         val {route, ...} 
-                           = HashSet.lookupOrInsert
-                             (routeTable, hash, 
-                              fn {dst = dst', phiArgs = phiArgs', ... } =>
-                              Label.equals (dst, dst') 
-                              andalso
-                              Vector.equals (phiArgs, phiArgs', Var.equals),
-                              fn () =>
-                              let
-                                val route = Label.new dst
-                                val args = Vector.map 
-                                           (LabelInfo.args' li, fn (x,ty) =>
-                                            (Var.new x, ty))
-                                val args' = Vector.concat 
-                                            [Vector.map(args, #1),
-                                             phiArgs]
-                                val block = Block.T
-                                            {label = route,
-                                             args = args,
-                                             statements = Vector.new0 (),
-                                             transfer = Goto {dst = dst,
-                                                              args = args'}}
-                                val _ = List.push (blocks, block)
-                              in
-                                {dst = dst,
-                                 phiArgs = phiArgs,
-                                 route = route,
-                                 hash = hash}
-                              end)
                        in
-                         route
+                          HashTable.lookupOrInsert
+                          (routeTable, {dst = dst, phiArgs = phiArgs},
+                           fn () =>
+                           let
+                              val route = Label.new dst
+                              val args = Vector.map
+                                         (LabelInfo.args' li, fn (x,ty) =>
+                                          (Var.new x, ty))
+                              val args' = Vector.concat
+                                          [Vector.map(args, #1),
+                                           phiArgs]
+                              val block = Block.T
+                                          {label = route,
+                                           args = args,
+                                           statements = Vector.new0 (),
+                                           transfer = Goto {dst = dst,
+                                                            args = args'}}
+                              val _ = List.push (blocks, block)
+                           in
+                              route
+                           end)
                        end
               end
         end
@@ -632,7 +624,7 @@ fun restoreFunction {globals: Statement.t vector}
                 val args = args
                 val post = post
               end
-              val _ = Tree.traverse (Function.dominatorTree f, visitBlock)
+              val _ = Tree.traverse (dt, visitBlock)
               val _ = post ()
             in
               Function.new {args = args,

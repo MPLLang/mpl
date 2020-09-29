@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Matthew Fluet.
+(* Copyright (C) 2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -15,20 +15,13 @@ structure Convention = CFunction.Convention
 structure SymbolScope = CFunction.SymbolScope
 
 local
-   val scopes: (Word.t * String.t * SymbolScope.t) HashSet.t =
-      HashSet.new {hash = #1}
+   val scopes: (String.t, SymbolScope.t) HashTable.t =
+      HashTable.new {hash = String.hash, equals = String.equals}
 in
    fun checkScope {name, symbolScope} =
-      let
-         val hash = String.hash name
-      in
-         (#3 o HashSet.lookupOrInsert)
-         (scopes, hash,
-          fn (hash', name', _) =>
-          hash = hash' andalso name = name',
-          fn () =>
-          (hash, name, symbolScope))
-      end
+      HashTable.lookupOrInsert
+      (scopes, name,
+       fn () => symbolScope)
 end
 
 val exports: {args: CType.t vector,
@@ -41,14 +34,13 @@ val symbols: {name: string,
               ty: CType.t,
               symbolScope: SymbolScope.t} list ref = ref []
 
-fun numExports () = List.length (!exports)
-
 local
-   val exportCounter = Counter.new 0
+   val nextId = Counter.generator 0
 in
    fun addExport {args, convention, name, res, symbolScope} =
       let
-         val id = Counter.next exportCounter
+         val id = nextId ()
+         val _ = Int.inc Control.numExports
          val _ = List.push (exports, {args = args,
                                       convention = convention,
                                       id = id,

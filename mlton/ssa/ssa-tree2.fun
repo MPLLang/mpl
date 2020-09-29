@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014,2017-2019 Matthew Fluet.
+(* Copyright (C) 2009,2014,2017-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -16,87 +16,6 @@ open S
 infix  1 <|> >>=
 infix  3 <*> <* *>
 infixr 4 <$> <$$> <$$$> <$$$$> <$ <$?>
-
-structure Prod =
-   struct
-      datatype 'a t = T of {elt: 'a, isMutable: bool} vector
-
-      fun dest (T p) = p
-
-      val make = T
-
-      fun empty () = T (Vector.new0 ())
-
-      local
-         fun new1 {elt, isMutable} = T (Vector.new1 {elt = elt, isMutable = isMutable})
-      in
-         fun new1Immutable elt = new1 {elt = elt, isMutable = false}
-         fun new1Mutable elt = new1 {elt = elt, isMutable = true}
-      end
-
-      fun fold (p, b, f) =
-         Vector.fold (dest p, b, fn ({elt, ...}, b) => f (elt, b))
-
-      fun foreach (p, f) = Vector.foreach (dest p, f o #elt)
-
-      fun isEmpty p = Vector.isEmpty (dest p)
-
-      fun allAreImmutable (T v) = Vector.forall (v, not o #isMutable)
-      fun allAreMutable (T v) = Vector.forall (v, #isMutable)
-      fun someIsImmutable (T v) = Vector.exists (v, not o #isMutable)
-      fun someIsMutable (T v) = Vector.exists (v, #isMutable)
-
-      fun sub (T p, i) = Vector.sub (p, i)
-
-      fun elt (p, i) = #elt (sub (p, i))
-
-      fun length p = Vector.length (dest p)
-
-      val equals: 'a t * 'a t * ('a * 'a -> bool) -> bool =
-         fn (p1, p2, equals) =>
-         Vector.equals (dest p1, dest p2,
-                        fn ({elt = e1, isMutable = m1},
-                            {elt = e2, isMutable = m2}) =>
-                        m1 = m2 andalso equals (e1, e2))
-
-      fun layout (p, layoutElt) =
-         let
-                    open Layout
-                 in
-                    seq [str "(",
-                         (mayAlign o separateRight)
-                         (Vector.toListMap (dest p, fn {elt, isMutable} =>
-                                            if isMutable
-                                       then seq [layoutElt elt, str " mut"]
-                                       else layoutElt elt),
-                  ","),
-                         str ")"]
-                 end
-
-      fun parse (parseElt: 'a Parse.t): 'a t Parse.t =
-         let
-            open Parse
-         in
-            make <$>
-            vector (parseElt >>= (fn elt =>
-                    optional (kw "mut") >>= (fn isMutable =>
-                    pure {elt = elt, isMutable = Option.isSome isMutable})))
-
-         end
-
-      val map: 'a t * ('a -> 'b) -> 'b t =
-         fn (p, f) =>
-         make (Vector.map (dest p, fn {elt, isMutable} =>
-                           {elt = f elt,
-                            isMutable = isMutable}))
-
-      val keepAllMap: 'a t * ('a -> 'b option) -> 'b t =
-         fn (p, f) =>
-         make (Vector.keepAllMap (dest p, fn {elt, isMutable} =>
-                                  Option.map (f elt, fn elt =>
-                                              {elt = elt,
-                                               isMutable = isMutable})))
-   end
 
 structure ObjectCon =
    struct
@@ -305,7 +224,8 @@ structure Type =
             datatype z = datatype Const.t
          in
             case c of
-               IntInf _ => intInf
+               CSymbol _ => cpointer
+             | IntInf _ => intInf
              | Null => cpointer
              | Real r => real (RealX.size r)
              | Word w => word (WordX.size w)
@@ -427,7 +347,6 @@ structure Type =
             val default = fn () =>
                (default ()) handle BadPrimApp => false
 
-            datatype z = datatype Prim.Name.t
             fun arg i = Vector.sub (args, i)
             fun noArgs f = 0 = Vector.length args andalso f ()
             fun oneArg f = 1 = Vector.length args andalso f (arg 0)
@@ -435,8 +354,8 @@ structure Type =
             fun fiveArgs f = 5 = Vector.length args andalso f (arg 0, arg 1, arg 2, arg 3, arg 4)
             val seqIndex = word (WordSize.seqIndex ())
          in
-            case Prim.name prim of
-               Array_alloc _ =>
+            case prim of
+               Prim.Array_alloc _ =>
                   oneArg
                   (fn n =>
                    case deSequenceOpt result of
@@ -444,7 +363,7 @@ structure Type =
                          Prod.allAreMutable resp
                          andalso equals (n, seqIndex)
                     | _ => false)
-             | Array_copyArray =>
+             | Prim.Array_copyArray =>
                   fiveArgs
                   (fn (dst, di, src, si, len) =>
                    case (deSequenceOpt dst, deSequenceOpt src) of
@@ -459,7 +378,7 @@ structure Type =
                          andalso equals (len, seqIndex)
                          andalso isUnit result
                     | _ => false)
-             | Array_copyVector =>
+             | Prim.Array_copyVector =>
                   fiveArgs
                   (fn (dst, di, src, si, len) =>
                    case (deSequenceOpt dst, deSequenceOpt src) of
@@ -474,11 +393,11 @@ structure Type =
                          andalso equals (len, seqIndex)
                          andalso isUnit result
                     | _ => false)
-             | Array_length =>
+             | Prim.Array_length =>
                   oneArg
                   (fn a =>
                    isSequence a andalso equals (result, seqIndex))
-             | Array_toArray =>
+             | Prim.Array_toArray =>
                   oneArg
                   (fn arr =>
                    case (deSequenceOpt arr, deSequenceOpt result) of
@@ -489,7 +408,7 @@ structure Type =
                                         arrIsMutable andalso resIsMutable
                                         andalso equals (arrElt, resElt))
                     | _ => false)
-             | Array_toVector =>
+             | Prim.Array_toVector =>
                   oneArg
                   (fn arr =>
                    case (deSequenceOpt arr, deSequenceOpt result) of
@@ -500,7 +419,7 @@ structure Type =
                                         arrIsMutable
                                         andalso equals (arrElt, resElt))
                     | _ => false)
-             | Array_uninit =>
+             | Prim.Array_uninit =>
                   twoArgs
                   (fn (arr, i) =>
                    case deSequenceOpt arr of
@@ -509,7 +428,7 @@ structure Type =
                          andalso equals (i, seqIndex)
                          andalso isUnit result
                     | _ => false)
-             | Array_uninitIsNop =>
+             | Prim.Array_uninitIsNop =>
                   oneArg
                   (fn arr =>
                    case deSequenceOpt arr of
@@ -543,11 +462,11 @@ structure Base =
             open Parse
          in
             SequenceSub <$>
-            (spaces *> str "$(" *>
+            (mlSpaces *> str "$(" *>
              parseX >>= (fn sequence =>
-             spaces *> str "," *>
+             mlSpaces *> str "," *>
              parseX >>= (fn index =>
-             spaces *> str ")" *>
+             mlSpaces *> str ")" *>
              pure {index = index, sequence = sequence})))
             <|>
             (Object <$> parseX)
@@ -565,7 +484,7 @@ structure Base =
          let
             open Parse
          in
-            spaces *> char #"#" *>
+            mlSpaces *> char #"#" *>
             (peek (nextSat Char.isDigit) *>
              fromScan (Function.curry Int.scan StringCvt.DEC)) >>= (fn offset =>
             parse parseX >>= (fn base =>
@@ -623,6 +542,7 @@ structure Exp =
                      args: Var.t vector}
        | Select of {base: Var.t Base.t,
                     offset: int}
+       | Sequence of {args: Var.t vector vector}
        | Var of Var.t
 
       val unit = Object {con = NONE, args = Vector.new0 ()}
@@ -637,6 +557,7 @@ structure Exp =
              | Object {args, ...} => vs args
              | PrimApp {args, ...} => vs args
              | Select {base, ...} => Base.foreach (base, v)
+             | Sequence {args, ...} => Vector.foreach (args, vs)
              | Var x => v x
          end
 
@@ -651,6 +572,8 @@ structure Exp =
              | PrimApp {prim, args} => PrimApp {args = fxs args, prim = prim}
              | Select {base, offset} =>
                   Select {base = Base.map (base, fx), offset = offset}
+             | Sequence {args} =>
+                  Sequence {args = Vector.map (args, fxs)}
              | Var x => Var (fx x)
          end
 
@@ -673,6 +596,9 @@ structure Exp =
                   seq [str "prim ", Prim.layoutFull (prim, Type.layout), str " ", layoutArgs args]
              | Select {base, offset} =>
                   Base.layoutWithOffset (base, offset, layoutVar)
+             | Sequence {args} =>
+                  seq [str "seq ",
+                       Vector.layout layoutArgs args]
              | Var x => layoutVar x
          end
 
@@ -683,7 +609,7 @@ structure Exp =
             open Parse
             val parseArgs = vector Var.parse
          in
-            any
+            mlSpaces *> any
             [Const <$> Const.parse,
              Inject <$>
              (kw "inj" *>
@@ -704,6 +630,10 @@ structure Exp =
              Select <$>
              (Base.parseWithOffset Var.parse >>= (fn (base, offset) =>
               pure {base = base, offset = offset})),
+             Sequence <$>
+             (kw "seq" *>
+              vector parseArgs >>= (fn args =>
+              pure {args = args})),
              Var <$> Var.parse]
          end
 
@@ -714,6 +644,7 @@ structure Exp =
           | Object _ => false
           | PrimApp {prim,...} => Prim.maySideEffect prim
           | Select _ => false
+          | Sequence _ => false
           | Var _ => false
 
       fun varsEquals (xs, xs') = Vector.equals (xs, xs', Var.equals)
@@ -729,6 +660,8 @@ structure Exp =
                Prim.equals (prim, prim') andalso varsEquals (args, args')
           | (Select {base = b1, offset = i1}, Select {base = b2, offset = i2}) =>
                Base.equals (b1, b2, Var.equals) andalso i1 = i2
+          | (Sequence {args}, Sequence {args = args'}) =>
+               Vector.equals (args, args', varsEquals)
           | (Var x, Var x') => Var.equals (x, x')
           | _ => false
       (* quell unused warning *)
@@ -739,6 +672,7 @@ structure Exp =
          val inject = newHash ()
          val primApp = newHash ()
          val select = newHash ()
+         val sequence = newHash ()
          val tuple = newHash ()
          fun hashVars (xs: Var.t vector, w: Word.t): Word.t =
             Hash.combine (w, Hash.vectorMap (xs, Var.hash))
@@ -755,6 +689,10 @@ structure Exp =
              | PrimApp {args, ...} => hashVars (args, primApp)
              | Select {base, offset} =>
                   Hash.combine3 (select, Base.hash (base, Var.hash), Word.fromInt offset)
+             | Sequence {args} =>
+                  Hash.combine (sequence,
+                                Hash.vectorMap (args, fn args =>
+                                                Hash.vectorMap (args, Var.hash)))
              | Var x => Var.hash x
       end
       (* quell unused warning *)
@@ -807,7 +745,7 @@ structure Statement =
          let
             open Parse
          in
-            any
+            mlSpaces *> any
             [Bind <$>
              (kw "val" *>
               ((SOME <$> Var.parse) <|> (NONE <$ kw "_")) >>= (fn var =>
@@ -1067,10 +1005,11 @@ structure Transfer =
                parseArgs >>= (fn args =>
                pure (fn return => pure {func = func, args = args, return = return})))
          in
-            any
+            mlSpaces *> any
             [Bug <$ kw "bug",
              Call <$>
              (kw "call" *>
+              mlSpaces *>
               any [kw "dead" *> parseCall >>= (fn mkCall => mkCall Return.Dead),
                    kw "tail" *> parseCall >>= (fn mkCall => mkCall Return.Tail),
                    Label.parse >>= (fn cont =>
@@ -2067,7 +2006,7 @@ structure Program =
       val toFile = {display = Control.Layouts layouts, style = Control.ML, suffix = "ssa2"}
 
       fun parse () =
-                 let
+         let
             open Parse
 
             val () = Tycon.parseReset {prims = Vector.new1 Tycon.bool}
@@ -2086,8 +2025,8 @@ structure Program =
                       globals = Vector.fromList globals,
                       functions = functions,
                       main = main})))))
-                 in
-            compose (skipCommentsML, parseProgram <* (spaces *> (failing next <|> failCut "end of file")))
+         in
+            parseProgram <* (mlSpaces *> (failing next <|> fail "end of file"))
          end
 
       fun layoutStats (program as T {datatypes, globals, functions, main, ...}) =

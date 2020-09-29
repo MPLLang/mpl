@@ -1,4 +1,4 @@
-(* Copyright (C) 2014,2017,2019 Matthew Fluet.
+(* Copyright (C) 2014,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -10,28 +10,38 @@ signature REP_TYPE_STRUCTS =
    sig
       structure CFunction: C_FUNCTION
       structure CType: C_TYPE
+      structure Const: CONST
       structure Label: LABEL
       structure ObjptrTycon: OBJPTR_TYCON
       structure Prim: PRIM
+      structure Prod: PROD
       structure RealSize: REAL_SIZE
+      structure RealX: REAL_X
       structure Runtime: RUNTIME
       structure WordSize: WORD_SIZE
       structure WordX: WORD_X
       structure WordXVector: WORD_X_VECTOR
       sharing CFunction = Prim.CFunction
       sharing CType = Prim.CType
-      sharing RealSize = Prim.RealSize
-      sharing WordSize = Prim.WordSize = WordX.WordSize
-      sharing WordX = WordXVector.WordX
+      sharing RealSize = ObjptrTycon.RealSize = Prim.RealSize = RealX.RealSize
+      sharing RealX = Const.RealX
+      sharing Runtime = ObjptrTycon.Runtime
+      sharing WordSize = ObjptrTycon.WordSize = Prim.WordSize = WordX.WordSize
+      sharing WordX = Const.WordX = RealX.WordX = WordXVector.WordX
+      sharing WordXVector = Const.WordXVector
    end
 
 signature REP_TYPE =
    sig
       include REP_TYPE_STRUCTS
 
-      structure ObjectType: OBJECT_TYPE
       type t
-      sharing type t = ObjectType.ty
+
+      structure ObjectType: OBJECT_TYPE
+      sharing type ObjectType.ty = t
+      sharing ObjectType.Prod = Prod
+      (* sharing ObjectType.ObjptrTycon = ObjptrTycon *)
+      (* sharing ObjectType.Runtime = Runtime *)
 
       val bogusWord: t -> WordX.t
       val align: t * Bytes.t -> Bytes.t
@@ -50,12 +60,14 @@ signature REP_TYPE =
       val compareRes: t
       val deLabel: t -> Label.t option
       val deObjptr: t -> ObjptrTycon.t option
+      val deObjptrs: t -> ObjptrTycon.t vector option
       val deReal: t -> RealSize.t option
       val deSeq: t -> t vector option
       val deWord: t -> WordSize.t option
       val equals: t * t -> bool
       val exnStack: unit -> t
       val gcState: unit -> t
+      val hash: t -> word
       val exists: t * (t -> bool) -> bool
       val intInf: unit -> t
       val isCPointer: t -> bool
@@ -65,10 +77,13 @@ signature REP_TYPE =
       val label: Label.t -> t
       val layout: t -> Layout.t
       val name: t -> string (* simple one letter abbreviation *)
+      val ofConst: Const.t -> t
       val ofGCField: Runtime.GCField.t -> t
+      val ofRealX: RealX.t -> t
       val ofWordXVector: WordXVector.t -> t
       val ofWordX: WordX.t -> t
       val offsetIsOk: {base: t,
+                       mustBeMutable: bool,
                        offset: Bytes.t,
                        tyconTy: ObjptrTycon.t -> ObjectType.t,
                        result: t} -> bool
@@ -80,6 +95,7 @@ signature REP_TYPE =
       val seqIndex: unit -> t
       val sequenceOffsetIsOk: {base: t,
                                index: t,
+                               mustBeMutable: bool,
                                offset: Bytes.t,
                                tyconTy: ObjptrTycon.t -> ObjectType.t,
                                result: t,

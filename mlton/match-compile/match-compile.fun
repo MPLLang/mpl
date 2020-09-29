@@ -1,4 +1,4 @@
-(* Copyright (C) 2015,2017,2019 Matthew Fluet.
+(* Copyright (C) 2015,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -566,7 +566,8 @@ fun unhandledConsts {consts = cs: Const.t vector, isChar, isInt}: Example.t opti
       datatype z = datatype Const.t
    in
       case Vector.first cs of
-         IntInf _ =>
+         CSymbol _ => Error.bug "MatchCompile.unhandledConsts: CSymbol"
+       | IntInf _ =>
             let
                fun extract c =
                   case c of
@@ -1159,7 +1160,7 @@ fun matchCompile {caseType: Type.t,
                                 es)
                       end
                 in
-                   (WordX.fromIntInf (IntInf.fromInt len, WordSize.seqIndex ()),
+                   (WordX.fromInt (len, WordSize.seqIndex ()),
                     Exp.devector {vector = test, length = len, body = body})
                 end)
          in

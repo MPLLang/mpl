@@ -1,5 +1,6 @@
 /* Copyright (C) 2018-2020 Sam Westrick
  * Copyright (C) 2014-2016 Ram Raghunathan
+ * Copyright (C) 2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -19,7 +20,7 @@
  * header ::
  * padding ::
  * bytesNeeded (size_t) ::
- * exnStack (size_t) ::
+ * exnStack (ptrdiff_t) ::
  * hierarchicalHeap (c pointer)
  * stack (object-pointer) ::
  *
@@ -28,7 +29,7 @@
  * The bytesNeeded size_t is the number of bytes needed when returning
  * to this thread.
  *
- * The exnStack size_t is an offset added to stackBottom that
+ * The exnStack ptrdiff_t is an offset added to stackBottom that
  * specifies the top of the exnStack.
  *
  * Note that the order of the fields is important.  The non-objptr
@@ -38,7 +39,7 @@
 typedef struct GC_thread {
   int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
-  size_t exnStack;
+  ptrdiff_t exnStack;
 
   /* Current depth (fork depth) of the thread allocating in this heap.
    * Fresh chunks are placed at this level. */
@@ -61,7 +62,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
-                    sizeof(size_t) +  // exnStack
+                    sizeof(ptrdiff_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
                     sizeof(uint32_t) + // minLocalCollectionDepth
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
@@ -70,7 +71,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(void*) +   // currentCheck
                     sizeof(objptr));  // stack
 
-#define BOGUS_EXN_STACK ((size_t)(-1))
+#define BOGUS_EXN_STACK ((ptrdiff_t)(-1))
 
 #else
 

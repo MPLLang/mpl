@@ -148,6 +148,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     .objectsCopied = 0,
     .stacksCopied = 0
   };
+  struct GC_foreachObjptrClosure forwardHHObjptrClosure =
+    {.fun = forwardHHObjptr, .env = &forwardHHObjptrArgs};
 
   size_t sizesBefore[maxDepth+1];
   for (uint32_t i = 0; i <= maxDepth; i++)
@@ -208,11 +210,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   foreachObjptrInObject(s,
                         objptrToPointer(getStackCurrentObjptr(s),
                                         NULL),
-                        FALSE,
-                        trueObjptrPredicate,
-                        NULL,
-                        forwardHHObjptr,
-                        &forwardHHObjptrArgs);
+                        &trueObjptrPredicateClosure,
+                        &forwardHHObjptrClosure,
+                        FALSE);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from stack",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
@@ -227,11 +227,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   foreachObjptrInObject(s,
                         objptrToPointer(getThreadCurrentObjptr(s),
                                         NULL),
-                        FALSE,
-                        trueObjptrPredicate,
-                        NULL,
-                        forwardHHObjptr,
-                        &forwardHHObjptrArgs);
+                        &trueObjptrPredicateClosure,
+                        &forwardHHObjptrClosure,
+                        FALSE);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from thread",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
@@ -259,11 +257,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   foreachObjptrInObject(s,
                         objptrToPointer(s->wsQueue,
                                         NULL),
-                        FALSE,
-                        trueObjptrPredicate,
-                        NULL,
-                        forwardHHObjptr,
-                        &forwardHHObjptrArgs);
+                        &trueObjptrPredicateClosure,
+                        &forwardHHObjptrClosure,
+                        FALSE);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects from deque",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);

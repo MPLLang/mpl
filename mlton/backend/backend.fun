@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2013-2014,2017,2019 Matthew Fluet.
+(* Copyright (C) 2009,2013-2014,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -21,9 +21,10 @@ in
    structure Live = Live
    structure ObjptrTycon = ObjptrTycon
    structure RealX = RealX
-   structure Register = Register
    structure Runtime = Runtime
    structure StackOffset = StackOffset
+   structure StaticHeap = StaticHeap
+   structure Temporary = Temporary
    structure WordSize = WordSize
    structure WordX = WordX
    structure WordXVector = WordXVector
@@ -42,12 +43,15 @@ in
    structure Const = Const
    structure Func = Func
    structure Function = Function
+   structure Object = Object
+   structure ObjectType = ObjectType
    structure Prim = Prim
+   structure Prod = Prod
    structure Type = Type
    structure Var = Var
 end
 
-structure AllocateRegisters = AllocateRegisters (structure Machine = Machine
+structure AllocateVariables = AllocateVariables (structure Machine = Machine
                                                  structure Rssa = Rssa)
 structure Chunkify = Chunkify (Rssa)
 structure ParallelMove = ParallelMove ()
@@ -132,8 +136,13 @@ fun eliminateDeadCode (f: R.Function.t): R.Function.t =
    end
 
 fun toMachine (rssa: Rssa.Program.t) =
-         let
-      val R.Program.T {functions, handlesSignals, main, objectTypes, profileInfo} = rssa
+   let
+      val R.Program.T {functions, handlesSignals, main, objectTypes, profileInfo, statics} = rssa
+      (* tyconTy *)
+      fun tyconTy tycon =
+         Vector.sub (objectTypes, ObjptrTycon.index tycon)
+      (* returnsTo and raisesTo info *)
+      val rflow = R.Program.rflow rssa
       (* Chunk info *)
       val {get = labelChunk, set = setLabelChunk, ...} =
          Property.getSetOnce (Label.plist,
@@ -168,7 +177,7 @@ fun toMachine (rssa: Rssa.Program.t) =
       (* Frame info *)
       local
          val frameInfos: M.FrameInfo.t list ref = ref []
-         val frameInfosCounter = Counter.new 0
+         val nextFrameInfo = Counter.generator 0
          val _ = ByteSet.reset ()
          val table =
             let
@@ -188,14 +197,14 @@ fun toMachine (rssa: Rssa.Program.t) =
                               hash = hash}
             end
          val frameOffsets: M.FrameOffsets.t list ref = ref []
-         val frameOffsetsCounter = Counter.new 0
+         val nextFrameOffset = Counter.generator 0
          val {get = getFrameOffsets: ByteSet.t -> M.FrameOffsets.t, ...} =
             Property.get
             (ByteSet.plist,
              Property.initFun
              (fn offsets =>
               let
-                 val index = Counter.next frameOffsetsCounter
+                 val index = nextFrameOffset ()
                  val offsets =
                                     QuickSort.sortVector
                     (Vector.fromList (ByteSet.toList offsets),
@@ -261,7 +270,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
                fun new () =
                   let
-                     val index = Counter.next frameInfosCounter
+                     val index = nextFrameInfo ()
                      val frameInfo =
                         M.FrameInfo.new
                         {frameOffsets = frameOffsets,
@@ -328,49 +337,193 @@ fun toMachine (rssa: Rssa.Program.t) =
                       Var.layout,
                       M.Operand.layout)
          varOperand
+
+      val (addToStaticHeaps, finishStaticHeaps, allGlobalObjptrs) =
+         let
+            open StaticHeap
+            val allGlobalObjptrs = ref []
+            fun varElem (x: Var.t): Elem.t * bool =
+               case varOperand x of
+                  M.Operand.Const c => (Elem.Const c, false)
+                | M.Operand.Global g =>
+                     (case List.peek (!allGlobalObjptrs, fn (_, g') =>
+                                      M.Global.equals (g, g')) of
+                         SOME (r, _) => (Elem.Ref r, true)
+                       | NONE => Error.bug "Backend.staticHeaps.varElem: invalid operand,Global")
+                | M.Operand.StaticHeapRef r => (Elem.Ref r,
+                                                Kind.isDynamic (Ref.kind r))
+                | _ => Error.bug "Backend.staticHeaps.varElem: invalid operand"
+            fun translateOperand (oper: R.Operand.t): Elem.t * bool =
+               case oper of
+                  R.Operand.Cast (z, ty) =>
+                     let
+                        val (z, hasDynamic) = translateOperand z
+                     in
+                        (Elem.Cast (z, ty), hasDynamic)
+                     end
+                | R.Operand.Const c => (Elem.Const c, false)
+                | R.Operand.Var {var, ...} => varElem var
+                | _ => Error.bug "Backend.staticHeaps.translateOperand: invalid operand"
+            fun translateInit init =
+               Vector.mapAndFold
+               (init, false, fn ({offset, src}, hasDynamic') =>
+                let
+                   val (src, hasDynamic) = translateOperand src
+                in
+                   ({offset = offset, src = src},
+                    hasDynamic' orelse hasDynamic)
+                end)
+            fun translateObject (obj, {forceDynamic}) =
+               case obj of
+                  R.Object.Normal {init, tycon} =>
+                     let
+                        val {components, ...} = ObjectType.deNormal (tyconTy tycon)
+                        val (init, hasDynamic) = translateInit init
+                        val kind =
+                           if forceDynamic orelse hasDynamic
+                              then Kind.Dynamic
+                              else if Prod.someIsMutable components
+                                      then if Vector.exists (Prod.dest components,
+                                                             fn {elt, isMutable} =>
+                                                             isMutable andalso Type.isObjptr elt)
+                                              then (* Reference to root static heap
+                                                    * won't map to valid card slot.
+                                                    *)
+                                                   if !Control.markCards
+                                                      then Kind.Dynamic
+                                                      else Kind.Root
+                                              else Kind.Mutable
+                              else Kind.Immutable
+                     in
+                        {kind = kind,
+                         obj = Object.Normal {init = init,
+                                              tycon = tycon},
+                         offset = Runtime.normalMetaDataSize (),
+                         size = R.Object.size (obj, {tyconTy = tyconTy}),
+                         tycon = tycon}
+                     end
+                | R.Object.Sequence {init, tycon} =>
+                     let
+                        val {components, hasIdentity} = ObjectType.deSequence (tyconTy tycon)
+                        val (init, hasDynamic) =
+                           Vector.mapAndFold
+                           (init, false, fn (init, hasDynamic') =>
+                            let
+                               val (init, hasDynamic) = translateInit init
+                            in
+                               (init, hasDynamic' orelse hasDynamic)
+                            end)
+                        val kind =
+                           if forceDynamic orelse hasDynamic
+                              then Kind.Dynamic
+                              else if hasIdentity
+                                      then if Vector.isEmpty init
+                                              then (* An empty sequence;
+                                                    * elements will never be updated,
+                                                    * but header may be updated.
+                                                    *)
+                                                   Kind.Mutable
+                                              else if Vector.exists (Prod.dest components,
+                                                                     fn {elt, isMutable} =>
+                                                                     isMutable andalso Type.isObjptr elt)
+                                                      then (* Reference to root static heap
+                                                            * won't map to valid card slot.
+                                                            *)
+                                                           if !Control.markCards
+                                                              then Kind.Dynamic
+                                                              else Kind.Root
+                                                      else Kind.Mutable
+                              else Kind.Immutable
+                     in
+                        {kind = kind,
+                         obj = Object.Sequence {init = init,
+                                                tycon = tycon},
+                         offset = Runtime.sequenceMetaDataSize (),
+                         size = R.Object.size (obj, {tyconTy = tyconTy}),
+                         tycon = tycon}
+                     end
+
+            val kindAcc = Kind.memoize (fn _ =>
+                                        {objs = ref [],
+                                         nextIndex = Counter.generator 0,
+                                         nextOffset = ref Bytes.zero})
+
+            fun add (obj, forceDynamic) =
+               let
+                  val {kind, obj, offset, size, tycon} =
+                     translateObject (obj, forceDynamic)
+                  val {objs, nextIndex, nextOffset} = kindAcc kind
+                  val r = Ref.T {index = nextIndex (),
+                                 kind = kind,
+                                 offset = Bytes.+ (!nextOffset, offset),
+                                 ty = Type.objptr tycon}
+                  val oper =
+                     case kind of
+                        Kind.Dynamic =>
+                           let
+                              val g = M.Global.new (Type.objptr tycon)
+                           in
+                              List.push (allGlobalObjptrs, (r, g))
+                              ; M.Operand.Global g
+                           end
+                      | _ => M.Operand.StaticHeapRef r
+               in
+                  List.push (objs, obj)
+                  ; nextOffset := Bytes.+ (!nextOffset, size)
+                  ; oper
+               end
+
+            fun finish () =
+               Kind.memoize (Vector.fromListRev o ! o #objs o kindAcc)
+         in
+            (add, finish, fn () => !allGlobalObjptrs)
+         end
+
+      val () = Vector.foreach (statics, fn {dst = (dstVar, dstTy), obj} =>
+                               let
+                                  val oper = addToStaticHeaps (obj, {forceDynamic = true})
+                               in
+                                  setVarInfo (dstVar, {operand = VarOperand.Const oper, ty = dstTy})
+                               end)
+
       (* Hash tables for uniquifying globals. *)
       local
          fun 'a make {equals: 'a * 'a -> bool,
                       hash: 'a -> word,
-                      ty: 'a -> Type.t} =
+                      oper: 'a -> M.Operand.t} =
             let
-               val table: ('a, M.Global.t) HashTable.t =
+               val table: ('a, M.Operand.t) HashTable.t =
                   HashTable.new {equals = equals, hash = hash}
                fun get (value: 'a): M.Operand.t =
-                     M.Operand.Global
-                  (HashTable.lookupOrInsert
-                   (table, value, fn () =>
-                    M.Global.new (ty value)))
-               fun all () =
-                  HashTable.fold
-                  (table, [], fn ((value, global), ac) =>
-                   (global, value) :: ac)
+                  HashTable.lookupOrInsert
+                  (table, value, fn () => oper value)
             in
-               (all, get)
+               get
             end
       in
-         val (allReals, globalReal) =
-            make {equals = RealX.equals,
-                  hash = RealX.hash,
-                  ty = Type.real o RealX.size}
-         val (allVectors, globalVector) =
+         local
+            val allGlobalReals = ref []
+         in
+            val globalReal =
+               make {equals = RealX.equals,
+                     hash = RealX.hash,
+                     oper = fn r => let
+                                       val g = M.Global.new (Type.real (RealX.size r))
+                                    in
+                                       List.push (allGlobalReals, (r, g))
+                                       ; M.Operand.Global g
+                                    end}
+            val allGlobalReals = fn () => !allGlobalReals
+         end
+
+         val globalWordVector =
             make {equals = WordXVector.equals,
                   hash = WordXVector.hash,
-                  ty = Type.ofWordXVector}
+                  oper = (fn wxv =>
+                          addToStaticHeaps
+                          (R.Object.fromWordXVector wxv,
+                           {forceDynamic = true}))}
       end
-      fun bogusOp (t: Type.t): M.Operand.t =
-         case Type.deReal t of
-            NONE => let
-                       val bogusWord =
-                          M.Operand.Word
-                          (WordX.zero
-                           (WordSize.fromBits (Type.width t)))
-                    in
-                       case Type.deWord t of
-                          NONE => M.Operand.Cast (bogusWord, t)
-                        | SOME _ => bogusWord
-                    end
-          | SOME s => globalReal (RealX.zero s)
       fun constOperand (c: Const.t): M.Operand.t =
          let
             datatype z = datatype Const.t
@@ -378,10 +531,9 @@ fun toMachine (rssa: Rssa.Program.t) =
             case c of
                IntInf _ =>
                   Error.bug "Backend.constOperand: IntInf"
-             | Null => M.Operand.Null
              | Real r => globalReal r
-             | Word w => M.Operand.Word w
-             | WordVector v => globalVector v
+             | WordVector v => globalWordVector v
+             | _ => M.Operand.Const c
          end
       fun parallelMove {dsts: M.Operand.t vector,
                         srcs: M.Operand.t vector}: M.Statement.t vector =
@@ -389,8 +541,8 @@ fun toMachine (rssa: Rssa.Program.t) =
             val moves =
                Vector.fold2 (srcs, dsts, [],
                              fn (src, dst, ac) => {src = src, dst = dst} :: ac)
-            fun temp r =
-               M.Operand.Register (Register.new (M.Operand.ty r, NONE))
+            fun temp t =
+               M.Operand.Temporary (Temporary.new (M.Operand.ty t, NONE))
          in
             Vector.fromList
             (ParallelMove.move {
@@ -405,13 +557,28 @@ fun toMachine (rssa: Rssa.Program.t) =
          case field of
             GCField.Frontier => M.Operand.Frontier
           | GCField.StackTop => M.Operand.StackTop
-          | _ =>
-               M.Operand.Offset {base = M.Operand.GCState,
-                                 offset = GCField.offset field,
-                                 ty = Type.ofGCField field}
+          | _ => M.Operand.gcField field
       val exnStackOp = runtimeOp GCField.ExnStack
       val stackBottomOp = runtimeOp GCField.StackBottom
       val stackTopOp = runtimeOp GCField.StackTop
+
+      val rec isWord =
+         fn M.Operand.Const (Const.Word _) => true
+          | M.Operand.Cast (z, _) => isWord z
+          | _ => false
+      fun bogusOp (t: Type.t): M.Operand.t =
+         case Type.deReal t of
+            NONE => let
+                       val bogusWord =
+                          M.Operand.word
+                          (WordX.zero
+                           (WordSize.fromBits (Type.width t)))
+                    in
+                       case Type.deWord t of
+                          NONE => M.Operand.Cast (bogusWord, t)
+                        | SOME _ => bogusWord
+                    end
+          | SOME s => globalReal (RealX.zero s)
       fun translateOperand (oper: R.Operand.t): M.Operand.t =
          let
             datatype z = datatype R.Operand.t
@@ -424,30 +591,30 @@ fun toMachine (rssa: Rssa.Program.t) =
                   let
                      val base = translateOperand base
                   in
-                     if M.Operand.isLocation base
-                        then M.Operand.Offset {base = base,
-                                               offset = offset,
-                                               ty = ty}
-                     else bogusOp ty
+                    (* Native codegens can't handle this;
+                     * Dead code may treat small constant
+                     * intInfs as large and take offsets *)
+                     if isWord base
+                     then bogusOp ty
+                     else M.Operand.Offset {base = base,
+                                            offset = offset,
+                                            ty = ty}
                   end
              | ObjptrTycon opt =>
-                  M.Operand.Word
-                  (WordX.fromIntInf
-                   (Word.toIntInf (Runtime.typeIndexToHeader
-                                   (ObjptrTycon.index opt)),
-                    WordSize.objptrHeader ()))
+                  M.Operand.word (ObjptrTycon.toHeader opt)
              | Runtime f => runtimeOp f
              | SequenceOffset {base, index, offset, scale, ty} =>
                   let
                      val base = translateOperand base
                   in
-                     if M.Operand.isLocation base
-                        then M.Operand.SequenceOffset {base = base,
-                                                        index = translateOperand index,
-                                                        offset = offset,
-                                                        scale = scale,
-                                                        ty = ty}
-                     else bogusOp ty
+                     if isWord base
+                     then bogusOp ty
+                     else M.Operand.SequenceOffset
+                              {base = base,
+                               index = translateOperand index,
+                               offset = offset,
+                               scale = scale,
+                               ty = ty}
                   end
              | Var {var, ...} => varOperand var
              | Address z => M.Operand.Address (translateOperand z)
@@ -461,85 +628,134 @@ fun toMachine (rssa: Rssa.Program.t) =
             fun handlerOffset () = #handlerOffset (valOf handlersInfo)
             fun linkOffset () = #linkOffset (valOf handlersInfo)
             datatype z = datatype R.Statement.t
+            fun move arg =
+               case M.Statement.move arg of
+                  NONE => Vector.new0 ()
+                | SOME move => Vector.new1 move
+            fun mkInit (init, mkDst) =
+               Vector.toListMap
+               (init, fn {src, offset} =>
+                move {dst = mkDst {offset = offset,
+                                   ty = R.Operand.ty src},
+                      src = translateOperand src})
          in
             case s of
                Bind {dst = (var, _), src, ...} =>
-                  Vector.new1
-                  (M.Statement.move {dst = varOperand var,
-                                     src = translateOperand src})
-             | Move {dst, src} =>
-                  Vector.new1
-                  (M.Statement.move {dst = translateOperand dst,
-                                     src = translateOperand src})
-             | Object {dst, header, size} =>
-                  M.Statement.object {dst = varOperand (#1 dst),
-                                      header = header,
-                                      size = size}
-             | PrimApp {dst, prim, args} =>
+                  (* CHECK *)
                   let
-                     datatype z = datatype Prim.Name.t
+                     val oper = varOperand var
                   in
-                     case Prim.name prim of
-                        MLton_touch => Vector.new0 ()
-                      | _ =>
-                           Vector.new1
-                           (M.Statement.PrimApp
-                            {args = translateOperands args,
-                             dst = Option.map (dst, varOperand o #1),
-                             prim = prim})
+                     if M.Operand.isDestination oper
+                        then move {dst = oper,
+                                   src = translateOperand src}
+                        else Vector.new0 () (* Destination already propagated *)
                   end
+             | Move {dst, src} =>
+                  move {dst = translateOperand dst,
+                        src = translateOperand src}
+             | Object {dst = (dst, _), obj as Object.Normal {init, tycon}} =>
+                  let
+                     val dst = varOperand dst
+                     val header = ObjptrTycon.toHeader tycon
+                     fun mkDst {offset, ty} =
+                        M.Operand.Offset {base = dst,
+                                          offset = offset,
+                                          ty = ty}
+                  in
+                     Vector.concat
+                     (M.Statement.object {dst = dst,
+                                          header = header,
+                                          size = Object.size (obj, {tyconTy = tyconTy})}
+                      :: mkInit (init, mkDst))
+                  end
+             | Object {dst = (dst, _), obj as Object.Sequence {init, tycon}} =>
+                  let
+                     val dst = varOperand dst
+                     val header = ObjptrTycon.toHeader tycon
+                     val elt = ObjectType.componentsSize (tyconTy tycon)
+                     val (scale, mkIndex) =
+                        case Scale.fromBytes elt of
+                           NONE =>
+                              (Scale.One, fn index =>
+                               M.Operand.word
+                               (WordX.mul
+                                (WordX.fromInt (index, WordSize.seqIndex ()),
+                                 WordX.fromBytes (elt, WordSize.seqIndex ()),
+                                 {signed = false})))
+                         | SOME s =>
+                              (s, fn index =>
+                               M.Operand.word
+                               (WordX.fromInt (index, WordSize.seqIndex ())))
+                  in
+                     Vector.concat
+                     (M.Statement.sequence {dst = dst,
+                                            header = header,
+                                            length = Vector.length init,
+                                            size = Object.size (obj, {tyconTy = tyconTy})}
+                      :: (List.concat o Vector.toListMapi)
+                         (init, fn (index, init) =>
+                          let
+                             fun mkDst {offset, ty} =
+                                M.Operand.SequenceOffset
+                                {base = dst,
+                                 index = mkIndex index,
+                                 offset = offset,
+                                 scale = scale,
+                                 ty = ty}
+                          in
+                             mkInit (init, mkDst)
+                          end))
+                  end
+             | PrimApp {dst, prim, args} =>
+                  (case prim of
+                      Prim.MLton_touch => Vector.new0 ()
+                    | _ =>
+                         Vector.new1
+                         (M.Statement.PrimApp
+                          {args = translateOperands args,
+                           dst = Option.map (dst, varOperand o #1),
+                           prim = prim}))
              | ProfileLabel s => Vector.new1 (M.Statement.ProfileLabel s)
              | SetExnStackLocal =>
                   (* ExnStack = stackTop + (handlerOffset + LABEL_SIZE) - StackBottom; *)
                   let
-                     val tmp1 =
-                        M.Operand.Register
-                        (Register.new (Type.cpointer (), NONE))
-                     val tmp2 =
-                        M.Operand.Register
-                        (Register.new (Type.csize (), NONE))
+                     val tmp =
+                        M.Operand.Temporary
+                        (Temporary.new (Type.cpointer (), NONE))
                   in
-                     Vector.new3
+                     Vector.new2
                      (M.Statement.PrimApp
                       {args = (Vector.new2
                                (stackTopOp,
-                                M.Operand.Word
-                                (WordX.fromIntInf
-                                 (Int.toIntInf
-                                  (Bytes.toInt
-                                   (Bytes.+ (handlerOffset (), Runtime.labelSize ()))),
-                                  WordSize.cpointer ())))),
-                       dst = SOME tmp1,
-                       prim = Prim.cpointerAdd},
+                                M.Operand.word
+                                (WordX.fromBytes
+                                 (Bytes.+ (handlerOffset (), Runtime.labelSize ()),
+                                  WordSize.cptrdiff ())))),
+                       dst = SOME tmp,
+                       prim = Prim.CPointer_add},
                       M.Statement.PrimApp
-                      {args = Vector.new2 (tmp1, stackBottomOp),
-                       dst = SOME tmp2,
-                       prim = Prim.cpointerDiff},
-                      M.Statement.move
-                      {dst = exnStackOp,
-                       src = M.Operand.Cast (tmp2, Type.exnStack ())})
+                      {args = Vector.new2 (tmp, stackBottomOp),
+                       dst = SOME exnStackOp,
+                       prim = Prim.CPointer_diff})
                   end
              | SetExnStackSlot =>
-                  (* ExnStack = *(size_t* )(stackTop + linkOffset); *)
-                  Vector.new1
-                  (M.Statement.move
-                   {dst = exnStackOp,
-                    src = M.Operand.stackOffset {offset = linkOffset (),
-                                                 ty = Type.exnStack ()}})
+                  (* ExnStack = *(ptrdiff_t* )(stackTop + linkOffset); *)
+                  move
+                  {dst = exnStackOp,
+                   src = M.Operand.stackOffset {offset = linkOffset (),
+                                                ty = Type.exnStack ()}}
              | SetHandler h =>
                   (* *(uintptr_t)(stackTop + handlerOffset) = h; *)
-                  Vector.new1
-                  (M.Statement.move
-                   {dst = M.Operand.stackOffset {offset = handlerOffset (),
-                                                 ty = Type.label h},
-                    src = M.Operand.Label h})
+                  move
+                  {dst = M.Operand.stackOffset {offset = handlerOffset (),
+                                                ty = Type.label h},
+                   src = M.Operand.Label h}
              | SetSlotExnStack =>
-                  (* *(size_t* )(stackTop + linkOffset) = ExnStack; *)
-                  Vector.new1
-                  (M.Statement.move
-                   {dst = M.Operand.stackOffset {offset = linkOffset (),
-                                                 ty = Type.exnStack ()},
-                    src = exnStackOp})
+                  (* *(ptrdiff_t* )(stackTop + linkOffset) = ExnStack; *)
+                  move
+                  {dst = M.Operand.stackOffset {offset = linkOffset (),
+                                                ty = Type.exnStack ()},
+                   src = exnStackOp}
              | _ => Error.bug (concat
                                ["Backend.genStatement: strange statement: ",
                                 R.Statement.toString s])
@@ -551,7 +767,7 @@ fun toMachine (rssa: Rssa.Program.t) =
       val bugTransfer = fn () =>
          M.Transfer.CCall
          {args = (Vector.new1
-                  (globalVector
+                  (globalWordVector
                    (WordXVector.fromString
                     "backend thought control shouldn't reach here"))),
           func = Type.BuiltInCFunction.bug (),
@@ -606,6 +822,7 @@ fun toMachine (rssa: Rssa.Program.t) =
             val f = eliminateDeadCode f
             val {args, blocks, name, raises, returns, start, ...} =
                Function.dest f
+            val {raisesTo, returnsTo} = rflow name
             val (returnLives, returnOperands) =
                case returns of
                   NONE => (NONE, NONE)
@@ -662,39 +879,36 @@ fun toMachine (rssa: Rssa.Program.t) =
                           fun normal () = R.Statement.foreachDef (s, newVarInfo)
                        in
                           case s of
-                             R.Statement.Bind {dst = (var, _), isMutable, src} =>
-                                if isMutable
-                                   then normal ()
-                                else
-                                   let
-                                      fun set (z: M.Operand.t,
-                                               casts: Type.t list) =
-                                         let
-                                            val z =
-                                               List.fold
-                                               (casts, z, fn (t, z) =>
-                                                M.Operand.Cast (z, t))
-                                         in
-                                            setVarInfo
-                                            (var, {operand = VarOperand.Const z,
-                                                   ty = M.Operand.ty z})
-                                         end
-                                      fun loop (z: R.Operand.t, casts) =
-                                         case z of
-                                            R.Operand.Cast (z, t) =>
-                                               loop (z, t :: casts)
-                                          | R.Operand.Const c =>
-                                               set (constOperand c, casts)
-                                          | R.Operand.Var {var = var', ...} =>
-                                               (case #operand (varInfo var') of
-                                                   VarOperand.Const z =>
-                                                      set (z, casts)
-                                                 | VarOperand.Allocate _ =>
-                                                      normal ())
-                                          | _ => normal ()
-                                   in
-                                      loop (src, [])
-                                   end
+                             R.Statement.Bind {dst = (var, _), src, ...} =>
+                                let
+                                   fun set (z: M.Operand.t,
+                                            casts: Type.t list) =
+                                      let
+                                         val z =
+                                            List.fold
+                                            (casts, z, fn (t, z) =>
+                                             M.Operand.Cast (z, t))
+                                      in
+                                         setVarInfo
+                                         (var, {operand = VarOperand.Const z,
+                                                ty = M.Operand.ty z})
+                                      end
+                                   fun loop (z: R.Operand.t, casts) =
+                                      case z of
+                                         R.Operand.Cast (z, t) =>
+                                            loop (z, t :: casts)
+                                       | R.Operand.Const c =>
+                                            set (constOperand c, casts)
+                                       | R.Operand.Var {var = var', ...} =>
+                                            (case #operand (varInfo var') of
+                                                VarOperand.Const z =>
+                                                   set (z, casts)
+                                              | VarOperand.Allocate _ =>
+                                                   normal ())
+                                       | _ => normal ()
+                                in
+                                   loop (src, [])
+                                end
                            | _ => normal ()
                        end)
                 in
@@ -719,7 +933,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                      val paramOffsets = fn args =>
                         paramOffsets (args, fn (_, ty) => ty, fn so => so)
                   in
-                     AllocateRegisters.allocate {function = f,
+                     AllocateVariables.allocate {function = f,
                                                  paramOffsets = paramOffsets,
                                                  varInfo = varInfo}
                   end
@@ -852,8 +1066,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                    | R.Transfer.Raise srcs =>
                         let
                            val handlerStackTop =
-                              M.Operand.Register
-                              (Register.new (Type.cpointer (), NONE))
+                              M.Operand.Temporary
+                              (Temporary.new (Type.cpointer (), NONE))
                            val dsts =
                               paramOffsets
                               (srcs, R.Operand.ty, fn {offset, ty} =>
@@ -862,24 +1076,24 @@ fun toMachine (rssa: Rssa.Program.t) =
                                                  ty = ty})
                         in
                            if Vector.isEmpty srcs
-                              then (Vector.new0 (), M.Transfer.Raise)
+                              then (Vector.new0 (), M.Transfer.Raise {raisesTo = raisesTo})
                               else (Vector.concat
                                     [Vector.new1
                                      (M.Statement.PrimApp
                                       {args = Vector.new2 (stackBottomOp, exnStackOp),
                                        dst = SOME handlerStackTop,
-                                       prim = Prim.cpointerAdd}),
+                                       prim = Prim.CPointer_add}),
                                      parallelMove {dsts = dsts,
                                                    srcs = translateOperands srcs}],
-                                    M.Transfer.Raise)
+                                    M.Transfer.Raise {raisesTo = raisesTo})
                         end
                    | R.Transfer.Return xs =>
                         (parallelMove {dsts = valOf returnOperands,
                                        srcs = translateOperands xs},
-                         M.Transfer.Return)
+                         M.Transfer.Return {returnsTo = returnsTo})
                    | R.Transfer.Switch switch =>
                         let
-                           val R.Switch.T {cases, default, size, test} =
+                           val R.Switch.T {cases, default, expect, size, test} =
                               switch
                         in
                            simple
@@ -893,6 +1107,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                   (M.Switch.T
                                    {cases = cases,
                                     default = default,
+                                    expect = expect,
                                     size = size,
                                     test = translateOperand test}))
                         end
@@ -1028,19 +1243,19 @@ fun toMachine (rssa: Rssa.Program.t) =
       fun chunkToMachine (Chunk.T {chunkLabel, blocks}) =
          let
             val blocks = Vector.fromList (!blocks)
-            val regMax = CType.memo (fn _ => ref ~1)
-            val regsNeedingIndex =
+            val tempsMax = CType.memo (fn _ => ref ~1)
+            val tempsNeedingIndex =
                Vector.fold
                (blocks, [], fn (b, ac) =>
                 M.Block.foldDefs
                 (b, ac, fn (z, ac) =>
                  case z of
-                    M.Operand.Register r =>
-                       (case Register.indexOpt r of
-                           NONE => r :: ac
+                    M.Operand.Temporary t =>
+                       (case Temporary.indexOpt t of
+                           NONE => t :: ac
                          | SOME i =>
                               let
-                                 val z = regMax (Type.toCType (Register.ty r))
+                                 val z = tempsMax (Type.toCType (Temporary.ty t))
                                  val _ =
                                     if i > !z
                                        then z := i
@@ -1051,19 +1266,19 @@ fun toMachine (rssa: Rssa.Program.t) =
                   | _ => ac))
             val _ =
                List.foreach
-               (regsNeedingIndex, fn r =>
+               (tempsNeedingIndex, fn t =>
                 let
-                   val z = regMax (Type.toCType (Register.ty r))
+                   val z = tempsMax (Type.toCType (Temporary.ty t))
                    val i = 1 + !z
                    val _ = z := i
-                   val _ = Register.setIndex (r, i)
+                   val _ = Temporary.setIndex (t, i)
                 in
                    ()
                 end)
          in
             M.Chunk.T {chunkLabel = chunkLabel,
-                             blocks = blocks,
-                             regMax = ! o regMax}
+                       blocks = blocks,
+                       tempsMax = ! o tempsMax}
          end
       val mainName = R.Function.name main
       val main = {chunkLabel = Chunk.label (funcChunk mainName),
@@ -1089,7 +1304,6 @@ fun toMachine (rssa: Rssa.Program.t) =
                        SequenceOffset {base, index, ...} =>
                           doOperand (base, doOperand (index, max))
                      | Cast (z, _) => doOperand (z, max)
-                     | Contents {oper, ...} => doOperand (oper, max)
                      | Offset {base, ...} => doOperand (base, max)
                      | StackOffset (StackOffset.T {offset, ty}) =>
                           Bytes.max (Bytes.+ (offset, Type.bytes ty), max)
@@ -1109,18 +1323,20 @@ fun toMachine (rssa: Rssa.Program.t) =
               max
            end))
       val maxFrameSize = Bytes.alignWord32 maxFrameSize
+
       val machine =
          M.Program.T
-      {chunks = chunks,
+         {chunks = chunks,
           frameInfos = frameInfos,
-       frameOffsets = frameOffsets,
-       handlesSignals = handlesSignals,
-       main = main,
-       maxFrameSize = maxFrameSize,
-       objectTypes = objectTypes,
-       reals = allReals (),
+          frameOffsets = frameOffsets,
+          globals = {objptrs = allGlobalObjptrs (),
+                     reals = allGlobalReals ()},
+          handlesSignals = handlesSignals,
+          main = main,
+          maxFrameSize = maxFrameSize,
+          objectTypes = objectTypes,
           sourceMaps = sourceMaps,
-       vectors = allVectors ()}
+          staticHeaps = finishStaticHeaps ()}
    in
       machine
    end

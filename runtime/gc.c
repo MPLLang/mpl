@@ -1,4 +1,4 @@
-/* Copyright (C) 2012,2014 Matthew Fluet.
+/* Copyright (C) 2012,2014,2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -82,6 +82,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/size.c"
 #include "gc/sources.c"
 #include "gc/stack.c"
+#include "gc/static-heaps.c"
 #include "gc/statistics.c"
 #include "gc/switch-thread.c"
 #include "gc/thread.c"
