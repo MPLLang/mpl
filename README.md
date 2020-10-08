@@ -1,11 +1,10 @@
 # MPL-CC
 
-MPL*/MPL-CC is an extension of the [MPL](https://github.com/MPLLang/mpl)
+MPL<sup>*</sup>/MPL-CC is an extension of the [MPL](https://github.com/MPLLang/mpl)
 compiler. MPL-CC and MPL are research softwares that are being actively developed.
 
-MPL-CC and MPL are identical except for extra garbage collection functionality
-that has been built into MPL*. Both offer the same primitives for
-parallelism and are identical from a user's perspective.
+The compilers are similar except that the runtime of MPL-CC implements extra garbage collection functionality.
+Otherwise, both offer the same primitives for parallelism and are identical from a user's perspective.
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
 Take a look at `examples/` to see these primitives in action.
