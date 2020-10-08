@@ -173,13 +173,6 @@ Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
 
-### Garbage Collection
-* ([#115](https://github.com/MPLLang/mpl/issues/115)) The GC is currently
-disabled at the "top level" (outside any calls to `ForkJoin.par`).
-For highly parallel programs, this has generally not been a problem so far,
-but it can cause a memory explosion for programs that are mostly (or entirely)
-sequential.
-
 ## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
 unsupported, including (but not limited to):
