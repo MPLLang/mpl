@@ -1,4 +1,4 @@
-MPL=../build/bin/mpl
+MPL=../build/bin/mpl-cc
 FLAGS=-default-type int64 -default-type word64
 
 PROGRAMS= \

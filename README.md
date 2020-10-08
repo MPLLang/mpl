@@ -1,9 +1,9 @@
-# MPL*
+# MPL-CC
 
 MPL*/MPL-CC is an extension of the [MPL](https://github.com/MPLLang/mpl)
-compiler. MPL* and MPL are research softwares that are being actively developed.
+compiler. MPL-CC and MPL are research softwares that are being actively developed.
 
-MPL* and MPL are identical except for extra garbage collection functionality
+MPL-CC and MPL are identical except for extra garbage collection functionality
 that has been built into MPL*. Both offer the same primitives for
 parallelism and are identical from a user's perspective.
 

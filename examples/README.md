@@ -1,6 +1,6 @@
-# MPL Examples
+# MPL-CC Examples
 
-This directory contains examples of parallel programming using MPL.
+This directory contains examples of parallel programming using MPL-CC.
 Each example program is defined by a `.mlb` file in `src/`, typically with a
 corresponding `.sml` file of the same name. The directory `src/lib/` contains
 common functions used across all examples.
