@@ -1,5 +1,0 @@
-$(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/basis/fork-join.mlb
-
-lib/sources.mlb
-dmm.sml

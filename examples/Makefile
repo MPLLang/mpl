@@ -11,14 +11,20 @@ PROGRAMS= \
 	tokens \
 	nn \
 	dedup \
-	nqueens
+	nqueens \
+	reverb \
+	seam-carve
 
 all: $(PROGRAMS)
 
-$(PROGRAMS): %: src/* src/lib/*
-	$(MPL) $(FLAGS) -output $* src/$*.mlb
-	@echo "successfully built $*"
+$(PROGRAMS): %: phony
+	@mkdir -p bin
+	$(MPL) $(FLAGS) -output bin/$* src/$*/sources.mlb
+	@echo "successfully built bin/$*"
 
-.PHONY: clean
+.PHONY: clean phony
+
+phony:
+
 clean:
-	rm -f $(PROGRAMS)
+	rm -rf bin/
