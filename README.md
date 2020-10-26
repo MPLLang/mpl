@@ -3,8 +3,51 @@
 MPL<sup>*</sup>/MPL-CC is an extension of the [MPL](https://github.com/MPLLang/mpl)
 compiler. MPL-CC and MPL are research softwares that are being actively developed.
 
+We are in the process of merging MPL-CC and MPL. In the meantime, we have two separate branches within
+the same repo for both. MPL is at the master branch and MPL-CC is at popl21-artifact. 
+
 The compilers are similar except that the runtime of MPL-CC implements extra garbage collection functionality.
 Otherwise, both offer the same primitives for parallelism and are identical from a user's perspective.
+
+## Docker
+
+Try out MPL-CC with Docker:
+```
+$ docker pull mpllang/popl_artifact
+$ docker run --name mpllang -it mpllang/popl_artifact /bin/bash
+```
+Find detailed instructions for using the Docker image [here](https://drive.google.com/file/d/1_I2oWc2JPpbjxFO_wLUFIheXhUKVzr2k/view?usp=sharing).
+
+## Build and Install (from source)
+
+### Requirements
+
+MPL-CC has only been tested on Linux with x86-64. The following software is
+required.
+ * [GCC](http://gcc.gnu.org)
+ * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
+ * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
+ * binutils (`ar`, `ranlib`, `strip`, ...)
+ * miscellaneous Unix utilities (`diff`, `find`, `grep`, `gzip`, `patch`, `sed`, `tar`, `xargs`, ...)
+ * Standard ML compiler and tools:
+   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
+   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
+
+### Instructions
+
+The following builds the compiler at `build/bin/mpl-cc`.
+```
+$ make all
+```
+
+After building, MPL-CC can then be installed to `/usr/local`:
+```
+$ make install
+```
+or to a custom directory with the `PREFIX` option:
+```
+$ make PREFIX=/opt/mpl-cc install
+```
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
 Take a look at `examples/` to see these primitives in action.
@@ -55,7 +98,7 @@ etc.). The semantics are a bit murky.
 on arrays instead of references. This performs a CAS at index `i` of array
 `a`, and does not read or write at any other locations of the array.
 
-## Using MPL
+## Using MPL-CC
 
 MPL uses `.mlb` files ([ML Basis](http://mlton.org/MLBasis)) to describe
 source files for compilation. A typical `.mlb` file for MPL is shown
@@ -83,7 +126,7 @@ The command to compile a `.mlb` is as follows. By default, MPL
 produces an executable with the same base name as the source file, i.e.
 this would create an executable named `foo`:
 ```
-$ mpl [compile-time options...] foo.mlb
+$ mpl-cc [compile-time options...] foo.mlb
 ```
 
 MPL has a number of compile-time options derived from MLton, which are
