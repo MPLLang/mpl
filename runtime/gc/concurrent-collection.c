@@ -559,7 +559,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   assert(s->currentThread == thread);
-  printf("collecting seq : %p\n", heap);
+  // printf("collecting seq : %p\n", heap);
   assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
   // printf("turning off for %p \n", heap);
@@ -740,15 +740,15 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     Q = Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
-  printf("%s %d \n", "Chunks Collected = ", lenFree);
+  // printf("%s %d \n", "Chunks Collected = ", lenFree);
 
-  printf("%s", "collected chunks: ");
+  // printf("%s", "collected chunks: ");
   for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
-    printf("%p", chunk);
+    // printf("%p", chunk);
     assert(chunk->tmpHeap == lists.fromHead);
     assert(HM_getLevelHeadPathCompress(chunk) == targetHH);
   }
-  printf("\n");
+  // printf("\n");
   // printf("Chunk list collected = %p \n", origList);
 
   // JATIN_NOTE: This loop is not needed if tmpHeap is made NULL in HM_getFreeChunk.
@@ -788,7 +788,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   uint64_t bytesSaved =  HM_getChunkListSize(repList);
   uint64_t bytesScanned =  HM_getChunkListSize(repList) + HM_getChunkListSize(origList);
 
-  printf("collected %s = %d %d and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
+  // printf("collected %s = %d %d and at %f\n", (isConcurrent? " ":"seq"), (bytesScanned-bytesSaved), bytesScanned, ratio);
   cp->bytesSurvivedLastCollection = HM_getChunkListSize(repList);
   cp->bytesAllocatedSinceLastCollection = 0;
   struct HM_chunkList _deleteList;
@@ -843,7 +843,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   timespec_sub(&stopTime, &startTime);
   size_t msTotal =
     (size_t)stopTime.tv_sec * 1000 + (size_t)stopTime.tv_nsec / 1000000;
-  printf("collection time: %zu ms\n", msTotal);
+  // printf("collection time: %zu ms\n", msTotal);
 
   if (isConcurrent) {
     timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);

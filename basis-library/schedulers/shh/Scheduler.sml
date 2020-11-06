@@ -229,7 +229,8 @@ struct
               returnToSched ()
           end
         val _ = push g'
-        val _ =
+        val _ = HH.setDepth (thread, depth + 1)
+(*
               if (depth < internalGCThresh) then
                 let
                   val cont_arr1 =  Array.array (1, SOME(f))
@@ -246,6 +247,7 @@ struct
                 in
                   ()
                 end
+*)
         (*val cont_arr2 =  Array.array (1, SOME(g'))*)
         (*location?*)
         (*force left heap must be after set Depth*)
