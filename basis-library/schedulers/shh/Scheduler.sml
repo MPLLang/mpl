@@ -90,6 +90,25 @@ struct
   fun stopTimer _ = ()
   *)
 
+  (** ========================================================================
+    * MAXIMUM FORK DEPTHS
+    *)
+
+  val maxForkDepths = Array.array (P, 0)
+
+  fun maxForkDepthSoFar () =
+    Array.foldl Int.max 0 maxForkDepths
+
+  fun recordForkDepth d =
+    let
+      val p = myWorkerId ()
+    in
+      if arraySub (maxForkDepths, p) >= d then
+        ()
+      else
+        arrayUpdate (maxForkDepths, p, d)
+    end
+
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
    *
@@ -236,6 +255,9 @@ struct
 
         val _ = push g'
         val _ = HH.setDepth (thread, depth + 1)
+
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
 
         val () = DE.decheckSetTid tidLeft
         val fr = result f
@@ -442,4 +464,6 @@ struct
     in
       ArrayExtra.Raw.unsafeToArray a
     end
+
+  val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
 end
