@@ -24,6 +24,9 @@ struct
       GC.getCumulativeStatisticsBytesAllocatedOfProc (gcState (), Word32.fromInt p)
     fun getCumulativeStatisticsLocalBytesReclaimedOfProc p =
       GC.getCumulativeStatisticsLocalBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+
+    fun numberDisentanglementChecks () =
+      C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
   end
 
   exception NotYetImplemented of string

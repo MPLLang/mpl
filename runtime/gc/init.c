@@ -414,6 +414,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
+  s->numberDisentanglementChecks = 0;
+
   HM_initChunkList(getFreeListSmall(s));
   HM_initChunkList(getFreeListLarge(s));
   HM_initChunkList(getFreeListExtraSmall(s));
@@ -535,6 +537,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
+  d->numberDisentanglementChecks = 0;
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;

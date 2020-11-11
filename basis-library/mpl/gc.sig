@@ -12,6 +12,11 @@ sig
    *)
   val currentHeapSize: unit -> IntInf.int
 
+  (* How many times the read barrier has been triggered, which
+   * checks that the program is disentangled.
+   *)
+  val numberDisentanglementChecks: unit -> IntInf.int
+
   (* The following are all cumulative statistics (initially 0, and only
    * increase throughout execution).
    *

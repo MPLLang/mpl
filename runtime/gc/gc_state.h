@@ -57,6 +57,7 @@ struct GC_state {
   bool mutatorMarksCards;
   /* The maximum amount of concurrency */
   uint32_t numberOfProcs;
+  size_t numberDisentanglementChecks;
   GC_objectType objectTypes; /* Array of object types. */
   uint32_t objectTypesLength; /* Cardinality of objectTypes array. */
   int32_t procNumber;
