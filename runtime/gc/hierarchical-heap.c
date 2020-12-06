@@ -432,6 +432,23 @@ void HM_HH_resetList(pointer threadp) {
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
 }
 
+
+// Separate the list into two. From list will be collected by the CC
+// and chunkList will be used by the mutator
+// for promotions or (allocations at depth 1)
+void HM_HH_splitChunkList(HM_HierarchicalHeap hh, GC_thread thread) {
+  HM_chunkList chunkList = HM_HH_getChunkList(hh);
+  HM_chunkList fromList = HM_HH_getFromList(hh);
+  *(fromList) = *(chunkList);
+  HM_initChunkList(chunkList);
+  HM_chunk newChunk = HM_allocateChunk(chunkList, GC_HEAP_LIMIT_SLOP);
+  newChunk->levelHead = hh;
+  thread->currentChunk = HM_getChunkListLastChunk(chunkList);
+
+  HM_assertChunkListInvariants(chunkList);
+  HM_assertChunkListInvariants(fromList);
+}
+
 void HM_HH_resetList2(HM_HierarchicalHeap hh) {
   assert(hh->concurrentPack->ccstate == CC_UNREG);
   HM_assertChunkListInvariants(HM_HH_getFromList(hh));
@@ -444,9 +461,7 @@ void HM_HH_resetList2(HM_HierarchicalHeap hh) {
 
 bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
   assert(HM_HH_getDepth(hh) == 1);
-  // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
-  // GC_stack stackP = (GC_stack) stackPtr;
-
+  // return false;
   // return;
   hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
   hh->concurrentPack->bytesSurvivedLastCollection +=
@@ -456,65 +471,16 @@ bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
   // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
   // hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
-  if (false) {
-    if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
-        (hh->concurrentPack->bytesAllocatedSinceLastCollection)
-      || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
-      // if (!hh->concurrentPack->shouldCollect) {
-        // hh->concurrentPack->bytesSurvivedLastCollection/=2;
-      // }
+  if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
+      (hh->concurrentPack->bytesAllocatedSinceLastCollection)
+    || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
+    // if (!hh->concurrentPack->shouldCollect) {
+      // hh->concurrentPack->bytesSurvivedLastCollection/=2;
+    // }
 
-      hh->concurrentPack->bytesSurvivedLastCollection +=4;
-      return false;
-    }
+    hh->concurrentPack->bytesSurvivedLastCollection +=4;
+    return false;
   }
-
-  // copyCurrentStack(stackPtr, hh, thread);
-
-  HM_appendChunkList(&(hh->concurrentPack->remSet), HM_HH_getRemSet(hh));
-  HM_initChunkList(HM_HH_getRemSet(hh));
-  // size_t objectSize, copySize, metaDataSize;
-  // metaDataSize = GC_STACK_METADATA_SIZE;
-  // copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
-  // // objectSize = sizeofObject(s, stackPtr);
-  // objectSize = copySize;
-  // // copyObject can add a chunk to the list. It updates the frontier but not the
-  // // thread current chunk. Also it returns the pointer to the header part.
-  // pointer stackCopy = copyObject(stackPtr - metaDataSize,
-  //                                objectSize, copySize, hh);
-  // thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
-  // stackCopy += metaDataSize;
-
-  // ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
-  // hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
-
-  // Separate the list into two. From list will be collected by the CC and chunkList will be used
-  // as it is always used by the mutator -- for promotions or allocations at depth 1
-  HM_chunkList chunkList = HM_HH_getChunkList(hh);
-  HM_chunkList fromList = HM_HH_getFromList(hh);
-  // HM_chunk lastChunk = thread->currentChunk;
-
-  // JATIN_NOTE: NOW CC does it before collection, so this is not needed
-  // for (HM_chunk chunk = chunkList->firstChunk; chunk !=NULL; chunk = chunk->nextChunk) {
-  //   assert(HM_getLevelHead(chunk) == hh);
-  //   chunk->levelHead = hh;
-  // }
-
-  *(fromList) = *(chunkList);
-  HM_initChunkList(chunkList);
-
-  // HM_chunk stackChunk = HM_getChunkOf(getStackCurrent(s));
-  // if(HM_getLevelHead(stackChunk) == hh) {
-  //   HM_unlinkChunk(fromList, stackChunk);
-  //   HM_appendChunk(chunkList, stackChunk);
-  //   stackChunk->levelHead = hh;
-  // }
-  HM_chunk newChunk = HM_allocateChunk(chunkList, GC_HEAP_LIMIT_SLOP);
-  newChunk->levelHead = hh;
-  thread->currentChunk = HM_getChunkListLastChunk(chunkList);
-
-  HM_assertChunkListInvariants(chunkList);
-  HM_assertChunkListInvariants(fromList);
   return true;
 }
 
@@ -580,21 +546,28 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
 
-  if(hh->concurrentPack->ccstate != CC_UNREG) {
+  if(HM_HH_getDepth(hh) == 1 &&
+    hh->concurrentPack->ccstate != CC_UNREG) {
+    // the CC at depth 1 hasn't completed yet, so don't
+    // change anything.
     return;
   }
-  // assert(hh->concurrentPack->isCollecting);
-  HM_HH_resetList2(hh);
-
-
-
+  else {
+    hh->concurrentPack->ccstate = CC_UNREG;
+  }
 
   if (HM_HH_getDepth(hh) == 1) {
-    bool willCollect = checkPolicyforRoot(s, hh, thread);
-    if(!willCollect) {
-      // hh->concurrentPack->shouldCollect = false;
-      return;
-    }
+      HM_HH_resetList2(hh);
+      bool willCollect = checkPolicyforRoot(s, hh, thread);
+      if (willCollect) {
+        HM_HH_splitChunkList(hh, thread);
+        HM_appendChunkList(&(hh->concurrentPack->remSet), HM_HH_getRemSet(hh));
+        HM_initChunkList(HM_HH_getRemSet(hh));
+      }
+      else {
+        // Not enough credits to collect the ROOT, so keep ccstate = CC_UNREG
+        return;
+      }
   }
 
   // hh->concurrentPack->shouldCollect = true;

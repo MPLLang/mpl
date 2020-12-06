@@ -258,6 +258,16 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
 }
 
 
+void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
+  objptr op = *opp;
+  assert(isObjptr(op));
+  pointer p = objptrToPointer (op, NULL);
+  if (isInScope(HM_getChunkOf(p), rawArgs)
+     && !isChunkSaved(HM_getChunkOf(p), rawArgs)) {
+    printf("%p \n", *opp);
+  }
+
+}
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
   printf("\t %p", *opp);
 }
@@ -631,6 +641,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_chunkList repList = &(_repList);
   HM_initChunkList(repList);
   HM_chunkList origList = (isConcurrent)?HM_HH_getFromList(targetHH):HM_HH_getChunkList(targetHH);
+  // HM_chunkList origList = HM_HH_getFromList(targetHH);
   HM_assertChunkListInvariants(origList);
 
   #if ASSERT2
@@ -679,85 +690,42 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct HM_chunkList downPtrs;
   HM_initChunkList(&downPtrs);
   CC_filterDownPointers(s, &downPtrs, targetHH);
-  // if(HM_HH_getDepth(targetHH) == 3) {
-  //   printf("downPtrs: ");
-  //   HM_foreachRemembered(s, &downPtrs, printDownPtrs, &lists);
-  //   printf("\n");
-  // }
   HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
-  // forward closures and stack
+  // forward closures, stack and deque?
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
   forceForward(s, &(cp->snapTemp), &lists);
   forceForward(s, &(s->wsQueue), &lists);
-
-  // comment from a previous impl. which did not store stack for each level.
-  // This was done because sometimes the stack does not have all the roots, for some
-  // reason I couldn't figure out.
-  // objptr stackp = isConcurrent?(cp->stack):(getStackCurrentObjptr(s));
-  objptr stackp = (cp->stack);
-  forceForward(s, &(stackp), &lists);
-
+  forceForward(s, &(cp->stack), &lists);
 
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
-  // often changes the level it is at. So it might in fact be at depth = 1. It is important that we
-  // only mark the stack and not scan it. Forwarding the stack races with the thread using it, causing arbitrary behaviour
-  // Not forwarding the stack is okay, since we've preserved the stack from before.
-  saveNoForward(s, (pointer)(thread->stack), &lists);
-
-  // forward reachability altering writes
-  // racy, discuss with Sam
+  // often changes the level it is at. So it might in fact be at depth = 1.
+  // It is important that we only mark the stack and not scan it.
+  // Scanning the stack races with the thread using it.
+  saveNoForward(s, thread->stack, &lists);
+  saveNoForward(s, thread, &lists);
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
+  #if ASSERT
+  if (HM_HH_getDepth(targetHH) != 1){
+    // prints all roots pointed by the current stack that are not
+    // already saved.
+    // If everything is correct nothing should be printed.
+    foreachObjptrInObject(s, thread->stack, false, trueObjptrPredicate, NULL,
+          printObjPtrInScopeFunction, &lists);
+  }
+  #endif
 
   // unmark in the exact same order
   HM_foreachRemembered(s, &downPtrs, unmarkDownPtrChunk, &lists);
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
   forceUnmark(s, &(cp->snapTemp), &lists);
-  forceUnmark(s, &(stackp), &lists);
   forceUnmark(s, &(s->wsQueue), &lists);
-
+  forceUnmark(s, &(cp->stack), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
-  /*
-  #if ASSERT2
-   {
-     HM_chunk soleChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(targetHH));
-     assert(HM_getChunkListLastChunk(HM_HH_getChunkList(targetHH)) == soleChunk);
-     assert(soleChunk->tmpHeap == NULL);
-     pointer p =  HM_getChunkStart(soleChunk);
-     assert(soleChunk->frontier <= soleChunk->limit);
-     while(p != soleChunk->frontier){
-       assert(0);
-       assert(p < soleChunk->frontier);
-       p = advanceToObjectData(s, p);
-       objptr ob = pointerToObjptr(p, NULL);
-       forceForward(s, &(ob), &lists);
-       p += sizeofObjectNoMetaData(s, p);
-     }
-   }
-   #endif
-
-  forwardPtrChunk(s, &(s->currentThread), &lists);
-  if(workStack!=NULL){
-    size_t size = CC_stack_size(workStack);
-    while(size!=0){
-      void* q = CC_stack_pop(workStack);
-      forwardPtrChunk(s, q, &lists);
-      // callIfIsObjptr(s, forwardPtrChunk, ((objptr*)(q)), &args);
-      q = CC_stack_pop(workStack);
-      if(HM_getChunkListFirstChunk(origList)==NULL)
-        break;
-    }
-  }
-  */
-
-  // HM_appendChunkList(repList, origList);
-  // *(origList) = *(repList);
-  // return;
-
-  #if ASSERT2
+  #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
   HM_assertChunkListInvariants(repList);
 
@@ -788,24 +756,24 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   printf("\n");
   // printf("Chunk list collected = %p \n", origList);
-
   #endif
+
   // JATIN_NOTE: This loop is not needed if tmpHeap is made NULL in HM_getFreeChunk.
   // Adding it here so that this runs in debug and the difference is evident if reasoning is flawed
   int countStopGapChunks = 0;
   int stopGapMem = 0;
-  for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
+  HM_chunk chunk = origList->firstChunk;
+  while (chunk!=NULL)  {
+    HM_chunk tChunk = chunk->nextChunk;
     assert(chunk->tmpHeap == lists.fromHead);
     if(chunk->startGap != 0) {
       saveChunk(chunk, &lists);
       countStopGapChunks++;
       stopGapMem+=(HM_getChunkSize(chunk));
     }
-    else {
-      chunk->levelHead = NULL;
-      chunk->tmpHeap  = NULL;
-    }
+    chunk=tChunk;
   }
+  // printf("\n");
 
   for(HM_chunk chunk = repList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
     chunk->tmpHeap = NULL;
@@ -842,17 +810,19 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   bytesCollected = bytesCollected>0?bytesCollected:0;
   bytesCollected/=4;
 
-  HM_chunk chunk = HM_getChunkListFirstChunk(origList);
+  HM_chunk chunk2 = HM_getChunkListFirstChunk(origList);
+  chunk = chunk2;
   while (chunk!=NULL) {
+    // printf("%p %p \t", chunk, chunk->levelHead);
     chunk->levelHead = NULL;
     chunk->tmpHeap  = NULL;
     // if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE) || (bytesFreed < bytesCollected)) {
     if(HM_getChunkSize(chunk) > 2 * (HM_BLOCK_SIZE)) {
       pointer q = chunk;
       chunk = chunk->nextChunk;
-      HM_unlinkChunk(origList, q);
-      HM_appendChunk(deleteList, q);
-      bytesFreed+= HM_getChunkSize(q);
+      // HM_unlinkChunk(origList, q);
+      // HM_appendChunk(deleteList, q);
+      // bytesFreed+= HM_getChunkSize(q);
       // printf("%d ", HM_getChunkSize(q));
       // GC_release (q, HM_getChunkSize(q));
     }
@@ -860,6 +830,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
       chunk = chunk->nextChunk;
     }
   }
+
   // printf("\n");
 
   // HM_appendChunkList(getFreeListSmall(s), origList);
