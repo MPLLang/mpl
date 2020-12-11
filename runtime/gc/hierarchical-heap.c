@@ -514,6 +514,7 @@ pointer HM_HH_getRoot(pointer threadp) {
 
   return (thread->hierarchicalHeap);
 }
+
 // Story: ccstate for each hh has three values
 // 1. CC_UNREG: This means that the root-set for the next collection (if we want to collect) needs to be constructed.
 //              Either the previous root-set has already been used for a collection (which has finished) or this
@@ -522,10 +523,6 @@ pointer HM_HH_getRoot(pointer threadp) {
 // 3. CC_COLLECTING: The collector sets this value to ccstate when it starts collecting using cas.
 //                   After its finished, the flag is set to CC_UNREG indicating that a new root set is needed.
 void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
-    // check if reg
-    // return;
-  // cas here -- unregistered {0}, registered but not collected{1} --cas by cc-- collecting{2}, collected {3}
-
   GC_state s = pthread_getspecific(gcstate_key);
 
   GC_MayTerminateThread(s);
@@ -545,11 +542,14 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   }
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  if(hh->concurrentPack->rootList == NULL) {
+    CC_initStack(hh->concurrentPack);
+  }
 
   if(HM_HH_getDepth(hh) == 1 &&
     hh->concurrentPack->ccstate != CC_UNREG) {
     // the CC at depth 1 hasn't completed yet, so don't
-    // change anything.
+    // do anything.
     return;
   }
   else {
@@ -579,17 +579,13 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
   hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
 
-  // Initialize write barrier stack
-  if(hh->concurrentPack->rootList == NULL) {
-    CC_initStack(hh->concurrentPack);
-  }
+
   // pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
   // GC_stack stackP = (GC_stack) stackPtr;
   // assert(!hh->concurrentPack->isCollecting);
   // store thread stack
   copyCurrentStack(s, thread);
   CC_clearMutationStack(hh->concurrentPack);
-
   hh->concurrentPack->ccstate = CC_REG;
   // hh->concurrentPack->isCollecting = false;
   // compute object size and bytes to be copied
