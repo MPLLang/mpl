@@ -283,21 +283,13 @@ struct
         val rootHH = HH.getRoot thread
 
         fun gcFunc() =
-          let
-            val _ = HH.collectThreadRoot(thread, rootHH)
-          in
-            (* if decrementHitsZero incounter then
-              ( setQueueDepth (myWorkerId ()) (depth+1)
-              ; threadSwitch thread
-              )
-              else
-            *)
-            returnToSched ()
-          end
+            (HH.collectThreadRoot(thread, rootHH)
+            ; returnToSched ()
+            )
 
         val cont_arr1 =  Array.array (1, SOME(f))
         val cont_arr2 =  Array.array (1, SOME(g))
-        val cont_arr3 =  Array.array (1, SOME(fn _ => gcFunc()))
+        val cont_arr3 =  Array.array (1, SOME(gcFunc))
         val _ = HH.registerCont(cont_arr1, cont_arr2, cont_arr3, thread)
         val _ = HH.setDepth (thread, depth + 1)
 
@@ -305,13 +297,10 @@ struct
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val _ = push gcFunc
         val fr = fork(f, g)
-        (*val start = ref(NONE : (Time.time) option)*)
-
         val gr =
           if popDiscard() then
             let
               val _ = HH.collectThreadRoot(thread, rootHH)
-              (*val _ = HH.resetList(thread)*)
               val _ = HH.promoteChunks thread
             in
               HH.setDepth (thread, depth)
@@ -319,23 +308,10 @@ struct
             end
           else
             ( clear()
-            ;   let
-(*                    val _ = case (!start) of
-                                SOME(t) => print (  "waited for the GC: " ^
-                                                    LargeInt.toString (
-                                                      Time.toMilliseconds (Time.- (Time.now(), t))
-                                                    )
-                                                    ^"\n"
-                                                  )
-                              | NONE => ()*)
-                in
-                  ( setQueueDepth (myWorkerId ()) depth
-                  (*; HH.resetList (thread)*)
-                  ; HH.promoteChunks thread
-                  ; HH.setDepth (thread, depth)
-                  ; ()
-                  )
-                end
+            ; setQueueDepth (myWorkerId ()) depth
+            ; HH.promoteChunks thread
+            ; HH.setDepth (thread, depth)
+            ; ()
             )
       in
         fr
