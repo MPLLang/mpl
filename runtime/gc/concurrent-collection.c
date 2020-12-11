@@ -30,7 +30,6 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
 }
 
 void CC_clearMutationStack(ConcurrentPackage cp) {
-  // assert(!cp->isCollecting);
   if(cp->rootList!=NULL) {
     CC_stack_clear(cp->rootList);
   }
@@ -53,7 +52,8 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
 // for out of scope objects the assertion and sanctity of *p is uncertain
 // This is because of local collection. In general, CC assumes that the access to chunk level info
 // about p is safe since it does not depend on (*p). Once it is established that p is in scope,
-// we can call getTransitivePtr on it. Only after the transitive p is reached can we begin to inspect
+// we can call getTransitivePtr on it.
+// Only after the transitive pointer is reached can we begin to inspect
 // (*p). Otherwise, all bets are off because of races
 pointer getTransitivePtr(GC_state s, pointer p, ConcurrentCollectArgs* args) {
   objptr op;
@@ -77,71 +77,6 @@ void markObj(pointer p) {
   GC_header header = *headerp;
   header ^= MARK_MASK;
   *headerp = header;
-}
-
-#if ASSERT2
-void linearTraverseChunkList (GC_state s, HM_chunkList list, HM_chunk skipChunk) {
-  HM_assertChunkListInvariants(list);
-  HM_chunk chunk = HM_getChunkListFirstChunk (list);
-
-  while(chunk!=NULL) {
-    if(chunk==skipChunk) {
-      chunk= chunk->nextChunk;
-      continue;
-    }
-
-    pointer p = HM_getChunkStart(chunk);
-    chunk->tmpHeap = NULL;
-
-    assert(chunk->frontier <= chunk->limit);
-    while(p != chunk->frontier){
-      assert(p < chunk->frontier);
-      p = advanceToObjectData(s, p);
-      p += sizeofObjectNoMetaData(s, p);
-    }
-
-    assert(chunk->frontier <= chunk->limit);
-    chunk = chunk->nextChunk;
-  }
-  HM_assertChunkListInvariants(list);
-}
-
-bool isInExtraChunk(objptr q, HM_HierarchicalHeap hh) {
-  return (HM_getChunkOf(q) == (hh->chunkList).firstChunk);
-}
-#else
-void linearTraverseChunkList (GC_state s, HM_chunkList list, HM_chunk skipChunk) {}
-bool isInExtraChunk(objptr q, HM_HierarchicalHeap hh) {return true;}
-#endif
-
-void linearUnmarkChunkList(GC_state s, ConcurrentCollectArgs* args,
-                            HM_HierarchicalHeap hh) {
-  #if ASSERT2
-  HM_assertChunkListInvariants(args->repList);
-  HM_chunk chunk = HM_getChunkListFirstChunk (args->repList);
-  while(chunk!=NULL) {
-    pointer p = HM_getChunkStart(chunk);
-    chunk->tmpHeap = NULL;
-    // chunk->levelHead = hh;
-/*
-
-    assert(chunk->frontier <= chunk->limit);
-    while(p != chunk->frontier){
-      assert(p < chunk->frontier);
-      p = advanceToObjectData(s, p);
-
-      if (CC_isPointerMarked(p)) {
-        markObj(p); // mark/unmark is just xor
-        assert(0);
-      }
-      p += sizeofObjectNoMetaData(s, p);
-    }
-    assert(chunk->frontier <= chunk->limit);
-*/
-    chunk = chunk->nextChunk;
-  }
-  HM_assertChunkListInvariants(args->repList);
-  #endif
 }
 
 // This function is exactly the same as in chunk.c.
@@ -190,10 +125,6 @@ bool saveNoForward(GC_state s, pointer p, void* rawArgs) {
 
   if(chunkOrig && !chunkSaved) {
     assert(getTransitivePtr(s, p, rawArgs) == p);
-    #if ASSERT2
-      assert(cand_chunk->tmpHeap == args->fromHead);
-      assert(isChunkInList(args->origList, cand_chunk));
-    #endif
     saveChunk(cand_chunk, args);
   }
   return (chunkSaved || chunkOrig);
@@ -208,7 +139,7 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
   }
 }
 
-
+// some debugging functions
 void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
@@ -217,14 +148,23 @@ void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
      && !isChunkSaved(HM_getChunkOf(p), rawArgs)) {
     printf("%p \n", *opp);
   }
-
 }
+
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
   printf("\t %p", *opp);
 }
 
-void printDownPtrs (GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+void printDownPtrs (GC_state s, objptr dst, objptr* field, objptr src,
+                  void* rawArgs) {
   printf("(%p, %p, %p) ", dst, field, src);
+}
+
+void printChunkListSize(HM_chunkList list) {
+  printf("sizes: ");
+  for(HM_chunk chunk = list->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
+    printf("%d ", HM_getChunkSize(chunk));
+  }
+  printf("\n");
 }
 
 bool isChunkInList(HM_chunk chunk, HM_chunkList list) {
@@ -246,14 +186,6 @@ bool forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   bool saved = saveNoForward(s, p, rawArgs);
 
   if(saved) {
-    #if ASSERT2
-      // ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
-      // if(!isChunkInList (args->repList, HM_getChunkOf(p))) {
-      //   printf("%s\n", "this is failing\n");
-      //   assert(0);
-      // }
-    #endif
-    // p = getTransitivePtr(s, p, rawArgs);
     markAndScan(s, p, rawArgs);
   }
   return saved;
@@ -296,7 +228,8 @@ void unmarkDownPtrChunk (GC_state s, objptr dst, objptr* field, objptr src, void
   unmarkPtrChunk(s, &dst, rawArgs);
 }
 
-// this function does more than forwardPtrChunk and is safer. It forwards even if not in scope.
+// This function does more than forwardPtrChunk.
+// It scans the object pointed by the pointer even if its not in scope.
 // Recursively however it only calls forwardPtrChunk and not itself
 void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   pointer p = objptrToPointer(*opp, NULL);
@@ -328,7 +261,6 @@ void ensureCallSanity(__attribute__((unused)) GC_state s,
   assert(args!=NULL);
   assert(args->snapLeft!=BOGUS_OBJPTR);
   assert(args->snapRight!=BOGUS_OBJPTR);
-
 }
 
 
@@ -339,7 +271,7 @@ bool checkLocalScheduler (GC_state s) {
          );
 }
 
-HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
+HM_HierarchicalHeap findHeap (GC_thread thread, int depth) {
 
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   while(currentHeap!=NULL && HM_HH_getDepth (currentHeap) != depth) {
@@ -348,132 +280,87 @@ HM_HierarchicalHeap claimHeap (GC_thread thread, int depth) {
 
   if(currentHeap==NULL)
     return NULL;
-  assert(HM_HH_getDepth(currentHeap) == depth);
-  // if(HM_HH_getDepth(currentHeap) < depth) {
-    // LOG(LM_HH_COLLECTION, LL_FORCE, "no heap at this depth for the thread");
-    // return NULL;
-  // }
 
-  ConcurrentPackage cp = currentHeap->concurrentPack;
-  if(cp == NULL
-    // || cp->isCollecting
-    || cp->ccstate != CC_REG
-    || cp->snapLeft == BOGUS_OBJPTR
-    || cp->snapRight == BOGUS_OBJPTR
-    || (cp->stack == BOGUS_OBJPTR && depth ==1 )
-    // || cp->shouldCollect == false
-    ) {
-    return NULL;
+  assert(HM_HH_getDepth(currentHeap) == depth);
+  return currentHeap;
+}
+
+bool readyforCollection(ConcurrentPackage cp) {
+  bool ready =  !(cp == NULL || cp-> ccstate != CC_REG);
+  if (ready) {
+    assert(cp->snapLeft != BOGUS_OBJPTR);
+    assert(cp->snapRight != BOGUS_OBJPTR);
+    assert(cp->stack != BOGUS_OBJPTR);
+  }
+  return ready;
+}
+
+// returns true if claim succeeds
+bool claimHeap(HM_HierarchicalHeap heap) {
+  if (heap == NULL) {
+    return false;
+  }
+
+  ConcurrentPackage cp = heap->concurrentPack;
+  if(!readyforCollection(cp)) {
+    return false;
   }
   else if (casCC (&(cp->ccstate), CC_REG, CC_COLLECTING) != CC_REG) {
     printf("\t %s\n", "returning because someone else claimed collection");
-    return NULL;
+    return false;
   }
-  // else if(casCC(&(cp->isCollecting), false, true)) {
-  //   printf("\t %s\n", "returning because someone else claimed collection");
-  //   assert(0);
-  //   return NULL;
-  // }
-  else {
-    // LOG(LM_HH_COLLECTION, LL_FORCE, "\t collection turned on isCollect = & depth = ");
-    // printf("%d %d\n", cp->isCollecting, depth);
-    // #if ASSERT2
-    //   while(oldStart!=currentHeap) {
-    //     printf(" %p => ", (void*) oldStart);
-    //     oldStart = oldStart->nextAncestor;
-    //   }
-    //   printf("FIN: %p\n", currentHeap);
-    // #endif
-    // assert(currentHeap->concurrentPack->isCollecting);
-    assert(currentHeap->concurrentPack->ccstate == CC_COLLECTING);
-    assert(HM_HH_getDepth(currentHeap) == depth);
-    return currentHeap;
-  }
-  // This point is reachable only after the fork is completed.
-  assert(HM_HH_getDepth(currentHeap) == depth);
-
-  return currentHeap;
+  assert(heap->concurrentPack->ccstate == CC_COLLECTING);
+  return true;
 }
 
 void CC_collectAtRoot(pointer threadp, pointer hhp) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-  HM_HierarchicalHeap hh = (HM_HierarchicalHeap)hhp;
-
-
+  HM_HierarchicalHeap heap = (HM_HierarchicalHeap)hhp;
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
 
   if (!checkLocalScheduler(s) || thread->currentDepth<=0) {
     return;
   }
 
-  int depth = 1;
-  HM_HierarchicalHeap heap = claimHeap(thread, depth);
-  if (heap == NULL) {
+  if (!claimHeap(heap)) {
     return;
   }
 
-  if(heap!= hh) {
-    DIE("heap != hh, the bug is caused by race with LC");
-  }
-
+  // for exiting even if CC is going on.
   assert(!s->amInCC);
   s->amInCC = true;
 
-  // pid_t childPid = fork();
-  // if(childPid >= 0) {
-  //   if(childPid == 0) {
-  //     printf("child created \n");
-  //   }
-  //   else {
-  //     printf("continuing parent\n");
-  //     s->amInCC = false;
-  //     return;
-  //   }
-  // }
-
-  // assert(heap->concurrentPack->shouldCollect);
   CC_collectWithRoots(s, heap, thread);
-  // heap->concurrentPack->shouldCollect = false;
-  // heap->concurrentPack->isCollecting = false;
   heap->concurrentPack->ccstate = CC_UNREG;
   s->amInCC = false;
-  // printf("child completed collection\n");
-  // exit(1);
 }
 
-// Function called for internal CC
-void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
-  // 1) ensure the depth is indeed a public depth
-  // 2) it is not being collected somewhere already
-  // 3) construct arguments to CC_collectWithRoots
-  checkLocalScheduler(s);
-
-  if (thread->currentDepth == 0
-    || depth <= 0
-    || thread->currentDepth < depth) {
-    return;
-  }
-
-  // (1)
+int minPrivateLevel(GC_state s) {
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t shallowestPrivateLevel = UNPACK_IDX(topval);
-  uint32_t maxDepth = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
-  if(depth > maxDepth) {
-    return;
-  }
-  else if (depth >= thread->currentDepth) {
+  uint32_t level = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
+  return level;
+}
+
+void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
+  checkLocalScheduler(s);
+  if (thread->currentDepth <= 1
+    || depth <= 0
+    || depth >= thread->currentDepth
+    // Don't collect heaps that are private
+    || depth > minPrivateLevel(s)
+    ) {
     return;
   }
 
-  // (2, 3)
-  HM_HierarchicalHeap heap = claimHeap(thread, depth);
-  if(heap == NULL){
+  HM_HierarchicalHeap heap = findHeap(thread, depth);
+  if(!claimHeap(heap)){
     return;
   }
 
+  // collect only if the heap is above a threshold size
   if (HM_getChunkListSize(&(heap->chunkList)) >= 2 * HM_BLOCK_SIZE) {
-    // just a quick check to see if it is worth it to collect.
     assert(getThreadCurrent(s) == thread);
     CC_collectWithRoots(s, heap, thread);
   }
@@ -481,8 +368,6 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // Mark that collection is complete
   heap->concurrentPack->ccstate = CC_UNREG;
 }
-
-
 
 void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   // Since the root collection is truly concurrent the depth 1 remSet is separated at the time of fork.
@@ -497,14 +382,6 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   HM_foreachRemembered(s, y, bucketIfValidAtList, (void*)x);
   HM_appendChunkList(getFreeListSmall(s), y);
   *y = *x;
-}
-
-void printChunkListSize(HM_chunkList list) {
-  printf("sizes: ");
-  for(HM_chunk chunk = list->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
-    printf("%d ", HM_getChunkSize(chunk));
-  }
-  printf("\n");
 }
 
 void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,

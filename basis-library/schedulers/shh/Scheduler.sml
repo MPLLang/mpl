@@ -235,20 +235,13 @@ struct
                   val cont_arr1 =  Array.array (1, SOME(f))
                   val cont_arr2 =  Array.array (1, SOME(g))
                   val cont_arr3 =  Array.array (0, NONE)
-                  val _ = HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
-                  val _ = HH.setDepth (thread, depth + 1)
-                  val _ = HH.forceLeftHeap(myWorkerId(), thread)
                 in
-                  ()
+                    HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
+                  ; HH.setDepth (thread, depth + 1)
+                  ; HH.forceLeftHeap(myWorkerId(), thread)
                 end
               else
-                let
-                  val _  = (HH.setDepth (thread, depth + 1))
-                in
-                  ()
-                end
-        (*val cont_arr2 =  Array.array (1, SOME(g'))*)
-        (*location?*)
+                (HH.setDepth (thread, depth + 1))
         (*force left heap must be after set Depth*)
         val fr = result f
         val gr =
@@ -265,7 +258,6 @@ struct
               | SOME (gr, t) =>
                   ( HH.mergeThreads (thread, t)
                   ; setQueueDepth (myWorkerId ()) depth
-                  (*; HH.resetList (thread)*)
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
                   ; gr
