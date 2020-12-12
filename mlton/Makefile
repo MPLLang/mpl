@@ -1,4 +1,4 @@
-## Copyright (C) 2010,2013,2016,2018-2019 Matthew Fluet.
+## Copyright (C) 2010,2013,2016,2018-2020 Matthew Fluet.
  # Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  #    Jagannathan, and Stephen Weeks.
  # Copyright (C) 1997-2000 NEC Research Institute.
@@ -33,6 +33,14 @@ MLTON_MLB := mlton-stubs.mlb
 endif
 endif
 
+## When self-compiling the current MLton sources with `Zone` enabled,
+## the resulting compiler exhibits a space leak; see MLton/mlton#334
+ifeq ($(RUN_MLTON_VERSION), $(firstword $(sort $(RUN_MLTON_VERSION) 20170629)))
+RUN_MLTON_COMPILE_XARGS += -drop-pass zone
+else ifeq ($(RUN_MLTON_VERSION), $(firstword $(sort $(RUN_MLTON_VERSION) 20191003)))
+RUN_MLTON_COMPILE_XARGS += -disable-pass zone
+endif
+
 FRONT_END_SOURCES :=		\
 	front-end/ml.lex.sml	\
 	front-end/ml.grm.sig	\
@@ -44,7 +52,8 @@ FRONT_END_SOURCES :=		\
 SOURCES :=			\
 	$(MLTON_MLB)		\
 	$(FRONT_END_SOURCES)	\
-	$(filter-out control/version.sml,$(shell if [ -r $(MLTON_MLB) ]; then "$(RUN_MLTON)" -stop f $(MLTON_MLB); fi))
+	control/version.sml	\
+	$(shell if [ -e $(MLTON_MLB) ]; then "$(RUN_MLTON_DEPS)" -stop f $(MLTON_MLB); fi)
 
 .PHONY: all
 all: $(MLTON_OUTPUT)
@@ -58,45 +67,49 @@ $(eval $(MK_SHOW_CONFIG))
 
 ######################################################################
 
-
 $(MLTON_OUTPUT): $(SOURCES)
-	rm -f control/version.sml
-	$(MAKE) control/version.sml
 	@echo 'Compiling mlton'
 	"$(RUN_MLTON)" \
-		@MLton $(RUN_MLTON_RUNTIME_ARGS) $(RUN_MLTON_RUNTIME_XARGS) gc-summary -- \
-		$(RUN_MLTON_COMPILE_ARGS) $(RUN_MLTON_COMPILE_XARGS) -verbose 2	\
+		@MLton $(RUN_MLTON_RUNTIME_XARGS) $(RUN_MLTON_RUNTIME_ARGS) gc-summary -- \
+		$(RUN_MLTON_COMPILE_XARGS) -verbose 2 $(RUN_MLTON_COMPILE_ARGS)	\
 		-target $(TARGET) -output $(MLTON_OUTPUT)			\
 		$(MLTON_MLB)
 
+ifeq ($(shell (cat control/version_sml.src; echo $(MLTON_NAME) $(MLTON_VERSION); if [ -e control/version.sml ]; then cat control/version.sml; fi) | $(SHA1DGST)),$(shell if [ -e control/version_sml.chk ]; then cat control/version_sml.chk; fi))
+control/version.sml: control/version_sml.src
+	touch control/version.sml
+else
+$(shell $(RM) control/version.sml)
 control/version.sml: control/version_sml.src
 	$(SED) \
 		-e "s/MLTON_NAME/$(MLTON_NAME)/" \
 		-e "s/MLTON_VERSION/$(MLTON_VERSION)/" \
 		< control/version_sml.src \
 		> control/version.sml
+	(cat control/version_sml.src; echo $(MLTON_NAME) $(MLTON_VERSION); cat control/version.sml) | $(SHA1DGST) > control/version_sml.chk
+endif
 
 front-end/%.lex.sml: front-end/%.lex
-	rm -f $<.*
+	$(RM) $<.*
 	$(RUN_MLLEX) $<
-	mv $<.sml $<.sml.in
+	$(MV) $<.sml $<.sml.in
 	$(SED) -e 's/val s = List.map f (List.rev (tl (List.rev s)))/val s = Pervasive.List.map f (Pervasive.List.rev (tl (Pervasive.List.rev s)))/' $<.sml.in > $<.sml
-	mv $<.sml $<.sml.in
+	$(MV) $<.sml $<.sml.in
 	$(SED) -e 's/in Vector.fromList(List.map g/in Vector.fromList(Pervasive.List.map g/' $<.sml.in > $<.sml
-	rm -f $<.sml.in
-	chmod -w $<.*
+	$(RM) $<.sml.in
+	$(CHMOD) -w $<.*
 
 front-end/%.grm.sig front-end/%.grm.sml: front-end/%.grm
-	rm -f $<.*
+	$(RM) $<.*
 	$(RUN_MLYACC) $<
-	mv $<.sml $<.sml.in
+	$(MV) $<.sml $<.sml.in
 	$(SED) -e 's/in f 0 handle General.Subscript => ()/in f 0 handle Pervasive.General.Subscript => ()/' $<.sml.in > $<.sml
-	mv $<.sml $<.sml.in
+	$(MV) $<.sml $<.sml.in
 	$(SED) -e 's/in Array.fromList(List.map actionRowLookUp actionRowNumbers)/in Array.fromList(Pervasive.List.map actionRowLookUp actionRowNumbers)/' $<.sml.in > $<.sml
-	rm -f $<.sml.in
-	chmod -w $<.*
+	$(RM) $<.sml.in
+	$(CHMOD) -w $<.*
 
-mlton-stubs.mlb: $(shell "$(RUN_MLTON)" -stop f ../lib/stubs/mlton-stubs/sources.mlb | $(GREP) 'mlb$$') $(shell "$(RUN_MLTON)" -stop f mlton.mlb | $(GREP) 'mlb$$')
+mlton-stubs.mlb: $(shell "$(RUN_MLTON_DEPS)" -stop f ../lib/stubs/mlton-stubs/sources.mlb | $(GREP) 'mlb$$') $(shell "$(RUN_MLTON_DEPS)" -stop f mlton.mlb | $(GREP) 'mlb$$')
 	(									\
 		echo '$$(SML_LIB)/basis/unsafe.mlb';				\
 		echo '$$(SML_LIB)/basis/sml-nj.mlb';				\
@@ -122,10 +135,24 @@ def-use: mlton.def-use
 
 mlton.def-use: $(SOURCES)
 	"$(RUN_MLTON)" \
-		@MLton $(RUN_MLTON_RUNTIME_ARGS) $(RUN_MLTON_RUNTIME_XARGS) --	\
-		$(RUN_MLTON_COMPILE_ARGS) $(RUN_MLTON_COMPILE_XARGS) -verbose 0	\
+		@MLton $(RUN_MLTON_RUNTIME_XARGS) $(RUN_MLTON_RUNTIME_ARGS) --	\
+		$(RUN_MLTON_COMPILE_XARGS) -verbose 0 $(RUN_MLTON_COMPILE_ARGS)	\
 		-stop tc -prefer-abs-paths true -show-def-use mlton.def-use	\
 		$(MLTON_MLB)
+
+######################################################################
+
+ifneq (,$(REMOTE_TARGET))
+mlton-bootstrap-$(REMOTE_TARGET).tgz: $(SOURCES)
+	"$(RUN_MLTON)" \
+		@MLton $(RUN_MLTON_RUNTIME_XARGS) $(RUN_MLTON_RUNTIME_ARGS) gc-summary -- \
+		$(RUN_MLTON_COMPILE_XARGS) -verbose 2 $(RUN_MLTON_COMPILE_ARGS)	\
+		-target $(REMOTE_TARGET) -output $(MLTON_OUTPUT) \
+		-codegen c -stop g \
+		$(MLTON_MLB)
+	$(TAR) czf $@ $(MLTON_OUTPUT).*.c
+	$(RM) $(MLTON_OUTPUT).*.c
+endif
 
 ######################################################################
 
@@ -136,13 +163,11 @@ SMLNJ := sml
 SMLNJ_CM_SERVERS_NUM := 0
 
 .PHONY: smlnj-mlton
-smlnj-mlton: $(FRONT_END_SOURCES)
-	rm -f control/version.sml
-	$(MAKE) control/version.sml
+smlnj-mlton: mlton-smlnj.cm control/version.sml $(FRONT_END_SOURCES)
 	(									\
 		echo 'SMLofNJ.Internals.GC.messages false;';			\
 		echo '#set CM.Control.verbose false;';				\
-		echo '#set CM.Control.warn_obsolete false;';			\
+		echo '#set CM.Control.warn_obsolete true;';			\
 		echo 'Control.polyEqWarn := false;';				\
 		echo 'local';							\
 		echo 'fun loop 0 = () | loop n = (CM.Server.start {cmd = (CommandLine.name (), ["@CMslave"]), name = "server" ^ (Int.toString n), pathtrans = NONE, pref = 0}; loop (n - 1));'; \
@@ -164,17 +189,15 @@ smlnj-mlton: $(FRONT_END_SOURCES)
 POLYML := poly
 
 .PHONY: polyml-mlton
-polyml-mlton: mlton-polyml.use $(FRONT_END_SOURCES)
-	rm -f control/version.sml
-	$(MAKE) control/version.sml
+polyml-mlton: mlton-polyml.use $(shell [ -e mlton-polyml.use ] && cat mlton-polyml.use | $(SED) 's/use "\(.*\)";/\1/') control/version.sml $(FRONT_END_SOURCES)
 	(									\
 		echo 'use "mlton-polyml.use";';					\
 		echo 'PolyML.export("$(MLTON_OUTPUT)-polyml", Main.mainWrapped);'; \
 	) | "$(POLYML)"
 	$(CC) -o $(MLTON_OUTPUT)-polyml $(MLTON_OUTPUT)-polyml.o -lpolymain -lpolyml
-	rm -f $(MLTON_OUTPUT)-polyml.o
+	$(RM) $(MLTON_OUTPUT)-polyml.o
 
-mlton-polyml.use: ../lib/stubs/basis-stubs-for-polyml/sources.use ../lib/stubs/mlton-stubs-for-polyml/sources.use $(shell "$(RUN_MLTON)" -stop f ../lib/stubs/mlton-stubs/sources.mlb | $(GREP) 'mlb$$') $(shell "$(RUN_MLTON)" -stop f mlton.mlb | $(GREP) 'mlb$$')
+mlton-polyml.use: ../lib/stubs/basis-stubs-for-polyml/sources.use ../lib/stubs/mlton-stubs-for-polyml/sources.use $(shell "$(RUN_MLTON_DEPS)" -stop f ../lib/stubs/mlton-stubs/sources.mlb | $(GREP) 'mlb$$') $(shell "$(RUN_MLTON_DEPS)" -stop f mlton.mlb | $(GREP) 'mlb$$')
 	(									\
 		cat ../lib/stubs/basis-stubs-for-polyml/sources.use |		\
 			$(SED) 's|use "\(.*\)";|../lib/stubs/basis-stubs-for-polyml/\1|'; \

@@ -1,4 +1,5 @@
-/* Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
+/* Copyright (C) 2020 Sam Westrick.
+ * Copyright (C) 2009-2010,2012,2016 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -11,25 +12,64 @@
 
 void growStackCurrent(GC_state s) {
   size_t reserved;
+  size_t stackSize;
   GC_stack stack;
 
   reserved = sizeofStackGrowReserved(s, getStackCurrent(s));
+  assert(isStackReservedAligned (s, reserved));
+  stackSize = sizeofStackWithMetaData(s, reserved);
   if (DEBUG_STACKS or s->controls->messages)
     fprintf (stderr,
              "[GC: Growing stack of size %s bytes to size %s bytes, using %s bytes.]\n",
              uintmaxToCommaString(getStackCurrent(s)->reserved),
              uintmaxToCommaString(reserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
-#if ASSERT
-  assert(threadAndHeapOkay(s));
-  GC_thread thread = getThreadCurrent(s);
-  assert(s->frontier == HM_HH_getFrontier(thread));
-  assert((size_t)(HM_HH_getLimit(thread) - HM_HH_getFrontier(thread))
-         >= sizeofStackWithMetaData(s, reserved));
-#endif
-  stack = newStack(s, reserved);
+  if (reserved > s->cumulativeStatistics->maxStackSize)
+    s->cumulativeStatistics->maxStackSize = reserved;
+
+  HM_chunk chunk = HM_getChunkOf((pointer)getStackCurrent(s));
+  HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(chunk);
+
+  if (chunk->mightContainMultipleObjects) {
+    DIE("Tried to grow a stack without its own chunk.");
+  }
+
+  assert(HM_getChunkFrontier(chunk) == HM_getChunkStart(chunk) +
+    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
+
+  /* the easy case: plenty of space in the stack's chunk to just grow the
+   * stack in place. */
+  if (stackSize <= (size_t)(HM_getChunkLimit(chunk) - HM_getChunkStart(chunk))) {
+    getStackCurrent(s)->reserved = reserved;
+    HM_updateChunkValues(chunk, HM_getChunkStart(chunk) + stackSize);
+    return;
+  }
+
+  /* in this case, the new stack needs more space, so allocate a new chunk,
+   * copy the stack, and throw away the old chunk. */
+  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  if (NULL == newChunk) {
+    DIE("Ran out of space to grow stack!");
+  }
+  assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
+  newChunk->mightContainMultipleObjects = FALSE;
+  newChunk->levelHead = hh;
+
+  pointer frontier = HM_getChunkFrontier(newChunk);
+  assert(frontier == HM_getChunkStart(newChunk));
+  assert(GC_STACK_METADATA_SIZE == GC_HEADER_SIZE);
+  *((GC_header*)frontier) = GC_STACK_HEADER;
+  stack = (GC_stack)(frontier + GC_HEADER_SIZE);
+  stack->reserved = reserved;
+  stack->used = 0;
+  HM_updateChunkValues(newChunk, frontier + stackSize);
+
   copyStack(s, getStackCurrent(s), stack);
-  getThreadCurrent(s)->stack = pointerToObjptr ((pointer)stack, NULL);
+  getThreadCurrent(s)->stack = pointerToObjptr((pointer)stack, NULL);
+
+  assert(getThreadCurrent(s)->currentChunk != chunk);
+  HM_unlinkChunk(HM_HH_getChunkList(hh), chunk);
+  HM_appendChunk(getFreeListSmall(s), chunk);
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {

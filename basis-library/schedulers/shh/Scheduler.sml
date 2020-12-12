@@ -335,10 +335,13 @@ struct
 
   fun setupSchedLoop () =
     let
+      val mySchedThread = Thread.current ()
+      val _ = HH.setDepth (mySchedThread, 1)
+      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 1)
+
       val myId = myWorkerId ()
       val myRand = SMLNJRandom.rand (0, myId)
       (*val myRand = SimpleRandom.rand myId*)
-      val mySchedThread = Thread.current ()
       val {queue=myQueue, schedThread, ...} =
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
@@ -382,8 +385,9 @@ struct
         in
           if depth >= 1 then () else
             die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
-          HH.setDepth (taskThread, depth+1);
           Queue.setDepth myQueue (depth+1);
+          HH.moveNewThreadToDepth (taskThread, depth);
+          HH.setDepth (taskThread, depth+1);
           setTaskBox myId task;
           stopTimer idleTimer';
           threadSwitch taskThread;
@@ -431,7 +435,6 @@ struct
         (* val schedHeap = HH.newHeap () *)
       in
         amOriginal := false;
-        HH.setDepth (schedThread, 1);
         setQueueDepth (myWorkerId ()) 1;
         threadSwitch schedThread
       end

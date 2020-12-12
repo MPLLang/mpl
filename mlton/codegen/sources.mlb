@@ -8,13 +8,13 @@
  *)
 
 local
-   amd64-codegen/sources.mlb
+   (*amd64-codegen/sources.mlb*)
    c-codegen/sources.mlb
-   llvm-codegen/sources.mlb
-   x86-codegen/sources.mlb
+   (*llvm-codegen/sources.mlb*)
+   (*x86-codegen/sources.mlb*)
 in
-   functor amd64Codegen
+   (*functor amd64Codegen*)
    functor CCodegen
-   functor LLVMCodegen
-   functor x86Codegen
+   (*functor LLVMCodegen*)
+   (*functor x86Codegen*)
 end

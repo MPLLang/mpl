@@ -179,9 +179,9 @@ static inline void HM_forwardHHObjptrsInChunkList(
   GC_state s,
   HM_chunk chunk,
   pointer start,
-  ObjptrPredicateFunction predicate,
-  void* predicateArgs,
-  ForeachObjptrFunction forwardHHObjptrFunc,
+  GC_objptrPredicateFun predicate,
+  void *predicateArgs,
+  GC_foreachObjptrFun forwardHHObjptrFunc,
   struct ForwardHHObjptrArgs* forwardHHObjptrArgs);
 
 /**
@@ -210,6 +210,8 @@ pointer HM_getChunkLimit(HM_chunk chunk);
  * @return the size of the chunk in bytes.
  */
 size_t HM_getChunkSize(HM_chunk chunk);
+
+size_t HM_getChunkSizePastFrontier(HM_chunk chunk);
 
 /**
  * This function returns the start of allocable area of the chunk (pointer to

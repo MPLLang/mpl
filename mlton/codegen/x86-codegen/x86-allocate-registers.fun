@@ -1,4 +1,4 @@
-(* Copyright (C) 2010 Matthew Fluet.
+(* Copyright (C) 2010,2020 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -38,7 +38,7 @@ struct
          fun mungeLabelDarwin l =
            Label.fromString (Label.toString l ^ "-MLtonLocalBaseSymbol")
       in
-        case (!Control.Target.os, !Control.positionIndependent) of
+        case (!Control.Target.os, !Control.Native.pic) of
             (* Only darwin and ELF might be using PIC *)
             (Darwin, true) => (mungeLabelDarwin, SOME Register.esp)
           | (_, true) => (mungeLabelELF, SOME Register.ebx)
@@ -4007,14 +4007,14 @@ struct
                                  registerAllocation = registerAllocation}
           in
             {assembly = AppendList.appends
-                        [if !Control.Native.commented > 3
+                        [if !Control.codegenComments > 3
                            then AppendList.cons
                                 ((Assembly.comment "pre begin:"),
                                  (toComments ra))
                            else AppendList.empty,
                          assembly_commit_fltregisters,
                          assembly_commit_registers,
-                         if !Control.Native.commented > 3
+                         if !Control.codegenComments > 3
                            then AppendList.cons
                                 ((Assembly.comment "pre end:"),
                                  (toComments registerAllocation))
@@ -4306,7 +4306,7 @@ struct
                                  registerAllocation = registerAllocation}
           in
             {assembly = AppendList.appends
-                        [if !Control.Native.commented > 3
+                        [if !Control.codegenComments > 3
                            then AppendList.cons
                                 ((Assembly.comment "post begin:"),
                                  (toComments ra))
@@ -4314,7 +4314,7 @@ struct
                          assembly_commit_fltregisters,
                          assembly_commit_registers,
                          assembly_dead_registers,
-                         if !Control.Native.commented > 3
+                         if !Control.codegenComments > 3
                            then AppendList.cons
                                 ((Assembly.comment "post end:"),
                                  (toComments registerAllocation))
@@ -6173,7 +6173,7 @@ struct
         = let
             val _ = setRA(id, {registerAllocation = registerAllocation})
           in
-            {assembly = if !Control.Native.commented > 2
+            {assembly = if !Control.codegenComments > 2
                           then (toComments registerAllocation)
                           else AppendList.empty,
              registerAllocation = registerAllocation}
@@ -10828,19 +10828,19 @@ struct
 
                         val assembly''
                           = AppendList.appends
-                            [if !Control.Native.commented > 1
+                            [if !Control.codegenComments > 1
                                then AppendList.fromList
                                     [Assembly.comment
                                      (String.make (60, #"*")),
                                      (Assembly.comment
                                       (Directive.toString d))]
                                else AppendList.empty,
-                             if !Control.Native.commented > 4
+                             if !Control.codegenComments > 4
                                then AppendList.fromList
                                     (Liveness.toComments info)
                                else AppendList.empty,
                              assembly',
-                             if !Control.Native.commented > 5
+                             if !Control.codegenComments > 5
                                then (RegisterAllocation.toComments 
                                      registerAllocation)
                                else AppendList.empty]
@@ -10871,19 +10871,19 @@ struct
 
                         val assembly''
                           = AppendList.appends
-                            [if !Control.Native.commented > 1
+                            [if !Control.codegenComments > 1
                                then AppendList.fromList
                                     [Assembly.comment
                                      (String.make (60, #"*")),
                                      (Assembly.comment
                                       (Instruction.toString i))]
                                else AppendList.empty,
-                             if !Control.Native.commented > 4
+                             if !Control.codegenComments > 4
                                then AppendList.fromList
                                     (Liveness.toComments info)
                                else AppendList.empty,
                              assembly',
-                             if !Control.Native.commented > 5
+                             if !Control.codegenComments > 5
                                then (RegisterAllocation.toComments 
                                      registerAllocation)
                                else AppendList.empty]
@@ -10895,7 +10895,7 @@ struct
                       end)
 
             val assembly = AppendList.toList assembly
-            val assembly = if !Control.Native.commented > 1
+            val assembly = if !Control.codegenComments > 1
                              then (Assembly.comment
                                    (String.make (60, #"&"))::
                                    Assembly.comment

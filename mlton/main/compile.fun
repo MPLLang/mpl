@@ -1,4 +1,4 @@
-(* Copyright (C) 2011,2014-2015,2017,2019 Matthew Fluet.
+(* Copyright (C) 2011,2014-2015,2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -20,12 +20,8 @@ structure Atoms = Atoms ()
 local
    open Atoms
 in
-   structure Const = Const
-   structure ConstType = Const.ConstType
    structure Ffi = Ffi
    structure Symbol = Symbol
-   structure WordSize = WordSize
-   structure WordX = WordX
 end
 structure Ast = Ast (open Atoms)
 structure TypeEnv = TypeEnv (open Atoms)
@@ -54,12 +50,6 @@ structure BackendAtoms = BackendAtoms (open Atoms)
 structure Rssa = Rssa (open BackendAtoms)
 structure Machine = Machine (open BackendAtoms)
 
-local
-   open Machine
-in
-   structure Runtime = Runtime
-end
-
 (*---------------------------------------------------*)
 (*                  Compiler Passes                  *)
 (*---------------------------------------------------*)
@@ -78,9 +68,6 @@ local
 in
    structure Env = Env
 end
-structure LookupConstant = LookupConstant (structure Const = Const
-                                           structure ConstType = ConstType
-                                           structure Ffi = Ffi)
 structure Monomorphise = Monomorphise (structure Xml = Xml
                                        structure Sxml = Sxml)
 structure ClosureConvert = ClosureConvert (structure Ssa = Ssa
@@ -93,123 +80,16 @@ structure Backend = Backend (structure Machine = Machine
                              structure Rssa = Rssa
                              fun funcToLabel f = f)
 structure CCodegen = CCodegen (structure Machine = Machine)
+
+(* SAM_NOTE: removing unsupported codegens *)
+(*
 structure LLVMCodegen = LLVMCodegen (structure CCodegen = CCodegen
                                      structure Machine = Machine)
 structure x86Codegen = x86Codegen (structure CCodegen = CCodegen
                                    structure Machine = Machine)
 structure amd64Codegen = amd64Codegen (structure CCodegen = CCodegen
                                        structure Machine = Machine)
-
-
-(* ------------------------------------------------- *)
-(*                 Lookup Constant                   *)
-(* ------------------------------------------------- *)
-
-val commandLineConstants: {name: string, value: string} list ref = ref []
-fun setCommandLineConstant (c as {name, value}) =
-   let
-      fun make (fromString, control) =
-         let
-            fun set () =
-               case fromString value of
-                  NONE => Error.bug (concat ["bad value for ", name])
-                | SOME v => control := v
-         in
-            set
-         end
-      val () =
-         case List.peek ([("Exn.keepHistory",
-                           make (Bool.fromString, Control.exnHistory))],
-                         fn (s, _) => s = name) of
-            NONE => ()
-          | SOME (_,set) => set ()
-   in
-      List.push (commandLineConstants, c)
-   end
-
-val allConstants: (string * ConstType.t) list ref = ref []
-val amBuildingConstants: bool ref = ref false
-
-val lookupConstant =
-   let
-      val zero = Const.word (WordX.fromIntInf (0, WordSize.word32))
-      val f =
-         Promise.lazy
-         (fn () =>
-          if !amBuildingConstants
-             then (fn ({name, default, ...}, t) =>
-                   let
-                      (* Don't keep constants that already have a default value.
-                       * These are defined by _command_line_const and set by
-                       * -const, and shouldn't be looked up.
-                       *)
-                      val () =
-                         if isSome default
-                            then ()
-                         else List.push (allConstants, (name, t))
-                   in
-                      zero
-                   end)
-          else
-             File.withIn
-             (concat [!Control.libTargetDir, "/constants"], fn ins =>
-              LookupConstant.load (ins, !commandLineConstants)))
-   in
-      fn z => f () z
-   end
-
-fun setupRuntimeConstants() : unit =
-   (* Set GC_state offsets and sizes. *)
-   let
-      val _ =
-         let
-            fun get (name: string): Bytes.t =
-               case lookupConstant ({default = NONE, name = name},
-                                    ConstType.Word WordSize.word32) of
-                  Const.Word w => Bytes.fromInt (WordX.toInt w)
-                | _ => Error.bug "Compile.setupRuntimeConstants: GC_state offset must be an int"
-         in
-            Runtime.GCField.setOffsets
-            {
-             atomicState = get "atomicState_Offset",
-             curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Offset",
-             exnStack = get "exnStack_Offset",
-             frontier = get "frontier_Offset",
-             limit = get "limit_Offset",
-             limitPlusSlop = get "limitPlusSlop_Offset",
-             signalIsPending = get "signalsInfo.signalIsPending_Offset",
-             stackBottom = get "stackBottom_Offset",
-             stackLimit = get "stackLimit_Offset",
-             stackTop = get "stackTop_Offset"
-             };
-            Runtime.GCField.setSizes
-            {
-             atomicState = get "atomicState_Size",
-             curSourceSeqIndex = get "sourceMaps.curSourceSeqIndex_Size",
-             exnStack = get "exnStack_Size",
-             frontier = get "frontier_Size",
-             limit = get "limit_Size",
-             limitPlusSlop = get "limitPlusSlop_Size",
-             signalIsPending = get "signalsInfo.signalIsPending_Size",
-             stackBottom = get "stackBottom_Size",
-             stackLimit = get "stackLimit_Size",
-             stackTop = get "stackTop_Size"
-             }
-         end
-      (* Setup endianness *)
-      val _ =
-         let
-            fun get (name:string): bool =
-                case lookupConstant ({default = NONE, name = name},
-                                     ConstType.Bool) of
-                   Const.Word w => 1 = WordX.toInt w
-                 | _ => Error.bug "Compile.setupRuntimeConstants: endian unknown"
-         in
-            Control.Target.setBigEndian (get "MLton_Platform_Arch_bigendian")
-         end
-   in
-      ()
-   end
+*)
 
 (* ------------------------------------------------- *)
 (*                   Primitive Env                   *)
@@ -404,9 +284,8 @@ fun parseAndElaborateMLB (input: MLBString.t): (CoreML.Dec.t list * bool) vector
       fun parseAndElaborateMLB input =
          let
             val _ = if !Control.keepAST
-                 then File.remove (concat [!Control.inputFile, ".ast"])
-                 else ()
-            val _ = Const.lookup := lookupConstant
+                       then File.remove (concat [!Control.inputFile, ".ast"])
+                       else ()
             val (E, decs) = Elaborate.elaborateMLB (lexAndParseMLB input, {addPrim = addPrim})
             val _ = Control.checkForErrors ()
             val _ = Option.map (!Control.showBasis, fn f => Env.showBasis (E, f))
@@ -436,23 +315,6 @@ fun parseAndElaborateMLB (input: MLBString.t): (CoreML.Dec.t list * bool) vector
                          style = #style CoreML.Program.toFile,
                          suffix = #suffix CoreML.Program.toFile},
        tgtTypeCheck = NONE}
-   end
-
-(* ------------------------------------------------- *)
-(*                   Basis Library                   *)
-(* ------------------------------------------------- *)
-
-fun outputBasisConstants (out: Out.t): unit =
-   let
-      val _ = amBuildingConstants := true
-      val decs =
-         parseAndElaborateMLB (MLBString.fromMLBFile "$(SML_LIB)/basis/primitive/primitive.mlb")
-      val decs = Vector.concatV (Vector.map (decs, Vector.fromList o #1))
-      (* Need to defunctorize so the constants are forced. *)
-      val _ = Defunctorize.defunctorize (CoreML.Program.T {decs = decs})
-      val _ = LookupConstant.build (!allConstants, out)
-   in
-      ()
    end
 
 (* ------------------------------------------------- *)
@@ -528,6 +390,14 @@ fun mkCompile {outputC, outputLL, outputS} =
       val mlbFrontend = frontend o MLBString.fromMLBFile
       val smlFrontend = frontend o MLBString.fromSMLFile
 
+      fun regionFromLocation (file, {column, line}) =
+        let
+           val sourcePos = SourcePos.make
+              {column=column, file=file, line=line}
+        in
+           Region.make {left=sourcePos, right=sourcePos}
+        end
+
       fun mkFrontend {parse, stats, toFile, typeCheck} =
          let
             val name = #suffix toFile
@@ -539,12 +409,12 @@ fun mkCompile {outputC, outputLL, outputS} =
              {arg = input,
               doit = (fn input =>
                       case Parse.parseFile (parse (), input) of
-                         Result.Yes program => program
-                       | Result.No msg =>
+                         Parse.Yes program => program
+                       | Parse.No (msg, location) =>
                             (Control.error
-                             (Region.bogus,
+                             (regionFromLocation (input, location),
                               Layout.str (concat [name, "Parse failed"]),
-                              Layout.str msg)
+                              msg)
                              ; Control.checkForErrors ()
                              ; Error.bug "unreachable")),
               keepIL = false,
@@ -670,14 +540,16 @@ fun mkCompile {outputC, outputLL, outputS} =
       ssa2
    end
       fun toRssa ssa2 =
-   let
-      val _ = setupRuntimeConstants ()
-      val codegenImplementsPrim =
-         case !Control.codegen of
-            Control.AMD64Codegen => amd64Codegen.implementsPrim
-          | Control.CCodegen => CCodegen.implementsPrim
-          | Control.LLVMCodegen => LLVMCodegen.implementsPrim
-          | Control.X86Codegen => x86Codegen.implementsPrim
+         let
+            val codegenImplementsPrim =
+               case !Control.codegen of
+                  Control.CCodegen => CCodegen.implementsPrim
+(* SAM_NOTE: removing unsupported codegens *)
+(*
+                | Control.AMD64Codegen => amd64Codegen.implementsPrim
+                | Control.LLVMCodegen => LLVMCodegen.implementsPrim
+                | Control.X86Codegen => x86Codegen.implementsPrim
+*)
             fun toRssa ssa2 =
                Ssa2ToRssa.convert
                (ssa2, {codegenImplementsPrim = codegenImplementsPrim})
@@ -690,7 +562,7 @@ fun mkCompile {outputC, outputLL, outputS} =
                 srcToFile = SOME Ssa2.Program.toFile,
                 tgtStats = SOME Rssa.Program.layoutStats,
                 tgtToFile = SOME Rssa.Program.toFile,
-                tgtTypeCheck = SOME Rssa.Program.typeCheck}
+                tgtTypeCheck = SOME Rssa.typeCheck}
          in
             rssa
    end
@@ -703,7 +575,7 @@ fun mkCompile {outputC, outputLL, outputS} =
           name = "rssaSimplify",
           stats = Rssa.Program.layoutStats,
           toFile = Rssa.Program.toFile,
-          typeCheck = Rssa.Program.typeCheck}
+          typeCheck = Rssa.typeCheck}
       fun toMachine rssa =
          let
             val machine =
@@ -735,13 +607,15 @@ fun mkCompile {outputC, outputLL, outputS} =
             val _ = Machine.Label.printNameAlphaNumeric := true
             fun codegen machine =
          case !Control.codegen of
+            Control.CCodegen =>
+                   CCodegen.output {program = machine,
+                                      outputC = outputC}
+(* SAM_NOTE: removing unsupported codegens *)
+(*
             Control.AMD64Codegen =>
                    amd64Codegen.output {program = machine,
                                         outputC = outputC,
                                           outputS = outputS}
-          | Control.CCodegen =>
-                   CCodegen.output {program = machine,
-                                      outputC = outputC}
           | Control.LLVMCodegen =>
                    LLVMCodegen.output {program = machine,
                                        outputC = outputC,
@@ -750,6 +624,7 @@ fun mkCompile {outputC, outputLL, outputS} =
                    x86Codegen.output {program = machine,
                                       outputC = outputC,
             outputS = outputS}
+*)
       in
             Control.translatePass
             {arg = machine,

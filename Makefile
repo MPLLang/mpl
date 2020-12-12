@@ -1,4 +1,5 @@
-## Copyright (C) 2009,2011,2013,2017-2019 Matthew Fluet.
+## Copyright (C) 2020 Sam Westrick
+ # Copyright (C) 2009,2011,2013,2017-2020 Matthew Fluet.
  # Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  #    Jagannathan, and Stephen Weeks.
  # Copyright (C) 1997-2000 NEC Research Institute.
@@ -12,18 +13,34 @@ include $(ROOT)/Makefile.config
 
 ######################################################################
 
+# Omit building artifacts not available with MaPLe
+OMIT_DOCS := true
+OMIT_MAN := true
+OMIT_MISC := true
+OMIT_TOOLS := true
+OMIT_XTRA_LIBS := true
+
+######################################################################
+
 .PHONY: all
 all:
-	$(MAKE) dirs runtime
+	$(MAKE) dirs
+	$(MAKE) runtime
 	$(MAKE) compiler CHECK_FIXPOINT=false                     # tools0 + mlton0 -> mlton1
-	$(MAKE) script basis-no-check constants basis-check libraries
+	$(MAKE) script
+	$(MAKE) basis
+	$(MAKE) libraries
+ifneq (true, $(OMIT_TOOLS))
 	$(MAKE) tools    CHECK_FIXPOINT=false                     # tools0 + mlton1 -> tools1
+endif # OMIT_TOOLS
 ifeq (2, $(firstword $(sort $(BOOTSTRAP_STYLE) 2)))
 	$(MAKE) compiler-clean
 	$(MAKE) compiler SELF_COMPILE=true  CHECK_FIXPOINT=false  # tools1 + mlton1 -> mlton2
 ifeq (3, $(firstword $(sort $(BOOTSTRAP_STYLE) 3)))
+ifneq (true, $(OMIT_TOOLS))
 	$(MAKE) tools-clean
-	$(MAKE) tools    CHECK_FIXPOINT=true                      # tools1 + mlton1 -> tools2; tools2 == tools1
+	$(MAKE) tools    CHECK_FIXPOINT=true                      # tools1 + mlton2 -> tools2; tools2 == tools1
+endif # OMIT_TOOLS
 	$(MAKE) compiler-clean
 	$(MAKE) compiler SELF_COMPILE=true  CHECK_FIXPOINT=true   # tools2 + mlton2 -> mlton3; mlton3 == mlton2
 endif
@@ -79,25 +96,17 @@ endif
 compiler-clean:
 	$(MAKE) -C "$(SRC)/mlton" clean
 
-.PHONY: constants
-constants:
-	@echo 'Creating constants file.'
-	"$(BIN)/$(MLTON)" -target "$(TARGET)" -build-constants true > build-constants.c
-	"$(BIN)/$(MLTON)" -target "$(TARGET)" -output build-constants build-constants.c
-	./build-constants$(EXE) >"$(LIB)/targets/$(TARGET)/constants"
-	$(RM) build-constants$(EXE) build-constants.c
-
 .PHONY: dirs
 dirs:
 	$(MKDIR) "$(BIN)" "$(LIB)" "$(INC)"
 	$(MKDIR) "$(LIB)/targets/$(TARGET)/include"
 	$(MKDIR) "$(LIB)/targets/$(TARGET)/sml"
 
+ifneq (true, $(OMIT_DOCS))
 .PHONY: docs
 docs:
-	$(MAKE) -C "$(SRC)/mllex" docs
-	$(MAKE) -C "$(SRC)/mlyacc" docs
 	$(MAKE) -C "$(SRC)/doc/guide"
+endif # OMIT_DOCS
 
 define LIBRARIES_NO_CHECK_TEMPLATE
 	$(RM) "$(LIB)/sml/$(1)"
@@ -113,15 +122,19 @@ endef
 
 .PHONY: libraries-no-check
 libraries-no-check:
+ifneq (true, $(OMIT_XTRA_LIBS))
 	$(MAKE) -C "$(SRC)/lib/ckit-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,ckit-lib,/ckit/src,)
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,cml,,'!' -path '*/tests/*')
+endif # OMIT_XTRA_LIBS
 	$(MAKE) -C "$(SRC)/lib/mllpt-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mllpt-lib,/ml-lpt/lib,)
+ifneq (true, $(OMIT_XTRA_LIBS))
 	$(MAKE) -C "$(SRC)/lib/mlnlffi-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlnlffi-lib,,)
 	$(MAKE) -C "$(SRC)/lib/mlrisc-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlrisc-lib,/MLRISC,'!' -path '*/demo/*' '!' -path '*/Tools/*' '!' -path './autoload.sml' '!' -path './make*.sml')
+endif # OMIT_XTRA_LIBS
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,mlyacc-lib,,)
 	$(MAKE) -C "$(SRC)/lib/smlnj-lib"
 	$(call LIBRARIES_NO_CHECK_TEMPLATE,smlnj-lib,/smlnj-lib,'!' -path '*/examples/*' '!' -path '*/tests/*' '!' -path '*/Tests/*')
@@ -133,11 +146,15 @@ endef
 
 .PHONY: libraries-check
 libraries-check:
+ifneq (true, $(OMIT_XTRA_LIBS))
 	$(call LIBRARIES_CHECK_TEMPLATE,ckit-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,cml)
+endif # OMIT_XTRA_LIBS
 	$(call LIBRARIES_CHECK_TEMPLATE,mllpt-lib)
+ifneq (true, $(OMIT_XTRA_LIBS))
 	$(call LIBRARIES_CHECK_TEMPLATE,mlnlffi-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,mlrisc-lib)
+endif # OMIT_XTRA_LIBS
 	$(call LIBRARIES_CHECK_TEMPLATE,mlyacc-lib)
 	$(call LIBRARIES_CHECK_TEMPLATE,smlnj-lib)
 
@@ -152,7 +169,7 @@ runtime:
 	$(MAKE) -C "$(SRC)/runtime"
 	$(CP) "$(SRC)/include/"*.h "$(INC)/"
 	$(CP) "$(SRC)/runtime/"*.a "$(LIB)/targets/$(TARGET)/"
-	$(CP) "$(SRC)/runtime/gen/sizes" "$(LIB)/targets/$(TARGET)/"
+	$(CP) "$(SRC)/runtime/gen/constants" "$(LIB)/targets/$(TARGET)/"
 	$(CP) "$(SRC)/runtime/gen/c-types.sml" "$(LIB)/targets/$(TARGET)/sml/"
 	echo "$(TARGET_OS)" > "$(LIB)/targets/$(TARGET)/os"
 	echo "$(TARGET_ARCH)" > "$(LIB)/targets/$(TARGET)/arch"
@@ -175,7 +192,7 @@ script:
 		-e "s;^GMP_LIB_DIR=.*;GMP_LIB_DIR=\"$(WITH_GMP_LIB_DIR)\";" \
 		-e 's/mlton-compile/$(MLTON_OUTPUT)/' \
 		< "$(SRC)/bin/mlton-script" > "$(BIN)/$(MLTON)"
-	chmod a+x "$(BIN)/$(MLTON)"
+	$(CHMOD) a+x "$(BIN)/$(MLTON)"
 ifneq (,$(ALTERNATE_SCRIPT_NAME))
 	ln -fs "$(MLTON)" "$(BIN)/$(ALTERNATE_SCRIPT_NAME)"
 endif
@@ -184,6 +201,7 @@ ifeq (mingw, $(TARGET_OS))
 	$(CP) "$(SRC)/bin/static-library.bat" "$(LIB)"
 endif
 
+ifneq (true, $(OMIT_TOOLS))
 ifeq (true, $(CHECK_FIXPOINT))
 define TOOLS_TEMPLATE_CHECK_FIXPOINT
 	$(DIFF) -b "$(SRC)/$(1)/$(1)$(EXE)" "$(BIN)/$(1)$(EXE)"
@@ -194,9 +212,9 @@ endef
 endif
 
 define TOOLS_TEMPLATE
-	$(MAKE) -C "$(SRC)/$(1)"
+	+$(MAKE) -C "$(SRC)/$(1)"
 	$(call TOOLS_TEMPLATE_CHECK_FIXPOINT,$(1))
-	$(CP) "$(1)/$(1)$(EXE)" "$(BIN)/"
+	$(CP) "$(SRC)/$(1)/$(1)$(EXE)" "$(BIN)/"
 endef
 
 .PHONY: tools
@@ -212,6 +230,7 @@ tools-clean:
 	$(MAKE) -C "$(SRC)/mlyacc" clean
 	$(MAKE) -C "$(SRC)/mlprof" clean
 	$(MAKE) -C "$(SRC)/mlnlffigen" clean
+endif # OMIT_TOOLS
 
 ######################################################################
 
@@ -219,22 +238,22 @@ tools-clean:
 
 .PHONY: debugged
 debugged:
-	$(MAKE) -C "$(SRC)/mlton" MLTON_OUTPUT=$(MLTON_OUTPUT).debug \
+	$(MAKE) -C "$(SRC)/mlton" MLTON_NAME="$(MLTON_NAME) (debug)" MLTON_OUTPUT=$(MLTON_OUTPUT).debug \
 		MLTON_COMPILE_ARGS="$(MLTON_COMPILE_ARGS) -debug true -const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true' -disable-pass 'deepFlatten'"
 	$(CP) "$(SRC)/mlton/$(MLTON_OUTPUT).debug$(EXE)" "$(LIB)/"
 	$(SED) -e 's/$(MLTON_OUTPUT)/$(MLTON_OUTPUT).debug/' \
 		< "$(BIN)/$(MLTON)" \
 		> "$(BIN)/$(MLTON).debug"
-	chmod u+x "$(BIN)/$(MLTON).debug"
+	$(CHMOD) u+x "$(BIN)/$(MLTON).debug"
 
 define PROFILED_TEMPLATE
-	$(MAKE) -C "$(SRC)/mlton" MLTON_OUTPUT=$(MLTON_OUTPUT).$(1) \
+	+$(MAKE) -C "$(SRC)/mlton" MLTON_NAME="$(MLTON_NAME) (profile-$(1))" MLTON_OUTPUT=$(MLTON_OUTPUT).$(1) \
 		MLTON_COMPILE_ARGS="$(MLTON_COMPILE_ARGS) -profile $(1)"
 	$(CP) "$(SRC)/mlton/$(MLTON_OUTPUT).$(1)$(EXE)" "$(LIB)/"
 	$(SED) -e "s/$(MLTON_OUTPUT)/$(MLTON_OUTPUT).$(1)/" \
 		< "$(BIN)/$(MLTON)" \
 		>"$(BIN)/$(MLTON).$(1)"
-	chmod u+x "$(BIN)/$(MLTON).$(1)"
+	$(CHMOD) u+x "$(BIN)/$(MLTON).$(1)"
 endef
 
 .PHONY: profiled-alloc
@@ -250,19 +269,20 @@ profiled-time:
 	$(call PROFILED_TEMPLATE,time)
 
 .PHONY: profiled
+profiled:
 	$(MAKE) profiled-alloc
 	$(MAKE) profiled-count
 	$(MAKE) profiled-time
 
 .PHONY: traced
 traced:
-	$(MAKE) -C "$(SRC)/mlton" MLTON_OUTPUT=$(MLTON_OUTPUT).trace \
+	$(MAKE) -C "$(SRC)/mlton" MLTON_NAME="$(MLTON_NAME) (trace)" MLTON_OUTPUT=$(MLTON_OUTPUT).trace \
 		MLTON_COMPILE_ARGS="$(MLTON_COMPILE_ARGS) -const 'Exn.keepHistory true' -profile-val true -const 'MLton.debug true' -disable-pass 'deepFlatten'"
 	$(CP) "$(SRC)/mlton/$(MLTON_OUTPUT).trace$(EXE)" "$(LIB)/"
 	$(SED) -e 's/$(MLTON_OUTPUT)/$(MLTON_OUTPUT).trace/' \
 		< "$(BIN)/$(MLTON)" \
 		> "$(BIN)/$(MLTON).trace"
-	chmod u+x "$(BIN)/$(MLTON).trace"
+	$(CHMOD) u+x "$(BIN)/$(MLTON).trace"
 
 ######################################################################
 
@@ -278,16 +298,19 @@ bootstrap-smlnj:
 
 .PHONY: smlnj-mlton
 smlnj-mlton:
-	$(MAKE) dirs runtime
+	$(MAKE) dirs
+	$(MAKE) runtime
 	$(MAKE) -C "$(SRC)/mlton" smlnj-mlton
 	smlnj_heap_suffix=`echo 'TextIO.output (TextIO.stdErr, SMLofNJ.SysInfo.getHeapSuffix ());' | sml 2>&1 1> /dev/null` && $(CP) "$(SRC)/mlton/$(MLTON_OUTPUT)-smlnj.$$smlnj_heap_suffix" "$(LIB)/"
-	$(MAKE) script basis-no-check constants libraries-no-check
+	$(MAKE) script
+	$(MAKE) basis-no-check
+	$(MAKE) libraries-no-check
 	$(SED) \
 		-e 's;doitMLton "$$@";# doitMLton "$$@";' \
 		-e 's;doitPolyML "$$@";# doitPolyML "$$@";' \
 		< "$(BIN)/$(MLTON)" \
 		> "$(BIN)/$(MLTON).smlnj"
-	chmod u+x "$(BIN)/$(MLTON).smlnj"
+	$(CHMOD) u+x "$(BIN)/$(MLTON).smlnj"
 	@echo 'Build of MLton (with SML/NJ) succeeded.'
 
 .PHONY: smlnj-mlton-x2
@@ -320,33 +343,36 @@ bootstrap-polyml:
 
 .PHONY: polyml-mlton
 polyml-mlton:
-	$(MAKE) dirs runtime
+	$(MAKE) dirs
+	$(MAKE) runtime
 	$(MAKE) -C "$(SRC)/mlton" polyml-mlton
 	$(CP) "$(SRC)/mlton/mlton-polyml$(EXE)" "$(LIB)/"
-	$(MAKE) script basis-no-check constants libraries-no-check
+	$(MAKE) script
+	$(MAKE) basis-no-check
+	$(MAKE) libraries-no-check
 	$(SED) \
 		-e 's;doitMLton "$$@";# doitMLton "$$@";' \
 		-e 's;doitSMLNJ "$$@";# doitSMLNJ "$$@";' \
 		< "$(BIN)/$(MLTON)" \
 		> "$(BIN)/$(MLTON).polyml"
-	chmod u+x "$(BIN)/$(MLTON).polyml"
+	$(CHMOD) u+x "$(BIN)/$(MLTON).polyml"
 	@echo 'Build of MLton (with Poly/ML) succeeded.'
 
 ######################################################################
 
 # version target
 
+ifneq (true, $(OMIT_MISC))
 .PHONY: version
 version:
 	@echo 'Instantiating version numbers.'
-	for f in							\
-		"$(SRC)/Makefile"					\
-		"$(SRC)/mlton/Makefile"					\
-		"$(SRC)/doc/guide/Makefile"				\
-	; do								\
-		$(SED) -e "s/^MLTON_VERSION := .*/MLTON_VERSION := $(MLTON_VERSION)/" <"$$f" >z && 	\
-		mv z "$$f";						\
-	done
+	$(SED) \
+		-e "s/^MLTON_VERSION := .*/MLTON_VERSION := $(MLTON_VERSION)/" \
+		-e "s/^RELEASE := .*/RELEASE := true/" \
+		< "$(SRC)/Makefile.config" \
+		> z && \
+		$(MV) z "$(SRC)/Makefile.config";
+endif # OMIT_MISC
 
 ######################################################################
 
@@ -374,42 +400,49 @@ ifeq ($(findstring $(TARGET_OS), openbsd solaris), $(TARGET_OS))
 GZIP_MAN := false
 endif
 
-# SAM_NOTE: mainline MLton also has install-docs here, but I'm removing
-# it because the docs mostly aren't relevant to MPL.
-# Also, install-docs target is currently broken for MPL.
 .PHONY: install
 install: install-no-strip install-strip
 
-MAN_PAGES :=  \
+ifneq (true, $(OMIT_MAN))
+MAN_PAGES := mlton.1
+ifneq (true, OMIT_TOOLS)
+MAN_PAGES := $(MAN_PAGES) \
 	mllex.1 \
 	mlnlffigen.1 \
 	mlprof.1 \
-	mlton.1 \
 	mlyacc.1
+endif # OMIT_TOOLS
+endif # OMIT_MAN
 
 .PHONY: install-no-strip
 install-no-strip:
-	$(MKDIR) "$(TBIN)" "$(TLIB)" "$(TMAN)"
+	$(MKDIR) "$(TBIN)" "$(TLIB)"
 	$(CP) "$(BIN)/." "$(TBIN)/"
 	$(SED) \
 		-e "s;^LIB_REL_BIN=.*;LIB_REL_BIN=\"$(TLIB_REL_TBIN)\";" \
 		< "$(BIN)/$(MLTON)" > "$(TBIN)/$(MLTON)"
-	chmod a+x "$(TBIN)/$(MLTON)"
+	$(CHMOD) a+x "$(TBIN)/$(MLTON)"
 	$(CP) "$(LIB)/." "$(TLIB)/"
+ifneq (true, $(OMIT_MAN))
+	$(MKDIR) "$(TMAN)"
 	cd "$(SRC)/man" && $(CP) $(MAN_PAGES) "$(TMAN)/"
 ifeq (true, $(GZIP_MAN))
 	cd "$(TMAN)" && $(GZIP) --force --best $(MAN_PAGES);
 endif
+endif # OMIT_MAN
+
+STRIP_PROGS := "$(TLIB)/$(MLTON_OUTPUT)$(EXE)"
+ifneq (true, $(OMIT_TOOLS))
+STRIP_PROGS := $(STRIP_PROGS) \
+	"$(TBIN)/mllex$(EXE)" \
+	"$(TBIN)/mlnlffigen$(EXE)" \
+	"$(TBIN)/mlprof$(EXE)" \
+	"$(TBIN)/mlyacc$(EXE)"
+endif # OMIT_TOOLS
 
 .PHONY: install-strip
 install-strip: install-no-strip
-	for f in "$(TLIB)/$(MLTON_OUTPUT)$(EXE)" 		\
-		"$(TBIN)/mllex$(EXE)"				\
-		"$(TBIN)/mlyacc$(EXE)"				\
-		"$(TBIN)/mlprof$(EXE)" 				\
-		"$(TBIN)/mlnlffigen$(EXE)"; do			\
-		$(STRIP) "$$f";					\
-	done
+	for f in $(STRIP_PROGS); do $(STRIP) "$$f"; done
 
 REGRESSION_EXAMPLES := \
 	callcc.sml command-line.sml hello-world.sml same-fringe.sml	\
@@ -419,6 +452,7 @@ REGRESSION_EXAMPLES := \
 # SAM_NOTE: Need to update this for MPL.
 # It's also currently broken, because README.adoc doesn't exist anymore,
 # and some regression examples are gone.
+ifneq (true, $(OMIT_DOCS))
 .PHONY: install-docs
 install-docs:
 	$(MKDIR) "$(TDOC)" "$(TDOC)/license"
@@ -442,15 +476,6 @@ install-docs:
 	if [ -d "$(SRC)/doc/guide/localhost" ]; then			\
 		$(CP) "$(SRC)/doc/guide/localhost" "$(TDOC)/guide";	\
 	fi
-	if [ -r "$(SRC)/doc/guide/mlton-guide.pdf" ]; then		\
-		$(CP) "$(SRC)/doc/guide/mlton-guide.pdf" "$(TDOC)/";	\
-	fi
-	if [ -r "mllex/mllex.pdf" ]; then				\
-		$(CP) "mllex/mllex.pdf" "$(TDOC)/";			\
-	fi
-	if [ -r "mlyacc/mlyacc.pdf" ]; then				\
-		$(CP) "mlyacc/mlyacc.pdf" "$(TDOC)/";			\
-	fi
 	(								\
 		cd "$(SRC)/util" &&					\
 		$(FIND) cm2mlb -type f '!' -name .gitignore		\
@@ -461,36 +486,247 @@ install-docs:
 		cd "$(SRC)/regression" &&				\
 		$(CP) $(REGRESSION_EXAMPLES) "$(TEXM)/"			\
 	)
+endif # OMIT_DOCS
 
 
+ifneq (true, $(OMIT_MISC))
 .PHONY: source-release
 source-release:
 	$(MAKE) clean
 	$(MAKE) MLTON_VERSION=$(MLTON_VERSION) version
-	( cd "$(SRC)/mllex" ; latexmk -pdf lexgen ; latexmk -c lexgen )
-	$(MAKE) -C "$(SRC)/mllex" mllex.pdf
-	( cd "$(SRC)/mlyacc/doc"; latexmk -pdf mlyaccc ; latexmk -c mlyacc )
-	$(MAKE) -C "$(SRC)/mlyacc" mlyacc.pdf
 	$(MAKE) -C doc/guide
 	$(TAR) cvzf ../mlton-$(MLTON_VERSION).src.tgz \
 		--exclude .git --exclude package \
 		--transform "s@^@mlton-$(MLTON_VERSION)/@S" \
 		*
+endif # OMIT_MISC
 
 MLTON_BINARY_RELEASE := 1
 MLTON_BINARY_RELEASE_SUFFIX :=
+MLTON_BINARY_RELEASE_NAME := mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
+MLTON_BINARY_RELEASE_WITH_DOCS := true
 .PHONY: binary-release
 binary-release:
-	$(MAKE) all docs
-	$(RM) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
-	$(MKDIR) "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)"
-	$(MAKE) DESTDIR="$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)" PREFIX="" install
-	$(CP) "$(SRC)/Makefile.binary" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/Makefile"
-	$(CP) "$(SRC)/CHANGELOG.adoc" "$(SRC)/LICENSE" "$(SRC)/README.adoc" "$(SRC)/mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)/"
-	$(TAR) cvzf ../mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX).tgz \
-		mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
-	$(RM) mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(TARGET_ARCH)-$(TARGET_OS)$(MLTON_BINARY_RELEASE_SUFFIX)
+	$(MAKE) all
+ifeq (true,$(MLTON_BINARY_RELEASE_WITH_DOCS))
+	$(MAKE) docs
+endif
+	$(RM) "$(SRC)/$(MLTON_BINARY_RELEASE_NAME)"
+	$(MKDIR) "$(SRC)/$(MLTON_BINARY_RELEASE_NAME)"
+	$(MAKE) DESTDIR="$(SRC)/$(MLTON_BINARY_RELEASE_NAME)" PREFIX="" install
+ifeq (true,$(MLTON_BINARY_RELEASE_WITH_DOCS))
+	$(MAKE) DESTDIR="$(SRC)/$(MLTON_BINARY_RELEASE_NAME)" PREFIX="" install-docs
+endif
+	$(CP) "$(SRC)/Makefile.binary" "$(SRC)/$(MLTON_BINARY_RELEASE_NAME)/Makefile"
+	$(CP) "$(SRC)/CHANGELOG.adoc" "$(SRC)/LICENSE" "$(SRC)/README.adoc" "$(SRC)/$(MLTON_BINARY_RELEASE_NAME)/"
+	$(TAR) cvzf $(MLTON_BINARY_RELEASE_NAME).tgz $(MLTON_BINARY_RELEASE_NAME)
+	$(RM) $(MLTON_BINARY_RELEASE_NAME)
 
+######################################################################
+
+# remote-bootstrap and remote-add-cross-target
+
+ifneq (true, $(OMIT_MISC))
+# The `remote-bootstrap` goal automates the process of bootstraping MLton on a
+# remote machine that doesn't have a suitable pre-compiled `mlton` binary.  It
+# works as follows:
+#  * send the current sources to a remote machine (using ssh)
+#  * build the MLton runtime system on the remote machine
+#  * receive the built runtime system from the remote machine as a new target on
+#    the host machine
+#  * build bootstrap compiler sources on the host machine for the new target
+#  * send the boostrap sources to the remote machine
+#  * build the boostrap compiler on the remote machine using the boostrap
+#    compiler sources
+#  * complete the MLton build on the remote machine with the boostrap compiler to
+#    obtain a boot package
+#  * build MLton on the remote machine from clean sources using the boot package
+#  * receive the built binary release from the remote machine
+#
+# The `remote-add-cross-target` goal automates the process of adding a cross
+# compiler target.  It works as follows:
+#  * send the current sources to a remote machine (using ssh)
+#  * build the MLton runtime system on the remote machine
+#  * receive the built runtime system from the remote machine as a new target on
+#    the host machine
+#
+#
+# For both `remote-bootstrap` and `remote-add-cross`, the following `Makefile`
+# variables are used:
+#  * REMOTE_MACHINE (required): Specify the remote machine to be used as an
+#    `ssh` destination, either `[user@]hostname` or
+#    `ssh://[user@]hostname[:port]`.
+#  * REMOTE_TMP: Specify (absolute) path on remote machine for building; default
+#    is `/tmp`.
+#  * REMOTE_MAKE: Specify `make` on remote machine.
+#  * REMOTE_MAKEFLAGS: Specify `Makefile` variables to set when invoking `make`
+#    on the remote machine.
+# For `remote-add-cross`, the following additional `Makefile` variable is used:
+#  * CROSS_TARGET (required): Specify target machine triple for host
+#    cross-compiler; that is the value of `<machine>` in `<machine>-gcc` or
+#    `<triple>` in `clang -target=<triple>` on the host machine, such as
+#    `arm-linux-gnu`.
+#
+#
+# For example, on OpenBSD, GNU Make is named `gmake` (and `make` is BSD Make)
+# and GMP is provided at `/usr/local` (and not on the default search paths).  To
+# boostrap on an OpenBSD virtual machine (with localhost port 2222 forwarded to
+# guest VM port 22), one could use:
+#
+# $ make REMOTE_MACHINE=ssh://localhost:2222 REMOTE_MAKE=gmake REMOTE_MAKEFLAGS=WITH_GMP_DIR=/usr/local remote-bootstrap
+
+ifneq (,$(findstring remote-,$(MAKECMDGOALS)))
+
+ifneq (,$(findstring dirty,$(MLTON_VERSION)))
+$(warning 'MLTON_VERSION' appears dirty; $(MLTON_VERSION))
+endif
+
+ifeq (,$(REMOTE_MACHINE))
+$(error 'REMOTE_MACHINE' not defined)
+endif
+
+SSH := ssh
+
+ifeq (false,$(shell $(SSH) $(REMOTE_MACHINE) true > /dev/null 2>&1 || echo false))
+$(error '$(SSH) $(REMOTE_MACHINE) true' failed)
+endif
+
+REMOTE_TMP := /tmp
+REMOTE_ROOT := $(REMOTE_TMP)/mlton-$(MLTON_VERSION)
+
+REMOTE_BASH := bash
+REMOTE_TAR := $(TAR)
+
+REMOTE_CP := $(CP)
+REMOTE_MKDIR := $(MKDIR)
+REMOTE_RM := $(RM)
+
+REMOTE_MAKE := make
+REMOTE_MAKEFLAGS :=
+REMOTE_XMAKEFLAGS := CHECK_MLCMD=
+
+REMOTE_PLATFORM := $(shell cat bin/platform | $(SSH) $(REMOTE_MACHINE) "$(REMOTE_BASH) -s")
+REMOTE_ARCH := $(patsubst HOST_ARCH=%,%,$(filter HOST_ARCH=%,$(REMOTE_PLATFORM)))
+REMOTE_OS := $(patsubst HOST_OS=%,%,$(filter HOST_OS=%,$(REMOTE_PLATFORM)))
+REMOTE_TARGET := $(REMOTE_ARCH)-$(REMOTE_OS)
+CROSS_TARGET := $(REMOTE_ARCH)-$(REMOTE_OS)
+
+.PHONY: remote-bootstrap
+remote-bootstrap:
+	$(MAKE) remote--send-src
+	$(MAKE) remote--make-version
+	$(MAKE) remote--make-dirs
+	$(MAKE) remote--make-runtime
+	$(MAKE) remote--recv-runtime
+	$(MAKE) remote--gen-bootstrap-compiler-files
+	$(MAKE) remote--send-bootstrap-compiler-files
+	$(MAKE) remote--make-bootstrap-compiler
+	$(MAKE) remote--make-script
+	$(MAKE) remote--make-basis
+	$(MAKE) remote--make-libraries
+	$(MAKE) remote--send-mlyacc-yacc-files
+	$(MAKE) remote--make-tools
+	$(MAKE) remote--recv-boot-files
+	$(MAKE) remote--make-clean
+	$(MAKE) remote--send-boot-files
+	$(MAKE) remote--make-all
+	$(MAKE) remote--make-binary-release
+	$(MAKE) remote--recv-binary-release
+	$(MAKE) remote--rm-root
+
+.PHONY: remote-add-target
+remote-add-target:
+	$(MAKE) remote--send-src
+	$(MAKE) remote--make-version
+	$(MAKE) remote--make-dirs
+	$(MAKE) remote--make-runtime
+	$(MAKE) remote--recv-runtime
+ifneq ($(REMOTE_TARGET),$(CROSS_TARGET))
+	$(MV) "$(LIB)/targets/$(REMOTE_TARGET)" "$(LIB)/targets/$(CROSS_TARGET)"
+endif
+	$(MAKE) remote--rm-root
+
+
+.PHONY: remote--send-src
+remote--send-src:
+	$(SSH) $(REMOTE_MACHINE) "$(REMOTE_RM) $(REMOTE_ROOT) && $(REMOTE_MKDIR) $(REMOTE_ROOT)"
+	$(GIT) archive --format=tar HEAD | $(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_TAR) xf -"
+
+.PHONY: remote--send-mlyacc-yacc-files
+remote--send-mlyacc-yacc-files:
+	$(MAKE) -C mlyacc src/yacc.lex.sml src/yacc.grm.sig src/yacc.grm.sml
+	$(TAR) cf - mlyacc/src/yacc.lex.* mlyacc/src/yacc.grm.* | $(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_TAR) xf -"
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && touch mlyacc/src/yacc.lex.* mlyacc/src/yacc.grm.*"
+
+.PHONY: remote--recv-runtime
+remote--recv-runtime:
+	$(RM) "$(LIB)/targets/$(REMOTE_TARGET)" && $(MKDIR) "$(LIB)/targets/$(REMOTE_TARGET)"
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT)/build/lib/mlton/targets/self && $(REMOTE_TAR) cf - ." | (cd "$(LIB)/targets/$(REMOTE_TARGET)" && $(TAR) xf -)
+
+.PHONY: remote-bootstrap-gen-bootstrap-compiler-files
+remote--gen-bootstrap-compiler-files:
+	$(MAKE) REMOTE_TARGET=$(REMOTE_TARGET) -C mlton mlton-bootstrap-$(REMOTE_TARGET).tgz
+
+.PHONY: remote--send-bootstrap-compiler-files
+remote--send-bootstrap-compiler-files:
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_RM) runtime/bootstrap && $(REMOTE_MKDIR) runtime/bootstrap"
+	cat mlton/mlton-bootstrap-$(REMOTE_TARGET).tgz | $(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT)/runtime/bootstrap && $(REMOTE_TAR) xzf -"
+
+.PHONY: remote--recv-boot-files
+remote--recv-boot-files:
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_RM) boot && $(REMOTE_CP) build boot"
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_TAR) czf - boot" | cat - > "$(LIB)/targets/$(REMOTE_TARGET)/boot.tgz"
+
+.PHONY: remote--send-boot-files
+remote--send-boot-files:
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_RM) boot"
+	cat "$(LIB)/targets/$(REMOTE_TARGET)/boot.tgz" | $(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && $(REMOTE_TAR) xzf -"
+
+.PHONY: remote--recv-binary-release
+remote--recv-binary-release:
+	$(SSH) $(REMOTE_MACHINE) "cd $(REMOTE_ROOT) && cat mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(REMOTE_ARCH)-$(REMOTE_OS)$(MLTON_BINARY_RELEASE_SUFFIX).tgz" | cat - > mlton-$(MLTON_VERSION)-$(MLTON_BINARY_RELEASE).$(REMOTE_ARCH)-$(REMOTE_OS)$(MLTON_BINARY_RELEASE_SUFFIX).tgz
+
+.PHONY: remote--rm-root
+remote--rm-root:
+	$(SSH) $(REMOTE_MACHINE) "$(REMOTE_RM) $(REMOTE_ROOT)"
+
+define MK_REMOTE_MAKE_TEMPLATE
+.PHONY: remote--make-$(1)
+remote--make-$(1):
+	$$(SSH) $$(REMOTE_MACHINE) "cd $$(REMOTE_ROOT) && $$(REMOTE_MAKE) $$(REMOTE_MAKEFLAGS) $$(REMOTE_XMAKEFLAGS) $$($(1)_REMOTE_XMAKEFLAGS) $(1)"
+endef
+
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,show-config))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,clean))
+version_REMOTE_XMAKEFLAGS := MLTON_VERSION=$(MLTON_VERSION)
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,version))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,dirs))
+runtime_REMOTE_XMAKEFLAGS := RELEASE=false
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,runtime))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,bootstrap-compiler))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,script))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,basis))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,libraries))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,check))
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,tools))
+all_REMOTE_XMAKEFLAGS := OLD_MLTON_DIR=$(REMOTE_ROOT)/boot/bin
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,all))
+binary-release_REMOTE_XMAKEFLAGS := MLTON_BINARY_RELEASE_WITH_DOCS=false
+$(eval $(call MK_REMOTE_MAKE_TEMPLATE,binary-release))
+
+endif
+
+.PHONY: bootstrap-compiler
+bootstrap-compiler:
+	$(MAKE) -C "$(SRC)/runtime" "bootstrap/$(MLTON_OUTPUT)"
+	$(CP) "$(SRC)/runtime/bootstrap/$(MLTON_OUTPUT)$(EXE)" "$(LIB)/"
+endif # OMIT_MISC
+
+######################################################################
+
+# ?????
+
+ifneq (true, $(OMIT_MISC))
 BSDSRC := /tmp/mlton-$(MLTON_VERSION)
 MLTON_FREEBSD_RELEASE := 1
 .PHONY: freebsd
@@ -498,8 +734,9 @@ freebsd:
 	$(MAKE) clean clean-git version
 	$(RM) "$(BSDSRC)"
 	$(MKDIR) "$(BSDSRC)"
-	( cd $(SRC) && tar -cpf - . ) | ( cd "$(BSDSRC)" && tar -xpf - )
-	cd /tmp && tar -cpf - mlton-$(MLTON_VERSION) | \
+	( cd $(SRC) && $(TAR) -cpf - . ) | ( cd "$(BSDSRC)" && $(TAR) -xpf - )
+	cd /tmp && $(TAR) -cpf - mlton-$(MLTON_VERSION) | \
 		 $(GZIP) --force --best >/usr/ports/distfiles/mlton-$(MLTON_VERSION)-$(MLTON_FREEBSD_RELEASE).freebsd.src.tgz
         # do not change "make" to "$(MAKE)" in the following line
 	cd "$(BSDSRC)/package/freebsd" && MAINTAINER_MODE=yes make build-package
+endif # OMIT_MISC

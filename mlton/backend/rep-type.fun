@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2010,2014,2016-2017,2019 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2016-2017,2019-2020 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -96,11 +96,31 @@ structure Type =
 
       val compareRes = word WordSize.compareRes
 
+      val cptrdiff: unit -> t = word o WordSize.cptrdiff
+
       val csize: unit -> t = word o WordSize.csize
 
-      val exnStack: unit -> t = csize
+      val exnStack: unit -> t = cptrdiff
 
       val gcState: unit -> t = cpointer
+
+      local
+         val b = Random.word ()
+         val cpointer = Random.word ()
+         val label = Random.word ()
+         val objptr = Random.word ()
+      in
+         fun hash (T {node, width}) =
+            case node of
+                 Bits => Hash.combine (b, Bits.toWord width)
+               | CPointer => cpointer
+               | Label l => Hash.combine (label, Label.hash l)
+               | Objptr os => Hash.combine (objptr,
+                  Hash.vectorMap (os, ObjptrTycon.hash))
+               | Real rs => RealSize.hash rs
+               | Seq ts => Hash.vectorMap (ts, hash)
+               | Word ws => WordSize.hash ws
+      end
 
       val objptrHeader: unit -> t = word o WordSize.objptrHeader
 
@@ -119,8 +139,8 @@ structure Type =
       val word32: t = word WordSize.word32
       val word64: t = word WordSize.word64
 
-      val wordVector: WordSize.t -> t =
-         objptr o ObjptrTycon.wordVector o WordSize.bits
+      val wordVector: WordSize.t -> t = 
+         objptr o ObjptrTycon.wordVector
 
       val word8Vector: unit -> t =  fn () =>
          wordVector WordSize.word8
@@ -131,6 +151,8 @@ structure Type =
 
       val zero: Bits.t -> t = bits
 
+      val ofRealX: RealX.t -> t =
+         fn r => real (RealX.size r)
 
       val ofWordX: WordX.t -> t =
          fn w => word (WordX.size w)
@@ -207,6 +229,21 @@ structure Type =
                            (Bits.- (WordSize.bits (WordSize.smallIntInfWord ()),
                                     Bits.one)))))))
 
+
+      fun ofConst (c: Const.t): t =
+         let
+            datatype z = datatype Const.t
+         in
+            case c of
+               CSymbol _ => cpointer ()
+             | IntInf _ => intInf ()
+             | Null => cpointer ()
+             | Real r => ofRealX r
+             | Word w => ofWordX w
+             | WordVector v => ofWordXVector v
+         end
+
+
       val deLabel: t -> Label.t option =
          fn t =>
          case node t of
@@ -220,6 +257,12 @@ structure Type =
                if 1 = Vector.length opts
                   then SOME (Vector.first opts)
                else NONE
+          | _ => NONE
+
+      val deObjptrs: t -> ObjptrTycon.t vector option =
+         fn t =>
+         case node t of
+            Objptr opts => SOME opts
           | _ => NONE
 
       val deReal: t -> RealSize.t option =
@@ -324,10 +367,12 @@ structure Type =
                   CPointer => C.CPointer
                 | Label _ =>
                      (case !Control.codegen of
-                         Control.Codegen.AMD64Codegen => C.CPointer
-                       | Control.Codegen.CCodegen => C.fromBits (width t)
+                         Control.Codegen.CCodegen => C.fromBits (width t)
+                      (*
+                       | Control.Codegen.AMD64Codegen => C.CPointer
                        | Control.Codegen.LLVMCodegen => C.fromBits (width t)
-                       | Control.Codegen.X86Codegen => C.CPointer)
+                       | Control.Codegen.X86Codegen => C.CPointer
+                      *))
                 | Real s =>
                      (case s of
                          RealSize.R32 => C.Real32
@@ -339,74 +384,94 @@ structure Type =
          val align: t * Bytes.t -> Bytes.t =
             fn (t, n) => C.align (toCType t, n)
       end
-
-      fun bytesAndObjptrs (t: t): Bytes.t * int =
-         case node t of
-            Objptr _ => (Bytes.zero, 1)
-          | Seq ts =>
-               (case Vector.peeki (ts, isObjptr o #2) of
-                   NONE => (bytes t, 0)
-                 | SOME (i, _) =>
-                      let
-                         val b = bytes (seq (Vector.prefix (ts, i)))
-                         val j = (Vector.length ts) - i
-                      in
-                         (b, j)
-                      end)
-          | _ => (bytes t, 0)
    end
 
 structure ObjectType =
    struct
+      structure Prod = Prod
       structure ObjptrTycon = ObjptrTycon
       structure Runtime = Runtime
 
       type ty = Type.t
       datatype t =
-         Normal of {hasIdentity: bool,
-                    ty: ty}
-       | Sequence of {elt: ty,
+         Normal of {components: ty Prod.t,
+                    hasIdentity: bool}
+       | Sequence of {components: ty Prod.t,
                       hasIdentity: bool}
        | Stack
        | Weak of Type.t option
+
+      fun deNormal t =
+         case t of
+            Normal {components, hasIdentity} =>
+               {components = components, hasIdentity = hasIdentity}
+          | _ => Error.bug "ObjectType.deNormal"
+
+      fun deSequence t =
+         case t of
+            Sequence {components, hasIdentity} =>
+               {components = components, hasIdentity = hasIdentity}
+          | _ => Error.bug "ObjectType.deSequence"
+
+      fun components t =
+         case t of
+            Normal {components, ...} => components
+          | Sequence {components, ...} => components
+          | _ => Error.bug "ObjectType.components"
+
+      fun componentsSize t =
+         Prod.fold (components t, Bytes.zero, fn (ty, b) =>
+                    Bytes.+ (b, Type.bytes ty))
 
       fun layout (t: t) =
          let
             open Layout
          in
             case t of
-               Normal {hasIdentity, ty} =>
+               Normal {components, hasIdentity} =>
                   seq [str "Normal ",
-                       record [("hasIdentity", Bool.layout hasIdentity),
-                               ("ty", Type.layout ty)]]
-             | Sequence {elt, hasIdentity} =>
+                       record [("components", Prod.layout (components, Type.layout)),
+                               ("hasIdentity", Bool.layout hasIdentity)]]
+             | Sequence {components, hasIdentity} =>
                   seq [str "Sequence ",
-                       record [("elt", Type.layout elt),
+                       record [("components", Prod.layout (components, Type.layout)),
                                ("hasIdentity", Bool.layout hasIdentity)]]
              | Stack => str "Stack"
              | Weak t => seq [str "Weak ", Option.layout Type.layout t]
          end
 
       fun isOk (t: t): bool =
-         case t of
-            Normal {ty, ...} =>
-               let
-                  val b = Bits.+ (Type.width ty,
-                                  Type.width (Type.objptrHeader ()))
-               in
-                  case !Control.align of
-                     Control.Align4 => Bits.isWord32Aligned b
-                   | Control.Align8 => Bits.isWord64Aligned b
-               end
-          | Sequence {elt, ...} =>
-               let
-                  val b = Type.width elt
-               in
-                  Bits.isByteAligned b
-               end
-          | Stack => true
-          | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
-
+         let
+            fun componentsOk components =
+               Exn.withEscape
+               (fn escape =>
+                ((ignore o Prod.fold)
+                 (components, false, fn (ty, hasObjptr) =>
+                  if Bits.isPrim (Type.width ty)
+                     then if Type.isObjptr ty
+                             then true
+                             else if hasObjptr
+                                     then escape false
+                                     else false
+                     else escape false)
+                 ; true))
+         in
+            case t of
+               Normal {components, ...} =>
+                  componentsOk components
+                  andalso
+                  let
+                     val b = Prod.fold (components, Type.width (Type.objptrHeader ()),
+                                        fn (ty, b) => Bits.+ (b, Type.width ty))
+                  in
+                     case !Control.align of
+                        Control.Align4 => Bits.isWord32Aligned b
+                      | Control.Align8 => Bits.isWord64Aligned b
+                  end
+             | Sequence {components, ...} => componentsOk components
+             | Stack => true
+             | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
+         end
       val stack = Stack
 
       val thread = fn () =>
@@ -416,7 +481,7 @@ structure ObjectType =
                   val align =
                      case !Control.align of
                         Control.Align4 => Bytes.fromInt 4
-                            | Control.Align8 => Bytes.fromInt 8
+                      | Control.Align8 => Bytes.fromInt 8
                   val bytesMetaData =
                      Bits.toBytes (Control.Target.Size.normalMetaData ())
                   val bytesCurrentProcNum =
@@ -426,6 +491,8 @@ structure ObjectType =
                   val bytesExnStack =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
+                     Bits.toBytes (Type.width Type.word32)
+                  val bytesMinLocalCollectionDepth =
                      Bits.toBytes (Type.width Type.word32)
                   val bytesAllocatedSinceLastCollection =
                      Bits.toBytes (Control.Target.Size.csize ())
@@ -448,6 +515,7 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesMinLocalCollectionDepth +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
@@ -457,23 +525,25 @@ structure ObjectType =
 
                   val bytesTotal =
                      Bytes.align (bytesObject, {alignment = align})
-                      val bytesPad = Bytes.- (bytesTotal, bytesObject)
+                  val bytesPad = Bytes.- (bytesTotal, bytesObject)
                in
                   Type.bits (Bytes.toBits bytesPad)
                end
+            val components =
+               Vector.fromList [Type.word32, Type.csize (), Type.exnStack (),
+                                Type.word32, Type.word32, Type.csize (),
+                                Type.csize (), Type.cpointer (), Type.cpointer (),
+                                Type.stack ()]
+            val components =
+               Vector.map (components, fn ty => {elt = ty, isMutable = true})
+            val components =
+               if Type.isUnit padding
+                  then components
+                  else Vector.concat [Vector.new1 {elt = padding, isMutable = false},
+                                      components]
          in
-            Normal {hasIdentity = true,
-                    ty =
-                    Type.seq (Vector.fromList [padding,
-                                               Type.word32,
-                                               Type.csize (),
-                                               Type.exnStack (),
-                                               Type.word32,
-                                               Type.csize (),
-                                               Type.csize (),
-                                               Type.cpointer (),
-                                               Type.cpointer (),
-                                               Type.stack ()])}
+            Normal {components = Prod.make components,
+                    hasIdentity = true}
          end
 
       (* Order in the following vector matters.  The basic pointer tycons must
@@ -481,6 +551,8 @@ structure ObjectType =
        * STACK_TYPE_INDEX,
        * THREAD_TYPE_INDEX,
        * WEAK_GONE_TYPE_INDEX,
+       * REAL32_VECTOR_TYPE_INDEX,
+       * REAL64_VECTOR_TYPE_INDEX,
        * WORD8_VECTOR_TYPE_INDEX,
        * WORD16_VECTOR_TYPE_INDEX,
        * WORD32_VECTOR_TYPE_INDEX.
@@ -490,49 +562,71 @@ structure ObjectType =
        *)
       val basic = fn () =>
          let
-            fun wordVec i =
-               let
-                  val b = Bits.fromInt i
-               in
-                  (ObjptrTycon.wordVector b,
-                   Sequence {hasIdentity = false,
-                          elt = Type.word (WordSize.fromBits b)})
-               end
+            fun realVec rs =
+               (ObjptrTycon.realVector rs,
+                Sequence {components = Prod.new1Immutable (Type.real rs),
+                          hasIdentity = false})
+            fun wordVec ws =
+               (ObjptrTycon.wordVector ws,
+                Sequence {components = Prod.new1Immutable (Type.word ws),
+                          hasIdentity = false})
          in
             Vector.fromList
             [(ObjptrTycon.stack, stack),
              (ObjptrTycon.thread, thread ()),
              (ObjptrTycon.weakGone, Weak NONE),
-             wordVec 8,
-             wordVec 32,
-             wordVec 16,
-             wordVec 64,
+             realVec RealSize.R32,
+             realVec RealSize.R64,
+             wordVec WordSize.word8,
+             wordVec WordSize.word32,
+             wordVec WordSize.word16,
+             wordVec WordSize.word64,
              (ObjptrTycon.fill0Normal,
-              Normal { hasIdentity = false, ty = Type.unit }),
+              Normal {components = Prod.empty (),
+                      hasIdentity = false}),
              (ObjptrTycon.fill8Normal,
-              Normal { hasIdentity = false, ty = Type.word WordSize.word64 })]
+              Normal {components = Prod.new1Immutable (Type.word WordSize.word64),
+                      hasIdentity = false})]
          end
 
       local
          structure R = Runtime.RObjectType
+         fun componentsToBytes components =
+            Vector.fold
+            (components, Bytes.zero, fn ({elt = ty, isMutable = _}, b) =>
+             Bytes.+ (Type.bytes ty, b))
+         fun componentsToRuntime components =
+            let
+               val components = Prod.dest components
+            in
+               case Vector.peeki (components, Type.isObjptr o #elt o #2) of
+                  NONE =>
+                     {bytesNonObjptrs = componentsToBytes components,
+                      numObjptrs = 0}
+                | SOME (i, _) =>
+                     {bytesNonObjptrs = componentsToBytes (Vector.prefix (components, i)),
+                      numObjptrs = Vector.length components - i}
+            end
       in
          fun toRuntime (t: t): R.t =
             case t of
-               Normal {hasIdentity, ty} =>
+               Normal {components, hasIdentity} =>
                   let
-                     val (b, nops) = Type.bytesAndObjptrs ty
+                     val {bytesNonObjptrs, numObjptrs} =
+                        componentsToRuntime components
                   in
                      R.Normal {hasIdentity = hasIdentity,
-                              bytesNonObjptrs = b,
-                              numObjptrs = nops}
+                               bytesNonObjptrs = bytesNonObjptrs,
+                               numObjptrs = numObjptrs}
                   end
-             | Sequence {elt, hasIdentity} =>
+             | Sequence {components, hasIdentity} =>
                   let
-                     val (b, nops) = Type.bytesAndObjptrs elt
+                     val {bytesNonObjptrs, numObjptrs} =
+                        componentsToRuntime components
                   in
                      R.Sequence {hasIdentity = hasIdentity,
-                               bytesNonObjptrs = b,
-                               numObjptrs = nops}
+                                 bytesNonObjptrs = bytesNonObjptrs,
+                                 numObjptrs = numObjptrs}
                   end
              | Stack => R.Stack
              | Weak to => R.Weak {gone = Option.isNone to}
@@ -565,7 +659,6 @@ fun castIsOk {from, to, tyconTy = _} =
 
 fun checkPrimApp {args, prim, result} =
    let
-      datatype z = datatype Prim.Name.t
       fun done (argsP, resultP) =
          let
             val argsP = Vector.fromList argsP
@@ -625,73 +718,72 @@ fun checkPrimApp {args, prim, result} =
       fun realTernary s = done ([real s, real s, real s], SOME (real s))
       fun wordShift s = done ([wordOrBitsOrSeq s, shiftArg], SOME (wordOrBitsOrSeq s))
    in
-      case Prim.name prim of
-         CPointer_add => done ([cpointer, cptrdiff], SOME cpointer)
-       | CPointer_diff => done ([cpointer, cpointer], SOME cptrdiff)
-       | CPointer_equal => done ([cpointer, cpointer], SOME bool)
-       | CPointer_fromWord => done ([csize], SOME cpointer)
-       | CPointer_lt => done ([cpointer, cpointer], SOME bool)
-       | CPointer_sub => done ([cpointer, cptrdiff], SOME cpointer)
-       | CPointer_toWord => done ([cpointer], SOME csize)
-       | FFI f => done (Vector.toListMap (CFunction.args f,
-                                          fn t' => fn t => equals (t', t)),
-                        SOME (fn t => equals (t, CFunction.return f)))
-       | FFI_Symbol _ => done ([], SOME cpointer)
-       | MLton_touch => done ([objptr], NONE)
-       | Real_Math_acos s => realUnary s
-       | Real_Math_asin s => realUnary s
-       | Real_Math_atan s => realUnary s
-       | Real_Math_atan2 s => realBinary s
-       | Real_Math_cos s => realUnary s
-       | Real_Math_exp s => realUnary s
-       | Real_Math_ln s => realUnary s
-       | Real_Math_log10 s => realUnary s
-       | Real_Math_sin s => realUnary s
-       | Real_Math_sqrt s => realUnary s
-       | Real_Math_tan s => realUnary s
-       | Real_abs s => realUnary s
-       | Real_add s => realBinary s
-       | Real_castToWord (s, s') => done ([real s], SOME (word s'))
-       | Real_div s => realBinary s
-       | Real_equal s => realCompare s
-       | Real_ldexp s => done ([real s, cint], SOME (real s))
-       | Real_le s => realCompare s
-       | Real_lt s => realCompare s
-       | Real_mul s => realBinary s
-       | Real_muladd s => realTernary s
-       | Real_mulsub s => realTernary s
-       | Real_neg s => realUnary s
-       | Real_qequal s => realCompare s
-       | Real_rndToReal (s, s') => done ([real s], SOME (real s'))
-       | Real_rndToWord (s, s', _) => done ([real s], SOME (word s'))
-       | Real_round s => realUnary s
-       | Real_sub s => realBinary s
-       | Thread_returnToC => done ([], NONE)
-       | Word_add s => wordBinary s
-       | Word_addCheckP (s, _) => wordBinaryP s
-       | Word_andb s => wordBinary s
-       | Word_castToReal (s, s') => done ([word s], SOME (real s'))
-       | Word_equal s => (wordCompare s) orelse objptrCompare
-       | Word_extdToWord (s, s', _) => done ([wordOrBitsOrSeq s],
-                                             SOME (wordOrBitsOrSeq s'))
-       | Word_lshift s => wordShift s
-       | Word_lt (s, _) => wordCompare s
-       | Word_mul (s, _) => wordBinary s
-       | Word_mulCheckP (s, _) => wordBinaryP s
-       | Word_neg s => wordUnary s
-       | Word_negCheckP (s, _) => wordUnaryP s
-       | Word_notb s => wordUnary s
-       | Word_orb s => wordBinary s
-       | Word_quot (s, _) => wordBinary s
-       | Word_rem (s, _) => wordBinary s
-       | Word_rndToReal (s, s', _) => done ([word s], SOME (real s'))
-       | Word_rol s => wordShift s
-       | Word_ror s => wordShift s
-       | Word_rshift (s, _) => wordShift s
-       | Word_sub s => wordBinary s
-       | Word_subCheckP (s, _) => wordBinaryP s
-       | Word_xorb s => wordBinary s
-       | Ref_cas (SOME cty) =>
+      case prim of
+         Prim.CFunction f => done (Vector.toListMap (CFunction.args f,
+                                                     fn t' => fn t => equals (t', t)),
+                                   SOME (fn t => equals (t, CFunction.return f)))
+       | Prim.CPointer_add => done ([cpointer, cptrdiff], SOME cpointer)
+       | Prim.CPointer_diff => done ([cpointer, cpointer], SOME cptrdiff)
+       | Prim.CPointer_equal => done ([cpointer, cpointer], SOME bool)
+       | Prim.CPointer_fromWord => done ([csize], SOME cpointer)
+       | Prim.CPointer_lt => done ([cpointer, cpointer], SOME bool)
+       | Prim.CPointer_sub => done ([cpointer, cptrdiff], SOME cpointer)
+       | Prim.CPointer_toWord => done ([cpointer], SOME csize)
+       | Prim.MLton_touch => done ([objptr], NONE)
+       | Prim.Real_Math_acos s => realUnary s
+       | Prim.Real_Math_asin s => realUnary s
+       | Prim.Real_Math_atan s => realUnary s
+       | Prim.Real_Math_atan2 s => realBinary s
+       | Prim.Real_Math_cos s => realUnary s
+       | Prim.Real_Math_exp s => realUnary s
+       | Prim.Real_Math_ln s => realUnary s
+       | Prim.Real_Math_log10 s => realUnary s
+       | Prim.Real_Math_sin s => realUnary s
+       | Prim.Real_Math_sqrt s => realUnary s
+       | Prim.Real_Math_tan s => realUnary s
+       | Prim.Real_abs s => realUnary s
+       | Prim.Real_add s => realBinary s
+       | Prim.Real_castToWord (s, s') => done ([real s], SOME (word s'))
+       | Prim.Real_div s => realBinary s
+       | Prim.Real_equal s => realCompare s
+       | Prim.Real_ldexp s => done ([real s, cint], SOME (real s))
+       | Prim.Real_le s => realCompare s
+       | Prim.Real_lt s => realCompare s
+       | Prim.Real_mul s => realBinary s
+       | Prim.Real_muladd s => realTernary s
+       | Prim.Real_mulsub s => realTernary s
+       | Prim.Real_neg s => realUnary s
+       | Prim.Real_qequal s => realCompare s
+       | Prim.Real_rndToReal (s, s') => done ([real s], SOME (real s'))
+       | Prim.Real_rndToWord (s, s', _) => done ([real s], SOME (word s'))
+       | Prim.Real_round s => realUnary s
+       | Prim.Real_sub s => realBinary s
+       | Prim.Thread_returnToC => done ([], NONE)
+       | Prim.Word_add s => wordBinary s
+       | Prim.Word_addCheckP (s, _) => wordBinaryP s
+       | Prim.Word_andb s => wordBinary s
+       | Prim.Word_castToReal (s, s') => done ([word s], SOME (real s'))
+       | Prim.Word_equal s => (wordCompare s) orelse objptrCompare
+       | Prim.Word_extdToWord (s, s', _) => done ([wordOrBitsOrSeq s],
+                                                  SOME (wordOrBitsOrSeq s'))
+       | Prim.Word_lshift s => wordShift s
+       | Prim.Word_lt (s, _) => wordCompare s
+       | Prim.Word_mul (s, _) => wordBinary s
+       | Prim.Word_mulCheckP (s, _) => wordBinaryP s
+       | Prim.Word_neg s => wordUnary s
+       | Prim.Word_negCheckP (s, _) => wordUnaryP s
+       | Prim.Word_notb s => wordUnary s
+       | Prim.Word_orb s => wordBinary s
+       | Prim.Word_quot (s, _) => wordBinary s
+       | Prim.Word_rem (s, _) => wordBinary s
+       | Prim.Word_rndToReal (s, s', _) => done ([word s], SOME (real s'))
+       | Prim.Word_rol s => wordShift s
+       | Prim.Word_ror s => wordShift s
+       | Prim.Word_rshift (s, _) => wordShift s
+       | Prim.Word_sub s => wordBinary s
+       | Prim.Word_subCheckP (s, _) => wordBinaryP s
+       | Prim.Word_xorb s => wordBinary s
+       | Prim.Ref_cas (SOME cty) =>
            let
              val ty = Vector.sub (args, 1)
              fun isTy t = equals (t, ty)
@@ -703,7 +795,7 @@ fun checkPrimApp {args, prim, result} =
                  NONE => NONE
                | _ => SOME isTy)
            end
-       | Array_cas (SOME cty) =>
+       | Prim.Array_cas (SOME cty) =>
            let
              fun isSeqIndex t = Type.equals (t, Type.seqIndex ())
              val ty = Vector.sub (args, 2)
@@ -720,117 +812,199 @@ fun checkPrimApp {args, prim, result} =
                                  Prim.toString prim])
    end
 
-fun checkOffset {base, isVector, offset, result} =
-   Exn.withEscape (fn escape =>
-   let
-      fun getTys ty =
-         case node ty of
-            Seq tys => Vector.toList tys
-          | _ => [ty]
+local
 
-      fun dropTys (tys, bits) =
-         let
-            fun loop (tys, bits) =
-               if Bits.equals (bits, Bits.zero)
-                  then tys
-               else (case tys of
-                        [] => escape false
-                      | ty::tys =>
-                           let
-                              val b = width ty
-                           in
-                              if Bits.>= (bits, b)
-                                 then loop (tys, Bits.- (bits, b))
-                              else (case node ty of
-                                       Bits => (Type.bits (Bits.- (b, bits))) :: tys
-                                     | _ => escape false)
-                           end)
-         in
-            if Bits.< (bits, Bits.zero)
-               then escape false
-            else loop (tys, bits)
-         end
-      val dropTys =
-         Trace.trace2
-         ("RepType.checkOffset.dropTys",
-          List.layout Type.layout, Bits.layout,
-          List.layout Type.layout)
-         dropTys
-      fun takeTys (tys, bits) =
-         let
-            fun loop (tys, bits, acc) =
-               if Bits.equals (bits, Bits.zero)
-                  then acc
-               else (case tys of
-                        [] => escape false
-                      | ty::tys =>
-                           let
-                              val b = width ty
-                           in
-                              if Bits.>= (bits, b)
-                                 then loop (tys, Bits.- (bits, b), ty :: acc)
-                              else (case node ty of
-                                       Bits => (Type.bits bits) :: acc
-                                     | _ => escape false)
-                           end)
-         in
-            if Bits.< (bits, Bits.zero)
-               then escape false
-            else List.rev (loop (tys, bits, []))
-         end
-      fun extractTys (tys, dropBits, takeBits) =
-         takeTys (dropTys (tys, dropBits), takeBits)
+fun extractTys (tys, dropBits, takeBits) =
+   Exn.withEscape
+   (fn escape =>
+    let
+       fun dropTys (tys, bits) =
+          let
+             fun loop (tys, bits) =
+                if Bits.equals (bits, Bits.zero)
+                   then tys
+                else (case tys of
+                         [] => escape NONE
+                       | ty::tys =>
+                            let
+                               val b = width ty
+                            in
+                               if Bits.>= (bits, b)
+                                  then loop (tys, Bits.- (bits, b))
+                               else (case node ty of
+                                        Bits => (Type.bits (Bits.- (b, bits))) :: tys
+                                      | _ => escape NONE)
+                            end)
+          in
+             if Bits.< (bits, Bits.zero)
+                then escape NONE
+             else loop (tys, bits)
+          end
+       val dropTys =
+          Trace.trace2
+          ("RepType.checkOffset.dropTys",
+           List.layout Type.layout, Bits.layout,
+           List.layout Type.layout)
+          dropTys
+       fun takeTys (tys, bits) =
+          let
+             fun loop (tys, bits, acc) =
+                if Bits.equals (bits, Bits.zero)
+                   then acc
+                else (case tys of
+                         [] => escape NONE
+                       | ty::tys =>
+                            let
+                               val b = width ty
+                            in
+                               if Bits.>= (bits, b)
+                                  then loop (tys, Bits.- (bits, b), ty :: acc)
+                               else (case node ty of
+                                        Bits => (Type.bits bits) :: acc
+                                      | _ => escape NONE)
+                            end)
+          in
+             if Bits.< (bits, Bits.zero)
+                then escape NONE
+             else List.rev (loop (tys, bits, []))
+          end
+       val takeTys =
+          Trace.trace2
+          ("RepType.checkOffset.takeTys",
+           List.layout Type.layout, Bits.layout,
+           List.layout Type.layout)
+          takeTys
+    in
+       SOME (takeTys (dropTys (tys, dropBits), takeBits))
+    end)
+val extractTys =
+   Trace.trace3
+   ("RepType.checkOffset.extractTys",
+    List.layout Type.layout, Bits.layout, Bits.layout,
+    Option.layout (List.layout Type.layout))
+   extractTys
 
-      fun equalsTys (tys1, tys2) =
-         case (tys1, tys2) of
-            ([], []) => true
-          | (ty1::tys1, ty2::tys2) =>
-               equals (ty1, ty2)
-               andalso equalsTys (tys1, tys2)
-          | _ => false
+fun getTys ty =
+   case node ty of
+      Seq tys => Vector.toList tys
+    | _ => [ty]
 
-      val alignBits =
-         case !Control.align of
-            Control.Align4 => Bits.inWord32
-          | Control.Align8 => Bits.inWord64
+in
 
-      val baseBits = width base
-      val baseTys = getTys base
+fun checkOffset {components, isSequence, mustBeMutable, offset, result} =
+   Exn.withEscape
+   (fn escape0 =>
+    let
+       val ({elt = componentTy, isMutable = componentIsMutable, ...}, componentOffset) =
+          Exn.withEscape
+          (fn escape1 =>
+           let
+              val _ =
+                 Vector.fold
+                 (Prod.dest components, Bytes.zero,
+                  fn (comp as {elt = compTy, ...}, compOffset) =>
+                  let
+                     val compOffset' = Bytes.+ (compOffset, Type.bytes compTy)
+                  in
+                     if Bytes.< (offset, compOffset')
+                        then escape1 (comp, compOffset)
+                        else compOffset'
+                  end)
+           in
+              escape0 false
+           end)
 
-      val offsetBytes = offset
-      val offsetBits = Bytes.toBits offsetBytes
+       val componentBits = Type.width componentTy
+       val componentTys = getTys componentTy
 
-      val resultBits = width result
-      val resultTys = getTys result
+       val offsetBytes = Bytes.- (offset, componentOffset)
+       val offsetBits = Bytes.toBits offsetBytes
 
-      val adjOffsetBits =
-         if Control.Target.bigEndian ()
-            andalso Bits.< (resultBits, Bits.inWord32)
-            andalso Bits.> (baseBits, resultBits)
-            then let
-                    val paddedComponentBits =
-                       if isVector
-                          then Bits.min (baseBits, Bits.inWord32)
-                       else Bits.inWord32
-                    val paddedComponentOffsetBits =
-                       Bits.alignDown (offsetBits, {alignment = paddedComponentBits})
-                 in
-                    Bits.+ (paddedComponentOffsetBits,
-                            Bits.- (paddedComponentBits,
-                                    Bits.- (Bits.+ (resultBits, offsetBits),
-                                            paddedComponentOffsetBits)))
-                 end
-         else offsetBits
-   in
-      List.exists
-      ([Bits.inWord8, Bits.inWord16, Bits.inWord32, Bits.inWord64], fn primBits =>
-       Bits.equals (resultBits, primBits)
-       andalso Bits.isAligned (offsetBits, {alignment = Bits.min (primBits, alignBits)}))
-      andalso
-      equalsTys (resultTys, extractTys (baseTys, adjOffsetBits, resultBits))
-   end)
+       val resultBits = Type.width result
+       val resultTys = getTys result
 
-fun offsetIsOk {base, offset, tyconTy, result} =
+       val alignBits =
+          case !Control.align of
+             Control.Align4 => Bits.inWord32
+           | Control.Align8 => Bits.inWord64
+
+       val adjOffsetBits =
+          if Control.Target.bigEndian ()
+             andalso Bits.< (resultBits, Bits.inWord32)
+             andalso Bits.> (componentBits, resultBits)
+             then let
+                     val paddedComponentBits =
+                        if isSequence
+                           then Bits.min (componentBits, Bits.inWord32)
+                           else Bits.inWord32
+                     val paddedComponentOffsetBits =
+                        Bits.alignDown (offsetBits, {alignment = paddedComponentBits})
+                  in
+                     Bits.+ (paddedComponentOffsetBits,
+                             Bits.- (paddedComponentBits,
+                                     Bits.- (Bits.+ (resultBits, offsetBits),
+                                             paddedComponentOffsetBits)))
+                  end
+             else offsetBits
+    in
+       List.exists
+       (Bits.prims, fn primBits =>
+        Bits.equals (resultBits, primBits)
+        andalso Bits.isAligned (offsetBits, {alignment = Bits.min (primBits, alignBits)}))
+       andalso
+       (case extractTys (componentTys, adjOffsetBits, resultBits) of
+           NONE => false
+         | SOME tys => List.equals (resultTys, tys, Type.equals))
+       andalso
+       (not mustBeMutable orelse componentIsMutable)
+    end)
+
+(* Check that offset/result exactly corresponds to a component;
+ * Doesn't work with something like:
+ *   components = ([Word10, Word14, Word8])
+ *   offset = 3
+ *   result = Word8
+ * because while the Word10 and Word14 sub-components are accessed with
+ * `Select.IndirectUnpack` (by reading/writing the whole `Word32` with
+ * shifting/masking), the `Word8` sub-component is accessed with
+ * `Select.Indirect` (because the packing results in the `Word8` sub-component
+ * ending up with an 8-bit aligned offset); see `makeSubword32s` in
+ * `PackedRepresentation`.
+ *)
+fun checkOffsetAlt {components, isSequence = _, mustBeMutable, offset, result} =
+   Exn.withEscape
+   (fn escape =>
+    (ignore
+     (Vector.fold
+      (Prod.dest components, Bytes.zero,
+       fn ({elt = compTy, isMutable = compIsMutable}, compOffset) =>
+       if Bytes.equals (compOffset, offset)
+          then escape (equals (compTy, result)
+                       andalso
+                       (not mustBeMutable orelse compIsMutable))
+          else Bytes.+ (compOffset, Type.bytes compTy)))
+     ; false))
+val _ = checkOffsetAlt
+
+end
+
+val checkOffset =
+   Trace.trace
+   ("RepType.checkOffset",
+    fn {components, isSequence, mustBeMutable, offset, result} =>
+    let
+       open Layout
+    in
+       record [("components", Prod.layout (components, Type.layout)),
+               ("isSequence", Bool.layout isSequence),
+               ("mustBeMutable", Bool.layout mustBeMutable),
+               ("offset", Bytes.layout offset),
+               ("result", Type.layout result)]
+    end,
+    Bool.layout)
+   checkOffset
+
+fun offsetIsOk {base, mustBeMutable, offset, tyconTy, result} =
    case node base of
       CPointer => true
     | Objptr opts =>
@@ -842,17 +1016,24 @@ fun offsetIsOk {base, offset, tyconTy, result} =
                              ObjectType.Sequence _ => true
                            | _ => false)
                  andalso (equals (result, seqIndex ()))
+         else if Bytes.equals (offset, Runtime.sequenceCounterOffset ())
+            then (1 = Vector.length opts)
+                 andalso (case tyconTy (Vector.sub (opts, 0)) of
+                             ObjectType.Sequence _ => true
+                           | _ => false)
+                 andalso (equals (result, seqIndex ()))
          else (1 = Vector.length opts)
               andalso (case tyconTy (Vector.sub (opts, 0)) of
-                          ObjectType.Normal {ty, ...} =>
-                             checkOffset {base = ty,
-                                          isVector = false,
+                          ObjectType.Normal {components, ...} =>
+                             checkOffset {components = components,
+                                          isSequence = false,
+                                          mustBeMutable = mustBeMutable,
                                           offset = offset,
                                           result = result}
                         | _ => false)
     | _ => false
 
-fun sequenceOffsetIsOk {base, index, offset, tyconTy, result, scale} =
+fun sequenceOffsetIsOk {base, mustBeMutable, index, offset, tyconTy, result, scale} =
    case node base of
       CPointer =>
          (equals (index, csize ()))
@@ -870,7 +1051,8 @@ fun sequenceOffsetIsOk {base, index, offset, tyconTy, result, scale} =
          (equals (index, seqIndex ()))
          andalso (1 = Vector.length opts)
          andalso (case tyconTy (Vector.first opts) of
-                     ObjectType.Sequence {elt, ...} =>
+                     ObjectType.Sequence {components, ...} =>
+                        let val elt = Type.seq (Vector.map (Prod.dest components, #elt)) in
                         if equals (elt, word8)
                            then (* special case for PackWord operations *)
                                 (case node result of
@@ -883,10 +1065,12 @@ fun sequenceOffsetIsOk {base, index, offset, tyconTy, result, scale} =
                         else (case Scale.fromBytes (bytes elt) of
                                  NONE => scale = Scale.One
                                | SOME s => scale = s)
-                             andalso (checkOffset {base = elt,
-                                                   isVector = true,
+                             andalso (checkOffset {components = components,
+                                                   isSequence = true,
+                                                   mustBeMutable = mustBeMutable,
                                                    offset = offset,
                                                    result = result})
+                        end
                    | _ => false)
     | _ => false
 
@@ -908,20 +1092,20 @@ structure BuiltInCFunction =
       local
          fun make b = fn () =>
             T {args = Vector.new3 (Type.gcState (), Type.csize (), Type.bool),
-                   convention = Cdecl,
-   		   kind = Kind.Runtime {bytesNeeded = NONE,
-                                        ensuresBytesFree = SOME 1,
-					mayGC = true,
-                                        maySwitchThreadsFrom = b,
-                                        maySwitchThreadsTo = b,
-					modifiesFrontier = true,
-					readsStackTop = true,
-					writesStackTop = true},
-                   prototype = (Vector.new3 (CType.cpointer, CType.csize (), CType.bool),
-                                NONE),
-                   return = Type.unit,
-                   symbolScope = SymbolScope.Private,
-                   target = Direct "GC_collect"}
+               convention = Cdecl,
+               inline = false,
+               kind = Kind.Runtime {bytesNeeded = NONE,
+                                    ensuresBytesFree = SOME 1,
+                                    mayGC = true,
+                                    maySwitchThreadsFrom = b,
+                                    maySwitchThreadsTo = b,
+                                    modifiesFrontier = true,
+                                    readsStackTop = true,
+                                    writesStackTop = true},
+               prototype = (Vector.new3 (CType.cpointer, CType.csize (), CType.bool), NONE),
+               return = Type.unit,
+               symbolScope = SymbolScope.Private,
+               target = Direct "GC_collect"}
          val t = make true
          val f = make false
       in

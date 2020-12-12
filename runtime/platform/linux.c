@@ -1,12 +1,13 @@
+// For `mremap` and `MREMAP_MAYMOVE`
 #define _GNU_SOURCE
 
 #include "platform.h"
 
-#include "diskBack.unix.c"
-#include "displayMem.proc.c"
-#include "mmap-protect.c"
-#include "nonwin.c"
-#include "use-mmap.c"
+#include "platform/diskBack.unix.c"
+#include "platform/displayMem.proc.c"
+#include "platform/mmap-protect.c"
+#include "platform/nonwin.c"
+#include "platform/use-mmap.c"
 
 static void catcher (__attribute__ ((unused)) int signo,
                      __attribute__ ((unused)) siginfo_t* info,
@@ -71,15 +72,6 @@ void GC_setSigProfHandler (struct sigaction *sa) {
         sa->sa_flags = SA_ONSTACK | SA_RESTART | SA_SIGINFO;
         sa->sa_sigaction = (void (*)(int, siginfo_t*, void*))catcher;
 }
-
-/* We need the value of MREMAP_MAYMOVE, which should come from sys/mman.h, but
- * isn't there.  It is in linux/mman.h, but we can't #include that here, because
- * kernel headers don't mix with system headers.  We could create a separate
- * file, include the kernel headers there, and define a global.  But there
- * sometimes seem to be problems including kernel headers, so the easiest thing
- * to do is just define MREMAP_MAYMOVE.
- */
-#define MREMAP_MAYMOVE 1
 
 void *GC_mremap (void *start, size_t oldLength, size_t newLength) {
         return mremap (start, oldLength, newLength, MREMAP_MAYMOVE);

@@ -50,7 +50,7 @@ struct ForwardHHObjptrArgs {
 /**
  * This function performs a local collection on the current hierarchical heap
  */
-void HM_HHC_collectLocal(uint32_t desiredScope, bool force);
+void HM_HHC_collectLocal(uint32_t desiredScope);
 
 /**
  * Forwards the object pointed to by 'opp' into 'destinationLevelList' starting

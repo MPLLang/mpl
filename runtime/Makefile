@@ -1,4 +1,4 @@
-## Copyright (C) 2010-2013,2018,2019 Matthew Fluet.
+## Copyright (C) 2010-2013,2018,2019-2020 Matthew Fluet.
  # Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  #    Jagannathan, and Stephen Weeks.
  # Copyright (C) 1997-2000 NEC Research Institute.
@@ -18,33 +18,64 @@ else
 CROSS_PREFIX := $(TARGET)-
 endif
 
-GCC_MAJOR_VERSION :=						\
-	$(shell $(CC) -v 2>&1 | $(GREP) 'gcc version' | 		\
-		sed 's/.*gcc version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1/')
-GCC_MINOR_VERSION :=						\
-	$(shell $(CC) -v 2>&1 | $(GREP) 'gcc version' | 		\
-		sed 's/.*gcc version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\2/')
-GCC_VERSION := $(GCC_MAJOR_VERSION).$(GCC_MINOR_VERSION)
-
 EXE :=
 
+MDVARIANTS := OPT DBG TRACE LTO
+PIVARIANTS := DPI NPI PIC PIE
+
+OPTSUFFIX :=
+DBGSUFFIX := -dbg
+TRACESUFFIX := -trace
+LTOSUFFIX := -lto
+DPISUFFIX :=
+NPISUFFIX := -npi
+PICSUFFIX := -pic
+PIESUFFIX := -pie
+
+WITH_OPT_RUNTIME := true
+WITH_DBG_RUNTIME := true
+WITH_TRACE_RUNTIME := true
+WITH_LTO_RUNTIME := true
+WITH_DPI_RUNTIME := true
+WITH_NPI_RUNTIME := $(or $(findstring true,$(RELEASE) $(WITH_ALL_RUNTIME)),false)
+WITH_PIC_RUNTIME := $(or $(findstring true,$(RELEASE) $(WITH_ALL_RUNTIME)),false)
+WITH_PIE_RUNTIME := $(or $(findstring true,$(RELEASE) $(WITH_ALL_RUNTIME)),false)
+
 # These flags can be overridden by the user
+CCFLAGS :=
+MFLAGS :=
 CPPFLAGS :=
 CFLAGS :=
+LDFLAGS :=
 
-WARNXCFLAGS :=
-WARNXCFLAGS += -pedantic -Wall -Wextra
-
-XCFLAGS := -std=gnu11 -fno-common $(WARNXCFLAGS)
+XCCFLAGS := -std=gnu11
+XMFLAGS :=
+XCPPFLAGS :=
+XCFLAGS := -fno-common -pedantic -Wall -Wextra
 OPTXCFLAGS := -Wdisabled-optimization -O2
-DEBUGXCFLAGS := -DASSERT=1 -Wno-uninitialized -O0 -g
-PICXCFLAGS :=
+DBGXCFLAGS := -g -DASSERT=1 -Wno-uninitialized -O0
 TRACEXCFLAGS := -DENABLE_TRACING $(OPTXCFLAGS)
 LTOXCFLAGS := -flto $(OPTXCFLAGS)
+DPIXCFLAGS :=
+NPIXCFLAGS := -fno-pic -fno-pie
+PICXCFLAGS := -fPIC
+PIEXCFLAGS := -fPIE
+XLDFLAGS :=
+
+ifneq ($(WITH_GMP_INC_DIR),)
+XCPPFLAGS += -I$(WITH_GMP_INC_DIR)
+endif
+
+ifneq ($(WITH_GMP_LIB_DIR),)
+XLDFLAGS += -L$(WITH_GMP_LIB_DIR)
+endif
+
+XCPPFLAGS += -I.
 
 # Win32&64 don't use PIC code, all other platforms do
-ifeq ($(findstring $(TARGET_OS), mingw cygwin),)
-PICXCFLAGS += -fPIC
+ifeq ($(findstring $(TARGET_OS), mingw cygwin),$(TARGET_OS))
+WITH_PIC_RUNTIME := false
+WITH_PIE_RUNTIME := false
 endif
 
 # Make mlton library symbols private (win32&64 use another technique)
@@ -53,39 +84,32 @@ XCFLAGS += -fvisibility=hidden
 endif
 
 ifeq ($(TARGET_ARCH), alpha)
-XCFLAGS += -mieee -mbwx -mtune=ev6 -mfp-rounding-mode=d
+XMFLAGS += -mieee -mbwx -mtune=ev6 -mfp-rounding-mode=d
 endif
 
 ifeq ($(TARGET_ARCH), amd64)
-XCFLAGS += -m64
-endif
-
-ifeq ($(findstring $(TARGET_ARCH), hppa ia64 powerpc sparc),$(TARGET_ARCH))
-ifeq (4.2, $(firstword $(sort $(GCC_VERSION) 4.2)))
-# GMP headers contain C99 inline functions which generate warnings
-# with a suggestion to use this flag to disable the warnings.
-XCFLAGS += -fgnu89-inline
-endif
+XMFLAGS += -m64
 endif
 
 ifeq ($(TARGET_ARCH), ia64)
-XCFLAGS += -mtune=itanium2
+XMFLAGS += -mtune=itanium2
 ifeq ($(TARGET_OS), hpux)
-XCFLAGS += -mlp64
+XMFLAGS += -mlp64
 endif
 endif
 
 ifeq ($(TARGET_OS)-$(TARGET_ARCH), aix-powerpc64)
-XCFLAGS += -maix64
+XMFLAGS += -maix64
 AR := ar -X 64 rc
 endif
 
 ifeq ($(TARGET_ARCH), sparc)
-XCFLAGS += -m32 -mcpu=v8 -Wa,-xarch=v8plusa
+XMFLAGS += -m32 -mcpu=v8
+XCFLAGS := -Wa,-xarch=v8plusa
 endif
 
 ifeq ($(TARGET_ARCH), x86)
-XCFLAGS += -m32
+XMFLAGS += -m32
 endif
 
 ifeq ($(TARGET_OS), cygwin)
@@ -102,271 +126,265 @@ ifeq ($(TARGET_OS), solaris)
 XCFLAGS += -funroll-all-loops
 endif
 
-ifneq ($(WITH_GMP_INC_DIR),)
-XCFLAGS += -I$(WITH_GMP_INC_DIR)
+### MK_FLAGS ###
+
+## MK_FLAGS (SRC,PHASE[,KS])
+define MK_FLAGS
+$(strip \
+$(XCCFLAGS) $($(1)_XCCFLAGS) $(CCFLAGS) \
+$(XMFLAGS) $($(1)_XMFLAGS) $(MFLAGS) \
+$(if $(findstring $(2),CPP C),$(CPPFLAGS) $(XCPPFLAGS) $($(1)_XCPPFLAGS)) \
+$(if $(findstring $(2),C), \
+$(CFLAGS) \
+$(XCFLAGS) \
+$(foreach K,$(3),$($(K)XCFLAGS)) \
+$($(1)_XCFLAGS) \
+$(foreach K,$(3),$($(1)_$(K)XCFLAGS))) \
+$(if $(findstring $(2),LD),$(LDFLAGS) $(XLDFLAGS) $($(1)_XLDFLAGS)) \
+)
+endef
+
+### Position-independent (or not) ###
+
+ifeq ($(shell echo "__pie__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C,PIE) -P -E -),2)
+HAVE_PIE := true
+ifeq ($(shell echo "__pie__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C) -P -E -),2)
+WITH_DEFAULT_PIE := true
+else
+WITH_DEFAULT_PIE := false
+endif
+else
+HAVE_PIE := false
+WITH_PIE_RUNTIME := false
+WITH_DEFAULT_PIE := false
 endif
 
-XCFLAGS += -I. -Iplatform
-OPTCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(OPTXCFLAGS)
-DEBUGCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(DEBUGXCFLAGS)
-PICCFLAGS := $(OPTCFLAGS) $(PICXCFLAGS)
-TRACECFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(TRACEXCFLAGS)
-LTOCFLAGS := $(CFLAGS) $(CPPFLAGS) $(XCFLAGS) $(LTOXCFLAGS)
+ifeq ($(shell echo "__pic__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C,PIC) -P -E -),2)
+HAVE_PIC := true
+ifeq ($(WITH_DEFAULT_PIE),true)
+WITH_DEFAULT_PIC := false
+else ifeq ($(shell echo "__pic__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C) -P -E -),2)
+WITH_DEFAULT_PIC := true
+else
+WITH_DEFAULT_PIC := false
+endif
+else
+HAVE_PIC := false
+WITH_PIC_RUNTIME := false
+WITH_DEFAULT_PIC := false
+endif
 
-ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a libgdtoa-trace.a libgdtoa-lto.a \
-       libmlton.a libmlton-gdb.a libmlton-pic.a libmlton-trace.a libmlton-lto.a \
-	$(XLIBS)
-ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
+ifeq ($(shell echo "__pic__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C,NPI) -P -E -),__pic__)
+HAVE_NPI := true
+ifeq ($(shell echo "__pic__" | $(CROSS_PREFIX)$(CC) $(call MK_FLAGS,-,C) -P -E -),__pic__)
+WITH_DEFAULT_NPI := true
+else
+WITH_DEFAULT_NPI := false
+endif
+else
+HAVE_NPI := false
+WITH_NPI_RUNTIME := false
+WITH_DEFAULT_NPI := false
+endif
 
+### pattern rules ###
+
+%.d: %.c
+	$(CROSS_PREFIX)$(CC) $(call MK_FLAGS,$<,CPP) -MM -MG $(foreach MD,$(MDVARIANTS),$(foreach PI,$(PIVARIANTS),-MT $(subst .d,$($(MD)SUFFIX)$($(PI)SUFFIX).o,$@))) -MT $@ -MM -MG -MF $@ $<
+
+## O_C_TEMPLATE (MD,PI)
+define O_C_TEMPLATE
+%$($(1)SUFFIX)$($(2)SUFFIX).o: %.c
+	$$(CROSS_PREFIX)$$(CC) $$(call MK_FLAGS,$$<,C,$(1) $(2)) -c -o $$@ $$<
+endef
+
+$(foreach MD,$(MDVARIANTS),$(foreach PI,$(PIVARIANTS), \
+$(eval $(call O_C_TEMPLATE,$(MD),$(PI)))))
+
+%$(EXE): %.o
+	$(CROSS_PREFIX)$(CC) $(call MK_FLAGS,$<,LD) -o $@ $^
+
+%.a:
+	$(RM) $@
+	$(CROSS_PREFIX)$(AR) rc $@ $^
+	$(CROSS_PREFIX)$(RANLIB) $@
+
+define A_TEMPLATE
+$(foreach MD,$(MDVARIANTS),$(foreach PI,$(PIVARIANTS), \
+ifeq ($(and $(findstring DPI,$(PI)),$(findstring true,$(foreach PIX,$(PIVARIANTS),$(WITH_DEFAULT_$(PIX))))),true)
+$(foreach PIX,$(PIVARIANTS), \
+ifeq ($(WITH_DEFAULT_$(PIX)),true)
+lib$(1)$($(MD)SUFFIX).a: lib$(1)$($(MD)SUFFIX)$($(PIX)SUFFIX).a
+	$$(CP) $$< $$@
+endif
+)
+else
+lib$(1)$($(MD)SUFFIX)$($(PI)SUFFIX).a: $(patsubst %.o,%$($(MD)SUFFIX)$($(PI)SUFFIX).o,$($(2)_OBJS))
+endif
+))
+endef
+
+### all ###
+
+LIBS := \
+$(foreach MD,$(MDVARIANTS), \
+$(if $(findstring true,$(WITH_$(MD)_RUNTIME)),\
+$(foreach PI,$(PIVARIANTS), \
+$(if $(findstring true,$(WITH_$(PI)_RUNTIME)),\
+$(patsubst %.a,%$($(MD)SUFFIX)$($(PI)SUFFIX).a,libgdtoa.a libmlton.a)))))
+ALL += $(LIBS) gen/constants gen/c-types.sml gen/basis-ffi.sml
+
+.PHONY: all
 all: $(ALL)
-
-
-### util ###
-
-UTILHFILES :=							\
-	util.h							\
-	$(shell $(FIND) util -type f -name '*.h')
-UTILCFILES :=							\
-	$(shell $(FIND) util -type f -name '*.c')
-
-util-pic.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
-	$(CROSS_PREFIX)$(CC) $(PICCFLAGS) -c -o $@ $<
-util-gdb.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
-	$(CROSS_PREFIX)$(CC) $(DEBUGCFLAGS) -c -o $@ $<
-util-trace.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
-	$(CROSS_PREFIX)$(CC) $(TRACECFLAGS) -c -o $@ $<
-util-lto.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
-	$(CROSS_PREFIX)$(CC) $(LTOCFLAGS) -c -o $@ $<
-util.o:     util.c $(UTILCFILES) cenv.h $(UTILHFILES)
-	$(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -c -o $@ $<
 
 ### c-types.h  ml-types.h  gen/c-types.sml ###
 
 c-types.h: gen/c-types.h
-	cp $< $@
+	$(CP) $< $@
 ml-types.h: gen/ml-types.h
-	cp $< $@
-gen/c-types.h gen/c-types.sml gen/ml-types.h: gen/gen-types.stamp
-	@touch $@
-gen/gen-types.stamp: gen/gen-types.c util.h util.o
-	$(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -o gen/gen-types gen/gen-types.c util.o
-	rm -f gen/c-types.h gen/c-types.sml gen/ml-types.h gen/gen-types.stamp
-	cd gen && ./gen-types
-	rm -f gen/gen-types$(EXE) gen/gen-types
-	touch $@
+	$(CP) $< $@
+
+gen/ml-types.h: gen/gen-types$(EXE)
+	./gen/gen-types$(EXE) ml-types.h > gen/ml-types.h
+gen/c-types.h: gen/gen-types$(EXE)
+	./gen/gen-types$(EXE) c-types.h > gen/c-types.h
+gen/c-types.sml: gen/gen-types$(EXE)
+	./gen/gen-types$(EXE) c-types.sml > gen/c-types.sml
+
+ifneq ($(MAKECMDGOALS),clean)
+-include gen/gen-types.d
+endif
+
+gen/gen-types$(EXE): util.o
 
 ### basis-ffi.h  gen/basis-ffi.sml ###
 
 basis-ffi.h: gen/basis-ffi.h
-	cp $< $@
-gen/basis-ffi.h gen/basis-ffi.sml: gen/gen-basis-ffi.stamp
-	@touch $@
-gen/gen-basis-ffi.stamp: gen/gen-basis-ffi.sml gen/basis-ffi.def
-	$(RUN_MLTON) -output gen/gen-basis-ffi gen/gen-basis-ffi.sml
-	rm -f gen/basis-ffi.h gen/basis-ffi.sml gen/gen-basis-ffi.stamp
-	cd gen && ./gen-basis-ffi
-	rm -f gen/gen-basis-ffi
-	touch $@
+	$(CP) $< $@
+
+define BASIS_FFI_TEMPLATE
+ifeq ($(shell cat gen/gen-basis-ffi.sml gen/basis-ffi.def gen/$(1) | $(SHA1DGST)),$(shell cat gen/$(1).chk))
+gen/$(1): gen/gen-basis-ffi.sml gen/basis-ffi.def
+	touch gen/$(1)
+else
+gen/$(1): gen/gen-basis-ffi$(EXE) gen/basis-ffi.def
+	./gen/gen-basis-ffi$(EXE) $(1) < gen/basis-ffi.def > gen/$(1)
+	cat gen/gen-basis-ffi.sml gen/basis-ffi.def gen/$(1) | $(SHA1DGST) > gen/$(1).chk
+endif
+endef
+
+$(eval $(call BASIS_FFI_TEMPLATE,basis-ffi.h))
+$(eval $(call BASIS_FFI_TEMPLATE,basis-ffi.sml))
+$(eval $(call BASIS_FFI_TEMPLATE,gen-basis-ffi-consts.c))
+
+gen/gen-basis-ffi$(EXE): gen/gen-basis-ffi.sml
+	$(RUN_MLTON) -output gen/gen-basis-ffi$(EXE) gen/gen-basis-ffi.sml
 
 ### libgdtoa ###
 
-GDTOAHFILES := arith.h gdtoa.h
-GDTOAHFILES := $(patsubst %,gdtoa/%,$(GDTOAHFILES))
-GDTOACFILES :=									\
+GDTOA_CFILES := \
 	dmisc.c     g_ddfmt.c   g_ffmt_p.c  gdtoa.c     misc.c      strtoIf.c   strtodI.c   strtopdd.c  strtord.c   sum.c \
 	dtoa.c      g_ddfmt_p.c g_xLfmt.c   gethex.c    smisc.c     strtoIg.c   strtodg.c   strtopf.c   strtordd.c  ulp.c \
 	g_Qfmt.c    g_dfmt.c    g_xLfmt_p.c gmisc.c     strtoIQ.c   strtoIx.c   strtof.c    strtopx.c   strtorf.c \
 	g_Qfmt_p.c  g_dfmt_p.c  g_xfmt.c    hd_init.c   strtoId.c   strtoIxL.c  strtopQ.c   strtopxL.c  strtorx.c \
 	g__fmt.c    g_ffmt.c    g_xfmt_p.c  hexnan.c    strtoIdd.c  strtod.c    strtopd.c   strtorQ.c   strtorxL.c
-GDTOACFILES := $(patsubst %,gdtoa/%,$(GDTOACFILES))
+GDTOA_CFILES := $(patsubst %,gdtoa/%,$(GDTOA_CFILES))
 
-GDTOA_OBJS       := $(patsubst %.c,%.o,$(GDTOACFILES))
-GDTOA_DEBUG_OBJS := $(patsubst %.c,%-gdb.o,$(GDTOACFILES))
-GDTOA_PIC_OBJS   := $(patsubst %.c,%-pic.o,$(GDTOACFILES))
-GDTOA_TRACE_OBJS := $(patsubst %.c,%-trace.o,$(GDTOACFILES))
-GDTOA_LTO_OBJS := $(patsubst %.c,%-lto.o,$(GDTOACFILES))
+GDTOA_OBJS := $(patsubst %.c,%.o,$(GDTOA_CFILES))
 
-gdtoa/README: gdtoa.tgz gdtoa.may_alias-unions.patch gdtoa.rename-public-fns.patch gdtoa.hide-private-fns.patch gdtoa.hide-public-fns.patch
+$(foreach F,$(GDTOA_CFILES), $(eval $(F)_XCFLAGS := -w -DINFNAN_CHECK))
+
+ifneq ($(MAKECMDGOALS),clean)
+-include $(patsubst %.o,%.d,$(GDTOA_OBJS))
+endif
+
+$(eval $(call A_TEMPLATE,gdtoa,GDTOA))
+
+gdtoa/gdtoa.h $(GDTOACFILES): gdtoa/README
+	@touch $@
+
+gdtoa/README: gdtoa.tgz gdtoa.may_alias-unions.patch gdtoa.rename-public-fns.patch gdtoa.hide-private-fns.patch gdtoa.hide-public-fns.patch gdtoa.include-via-gdtoa.patch
 	$(GZIP) -dc gdtoa.tgz | $(TAR) xf -
 	$(PATCH) -s -d gdtoa -p1 <gdtoa.may_alias-unions.patch
 	$(PATCH) -s -d gdtoa -p1 <gdtoa.rename-public-fns.patch
 	$(PATCH) -s -d gdtoa -p1 <gdtoa.hide-private-fns.patch
 	$(PATCH) -s -d gdtoa -p1 <gdtoa.hide-public-fns.patch
+	$(PATCH) -s -d gdtoa -p1 <gdtoa.include-via-gdtoa.patch
 	@touch $@
 
-gdtoa/gdtoa.h $(GDTOACFILES): gdtoa/README
-	@touch $@
+gdtoa/arith.h: gdtoa/arithchk$(EXE)
+	./gdtoa/arithchk$(EXE) > gdtoa/arith.h
 
 gdtoa/arithchk.c: gdtoa/README
 	@touch $@
 
-gdtoa/arithchk.out: gdtoa/arithchk.c
-	cd gdtoa && $(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -w -O1 -o arithchk.out arithchk.c
+gdtoa/arithchk.c_XCFLAGS := -w -O1
 
-gdtoa/arith.h: gdtoa/arithchk.out
-	cd gdtoa && ./arithchk.out >arith.h
+ifneq ($(MAKECMDGOALS),clean)
+-include gdtoa/arithchk.d
+endif
+
+gdtoa/gd_qnan.h: gdtoa/qnan$(EXE)
+	./gdtoa/qnan$(EXE) > gdtoa/gd_qnan.h
 
 gdtoa/qnan.c: gdtoa/README
 	@touch $@
 
-gdtoa/qnan.out: gdtoa/arith.h gdtoa/qnan.c
-	cd gdtoa && $(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -w -O1 -o qnan.out qnan.c
+gdtoa/qnan.c_XCFLAGS := -w -O1
 
-gdtoa/gd_qnan.h: gdtoa/qnan.out
-	cd gdtoa && ./qnan.out >gd_qnan.h
-
-gdtoa/%-lto.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
-	$(CC) $(LTOCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-gdtoa/%-trace.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
-	$(CROSS_PREFIX)$(CC) $(TRACECFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-gdtoa/%-pic.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
-	$(CROSS_PREFIX)$(CC) $(PICCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-gdtoa/%-gdb.o: gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
-	$(CROSS_PREFIX)$(CC) $(DEBUGCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-gdtoa/%.o:     gdtoa/%.c gdtoa/arith.h gdtoa/gd_qnan.h
-	$(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -w -DINFNAN_CHECK -c -o $@ $<
-
-libgdtoa.a:     $(GDTOA_OBJS)
-libgdtoa-gdb.a: $(GDTOA_DEBUG_OBJS)
-libgdtoa-pic.a: $(GDTOA_PIC_OBJS)
-libgdtoa-trace.a: $(GDTOA_TRACE_OBJS)
-libgdtoa-lto.a: $(GDTOA_LTO_OBJS)
+ifneq ($(MAKECMDGOALS),clean)
+-include gdtoa/qnan.d
+endif
 
 ### libmlton ###
 
-PLATFORMHFILES :=						\
-	platform.h						\
-	$(shell $(FIND) platform -type f -name '*.h')
-PLATFORMCFILES :=						\
-	$(shell $(FIND) platform -type f -name '*.c')
+BASIS_CFILES := $(shell $(FIND) basis -type f -name '*.c')
 
-GCHFILES :=							\
-	gc.h							\
-	$(shell $(FIND) gc -type f -name '*.h')
-GCCFILES :=							\
-	$(shell $(FIND) gc -type f -name '*.c')
+MLTON_OBJS := gc.o platform.o platform/$(TARGET_OS).o util.o
+MLTON_OBJS += $(patsubst %.c,%.o,$(BASIS_CFILES))
 
-BASISCFILES :=							\
-	$(shell $(FIND) basis -type f -name '*.c')
+gc.c_XCFLAGS := -Wno-address-of-packed-member
 
-HFILES :=							\
-	cenv.h							\
-	$(UTILHFILES)						\
-	ml-types.h						\
-	c-types.h						\
-	basis-ffi.h						\
-	trace.h						\
-	$(PLATFORMHFILES)					\
-	$(GCHFILES)
+ifneq ($(MAKECMDGOALS),clean)
+-include $(patsubst %.o,%.d,$(MLTON_OBJS))
+endif
 
-MLTON_OBJS := 							\
-	util.o							\
-	platform.o						\
-	platform/$(TARGET_OS).o				\
-	tracing.o						\
-	gc.o
-MLTON_OBJS += $(foreach f, $(basename $(BASISCFILES)), $(f).o)
-MLTON_DEBUG_OBJS := $(patsubst %.o,%-gdb.o,$(MLTON_OBJS))
-MLTON_PIC_OBJS   := $(patsubst %.o,%-pic.o,$(MLTON_OBJS))
-MLTON_TRACE_OBJS := $(patsubst %.o,%-trace.o,$(MLTON_OBJS))
-MLTON_LTO_OBJS := $(patsubst %.o,%-lto.o,$(MLTON_OBJS))
+$(eval $(call A_TEMPLATE,mlton,MLTON))
 
-platform/$(TARGET_OS)-lto.o:	$(PLATFORMCFILES)
-platform/$(TARGET_OS)-trace.o:	$(PLATFORMCFILES)
-platform/$(TARGET_OS)-pic.o:	$(PLATFORMCFILES)
-platform/$(TARGET_OS)-gdb.o:	$(PLATFORMCFILES)
-platform/$(TARGET_OS).o:	$(PLATFORMCFILES)
+### gen/constants ###
 
-gc-lto.o:	$(GCCFILES)
-gc-trace.o:	$(GCCFILES)
-gc-pic.o:	$(GCCFILES)
-gc-gdb.o:	$(GCCFILES)
-gc.o:		$(GCCFILES)
+gen/constants: gen/gen-constants$(EXE)
+	./gen/gen-constants > gen/constants
 
-gc.c_XCFLAGS := -Wno-unreachable-code
+ifneq ($(MAKECMDGOALS),clean)
+-include gen/gen-constants.d
+endif
 
-basis/Real/Real-lto.o:		basis/Real/Real-ops.h
-basis/Real/Real-trace.o:	basis/Real/Real-ops.h
-basis/Real/Real-pic.o:		basis/Real/Real-ops.h
-basis/Real/Real-gdb.o:		basis/Real/Real-ops.h
-basis/Real/Real.o:		basis/Real/Real-ops.h
-basis/Real/Real.c_XCFLAGS := -Wno-float-equal
-basis/Real/gdtoa-lto.o:	$(GDTOAHFILES)
-basis/Real/gdtoa-trace.o:	$(GDTOAHFILES)
-basis/Real/gdtoa-pic.o:	$(GDTOAHFILES)
-basis/Real/gdtoa-gdb.o:	$(GDTOAHFILES)
-basis/Real/gdtoa.o:		$(GDTOAHFILES)
-basis/Real/strto-lto.o:	$(GDTOAHFILES)
-basis/Real/strto-trace.o:	$(GDTOAHFILES)
-basis/Real/strto-pic.o:	$(GDTOAHFILES)
-basis/Real/strto-gdb.o:	$(GDTOAHFILES)
-basis/Real/strto.o:		$(GDTOAHFILES)
-basis/System/Date.c_XCFLAGS := -Wno-format-nonliteral
-basis/Word/Word-lto.o:   basis/Word/Word-ops.h
-basis/Word/Word-trace.o: basis/Word/Word-ops.h
-basis/Word/Word-pic.o:   basis/Word/Word-ops.h
-basis/Word/Word-gdb.o:   basis/Word/Word-ops.h
-basis/Word/Word.o:       basis/Word/Word-ops.h
-basis/coerce-lto.o:      basis/coerce.h
-basis/coerce-trace.o:    basis/coerce.h
-basis/coerce-pic.o:      basis/coerce.h
-basis/coerce-gdb.o:      basis/coerce.h
-basis/coerce.o:          basis/coerce.h
-basis/cpointer-lto.o:    basis/cpointer.h
-basis/cpointer-trace.o:  basis/cpointer.h
-basis/cpointer-pic.o:    basis/cpointer.h
-basis/cpointer-gdb.o:    basis/cpointer.h
-basis/cpointer.o:        basis/cpointer.h
+gen/gen-constants$(EXE): libmlton.a
 
-%-lto.o: %.c $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(LTOCFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
-%-trace.o: %.c $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(TRACECFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
-%-pic.o: %.c $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(PICCFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
-%-gdb.o: %.c $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(DEBUGCFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
-%.o: %.c $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(OPTCFLAGS) $($(<)_XCFLAGS) -c -o $@ $<
+### bootstrap ###
 
-libmlton.a: $(MLTON_OBJS)
-libmlton-gdb.a: $(MLTON_DEBUG_OBJS)
-libmlton-pic.a: $(MLTON_PIC_OBJS)
-libmlton-trace.a: $(MLTON_TRACE_OBJS)
-libmlton-lto.a: $(MLTON_LTO_OBJS)
+ifeq (true,$(shell if [ -d bootstrap ]; then echo true; else echo false; fi))
+BOOTSTRAP_CFILES := $(shell $(FIND) bootstrap -type f -name '*.c')
 
-### gen/sizes ###
+BOOTSTRAP_OBJS := $(patsubst %.c,%.o,$(BOOTSTRAP_CFILES))
 
-gen/sizes: gen/gen-sizes.stamp
-	@touch $@
-gen/gen-sizes.stamp: gen/gen-sizes.c libmlton.a $(HFILES)
-	$(CROSS_PREFIX)$(CC) $(OPTCFLAGS) -o gen/gen-sizes gen/gen-sizes.c -L. -lmlton
-	rm -f gen/sizes
-	cd gen && ./gen-sizes
-	rm -f gen/gen-sizes$(EXE) gen/gen-sizes
-	touch $@
+bootstrap/$(MLTON_OUTPUT)$(EXE): $(BOOTSTRAP_OBJS) libmlton.a libgdtoa.a
+	$(CC) $(call MK_FLAGS,-,LD) -L. -o $@ $(BOOTSTRAP_OBJS) -lmlton -lgdtoa -lgmp -lm
 
+bootstrap/%.o: bootstrap/%.c
+	$(CC) $(call MK_FLAGS,-,C) -O1 -fno-strict-aliasing -foptimize-sibling-calls -w -I$(ROOT)/include -w -c -o $@ $<
+endif
 
 ######
 
-%.a:
-	rm -f $@
-	$(CROSS_PREFIX)$(AR) rc $@ $^
-	$(CROSS_PREFIX)$(RANLIB) $@
+SHOW_VARS += TARGET TARGET_ARCH TARGET_OS
+SHOW_VARS += WITH_OPT_RUNTIME WITH_DBG_RUNTIME WITH_DPI_RUNTIME WITH_NPI_RUNTIME WITH_PIC_RUNTIME WITH_PIE_RUNTIME
+SHOW_VARS += XCCFLAGS XMFLAGS XCPPFLAGS XCFLAGS OPTXCFLAGS DBGXCFLAGS DPIXCFLAGS NPIXCFLAGS PICXCFLAGS PIEXCFLAGS XLDFLAGS
+SHOW_VARS += HAVE_NPI WITH_DEFAULT_NPI HAVE_PIE WITH_DEFAULT_PIE HAVE_PIC WITH_DEFAULT_PIC
+SHOW_VARS += LIBS
 
-.PHONY: flags
-flags:
-	@echo TARGET = $(TARGET)
-	@echo TARGET_ARCH = $(TARGET_ARCH)
-	@echo TARGET_OS = $(TARGET_OS)
-	@echo GCC_MAJOR_VERSION = $(GCC_MAJOR_VERSION)
-	@echo GCC_MINOR_VERSION = $(GCC_MINOR_VERSION)
-	@echo GCC_VERSION = $(GCC_VERSION)
-	@echo EXE = $(EXE)
-	@echo XCFLAGS = $(XCFLAGS)
-	@echo OPTXCFLAGS = $(OPTXCFLAGS)
-	@echo DEBUGXCFLAGS = $(DEBUGXCFLAGS)
-	@echo PICXCFLAGS = $(PICXCFLAGS)
+$(eval $(MK_SHOW_CONFIG))
 
 
 .PHONY: clean

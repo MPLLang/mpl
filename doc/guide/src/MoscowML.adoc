@@ -1,7 +1,0 @@
-MoscowML
-========
-
-http://mosml.org[Moscow ML] is a
-<:StandardMLImplementations:Standard ML implementation>.  It is a
-byte-code compiler, so it compiles code quickly, but the code runs
-slowly.  See <:Performance:>.

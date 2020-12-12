@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014-2017,2019 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -12,11 +12,20 @@ signature CONTROL_FLAGS =
       (* set all flags to their default values *)
       val defaults: unit -> unit
 
-      val all : unit -> {name: string, 
+      val all : unit -> {name: string,
                          value: string} list
 
       val layout': {pre: string, suf: string} -> Layout.t
       val layout: unit -> Layout.t
+
+      structure StrMap:
+         sig
+            type t
+            val load: File.t -> t
+            val lookup: t * string -> string
+            val lookupIntInf: t * string -> IntInf.t
+            val peek: t * string -> string option
+         end
 
       (*------------------------------------*)
       (*            Begin Flags             *)
@@ -32,16 +41,30 @@ signature CONTROL_FLAGS =
       val bounceRssaLoopCutoff: int option ref
       val bounceRssaUsageCutoff: int option ref
 
+      val buildConsts: StrMap.t Promise.t
+
       val chunkBatch: int ref
 
       structure Chunkify:
          sig
             datatype t = Coalesce of {limit: int}
+                       | Func
                        | One
-                       | PerFunc
+                       | Simple of {mainFns: bool,
+                                    sccC: bool,
+                                    sccR: bool,
+                                    singC: bool,
+                                    singR: bool}
+            val toString: t -> string
+            val fromString: string -> t option
          end
       val chunkify: Chunkify.t ref
 
+      val chunkJumpTable: bool ref
+      val chunkMayRToSelfOpt: bool ref
+      val chunkMustRToOtherOpt: bool ref
+      val chunkMustRToSelfOpt: bool ref
+      val chunkMustRToSingOpt: bool ref
       val chunkTailCall: bool ref
 
       val closureConvertGlobalize: bool ref
@@ -49,11 +72,14 @@ signature CONTROL_FLAGS =
 
       structure Codegen:
          sig
-            datatype t =
+            (* SAM_NOTE: removing unsupported codegens *)
+            datatype t = CCodegen
+            (*
                AMD64Codegen
              | CCodegen
              | LLVMCodegen
              | X86Codegen
+            *)
             val all: t list
             val toString: t -> string
          end
@@ -61,6 +87,15 @@ signature CONTROL_FLAGS =
       datatype codegen = datatype Codegen.t
 
       val codegen: Codegen.t ref
+
+      (* whether or not to use comments in codegen *)
+      val codegenComments: int ref
+
+      (* whether or not to fuse `op` and `opCheckP` primitives in codegen *)
+      val codegenFuseOpAndChk: bool ref
+
+      val commandLineConsts: StrMap.t
+      val setCommandLineConst: {name: string, value: string} -> unit
 
       val contifyIntoMain: bool ref
 
@@ -190,7 +225,7 @@ signature CONTROL_FLAGS =
             val all: t list
             val toString: t -> string
          end
-      
+
       datatype format = datatype Format.t
 
       val format: Format.t ref
@@ -201,6 +236,8 @@ signature CONTROL_FLAGS =
        | First
        | Every
       val gcCheck: gcCheck ref
+
+      val gcExpect: bool option ref
 
       val globalizeArrays: bool ref
 
@@ -225,7 +262,7 @@ signature CONTROL_FLAGS =
 
       (* Whether or not the elaborator keeps def-use information. *)
       val keepDefUse: bool ref
-         
+
       (* Keep dot files for whatever SSA files are produced. *)
       val keepDot: bool ref
 
@@ -259,9 +296,26 @@ signature CONTROL_FLAGS =
 
       (* lib/mlton/target directory *)
       val libTargetDir: Dir.t ref
-      
+
       (* name of the output library *)
       val libname : string ref
+
+      structure LLVMAliasAnalysisMetaData:
+         sig
+            datatype t =
+               None
+             | Scope
+             | TBAA of {gcstate: {offset: bool} option,
+                        global: {cty: bool, index: bool} option,
+                        heap: {cty: bool, kind: bool, offset: bool, tycon: bool} option,
+                        other: bool,
+                        stack: {offset: bool} option}
+            val toString: t -> string
+            val fromString: string -> t option
+         end
+      val llvmAAMD: LLVMAliasAnalysisMetaData.t ref
+
+      val llvmCC10: bool ref
 
       (* Limit the code growth loop unrolling/unswitching will allow. *)
       val loopUnrollLimit: int ref
@@ -279,14 +333,11 @@ signature CONTROL_FLAGS =
 
       structure Native:
          sig
-            (* whether or not to use comments in native codegen *)
-            val commented: int ref
-
             (* whether to eliminate redundant AL ops in native codegen *)
             val elimALRedundant: bool ref
 
             (* whether or not to track liveness of stack slots *)
-            val liveStack: bool ref 
+            val liveStack: bool ref
 
             (* level of optimization to use in native codegen *)
             val optimize: int ref
@@ -301,10 +352,10 @@ signature CONTROL_FLAGS =
             val copyPropCutoff: int ref
 
             (* live transfer cutoff distance *)
-            val cutoff: int ref 
+            val cutoff: int ref
 
             (* whether or not to use live transfer in native codegen *)
-            val liveTransfer: int ref 
+            val liveTransfer: int ref
 
             (* whether or not to shuffle registers around C-calls *)
             val shuffle: bool ref
@@ -314,16 +365,25 @@ signature CONTROL_FLAGS =
 
             (* whether or not to split assembly file in native codegen *)
             val split: int option ref
+
+            (* whether or not to use position-independent code in native codegen *)
+            val pic: bool ref
          end
+
+      val numExports: int ref
 
       val optFuel: int option ref
 
       val optFuelAvailAndUse: unit -> bool
 
-      val optimizationPasses:
-         {il: string, set: string -> unit Result.t, get: unit -> string} list ref
-      
-      val positionIndependent : bool ref
+      (* Control IL-specific optimization passes *)
+      structure OptimizationPasses:
+         sig
+            val register: {il: string,
+                           set: string -> unit Result.t} -> unit
+            val set: {il: string, passes: string} -> unit Result.t
+            val setAll: string -> unit Result.t
+         end
 
       (* Only duplicate big functions when
        * (size - small) * (number of occurrences - 1) <= product
@@ -335,6 +395,23 @@ signature CONTROL_FLAGS =
           small: int,
           product: int
          } option ref
+
+      structure PositionIndependentStyle:
+         sig
+            datatype t =
+               NPI
+             | PIC
+             | PIE
+
+            val ccOpts: t option -> string list
+            val fromString: string -> t option
+            val linkOpts: t option -> string list
+            val llvm_llcOpts: t option * {targetDefault: t} -> string list
+            val toString: t -> string
+            val toSuffix: t option -> string
+         end
+
+      val positionIndependentStyle: PositionIndependentStyle.t option ref
 
       val preferAbsPaths: bool ref
 
@@ -352,6 +429,8 @@ signature CONTROL_FLAGS =
        | ProfileTimeField
        | ProfileTimeLabel
       val profile: profile ref
+
+      val profileBlock: bool ref
 
       val profileBranch: bool ref
 
@@ -401,10 +480,11 @@ signature CONTROL_FLAGS =
             val arch: arch ref
 
             val bigEndian: unit -> bool
-            val setBigEndian: bool -> unit
 
             datatype os = datatype MLton.Platform.OS.t
             val os: os ref
+
+            val consts: StrMap.t Promise.t
 
             structure Size:
                sig
@@ -419,16 +499,6 @@ signature CONTROL_FLAGS =
                   val seqIndex: unit -> Bits.t
                   val sequenceMetaData: unit -> Bits.t
                end
-            val setSizes: {cint: Bits.t,
-                           cpointer: Bits.t,
-                           cptrdiff: Bits.t,
-                           csize: Bits.t,
-                           header: Bits.t,
-                           mplimb: Bits.t,
-                           normalMetaData: Bits.t,
-                           objptr: Bits.t,
-                           seqIndex: Bits.t,
-                           sequenceMetaData: Bits.t} -> unit
          end
 
       (* Type check ILs. *)

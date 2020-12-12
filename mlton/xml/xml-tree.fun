@@ -1,4 +1,4 @@
-(* Copyright (C) 2017,2019 Matthew Fluet.
+(* Copyright (C) 2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -160,7 +160,7 @@ structure VarExp =
       val parse =
          let
             open Parse
-            val varExcepts = Vector.new3 ("exception", "val", "in")
+            val varExcepts = Vector.new4 ("exception", "val", "in", "fun")
          in
             T <$>
             (Var.parseExcept varExcepts >>= (fn var =>
@@ -237,7 +237,7 @@ in
                     let
                        val pre =
                           if i = 0
-                             then seq [str "val rec ", layoutTyvars tyvars]
+                             then seq [str "fun ", layoutTyvars tyvars]
                              else str "and "
                     in
                        mayAlign [maybeConstrain (pre, var, ty, str " ="),
@@ -286,7 +286,7 @@ in
                       indent (alignPrefix (cases, "| "), 2)]
             end
        | ConApp {arg, con, targs, ...} =>
-            seq [str "new ",
+            seq [str "con ",
                  Con.layout con,
                  layoutTargs targs,
                  case arg of
@@ -341,11 +341,11 @@ in
       pure {con = con, arg = arg}))
    val parseArgs = vector VarExp.parse
    fun parseDec () =
-      any
+      mlSpaces *> any
       [Exception <$>
        (kw "exception" *> parseConArg),
        Fun <$>
-       (kw "val" *> kw "rec" *>
+       (kw "fun" *>
         parseTyvars >>= (fn tyvars =>
         sepBy (Var.parse >>= (fn var =>
                sym ":" *>
@@ -384,7 +384,7 @@ in
        (VarExp.parse >>= (fn result =>
         pure {decs = [], result = result})))
    and parsePrimExp () =
-      any
+      mlSpaces *> any
       [Case <$>
        let
           fun parseCase (parseP, mk) =
@@ -408,7 +408,7 @@ in
                            parseCase (WordX.parse, fn cases => (Cases.Word (ws, cases)))))))
        end,
        ConApp <$>
-       (kw "new" *>
+       (kw "con" *>
         Con.parse >>= (fn con =>
         parseTargs >>= (fn targs =>
         optional VarExp.parse >>= (fn arg =>
@@ -436,7 +436,7 @@ in
         VarExp.parse >>= (fn exn =>
         pure {extend = Option.isSome extend, exn = exn}))),
        Select <$>
-       (spaces *> char #"#" *>
+       (mlSpaces *> char #"#" *>
         (peek (nextSat Char.isDigit) *>
          fromScan (Function.curry Int.scan StringCvt.DEC)) >>= (fn offset =>
         VarExp.parse >>= (fn tuple =>
@@ -508,6 +508,24 @@ structure Exp =
          let
             datatype z = datatype Dec.t
             datatype z = datatype PrimExp.t
+
+            fun mayRaiseExp e = List.exists (decs e, mayRaiseDec)
+            and mayRaisePrimExp e =
+               case e of
+                  App _ => true
+                | Case {cases, default, ...} =>
+                     Cases.exists (cases, mayRaiseExp)
+                     orelse
+                     Option.fold (default, false, mayRaiseExp o #1)
+                | Handle {handler, ...} =>
+                     mayRaiseExp handler
+                | Raise _ => true
+                | _ => false
+            and mayRaiseDec d =
+               case d of
+                  MonoVal {exp, ...} => mayRaisePrimExp exp
+                | _ => false
+
             fun prof f =
                MonoVal {exp = Profile (f si),
                         ty = Type.unit,
@@ -532,7 +550,7 @@ structure Exp =
                                   var = unit},
                          MonoVal
                          {exp = PrimApp {args = Vector.new1 (VarExp.mono unit),
-                                         prim = Prim.touch,
+                                         prim = Prim.MLton_touch,
                                          targs = Vector.new1 Type.unit},
                           ty = Type.unit,
                           var = Var.newNoname ()}]
@@ -546,10 +564,12 @@ structure Exp =
                             [prof ProfileExp.Leave]]
             val try = make {decs = decs, result = result}
          in
-            fromPrimExp (Handle {catch = (exn, Type.exn),
-                                 handler = handler,
-                                 try = try},
-                         ty)
+            if mayRaiseExp e
+               then fromPrimExp (Handle {catch = (exn, Type.exn),
+                                         handler = handler,
+                                         try = try},
+                                 ty)
+               else try
          end
 
       (*------------------------------------*)
@@ -666,6 +686,48 @@ structure Exp =
       val size = Trace.trace ("XmlTree.Exp.size", Layout.ignore, Int.layout) size
       (* quell unused warning *)
       val _ = size
+
+      fun dropProfile (e: t): t =
+         let
+            fun dropProfileExp (Exp {decs, result}) =
+               Exp {decs = List.keepAllMap (decs, dropProfileDec),
+                    result = result}
+            and dropProfilePrimExp e =
+               case e of
+                  Case {test, cases, default} =>
+                     Case {test = test,
+                           cases = Cases.map (cases, dropProfileExp),
+                           default = Option.map (default, dropProfileExp)}
+                | Handle {try, catch, handler} =>
+                     Handle {try = dropProfileExp try,
+                             catch = catch,
+                             handler = dropProfileExp handler}
+                | Lambda lambda => Lambda (dropProfileLambda lambda)
+                | _ => e
+            and dropProfileDec d =
+               case d of
+                  Exception arg_con => SOME (Exception arg_con)
+                | Fun {decs, tyvars} =>
+                     SOME (Fun {decs = Vector.map
+                                (decs, fn {lambda, ty, var} =>
+                                 {lambda = dropProfileLambda lambda,
+                                  ty = ty, var = var}),
+                                tyvars = tyvars})
+                | MonoVal {exp = Profile _, ...} => NONE
+                | MonoVal {exp, ty, var} =>
+                     SOME (MonoVal {exp = dropProfilePrimExp exp,
+                                    ty = ty, var = var})
+                | PolyVal {exp, ty, tyvars, var} =>
+                     SOME (PolyVal {exp = dropProfileExp exp, ty = ty,
+                                    tyvars = tyvars, var = var})
+            and dropProfileLambda (Lam {arg, argType, body, mayInline, plist}) =
+               Lam {arg = arg, argType = argType,
+                    body = dropProfileExp body,
+                    mayInline = mayInline,
+                    plist = plist}
+         in
+            dropProfileExp e
+         end
 
       fun clear (e: t): unit =
          let open PrimExp
@@ -875,7 +937,7 @@ structure DirectExp =
 
       fun reff (e: t): t =
          convert (e, fn (x, t) =>
-                  (PrimApp {prim = Prim.reff,
+                  (PrimApp {prim = Prim.Ref_ref,
                             targs = Vector.new1 t,
                             args = Vector.new1 x},
                    Type.reff t))
@@ -885,7 +947,7 @@ structure DirectExp =
                   let
                      val t = Type.deRef t
                   in
-                     (PrimApp {prim = Prim.deref,
+                     (PrimApp {prim = Prim.Ref_deref,
                                targs = Vector.new1 t,
                                args = Vector.new1 x},
                       t)
@@ -896,7 +958,7 @@ structure DirectExp =
                   let
                      val t = Type.deVector t
                   in
-                     (PrimApp {prim = Prim.vectorLength,
+                     (PrimApp {prim = Prim.Vector_length,
                                targs = Vector.new1 t,
                                args = Vector.new1 x},
                       Type.word (WordSize.seqIndex ()))
@@ -907,7 +969,7 @@ structure DirectExp =
                    let
                       val t = Type.deVector t1
                    in
-                      (PrimApp {prim = Prim.vectorSub,
+                      (PrimApp {prim = Prim.Vector_sub,
                                 targs = Vector.new1 t,
                                 args = Vector.new2 (x1, x2)},
                        t)
@@ -915,7 +977,7 @@ structure DirectExp =
 
       fun equal (e1, e2) =
          convert2 (e1, e2, fn ((x1, t), (x2, _)) =>
-                   (PrimApp {prim = Prim.equal,
+                   (PrimApp {prim = Prim.MLton_equal,
                              targs = Vector.new1 t,
                              args = Vector.new2 (x1, x2)},
                     Type.bool))
@@ -942,7 +1004,7 @@ structure DirectExp =
 
       val bug: string -> t =
          fn s =>
-         primApp {prim = Prim.bug,
+         primApp {prim = Prim.MLton_bug,
                   targs = Vector.new0 (),
                   args = Vector.new1 (string s),
                   ty = Type.unit}
@@ -1024,7 +1086,7 @@ structure DirectExp =
             val es =
                Vector.tabulate
                (length, fn i =>
-                vectorSub (vector, const (Const.word (WordX.fromIntInf (IntInf.fromInt i, WordSize.seqIndex ())))))
+                vectorSub (vector, const (Const.word (WordX.fromInt (i, WordSize.seqIndex ())))))
          in
             convertsGen (es, fn args => (body args) k)
          end
@@ -1118,8 +1180,13 @@ structure Program =
                 pure {datatypes = Vector.fromList datatypes,
                       body = body})))
          in
-            compose (skipCommentsML, parseProgram <* (spaces *> (failing next <|> failCut "end of file")))
+            parseProgram <* (mlSpaces *> (failing next <|> fail "end of file"))
          end
+
+      fun dropProfile (T {datatypes, body}) =
+         (Control.profile := Control.ProfileNone
+          ; T {datatypes = datatypes,
+               body = Exp.dropProfile body})
 
       fun clear (T {datatypes, body, ...}) =
          (Vector.foreach (datatypes, fn {tycon, tyvars, cons} =>

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Matthew Fluet.
+/* Copyright (C) 2016,2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -29,7 +29,7 @@ typedef enum {
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static const char* objectTypeTagToString (GC_objectTypeTag tag);
+static const char * objectTypeTagToString (GC_objectTypeTag tag);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
@@ -134,24 +134,26 @@ static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
  * In a weak object, the bytesNonObjptrs and numObjptrs fields are
  * interpreted as in a normal object.
 */
-typedef struct GC_objectType {
+typedef const struct GC_objectType {
   /* Keep tag first, at zero offset, since it is referenced most often. */
-  GC_objectTypeTag tag;
-  bool hasIdentity;
-  uint16_t bytesNonObjptrs;
-  uint16_t numObjptrs;
+  const GC_objectTypeTag tag;
+  const bool hasIdentity;
+  const uint16_t bytesNonObjptrs;
+  const uint16_t numObjptrs;
 } *GC_objectType;
 enum {
   /* The type indices here must agree with those in backend/rep-type.fun. */
   STACK_TYPE_INDEX =         0,
   THREAD_TYPE_INDEX =        1,
   WEAK_GONE_TYPE_INDEX =     2,
-  WORD8_VECTOR_TYPE_INDEX =  3,
-  WORD32_VECTOR_TYPE_INDEX = 4,
-  WORD16_VECTOR_TYPE_INDEX = 5,
-  WORD64_VECTOR_TYPE_INDEX = 6,
-  FILL0_NORMAL_TYPE_INDEX =  7,
-  FILL8_NORMAL_TYPE_INDEX =  8
+  REAL32_VECTOR_TYPE_INDEX = 3,
+  REAL64_VECTOR_TYPE_INDEX = 4,
+  WORD8_VECTOR_TYPE_INDEX =  5,
+  WORD32_VECTOR_TYPE_INDEX = 6,
+  WORD16_VECTOR_TYPE_INDEX = 7,
+  WORD64_VECTOR_TYPE_INDEX = 8,
+  FILL0_NORMAL_TYPE_INDEX =  9,
+  FILL8_NORMAL_TYPE_INDEX =  10
 };
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
@@ -161,6 +163,8 @@ enum {
 #define GC_STACK_HEADER buildHeaderFromTypeIndex (STACK_TYPE_INDEX)
 #define GC_THREAD_HEADER buildHeaderFromTypeIndex (THREAD_TYPE_INDEX)
 #define GC_WEAK_GONE_HEADER buildHeaderFromTypeIndex (WEAK_GONE_TYPE_INDEX)
+#define GC_REAL32_VECTOR_HEADER buildHeaderFromTypeIndex (REAL32_VECTOR_TYPE_INDEX)
+#define GC_REAL64_VECTOR_HEADER buildHeaderFromTypeIndex (REAL64_VECTOR_TYPE_INDEX)
 #define GC_WORD8_VECTOR_HEADER buildHeaderFromTypeIndex (WORD8_VECTOR_TYPE_INDEX)
 #define GC_WORD16_VECTOR_HEADER buildHeaderFromTypeIndex (WORD16_VECTOR_TYPE_INDEX)
 #define GC_WORD32_VECTOR_HEADER buildHeaderFromTypeIndex (WORD32_VECTOR_TYPE_INDEX)

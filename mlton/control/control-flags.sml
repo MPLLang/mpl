@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014-2017,2019 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -9,6 +9,72 @@
 
 structure ControlFlags: CONTROL_FLAGS =
 struct
+
+structure StrMap =
+struct
+   type t = (string, string) HashTable.t
+
+   fun new (): t =
+      HashTable.new {hash = String.hash, equals = String.equals}
+
+   fun add (table, name, value) =
+      (ignore o HashTable.lookupOrInsert)
+      (table, name, fn () => value)
+
+   fun load (f: File.t): t =
+      let
+         val table = new ()
+         val () =
+            File.withIn
+            (f, fn ins =>
+             In.foreachLine
+             (ins, fn l =>
+              let
+                 fun err () =
+                    Error.bug (concat ["Control.StrMap.load: strange line: ", l])
+              in
+                 case String.peeki (l, fn (_, c) => c = #"=") of
+                    NONE => err ()
+                  | SOME (i, _) =>
+                       let
+                          val name = String.prefix (l, i)
+                          val name = String.deleteSurroundingWhitespace name
+                          val value = String.dropPrefix (l, i + 1)
+                          val value = String.deleteSurroundingWhitespace value
+                       in
+                          add (table, name, value)
+                       end
+              end))
+      in
+         table
+      end
+
+   fun peek (table, name) =
+      HashTable.peek (table, name)
+
+   fun lookup (table, name) =
+      case peek (table, name) of
+         NONE => Error.bug (concat ["Control.StrMap.lookup: ", name])
+       | SOME value => value
+
+   fun lookupIntInf (table, name) =
+      let
+         val value = lookup (table, name)
+      in
+         case IntInf.fromString value of
+            NONE => Error.bug (concat ["Control.StrMap.lookupIntInf: ", name, ", ", value])
+          | SOME ii => ii
+      end
+
+   fun lookupBool (table, name) =
+      let
+         val value = lookup (table, name)
+      in
+         case Bool.fromString value of
+            NONE => Error.bug (concat ["Control.StrMap.lookupBool: ", name, ", ", value])
+          | SOME b => b
+      end
+end
 
 structure C = Control ()
 open C
@@ -65,19 +131,93 @@ structure Chunkify =
    struct
       datatype t =
          Coalesce of {limit: int}
+       | Func
        | One
-       | PerFunc
+       | Simple of {mainFns: bool,
+                    sccC: bool,
+                    sccR: bool,
+                    singC: bool,
+                    singR: bool}
 
-      val toString =
-         fn One => "one"
-          | PerFunc => "per function"
-          | Coalesce {limit} => concat ["coalesce ", Int.toString limit]
+      val simpleDefault =
+         Simple {mainFns = true,
+                 sccC = true,
+                 sccR = true,
+                 singC = true,
+                 singR = true}
+
+      fun toString c =
+         case c of
+            Coalesce {limit} => concat ["coalesce", Int.toString limit]
+          | Func => "func"
+          | One => "one"
+          | Simple {mainFns, sccC, sccR, singC, singR} =>
+               let
+                  open Layout
+               in
+                  toString
+                  (namedRecord
+                   ("simple",
+                    [("mainFns", Bool.layout mainFns),
+                     ("sccC", Bool.layout sccC),
+                     ("sccR", Bool.layout sccR),
+                     ("singC", Bool.layout singC),
+                     ("singR", Bool.layout singR)]))
+               end
+      fun fromString s =
+         let
+            open Parse
+            infix 1 <|> >>=
+            infix  3 <*> <* *>
+            infixr 4 <$> <$$> <$$$> <$$$$> <$ <$?>
+            val p =
+               any
+               [str "coalesce" *>
+                (peek (nextSat Char.isDigit) *>
+                 fromScan (Function.curry Int.scan StringCvt.DEC)) >>= (fn limit =>
+                pure (Coalesce {limit = limit})),
+                str "func" *> pure Func,
+                str "one" *> pure One,
+                str "simple" *>
+                (cbrack (ffield ("mainFns", bool) >>= (fn mainFns =>
+                         nfield ("sccC", bool) >>= (fn sccC =>
+                         nfield ("sccR", bool) >>= (fn sccR =>
+                         nfield ("singC", bool) >>= (fn singC =>
+                         nfield ("singR", bool) >>= (fn singR =>
+                         pure (Simple {mainFns = mainFns,
+                                       sccC = sccC,
+                                       sccR = sccR,
+                                       singC = singC,
+                                       singR = singR})))))))
+                 <|>
+                 pure simpleDefault)]
+               <* failing next
+         in
+            case parseString (p, s) of
+               No _ => NONE
+             | Yes c => SOME c
+         end
    end
 
 val chunkify = control {name = "chunkify",
                         default = Chunkify.Coalesce {limit = 4096},
                         toString = Chunkify.toString}
 
+val chunkJumpTable = control {name = "chunkJumpTable",
+                              default = false,
+                              toString = Bool.toString}
+val chunkMayRToSelfOpt = control {name = "chunkMayRToSelfOpt",
+                                  default = true,
+                                  toString = Bool.toString}
+val chunkMustRToOtherOpt = control {name = "chunkMustRToOtherOpt",
+                                    default = true,
+                                    toString = Bool.toString}
+val chunkMustRToSelfOpt = control {name = "chunkMustRToSelfOpt",
+                                   default = true,
+                                   toString = Bool.toString}
+val chunkMustRToSingOpt = control {name = "chunkMustRToSingOpt",
+                                   default = true,
+                                   toString = Bool.toString}
 val chunkTailCall = control {name = "chunkTailCall",
                              default = true,
                              toString = Bool.toString}
@@ -93,25 +233,38 @@ val closureConvertShrink = control {name = "closureConvertShrink",
 structure Codegen =
    struct
       datatype t =
-         AMD64Codegen
-       | CCodegen
+         CCodegen
+       (*
+       | AMD64Codegen
        | LLVMCodegen
        | X86Codegen
+       *)
 
-      val all = [X86Codegen,AMD64Codegen,CCodegen,LLVMCodegen]
+      (* val all = [X86Codegen,AMD64Codegen,CCodegen,LLVMCodegen] *)
+      val all = [CCodegen]
 
       val toString: t -> string =
-         fn AMD64Codegen => "amd64"
-          | CCodegen => "c"
+         fn CCodegen => "c"
+          (*
+          | AMD64Codegen => "amd64"
           | LLVMCodegen => "llvm"
           | X86Codegen => "x86"
+          *)
    end
 
 datatype codegen = datatype Codegen.t
 
 val codegen = control {name = "codegen",
-                       default = Codegen.X86Codegen,
+                       default = Codegen.CCodegen,
                        toString = Codegen.toString}
+
+val codegenComments = control {name = "codegen comments",
+                               default = 0,
+                               toString = Int.toString}
+
+val codegenFuseOpAndChk = control {name = "fuse `op` and `opCheckP` primitives in codegen",
+                                   default = false,
+                                   toString = Bool.toString}
 
 val contifyIntoMain = control {name = "contifyIntoMain",
                                default = false,
@@ -137,11 +290,11 @@ val defaultWord = control {name = "defaultWord",
                            default = "word32",
                            toString = fn s => s}
 
-val diagPasses = 
+val diagPasses =
    control {name = "diag passes",
             default = [],
-            toString = List.toString 
-                       (Layout.toString o 
+            toString = List.toString
+                       (Layout.toString o
                         Regexp.Compiled.layout)}
 
 val executePasses =
@@ -167,7 +320,7 @@ structure Elaborate =
                 | "warn" => SOME Warn
                 | _ => NONE
 
-            val toString: t -> string = 
+            val toString: t -> string =
                fn Error => "error"
                 | Ignore => "ignore"
                 | Warn => "warn"
@@ -184,7 +337,7 @@ structure Elaborate =
                 | "ignore" => SOME Ignore
                 | _ => NONE
 
-            val toString: t -> string = 
+            val toString: t -> string =
                fn Default => "default"
                 | Ignore => "ignore"
          end
@@ -216,8 +369,8 @@ structure Elaborate =
             datatype t = T of {enabled: bool ref,
                                expert: bool,
                                name: string}
-            fun equals (T {enabled = enabled1, ...}, 
-                        T {enabled = enabled2, ...}) = 
+            fun equals (T {enabled = enabled1, ...},
+                        T {enabled = enabled2, ...}) =
                enabled1 = enabled2
 
             val enabled = fn (T {enabled, ...}) => !enabled
@@ -251,7 +404,7 @@ structure Elaborate =
 
       datatype 'a parseResult =
          Bad | Good of 'a | Other | Proxy of 'a list * {deprecated: bool}
-      val deGood = 
+      val deGood =
          fn Good z => z
           | _ => Error.bug "Control.Elaborate.deGood"
 
@@ -282,7 +435,7 @@ structure Elaborate =
                                          "}"]])))
          end
 
-      local 
+      local
          fun make ({choices: 'st list option,
                     default: 'st,
                     expert: bool,
@@ -303,7 +456,7 @@ structure Elaborate =
                                           List.map (cs, toString)),
                     expert = expert,
                     name = name})
-               val ctrl as T {args = argsRef, cur, def, 
+               val ctrl as T {args = argsRef, cur, def,
                               id as Id.T {enabled, ...}, ...} =
                   T {args = ref NONE,
                      cur = ref default,
@@ -318,16 +471,16 @@ structure Elaborate =
                                 expert = expert,
                                 name = name}}
                val parseId = fn name' =>
-                  if String.equals (name', name) 
-                     then Good id 
+                  if String.equals (name', name)
+                     then Good id
                      else parseId name'
                val parseIdAndArgs = fn ss =>
                   case ss of
                      name'::args' =>
                         if String.equals (name', name)
-                           then 
+                           then
                               case parseArgs args' of
-                                 SOME v => 
+                                 SOME v =>
                                     let
                                        fun fillArgs () =
                                           (argsRef := SOME v
@@ -372,9 +525,9 @@ structure Elaborate =
                   end
                val snapshot : unit -> unit -> (unit -> unit) =
                   fn () =>
-                  let 
+                  let
                      val withSaved = snapshot ()
-                     val saved = !cur 
+                     val saved = !cur
                   in
                      fn () =>
                      let
@@ -387,7 +540,7 @@ structure Elaborate =
                      end
                   end
             in
-               (ctrl, 
+               (ctrl,
                 {parseId = parseId,
                  parseIdAndArgs = parseIdAndArgs,
                  withDef = withDef,
@@ -408,7 +561,7 @@ structure Elaborate =
                    parseArgs = fn args' =>
                                case args' of
                                   [arg'] => Bool.fromString arg'
-                                | _ => NONE}, 
+                                | _ => NONE},
                   ac)
 
          fun makeDiagnostic ({choices,
@@ -471,16 +624,16 @@ structure Elaborate =
 
 
          val (allowConstant, ac) =
-            makeBool ({name = "allowConstant", 
+            makeBool ({name = "allowConstant",
                        default = false, expert = true}, ac)
          val (allowFFI, ac) =
             makeBool ({name = "allowFFI",
                        default = false, expert = false}, ac)
          val (allowPrim, ac) =
-            makeBool ({name = "allowPrim", 
+            makeBool ({name = "allowPrim",
                        default = false, expert = true}, ac)
          val (allowOverload, ac) =
-            makeBool ({name = "allowOverload", 
+            makeBool ({name = "allowOverload",
                        default = false, expert = true}, ac)
          val (allowRedefineSpecialIds, ac) =
             makeBool ({name = "allowRedefineSpecialIds",
@@ -489,7 +642,7 @@ structure Elaborate =
             makeBool ({name = "allowSpecifySpecialIds",
                        default = false, expert = true}, ac)
          val (deadCode, ac) =
-            makeBool ({name = "deadCode", 
+            makeBool ({name = "deadCode",
                        default = false, expert = true}, ac)
          val (forceUsed, ac) =
             make ({choices = NONE,
@@ -558,13 +711,13 @@ structure Elaborate =
                                 | _ => NONE},
                   ac)
          val (sequenceNonUnit, ac) =
-            makeDiagEIW ({name = "sequenceNonUnit", 
+            makeDiagEIW ({name = "sequenceNonUnit",
                           default = DiagEIW.Ignore, expert = false}, ac)
          val (valrecConstr, ac) =
             makeDiagEIW ({name = "valrecConstr",
                           default = DiagEIW.Warn, expert = false}, ac)
          val (warnUnused, ac) =
-            makeBool ({name = "warnUnused", 
+            makeBool ({name = "warnUnused",
                        default = false, expert = false}, ac)
 
          (* Successor ML *)
@@ -635,7 +788,7 @@ structure Elaborate =
                     expert = expert,
                     name = name})
                val parseId = fn name' =>
-                  if String.equals (name', name) 
+                  if String.equals (name', name)
                      then Proxy (List.map (alts, fn (id, _) => id), {deprecated = deprecated})
                      else parseId name'
                val parseIdAndArgs = fn ss =>
@@ -828,6 +981,10 @@ val gcCheck = control {name = "gc check",
                        default = Limit,
                        toString = GcCheck.toString}
 
+val gcExpect = control {name = "gc check expect",
+                        default = NONE,
+                        toString = Option.toString Bool.toString}
+
 val globalizeArrays = control {name = "globalize arrays",
                                default = false,
                                toString = Bool.toString}
@@ -852,7 +1009,7 @@ val inlineIntoMain = control {name = "inlineIntoMain",
                               default = true,
                               toString = Bool.toString}
 
-val inlineLeafA = 
+val inlineLeafA =
    control {name = "inlineLeafA",
             default = {loops = true,
                        repeat = true,
@@ -863,7 +1020,7 @@ val inlineLeafA =
             (Layout.record [("loops", Bool.layout loops),
                             ("repeat", Bool.layout repeat),
                             ("size", Option.layout Int.layout size)])}
-val inlineLeafB = 
+val inlineLeafB =
    control {name = "inlineLeafB",
             default = {loops = true,
                        repeat = true,
@@ -946,9 +1103,108 @@ val libDir = control {name = "lib dir",
 
 val libTargetDir = control {name = "lib target dir",
                             default = "<libTargetDir unset>",
-                            toString = fn s => s} 
+                            toString = fn s => s}
 
 val libname = ref ""
+
+structure LLVMAliasAnalysisMetaData =
+   struct
+      datatype t =
+         None
+       | Scope
+       | TBAA of {gcstate: {offset: bool} option,
+                  global: {cty: bool, index: bool} option,
+                  heap: {cty: bool, kind: bool, offset: bool, tycon: bool} option,
+                  other: bool,
+                  stack: {offset: bool} option}
+
+      val tbaaDefault =
+         TBAA {gcstate = SOME {offset = false},
+               global = SOME {cty = false, index = false},
+               heap = SOME {cty = false, kind = false, offset = false, tycon = false},
+               other = true,
+               stack = SOME {offset = false}}
+
+      fun toString aamd =
+         case aamd of
+            None => "none"
+          | Scope => "scope"
+          | TBAA {gcstate, global, heap, other, stack} =>
+               let
+                  open Layout
+               in
+                  toString
+                  (namedRecord
+                   ("tbaa",
+                    [("gcstate",
+                      Option.layout (fn {offset} =>
+                                     record [("offset", Bool.layout offset)])
+                      gcstate),
+                     ("global",
+                      Option.layout (fn {cty, index} =>
+                                     record [("cty", Bool.layout cty),
+                                             ("index", Bool.layout index)])
+                      global),
+                     ("heap",
+                      Option.layout (fn {cty, kind, offset, tycon} =>
+                                     record [("cty", Bool.layout cty),
+                                             ("kind", Bool.layout kind),
+                                             ("offset", Bool.layout offset),
+                                             ("tycon", Bool.layout tycon)])
+                      heap),
+                     ("other", Bool.layout other),
+                     ("stack",
+                      Option.layout (fn {offset} =>
+                                     record [("offset", Bool.layout offset)])
+                      stack)]))
+               end
+      fun fromString s =
+         let
+            open Parse
+            infix 1 <|> >>=
+            infix  3 <*> <* *>
+            infixr 4 <$> <$$> <$$$> <$$$$> <$ <$?>
+            val p =
+               any
+               [kw "none" *> pure None,
+                kw "scope" *> pure Scope,
+                kw "tbaa" *>
+                (cbrack (ffield ("gcstate", option (cbrack (ffield ("offset", bool) >>= (fn offset =>
+                                                            pure {offset = offset})))) >>= (fn gcstate =>
+                         nfield ("global", option (cbrack (ffield ("cty", bool) >>= (fn cty =>
+                                                           nfield ("index", bool) >>= (fn index =>
+                                                           pure {cty = cty,
+                                                                 index = index}))))) >>= (fn global =>
+                         nfield ("heap", option (cbrack (ffield ("cty", bool) >>= (fn cty =>
+                                                         nfield ("kind", bool) >>= (fn kind =>
+                                                         nfield ("offset", bool) >>= (fn offset =>
+                                                         nfield ("tycon", bool) >>= (fn tycon =>
+                                                         pure {cty = cty,
+                                                               kind = kind,
+                                                               offset = offset,
+                                                               tycon = tycon}))))))) >>= (fn heap =>
+                         nfield ("other", bool) >>= (fn other =>
+                         nfield ("stack", option (cbrack (ffield ("offset", bool) >>= (fn offset =>
+                                                          pure {offset = offset})))) >>= (fn stack =>
+                         pure (TBAA {gcstate = gcstate, global = global, heap = heap, other = other, stack = stack})))))))
+                <|>
+                pure tbaaDefault)]
+               <* failing next
+         in
+            case parseString (p, s) of
+               No _ => NONE
+             | Yes c => SOME c
+         end
+   end
+
+val llvmAAMD =
+      control {name = "llvmAAMD",
+               default = LLVMAliasAnalysisMetaData.None,
+               toString = LLVMAliasAnalysisMetaData.toString}
+
+val llvmCC10 = control {name = "llvm 'cc10'",
+                        default = false,
+                        toString = Bool.toString}
 
 val loopUnrollLimit = control {name = "loop unrolling limit",
                                 default = 150,
@@ -975,10 +1231,6 @@ val mlbPathVars =
 
 structure Native =
    struct
-      val commented = control {name = "native commented",
-                               default = 0,
-                               toString = Int.toString}
-
       val elimALRedundant = control {name = "elim AL redundant",
                                      default = true,
                                      toString = Bool.toString}
@@ -1022,7 +1274,13 @@ structure Native =
       val split = control {name = "native split",
                            default = SOME 20000,
                            toString = Option.toString Int.toString}
+
+      val pic = control {name = "native pic",
+                         default = false,
+                         toString = Bool.toString}
    end
+
+val numExports: int ref = ref 0
 
 val optFuel =
    control {name = "optFuel",
@@ -1042,12 +1300,41 @@ fun optFuelAvailAndUse () =
  *)
 val _ = optFuelAvailAndUse
 
-val optimizationPasses:
-   {il: string, set: string -> unit Result.t, get: unit -> string} list ref =
-   control {name = "optimizationPasses",
-            default = [],
-            toString = List.toString 
-                       (fn {il,get,...} => concat ["<",il,"::",get (),">"])}
+(* Control IL-specific optimization passes *)
+structure OptimizationPasses =
+   struct
+      val optPasses: {il: string, passes: string} list ref =
+         control {name = "optimizationPasses",
+                  default = [],
+                  toString = List.toString (fn {il, passes} =>
+                                            concat ["<",il,"::",passes,">"])}
+      val optPassesSets: {il: string, set: string -> unit Result.t} list ref =
+         ref []
+
+      fun register {il, set} =
+         let
+            val set = fn passes =>
+               (optPasses := List.map (!optPasses, fn z =>
+                                       if String.equals (il, #il z)
+                                          then {il = il, passes = passes}
+                                          else z)
+                ; set passes)
+         in
+            List.push (optPassesSets, {il = il, set = set})
+         end
+
+      fun set {il, passes} =
+         case List.peek (!optPassesSets, fn z => String.equals (il, #il z)) of
+            NONE => Error.bug (concat ["Control.OptimizationPasses.set: ", il, " not found"])
+          | SOME {set, ...} => set passes
+      fun setAll passes =
+         List.foldr (!optPassesSets, Result.Yes (), fn ({il, set}, res) =>
+                     case res of
+                        Result.No s => Result.No s
+                      | Result.Yes () => (case set passes of
+                                             Result.No s => Result.No (concat [s, " (for ", il, ")"])
+                                           | Result.Yes () => Result.Yes ()))
+   end
 
 val polyvariance =
    control {name = "polyvariance",
@@ -1066,17 +1353,71 @@ val polyvariance =
                              ("product", Int.layout product)])
              p)}
 
-val positionIndependent = ref false
+structure PositionIndependentStyle =
+   struct
+      datatype t =
+         NPI
+       | PIC
+       | PIE
+
+      fun fromString s =
+         case s of
+            "npi" => SOME NPI
+          | "pic" => SOME PIC
+          | "pie" => SOME PIE
+          | _ => NONE
+      fun toString pis =
+         case pis of
+            NPI => "npi"
+          | PIC => "pic"
+          | PIE => "pie"
+      fun toSuffix pis =
+         case pis of
+            NONE => ""
+          | SOME NPI => "-npi"
+          | SOME PIC => "-pic"
+          | SOME PIE => "-pie"
+
+      fun ccOpts pis =
+         case pis of
+            NONE => []
+          | SOME NPI => ["-fno-pic", "-fno-pie"]
+          | SOME PIC => ["-fPIC"]
+          | SOME PIE => ["-fPIE"]
+      fun llvm_llcOpts (pis, {targetDefault}) =
+         let
+            fun llcOpts pis =
+               case pis of
+                  NPI => [] (* ["--relocation-model=static"] *)
+                | PIC => ["--relocation-model=pic"]
+                | PIE => ["--relocation-model=pic"]
+         in
+            case pis of
+               NONE => llcOpts targetDefault
+             | SOME pis => llcOpts pis
+         end
+      fun linkOpts pis =
+         case pis of
+            NONE => []
+          | SOME NPI => ["-fno-pic", "-fno-pie", "-no-pie"]
+          | SOME PIC => ["-fno-pie", "-no-pie"]
+          | SOME PIE => ["-fPIE -pie"]
+   end
+
+val positionIndependentStyle = control {name = "position independent style",
+                                        default = NONE,
+                                        toString = Option.toString PositionIndependentStyle.toString}
+
 
 val preferAbsPaths = control {name = "prefer abs paths",
                               default = false,
                               toString = Bool.toString}
 
-val profPasses = 
+val profPasses =
    control {name = "prof passes",
             default = [],
-            toString = List.toString 
-            (Layout.toString o 
+            toString = List.toString
+            (Layout.toString o
              Regexp.Compiled.layout)}
 
 structure Profile =
@@ -1108,6 +1449,10 @@ val profile = control {name = "profile",
                        default = ProfileNone,
                        toString = Profile.toString}
 
+val profileBlock = control {name = "profile block",
+                            default = false,
+                            toString = Bool.toString}
+
 val profileBranch = control {name = "profile branch",
                              default = false,
                              toString = Bool.toString}
@@ -1115,7 +1460,7 @@ val profileBranch = control {name = "profile branch",
 val profileC = control {name = "profile C",
                         default = [],
                         toString = List.toString
-                                   (Layout.toString o 
+                                   (Layout.toString o
                                     Regexp.Compiled.layout)}
 
 structure ProfileIL =
@@ -1134,12 +1479,12 @@ val profileIL = control {name = "profile IL",
                          default = ProfileSource,
                          toString = ProfileIL.toString}
 
-val profileInclExcl = 
+val profileInclExcl =
    control {name = "profile include/exclude",
             default = [],
             toString = List.toString
-                       (Layout.toString o 
-                        (Layout.tuple2 (Regexp.Compiled.layout, 
+                       (Layout.toString o
+                        (Layout.tuple2 (Regexp.Compiled.layout,
                                         Bool.layout)))}
 
 val profileRaise = control {name = "profile raise",
@@ -1204,7 +1549,7 @@ structure Target =
       datatype t =
          Cross of string
        | Self
-         
+
       val toString =
          fn Cross s => s
           | Self => "self"
@@ -1219,9 +1564,16 @@ val target = control {name = "target",
 structure Target =
    struct
       open Target
-      
+
+      val consts =
+         Promise.delay
+         (fn () =>
+          StrMap.load
+          (OS.Path.joinDirFile {dir = !libTargetDir,
+                                file = "constants"}))
+
       datatype arch = datatype MLton.Platform.Arch.t
-         
+
       val arch = control {name = "target arch",
                           default = X86,
                           toString = MLton.Platform.Arch.toString}
@@ -1232,44 +1584,30 @@ structure Target =
                         default = Linux,
                         toString = MLton.Platform.OS.toString}
 
-      fun make s =
-         let
-            val r = ref NONE
-            fun get () =
-               case !r of
-                  NONE => Error.bug ("ControlFlags.Target." ^ s ^ ": not set")
-                | SOME x => x
-            fun set x = r := SOME x
-         in
-            (get, set)
-         end
-      val (bigEndian: unit -> bool, setBigEndian) = make "bigEndian"
+      val bigEndian =
+         Promise.lazy
+         (fn () =>
+          StrMap.lookupBool (Promise.force consts, "const::MLton_Platform_Arch_bigendian"))
 
       structure Size =
          struct
-            val (sequenceMetaData: unit -> Bits.t, set_sequenceMetaData) = make "Size.sequenceMetaData"
-            val (cint: unit -> Bits.t, set_cint) = make "Size.cint"
-            val (cpointer: unit -> Bits.t, set_cpointer) = make "Size.cpointer"
-            val (cptrdiff: unit -> Bits.t, set_cptrdiff) = make "Size.cptrdiff"
-            val (csize: unit -> Bits.t, set_csize) = make "Size.csize"
-            val (header: unit -> Bits.t, set_header) = make "Size.header"
-            val (mplimb: unit -> Bits.t, set_mplimb) = make "Size.mplimb"
-            val (normalMetaData: unit -> Bits.t, set_normalMetaData) = make "Size.normalMetaData"
-            val (objptr: unit -> Bits.t, set_objptr) = make "Size.objptr"
-            val (seqIndex: unit -> Bits.t, set_seqIndex) = make "Size.seqIndex"
+            fun make name =
+               Promise.lazy
+               (fn () =>
+                (Bytes.toBits o Bytes.fromIntInf)
+                (StrMap.lookupIntInf (Promise.force consts, "size::" ^ name)))
+
+            val cint = make "cint"
+            val cpointer = make "cpointer"
+            val cptrdiff = make "cptrdiff"
+            val csize = make "csize"
+            val header = make "header"
+            val mplimb = make "mplimb"
+            val normalMetaData = make "normalMetaData"
+            val objptr = make "objptr"
+            val seqIndex = make "seqIndex"
+            val sequenceMetaData = make "sequenceMetaData"
          end
-      fun setSizes {sequenceMetaData, cint, cpointer, cptrdiff, csize,
-                    header, mplimb, normalMetaData, objptr, seqIndex} =
-         (Size.set_sequenceMetaData sequenceMetaData
-          ; Size.set_cint cint
-          ; Size.set_cpointer cpointer
-          ; Size.set_cptrdiff cptrdiff
-          ; Size.set_csize csize
-          ; Size.set_header header
-          ; Size.set_mplimb mplimb
-          ; Size.set_normalMetaData normalMetaData
-          ; Size.set_objptr objptr
-          ; Size.set_seqIndex seqIndex)
    end
 
 fun mlbPathMap () =
@@ -1362,5 +1700,64 @@ val zoneCutDepth: int ref =
 val defaults = setDefaults
 
 val _ = defaults ()
+
+
+val commandLineConsts = StrMap.new ()
+fun setCommandLineConst {name, value} =
+   let
+      fun make (fromString, control) =
+         let
+            fun set () =
+               case fromString value of
+                  NONE => Error.bug (concat ["bad value for ", name])
+                | SOME v => control := v
+         in
+            set
+         end
+      val () =
+         case List.peek ([("Exn.keepHistory",
+                           make (Bool.fromString, exnHistory))],
+                         fn (s, _) => s = name) of
+            NONE => ()
+          | SOME (_,set) => set ()
+   in
+      StrMap.add (commandLineConsts, "cmdLineConst::" ^ name, value)
+   end
+
+val buildConsts =
+   Promise.delay
+   (fn () =>
+    let
+       val bool = Bool.toString
+       val int = Int.toString
+       val buildConsts =
+          [("MLton_Align_align", int (case !align of
+                                         Align4 => 4
+                                       | Align8 => 8)),
+           ("MLton_Codegen_codegen", int (case !codegen of
+                                             CCodegen => 0
+                                           (*
+                                           | X86Codegen => 1
+                                           | AMD64Codegen => 2
+                                           | LLVMCodegen => 3
+                                           *))),
+           ("MLton_FFI_numExports", int (!numExports)),
+           ("MLton_Platform_Format", (case !format of
+                                         Archive => "archive"
+                                       | Executable => "executable"
+                                       | LibArchive => "libarchive"
+                                       | Library => "library")),
+           ("MLton_Profile_isOn", bool (case !profile of
+                                           ProfileNone => false
+                                         | ProfileCallStack => false
+                                         | ProfileDrop => false
+                                         | ProfileLabel => false
+                                         | _ => true))]
+       val table = StrMap.new ()
+       val () = List.foreach (buildConsts, fn (name, value) =>
+                              StrMap.add (table, "buildConst::" ^ name, value))
+    in
+       table
+    end)
 
 end

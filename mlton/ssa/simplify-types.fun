@@ -136,8 +136,8 @@ structure ConRep =
        | FFI
 
       val isFFI =
-       fn FFI => true
-        | _ => false
+         fn FFI => true
+          | _ => false
 
       val isUseful =
          fn Useful => true
@@ -290,8 +290,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                             | Type.Weak t => deepSetFFI t
                             | _ => ()
                      in
-                        case Prim.name prim of
-                           Prim.Name.FFI cfunction =>
+                        case prim of
+                           Prim.CFunction cfunction =>
                               (Control.diagnostics
                                (fn display =>
                                 let
@@ -302,7 +302,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                 end);
                                Vector.foreach (CFunction.args cfunction, deepSetFFI);
                                deepSetFFI (CFunction.return cfunction))
-                         | Prim.Name.MLton_bogus =>
+                         | Prim.MLton_bogus =>
                               (case Type.dest (Vector.sub (targs, 0)) of
                                   Type.Datatype tycon =>
                                      Cardinality.makeMany (tyconCardinality tycon)
@@ -718,13 +718,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      if Cardinality.isZero (typeCardinality (Vector.first targs))
                         then Exp.Const (Const.word (WordX.zero (WordSize.seqIndex ())))
                         else normal ()
-                  datatype z = datatype Prim.Name.t
                in
-                  case Prim.name prim of
-                     Array_length => length ()
-                   | MLton_eq => equal ()
-                   | MLton_equal => equal ()
-                   | Vector_length => length ()
+                  case prim of
+                     Prim.Array_length => length ()
+                   | Prim.MLton_eq => equal ()
+                   | Prim.MLton_equal => equal ()
+                   | Prim.Vector_length => length ()
                    | _ => normal ()
                end
           | Select {tuple, offset} =>

@@ -1,4 +1,4 @@
-(* Copyright (C) 2017,2019 Matthew Fluet.
+(* Copyright (C) 2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2005 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -27,8 +27,14 @@ local
    word-x-vector.fun
    real-x.sig
    real-x.fun
-   const-type.sig
-   const-type.fun
+   c-symbol-scope.sig
+   c-symbol-scope.fun
+   c-type.sig
+   c-type.fun
+   c-symbol.sig
+   c-symbol.fun
+   c-function.sig
+   c-function.fun
    const.sig
    const.fun
    symbol.sig
@@ -58,16 +64,14 @@ local
    var.fun
    func.sig
    label.sig
-   c-type.sig
-   c-type.fun
-   c-function.sig
-   c-function.fun
    ffi.sig
    ffi.fun
    cases.sig
    cases.fun
    prim.sig
    prim.fun
+   prod.sig
+   prod.fun
    handler.sig
    handler.fun
    return.sig
@@ -93,10 +97,8 @@ in
    signature ATOMS
    signature CHAR_SIZE
    signature CONST
-   signature CONST_TYPE
    signature C_FUNCTION
    signature C_TYPE
-   signature FFI
    signature HASH_TYPE
    signature ID
    signature INT_SIZE
@@ -104,8 +106,10 @@ in
    signature PRIM
    signature PRIM_CONS
    signature PRIM_TYCONS
+   signature PROD
    signature PROFILE_LABEL
    signature REAL_SIZE
+   signature REAL_X
    signature RECORD
    signature SYMBOL
    signature TYCON

@@ -1,5 +1,0 @@
-usr/bin/mlton
-usr/lib/mlton/mlton-compile
-usr/lib/mlton/static-library
-usr/lib/mlton/targets/self
-usr/share/man/man1/mlton.1.gz

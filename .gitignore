@@ -1,5 +1,4 @@
+/boot/
 /build/
 /install/
-
-# created by a failed build
-/tmp*
+mlton-*.tgz

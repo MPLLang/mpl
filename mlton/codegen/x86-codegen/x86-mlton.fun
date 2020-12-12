@@ -1,4 +1,4 @@
-(* Copyright (C) 2019 Matthew Fluet.
+(* Copyright (C) 2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -30,7 +30,6 @@ struct
 
   fun implementsPrim (p: 'a Prim.t) =
      let
-        datatype z = datatype RealSize.t
         datatype z = datatype WordSize.prim 
         fun w32168 s =
            case WordSize.prim s of
@@ -38,9 +37,9 @@ struct
             | W16 => true
             | W32 => true
             | W64 => false
-        datatype z = datatype Prim.Name.t
+        datatype z = datatype Prim.t
      in
-        case Prim.name p of
+        case p of
            CPointer_add => true
          | CPointer_diff => true
          | CPointer_equal => true
@@ -48,7 +47,6 @@ struct
          | CPointer_lt => true
          | CPointer_sub => true
          | CPointer_toWord => true
-         | FFI_Symbol _ => true
          | Real_Math_acos _ => true
          | Real_Math_asin _ => true
          | Real_Math_atan _ => true
@@ -110,10 +108,9 @@ struct
   fun prim {prim : RepType.t Prim.t,
             args : (Operand.t * Size.t) vector,
             dsts : (Operand.t * Size.t) vector,
-            transInfo = {addData, ...} : transInfo}
+            transInfo = {...} : transInfo}
     = let
         val primName = Prim.toString prim
-        datatype z = datatype Prim.Name.t
 
         fun getDst1 ()
           = Vector.sub (dsts, 0)
@@ -878,7 +875,7 @@ struct
 
         val (comment_begin,
              comment_end)
-          = if !Control.Native.commented > 0
+          = if !Control.codegenComments > 0
               then let
                      val comment = primName
                    in 
@@ -923,10 +920,12 @@ struct
 
         fun flag {signed} =
           if signed then x86.Instruction.O else x86.Instruction.C
+
+        datatype z = datatype Prim.t
       in
         AppendList.appends
         [comment_begin,
-         (case Prim.name prim of
+         (case prim of
                CPointer_add => binal Instruction.ADD
              | CPointer_diff => binal Instruction.SUB
              | CPointer_equal => cmp Instruction.E
@@ -934,119 +933,6 @@ struct
              | CPointer_lt => cmp Instruction.B
              | CPointer_sub => binal Instruction.SUB
              | CPointer_toWord => mov ()
-             | FFI_Symbol {name, symbolScope, ...}
-             => let
-                   datatype z = datatype CFunction.SymbolScope.t
-                   datatype z = datatype Control.Format.t
-                   datatype z = datatype MLton.Platform.OS.t
-
-                   val (dst, dstsize) = getDst1 ()
-
-                   val label = fn () => Label.fromString name
-
-                   (* how to access an imported label's address *)
-                   (* windows coff will add another leading _ to label *)
-                   val coff = fn () => Label.fromString ("_imp__" ^ name)
-                   val macho = fn () =>
-                      let
-                         val label =
-                            Label.newString (concat ["L_", name, "_non_lazy_ptr"])
-                         val () =
-                            addData
-                            [Assembly.pseudoop_non_lazy_symbol_pointer (),
-                             Assembly.label label,
-                             Assembly.pseudoop_indirect_symbol (Label.fromString name),
-                             Assembly.pseudoop_long [Immediate.zero]]
-                      in
-                         label
-                      end
-                   val elf = fn () => Label.fromString (name ^ "@GOT")
-
-                   val importLabel = fn () =>
-                      case !Control.Target.os of
-                         Cygwin => coff ()
-                       | Darwin => macho ()
-                       | MinGW => coff ()
-                       | _ => elf ()
-
-                   val direct = fn () =>
-                      AppendList.fromList
-                      [Block.mkBlock'
-                       {entry = NONE,
-                        statements =
-                        [Assembly.instruction_lea
-                         {dst = dst,
-                          src = Operand.memloc_label (label ()),
-                          size = dstsize}],
-                        transfer = NONE}]
-
-                   val indirect = fn () =>
-                      AppendList.fromList
-                      [Block.mkBlock'
-                       {entry = NONE,
-                        statements =
-                        [Assembly.instruction_mov
-                         {dst = dst,
-                          src = Operand.memloc_label (importLabel ()),
-                          size = dstsize}],
-                        transfer = NONE}]
-                in
-                   case (symbolScope, 
-                         !Control.Target.os, 
-                         !Control.positionIndependent) of
-                    (* Even private PIC symbols on darwin need indirection. *)
-                      (Private, Darwin, true) => indirect ()
-                    (* As long as the symbol is private (thus it is not
-                     * exported to code outside this text segment), then 
-                     * use normal addressing. If PIC is needed, then the
-                     * memloc_label is updated to relative access in the
-                     * allocate-registers pass.
-                     *)
-                    | (Private, _, _) => direct ()
-                    (* On darwin, even executables use the defintion address.
-                     * Therefore we don't need to do indirection.
-                     *)
-                    | (Public, Darwin, _) => direct ()
-                    (* On ELF, a public symbol must be accessed via
-                     * the GOT. This is because the final value may not be
-                     * in this text segment. If the executable uses it, then
-                     * the unique C address resides in the executable's
-                     * text segment. The loader does this by creating a PLT
-                     * proxy or copying values to the executable text segment.
-                     * When linking an executable, ELF uses a special trick 
-                     * to "simplify" the code. All exported functions and
-                     * symbols have pointers that correspond  to the 
-                     * executable. Function pointers point to the 
-                     * automatically created PLT entry in the executable.
-                     * Variables are copied/relocated into the executable bss.
-                     * 
-                     * This means that direct access is fine for executable
-                     * and archive formats. (It also means direct access is
-                     * NOT fine for a library, even if it defines the symbol)
-                     * 
-                     *)
-                    | (Public, _, true) => indirect ()
-                    | (Public, _, false) => direct ()
-                    (* On darwin, the address is the point of definition. So
-                     * indirection is needed. We also need to make a stub!
-                     *)
-                    | (External, Darwin, _) => indirect ()
-                    (* On windows, the address is the point of definition. So
-                     * we must always use an indirect lookup to the symbols
-                     * windows rewrites (__imp__name) in our segment.
-                     *)
-                    | (External, MinGW, _) => indirect ()
-                    | (External, Cygwin, _) => indirect ()
-                    (* When compiling ELF to a library, we access external
-                     * symbols via some address that is updated by the loader.
-                     * That address resides within our data segment, and can
-                     * be easily referenced using RBX-relative addressing.
-                     * This trick is used on every platform MLton supports.
-                     * ELF rewrites symbols of form name@GOT.
-                     *)
-                    | (External, _, true) => indirect ()
-                    | (External, _, false) => direct ()
-                end
              | Real_Math_acos _
              => let
                   val (dst,dstsize) = getDst1 ()
@@ -1724,7 +1610,7 @@ struct
     = let
         val CFunction.T {convention, target, ...} = func
         val comment_begin
-          = if !Control.Native.commented > 0
+          = if !Control.codegenComments > 0
               then AppendList.single 
                    (x86.Block.mkBlock'
                     {entry = NONE,
@@ -1772,7 +1658,7 @@ struct
                 transfer = NONE})
             end
         val comment_end
-          = if !Control.Native.commented > 0
+          = if !Control.codegenComments > 0
               then AppendList.single 
                    (x86.Block.mkBlock'
                     {entry = NONE,

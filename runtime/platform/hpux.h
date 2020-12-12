@@ -30,7 +30,7 @@
 #include <termios.h>
 #include <utime.h>
 
-#include "setenv.h"
+#include "platform/setenv.h"
 
 #if defined(SO_TOE)
 #define HPUX_VERSION 1123
@@ -60,7 +60,9 @@
 #define MLton_Platform_OS_host "hpux"
 
 #define LOG_PERROR 0
+#ifndef LOG_AUTHPRIV
 #define LOG_AUTHPRIV LOG_AUTH
+#endif
 
 /* This should not conflict with existing flags. */
 #define MSG_DONTWAIT 0x1000000

@@ -1,4 +1,4 @@
-(* Copyright (C) 2017 Matthew Fluet.
+(* Copyright (C) 2017,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -523,8 +523,8 @@ structure Value =
                                       fn {args, targs} =>
                                       case !raw of
                                          Raw.Raw raw =>
-                                      Exp.PrimApp {args = args,
-                                                         prim = Prim.arrayAlloc {raw = raw},
+                                            Exp.PrimApp {args = args,
+                                                         prim = Prim.Array_alloc {raw = raw},
                                                          targs = targs}
                                        | _ => Error.bug "ConstantPropagation.Value.global: Array, raw",
                                       Type.deArray ty)
@@ -548,7 +548,7 @@ structure Value =
                                unary (birth, fn {init} => init,
                                       fn {args, targs} =>
                                       Exp.PrimApp {args = args,
-                                                   prim = Prim.reff,
+                                                   prim = Prim.Ref_ref,
                                                    targs = targs},
                                       Type.deRef ty)
                                else No
@@ -567,7 +567,7 @@ structure Value =
                                          fun mkVec args =
                                             yes (Exp.PrimApp
                                                  {args = args,
-                                                  prim = Prim.vector,
+                                                  prim = Prim.Vector_vector,
                                                   targs = Vector.new1 eltTy})
                                          fun mkConst (ws, elts) =
                                             yes (Exp.Const
@@ -630,8 +630,7 @@ structure Value =
                        else const' (Const.unknown (), eltTy)
                     end
             val length =
-               const (Sconst.Word (WordX.fromIntInf (IntInf.fromInt length,
-                                                     WordSize.seqIndex ())))
+               const (Sconst.Word (WordX.fromInt (length, WordSize.seqIndex ())))
          in
             {elt = elt, length = length}
          end
@@ -995,7 +994,6 @@ fun transform (program: Program.t): Program.t =
                   (coerce {from = v, to = dearray a}
                    ; unit ())
                fun arg i = Vector.sub (args, i)
-               datatype z = datatype Prim.Name.t
                fun array (raw, length, birth) =
                   let
                      val a = fromType resultType
@@ -1009,9 +1007,8 @@ fun transform (program: Program.t): Program.t =
                   let
                      val v = fromType resultType
                      val l =
-                        (const o S.Const.word o WordX.fromIntInf)
-                        (IntInf.fromInt (Vector.length args),
-                         WordSize.seqIndex ())
+                        (const o S.Const.word o WordX.fromInt)
+                        (Vector.length args, WordSize.seqIndex ())
                      val _ = coerce {from = l, to = vectorLength v}
                      val _ =
                         Vector.foreach
@@ -1021,24 +1018,40 @@ fun transform (program: Program.t): Program.t =
                      v
                   end
             in
-               case Prim.name prim of
-                  Array_alloc {raw} => array (raw, arg 0, bear ())
-                | Array_copyArray =>
-                     update (arg 0, dearray (arg 2))
-                | Array_copyVector =>
-                     update (arg 0, devector (arg 2))
-                | Array_length => arrayLength (arg 0)
-                | Array_sub => dearray (arg 0)
-                | Array_toArray => arrayFromArray (arg 0)
-                | Array_toVector => vectorFromArray (arg 0)
-                | Array_update _ => update (arg 0, arg 2)
-                | Array_cas _ =>
+               case prim of
+                  Prim.Array_alloc {raw} => array (raw, arg 0, bear ())
+                | Prim.Array_array =>
+                     let
+                        val l =
+                           (const o S.Const.word o WordX.fromInt)
+                           (Vector.length args, WordSize.seqIndex ())
+                        val a = array (false, l, bear ())
+                        val _ =
+                           Vector.foreach
+                           (args, fn arg =>
+                            coerce {from = arg, to = dearray a})
+                     in
+                        a
+                     end
+                | Prim.Array_cas _ =>
                     (coerce {from = arg 3, to = dearray (arg 0)}
                      ; dearray (arg 0))
-                | Ref_assign _ =>
+                | Prim.Array_copyArray =>
+                     update (arg 0, dearray (arg 2))
+                | Prim.Array_copyVector =>
+                     update (arg 0, devector (arg 2))
+                | Prim.Array_length => arrayLength (arg 0)
+                | Prim.Array_sub => dearray (arg 0)
+                | Prim.Array_toArray => arrayFromArray (arg 0)
+                | Prim.Array_toVector => vectorFromArray (arg 0)
+                | Prim.Array_update _ => update (arg 0, arg 2)
+                | Prim.Ref_assign _ =>
                      (coerce {from = arg 1, to = deref (arg 0)}; unit ())
-                | Ref_deref => deref (arg 0)
-                | Ref_ref =>
+                | Prim.Ref_cas _ =>
+                    (coerce {from = arg 2, to = deref (arg 0)}
+                     ; deref (arg 0))
+                | Prim.Ref_deref => deref (arg 0)
+                | Prim.Ref_ref =>
                      let
                         val v = arg 0
                         val r = fromType resultType
@@ -1048,14 +1061,11 @@ fun transform (program: Program.t): Program.t =
                      in
                         r
                      end
-                | Ref_cas _ =>
-                    (coerce {from = arg 2, to = deref (arg 0)}
-                     ; deref (arg 0))
-                | Vector_length => vectorLength (arg 0)
-                | Vector_sub => devector (arg 0)
-                | Vector_vector => vector ()
-                | Weak_get => deweak (arg 0)
-                | Weak_new =>
+                | Prim.Vector_length => vectorLength (arg 0)
+                | Prim.Vector_sub => devector (arg 0)
+                | Prim.Vector_vector => vector ()
+                | Prim.Weak_get => deweak (arg 0)
+                | Prim.Weak_new =>
                      let
                         val w = fromType resultType
                         val _ = coerce {from = arg 0, to = deweak w}

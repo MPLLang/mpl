@@ -1,6 +1,0 @@
-local
-   $(SML_LIB)/basis/basis.mlb
-   $(SML_LIB)/basis/mlton.mlb
-in
-   print.sml
-end

@@ -1,4 +1,4 @@
-/* Copyright (C) 2014,2019 Matthew Fluet.
+/* Copyright (C) 2014,2019-2020 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -22,12 +22,8 @@
 #define DeclareProfileLabel(l)                  \
         extern char l __attribute__ ((weak))
 
-#define BeginVectorInits static struct GC_vectorInit vectorInits[] = {
-#define VectorInitElem(es, gi, l, w) { es, gi, l, w },
-#define EndVectorInits };
-
-#define LoadArray(a, f) if (fread (a, sizeof(*a), cardof(a), f) != cardof(a)) return -1;
-#define SaveArray(a, f) if (fwrite(a, sizeof(*a), cardof(a), f) != cardof(a)) return -1;
+#define LoadArray(a, f) do { if (fread (a, sizeof(*a), cardof(a), f) != cardof(a)) return -1; } while (0)
+#define SaveArray(a, f) do { if (fwrite(a, sizeof(*a), cardof(a), f) != cardof(a)) return -1; } while (0)
 
 #define Initialize(s, al, mg, mfs, mmc, pk, ps)                         \
         s->alignment = al;                                              \
@@ -45,8 +41,6 @@
         s->objectTypesLength = cardof(objectTypes);                     \
         s->returnAddressToFrameIndex = returnAddressToFrameIndex;       \
         s->saveGlobals = saveGlobals;                                   \
-        s->vectorInits = vectorInits;                                   \
-        s->vectorInitsLength = cardof(vectorInits);                     \
         s->sourceMaps.profileLabelInfos = profileLabelInfos;            \
         s->sourceMaps.profileLabelInfosLength = cardof(profileLabelInfos); \
         s->sourceMaps.sourceNames = sourceNames;                        \
@@ -55,6 +49,14 @@
         s->sourceMaps.sourceSeqsLength = cardof(sourceSeqs);            \
         s->sourceMaps.sources = sources;                                \
         s->sourceMaps.sourcesLength = cardof(sources);                  \
+        s->staticHeaps.dynamic.start = (pointer)&staticHeapD;           \
+        s->staticHeaps.dynamic.size = (pointer)&staticHeapD.end - (pointer)&staticHeapD; \
+        s->staticHeaps.immutable.start = (pointer)&staticHeapI;         \
+        s->staticHeaps.immutable.size = (pointer)&staticHeapI.end - (pointer)&staticHeapI; \
+        s->staticHeaps.mutable.start = (pointer)&staticHeapM;           \
+        s->staticHeaps.mutable.size = (pointer)&staticHeapM.end - (pointer)&staticHeapM; \
+        s->staticHeaps.root.start = (pointer)&staticHeapR;              \
+        s->staticHeaps.root.size = (pointer)&staticHeapR.end - (pointer)&staticHeapR; \
         s->profiling.kind = pk;                                         \
         s->profiling.stack = ps;                                        \
         MLton_init (argc, argv, s);
@@ -81,8 +83,6 @@ void Duplicate (GC_state d, GC_state s) {
   d->objectTypesLength = s->objectTypesLength;
   d->returnAddressToFrameIndex = s->returnAddressToFrameIndex;
   d->saveGlobals = s->saveGlobals;
-  d->vectorInits = s->vectorInits;
-  d->vectorInitsLength = s->vectorInitsLength;
   d->sourceMaps.profileLabelInfos = s->sourceMaps.profileLabelInfos;
   d->sourceMaps.profileLabelInfosLength = s->sourceMaps.profileLabelInfosLength;
   d->sourceMaps.sourceNames = s->sourceMaps.sourceNames;
@@ -91,6 +91,7 @@ void Duplicate (GC_state d, GC_state s) {
   d->sourceMaps.sourceSeqsLength = s->sourceMaps.sourceSeqsLength;
   d->sourceMaps.sources = s->sourceMaps.sources;
   d->sourceMaps.sourcesLength = s->sourceMaps.sourcesLength;
+  d->staticHeaps = s->staticHeaps;
   d->profiling.kind = s->profiling.kind;
   d->profiling.stack = s->profiling.stack;
   d->profiling.isOn = s->profiling.isOn;

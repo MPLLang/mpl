@@ -2,12 +2,12 @@
 
 #include "platform.h"
 
-#include "mmap.c"
+#include "platform/mmap.c"
 #if not HAS_MSG_DONTWAIT
-#include "recv.nonblock.c"
+#include "platform/recv.nonblock.c"
 #endif
-#include "windows.c"
-#include "mremap.c"
+#include "platform/windows.c"
+#include "platform/mremap.c"
 
 /* 
  * The sysconf(_SC_PAGESIZE) is the necessary alignment for using
@@ -75,6 +75,10 @@ void *GC_mmapAnon (void *start, size_t length) {
                 return mmapAnon (start, length);
         else
                 return Windows_mmapAnon (start, length);
+}
+
+void *GC_mmapAnonFlags (void *start, size_t length, __attribute__ ((unused)) int flags) {
+        return GC_mmapAnon(start, length);
 }
 
 void GC_release (void *base, size_t length) {
