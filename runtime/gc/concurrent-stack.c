@@ -112,7 +112,7 @@ void CC_stack_clear(CC_stack* stack){
 
 void forEachObjptrinStack(GC_state s,
                           CC_stack* stack,
-                          ForeachObjptrFunction f,
+                          GC_foreachObjptrFun f,
                           void* rawArgs){
     if(stack==NULL)
         return;
@@ -125,10 +125,13 @@ void forEachObjptrinStack(GC_state s,
     pthread_mutex_lock(&stack->mutex);
     size_t i = 0, size = stack->size;
     // size_t i = 0, size = CC_stack_size(stack);
+    struct GC_foreachObjptrClosure fObjptrClosure =
+    {.fun = f, .env = rawArgs};
+
     while(i!=size){
 
         while(i!=size){
-            callIfIsObjptr(s, f, &(stack->storage[i]), rawArgs);
+            callIfIsObjptr(s, &fObjptrClosure, &(stack->storage[i]));
             i++;
         }
 

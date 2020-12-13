@@ -134,8 +134,12 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
   if(!CC_isPointerMarked(p)) {
     markObj(p);
     assert(CC_isPointerMarked(p));
-    foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
-            forwardPtrChunk, rawArgs);
+
+    struct GC_foreachObjptrClosure forwardPtrClosure =
+    {.fun = forwardPtrChunk, .env = rawArgs};
+
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
+            &forwardPtrClosure, FALSE);
   }
 }
 
@@ -218,8 +222,11 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
     markObj(p);
 
     assert(!CC_isPointerMarked(p));
-    foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
-                  unmarkPtrChunk, rawArgs);
+
+    struct GC_foreachObjptrClosure unmarkPtrClosure =
+    {.fun = unmarkPtrChunk, .env = rawArgs};
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
+            &unmarkPtrClosure, FALSE);
   }
 }
 
@@ -240,8 +247,11 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
     assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
   }
-  foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
-          forwardPtrChunk, rawArgs);
+
+  struct GC_foreachObjptrClosure forwardPtrClosure =
+  {.fun = forwardPtrChunk, .env = rawArgs};
+  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
+          &forwardPtrClosure, FALSE);
 }
 
 void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
@@ -250,8 +260,10 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
     assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
   }
-  foreachObjptrInObject(s, p, false, trueObjptrPredicate, NULL,
-                unmarkPtrChunk, rawArgs);
+  struct GC_foreachObjptrClosure unmarkPtrClosure =
+  {.fun = unmarkPtrChunk, .env = rawArgs};
+  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
+          &unmarkPtrClosure, FALSE);
 }
 
 void ensureCallSanity(__attribute__((unused)) GC_state s,
@@ -465,8 +477,10 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   #if ASSERT
   if (HM_HH_getDepth(targetHH) != 1){
-    foreachObjptrInObject(s, thread->stack, false, trueObjptrPredicate, NULL,
-          printObjPtrInScopeFunction, &lists);
+    struct GC_foreachObjptrClosure printObjPtrInScopeClosure =
+    {.fun = printObjPtrInScopeFunction, .env =  &lists};
+    foreachObjptrInObject(s, thread->stack, &trueObjptrPredicateClosure,
+          &printObjPtrInScopeClosure, FALSE);
   }
   #endif
 
@@ -508,23 +522,20 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     assert(HM_getLevelHeadPathCompress(chunk) == targetHH);
   }
   printf("\n");
-  // printf("Chunk list collected = %p \n", origList);
-  #endif
-
-  #if ASSERT2
-    int countStopGapChunks = 0;
-    int stopGapMem = 0;
-    HM_chunk chunk = origList->firstChunk;
-    while (chunk!=NULL)  {
-      HM_chunk tChunk = chunk->nextChunk;
-      assert(chunk->tmpHeap == lists.fromHead);
-      if(chunk->startGap != 0) {
-        saveChunk(chunk, &lists);
-        countStopGapChunks++;
-        stopGapMem+=(HM_getChunkSize(chunk));
-      }
-      chunk=tChunk;
+  // safety code
+  int countStopGapChunks = 0;
+  int stopGapMem = 0;
+  HM_chunk chunk = origList->firstChunk;
+  while (chunk!=NULL)  {
+    HM_chunk tChunk = chunk->nextChunk;
+    assert(chunk->tmpHeap == lists.fromHead);
+    if(chunk->startGap != 0) {
+      saveChunk(chunk, &lists);
+      countStopGapChunks++;
+      stopGapMem+=(HM_getChunkSize(chunk));
     }
+    chunk=tChunk;
+  }
   #endif
 
   uint64_t bytesSaved =  HM_getChunkListSize(repList);
@@ -547,7 +558,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
       HM_unlinkChunk(origList, chunk);
       HM_appendChunk(deleteList, chunk);
     }
-
     chunk = tChunk;
   }
 
@@ -565,8 +575,6 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   timespec_now(&stopTime);
   timespec_sub(&stopTime, &startTime);
-  size_t msTotal =
-    (size_t)stopTime.tv_sec * 1000 + (size_t)stopTime.tv_nsec / 1000000;
 
   if (isConcurrent) {
     timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);

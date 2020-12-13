@@ -1,8 +1,5 @@
 #ifndef CC_STACK_H
 #define CC_STACK_H
-// #include "foreach.h"
-#include "hierarchical-heap.h"
-#include "objptr.h"
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
@@ -32,7 +29,7 @@ void CC_stack_clear(CC_stack* stack);
 
 void forEachObjptrinStack(GC_state s,
                           CC_stack* stack,
-                          ForeachObjptrFunction f,
+                          GC_foreachObjptrFun f,
                           void* rawArgs);
 
 #endif /* CC_STACK_H */
