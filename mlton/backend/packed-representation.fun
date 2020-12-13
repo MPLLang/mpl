@@ -1589,6 +1589,7 @@ structure Objptrs =
                 in
                     ([s, s2], Switch (Switch.T {cases = cases,
                                             default = default,
+                                            expect = NONE,
                                             size = WordSize.objptrHeader (),
                                             test = tag2}))
                 end
