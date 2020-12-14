@@ -23,8 +23,10 @@ void CC_initStack(ConcurrentPackage cp) {
 
 void CC_addToStack (ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
-    LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
-    CC_initStack(cp);
+    // Its NULL because we won't collect this heap. so no need to snapshot
+    return;
+    // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
+    // CC_initStack(cp);
   }
   CC_stack_push(cp->rootList, (void*)p);
 }
@@ -296,8 +298,9 @@ HM_HierarchicalHeap findHeap (GC_thread thread, uint32_t depth) {
 }
 
 bool readyforCollection(ConcurrentPackage cp) {
-  bool ready =  !(cp == NULL || cp-> ccstate != CC_REG);
+  bool ready =  (cp != NULL && cp->ccstate == CC_REG);
   if (ready) {
+    assert(cp->rootList!=NULL);
     assert(cp->snapLeft != BOGUS_OBJPTR);
     assert(cp->snapRight != BOGUS_OBJPTR);
     assert(cp->stack != BOGUS_OBJPTR);
