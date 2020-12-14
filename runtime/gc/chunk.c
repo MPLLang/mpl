@@ -676,16 +676,15 @@ void HM_deleteChunks(GC_state s, HM_chunkList deleteList) {
   assert(*(s->freeListLock));
   HM_chunk chunk = deleteList->firstChunk;
   while (chunk!=NULL) {
-    pointer q= chunk;
+    HM_chunk c = chunk;
     chunk = chunk->nextChunk;
-    HM_unlinkChunk(deleteList, q);
-    GC_release (q, HM_getChunkSize(q));
+    HM_unlinkChunk(deleteList, c);
+    GC_release (c, HM_getChunkSize(c));
   }
   unlockSharedList(s);
 }
 
 void HM_appendToSharedList(GC_state s, HM_chunkList list) {
-  HM_chunkList sharedList = HM_getsharedFreeList(s);
   while (!tryLockSharedList(s)) {}
   assert(*(s->freeListLock));
   HM_appendChunkList(s->sharedfreeList, list);

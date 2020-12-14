@@ -417,9 +417,7 @@ void HM_HH_resetList2(HM_HierarchicalHeap hh) {
 bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
   assert(HM_HH_getDepth(hh) == 1);
   hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
-  hh->concurrentPack->bytesSurvivedLastCollection +=
-      thread->bytesSurvivedLastCollection;
-
+  // return true;
   // thread->bytesAllocatedSinceLastCollection = 0;
   // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
   // hh->concurrentPack->bytesSurvivedLastCollection/=2;

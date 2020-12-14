@@ -150,23 +150,23 @@ void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
   pointer p = objptrToPointer (op, NULL);
   if (isInScope(HM_getChunkOf(p), rawArgs)
      && !isChunkSaved(HM_getChunkOf(p), rawArgs)) {
-    printf("%p \n", *opp);
+    printf("%p \n", (void *) *opp);
   }
 }
 
 void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
-  printf("\t %p", *opp);
+  printf("\t %p", (void*) *opp);
 }
 
 void printDownPtrs (GC_state s, objptr dst, objptr* field, objptr src,
                   void* rawArgs) {
-  printf("(%p, %p, %p) ", dst, field, src);
+  printf("(%p, %p, %p) ", (void*)dst, (void*)field, (void*)src);
 }
 
 void printChunkListSize(HM_chunkList list) {
   printf("sizes: ");
   for(HM_chunk chunk = list->firstChunk; chunk!=NULL; chunk = chunk->nextChunk) {
-    printf("%d ", HM_getChunkSize(chunk));
+    printf("%zu ", HM_getChunkSize(chunk));
   }
   printf("\n");
 }
@@ -283,7 +283,7 @@ bool checkLocalScheduler (GC_state s) {
          );
 }
 
-HM_HierarchicalHeap findHeap (GC_thread thread, int depth) {
+HM_HierarchicalHeap findHeap (GC_thread thread, uint32_t depth) {
 
   HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
   while(currentHeap!=NULL && HM_HH_getDepth (currentHeap) != depth) {
@@ -329,7 +329,6 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   GC_state s = pthread_getspecific (gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   HM_HierarchicalHeap heap = (HM_HierarchicalHeap)hhp;
-  HM_HierarchicalHeap currentHeap = thread->hierarchicalHeap;
 
   if (!checkLocalScheduler(s) || thread->currentDepth<=0) {
     return;
@@ -348,7 +347,7 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   s->amInCC = false;
 }
 
-int minPrivateLevel(GC_state s) {
+uint32_t minPrivateLevel(GC_state s) {
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t shallowestPrivateLevel = UNPACK_IDX(topval);
   uint32_t level = (shallowestPrivateLevel>0)?(shallowestPrivateLevel-1):0;
