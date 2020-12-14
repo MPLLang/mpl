@@ -171,10 +171,10 @@ void bucketIfValidAtList(__attribute__((unused)) GC_state s,
                    objptr dst,
                    objptr* field,
                    objptr src,
-                   HM_chunkList remSet)
+                   void* remSet)
 {
   if(checkValid(dst, field, src)) {
-    HM_remember(remSet, dst, field, src);
+    HM_remember((HM_chunkList)remSet, dst, field, src);
   }
 }
 

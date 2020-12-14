@@ -462,7 +462,7 @@ pointer HM_HH_getRoot(pointer threadp) {
     DIE("not root heap");
   }
 
-  return (thread->hierarchicalHeap);
+  return (void*)(thread->hierarchicalHeap);
 }
 
 // Story: ccstate for each hh has three values
