@@ -18,7 +18,12 @@ struct HM_remembered {
   objptr src;
 };
 
-typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+typedef void (*HM_foreachDownptrFun)(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+
+typedef struct HM_foreachDownptrClosure {
+  HM_foreachDownptrFun fun;
+  void *env;
+} *HM_foreachDownptrClosure;
 
 #endif /* defined (MLTON_GC_INTERNAL_TYPES) */
 
@@ -27,7 +32,7 @@ typedef void (*ForeachRememberedFunc)(GC_state s, objptr dst, objptr* field, obj
 
 void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src);
 void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objptr src);
-void HM_foreachRemembered(GC_state s, HM_chunkList remSet, ForeachRememberedFunc f, void* fArgs);
+void HM_foreachRemembered(GC_state s, HM_chunkList remSet, HM_foreachDownptrClosure f);
 size_t HM_numRemembered(HM_chunkList remSet);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */

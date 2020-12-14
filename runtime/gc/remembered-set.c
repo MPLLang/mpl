@@ -27,8 +27,7 @@ void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objpt
 void HM_foreachRemembered(
   GC_state s,
   HM_chunkList remSet,
-  ForeachRememberedFunc f,
-  void* fArgs)
+  HM_foreachDownptrClosure f)
 {
   assert(remSet != NULL);
   HM_chunk chunk = HM_getChunkListFirstChunk(remSet);
@@ -37,7 +36,7 @@ void HM_foreachRemembered(
     pointer frontier = HM_getChunkFrontier(chunk);
     while (p < frontier) {
       struct HM_remembered* r = (struct HM_remembered*)p;
-      f(s, r->dst, r->field, r->src, fArgs);
+      f->fun(s, r->dst, r->field, r->src, f->env);
       p += sizeof(struct HM_remembered);
     }
     chunk = chunk->nextChunk;

@@ -272,7 +272,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   LOG(LM_HH_COLLECTION, LL_DEBUG,
     "START forwarding %zu global down-pointers",
     HM_numRemembered(&globalDownPtrs));
-  HM_foreachRemembered(s, &globalDownPtrs, forwardDownPtr, &forwardHHObjptrArgs);
+
+  struct HM_foreachDownptrClosure forwardDownPtrClosure =
+    {.fun = forwardDownPtr, .env = &forwardHHObjptrArgs};
+
+  HM_foreachRemembered(s, &globalDownPtrs, &forwardDownPtrClosure);
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
   HM_appendChunkList(getFreeListSmall(s), &globalDownPtrs);
 
