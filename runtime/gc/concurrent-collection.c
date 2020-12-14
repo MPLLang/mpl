@@ -387,8 +387,10 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   else {
     y = HM_HH_getRemSet(hh);
   }
+  struct HM_foreachDownptrClosure bucketIfValidAtListClosure =
+  {.fun = bucketIfValidAtList, .env = (void*)x};
 
-  HM_foreachRemembered(s, y, bucketIfValidAtList, (void*)x);
+  HM_foreachRemembered(s, y, &bucketIfValidAtListClosure);
   HM_appendChunkList(getFreeListSmall(s), y);
   *y = *x;
 }
@@ -456,7 +458,11 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct HM_chunkList downPtrs;
   HM_initChunkList(&downPtrs);
   CC_filterDownPointers(s, &downPtrs, targetHH);
-  HM_foreachRemembered(s, &downPtrs, forwardDownPtrChunk, &lists);
+
+  struct HM_foreachDownptrClosure forwardDownPtrChunkClosure =
+  {.fun = forwardDownPtrChunk, .env = &lists};
+  HM_foreachRemembered(s, &downPtrs, &forwardDownPtrChunkClosure);
+
   // forward closures, stack and deque?
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
@@ -481,7 +487,10 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   #endif
 
-  HM_foreachRemembered(s, &downPtrs, unmarkDownPtrChunk, &lists);
+  struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
+  {.fun = unmarkDownPtrChunk, .env = &lists};
+  HM_foreachRemembered(s, &downPtrs, &unmarkDownPtrChunkClosure);
+
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
   forceUnmark(s, &(cp->snapTemp), &lists);
