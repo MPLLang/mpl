@@ -92,7 +92,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
 
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
-  uint32_t minDepth = originalLocalScope;
+  uint32_t minDepth = max(thread->minLocalCollectionDepth, originalLocalScope);
   // claim as many levels as we can, but only as far as desired
   while (minDepth > desiredScope &&
          minDepth > thread->minLocalCollectionDepth &&
