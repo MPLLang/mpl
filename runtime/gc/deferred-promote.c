@@ -28,6 +28,10 @@ void HM_deferredPromote(
   for (uint32_t i = 0; i < numLevels; i++) {
     HM_initChunkList(&(downPtrs[i]));
   }
+
+  struct HM_foreachDownptrClosure bucketIfValidClosure =
+  {.fun = bucketIfValid, .env = &(downPtrs[0])};
+
   for (HM_HierarchicalHeap cursor = args->hh;
        (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
        cursor = cursor->nextAncestor)
@@ -35,8 +39,7 @@ void HM_deferredPromote(
     HM_foreachRemembered(
       s,
       HM_HH_getRemSet(cursor),
-      bucketIfValid,
-      &(downPtrs[0]));
+      &bucketIfValidClosure);
   }
 
   /* memoize the fromSpace chunkLists for quick access */
@@ -70,11 +73,14 @@ void HM_deferredPromote(
 
     /* promote the roots, as indicated by the remembered downptrs */
     args->toDepth = i;
+
+    struct HM_foreachDownptrClosure promoteDownPtrClosure =
+    {.fun = promoteDownPtr, .env = args};
+
     HM_foreachRemembered(
       s,
       &(downPtrs[i]),
-      promoteDownPtr,
-      args);
+      &promoteDownPtrClosure);
 
     if (NULL == fromSpace[i] ||
         NULL == HM_getChunkListFirstChunk(HM_HH_getChunkList(fromSpace[i])))
