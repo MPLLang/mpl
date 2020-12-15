@@ -73,6 +73,13 @@ struct
   type thread = Basic.t
   type t = MLtonPointer.t
 
+  fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
+  fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
+  fun resetList (t) = Prim.resetList(t)
+
+  fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
+  fun getRoot t = Prim.getRoot t
+
   fun getDepth t = Word32.toInt (Prim.getDepth t)
   fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
   fun setMinLocalCollectionDepth (t, d) =

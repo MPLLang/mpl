@@ -1543,7 +1543,7 @@ structure Objptrs =
                     default: Label.t option,
                     test: Operand.t})
          : Statement.t list * Transfer.t =
-         let
+          let
             val cases =
                Vector.keepAllMap
                (cases, fn {con, dst, dstHasArg} =>
@@ -1559,34 +1559,41 @@ structure Objptrs =
                                                      else Vector.new0 (),
                                               dst = dst}})
                  | _ => NONE)
-         in
+          in
             if Vector.isEmpty cases
                then case default of
                        NONE => ([], Transfer.bug ())
                      | SOME default =>
                           ([], Goto {args = Vector.new0 (), dst = default})
-               else let
-                       val default =
-                          if Vector.length variants = Vector.length cases
-                             then NONE
-                             else default
-                       val cases =
-                          QuickSort.sortVector (cases, fn ((w, _), (w', _)) =>
-                                                WordX.le (w, w', {signed = false}))
-                       val shift = Operand.word (WordX.one WordSize.shiftArg)
-                       val (s, tag) =
-                          Statement.rshift (Offset {base = test,
-                                                    offset = Runtime.headerOffset (),
-                                                    ty = Type.objptrHeader ()},
-                                            shift)
-                    in
-                       ([s], Switch (Switch.T {cases = cases,
-                                               default = default,
-                                               expect = NONE,
-                                               size = WordSize.objptrHeader (),
-                                               test = tag}))
-                    end
-         end
+            else
+                let
+                  val default =
+                     if Vector.length variants = Vector.length cases
+                        then NONE
+                     else default
+                  val cases =
+                     QuickSort.sortVector (cases, fn ((w, _), (w', _)) =>
+                                           WordX.le (w, w', {signed = false}))
+                  val shift = Operand.word (WordX.one WordSize.shiftArg)
+                  val (s, tag) =
+                     Statement.rshift (Offset {base = test,
+                                               offset = Runtime.headerOffset (),
+                                               ty = Type.objptrHeader ()},
+                                       shift)
+                  val wmask = 0wx7ffff
+                  val wmaskint = Word.toInt wmask
+                  val wmaskintInf = IntInf.fromInt wmaskint
+                  (* val mask = Operand.word (WordX.fromIntInf (mark_mask, WordSize.shiftArg)) *)
+                  val mask = Operand.word (WordX.fromIntInf (wmaskintInf, WordSize.shiftArg))
+                  val (s2, tag2) = Statement.andb (tag, mask)
+                in
+                    ([s, s2], Switch (Switch.T {cases = cases,
+                                            default = default,
+                                            expect = NONE,
+                                            size = WordSize.objptrHeader (),
+                                            test = tag2}))
+                end
+          end
    end
 
 structure Small =

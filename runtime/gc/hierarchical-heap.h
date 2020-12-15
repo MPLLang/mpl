@@ -9,6 +9,7 @@
 #define HIERARCHICAL_HEAP_H_
 
 #include "chunk.h"
+#include "concurrent-collection.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
@@ -17,8 +18,10 @@ typedef struct HM_HierarchicalHeap {
   uint32_t depth;
 
   struct HM_chunkList chunkList;
+  struct HM_chunkList fromList;
 
   struct HM_chunkList rememberedSet;
+  struct ConcurrentPackage* concurrentPack;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
    * Also, all threads have their own leaf-to-root path (essentially, path
@@ -43,6 +46,12 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
   return &(hh->chunkList);
 }
 
+static inline HM_chunkList HM_HH_getFromList(HM_HierarchicalHeap hh)
+{
+  return &(hh->fromList);
+}
+
+
 static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
 {
   return &(hh->rememberedSet);
@@ -53,6 +62,9 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);
 uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh);
 
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh);
+
+bool HM_HH_isCCollecting(HM_HierarchicalHeap hh);
+void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
@@ -77,6 +89,10 @@ size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 
 uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 
+void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
+pointer HM_HH_getRoot(pointer threadp);
+void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
+void HM_HH_resetList(pointer threadp);
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

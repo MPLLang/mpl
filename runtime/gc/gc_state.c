@@ -57,6 +57,11 @@ struct HM_chunkList* getFreeListSmall(GC_state s) {
   return &(s->freeListSmall);
 }
 
+struct HM_chunkList* HM_getsharedFreeList(GC_state s)  {
+  return s->sharedfreeList;
+}
+
+
 struct HM_chunkList* getFreeListLarge(GC_state s) {
   return &(s->freeListLarge);
 }
@@ -162,6 +167,32 @@ size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s) {
 
 uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc) {
   return s->procStates[proc].cumulativeStatistics->numHHLocalGCs;
+}
+
+uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->numRootCCs;
+}
+
+uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->numInternalCCs;
+}
+
+uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc) {
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeRootCC);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
+uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc) {
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeInternalCC);
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
+uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByRootCC;
+}
+
+uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByInternalCC;
 }
 
 uintmax_t GC_getLocalGCMillisecondsOfProc(GC_state s, uint32_t proc) {

@@ -104,6 +104,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    *   getThreadCurrent(s)->bytesNeeded
    * instead of bytesRequested? */
   HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
+  // CC_collectWithRoots(s, )
 
   endAtomic(s);
 

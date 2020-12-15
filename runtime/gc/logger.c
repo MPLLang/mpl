@@ -15,7 +15,6 @@
 #include "hierarchical-heap.h"
 
 #include <string.h>
-#include <strings.h>
 
 /********************/
 /* Extern Variables */

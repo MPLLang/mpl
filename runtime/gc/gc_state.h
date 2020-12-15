@@ -25,6 +25,7 @@ struct GC_state {
   /* Alphabetized fields follow. */
   size_t alignment; /* */
   bool amInGC;
+  bool amInCC;
   bool amOriginal;
   char **atMLtons; /* Initial @MLton args, processed before command line. */
   int atMLtonsLength;
@@ -42,6 +43,8 @@ struct GC_state {
   uint32_t frameInfosLength; /* Cardinality of frameInfos array. */
   struct HM_chunkList freeListSmall;
   struct HM_chunkList freeListLarge;
+  HM_chunkList sharedfreeList;
+  bool* freeListLock;
   struct HM_chunkList extraSmallObjects;
   size_t nextChunkAllocSize;
   /* Ordinary globals */
@@ -97,6 +100,8 @@ static inline void setGCStateCurrentThreadAndStack (GC_state s);
 static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListLarge(GC_state s);
+struct HM_chunkList* HM_getsharedFreeList(GC_state s);
+
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
@@ -125,6 +130,13 @@ PRIVATE uintmax_t GC_getLocalGCMillisecondsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(GC_state s, uint32_t proc);
 
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc);
+
+PRIVATE uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
 PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);

@@ -194,7 +194,6 @@ void HM_HH_promoteChunks(
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
     hh->representative = hh->nextAncestor;
-
     /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
   }
@@ -210,17 +209,41 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
+  // this can be more in concert with the scheduler.
+  bool createCP = (depth >= 1);
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
+  if (createCP){
+    bytesNeeded += sizeof(struct ConcurrentPackage);
+  }
+
   HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
   pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
+  assert(start!=NULL);
 
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
-
+  if(createCP) {
+    hh->concurrentPack = (ConcurrentPackage)
+                        (start + sizeof(struct HM_HierarchicalHeap));
+    // hh->concurrentPack->isCollecting = false;
+    hh->concurrentPack->rootList = NULL;
+    hh->concurrentPack->snapLeft = BOGUS_OBJPTR;
+    hh->concurrentPack->snapRight = BOGUS_OBJPTR;
+    hh->concurrentPack->stack = BOGUS_OBJPTR;
+    hh->concurrentPack->ccstate = CC_UNREG;
+    hh->concurrentPack->bytesSurvivedLastCollection = 0;
+    hh->concurrentPack->bytesAllocatedSinceLastCollection = 0;
+    HM_initChunkList(&(hh->concurrentPack->remSet));
+  }
+  else {
+    hh->concurrentPack = NULL;
+  }
+  // hh->concurrentPack = NULL;
   hh->representative = NULL;
   hh->depth = depth;
   hh->nextAncestor = NULL;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
+  HM_initChunkList(HM_HH_getFromList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
 
   HM_appendChunk(HM_HH_getChunkList(hh), chunk);
@@ -329,6 +352,200 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   return TRUE;
 }
 
+void HM_HH_forceLeftHeap(
+  ARG_USED_FOR_ASSERT uint32_t processor,
+  pointer threadp)
+{
+  GC_state s = pthread_getspecific (gcstate_key);
+  assert(processor < s->numberOfProcs);
+  GC_MayTerminateThread(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+
+  beginAtomic(s);
+  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
+  assert(threadAndHeapOkay(s));
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  HM_HH_updateValues(thread, s->frontier);
+
+  if (s->limitPlusSlop < s->frontier) {
+    DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
+        ((void*)(s->limit)),
+        ((void*)(s->frontier)));
+  }
+
+  // JATIN_TODO: have a better bytesRequested here.
+  size_t bytesRequested = GC_HEAP_LIMIT_SLOP;
+  if (!HM_HH_extend (s, thread, bytesRequested)){
+    assert(0);
+  }
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
+  endAtomic(s);
+}
+
+// Separate the list into two. The "fromList" will be garbage-collected
+// but the chunkList is not touched by CC.
+// It can be used by the mutator for promotions or other allocations.
+void HM_HH_splitChunkList(HM_HierarchicalHeap hh, GC_thread thread) {
+  HM_chunkList chunkList = HM_HH_getChunkList(hh);
+  HM_chunkList fromList = HM_HH_getFromList(hh);
+  *(fromList) = *(chunkList);
+  HM_initChunkList(chunkList);
+  HM_chunk newChunk = HM_allocateChunk(chunkList, GC_HEAP_LIMIT_SLOP);
+  newChunk->levelHead = hh;
+  thread->currentChunk = HM_getChunkListLastChunk(chunkList);
+
+  HM_assertChunkListInvariants(chunkList);
+  HM_assertChunkListInvariants(fromList);
+}
+
+void HM_HH_resetList2(HM_HierarchicalHeap hh) {
+  assert(hh->concurrentPack->ccstate == CC_UNREG);
+  HM_assertChunkListInvariants(HM_HH_getFromList(hh));
+  HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
+
+  HM_appendChunkList(HM_HH_getFromList(hh), HM_HH_getChunkList(hh));
+  hh->chunkList = hh->fromList;
+  HM_initChunkList(HM_HH_getFromList(hh));
+}
+
+bool checkPolicyforRoot(
+  __attribute__((unused)) GC_state s,
+  HM_HierarchicalHeap hh,
+  __attribute__((unused)) GC_thread thread)
+{
+  assert(HM_HH_getDepth(hh) == 1);
+  hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
+  // return true;
+  // thread->bytesAllocatedSinceLastCollection = 0;
+  // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
+  // hh->concurrentPack->bytesSurvivedLastCollection/=2;
+  // hh->concurrentPack->bytesAllocatedSinceLastCollection;
+  if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
+      (hh->concurrentPack->bytesAllocatedSinceLastCollection)
+    || hh->concurrentPack->bytesSurvivedLastCollection == 0) {
+    // if (!hh->concurrentPack->shouldCollect) {
+      // hh->concurrentPack->bytesSurvivedLastCollection/=2;
+    // }
+    hh->concurrentPack->bytesSurvivedLastCollection +=4;
+    return false;
+  }
+  return true;
+}
+
+void copyCurrentStack(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
+  GC_stack stackP = (GC_stack) stackPtr;
+
+  size_t objectSize, copySize, metaDataSize;
+  metaDataSize = GC_STACK_METADATA_SIZE;
+  copySize = sizeof(struct GC_stack) + stackP->used + metaDataSize;
+  // objectSize = sizeofObject(s, stackPtr);
+  objectSize = copySize;
+  // copyObject can add a chunk to the list. It updates the frontier but not the
+  // thread current chunk. Also it returns the pointer to the header part.
+  pointer stackCopy = copyObject(stackPtr - metaDataSize,
+                                 objectSize, copySize, hh);
+  thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(hh));
+  stackCopy += metaDataSize;
+  ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
+  hh->concurrentPack->stack = pointerToObjptr(stackCopy, NULL);
+}
+
+pointer HM_HH_getRoot(pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  if (HM_HH_getDepth(thread->hierarchicalHeap)!= 1) {
+    DIE("not root heap");
+  }
+
+  return (void*)(thread->hierarchicalHeap);
+}
+
+// Story: ccstate for each hh has three values
+// 1. CC_UNREG: This means that the root-set for the next collection (if we want to collect) needs to be constructed.
+//              Either the previous root-set has already been used for a collection (which has finished) or this
+//              is the first time a root-set is being made for this hh.
+// 2. CC_REG:   This means that the root-set has been constructed but the collection hasn't started
+// 3. CC_COLLECTING: The collector sets this value to ccstate when it starts collecting using cas.
+//                   After its finished, the flag is set to CC_UNREG indicating that a new root set is needed.
+void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+
+  GC_MayTerminateThread(s);
+  beginAtomic(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  getThreadCurrent(s)->currentChunk->frontier = s->frontier;
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  assert(thread != NULL);
+  HM_HH_updateValues(thread, s->frontier);
+  if (s->limitPlusSlop < s->frontier) {
+    DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
+        ((void*)(s->limit)),
+        ((void*)(s->frontier)));
+  }
+
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  if(hh->concurrentPack->rootList == NULL) {
+    CC_initStack(hh->concurrentPack);
+  }
+
+  if(HM_HH_getDepth(hh) == 1 &&
+    hh->concurrentPack->ccstate != CC_UNREG) {
+    // the CC at depth 1 hasn't completed yet, so don't
+    // do anything.
+    return;
+  }
+  else {
+    hh->concurrentPack->ccstate = CC_UNREG;
+  }
+
+  if (HM_HH_getDepth(hh) == 1) {
+      HM_HH_resetList2(hh);
+      bool willCollect = checkPolicyforRoot(s, hh, thread);
+      if (willCollect) {
+        HM_HH_splitChunkList(hh, thread);
+        HM_appendChunkList(&(hh->concurrentPack->remSet), HM_HH_getRemSet(hh));
+        HM_initChunkList(HM_HH_getRemSet(hh));
+      }
+      else {
+        // Not collecting, so keep ccstate = CC_UNREG
+        return;
+      }
+  }
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kl)) == hh);
+  assert(HM_getLevelHeadPathCompress(HM_getChunkOf(kr)) == hh);
+  assert(hh->concurrentPack != NULL);
+
+  hh->concurrentPack->snapLeft  =  pointerToObjptr(kl, NULL);
+  hh->concurrentPack->snapRight =  pointerToObjptr(kr, NULL);
+  hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
+  copyCurrentStack(s, thread);
+
+  CC_clearMutationStack(hh->concurrentPack);
+  hh->concurrentPack->ccstate = CC_REG;
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
+  endAtomic(s);
+}
+
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;
 }
@@ -423,6 +640,22 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
   return desiredMinDepth;
 }
 
+bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
+  assert(hh!=NULL);
+  if (hh->concurrentPack != NULL)
+    return  ((hh->concurrentPack)->ccstate == CC_COLLECTING);
+  return false;
+}
+
+void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
+  assert(hh!=NULL);
+  if(hh->concurrentPack!=NULL){
+    CC_addToStack(hh->concurrentPack, p);
+  }
+}
+
+
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 /*******************************/
@@ -433,6 +666,7 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread)
 
 void assertInvariants(GC_thread thread)
 {
+  return;
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
 

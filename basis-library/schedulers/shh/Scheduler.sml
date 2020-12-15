@@ -22,6 +22,8 @@ struct
   structure HH = MLton.Thread.HierarchicalHeap
 
   val P = MLton.Parallel.numberOfProcessors
+  val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
+                          ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
   val myWorkerId = MLton.Parallel.processorNumber
 
   (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
@@ -213,7 +215,6 @@ struct
       let
         val rightSide = ref (NONE : ('b result * Thread.t) option)
         val incounter = ref 2
-
         fun g' () =
           let
             val gr = result g
@@ -227,12 +228,22 @@ struct
             else
               returnToSched ()
           end
-
         val _ = push g'
-        val _ = HH.setDepth (thread, depth + 1)
-
+        val _ =
+              if (depth < internalGCThresh) then
+                let
+                  val cont_arr1 =  Array.array (1, SOME(f))
+                  val cont_arr2 =  Array.array (1, SOME(g))
+                  val cont_arr3 =  Array.array (0, NONE)
+                in
+                    HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
+                  ; HH.setDepth (thread, depth + 1)
+                  ; HH.forceLeftHeap(myWorkerId(), thread)
+                end
+              else
+                (HH.setDepth (thread, depth + 1))
+        (*force left heap must be after set Depth*)
         val fr = result f
-
         val gr =
           if popDiscard () then
             ( HH.promoteChunks thread
@@ -256,13 +267,57 @@ struct
         (extractResult fr, extractResult gr)
       end
 
-    fun fork (f, g) =
+    fun forkGC (f : unit -> 'a, g : unit -> 'b) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
+        val rootHH = HH.getRoot thread
+
+        fun gcFunc() =
+            (HH.collectThreadRoot(thread, rootHH)
+            ; returnToSched ()
+            )
+
+        val cont_arr1 =  Array.array (1, SOME(f))
+        val cont_arr2 =  Array.array (1, SOME(g))
+        val cont_arr3 =  Array.array (1, SOME(gcFunc))
+        val _ = HH.registerCont(cont_arr1, cont_arr2, cont_arr3, thread)
+        val _ = HH.setDepth (thread, depth + 1)
+
+        (*force left heap must be after set Depth*)
+        val _ = HH.forceLeftHeap(myWorkerId(), thread)
+        val _ = push gcFunc
+        val fr = fork(f, g)
+        val gr =
+          if popDiscard() then
+            let
+              val _ = HH.collectThreadRoot(thread, rootHH)
+              val _ = HH.promoteChunks thread
+            in
+              HH.setDepth (thread, depth)
+              ; ()
+            end
+          else
+            ( clear()
+            ; setQueueDepth (myWorkerId ()) depth
+            ; HH.promoteChunks thread
+            ; HH.setDepth (thread, depth)
+            ; ()
+            )
+      in
+        fr
+      end
+
+    and fork (f, g) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
         (* don't let us hit an error, just sequentialize instead *)
-        if depth < Queue.capacity then
+        if depth = 1 then
+          forkGC(f, g)
+        else if depth < Queue.capacity then
           parfork thread depth (f, g)
         else
           (f (), g ())
@@ -282,7 +337,7 @@ struct
     let
       val mySchedThread = Thread.current ()
       val _ = HH.setDepth (mySchedThread, 1)
-      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 1)
+      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 2)
 
       val myId = myWorkerId ()
       val myRand = SMLNJRandom.rand (0, myId)

@@ -7,9 +7,11 @@
 #include "remembered-set.h"
 #include "hierarchical-heap-collection.h"
 
-void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 void promoteDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs);
 void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArgs);
+
+
+void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
 /* ========================================================================= */
 
@@ -150,21 +152,13 @@ void HM_deferredPromote(
   return;
 }
 
-void bucketIfValid(__attribute__((unused)) GC_state s,
-                   objptr dst,
-                   objptr* field,
-                   objptr src,
-                   void* arg)
-{
-  struct HM_chunkList* downPtrs = arg;
-  // pointer dstp = objptrToPointer(dst, NULL);
-  // pointer srcp = objptrToPointer(src, NULL);
-
+bool checkValid(objptr dst, objptr* field, objptr src) {
   assert(!hasFwdPtr(objptrToPointer(dst, NULL)));
+
   if (*field != src) {
     /* Another write to this location has since invalidated this particular
      * remembered entry. */
-    return;
+    return false;
   }
 
   uint32_t dstDepth = HM_getObjptrDepth(dst);
@@ -174,10 +168,36 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
 
   if (dstDepth == srcDepth) {
     /* levels have coincided due to joins, so ignore this entry. */
-    return;
+    return false;
   }
+  return true;
+}
 
-  HM_remember(&(downPtrs[dstDepth]), dst, field, src);
+void bucketIfValidAtList(__attribute__((unused)) GC_state s,
+                   objptr dst,
+                   objptr* field,
+                   objptr src,
+                   void* remSet)
+{
+  if(checkValid(dst, field, src)) {
+    HM_remember((HM_chunkList)remSet, dst, field, src);
+  }
+}
+
+void bucketIfValid(__attribute__((unused)) GC_state s,
+                   objptr dst,
+                   objptr* field,
+                   objptr src,
+                   void* arg)
+{
+
+  struct HM_chunkList* downPtrs = arg;
+  uint32_t dstDepth = HM_getObjptrDepth(dst);
+  bucketIfValidAtList(s, dst, field, src, &(downPtrs[dstDepth]));
+  // if (checkValid(dst, field, src)) {
+  //   struct HM_chunkList* downPtrs = arg;
+  //   HM_remember(&(downPtrs[dstDepth]), dst, field, src);
+  // }
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,

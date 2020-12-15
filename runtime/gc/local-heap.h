@@ -13,6 +13,7 @@
  * The interface for managing local heaps
  */
 
+#include "concurrent-collection.h"
 #ifndef LOCAL_HEAP_H_
 #define LOCAL_HEAP_H_
 

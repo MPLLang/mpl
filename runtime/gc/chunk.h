@@ -51,8 +51,8 @@ struct HM_chunk {
   HM_chunk nextChunk;
   HM_chunk prevChunk;
 
-  HM_chunk nextAdjacent;
-  HM_chunk prevAdjacent;
+  // HM_chunk nextAdjacent;
+  // HM_chunk prevAdjacent;
 
   /* some chunks may be used to store other non-ML allocated objects, like
    * heap records; if so, these will be stored at the front of the chunk, and
@@ -63,6 +63,7 @@ struct HM_chunk {
   uint8_t startGap;
 
   bool mightContainMultipleObjects;
+  void* tmpHeap;
 
   // for padding and sanity checks
   uint32_t magic;
@@ -136,6 +137,8 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
 void HM_initChunkList(HM_chunkList list);
 HM_chunkList HM_newChunkList(void);
 
+void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
+void HM_appendToSharedList(GC_state s, HM_chunkList list);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);
@@ -236,6 +239,10 @@ HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 size_t HM_getChunkListSize(HM_chunkList levelHead);
+
+// bool HM_isChunkMarked(HM_chunk chunk);
+// void HM_markChunk(HM_chunk chunk);
+// void HM_unmarkChunk(HM_chunk chunk);
 
 /**
  * Updates the chunk's values to reflect mutator

@@ -155,6 +155,13 @@ structure GC =
       val getCumulativeStatisticsBytesAllocatedOfProc = _import "GC_getCumulativeStatisticsBytesAllocatedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
       val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
       "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+
+      val getNumRootCCsOfProc = _import "GC_getNumRootCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getNumInternalCCsOfProc = _import "GC_getNumInternalCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCMillisecondsOfProc = _import "GC_getRootCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
    end
 
 structure HM =
@@ -404,7 +411,16 @@ structure Thread =
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: GCState.t -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
+      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
+      val registerCont: ('a array) * ('b array) * ('c array) * thread -> unit =
+            _import "HM_HH_registerCont" runtime private:
+            ('a array) * ('b array) * ('c array) * thread -> unit;
+      val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
+      val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
+
       val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
+      val getRoot = _import "HM_HH_getRoot" runtime private: thread -> Word64.word;
+
       val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
       val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
