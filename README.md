@@ -1,4 +1,6 @@
 # MPL-CC
+Please use the master branch for updated implementation. 
+
 
 MPL<sup>*</sup>/MPL-CC is an extension of the [MPL](https://github.com/MPLLang/mpl)
 compiler. MPL-CC and MPL are research softwares that are being actively developed.
