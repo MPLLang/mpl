@@ -352,8 +352,10 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   return TRUE;
 }
 
-void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp) {
-
+void HM_HH_forceLeftHeap(
+  ARG_USED_FOR_ASSERT uint32_t processor,
+  pointer threadp)
+{
   GC_state s = pthread_getspecific (gcstate_key);
   assert(processor < s->numberOfProcs);
   GC_MayTerminateThread(s);
@@ -414,7 +416,11 @@ void HM_HH_resetList2(HM_HierarchicalHeap hh) {
   HM_initChunkList(HM_HH_getFromList(hh));
 }
 
-bool checkPolicyforRoot(GC_state s, HM_HierarchicalHeap hh, GC_thread thread) {
+bool checkPolicyforRoot(
+  __attribute__((unused)) GC_state s,
+  HM_HierarchicalHeap hh,
+  __attribute__((unused)) GC_thread thread)
+{
   assert(HM_HH_getDepth(hh) == 1);
   hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
   // return true;

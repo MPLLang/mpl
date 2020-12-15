@@ -117,12 +117,16 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
   HM_assertChunkListInvariants(args->repList);
 }
 
-bool saveNoForward(GC_state s, pointer p, void* rawArgs) {
+bool saveNoForward(
+  __attribute__((unused)) GC_state s,
+  pointer p,
+  void* rawArgs)
+{
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
   HM_chunk cand_chunk = HM_getChunkOf(p);
   bool chunkSaved = isChunkSaved(cand_chunk, args);
-  bool chunkOrig  = (chunkSaved)?true:isInScope(cand_chunk, args);
+  bool chunkOrig  = (chunkSaved)?TRUE:isInScope(cand_chunk, args);
 
   if(chunkOrig && !chunkSaved) {
     assert(getTransitivePtr(p, rawArgs) == p);
@@ -145,7 +149,11 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
 }
 
 // some debugging functions
-void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
+void printObjPtrInScopeFunction(
+  __attribute__((unused)) GC_state s,
+  objptr* opp,
+  void* rawArgs)
+{
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
@@ -155,12 +163,21 @@ void printObjPtrInScopeFunction(GC_state s, objptr* opp, void* rawArgs) {
   }
 }
 
-void printObjPtrFunction(GC_state s, objptr* opp, void* rawArgs) {
+void printObjPtrFunction(
+  __attribute__((unused)) GC_state s,
+  objptr* opp,
+  __attribute__((unused)) void* rawArgs)
+{
   printf("\t %p", (void*) *opp);
 }
 
-void printDownPtrs (GC_state s, objptr dst, objptr* field, objptr src,
-                  void* rawArgs) {
+void printDownPtrs(
+  __attribute__((unused)) GC_state s,
+  objptr dst,
+  objptr* field,
+  objptr src,
+  __attribute__((unused)) void* rawArgs)
+{
   printf("(%p, %p, %p) ", (void*)dst, (void*)field, (void*)src);
 }
 
@@ -175,9 +192,9 @@ void printChunkListSize(HM_chunkList list) {
 bool isChunkInList(HM_chunk chunk, HM_chunkList list) {
   for(HM_chunk c = list->firstChunk; c!=NULL; c=c->nextChunk) {
     if(c == chunk)
-      return true;
+      return TRUE;
   }
-  return false;
+  return FALSE;
 }
 
 void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
@@ -230,7 +247,13 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
   }
 }
 
-void unmarkDownPtrChunk (GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
+void unmarkDownPtrChunk(
+  GC_state s,
+  objptr dst,
+  __attribute__((unused)) objptr* field,
+  objptr src,
+  void* rawArgs)
+{
   unmarkPtrChunk(s, &src, rawArgs);
   unmarkPtrChunk(s, &dst, rawArgs);
 }
@@ -311,19 +334,19 @@ bool readyforCollection(ConcurrentPackage cp) {
 // returns true if claim succeeds
 bool claimHeap(HM_HierarchicalHeap heap) {
   if (heap == NULL) {
-    return false;
+    return FALSE;
   }
 
   ConcurrentPackage cp = heap->concurrentPack;
   if(!readyforCollection(cp)) {
-    return false;
+    return FALSE;
   }
   else if (casCC (&(cp->ccstate), CC_REG, CC_COLLECTING) != CC_REG) {
     printf("\t %s\n", "returning because someone else claimed collection");
-    return false;
+    return FALSE;
   }
   assert(heap->concurrentPack->ccstate == CC_COLLECTING);
-  return true;
+  return TRUE;
 }
 
 void CC_collectAtRoot(pointer threadp, pointer hhp) {
@@ -341,11 +364,11 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
 
   // for exiting even if CC is going on.
   assert(!s->amInCC);
-  s->amInCC = true;
+  s->amInCC = TRUE;
 
   CC_collectWithRoots(s, heap, thread);
   heap->concurrentPack->ccstate = CC_UNREG;
-  s->amInCC = false;
+  s->amInCC = FALSE;
 }
 
 uint32_t minPrivateLevel(GC_state s) {
@@ -485,8 +508,12 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   if (HM_HH_getDepth(targetHH) != 1){
     struct GC_foreachObjptrClosure printObjPtrInScopeClosure =
     {.fun = printObjPtrInScopeFunction, .env =  &lists};
-    foreachObjptrInObject(s, thread->stack, &trueObjptrPredicateClosure,
-          &printObjPtrInScopeClosure, FALSE);
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(thread->stack, NULL),
+      &trueObjptrPredicateClosure,
+      &printObjPtrInScopeClosure,
+      FALSE);
   }
   #endif
 

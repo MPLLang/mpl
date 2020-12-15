@@ -131,7 +131,8 @@ void forEachObjptrinStack(GC_state s,
     while(i!=size){
 
         while(i!=size){
-            callIfIsObjptr(s, &fObjptrClosure, &(stack->storage[i]));
+            objptr* opp = (objptr*)(&(stack->storage[i]));
+            callIfIsObjptr(s, &fObjptrClosure, opp);
             i++;
         }
 
