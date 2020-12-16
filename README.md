@@ -2,7 +2,10 @@
 
 MaPLe (MPL) is an extension of the [MLton](http://mlton.org)
 compiler for Standard ML which implements support for
-nested (fork-join) parallelism.
+nested (fork-join) parallelism. MPL generates executables with
+excellent multicore performance, utilizing a novel approach to
+memory management based on the theory of disentanglement
+[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21)].
 
 MPL is research software and is being actively developed.
 
@@ -176,7 +179,7 @@ $ foo @mpl procs 4 set-affinity -- bar
 
 Currently, MPL only supports programs that are **disentangled**, which
 (roughly speaking) is the property that concurrent threads remain oblivious
-to each other's allocations.
+to each other's allocations [[3](#wyfa20)].
 
 Here are a number of different ways to guarantee that your code is
 disentangled.
@@ -200,10 +203,6 @@ you just need to compile and run your program as usual. Note that the checker
 is execution-dependent, so if your program is non-deterministic (e.g. racy),
 it's possible that the checker will not detect entanglement. **The checker is
 a work-in-progress**, so at the moment it doesn't come with any guarantees.
-
-For more information about disentanglement, see the POPL 2020 paper
-[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf)
-by Westrick et al.
 
 ## Bugs and Known Issues
 
@@ -236,3 +235,24 @@ unsupported, including (but not limited to):
 * `Weak`
 * `World`
 
+## References
+
+[<a name="rmab16">1</a>]
+[Hierarchical Memory Management for Parallel Programs](http://cs.iit.edu/~smuller/papers/icfp16-preprint.pdf).
+Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
+ICFP 2016.
+
+[<a name="gwraf18">2</a>]
+[Hierarchical Memory Management for Mutable State](http://www.cs.cmu.edu/~swestric/18/ppopp.pdf).
+Adrien Guatto, Sam Westrick, Ram Raghunathan, Umut Acar, and Matthew Fluet.
+PPoPP 2018.
+
+[<a name="wyfa20">3</a>]
+[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf).
+Sam Westrick, Rohan Yadav, Matthew Fluet, and Umut A. Acar.
+POPL 2020.
+
+[<a name="awa21">4</a>]
+[Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
+Jatin Arora, Sam Westrick, and Umut A. Acar.
+POPL 2021.
