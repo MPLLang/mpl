@@ -21,7 +21,7 @@ typedef struct HM_HierarchicalHeap {
   struct HM_chunkList fromList;
 
   struct HM_chunkList rememberedSet;
-  struct ConcurrentPackage* concurrentPack;
+  struct ConcurrentPackage concurrentPack;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
    * Also, all threads have their own leaf-to-root path (essentially, path
@@ -40,6 +40,11 @@ typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+static inline ConcurrentPackage HM_HH_getConcurrentPack(HM_HierarchicalHeap hh)
+{
+  return &(hh->concurrentPack);
+}
 
 static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
 {

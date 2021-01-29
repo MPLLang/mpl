@@ -289,9 +289,11 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
           &unmarkPtrClosure, FALSE);
 }
 
-void ensureCallSanity(__attribute__((unused)) GC_state s,
-                     __attribute__((unused)) HM_HierarchicalHeap targetHH,
-                      __attribute__((unused))ConcurrentPackage args) {
+void ensureCallSanity(
+  __attribute__((unused)) GC_state s,
+  ARG_USED_FOR_ASSERT HM_HierarchicalHeap targetHH,
+  ARG_USED_FOR_ASSERT ConcurrentPackage args)
+{
   assert(targetHH!=NULL);
   assert(args!=NULL);
   assert(args->snapLeft!=BOGUS_OBJPTR);
@@ -337,7 +339,7 @@ bool claimHeap(HM_HierarchicalHeap heap) {
     return FALSE;
   }
 
-  ConcurrentPackage cp = heap->concurrentPack;
+  ConcurrentPackage cp = HM_HH_getConcurrentPack(heap);
   if(!readyforCollection(cp)) {
     return FALSE;
   }
@@ -345,7 +347,7 @@ bool claimHeap(HM_HierarchicalHeap heap) {
     printf("\t %s\n", "returning because someone else claimed collection");
     return FALSE;
   }
-  assert(heap->concurrentPack->ccstate == CC_COLLECTING);
+  assert(HM_HH_getConcurrentPack(heap)->ccstate == CC_COLLECTING);
   return TRUE;
 }
 
@@ -367,7 +369,7 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   s->amInCC = TRUE;
 
   CC_collectWithRoots(s, heap, thread);
-  heap->concurrentPack->ccstate = CC_UNREG;
+  HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
   s->amInCC = FALSE;
 }
 
@@ -401,14 +403,14 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   // Mark that collection is complete
-  heap->concurrentPack->ccstate = CC_UNREG;
+  HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
 }
 
 void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   // Since the root collection is truly concurrent the depth 1 remSet is separated at the time of fork.
   HM_chunkList y;
   if (hh->depth == 1) {
-    y = &(hh->concurrentPack->remSet);
+    y = &(HM_HH_getConcurrentPack(hh)->remSet);
   }
   else {
     y = HM_HH_getRemSet(hh);
@@ -428,7 +430,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   timespec_now(&startTime);
 
-  ConcurrentPackage cp = targetHH->concurrentPack;
+  ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
   ensureCallSanity(s, targetHH, cp);
   // At the end of collection, repList will contain all the chunks that have
   // some object that is reachable from the roots. origList will contain the
@@ -456,7 +458,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // So, I assign the levelHead of all chunks in the list to targetHH.
   // Then I explicitly preserve the chunk that contains targetHH.
   for(HM_chunk T = HM_getChunkListFirstChunk(origList); T!=NULL; T = T->nextChunk) {
-    #if ASSERT2
+#if ASSERT2
     // there were some issues with stack chunks
     // preserving for future debugging
       HM_chunk stackChunk =  HM_getChunkOf(thread->stack);
@@ -464,7 +466,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
         printf("%s\n", "this is failing");
         assert(0);
       }
-    #endif
+#endif
     assert(T->tmpHeap == NULL);
     T->tmpHeap = lists.fromHead;
     T->levelHead = targetHH;
@@ -504,7 +506,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   saveNoForward(s, (void*)thread, &lists);
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
-  #if ASSERT
+#if ASSERT
   if (HM_HH_getDepth(targetHH) != 1){
     struct GC_foreachObjptrClosure printObjPtrInScopeClosure =
     {.fun = printObjPtrInScopeFunction, .env =  &lists};
@@ -515,7 +517,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
       &printObjPtrInScopeClosure,
       FALSE);
   }
-  #endif
+#endif
 
   struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
   {.fun = unmarkDownPtrChunk, .env = &lists};
@@ -528,7 +530,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceUnmark(s, &(cp->stack), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
-  #if ASSERT2 // just contains code that is sometimes useful for debugging.
+#if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
   HM_assertChunkListInvariants(repList);
 
@@ -572,7 +574,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     }
     chunk=tChunk;
   }
-  #endif
+#endif
 
   uint64_t bytesSaved =  HM_getChunkListSize(repList);
   uint64_t bytesScanned =  HM_getChunkListSize(repList)
