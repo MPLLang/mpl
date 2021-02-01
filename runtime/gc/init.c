@@ -422,6 +422,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   HM_initChunkList(s->sharedfreeList);
   s->freeListLock = (bool*) (malloc(sizeof(bool)));
   *(s->freeListLock) = false;
+  initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -538,6 +539,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   HM_initChunkList(getFreeListSmall(d));
   HM_initChunkList(getFreeListLarge(d));
   HM_initChunkList(getFreeListExtraSmall(d));
+  initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
   d->sharedfreeList = s->sharedfreeList;
   d->freeListLock = s->freeListLock;
   d->nextChunkAllocSize = s->nextChunkAllocSize;

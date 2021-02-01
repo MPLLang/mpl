@@ -41,6 +41,7 @@ typedef GC_state GCState_t;
 #include "gc/foreach.h"
 #include "gc/stack.h"
 #include "gc/chunk.h"
+#include "gc/fixed-size-allocator.h"
 #include "gc/thread.h"
 #include "gc/weak.h"
 #include "gc/int-inf.h"

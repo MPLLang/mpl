@@ -61,6 +61,10 @@ struct HM_chunkList* HM_getsharedFreeList(GC_state s)  {
   return s->sharedfreeList;
 }
 
+struct FixedSizeAllocator* getHHAllocator(GC_state s) {
+  return &(s->hhAllocator);
+}
+
 
 struct HM_chunkList* getFreeListLarge(GC_state s) {
   return &(s->freeListLarge);

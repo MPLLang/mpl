@@ -50,6 +50,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/done.c"
 #include "gc/deferred-promote.c"
 #include "gc/enter_leave.c"
+#include "gc/fixed-size-allocator.c"
 #include "gc/foreach.c"
 #include "gc/forward.c"
 #include "gc/frame.c"

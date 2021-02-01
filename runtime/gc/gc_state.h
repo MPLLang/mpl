@@ -50,6 +50,7 @@ struct GC_state {
   /* Ordinary globals */
   objptr *globals;
   uint32_t globalsLength;
+  struct FixedSizeAllocator hhAllocator;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
@@ -101,6 +102,8 @@ static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListLarge(GC_state s);
 struct HM_chunkList* HM_getsharedFreeList(GC_state s);
+
+static inline struct FixedSizeAllocator* getHHAllocator(GC_state s);
 
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
