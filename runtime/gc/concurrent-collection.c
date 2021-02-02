@@ -479,7 +479,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
   else if (baseChunk == (targetHH->chunkList).firstChunk && isConcurrent) {}
   else {
-    assert(0);
+    // assert(0);
   }
 
   // forward down pointers

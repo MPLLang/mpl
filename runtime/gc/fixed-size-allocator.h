@@ -20,6 +20,16 @@ typedef struct FixedSizeAllocator {
     */
   size_t fixedSize;
 
+  /** Some statistics. Can calculate e.g.
+    *   numFreed = numLocalFreed + numSharedFreed
+    *   numCurrentlyInUse = numAllocated - numFreed
+    *   currentCapacity = totalSize(buffer) / fixedSize
+    *   spaceUtilization = numCurrentlyInUse / currentCapacity
+    */
+  size_t numAllocated;
+  size_t numLocalFreed;
+  size_t numSharedFreed;
+
   /** A bit of a hack. I just want quick access to pages to store elements.
     * I'll reuse the frontier mechanism inherent to chunks to remember which
     * portions of chunks are currently in use by the allocator. Also, the
@@ -81,6 +91,16 @@ void* allocateFixedSize(FixedSizeAllocator fsa);
   * allocated, freeing will be fast!
   */
 void freeFixedSize(FixedSizeAllocator myfsa, void* elem);
+
+
+size_t numFixedSizeAllocated(FixedSizeAllocator fsa);
+size_t numFixedSizeFreed(FixedSizeAllocator fsa);
+size_t numFixedSizeSharedFreed(FixedSizeAllocator fsa);
+size_t numFixedSizeCurrentlyInUse(FixedSizeAllocator fsa);
+size_t currentFixedSizeCapacity(FixedSizeAllocator fsa);
+double currentFixedSizeSpaceUtilization(FixedSizeAllocator fsa);
+
+void displayFixedSizeStatistics(FILE *out, FixedSizeAllocator fsa);
 
 #endif
 
