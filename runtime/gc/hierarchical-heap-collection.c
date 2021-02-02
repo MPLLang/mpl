@@ -359,10 +359,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     }
 #endif
 
-    /* This implicitly frees the heap records too, because they are stored in
-     * the level list. */
     HM_appendChunkList(getFreeListSmall(s), level);
 
+    freeFixedSize(getHHAllocator(s), hhTail);
     hhTail = nextAncestor;
   }
 

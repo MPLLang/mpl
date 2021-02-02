@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2019 Sam Westrick
+/* Copyright (C) 2018-2021 Sam Westrick
  * Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
@@ -209,36 +209,17 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
-  // this can be more in concert with the scheduler.
-  // bool createCP = (depth >= 1);
-  size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
-  // if (createCP){
-  //   bytesNeeded += sizeof(struct ConcurrentPackage);
-  // }
+  HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
 
-  HM_chunk chunk = HM_getFreeChunk(s, bytesNeeded);
-  pointer start = HM_shiftChunkStart(chunk, bytesNeeded);
-  assert(start!=NULL);
+  HM_HH_getConcurrentPack(hh)->rootList = NULL;
+  HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
+  HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
+  HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
+  HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
+  HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
+  HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
+  HM_initChunkList(&(HM_HH_getConcurrentPack(hh)->remSet));
 
-  HM_HierarchicalHeap hh = (HM_HierarchicalHeap)start;
-  // if(createCP)
-  {
-    // hh->concurrentPack = (ConcurrentPackage)
-    //                     (start + sizeof(struct HM_HierarchicalHeap));
-    // hh->concurrentPack->isCollecting = false;
-    HM_HH_getConcurrentPack(hh)->rootList = NULL;
-    HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
-    HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
-    HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
-    HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
-    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
-    HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
-    HM_initChunkList(&(HM_HH_getConcurrentPack(hh)->remSet));
-  }
-  // else {
-  //   hh->concurrentPack = NULL;
-  // }
-  // hh->concurrentPack = NULL;
   hh->representative = NULL;
   hh->depth = depth;
   hh->nextAncestor = NULL;
@@ -247,7 +228,11 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_initChunkList(HM_HH_getFromList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
 
-  HM_appendChunk(HM_HH_getChunkList(hh), chunk);
+  /** SAM_NOTE: TODO: previous invariant was that new HH always had at least
+    * one chunk. Can we relax this invariant? It would be much more efficient
+    * to avoid allocating these chunks unless we needed to.
+    */
+  HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(hh), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = hh;
 
   return hh;

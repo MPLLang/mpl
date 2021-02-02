@@ -11,6 +11,7 @@ void initFixedSizeAllocator(FixedSizeAllocator fsa, size_t fixedSize) {
   fsa->fixedSize = align(fixedSize < minSize ? minSize : fixedSize, 8);
   HM_initChunkList(&(fsa->buffer));
   fsa->freeList = NULL;
+  fsa->sharedFreeList = NULL;
   return;
 }
 
