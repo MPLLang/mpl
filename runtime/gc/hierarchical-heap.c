@@ -159,7 +159,9 @@ void HM_HH_merge(
 
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
 
-  // free(childHH);
+
+  // free stack of joining heap
+  CC_freeStack(childHH->concurrentPack);
 }
 
 void HM_HH_promoteChunks(
@@ -194,8 +196,12 @@ void HM_HH_promoteChunks(
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
     hh->representative = hh->nextAncestor;
+
     /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
+
+    /* don't need the snapshot for this heap now. */
+    CC_freeStack(hh->concurrentPack);
   }
 
   assert(HM_HH_getDepth(thread->hierarchicalHeap) < thread->currentDepth);
@@ -210,7 +216,7 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
   // this can be more in concert with the scheduler.
-  bool createCP = (depth >= 1);
+  bool createCP = (depth >= 0);
   size_t bytesNeeded = sizeof(struct HM_HierarchicalHeap);
   if (createCP){
     bytesNeeded += sizeof(struct ConcurrentPackage);
@@ -422,10 +428,12 @@ bool checkPolicyforRoot(
   __attribute__((unused)) GC_thread thread)
 {
   assert(HM_HH_getDepth(hh) == 1);
-  hh->concurrentPack->bytesAllocatedSinceLastCollection = HM_getChunkListSize(HM_HH_getChunkList(hh));
+  hh->concurrentPack->bytesAllocatedSinceLastCollection =
+    HM_getChunkListSize(HM_HH_getChunkList(hh));
   // return true;
   // thread->bytesAllocatedSinceLastCollection = 0;
-  // thread->bytesSurvivedLastCollection s= (hh->concurrentPack->bytesSurvivedLastCollection)/2;
+  // thread->bytesSurvivedLastCollection s=
+    // (hh->concurrentPack->bytesSurvivedLastCollection)/2;
   // hh->concurrentPack->bytesSurvivedLastCollection/=2;
   // hh->concurrentPack->bytesAllocatedSinceLastCollection;
   if((2*hh->concurrentPack->bytesSurvivedLastCollection) >
@@ -498,9 +506,8 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   }
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  if(hh->concurrentPack->rootList == NULL) {
-    CC_initStack(hh->concurrentPack);
-  }
+  CC_initStack(hh->concurrentPack);
+
 
   if(HM_HH_getDepth(hh) == 1 &&
     hh->concurrentPack->ccstate != CC_UNREG) {
@@ -534,7 +541,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   hh->concurrentPack->snapTemp =   pointerToObjptr(k, NULL);
   copyCurrentStack(s, thread);
 
-  CC_clearMutationStack(hh->concurrentPack);
+  CC_clearStack(hh->concurrentPack);
   hh->concurrentPack->ccstate = CC_REG;
 
   s->frontier = HM_HH_getFrontier(thread);
