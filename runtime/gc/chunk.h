@@ -228,6 +228,9 @@ pointer HM_getChunkStart(HM_chunk chunk);
  * returns a pointer to the gap, or NULL if no more space is available. */
 pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes);
 
+/* return the pointer to the start gap, or NULL if it doesn't have a gap. */
+pointer HM_getChunkStartGap(HM_chunk chunk);
+
 /**
  * This function gets the last chunk in a list
  *

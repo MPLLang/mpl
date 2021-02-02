@@ -619,6 +619,13 @@ pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes) {
   return oldStart;
 }
 
+pointer HM_getChunkStartGap(HM_chunk chunk) {
+  if (0 == chunk->startGap) {
+    return NULL;
+  }
+  return (pointer)chunk + sizeof(struct HM_chunk);
+}
+
 HM_chunk HM_getChunkListLastChunk(HM_chunkList list) {
   if (NULL == list) {
     return NULL;
