@@ -28,6 +28,35 @@ typedef struct HM_HierarchicalHeap {
    * copying) which is merged only at join points of the program. */
   struct HM_HierarchicalHeap *nextAncestor;
 
+  /* In the union-find tree of HH records, any node that is not a representative
+   * is a "dependant". These nodes only serve to redirect queries towards the
+   * representative, and eventually become garbage, as they are "spliced out"
+   * due to path compression.
+   *
+   * To make sure we don't leak a node, all dependants of each representative
+   * are linked into a tree. Representatives are allowed to have at most one
+   * dependant link, whereas dependants are allows up to two. This makes it
+   * always possible to perform a union:
+   *
+   *                          r1
+   *      r1    r2            |
+   *      |     |     ===>    r2
+   *      D1    D2            | \
+   *                          D1 D2
+   *
+   * The advantage of using a tree (instead of e.g. a cycle or a flat linked
+   * list) is parallelism. After a union:
+   *   height(r1) <- 1 + max(height(r1), height(r2))
+   * So, the final tree should be approximately balanced. We can then enumerate
+   * all dependants efficiently in parallel. (This is important for parallel
+   * GC, although we haven't implemented this yet.)
+   */
+  struct HM_HierarchicalHeap *dependant1;
+  struct HM_HierarchicalHeap *dependant2;
+
+  size_t numDependants;
+  size_t heightDependants;
+
 } *HM_HierarchicalHeap;
 
 #define HM_HH_INVALID_DEPTH CHUNK_INVALID_DEPTH
@@ -98,6 +127,18 @@ void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
 pointer HM_HH_getRoot(pointer threadp);
 void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
 void HM_HH_resetList(pointer threadp);
+
+
+/** Very fancy (constant-space) loop that frees each dependant of hh.
+  * Specifically, calls this on each dependant d:
+  *
+  *   freeFixedSize(getHHAllocator(s), d)
+  *
+  * Note that this does NOT free hh.
+  */
+void HM_HH_freeAllDependants(GC_state s, HM_HierarchicalHeap hh);
+
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* HIERARCHICAL_HEAP_H_ */

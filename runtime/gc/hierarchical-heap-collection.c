@@ -360,8 +360,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 #endif
 
     HM_appendChunkList(getFreeListSmall(s), level);
-
+    HM_HH_freeAllDependants(s, hhTail);
     freeFixedSize(getHHAllocator(s), hhTail);
+
     hhTail = nextAncestor;
   }
 

@@ -22,6 +22,15 @@
 
 static void assertInvariants(GC_thread thread);
 
+/** Update representative/dependant pointers for the HH union-find tree.
+  * The left heap is made the representative, and the right heap is made
+  * dependant.
+  */
+static inline void linkInto(
+  HM_HierarchicalHeap left,
+  HM_HierarchicalHeap right
+);
+
 /************************/
 /* Function Definitions */
 /************************/
@@ -59,7 +68,7 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
       HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
 
-      hh2->representative = hh1;
+      linkInto(hh1, hh2);
 
       *cursor = hh1;
       cursor = &(hh1->nextAncestor);
@@ -193,7 +202,7 @@ void HM_HH_promoteChunks(
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
-    hh->representative = hh->nextAncestor;
+    linkInto(hh->nextAncestor, hh);
     /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
   }
@@ -223,6 +232,10 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->representative = NULL;
   hh->depth = depth;
   hh->nextAncestor = NULL;
+  hh->dependant1 = NULL;
+  hh->dependant2 = NULL;
+  hh->numDependants = 0;
+  hh->heightDependants = 0;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initChunkList(HM_HH_getFromList(hh));
@@ -641,12 +654,102 @@ void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
 }
 
 
+void HM_HH_freeAllDependants(GC_state s, HM_HierarchicalHeap hh) {
+  FixedSizeAllocator myHHAllocator = getHHAllocator(s);
+
+  HM_HierarchicalHeap parent = hh;
+  HM_HierarchicalHeap child = hh->dependant1;
+  hh->dependant1 = NULL;
+
+  size_t numFreed = 0;
+
+  /** Invariant: parent (and every node above it) has an inverted dependant1
+    * pointer, which is pointing to its ancestor. There must be NO pointer
+    * in memory from child to parent. It's possible that the parent may have
+    * some right child, still given by dependant2.
+    *
+    *                ???              Legend:
+    *                 ^ \             @@@  node (definitely non-NULL)
+    *                 ^  \            ???  possibly NULL node
+    *     parent --> @@@  ???         \    normal pointer
+    *                   \             ^    inverted pointer
+    *                    \
+    *      child --> ???  ???
+    *
+    * There are four cases.
+    *   1) child NULL, sibling NULL:
+    *        slide up to parent
+    *   2) child NULL, sibling non-NULL:
+    *        swap child and sibling
+    *   3) child non-NULL, left grandchild NULL:
+    *        free child and switch to right grandchild
+    *   4) child non-NULL, left grandchild non-NULL:
+    *        slide down to grandchild
+    */
+  while (parent != NULL) {
+    if (NULL == child) {
+      if (NULL == parent->dependant2) {
+        // go back UP the tree (note that parent->dependant1 is INVERTED)
+        child = parent;
+        parent = parent->dependant1;
+        child->dependant1 = NULL;
+      }
+      else {
+        // switch to other child
+        child = parent->dependant2;
+        parent->dependant2 = NULL;
+      }
+    }
+    else {
+      if (child->dependant1 == NULL) {
+        // free and jump to other grandchild
+        HM_HierarchicalHeap grandchild = child->dependant2;
+        freeFixedSize(myHHAllocator, child);
+        numFreed++;
+        child = grandchild;
+      }
+      else {
+        // move DOWN the tree (careful to INVERT the pointer)
+        HM_HierarchicalHeap grandchild = child->dependant1;
+        child->dependant1 = parent;
+        parent = child;
+        child = grandchild;
+      }
+    }
+  }
+
+  assert(numFreed == hh->numDependants);
+  hh->numDependants = 0;
+  hh->heightDependants = 0;
+}
+
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 /*******************************/
 /* Static Function Definitions */
 /*******************************/
+
+static inline void linkInto(
+  HM_HierarchicalHeap left,
+  HM_HierarchicalHeap right)
+{
+  assert(NULL == right->representative);
+  assert(NULL == left->dependant2);
+  assert(NULL == right->dependant2);
+
+  right->representative = left;
+  right->dependant2 = left->dependant1;
+  left->dependant1 = right;
+
+  left->numDependants += 1 + right->numDependants;
+
+  size_t lh = left->heightDependants;
+  size_t rh = right->heightDependants;
+  left->heightDependants = 1 + (lh > rh ? lh : rh);
+
+  assert(NULL == left->dependant2);
+}
 
 #if ASSERT
 
