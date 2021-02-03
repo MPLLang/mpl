@@ -56,6 +56,21 @@ static void displayHHAllocStats(FILE *out, GC_state s) {
   fprintf(out, "current hh alloc capacity: %zu\n", currentFixedSizeCapacity(fsa));
   fprintf(out, "current hh space util: %.1f%%\n",
           100.0 * currentFixedSizeSpaceUtilization(fsa));
+
+  size_t maxSize = 0;
+  size_t maxHeight = 0;
+  for (HM_HierarchicalHeap cursor = getHierarchicalHeapCurrent(s);
+       cursor != NULL;
+       cursor = cursor->nextAncestor)
+  {
+    if (cursor->numDependants > maxSize)
+      maxSize = cursor->numDependants;
+    if (cursor->heightDependants > maxHeight) maxHeight =
+      cursor->heightDependants;
+  }
+
+  fprintf(out, "current max num hh dependants: %zu\n", maxSize);
+  fprintf(out, "current max dependant tree height: %zu\n", maxHeight);
 }
 
 
