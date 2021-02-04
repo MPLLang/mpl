@@ -130,13 +130,20 @@ void HM_HH_resetList(pointer threadp);
 
 
 /** Very fancy (constant-space) loop that frees each dependant of hh.
-  * Specifically, calls this on each dependant d:
+  * Specifically, calls this on each dependant dhh:
   *
-  *   freeFixedSize(getHHAllocator(s), d)
+  *   freeFixedSize(getHHAllocator(s), dhh)
+  *
+  * Or, if specified to retire instead:
+  *
+  *   HH_EBR_retire(s, dhh);
   *
   * Note that this does NOT free hh.
   */
-void HM_HH_freeAllDependants(GC_state s, HM_HierarchicalHeap hh);
+void HM_HH_freeAllDependants(
+  GC_state s,
+  HM_HierarchicalHeap hh,
+  bool retireInsteadOfFree);
 
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

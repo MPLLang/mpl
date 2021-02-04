@@ -506,6 +506,8 @@ void GC_lateInit (GC_state s) {
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
 
+  HH_EBR_init(s);
+
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   /* Initialize profiling.  This must occur after processing
@@ -540,6 +542,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   HM_initChunkList(getFreeListLarge(d));
   HM_initChunkList(getFreeListExtraSmall(d));
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
+  d->hhEBR = s->hhEBR;
   d->sharedfreeList = s->sharedfreeList;
   d->freeListLock = s->freeListLock;
   d->nextChunkAllocSize = s->nextChunkAllocSize;

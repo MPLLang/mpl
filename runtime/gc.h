@@ -80,6 +80,7 @@ typedef GC_state GCState_t;
 #include "gc/parallel.h"
 #include "gc/processor.h"
 #include "gc/hierarchical-heap.h"
+#include "gc/hierarchical-heap-ebr.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/local-scope.h"
 #include "gc/local-heap.h"

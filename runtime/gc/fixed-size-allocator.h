@@ -100,8 +100,6 @@ size_t numFixedSizeCurrentlyInUse(FixedSizeAllocator fsa);
 size_t currentFixedSizeCapacity(FixedSizeAllocator fsa);
 double currentFixedSizeSpaceUtilization(FixedSizeAllocator fsa);
 
-void displayFixedSizeStatistics(FILE *out, FixedSizeAllocator fsa);
-
 #endif
 
 

@@ -85,6 +85,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic(s);
 
+  HH_EBR_leaveQuiescentState(s);
+
   assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
   assert(threadAndHeapOkay(s));
 

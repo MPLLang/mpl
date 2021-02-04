@@ -654,7 +654,11 @@ void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
 }
 
 
-void HM_HH_freeAllDependants(GC_state s, HM_HierarchicalHeap hh) {
+void HM_HH_freeAllDependants(
+  GC_state s,
+  HM_HierarchicalHeap hh,
+  bool retireInsteadOfFree)
+{
   FixedSizeAllocator myHHAllocator = getHHAllocator(s);
 
   HM_HierarchicalHeap parent = hh;
@@ -704,8 +708,14 @@ void HM_HH_freeAllDependants(GC_state s, HM_HierarchicalHeap hh) {
       if (child->dependant1 == NULL) {
         // free and jump to other grandchild
         HM_HierarchicalHeap grandchild = child->dependant2;
-        freeFixedSize(myHHAllocator, child);
+
+        if (retireInsteadOfFree) {
+          HH_EBR_retire(s, child);
+        } else {
+          freeFixedSize(myHHAllocator, child);
+        }
         numFreed++;
+
         child = grandchild;
       }
       else {
