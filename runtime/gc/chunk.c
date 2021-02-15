@@ -588,7 +588,7 @@ size_t HM_getChunkSize(HM_chunk chunk) {
 }
 
 size_t HM_getChunkSizePastFrontier(HM_chunk chunk) {
-  assert(chunk->frontier < chunk->limit);
+  assert(chunk->frontier <= chunk->limit);
   return (size_t)chunk->limit - (size_t)chunk->frontier;
 }
 
