@@ -472,15 +472,18 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     T->levelHead = targetHH;
   }
 
-
-  HM_chunk baseChunk = HM_getChunkOf((void *)targetHH);
-  if(isInScope(baseChunk, &lists)) {
-    saveChunk(baseChunk, &lists);
-  }
-  else if (baseChunk == (targetHH->chunkList).firstChunk && isConcurrent) {}
-  else {
-    // assert(0);
-  }
+  /** SAM_NOTE: This code is no longer needed, because HH objects are not
+    * stored in their own chunks. I'm leaving it commented for now (just for
+    * reference), and will remove later.
+    */
+  // HM_chunk baseChunk = HM_getChunkOf((void *)targetHH);
+  // if(isInScope(baseChunk, &lists)) {
+  //   saveChunk(baseChunk, &lists);
+  // }
+  // else if (baseChunk == (targetHH->chunkList).firstChunk && isConcurrent) {}
+  // else {
+  //   // assert(0);
+  // }
 
   // forward down pointers
   struct HM_chunkList downPtrs;
