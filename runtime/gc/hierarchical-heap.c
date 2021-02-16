@@ -227,7 +227,6 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
-  // HM_initChunkList(&(HM_HH_getConcurrentPack(hh)->remSet));
 
   hh->representative = NULL;
   hh->subHeapForRootCC = NULL;
@@ -239,15 +238,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->heightDependants = 0;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
-  // HM_initChunkList(HM_HH_getFromList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
-
-  /** SAM_NOTE: TODO: previous invariant was that new HH always had at least
-    * one chunk. Can we relax this invariant? It would be much more efficient
-    * to avoid allocating these chunks unless we needed to.
-    */
-  HM_chunk chunk = HM_allocateChunk(HM_HH_getChunkList(hh), GC_HEAP_LIMIT_SLOP);
-  chunk->levelHead = hh;
 
   return hh;
 }
@@ -324,18 +315,6 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     thread->hierarchicalHeap = newhh;
 
     hh = newhh;
-
-    /* note that new heaps are initialized with one free chunk */
-    chunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
-    if (((size_t)HM_getChunkLimit(chunk) - (size_t)HM_getChunkFrontier(chunk))
-        >= bytesRequested)
-    {
-      thread->currentChunk = chunk;
-      HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
-      return TRUE;
-    }
-    /* otherwise, we need to allocate a new chunk, so fall through to standard
-     * logic below. */
   }
 
   chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
@@ -406,7 +385,10 @@ void mergeHeapForRootCC(GC_state s, GC_thread thread) {
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, 1);
   thread->hierarchicalHeap = newHH;
-  thread->currentChunk = HM_getChunkListLastChunk(HM_HH_getChunkList(newHH));
+  HM_chunk chunk =
+    HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
+  chunk->levelHead = newHH;
+  thread->currentChunk = chunk;
   newHH->subHeapForRootCC = subhh;
 }
 

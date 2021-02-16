@@ -693,8 +693,9 @@ void forwardHHObjptr (GC_state s,
 
     HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
     if (tgtHeap == NULL) {
-      /* Level does not exist, so create it */
-      /* SAM_NOTE: new heaps are initialized with one free chunk. */
+      /** Level does not exist, so create it. Relocating an object allocates
+        * chunks lazily, so we don't need a fresh chunk here.
+        */
       tgtHeap = HM_HH_new(s, opDepth);
       args->toSpace[opDepth] = tgtHeap;
     }
