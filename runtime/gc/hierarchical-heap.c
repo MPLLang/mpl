@@ -168,7 +168,8 @@ void HM_HH_merge(
 
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
 
-  // free(childHH);
+  // free stack of joining heap
+  CC_freeStack(HM_HH_getConcurrentPack(childHH));
 }
 
 void HM_HH_promoteChunks(
@@ -205,6 +206,9 @@ void HM_HH_promoteChunks(
     linkInto(hh->nextAncestor, hh);
     /* ...and then shortcut. */
     thread->hierarchicalHeap = hh->nextAncestor;
+
+    /* don't need the snapshot for this heap now. */
+    CC_freeStack(HM_HH_getConcurrentPack(hh));
   }
 
   assert(HM_HH_getDepth(thread->hierarchicalHeap) < thread->currentDepth);
@@ -493,9 +497,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   }
   assert(NULL == hh->subHeapForRootCC);
 
-  if(HM_HH_getConcurrentPack(hh)->rootList == NULL) {
-    CC_initStack(HM_HH_getConcurrentPack(hh));
-  }
+  CC_initStack(HM_HH_getConcurrentPack(hh));
 
   if (HM_HH_getDepth(hh) == 1) {
     if (HM_HH_getConcurrentPack(hh)->ccstate != CC_UNREG) {
@@ -533,7 +535,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapTemp =   pointerToObjptr(k, NULL);
   HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
 
-  CC_clearMutationStack(HM_HH_getConcurrentPack(hh));
+  CC_clearStack(HM_HH_getConcurrentPack(hh));
   HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
 
   s->frontier = HM_HH_getFrontier(thread);

@@ -16,6 +16,11 @@ void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 #define ASSERT2 0
 
 void CC_initStack(ConcurrentPackage cp) {
+  // don't re-initialize
+  if(cp->rootList!=NULL) {
+    return;
+  }
+
   CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
   CC_stack_init(temp, 2);
   cp->rootList = temp;
@@ -31,9 +36,17 @@ void CC_addToStack (ConcurrentPackage cp, pointer p) {
   CC_stack_push(cp->rootList, (void*)p);
 }
 
-void CC_clearMutationStack(ConcurrentPackage cp) {
+void CC_clearStack(ConcurrentPackage cp) {
   if(cp->rootList!=NULL) {
     CC_stack_clear(cp->rootList);
+  }
+}
+
+void CC_freeStack(ConcurrentPackage cp) {
+  if(cp->rootList!=NULL) {
+    CC_stack_free(cp->rootList);
+    free(cp->rootList);
+    cp->rootList = NULL;
   }
 }
 
