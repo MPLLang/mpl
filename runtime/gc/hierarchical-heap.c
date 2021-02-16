@@ -390,9 +390,10 @@ void HM_HH_forceLeftHeap(
   endAtomic(s);
 }
 
-// Separate the list into two. The "fromList" will be garbage-collected
-// but the chunkList is not touched by CC.
-// It can be used by the mutator for promotions or other allocations.
+/** Migrate all chunks of the thread's HH into the side heap (subHeapForRootCC),
+  * used for concurrent collection. Also allocate a fresh hierarchical heap
+  * for the thread.
+  */
 void mergeHeapForRootCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   HM_HierarchicalHeap subhh = hh->subHeapForRootCC;

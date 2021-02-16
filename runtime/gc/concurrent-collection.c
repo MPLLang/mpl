@@ -616,12 +616,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   *(origList) = *(repList);
 
-  /** SAM_NOTE: TODO: the following line needs to be included at some point.
-    * The problem at the moment is that the left-most spine task could be
-    * zipping (due to joins) which which modifies the union-find tree for this
-    * representative. This is a race! freeAllDependents modifies the union-find
-    * dependant structure as it goes... It's not safe for this to happen
-    * concurrently with an HH zip.
+  /** This is safe (no race with any zips), because `targetHH` is split off
+    * from the main spine of the program.
     */
   HM_HH_freeAllDependants(s, targetHH, TRUE);
 

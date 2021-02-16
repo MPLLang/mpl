@@ -1,4 +1,4 @@
-/* Copyright (C) 2018,2019 Sam Westrick
+/* Copyright (C) 2018-2021 Sam Westrick
  * Copyright (C) 2014,2015 Ram Raghunathan.
  *
  * MLton is released under a HPND-style license.
@@ -18,7 +18,6 @@ typedef struct HM_HierarchicalHeap {
   uint32_t depth;
 
   struct HM_chunkList chunkList;
-  // struct HM_chunkList fromList;
 
   /** This is a bit of a hack. For root (fully concurrent) collections,
     * we need to separate collected space from the space where new allocations
@@ -88,12 +87,6 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
 {
   return &(hh->chunkList);
 }
-
-// static inline HM_chunkList HM_HH_getFromList(HM_HierarchicalHeap hh)
-// {
-//   return &(hh->fromList);
-// }
-
 
 static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
 {
