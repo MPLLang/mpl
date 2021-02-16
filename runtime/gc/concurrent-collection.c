@@ -41,10 +41,12 @@ bool CC_isPointerMarked (pointer p) {
   return ((MARK_MASK & getHeader (p)) == MARK_MASK);
 }
 
+/** Is it in the from space? */
 bool isInScope(HM_chunk chunk, ConcurrentCollectArgs* args) {
   return chunk->tmpHeap == args->fromHead;
 }
 
+/** Is it in the to-space? */
 bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
   return chunk->tmpHeap==args->toHead;
 }
@@ -339,6 +341,9 @@ bool claimHeap(HM_HierarchicalHeap heap) {
     return FALSE;
   }
 
+  /** We should never be working on a (root) heap that was split. */
+  assert(NULL == heap->subHeapForRootCC);
+
   ConcurrentPackage cp = HM_HH_getConcurrentPack(heap);
   if(!readyforCollection(cp)) {
     return FALSE;
@@ -407,14 +412,11 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
 }
 
 void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
-  // Since the root collection is truly concurrent the depth 1 remSet is separated at the time of fork.
-  HM_chunkList y;
-  if (hh->depth == 1) {
-    y = &(HM_HH_getConcurrentPack(hh)->remSet);
-  }
-  else {
-    y = HM_HH_getRemSet(hh);
-  }
+  /** There is no race here, because for truly concurrent GC (depth 1), the
+    * hh has been split.
+    */
+  assert(NULL == hh->subHeapForRootCC);
+  HM_chunkList y = HM_HH_getRemSet(hh);
   struct HM_foreachDownptrClosure bucketIfValidAtListClosure =
   {.fun = bucketIfValidAtList, .env = (void*)x};
 
@@ -430,6 +432,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   timespec_now(&startTime);
 
+  assert(NULL == targetHH->subHeapForRootCC);
+
   ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
   ensureCallSanity(s, targetHH, cp);
   // At the end of collection, repList will contain all the chunks that have
@@ -442,7 +446,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);
   HM_initChunkList(repList);
-  HM_chunkList origList = (isConcurrent)?HM_HH_getFromList(targetHH):HM_HH_getChunkList(targetHH);
+  HM_chunkList origList = HM_HH_getChunkList(targetHH);
 
   HM_assertChunkListInvariants(origList);
 
@@ -550,7 +554,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   while(Q!=NULL){
     lenRep++;
     assert(Q->tmpHeap == lists.toHead);
-    assert(HM_getLevelHeadPathCompress(Q) == targetHH);
+    assert(HM_getLevelHead(Q) == targetHH);
     Q = Q->nextChunk;
   }
   assert(lenRep+lenFree == lenOrig);
@@ -560,7 +564,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   for(HM_chunk chunk = origList->firstChunk; chunk!=NULL; chunk = chunk->nextChunk){
     printf("%p", chunk);
     assert(chunk->tmpHeap == lists.fromHead);
-    assert(HM_getLevelHeadPathCompress(chunk) == targetHH);
+    assert(HM_getLevelHead(chunk) == targetHH);
   }
   printf("\n");
   // safety code
@@ -619,7 +623,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     * dependant structure as it goes... It's not safe for this to happen
     * concurrently with an HH zip.
     */
-  // HM_HH_freeAllDependants(s, targetHH, TRUE);
+  HM_HH_freeAllDependants(s, targetHH, TRUE);
 
   HM_assertChunkListInvariants(origList);
 

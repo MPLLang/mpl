@@ -47,9 +47,17 @@ typedef struct ConcurrentPackage {
 	bool shouldCollect;
 	enum CCState ccstate;
 	objptr stack;
+
+  /** For deciding when to collect. Could be cleaned up.
+    */
 	size_t bytesAllocatedSinceLastCollection;
 	size_t bytesSurvivedLastCollection;
-	struct HM_chunkList remSet;
+
+  /** To avoid races with other processor adding to the remset (writebarrier or
+    * promotions).
+    */
+	// struct HM_chunkList remSet;
+
 } * ConcurrentPackage;
 
 #else

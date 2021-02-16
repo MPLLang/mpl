@@ -18,7 +18,16 @@ typedef struct HM_HierarchicalHeap {
   uint32_t depth;
 
   struct HM_chunkList chunkList;
-  struct HM_chunkList fromList;
+  // struct HM_chunkList fromList;
+
+  /** This is a bit of a hack. For root (fully concurrent) collections,
+    * we need to separate collected space from the space where new allocations
+    * are permitted. Really, all we need is just a separate chunklist (and
+    * this is what Jatin originally implemented). But for tracking HH objects
+    * and their union-find dependants, having a completely separate HH object
+    * is nice because then we can free dependants during root CC.
+    */
+  struct HM_HierarchicalHeap *subHeapForRootCC;
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage concurrentPack;
@@ -80,10 +89,10 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
   return &(hh->chunkList);
 }
 
-static inline HM_chunkList HM_HH_getFromList(HM_HierarchicalHeap hh)
-{
-  return &(hh->fromList);
-}
+// static inline HM_chunkList HM_HH_getFromList(HM_HierarchicalHeap hh)
+// {
+//   return &(hh->fromList);
+// }
 
 
 static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
