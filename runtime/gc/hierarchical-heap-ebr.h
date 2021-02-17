@@ -14,6 +14,7 @@
 
 struct HH_EBR_local {
   struct HM_chunkList limboBags[3];
+  int limboIdx;
 };
 
 // There is exactly one of these! Everyone shares a reference to it.
@@ -21,6 +22,7 @@ typedef struct HH_EBR_shared {
   size_t epoch;
 
   // announcement array, length = num procs
+  // each announcement is packed: 63 bits for epoch, 1 bit for quiescent bit
   size_t *announce;
 
   // processor-local data, length = num procs
@@ -40,6 +42,7 @@ typedef struct HH_EBR_shared * HH_EBR_shared;
 void HH_EBR_init(GC_state s);
 void HH_EBR_enterQuiescentState(GC_state s);
 void HH_EBR_leaveQuiescentState(GC_state s);
+void HH_EBR_fastLeaveQuiescentState(GC_state s);
 
 void HH_EBR_retire(GC_state s, HM_HierarchicalHeap hh);
 
