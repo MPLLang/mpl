@@ -44,8 +44,6 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     (size_t)(objend - dstp));
 #endif
 
-  HH_EBR_fastLeaveQuiescentState(s);
-
   HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
 
   objptr readVal = *field;
@@ -60,18 +58,18 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   /* If src does not reference an object, then no need to check for
    * down-pointers. */
   if (!isObjptr(src))
-    goto writebarrier_done;
+    return;
 
   pointer srcp = objptrToPointer(src, NULL);
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* Internal or up-pointer. */
   if (dstHH->depth >= srcHH->depth)
-    goto writebarrier_done;
+    return;
 
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
-    goto writebarrier_done;
+    return;
 
   /* Otherwise, remember the down-pointer! */
   uint32_t d = srcHH->depth;
@@ -82,10 +80,6 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */
-
-writebarrier_done:
-  HH_EBR_enterQuiescentState(s);
-  return;
 }
 
 // void Assignable_updateBarrier (GC_state s, objptr dst, objptr* field, objptr src) {

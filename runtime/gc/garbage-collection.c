@@ -108,7 +108,6 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   // CC_collectWithRoots(s, )
 
   endAtomic(s);
-  HH_EBR_enterQuiescentState(s);
 
   Trace0(EVENT_RUNTIME_LEAVE);
 }

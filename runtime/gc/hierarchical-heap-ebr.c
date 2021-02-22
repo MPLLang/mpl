@@ -6,28 +6,28 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+/** Helpers for packing/unpacking announcements. DEBRA packs epochs with a
+  * "quiescent" bit, the idea being that processors should set the bit during
+  * quiescent periods (between operations) and have it unset otherwise (i.e.
+  * during an operation). Being precise about quiescent periods in this way
+  * is helpful for reclamation, because in order to advance the epoch, all we
+  * need to know is that every processor has been in a quiescent period since
+  * the beginning of the last epoch.
+  *
+  * But note that updating the quiescent bits is only efficient if we can
+  * amortize the cost of the setting/unsetting the bit with other nearby
+  * operations. If we assumed that the typical state for each processor
+  * is quiescent and then paid for non-quiescent periods, this would
+  * be WAY too expensive. In our case, processors are USUALLY NON-QUIESCENT,
+  * due to depth queries at the write-barrier.
+  *
+  * So
+  */
 #define PACK(epoch, qbit) ((((size_t)(epoch)) << 1) | ((qbit) & 1))
 #define UNPACK_EPOCH(announcement) ((announcement) >> 1)
 #define UNPACK_QBIT(announcement) ((announcement) & 1)
-
 #define SET_Q_TRUE(announcement) ((announcement) | (size_t)1)
 #define SET_Q_FALSE(announcement) ((announcement) & (~(size_t)1))
-
-
-static inline bool getQBit(GC_state s, uint32_t pid) {
-  size_t ann = s->hhEBR->announce[pid];
-  return UNPACK_QBIT(ann);
-}
-
-static inline void setQBitTrue(GC_state s, uint32_t pid) {
-  size_t ann = s->hhEBR->announce[pid];
-  s->hhEBR->announce[pid] = SET_Q_TRUE(ann);
-}
-
-static inline void setQBitFalse(GC_state s, uint32_t pid) {
-  size_t ann = s->hhEBR->announce[pid];
-  s->hhEBR->announce[pid] = SET_Q_FALSE(ann);
-}
 
 
 static void rotateAndReclaim(GC_state s) {
@@ -60,13 +60,14 @@ void HH_EBR_init(GC_state s) {
   HH_EBR_shared ebr = malloc(sizeof(struct HH_EBR_shared));
 
   ebr->epoch = 0;
-  ebr->announce = malloc(s->numberOfProcs * sizeof(size_t));
+  ebr->announce = malloc(s->numberOfProcs * 16 * sizeof(size_t));
   ebr->local = malloc(s->numberOfProcs * sizeof(struct HH_EBR_local));
 
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
-    // Everyone starts by announcing epoch = 0, and starts in quiescent state
-    ebr->announce[i] = PACK(0, 1);
+    // Everyone starts by announcing epoch = 0 and is non-quiescent
+    ebr->announce[16*i] = PACK(0, 0);
     ebr->local[i].limboIdx = 0;
+    ebr->local[i].checkNext = 0;
     for (int j = 0; j < 3; j++)
       HM_initChunkList(&(ebr->local[i].limboBags[j]));
   }
@@ -75,57 +76,49 @@ void HH_EBR_init(GC_state s) {
 }
 
 
-void HH_EBR_enterQuiescentState(GC_state s) {
-  setQBitTrue(s, s->procNumber);
-}
-
-void HH_EBR_fastLeaveQuiescentState(GC_state s) {
-  HH_EBR_shared ebr = s->hhEBR;
-  uint32_t mypid = s->procNumber;
-  size_t globalEpoch = ebr->epoch;
-  size_t myEpoch = UNPACK_EPOCH(ebr->announce[mypid]);
-  assert(globalEpoch >= myEpoch);
-  if (myEpoch != globalEpoch) {
-    /** Advance into the current epoch. To do so, we need to clear the limbo
-      * bag of the epoch we're moving into.
-      */
-    rotateAndReclaim(s);
-  }
-  ebr->announce[mypid] = PACK(globalEpoch, 0);
-}
-
 void HH_EBR_leaveQuiescentState(GC_state s) {
   HH_EBR_shared ebr = s->hhEBR;
   uint32_t mypid = s->procNumber;
   uint32_t numProcs = s->numberOfProcs;
 
   size_t globalEpoch = ebr->epoch;
-  size_t myEpoch = UNPACK_EPOCH(ebr->announce[mypid]);
+  size_t myann = ebr->announce[16*mypid];
+  size_t myEpoch = UNPACK_EPOCH(myann);
   assert(globalEpoch >= myEpoch);
 
   if (myEpoch != globalEpoch) {
+    ebr->local[mypid].checkNext = 0;
     /** Advance into the current epoch. To do so, we need to clear the limbo
       * bag of the epoch we're moving into.
       */
     rotateAndReclaim(s);
   }
 
-  // Check: has everyone entered the current global epoch?
-  bool everyoneInSameEpochOrQuiescent = TRUE;
-  for (uint32_t otherpid = 0; otherpid < numProcs; otherpid++) {
-    if ( !(UNPACK_EPOCH(ebr->announce[otherpid]) == globalEpoch
-           || getQBit(s, otherpid)) )
-    {
-      everyoneInSameEpochOrQuiescent = FALSE;
-      break;
+  uint32_t otherpid = (ebr->local[mypid].checkNext) % numProcs;
+  size_t otherann = ebr->announce[16*otherpid];
+  if ( UNPACK_EPOCH(otherann) == globalEpoch || UNPACK_QBIT(otherann) ) {
+    uint32_t c = ++ebr->local[mypid].checkNext;
+    if (c >= numProcs) {
+      __sync_val_compare_and_swap(&(ebr->epoch), globalEpoch, globalEpoch+1);
     }
   }
 
-  if (everyoneInSameEpochOrQuiescent && (ebr->epoch == globalEpoch)) {
-    __sync_val_compare_and_swap(&(ebr->epoch), globalEpoch, globalEpoch+1);
-  }
+  // Check: has everyone entered the current global epoch?
+  // bool everyoneInSameEpochOrQuiescent = TRUE;
+  // for (uint32_t otherpid = 0; otherpid < numProcs; otherpid++) {
+  //   size_t ann = ebr->announce[16*otherpid];
+  //   if ( !(UNPACK_EPOCH(ann) == globalEpoch || UNPACK_QBIT(ann)) )
+  //   {
+  //     everyoneInSameEpochOrQuiescent = FALSE;
+  //     break;
+  //   }
+  // }
 
-  ebr->announce[mypid] = PACK(globalEpoch, 0);
+  // if (everyoneInSameEpochOrQuiescent && (ebr->epoch == globalEpoch)) {
+  //   __sync_val_compare_and_swap(&(ebr->epoch), globalEpoch, globalEpoch+1);
+  // }
+
+  ebr->announce[16*mypid] = PACK(globalEpoch, 0);
 }
 
 

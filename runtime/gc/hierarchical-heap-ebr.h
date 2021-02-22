@@ -15,6 +15,7 @@
 struct HH_EBR_local {
   struct HM_chunkList limboBags[3];
   int limboIdx;
+  uint32_t checkNext;
 };
 
 // There is exactly one of these! Everyone shares a reference to it.
@@ -40,10 +41,7 @@ typedef struct HH_EBR_shared * HH_EBR_shared;
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void HH_EBR_init(GC_state s);
-void HH_EBR_enterQuiescentState(GC_state s);
 void HH_EBR_leaveQuiescentState(GC_state s);
-void HH_EBR_fastLeaveQuiescentState(GC_state s);
-
 void HH_EBR_retire(GC_state s, HM_HierarchicalHeap hh);
 
 #endif // MLTON_GC_INTERNAL_FUNCS
