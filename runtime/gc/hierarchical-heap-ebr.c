@@ -39,6 +39,10 @@ static inline void setAnnouncement(GC_state s, uint32_t pid, size_t ann) {
   s->hhEBR->announce[ANNOUNCEMENT_PADDING*pid] = ann;
 }
 
+void HH_EBR_enterQuiescentState(GC_state s) {
+  uint32_t mypid = s->procNumber;
+  setAnnouncement(s, mypid, SET_Q_TRUE(getAnnouncement(s, mypid)));
+}
 
 static void rotateAndReclaim(GC_state s) {
   HH_EBR_shared ebr = s->hhEBR;

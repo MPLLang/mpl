@@ -470,6 +470,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     .fromHead = (void*) &(origList)
   };
 
+  HH_EBR_enterQuiescentState(s);
+
   // JATIN_NOTE: Some HM_hierarchical objects in origList
   // might not be reachable from the mutator roots.
   // So, I assign the levelHead of all chunks in the list to targetHH.
@@ -628,6 +630,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
 
   *(origList) = *(repList);
+
+  HH_EBR_leaveQuiescentState(s);
 
   /** This is safe (no race with any zips), because `targetHH` is split off
     * from the main spine of the program.
