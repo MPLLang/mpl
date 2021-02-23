@@ -27,6 +27,7 @@ static void assertInvariants(GC_thread thread);
   * dependant.
   */
 static inline void linkInto(
+  GC_state s,
   HM_HierarchicalHeap left,
   HM_HierarchicalHeap right
 );
@@ -36,7 +37,10 @@ static inline void linkInto(
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
+HM_HierarchicalHeap HM_HH_zip(
+  GC_state s,
+  HM_HierarchicalHeap hh1,
+  HM_HierarchicalHeap hh2)
 {
 
 #if ASSERT
@@ -46,13 +50,13 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
   uint32_t maxd1 = (NULL == hh1 ? 0 : HM_HH_getDepth(hh1));
   uint32_t maxd2 = (NULL == hh2 ? 0 : HM_HH_getDepth(hh2));
   uint32_t maxd = max(maxd1, maxd2);
-  HM_HierarchicalHeap heaps1[maxd+1];
-  HM_HierarchicalHeap heaps2[maxd+1];
-  for (uint32_t i = 0; i <= maxd; i++) { heaps1[i] = NULL; heaps2[i] = NULL; }
+  HM_UnionFindNode nodes1[maxd+1];
+  HM_UnionFindNode nodes2[maxd+1];
+  for (uint32_t i = 0; i <= maxd; i++) { nodes1[i] = NULL; nodes2[i] = NULL; }
   for (HM_HierarchicalHeap h = hh1; NULL != h; h = h->nextAncestor)
-    heaps1[HM_HH_getDepth(h)] = h;
+    nodes1[HM_HH_getDepth(h)] = HM_HH_getUFNode(h);
   for (HM_HierarchicalHeap h = hh2; NULL != h; h = h->nextAncestor)
-    heaps2[HM_HH_getDepth(h)] = h;
+    nodes2[HM_HH_getDepth(h)] = HM_HH_getUFNode(h);
 #endif
 
   HM_HierarchicalHeap result = NULL;
@@ -68,13 +72,16 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
       HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
 
-      linkInto(hh1, hh2);
+      // This has to happen before linkInto (which frees hh2)
+      HM_HierarchicalHeap hh2anc = hh2->nextAncestor;
+
+      linkInto(s, hh1, hh2);
 
       *cursor = hh1;
       cursor = &(hh1->nextAncestor);
 
       hh1 = hh1->nextAncestor;
-      hh2 = hh2->nextAncestor;
+      hh2 = hh2anc;
     }
     else if (depth1 > depth2)
     {
@@ -113,21 +120,18 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
     }
 
     /* check that the result contains exactly the heaps of the two inputs */
-    if (NULL != heaps1[i] && NULL != heaps2[i])
+    if (NULL != nodes1[i] && NULL != nodes2[i])
     {
-      assert(heapsResult[i] == heaps1[i]);
-      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps1[i]));
-      assert(heaps2[i]->representative == heaps1[i]);
+      assert(HM_HH_getUFNode(heapsResult[i]) == nodes1[i]);
+      assert(nodes2[i]->representative == nodes1[i]);
     }
-    else if (NULL != heaps1[i])
+    else if (NULL != nodes1[i])
     {
-      assert(heapsResult[i] == heaps1[i]);
-      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps1[i]));
+      assert(HM_HH_getUFNode(heapsResult[i]) == nodes1[i]);
     }
-    else if (NULL != heaps2[i])
+    else if (NULL != nodes2[i])
     {
-      assert(heapsResult[i] == heaps2[i]);
-      assert(HM_HH_getChunkList(heapsResult[i]) == HM_HH_getChunkList(heaps2[i]));
+      assert(HM_HH_getUFNode(heapsResult[i]) == nodes2[i]);
     }
     else
     {
@@ -140,7 +144,7 @@ HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2)
 }
 
 void HM_HH_merge(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   GC_thread parentThread,
   GC_thread childThread)
 {
@@ -156,8 +160,13 @@ void HM_HH_merge(
   assert(childThread->currentDepth == parentThread->currentDepth);
   assert(childThread->currentDepth >= 1);
 
+  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
+
+  // free stack of joining heap
+  CC_freeStack(HM_HH_getConcurrentPack(childHH));
+
   /* Merge levels. */
-  parentThread->hierarchicalHeap = HM_HH_zip(parentHH, childHH);
+  parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
 
   parentThread->bytesSurvivedLastCollection +=
     childThread->bytesSurvivedLastCollection;
@@ -165,15 +174,10 @@ void HM_HH_merge(
     childThread->bytesAllocatedSinceLastCollection;
 
   assertInvariants(parentThread);
-
-  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
-
-  // free stack of joining heap
-  CC_freeStack(HM_HH_getConcurrentPack(childHH));
 }
 
 void HM_HH_promoteChunks(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   GC_thread thread)
 {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
@@ -203,12 +207,11 @@ void HM_HH_promoteChunks(
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
-    linkInto(hh->nextAncestor, hh);
-    /* ...and then shortcut. */
+    /* shortcut.  */
     thread->hierarchicalHeap = hh->nextAncestor;
-
     /* don't need the snapshot for this heap now. */
     CC_freeStack(HM_HH_getConcurrentPack(hh));
+    linkInto(s, hh->nextAncestor, hh);
   }
 
   assert(HM_HH_getDepth(thread->hierarchicalHeap) < thread->currentDepth);
@@ -217,12 +220,21 @@ void HM_HH_promoteChunks(
 
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 {
-  return (NULL != hh) && (NULL == hh->representative);
+  return (NULL != hh)
+      && (NULL != HM_HH_getUFNode(hh))
+      && (HM_HH_getUFNode(hh)->payload == hh)
+      && (NULL == HM_HH_getUFNode(hh)->representative);
 }
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
+  HM_UnionFindNode uf = allocateFixedSize(getUFAllocator(s));
   HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
+
+  uf->dependant1 = NULL;
+  uf->dependant2 = NULL;
+  uf->representative = NULL;
+  uf->payload = hh;
 
   HM_HH_getConcurrentPack(hh)->rootList = NULL;
   HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
@@ -232,12 +244,13 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
 
-  hh->representative = NULL;
+  // hh->representative = NULL;
+  hh->ufNode = uf;
   hh->subHeapForRootCC = NULL;
   hh->depth = depth;
   hh->nextAncestor = NULL;
-  hh->dependant1 = NULL;
-  hh->dependant2 = NULL;
+  // hh->dependant1 = NULL;
+  // hh->dependant2 = NULL;
   hh->numDependants = 0;
   hh->heightDependants = 0;
 
@@ -327,7 +340,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
-  chunk->levelHead = hh;
+  chunk->levelHead = HM_HH_getUFNode(hh);
 
   thread->currentChunk = chunk;
   HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
@@ -385,13 +398,13 @@ void mergeHeapForRootCC(GC_state s, GC_thread thread) {
 
   HM_appendChunkList(HM_HH_getChunkList(subhh), HM_HH_getChunkList(hh));
   HM_appendChunkList(HM_HH_getRemSet(subhh), HM_HH_getRemSet(hh));
-  linkInto(subhh, hh);
+  linkInto(s, subhh, hh);
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, 1);
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk =
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
-  chunk->levelHead = newHH;
+  chunk->levelHead = HM_HH_getUFNode(newHH);
   thread->currentChunk = chunk;
   newHH->subHeapForRootCC = subhh;
 }
@@ -661,11 +674,12 @@ void HM_HH_freeAllDependants(
   HM_HierarchicalHeap hh,
   bool retireInsteadOfFree)
 {
-  FixedSizeAllocator myHHAllocator = getHHAllocator(s);
+  assert(HM_HH_isLevelHead(hh));
+  FixedSizeAllocator myUFAllocator = getUFAllocator(s);
 
-  HM_HierarchicalHeap parent = hh;
-  HM_HierarchicalHeap child = hh->dependant1;
-  hh->dependant1 = NULL;
+  HM_UnionFindNode parent = HM_HH_getUFNode(hh);
+  HM_UnionFindNode child = parent->dependant1;
+  parent->dependant1 = NULL;
 
   size_t numFreed = 0;
 
@@ -709,12 +723,12 @@ void HM_HH_freeAllDependants(
     else {
       if (child->dependant1 == NULL) {
         // free and jump to other grandchild
-        HM_HierarchicalHeap grandchild = child->dependant2;
+        HM_UnionFindNode grandchild = child->dependant2;
 
         if (retireInsteadOfFree) {
           HH_EBR_retire(s, child);
         } else {
-          freeFixedSize(myHHAllocator, child);
+          freeFixedSize(myUFAllocator, child);
         }
         numFreed++;
 
@@ -722,7 +736,7 @@ void HM_HH_freeAllDependants(
       }
       else {
         // move DOWN the tree (careful to INVERT the pointer)
-        HM_HierarchicalHeap grandchild = child->dependant1;
+        HM_UnionFindNode grandchild = child->dependant1;
         child->dependant1 = parent;
         parent = child;
         child = grandchild;
@@ -733,6 +747,8 @@ void HM_HH_freeAllDependants(
   assert(numFreed == hh->numDependants);
   hh->numDependants = 0;
   hh->heightDependants = 0;
+
+  assert(HM_HH_isLevelHead(hh));
 }
 
 
@@ -743,16 +759,17 @@ void HM_HH_freeAllDependants(
 /*******************************/
 
 static inline void linkInto(
+  GC_state s,
   HM_HierarchicalHeap left,
   HM_HierarchicalHeap right)
 {
-  assert(NULL == right->representative);
-  assert(NULL == left->dependant2);
-  assert(NULL == right->dependant2);
+  assert(NULL == HM_HH_getUFNode(right)->representative);
+  assert(NULL == HM_HH_getUFNode(left)->dependant2);
+  assert(NULL == HM_HH_getUFNode(right)->dependant2);
 
-  right->representative = left;
-  right->dependant2 = left->dependant1;
-  left->dependant1 = right;
+  HM_HH_getUFNode(right)->representative = HM_HH_getUFNode(left);
+  HM_HH_getUFNode(right)->dependant2 = HM_HH_getUFNode(left)->dependant1;
+  HM_HH_getUFNode(left)->dependant1 = HM_HH_getUFNode(right);
 
   left->numDependants += 1 + right->numDependants;
 
@@ -760,7 +777,12 @@ static inline void linkInto(
   size_t rh = right->heightDependants;
   left->heightDependants = 1 + (lh > rh ? lh : rh);
 
-  assert(NULL == left->dependant2);
+  assert(NULL == HM_HH_getUFNode(left)->dependant2);
+
+  HM_HH_getUFNode(right)->payload = NULL;
+  freeFixedSize(getHHAllocator(s), right);
+
+  assert(HM_HH_isLevelHead(left));
 }
 
 #if ASSERT
@@ -775,7 +797,7 @@ void assertInvariants(GC_thread thread)
        cursor != NULL;
        cursor = cursor->nextAncestor)
   {
-    HM_HH_isLevelHead(cursor);
+    assert(HM_HH_isLevelHead(cursor));
     HM_chunkList list = HM_HH_getChunkList(cursor);
     assert(NULL != list);
     HM_assertChunkListInvariants(list);

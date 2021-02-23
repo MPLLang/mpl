@@ -13,28 +13,9 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-typedef struct HM_HierarchicalHeap {
-  struct HM_HierarchicalHeap *representative;
-  uint32_t depth;
-
-  struct HM_chunkList chunkList;
-
-  /** This is a bit of a hack. For root (fully concurrent) collections,
-    * we need to separate collected space from the space where new allocations
-    * are permitted. Really, all we need is just a separate chunklist (and
-    * this is what Jatin originally implemented). But for tracking HH objects
-    * and their union-find dependants, having a completely separate HH object
-    * is nice because then we can free dependants during root CC.
-    */
-  struct HM_HierarchicalHeap *subHeapForRootCC;
-
-  struct HM_chunkList rememberedSet;
-  struct ConcurrentPackage concurrentPack;
-
-  /* The next non-empty ancestor heap. This may skip over "unused" levels.
-   * Also, all threads have their own leaf-to-root path (essentially, path
-   * copying) which is merged only at join points of the program. */
-  struct HM_HierarchicalHeap *nextAncestor;
+typedef struct HM_UnionFindNode {
+  struct HM_UnionFindNode *representative;
+  struct HM_HierarchicalHeap *payload;
 
   /* In the union-find tree of HH records, any node that is not a representative
    * is a "dependant". These nodes only serve to redirect queries towards the
@@ -59,8 +40,34 @@ typedef struct HM_HierarchicalHeap {
    * all dependants efficiently in parallel. (This is important for parallel
    * GC, although we haven't implemented this yet.)
    */
-  struct HM_HierarchicalHeap *dependant1;
-  struct HM_HierarchicalHeap *dependant2;
+  struct HM_UnionFindNode *dependant1;
+  struct HM_UnionFindNode *dependant2;
+
+} *HM_UnionFindNode;
+
+
+typedef struct HM_HierarchicalHeap {
+  struct HM_UnionFindNode *ufNode;
+  uint32_t depth;
+
+  struct HM_chunkList chunkList;
+
+  /** This is a bit of a hack. For root (fully concurrent) collections,
+    * we need to separate collected space from the space where new allocations
+    * are permitted. Really, all we need is just a separate chunklist (and
+    * this is what Jatin originally implemented). But for tracking HH objects
+    * and their union-find dependants, having a completely separate HH object
+    * is nice because then we can free dependants during root CC.
+    */
+  struct HM_HierarchicalHeap *subHeapForRootCC;
+
+  struct HM_chunkList rememberedSet;
+  struct ConcurrentPackage concurrentPack;
+
+  /* The next non-empty ancestor heap. This may skip over "unused" levels.
+   * Also, all threads have their own leaf-to-root path (essentially, path
+   * copying) which is merged only at join points of the program. */
+  struct HM_HierarchicalHeap *nextAncestor;
 
   size_t numDependants;
   size_t heightDependants;
@@ -71,12 +78,19 @@ typedef struct HM_HierarchicalHeap {
 
 #else
 
+struct HM_UnionFindNode;
+typedef struct HM_UnionFindNode *HM_UnionFindNode;
 struct HM_HierarchicalHeap;
 typedef struct HM_HierarchicalHeap *HM_HierarchicalHeap;
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
+
+static inline HM_UnionFindNode HM_HH_getUFNode(HM_HierarchicalHeap hh)
+{
+  return hh->ufNode;
+}
 
 static inline ConcurrentPackage HM_HH_getConcurrentPack(HM_HierarchicalHeap hh)
 {
@@ -110,7 +124,10 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested);
 
 /* zip-up hh1 and hh2, returning the new deepest leaf
  * (will be one of hh1 or hh2) */
-HM_HierarchicalHeap HM_HH_zip(HM_HierarchicalHeap hh1, HM_HierarchicalHeap hh2);
+HM_HierarchicalHeap HM_HH_zip(
+  GC_state s,
+  HM_HierarchicalHeap hh1,
+  HM_HierarchicalHeap hh2);
 
 /* Find the HH at the indicated depth (create one if doesn't exist) */
 HM_HierarchicalHeap HM_HH_getHeapAtDepth(GC_state s, GC_thread thread, uint32_t depth);
@@ -131,16 +148,16 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
 void HM_HH_resetList(pointer threadp);
 
 
-/** Very fancy (constant-space) loop that frees each dependant of hh.
-  * Specifically, calls this on each dependant dhh:
+/** Very fancy (constant-space) loop that frees each dependant union-find
+  * node of hh. Specifically, calls this on each dependant ufnode:
   *
-  *   freeFixedSize(getHHAllocator(s), dhh)
+  *   freeFixedSize(getUFAllocator(s), ufnode)
   *
   * Or, if specified to retire instead:
   *
-  *   HH_EBR_retire(s, dhh);
+  *   HH_EBR_retire(s, ufnode);
   *
-  * Note that this does NOT free hh.
+  * Note that this does NOT free hh, or its corresponding ufnode.
   */
 void HM_HH_freeAllDependants(
   GC_state s,

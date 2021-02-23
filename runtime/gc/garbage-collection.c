@@ -53,7 +53,7 @@ void growStackCurrent(GC_state s) {
   }
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
-  newChunk->levelHead = hh;
+  newChunk->levelHead = HM_HH_getUFNode(hh);
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));

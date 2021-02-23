@@ -486,7 +486,7 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 #endif
     assert(T->tmpHeap == NULL);
     T->tmpHeap = lists.fromHead;
-    T->levelHead = targetHH;
+    T->levelHead = HM_HH_getUFNode(targetHH);
   }
 
   /** SAM_NOTE: This code is no longer needed, because HH objects are not

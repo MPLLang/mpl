@@ -65,6 +65,10 @@ struct FixedSizeAllocator* getHHAllocator(GC_state s) {
   return &(s->hhAllocator);
 }
 
+struct FixedSizeAllocator* getUFAllocator(GC_state s) {
+  return &(s->hhUnionFindAllocator);
+}
+
 
 struct HM_chunkList* getFreeListLarge(GC_state s) {
   return &(s->freeListLarge);

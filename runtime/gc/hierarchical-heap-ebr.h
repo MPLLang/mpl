@@ -42,7 +42,7 @@ typedef struct HH_EBR_shared * HH_EBR_shared;
 
 void HH_EBR_init(GC_state s);
 void HH_EBR_leaveQuiescentState(GC_state s);
-void HH_EBR_retire(GC_state s, HM_HierarchicalHeap hh);
+void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf);
 
 #endif // MLTON_GC_INTERNAL_FUNCS
 

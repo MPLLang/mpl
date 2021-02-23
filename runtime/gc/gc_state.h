@@ -51,6 +51,7 @@ struct GC_state {
   objptr *globals;
   uint32_t globalsLength;
   struct FixedSizeAllocator hhAllocator;
+  struct FixedSizeAllocator hhUnionFindAllocator;
   struct HH_EBR_shared * hhEBR;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */

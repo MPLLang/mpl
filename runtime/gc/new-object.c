@@ -140,8 +140,8 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   if (NULL == sChunk || NULL == tChunk) {
     DIE("Ran out of space for thread+stack allocation!");
   }
-  tChunk->levelHead = hh;
-  sChunk->levelHead = hh;
+  tChunk->levelHead = HM_HH_getUFNode(hh);
+  sChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->mightContainMultipleObjects = FALSE;
 
   assert(threadSize < HM_getChunkSizePastFrontier(tChunk));

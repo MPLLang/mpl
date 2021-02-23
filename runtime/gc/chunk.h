@@ -43,7 +43,7 @@ struct ForwardHHObjptrArgs;
  * levelheads are identical to normal chunks (e.g. they still store user
  * objects in the reserved space up to .frontier). */
 struct HM_chunk {
-  struct HM_HierarchicalHeap *levelHead;
+  struct HM_UnionFindNode *levelHead;
 
   pointer frontier; // end of allocations within this chunk
   pointer limit;    // the end of this chunk

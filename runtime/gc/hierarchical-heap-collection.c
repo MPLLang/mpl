@@ -361,6 +361,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
     HM_appendChunkList(getFreeListSmall(s), level);
     HM_HH_freeAllDependants(s, hhTail, FALSE);
+    freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
     freeFixedSize(getHHAllocator(s), hhTail);
 
     hhTail = nextAncestor;
@@ -378,7 +379,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   /* merge in toSpace */
-  hh = HM_HH_zip(hhTail, hhToSpace);
+  hh = HM_HH_zip(s, hhTail, hhToSpace);
   thread->hierarchicalHeap = hh;
 
   /* update currentChunk and associated */
@@ -542,7 +543,7 @@ objptr relocateObject(
     HM_chunk chunk = HM_getChunkOf(p);
     HM_unlinkChunk(HM_HH_getChunkList(HM_getLevelHead(chunk)), chunk);
     HM_appendChunk(tgtChunkList, chunk);
-    chunk->levelHead = tgtHeap;
+    chunk->levelHead = HM_HH_getUFNode(tgtHeap);
 
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "Moved single-object chunk %p of size %zu",
@@ -747,7 +748,7 @@ pointer copyObject(pointer p,
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    chunk->levelHead = tgtHeap;
+    chunk->levelHead = HM_HH_getUFNode(tgtHeap);
   }
 
   pointer frontier = HM_getChunkFrontier(chunk);

@@ -55,9 +55,9 @@ static void rotateAndReclaim(GC_state s) {
   {
     for (pointer p = HM_getChunkStart(chunk);
          p < HM_getChunkFrontier(chunk);
-         p += sizeof(HM_HierarchicalHeap *))
+         p += sizeof(HM_UnionFindNode *))
     {
-      freeFixedSize(getHHAllocator(s), *(HM_HierarchicalHeap*)p);
+      freeFixedSize(getUFAllocator(s), *(HM_UnionFindNode*)p);
     }
   }
 
@@ -118,7 +118,7 @@ void HH_EBR_leaveQuiescentState(GC_state s) {
 }
 
 
-void HH_EBR_retire(GC_state s, HM_HierarchicalHeap hh) {
+void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf) {
   HH_EBR_shared ebr = s->hhEBR;
   uint32_t mypid = s->procNumber;
   int limboIdx = ebr->local[mypid].limboIdx;
@@ -128,25 +128,25 @@ void HH_EBR_retire(GC_state s, HM_HierarchicalHeap hh) {
   // fast path: bump frontier in chunk
 
   if (NULL != chunk &&
-      HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_HierarchicalHeap *))
+      HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_UnionFindNode *))
   {
     pointer p = chunk->frontier;
-    *(HM_HierarchicalHeap *)p = hh;
-    chunk->frontier += sizeof(HM_HierarchicalHeap *);
+    *(HM_UnionFindNode *)p = hhuf;
+    chunk->frontier += sizeof(HM_UnionFindNode *);
     assert(chunk->limit >= chunk->frontier);
     return;
   }
 
   // slow path: allocate new chunk
 
-  chunk = HM_allocateChunk(limboBag, sizeof(HM_HierarchicalHeap *));
+  chunk = HM_allocateChunk(limboBag, sizeof(HM_UnionFindNode *));
 
   assert(NULL != chunk &&
-    HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_HierarchicalHeap *));
+    HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_UnionFindNode *));
 
   pointer p = chunk->frontier;
-  *(HM_HierarchicalHeap *)p = hh;
-  chunk->frontier += sizeof(HM_HierarchicalHeap *);
+  *(HM_UnionFindNode *)p = hhuf;
+  chunk->frontier += sizeof(HM_UnionFindNode *);
   assert(chunk->limit >= chunk->frontier);
   return;
 }
