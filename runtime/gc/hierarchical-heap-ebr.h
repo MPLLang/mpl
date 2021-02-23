@@ -16,7 +16,7 @@ struct HH_EBR_local {
   struct HM_chunkList limboBags[3];
   int limboIdx;
   uint32_t checkNext;
-};
+} __attribute__((aligned(128)));
 
 // There is exactly one of these! Everyone shares a reference to it.
 typedef struct HH_EBR_shared {

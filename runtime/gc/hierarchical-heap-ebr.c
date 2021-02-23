@@ -29,6 +29,16 @@
 #define SET_Q_TRUE(announcement) ((announcement) | (size_t)1)
 #define SET_Q_FALSE(announcement) ((announcement) & (~(size_t)1))
 
+#define ANNOUNCEMENT_PADDING 16
+
+static inline size_t getAnnouncement(GC_state s, uint32_t pid) {
+  return s->hhEBR->announce[ANNOUNCEMENT_PADDING*pid];
+}
+
+static inline void setAnnouncement(GC_state s, uint32_t pid, size_t ann) {
+  s->hhEBR->announce[ANNOUNCEMENT_PADDING*pid] = ann;
+}
+
 
 static void rotateAndReclaim(GC_state s) {
   HH_EBR_shared ebr = s->hhEBR;
@@ -58,21 +68,22 @@ static void rotateAndReclaim(GC_state s) {
 
 void HH_EBR_init(GC_state s) {
   HH_EBR_shared ebr = malloc(sizeof(struct HH_EBR_shared));
+  s->hhEBR = ebr;
 
   ebr->epoch = 0;
-  ebr->announce = malloc(s->numberOfProcs * 16 * sizeof(size_t));
-  ebr->local = malloc(s->numberOfProcs * sizeof(struct HH_EBR_local));
+  ebr->announce =
+    malloc(s->numberOfProcs * ANNOUNCEMENT_PADDING * sizeof(size_t));
+  ebr->local =
+    malloc(s->numberOfProcs * sizeof(struct HH_EBR_local));
 
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     // Everyone starts by announcing epoch = 0 and is non-quiescent
-    ebr->announce[16*i] = PACK(0, 0);
+    setAnnouncement(s, i, PACK(0,0));
     ebr->local[i].limboIdx = 0;
     ebr->local[i].checkNext = 0;
     for (int j = 0; j < 3; j++)
       HM_initChunkList(&(ebr->local[i].limboBags[j]));
   }
-
-  s->hhEBR = ebr;
 }
 
 
@@ -82,7 +93,7 @@ void HH_EBR_leaveQuiescentState(GC_state s) {
   uint32_t numProcs = s->numberOfProcs;
 
   size_t globalEpoch = ebr->epoch;
-  size_t myann = ebr->announce[16*mypid];
+  size_t myann = getAnnouncement(s, mypid);
   size_t myEpoch = UNPACK_EPOCH(myann);
   assert(globalEpoch >= myEpoch);
 
@@ -95,7 +106,7 @@ void HH_EBR_leaveQuiescentState(GC_state s) {
   }
 
   uint32_t otherpid = (ebr->local[mypid].checkNext) % numProcs;
-  size_t otherann = ebr->announce[16*otherpid];
+  size_t otherann = getAnnouncement(s, otherpid);
   if ( UNPACK_EPOCH(otherann) == globalEpoch || UNPACK_QBIT(otherann) ) {
     uint32_t c = ++ebr->local[mypid].checkNext;
     if (c >= numProcs) {
@@ -103,22 +114,7 @@ void HH_EBR_leaveQuiescentState(GC_state s) {
     }
   }
 
-  // Check: has everyone entered the current global epoch?
-  // bool everyoneInSameEpochOrQuiescent = TRUE;
-  // for (uint32_t otherpid = 0; otherpid < numProcs; otherpid++) {
-  //   size_t ann = ebr->announce[16*otherpid];
-  //   if ( !(UNPACK_EPOCH(ann) == globalEpoch || UNPACK_QBIT(ann)) )
-  //   {
-  //     everyoneInSameEpochOrQuiescent = FALSE;
-  //     break;
-  //   }
-  // }
-
-  // if (everyoneInSameEpochOrQuiescent && (ebr->epoch == globalEpoch)) {
-  //   __sync_val_compare_and_swap(&(ebr->epoch), globalEpoch, globalEpoch+1);
-  // }
-
-  ebr->announce[16*mypid] = PACK(globalEpoch, 0);
+  setAnnouncement(s, mypid, PACK(globalEpoch, 0));
 }
 
 
