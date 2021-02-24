@@ -359,9 +359,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     }
 #endif
 
-    /* This implicitly frees the heap records too, because they are stored in
-     * the level list. */
     HM_appendChunkList(getFreeListSmall(s), level);
+    HM_HH_freeAllDependants(s, hhTail, FALSE);
+    freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
+    freeFixedSize(getHHAllocator(s), hhTail);
 
     hhTail = nextAncestor;
   }
@@ -378,7 +379,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   /* merge in toSpace */
-  hh = HM_HH_zip(hhTail, hhToSpace);
+  hh = HM_HH_zip(s, hhTail, hhToSpace);
   thread->hierarchicalHeap = hh;
 
   /* update currentChunk and associated */
@@ -542,7 +543,7 @@ objptr relocateObject(
     HM_chunk chunk = HM_getChunkOf(p);
     HM_unlinkChunk(HM_HH_getChunkList(HM_getLevelHead(chunk)), chunk);
     HM_appendChunk(tgtChunkList, chunk);
-    chunk->levelHead = tgtHeap;
+    chunk->levelHead = HM_HH_getUFNode(tgtHeap);
 
     LOG(LM_HH_COLLECTION, LL_DEBUGMORE,
       "Moved single-object chunk %p of size %zu",
@@ -693,8 +694,9 @@ void forwardHHObjptr (GC_state s,
 
     HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
     if (tgtHeap == NULL) {
-      /* Level does not exist, so create it */
-      /* SAM_NOTE: new heaps are initialized with one free chunk. */
+      /** Level does not exist, so create it. Relocating an object allocates
+        * chunks lazily, so we don't need a fresh chunk here.
+        */
       tgtHeap = HM_HH_new(s, opDepth);
       args->toSpace[opDepth] = tgtHeap;
     }
@@ -746,7 +748,7 @@ pointer copyObject(pointer p,
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    chunk->levelHead = tgtHeap;
+    chunk->levelHead = HM_HH_getUFNode(tgtHeap);
   }
 
   pointer frontier = HM_getChunkFrontier(chunk);

@@ -229,7 +229,9 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   if (NULL == args->fromSpace[args->toDepth]) {
-    /* note that new heaps are initialized with a free chunk. */
+    /** Now that copying objects lazily allocates chunks, we don't rely
+      * on fresh chunk here.
+      */
     HM_HierarchicalHeap newhh = HM_HH_new(s, args->toDepth);
     args->fromSpace[args->toDepth] = newhh;
   }

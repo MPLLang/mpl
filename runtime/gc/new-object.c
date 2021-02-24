@@ -135,13 +135,13 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
    * yet. */
   HM_HierarchicalHeap hh = HM_HH_new(s, depth);
 
-  /* note that new heaps are initialized with one free chunk */
-  HM_chunk tChunk = HM_getChunkListFirstChunk(HM_HH_getChunkList(hh));
+  HM_chunk tChunk = HM_allocateChunk(HM_HH_getChunkList(hh), threadSize);
   HM_chunk sChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
-  if (NULL == sChunk) {
-    DIE("Ran out of space for stack allocation!");
+  if (NULL == sChunk || NULL == tChunk) {
+    DIE("Ran out of space for thread+stack allocation!");
   }
-  sChunk->levelHead = hh;
+  tChunk->levelHead = HM_HH_getUFNode(hh);
+  sChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->mightContainMultipleObjects = FALSE;
 
   assert(threadSize < HM_getChunkSizePastFrontier(tChunk));

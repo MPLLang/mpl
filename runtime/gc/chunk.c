@@ -588,7 +588,7 @@ size_t HM_getChunkSize(HM_chunk chunk) {
 }
 
 size_t HM_getChunkSizePastFrontier(HM_chunk chunk) {
-  assert(chunk->frontier < chunk->limit);
+  assert(chunk->frontier <= chunk->limit);
   return (size_t)chunk->limit - (size_t)chunk->frontier;
 }
 
@@ -619,6 +619,13 @@ pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes) {
   return oldStart;
 }
 
+pointer HM_getChunkStartGap(HM_chunk chunk) {
+  if (0 == chunk->startGap) {
+    return NULL;
+  }
+  return (pointer)chunk + sizeof(struct HM_chunk);
+}
+
 HM_chunk HM_getChunkListLastChunk(HM_chunkList list) {
   if (NULL == list) {
     return NULL;
@@ -643,28 +650,31 @@ size_t HM_getChunkListSize(HM_chunkList list) {
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
-  HM_HierarchicalHeap cursor = chunk->levelHead;
+  HM_UnionFindNode cursor = chunk->levelHead;
   while (cursor->representative != NULL) {
     cursor = cursor->representative;
   }
-  return cursor;
+  assert(NULL != cursor->payload);
+  return cursor->payload;
 }
 
 HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   HM_HierarchicalHeap levelHead = HM_getLevelHead(chunk);
   assert(levelHead != NULL);
+  HM_UnionFindNode topNode = HM_HH_getUFNode(levelHead);
+  assert(topNode != NULL);
 
   /* fast path */
-  if (chunk->levelHead == levelHead) {
+  if (chunk->levelHead == topNode) {
     return levelHead;
   }
 
-  HM_HierarchicalHeap cursor = chunk->levelHead;
-  chunk->levelHead = levelHead;
+  HM_UnionFindNode cursor = chunk->levelHead;
+  chunk->levelHead = topNode;
 
-  while (cursor != levelHead) {
-    HM_HierarchicalHeap representative = cursor->representative;
-    cursor->representative = levelHead;
+  while (cursor != topNode) {
+    HM_UnionFindNode representative = cursor->representative;
+    cursor->representative = topNode;
     cursor = representative;
   }
 

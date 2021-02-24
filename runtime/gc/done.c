@@ -47,6 +47,32 @@ static void displayGlobalCumulativeStatistics (
     //          uintmaxToCommaString (ChunkPool_maxAllocated ()));
 }
 
+static void displayHHAllocStats(FILE *out, GC_state s) {
+  FixedSizeAllocator fsa = getHHAllocator(s);
+  fprintf(out, "num hh allocated: %zu\n", numFixedSizeAllocated(fsa));
+  fprintf(out, "num hh freed: %zu\n", numFixedSizeFreed(fsa));
+  fprintf(out, "num hh shared freed: %zu\n", numFixedSizeSharedFreed(fsa));
+  fprintf(out, "num hh currently in use: %zu\n", numFixedSizeCurrentlyInUse(fsa));
+  fprintf(out, "current hh alloc capacity: %zu\n", currentFixedSizeCapacity(fsa));
+  fprintf(out, "current hh space util: %.1f%%\n",
+          100.0 * currentFixedSizeSpaceUtilization(fsa));
+
+  size_t maxSize = 0;
+  size_t maxHeight = 0;
+  for (HM_HierarchicalHeap cursor = getHierarchicalHeapCurrent(s);
+       cursor != NULL;
+       cursor = cursor->nextAncestor)
+  {
+    if (cursor->numDependants > maxSize)
+      maxSize = cursor->numDependants;
+    if (cursor->heightDependants > maxHeight) maxHeight =
+      cursor->heightDependants;
+  }
+
+  fprintf(out, "current max num hh dependants: %zu\n", maxSize);
+  fprintf(out, "current max dependant tree height: %zu\n", maxHeight);
+}
+
 
 static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatistics *cumulativeStatistics) {
   struct rusage ru_total;
@@ -203,10 +229,12 @@ void GC_done(GC_state s) {
           displayCumulativeStatistics
               (s->controls->summaryFile,
                s->procStates[proc].cumulativeStatistics);
+          displayHHAllocStats(s->controls->summaryFile, &(s->procStates[proc]));
         }
       } else {
         displayCumulativeStatistics(s->controls->summaryFile,
                                     s->cumulativeStatistics);
+        displayHHAllocStats(s->controls->summaryFile, s);
       }
     } else if (JSON == s->controls->summaryFormat) {
       displayCumulativeStatisticsJSON(s->controls->summaryFile, s);

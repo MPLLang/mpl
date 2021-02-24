@@ -43,7 +43,7 @@ struct ForwardHHObjptrArgs;
  * levelheads are identical to normal chunks (e.g. they still store user
  * objects in the reserved space up to .frontier). */
 struct HM_chunk {
-  struct HM_HierarchicalHeap *levelHead;
+  struct HM_UnionFindNode *levelHead;
 
   pointer frontier; // end of allocations within this chunk
   pointer limit;    // the end of this chunk
@@ -227,6 +227,9 @@ pointer HM_getChunkStart(HM_chunk chunk);
 /* shift the start of the chunk, to store e.g. a heap record.
  * returns a pointer to the gap, or NULL if no more space is available. */
 pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes);
+
+/* return the pointer to the start gap, or NULL if it doesn't have a gap. */
+pointer HM_getChunkStartGap(HM_chunk chunk);
 
 /**
  * This function gets the last chunk in a list

@@ -17,8 +17,8 @@
 // #include "logger.h"
 
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
-#define LL_Log LL_FORCE
+#if (defined (MLTON_GC_INTERNAL_TYPES))
+
 // Struct to pass around args. repList is the new chunklist.
 typedef struct ConcurrentCollectArgs {
 	HM_chunkList origList;
@@ -47,10 +47,28 @@ typedef struct ConcurrentPackage {
 	bool shouldCollect;
 	enum CCState ccstate;
 	objptr stack;
+
+  /** For deciding when to collect. Could be cleaned up.
+    */
 	size_t bytesAllocatedSinceLastCollection;
 	size_t bytesSurvivedLastCollection;
-	struct HM_chunkList remSet;
+
+  /** To avoid races with other processor adding to the remset (writebarrier or
+    * promotions).
+    */
+	// struct HM_chunkList remSet;
+
 } * ConcurrentPackage;
+
+#else
+
+struct ConcurrentPackage;
+typedef struct ConcurrentPackage *ConcurrentPackage;
+
+#endif
+
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 // Assume complete access in this function
 // This function constructs a HM_chunkList of reachable chunks without copying them

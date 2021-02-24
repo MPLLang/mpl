@@ -1,7 +1,7 @@
 #ifndef CC_STACK_H
 #define CC_STACK_H
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
+#if (defined (MLTON_GC_INTERNAL_TYPES))
 
 typedef struct CC_stack {
     size_t size;
@@ -11,6 +11,15 @@ typedef struct CC_stack {
     pthread_mutex_t mutex;
 }
 CC_stack;
+
+#else
+
+struct CC_stack;
+typedef struct CC_stack CC_stack;
+
+#endif /* MLTON_GC_INTERNAL_TYPES */
+
+#if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void CC_stack_init(CC_stack* stack, size_t capacity);
 
@@ -32,5 +41,6 @@ void forEachObjptrinStack(GC_state s,
                           GC_foreachObjptrFun f,
                           void* rawArgs);
 
+#endif /* MLTON_GC_INTERNAL_FUNCS */
+
 #endif /* CC_STACK_H */
-#endif

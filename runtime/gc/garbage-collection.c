@@ -53,7 +53,7 @@ void growStackCurrent(GC_state s) {
   }
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
-  newChunk->levelHead = hh;
+  newChunk->levelHead = HM_HH_getUFNode(hh);
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));
@@ -84,6 +84,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   beginAtomic(s);
+  HH_EBR_leaveQuiescentState(s);
 
   assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
   assert(threadAndHeapOkay(s));
