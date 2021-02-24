@@ -82,7 +82,7 @@ void initDynHeap(GC_state s, GC_thread thread) {
     }
     // Advance frontier.
     frontier += p - start;
-    HM_updateChunkValues(currentChunk, frontier);
+    HM_updateChunkFrontier(currentChunk, frontier);
 
     if (p >= end) {
       // This segment was the last to be copied.

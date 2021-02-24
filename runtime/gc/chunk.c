@@ -55,9 +55,6 @@ void HM_configChunks(GC_state s) {
   assert(isAligned(s->controls->allocChunkSize, s->controls->blockSize));
   HM_BLOCK_SIZE = s->controls->blockSize;
   HM_ALLOC_SIZE = s->controls->allocChunkSize;
-
-  HM_chunk firstChunk = mmapNewChunk(HM_BLOCK_SIZE * 16);
-  HM_appendChunk(getFreeListExtraSmall(s), firstChunk);
 }
 
 static void HM_prependChunk(HM_chunkList list, HM_chunk chunk) {
@@ -465,23 +462,6 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
   return chunk;
 }
 
-HM_chunkList HM_newChunkList(void) {
-  GC_state s = pthread_getspecific(gcstate_key);
-
-  size_t bytesNeeded = sizeof(struct HM_chunkList);
-  HM_chunk sourceChunk = HM_getChunkListLastChunk(getFreeListExtraSmall(s));
-  if (NULL == sourceChunk ||
-      (size_t)(sourceChunk->limit - sourceChunk->frontier) < bytesNeeded) {
-    sourceChunk = HM_allocateChunk(getFreeListExtraSmall(s), bytesNeeded);
-  }
-  pointer frontier = HM_getChunkFrontier(sourceChunk);
-  HM_updateChunkValues(sourceChunk, frontier+bytesNeeded);
-  HM_chunkList list = (HM_chunkList)frontier;
-
-  HM_initChunkList(list);
-  return list;
-}
-
 void HM_initChunkList(HM_chunkList list) {
   list->firstChunk = NULL;
   list->lastChunk = NULL;
@@ -736,7 +716,7 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
   HM_assertChunkListInvariants(list1);
 }
 
-void HM_updateChunkValues(HM_chunk chunk, pointer frontier) {
+void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier) {
   assert(chunk->frontier <= frontier && frontier <= chunk->limit);
   chunk->frontier = frontier;
 }

@@ -171,8 +171,8 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
 
-  HM_updateChunkValues(tChunk, tFrontier + threadSize);
-  HM_updateChunkValues(sChunk, sFrontier + stackSize);
+  HM_updateChunkFrontier(tChunk, tFrontier + threadSize);
+  HM_updateChunkFrontier(sChunk, sFrontier + stackSize);
 
   return thread;
 }

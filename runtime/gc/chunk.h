@@ -135,7 +135,6 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
 
 void HM_initChunkList(HM_chunkList list);
-HM_chunkList HM_newChunkList(void);
 
 void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendToSharedList(GC_state s, HM_chunkList list);
@@ -157,12 +156,6 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk);
 HM_chunk HM_splitChunk(HM_chunkList list, HM_chunk chunk, size_t bytesRequested);
 
 void HM_coalesceChunks(HM_chunk left, HM_chunk right);
-
-struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
-
-/* Lookup the levelhead for this chunk, but don't path compress. This is useful
- * for looking up the levelhead of a chunk which might not be locally owned */
-struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which
@@ -243,22 +236,21 @@ HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
 size_t HM_getChunkListSize(HM_chunkList levelHead);
 
-// bool HM_isChunkMarked(HM_chunk chunk);
-// void HM_markChunk(HM_chunk chunk);
-// void HM_unmarkChunk(HM_chunk chunk);
-
 /**
  * Updates the chunk's values to reflect mutator
  *
  * @param chunk The chunk to update
  * @param frontier The end of the allocations
  */
-void HM_updateChunkValues(HM_chunk chunk, pointer frontier);
+void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier);
 
-HM_chunkList HM_getChunkList(HM_chunk chunk);
-
+/** These query the union-find tree, to either look up the depth of
+  * an object, or look up the heap that contains the object.
+  */
 uint32_t HM_getObjptrDepth(objptr op);
 uint32_t HM_getObjptrDepthPathCompress(objptr op);
+struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
+struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

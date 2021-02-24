@@ -574,7 +574,7 @@ pointer HM_HH_getLimit(GC_thread thread) {
 }
 
 void HM_HH_updateValues(GC_thread thread, pointer frontier) {
-  HM_updateChunkValues(thread->currentChunk, frontier);
+  HM_updateChunkFrontier(thread->currentChunk, frontier);
 }
 
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {

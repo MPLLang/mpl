@@ -41,7 +41,7 @@ void growStackCurrent(GC_state s) {
    * stack in place. */
   if (stackSize <= (size_t)(HM_getChunkLimit(chunk) - HM_getChunkStart(chunk))) {
     getStackCurrent(s)->reserved = reserved;
-    HM_updateChunkValues(chunk, HM_getChunkStart(chunk) + stackSize);
+    HM_updateChunkFrontier(chunk, HM_getChunkStart(chunk) + stackSize);
     return;
   }
 
@@ -62,7 +62,7 @@ void growStackCurrent(GC_state s) {
   stack = (GC_stack)(frontier + GC_HEADER_SIZE);
   stack->reserved = reserved;
   stack->used = 0;
-  HM_updateChunkValues(newChunk, frontier + stackSize);
+  HM_updateChunkFrontier(newChunk, frontier + stackSize);
 
   copyStack(s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr((pointer)stack, NULL);

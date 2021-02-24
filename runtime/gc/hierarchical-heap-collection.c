@@ -755,7 +755,7 @@ pointer copyObject(pointer p,
 
   GC_memcpy(p, frontier, copySize);
   pointer newFrontier = frontier + objectSize;
-  HM_updateChunkValues(chunk, newFrontier);
+  HM_updateChunkFrontier(chunk, newFrontier);
   // if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
   //   /* size is arbitrary; just need a new chunk */
   //   chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);

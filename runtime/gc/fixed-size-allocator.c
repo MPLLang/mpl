@@ -71,11 +71,10 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
   HM_chunk chunk = HM_getChunkListLastChunk(&(fsa->buffer));
 
   if (NULL != chunk && HM_getChunkSizePastFrontier(chunk) >= fsa->fixedSize) {
-    pointer elem = chunk->frontier;
-    chunk->frontier += fsa->fixedSize;
-    assert(chunk->frontier <= chunk->limit);
+    pointer frontier = HM_getChunkFrontier(chunk);
+    HM_updateChunkFrontier(chunk, frontier + fsa->fixedSize);
     fsa->numAllocated++;
-    return elem;
+    return frontier;
   }
 
   /** Slow path: not enough space in the buffer, so we need to allocate a new
@@ -91,11 +90,10 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
   *(FixedSizeAllocator *)gap = fsa;
 
   assert(NULL != chunk && HM_getChunkSizePastFrontier(chunk) >= fsa->fixedSize);
-  pointer elem = chunk->frontier;
-  chunk->frontier += fsa->fixedSize;
-  assert(chunk->frontier <= chunk->limit);
+  pointer frontier = HM_getChunkFrontier(chunk);
+  HM_updateChunkFrontier(chunk, frontier + fsa->fixedSize);
   fsa->numAllocated++;
-  return elem;
+  return frontier;
 }
 
 

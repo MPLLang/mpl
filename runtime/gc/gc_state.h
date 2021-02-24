@@ -100,7 +100,6 @@ static void displayGCState (GC_state s, FILE *stream);
 static inline size_t sizeofGCStateCurrentStackUsed (GC_state s);
 static inline void setGCStateCurrentThreadAndStack (GC_state s);
 
-static inline struct HM_chunkList* getFreeListExtraSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListSmall(GC_state s);
 static inline struct HM_chunkList* getFreeListLarge(GC_state s);
 struct HM_chunkList* HM_getsharedFreeList(GC_state s);
