@@ -14,7 +14,8 @@ PROGRAMS= \
 	dedup \
 	nqueens \
 	reverb \
-	seam-carve
+	seam-carve \
+	coins
 
 DBG_PROGRAMS := $(addsuffix .dbg,$(PROGRAMS))
 SYSMPL_PROGRAMS := $(addsuffix .sysmpl,$(PROGRAMS))
