@@ -68,11 +68,12 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
 
   // Fast path #3: bump space on the buffer, if we can.
 
-  HM_chunk chunk = HM_getChunkListLastChunk(&(fsa->buffer));
+  HM_chunkList buffer = &(fsa->buffer);
+  HM_chunk chunk = HM_getChunkListLastChunk(buffer);
 
   if (NULL != chunk && HM_getChunkSizePastFrontier(chunk) >= fsa->fixedSize) {
     pointer frontier = HM_getChunkFrontier(chunk);
-    HM_updateChunkFrontier(chunk, frontier + fsa->fixedSize);
+    HM_updateChunkFrontierInList(buffer, chunk, frontier + fsa->fixedSize);
     fsa->numAllocated++;
     return frontier;
   }
@@ -85,13 +86,13 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
     * to their original buffer, by looking up the chunk header.
     */
 
-  chunk = HM_allocateChunk(&(fsa->buffer), fsa->fixedSize + sizeof(void*));
+  chunk = HM_allocateChunk(buffer, fsa->fixedSize + sizeof(void*));
   pointer gap = HM_shiftChunkStart(chunk, sizeof(void*));
   *(FixedSizeAllocator *)gap = fsa;
 
   assert(NULL != chunk && HM_getChunkSizePastFrontier(chunk) >= fsa->fixedSize);
   pointer frontier = HM_getChunkFrontier(chunk);
-  HM_updateChunkFrontier(chunk, frontier + fsa->fixedSize);
+  HM_updateChunkFrontierInList(buffer, chunk, frontier + fsa->fixedSize);
   fsa->numAllocated++;
   return frontier;
 }

@@ -74,7 +74,15 @@ struct HM_chunkList {
   HM_chunk firstChunk;
   HM_chunk lastChunk;
 
-  size_t size; // size (bytes) of this level, both allocated and unallocated
+  /** usedSize = sum of used (frontier-start) space of chunks in this list.
+    * size = total size of chunks in this list.
+    *
+    * So, for example, the fraction of "wasted" space in the list is
+    *   (size-usedSize)/size
+    */
+  size_t usedSize;
+  size_t size;
+
 } __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
@@ -204,6 +212,10 @@ pointer HM_getChunkLimit(HM_chunk chunk);
  */
 size_t HM_getChunkSize(HM_chunk chunk);
 
+/** frontier-start */
+size_t HM_getChunkUsedSize(HM_chunk chunk);
+
+/** limit-frontier */
 size_t HM_getChunkSizePastFrontier(HM_chunk chunk);
 
 /**
@@ -234,14 +246,22 @@ pointer HM_getChunkStartGap(HM_chunk chunk);
 HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
-size_t HM_getChunkListSize(HM_chunkList levelHead);
+size_t HM_getChunkListSize(HM_chunkList list);
+size_t HM_getChunkListUsedSize(HM_chunkList list);
 
-/**
- * Updates the chunk's values to reflect mutator
- *
- * @param chunk The chunk to update
- * @param frontier The end of the allocations
- */
+/** These functions update the frontier of a chunk. This is used typically
+  * to reflect bumps made by the mutator.
+  *
+  * Updating the frontier also needs to be reflected in the `usedSize` of
+  * the list that holds the chunk. This is the purpose of the `list` argument
+  * for `HM_updateChunkFrontierInList`. For updating the frontier of a chunk
+  * that is not currently in any list, `HM_updateChunkFrontier` can be used
+  * instead.
+  */
+void HM_updateChunkFrontierInList(
+  HM_chunkList list,
+  HM_chunk chunk,
+  pointer frontier);
 void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier);
 
 /** These query the union-find tree, to either look up the depth of

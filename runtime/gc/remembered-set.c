@@ -13,7 +13,12 @@ void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src) {
   assert(NULL != chunk);
   assert(HM_getChunkSizePastFrontier(chunk) >= sizeof(struct HM_remembered));
   pointer frontier = HM_getChunkFrontier(chunk);
-  HM_updateChunkFrontier(chunk, frontier + sizeof(struct HM_remembered));
+
+  HM_updateChunkFrontierInList(
+    remSet,
+    chunk,
+    frontier + sizeof(struct HM_remembered));
+
   struct HM_remembered* r = (struct HM_remembered*)frontier;
   r->dst = dst;
   r->field = field;

@@ -136,7 +136,7 @@ void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf) {
   {
     pointer p = HM_getChunkFrontier(chunk);
     *(HM_UnionFindNode *)p = hhuf;
-    HM_updateChunkFrontier(chunk, p + sizeof(HM_UnionFindNode *));
+    HM_updateChunkFrontierInList(limboBag, chunk, p + sizeof(HM_UnionFindNode *));
     return;
   }
 
@@ -149,7 +149,7 @@ void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf) {
 
   pointer p = HM_getChunkFrontier(chunk);
   *(HM_UnionFindNode *)p = hhuf;
-  HM_updateChunkFrontier(chunk, p + sizeof(HM_UnionFindNode *));
+  HM_updateChunkFrontierInList(limboBag, chunk, p + sizeof(HM_UnionFindNode *));
   return;
 }
 

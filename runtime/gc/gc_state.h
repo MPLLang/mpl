@@ -45,7 +45,6 @@ struct GC_state {
   struct HM_chunkList freeListLarge;
   HM_chunkList sharedfreeList;
   bool* freeListLock;
-  struct HM_chunkList extraSmallObjects;
   size_t nextChunkAllocSize;
   /* Ordinary globals */
   objptr *globals;
