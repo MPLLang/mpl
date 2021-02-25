@@ -76,12 +76,12 @@ val amt = CommandLineArgs.parseInt "N" 777
 
 (* Sequential *)
 val t0 = Time.now ()
-val result = payA_seq amt coins_input
+val result_seq = payA_seq amt coins_input
 val t1 = Time.now ()
-val _ = print ("Sequential: " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
+val _ = print ("Sequential: " ^ Int.toString (lenA result_seq) ^ ". Finished in: " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
 
 (* Parallel *)
 val t2 = Time.now ()
-val result = payA_par 3 amt coins_input
+val result_par = payA_par 3 amt coins_input
 val t3 = Time.now ()
-val _ = print ("Parallel: " ^ Time.fmt 4 (Time.- (t3, t2)) ^ "s.")
+val _ = print ("Parallel: " ^ Int.toString (lenA result_par) ^ ". Finished in: " ^ Time.fmt 4 (Time.- (t3, t2)) ^ "s.")
