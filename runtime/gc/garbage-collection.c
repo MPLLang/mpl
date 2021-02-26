@@ -93,6 +93,18 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   beginAtomic(s);
   HH_EBR_leaveQuiescentState(s);
 
+  // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
+  // while (h->nextAncestor != NULL) h = h->nextAncestor;
+  // if (HM_HH_getDepth(h) == 0 && HM_getChunkListSize(HM_HH_getChunkList(h)) > 8192) {
+  //   size_t gsize = HM_getChunkListSize(HM_HH_getChunkList(h));
+  //   size_t gusize = HM_getChunkListUsedSize(HM_HH_getChunkList(h));
+  //   printf("[BIG GLOBAL %d] size: %zu, used: %zu (%.01lf%%)\n",
+  //     s->procNumber,
+  //     gsize,
+  //     gusize,
+  //     100.0 * ((double)gusize / (double)gsize));
+  // }
+
   assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
   assert(threadAndHeapOkay(s));
 

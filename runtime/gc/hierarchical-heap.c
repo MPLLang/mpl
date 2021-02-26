@@ -793,7 +793,7 @@ static inline void linkInto(
 
 void assertInvariants(GC_thread thread)
 {
-  return;
+  // return;
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
 

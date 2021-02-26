@@ -116,6 +116,7 @@ void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   }
 
   list->size -= HM_getChunkSize(chunk);
+  list->usedSize -= HM_getChunkUsedSize(chunk);
 
   chunk->prevChunk = NULL;
   chunk->nextChunk = NULL;
@@ -153,6 +154,7 @@ bool saveNoForward(
 void markAndScan(GC_state s, pointer p, void* rawArgs) {
   if(!CC_isPointerMarked(p)) {
     markObj(p);
+    ((ConcurrentCollectArgs*)rawArgs)->bytesSaved += sizeofObject(s, p);
     assert(CC_isPointerMarked(p));
 
     struct GC_foreachObjptrClosure forwardPtrClosure =
@@ -284,6 +286,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   if(saved && !CC_isPointerMarked(p)) {
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
+    ((ConcurrentCollectArgs*)rawArgs)->bytesSaved += sizeofObject(s, p);
   }
 
   struct GC_foreachObjptrClosure forwardPtrClosure =
@@ -386,7 +389,32 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   assert(!s->amInCC);
   s->amInCC = TRUE;
 
-  CC_collectWithRoots(s, heap, thread);
+  size_t beforeSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
+  size_t beforeUsed = HM_getChunkListUsedSize(HM_HH_getChunkList(heap));
+  size_t saved = CC_collectWithRoots(s, heap, thread);
+
+#if 0
+  printf("[ROOT CC] size: %zu, used: %zu (%.01lf%%), saved: %zu (%.01lf%%)\n",
+    beforeSize,
+    beforeUsed,
+    100.0 * ((double)beforeUsed / (double)beforeSize),
+    saved,
+    100.0 * ((double)saved / (double)beforeSize));
+  HM_HierarchicalHeap global =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(s->wsQueue, NULL)));
+  size_t gsize = HM_getChunkListSize(HM_HH_getChunkList(global));
+  size_t gusize = HM_getChunkListUsedSize(HM_HH_getChunkList(global));
+  printf("[GLOBAL %d] size: %zu, used: %zu (%.01lf%%)\n",
+    s->procNumber,
+    gsize,
+    gusize,
+    100.0 * ((double)gusize / (double)gsize));
+#else
+  ((void)beforeSize);
+  ((void)beforeUsed);
+  ((void)saved);
+#endif
+
   HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
   s->amInCC = FALSE;
 }
@@ -438,7 +466,7 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   *y = *x;
 }
 
-void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
+size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
   struct timespec startTime;
   struct timespec stopTime;
@@ -467,7 +495,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     .origList = origList,
     .repList  = repList,
     .toHead = (void*)repList,
-    .fromHead = (void*) &(origList)
+    .fromHead = (void*) &(origList),
+    .bytesSaved = 0
   };
 
   HH_EBR_enterQuiescentState(s);
@@ -653,5 +682,8 @@ void CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     s->cumulativeStatistics->bytesReclaimedByInternalCC += bytesScanned-bytesSaved;
   }
 
+  return lists.bytesSaved;
+
 }
+
 #endif

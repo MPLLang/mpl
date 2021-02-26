@@ -476,9 +476,9 @@ void HM_initChunkList(HM_chunkList list) {
 
 void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
 
-#if ASSERT
-  HM_assertChunkListInvariants(list);
-#endif
+// #if ASSERT
+//   HM_assertChunkListInvariants(list);
+// #endif
 
   if (NULL == chunk->prevChunk) {
     assert(list->firstChunk == chunk);
@@ -503,9 +503,9 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   chunk->prevChunk = NULL;
   chunk->nextChunk = NULL;
 
-#if ASSERT
-  HM_assertChunkListInvariants(list);
-#endif
+// #if ASSERT
+//   HM_assertChunkListInvariants(list);
+// #endif
 
 }
 
