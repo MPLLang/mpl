@@ -130,3 +130,12 @@ the process.
 $ make seam-carve
 $ bin/seam-carve @mpl procs 4 -- INPUT.ppm -output OUTPUT.gif -num-seams 100
 ```
+
+## Coins
+
+A port of the `coins` benchmark from the Haskell NoFib benchmark suite.
+Use `-N` for the input size.
+```
+$ make coins
+$ bin/coins @mpl procs 4 -- -N 999
+```

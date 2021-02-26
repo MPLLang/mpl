@@ -71,17 +71,27 @@ val coins_input : coin list =
     ListPair.zip (cs, qs)
   end
 
-
 val amt = CommandLineArgs.parseInt "N" 777
+val doSequential = CommandLineArgs.parseFlag "sequential"
+val repeat = Int.max (1, CommandLineArgs.parseInt "repeat" 1)
 
-(* Sequential *)
-val t0 = Time.now ()
-val result_seq = payA_seq amt coins_input
-val t1 = Time.now ()
-val _ = print ("Sequential: " ^ Int.toString (lenA result_seq) ^ ". Finished in: " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
+val _ = print ("N " ^ Int.toString amt ^ "\n")
+val _ = print ("sequential? " ^ (if doSequential then "true" else "false") ^ "\n")
+val _ = print ("repeat " ^ Int.toString repeat ^ "\n")
 
-(* Parallel *)
-val t2 = Time.now ()
-val result_par = payA_par 3 amt coins_input
-val t3 = Time.now ()
-val _ = print ("Parallel: " ^ Int.toString (lenA result_par) ^ ". Finished in: " ^ Time.fmt 4 (Time.- (t3, t2)) ^ "s.")
+val _ = Util.for (0, repeat) (fn _ =>
+  let
+    val (result, tm) = Util.getTime (fn _ =>
+      if not doSequential then
+        payA_par 3 amt coins_input
+      else
+        #1 (ForkJoin.par (fn _ => payA_seq amt coins_input,
+                          fn _ => "workaround")))
+
+    val name = if doSequential then "Sequential" else "Parallel"
+    val _ =
+      print (name ^ ": " ^ Int.toString (lenA result) ^ ". " ^
+             "Finished in: " ^ Time.fmt 4 tm ^ "s.\n")
+  in
+    ()
+  end)
