@@ -131,6 +131,15 @@ void HM_ensureHierarchicalHeapAssurances(
     s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   }
 
+#if ASSERT
+  for (HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    HM_assertChunkListInvariants(HM_HH_getChunkList(cursor));
+  }
+#endif
+
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
 }

@@ -74,7 +74,15 @@ struct HM_chunkList {
   HM_chunk firstChunk;
   HM_chunk lastChunk;
 
-  size_t size; // size (bytes) of this level, both allocated and unallocated
+  /** usedSize = sum of used (frontier-start) space of chunks in this list.
+    * size = total size of chunks in this list.
+    *
+    * So, for example, the fraction of "wasted" space in the list is
+    *   (size-usedSize)/size
+    */
+  size_t usedSize;
+  size_t size;
+
 } __attribute__((aligned(8)));
 
 COMPILE_TIME_ASSERT(HM_chunk__aligned,
@@ -135,7 +143,6 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
 
 void HM_initChunkList(HM_chunkList list);
-HM_chunkList HM_newChunkList(void);
 
 void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendToSharedList(GC_state s, HM_chunkList list);
@@ -157,12 +164,6 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk);
 HM_chunk HM_splitChunk(HM_chunkList list, HM_chunk chunk, size_t bytesRequested);
 
 void HM_coalesceChunks(HM_chunk left, HM_chunk right);
-
-struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
-
-/* Lookup the levelhead for this chunk, but don't path compress. This is useful
- * for looking up the levelhead of a chunk which might not be locally owned */
-struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which
@@ -211,6 +212,10 @@ pointer HM_getChunkLimit(HM_chunk chunk);
  */
 size_t HM_getChunkSize(HM_chunk chunk);
 
+/** frontier-start */
+size_t HM_getChunkUsedSize(HM_chunk chunk);
+
+/** limit-frontier */
 size_t HM_getChunkSizePastFrontier(HM_chunk chunk);
 
 /**
@@ -241,24 +246,31 @@ pointer HM_getChunkStartGap(HM_chunk chunk);
 HM_chunk HM_getChunkListLastChunk(HM_chunkList chunkList);
 HM_chunk HM_getChunkListFirstChunk(HM_chunkList chunkList);
 
-size_t HM_getChunkListSize(HM_chunkList levelHead);
+size_t HM_getChunkListSize(HM_chunkList list);
+size_t HM_getChunkListUsedSize(HM_chunkList list);
 
-// bool HM_isChunkMarked(HM_chunk chunk);
-// void HM_markChunk(HM_chunk chunk);
-// void HM_unmarkChunk(HM_chunk chunk);
+/** These functions update the frontier of a chunk. This is used typically
+  * to reflect bumps made by the mutator.
+  *
+  * Updating the frontier also needs to be reflected in the `usedSize` of
+  * the list that holds the chunk. This is the purpose of the `list` argument
+  * for `HM_updateChunkFrontierInList`. For updating the frontier of a chunk
+  * that is not currently in any list, `HM_updateChunkFrontier` can be used
+  * instead.
+  */
+void HM_updateChunkFrontierInList(
+  HM_chunkList list,
+  HM_chunk chunk,
+  pointer frontier);
+void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier);
 
-/**
- * Updates the chunk's values to reflect mutator
- *
- * @param chunk The chunk to update
- * @param frontier The end of the allocations
- */
-void HM_updateChunkValues(HM_chunk chunk, pointer frontier);
-
-HM_chunkList HM_getChunkList(HM_chunk chunk);
-
+/** These query the union-find tree, to either look up the depth of
+  * an object, or look up the heap that contains the object.
+  */
 uint32_t HM_getObjptrDepth(objptr op);
 uint32_t HM_getObjptrDepthPathCompress(objptr op);
+struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
+struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

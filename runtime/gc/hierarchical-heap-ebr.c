@@ -134,10 +134,9 @@ void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf) {
   if (NULL != chunk &&
       HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_UnionFindNode *))
   {
-    pointer p = chunk->frontier;
+    pointer p = HM_getChunkFrontier(chunk);
     *(HM_UnionFindNode *)p = hhuf;
-    chunk->frontier += sizeof(HM_UnionFindNode *);
-    assert(chunk->limit >= chunk->frontier);
+    HM_updateChunkFrontierInList(limboBag, chunk, p + sizeof(HM_UnionFindNode *));
     return;
   }
 
@@ -148,10 +147,9 @@ void HH_EBR_retire(GC_state s, HM_UnionFindNode hhuf) {
   assert(NULL != chunk &&
     HM_getChunkSizePastFrontier(chunk) >= sizeof(HM_UnionFindNode *));
 
-  pointer p = chunk->frontier;
+  pointer p = HM_getChunkFrontier(chunk);
   *(HM_UnionFindNode *)p = hhuf;
-  chunk->frontier += sizeof(HM_UnionFindNode *);
-  assert(chunk->limit >= chunk->frontier);
+  HM_updateChunkFrontierInList(limboBag, chunk, p + sizeof(HM_UnionFindNode *));
   return;
 }
 

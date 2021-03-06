@@ -70,8 +70,11 @@ pointer sequenceAllocateInHH(GC_state s,
     HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(thread->currentChunk);
     HM_chunk sequenceChunk = HM_splitChunk(HM_HH_getChunkList(hh), thread->currentChunk, sequenceChunkBytes);
     assert(sequenceChunk != NULL);
-    pointer result = sequenceChunk->frontier;
-    sequenceChunk->frontier += sequenceSizeAligned;
+    pointer result = HM_getChunkFrontier(sequenceChunk);
+    HM_updateChunkFrontierInList(
+      HM_HH_getChunkList(hh),
+      sequenceChunk,
+      result + sequenceSizeAligned);
     sequenceChunk->mightContainMultipleObjects = FALSE;
 
     assert(s->frontier == HM_HH_getFrontier(thread));

@@ -25,6 +25,7 @@ void initDynHeap(GC_state s, GC_thread thread) {
   assert(0 == thread->currentDepth);
 
   HM_chunk currentChunk;
+  HM_chunkList currentChunkList;
   pointer frontier, limit;
   pointer start = s->staticHeaps.dynamic.start;
   pointer end = start + s->staticHeaps.dynamic.size;
@@ -35,6 +36,7 @@ void initDynHeap(GC_state s, GC_thread thread) {
   // into the root hierarchical heap.
   while (1) {
     currentChunk = thread->currentChunk;
+    currentChunkList = HM_HH_getChunkList(HM_getLevelHead(currentChunk));
     frontier = HM_getChunkFrontier(currentChunk);
     assert(isFrontierAligned(s, frontier));
     limit = HM_getChunkLimit(currentChunk);
@@ -82,7 +84,7 @@ void initDynHeap(GC_state s, GC_thread thread) {
     }
     // Advance frontier.
     frontier += p - start;
-    HM_updateChunkValues(currentChunk, frontier);
+    HM_updateChunkFrontierInList(currentChunkList, currentChunk, frontier);
 
     if (p >= end) {
       // This segment was the last to be copied.

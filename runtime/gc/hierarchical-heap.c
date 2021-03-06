@@ -481,17 +481,18 @@ pointer HM_HH_getRoot(pointer threadp) {
 //                   After its finished, the flag is set to CC_UNREG indicating that a new root set is needed.
 void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  // So, we should really get rid of the extra argument.
+  assert(thread == getThreadCurrent(s));
 
   GC_MayTerminateThread(s);
   beginAtomic(s);
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  getThreadCurrent(s)->currentChunk->frontier = s->frontier;
-  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
-  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-
-  assert(thread != NULL);
   HM_HH_updateValues(thread, s->frontier);
+  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
         ((void*)(s->limit)),
@@ -574,7 +575,10 @@ pointer HM_HH_getLimit(GC_thread thread) {
 }
 
 void HM_HH_updateValues(GC_thread thread, pointer frontier) {
-  HM_updateChunkValues(thread->currentChunk, frontier);
+  HM_updateChunkFrontierInList(
+    HM_HH_getChunkList(HM_getLevelHeadPathCompress(thread->currentChunk)),
+    thread->currentChunk,
+    frontier);
 }
 
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize) {
@@ -789,7 +793,7 @@ static inline void linkInto(
 
 void assertInvariants(GC_thread thread)
 {
-  return;
+  // return;
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
 

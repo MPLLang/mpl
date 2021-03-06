@@ -417,7 +417,6 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   HM_initChunkList(getFreeListSmall(s));
   HM_initChunkList(getFreeListLarge(s));
-  HM_initChunkList(getFreeListExtraSmall(s));
   s->sharedfreeList = (HM_chunkList) (malloc (sizeof(struct HM_chunkList)));
   HM_initChunkList(s->sharedfreeList);
   s->freeListLock = (bool*) (malloc(sizeof(bool)));
@@ -541,7 +540,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueBot = BOGUS_OBJPTR;
   HM_initChunkList(getFreeListSmall(d));
   HM_initChunkList(getFreeListLarge(d));
-  HM_initChunkList(getFreeListExtraSmall(d));
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
   d->hhEBR = s->hhEBR;

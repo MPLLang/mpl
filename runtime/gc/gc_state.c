@@ -1,4 +1,5 @@
-/* Copyright (C) 2009,2012,2019 Matthew Fluet.
+/* Copyright (C) 2018-2021 Sam Westrick.
+ * Copyright (C) 2009,2012,2019 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -47,10 +48,6 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   s->stackBottom = getStackBottom (s, stack);
   s->stackTop = getStackTop (s, stack);
   s->stackLimit = getStackLimit (s, stack);
-}
-
-struct HM_chunkList* getFreeListExtraSmall(GC_state s) {
-  return &(s->extraSmallObjects);
 }
 
 struct HM_chunkList* getFreeListSmall(GC_state s) {
