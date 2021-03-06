@@ -215,6 +215,7 @@ bool stringToLogModule(enum LogModule* module, const char* moduleString) {
        {.string = "hierarchical-heap", .module = LM_HIERARCHICAL_HEAP},
        {.string = "hh-collection", .module = LM_HH_COLLECTION},
        {.string = "hh-promotion", .module = LM_HH_PROMOTION},
+       {.string = "cc-collection", .module = LM_CC_COLLECTION},
        {.string = "parallel", .module = LM_PARALLEL},
        {.string = "thread", .module = LM_THREAD}};
   size_t numConversions = sizeof(conversions) / sizeof(*conversions);

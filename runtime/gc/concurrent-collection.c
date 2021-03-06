@@ -390,30 +390,18 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   s->amInCC = TRUE;
 
   size_t beforeSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
-  size_t beforeUsed = HM_getChunkListUsedSize(HM_HH_getChunkList(heap));
-  size_t saved = CC_collectWithRoots(s, heap, thread);
+  size_t live = CC_collectWithRoots(s, heap, thread);
+  size_t afterSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
 
-#if 0
-  printf("[ROOT CC] size: %zu, used: %zu (%.01lf%%), saved: %zu (%.01lf%%)\n",
+  size_t diff = beforeSize > afterSize ? beforeSize - afterSize : 0;
+
+  LOG(LM_CC_COLLECTION, LL_INFO,
+    "before: %zu after: %zu (-%.01lf%%) live: %zu (%.01lf%% fragmented)",
     beforeSize,
-    beforeUsed,
-    100.0 * ((double)beforeUsed / (double)beforeSize),
-    saved,
-    100.0 * ((double)saved / (double)beforeSize));
-  HM_HierarchicalHeap global =
-    HM_getLevelHead(HM_getChunkOf(objptrToPointer(s->wsQueue, NULL)));
-  size_t gsize = HM_getChunkListSize(HM_HH_getChunkList(global));
-  size_t gusize = HM_getChunkListUsedSize(HM_HH_getChunkList(global));
-  printf("[GLOBAL %d] size: %zu, used: %zu (%.01lf%%)\n",
-    s->procNumber,
-    gsize,
-    gusize,
-    100.0 * ((double)gusize / (double)gsize));
-#else
-  ((void)beforeSize);
-  ((void)beforeUsed);
-  ((void)saved);
-#endif
+    afterSize,
+    100.0 * ((double)diff / (double)beforeSize),
+    live,
+    100.0 * (1.0 - (double)live / (double)afterSize));
 
   HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
   s->amInCC = FALSE;
