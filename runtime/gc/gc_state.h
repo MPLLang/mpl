@@ -30,9 +30,12 @@ struct GC_state {
   char **atMLtons; /* Initial @MLton args, processed before command line. */
   int atMLtonsLength;
   uint32_t atomicState;
+  struct BlockAllocator *blockAllocatorGlobal;
+  struct BlockAllocator *blockAllocatorLocal;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
   pointer callFromCOpArgsResPtr; /* Pass op, args, and res from exported C call */
   struct GC_controls *controls;
+  float emptinessFraction;
   struct GC_globalCumulativeStatistics* globalCumulativeStatistics;
   struct GC_cumulativeStatistics *cumulativeStatistics;
   objptr currentThread; /* Currently executing thread (in heap). */

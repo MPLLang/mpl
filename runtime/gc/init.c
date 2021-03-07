@@ -389,6 +389,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
 
+  initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
+  s->emptinessFraction = 0.25;
+
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
@@ -538,6 +541,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
+  initLocalBlockAllocator(d, s->blockAllocatorGlobal);
   HM_initChunkList(getFreeListSmall(d));
   HM_initChunkList(getFreeListLarge(d));
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));

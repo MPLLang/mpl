@@ -314,136 +314,160 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
   return foundChunk;
 }
 
+// HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
+//   HM_chunk chunk = getFreeListSmall(s)->firstChunk;
+
+//   // can increase this number to cycle through more chunks
+//   int remainingToCheck = 2;
+//   while (chunk != NULL && remainingToCheck > 0) {
+//     /* SAM_NOTE: Disabled for now, because chunkIsInList check has been
+//      * deprecated.
+//      *
+//      * Coalescing wasn't getting much benefit anyway. Later, if we really need
+//      * coalescing, a better approach would be to incrementally sort the freelist
+//      * and look for physically adjacent chunks. The pointers {next,prev}Adjacent
+//      * would still be necessary for this! So I'm leaving them in. */
+// #if 0
+//     if (s->controls->freeListCoalesce) {
+//       HM_unlinkChunk(chunk);
+//       if (chunkIsInList(chunk->prevAdjacent, s->freeListSmall)) {
+//         assert(chunk->prevAdjacent->nextAdjacent == chunk);
+//         HM_unlinkChunk(chunk->prevAdjacent);
+//         chunk = chunk->prevAdjacent;
+//         HM_coalesceChunks(chunk, chunk->nextAdjacent);
+//       }
+//       if (chunkIsInList(chunk->nextAdjacent, s->freeListSmall)) {
+//         HM_unlinkChunk(chunk->nextAdjacent);
+//         HM_coalesceChunks(chunk, chunk->nextAdjacent);
+//       }
+//       HM_prependChunk(s->freeListSmall, chunk);
+//     }
+// #endif
+//     // chunks in freeListSmall might have frontiers/gaps that haven't been reset
+//     getFreeListSmall(s)->usedSize -= HM_getChunkUsedSize(chunk);
+//     chunk->startGap = 0;
+//     chunk->frontier = HM_getChunkStart(chunk);
+
+//     /* if this chunk is good, then we're done. */
+//     if (chunkHasBytesFree(chunk, bytesRequested)) {
+//       assert(chunk->frontier == HM_getChunkStart(chunk));
+//       chunk->mightContainMultipleObjects = TRUE;
+//       chunk->tmpHeap = NULL;
+//       splitChunkFront(getFreeListSmall(s), chunk, bytesRequested);
+//       HM_unlinkChunk(getFreeListSmall(s), chunk);
+//       return chunk;
+//     }
+
+//     /* otherwise, rotate this chunk onto the end and keep searching. */
+//     HM_unlinkChunk(getFreeListSmall(s), chunk);
+//     HM_appendChunk(getFreeListSmall(s), chunk);
+//     remainingToCheck--;
+//     chunk = getFreeListSmall(s)->firstChunk;
+//   }
+
+//   chunk = getFreeListLarge(s)->firstChunk;
+//   /* chunks in freeListLarge should always have properly set frontiers */
+//   assert(chunk == NULL || chunk->frontier == HM_getChunkStart(chunk));
+
+//   /* if this chunk is good, we're done. */
+//   if (chunkHasBytesFree(chunk, bytesRequested)) {
+//     chunk->mightContainMultipleObjects = TRUE;
+//     chunk->tmpHeap = NULL;
+//     splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
+//     HM_unlinkChunk(getFreeListLarge(s), chunk);
+//     return chunk;
+//   }
+
+//   /* otherwise, dump it into the freelist of small chunks and mmap a fresh
+//    * large chunk. */
+
+//   if (chunk != NULL) {
+//     HM_unlinkChunk(getFreeListLarge(s), chunk);
+//     HM_appendChunk(getFreeListSmall(s), chunk);
+//   }
+
+//   chunk = HM_checkSharedListForChunk(s, bytesRequested);
+
+//   if(chunk!=NULL) {
+//     chunk->startGap = 0;
+//     chunk->frontier = HM_getChunkStart(chunk);
+//     chunk->mightContainMultipleObjects = TRUE;
+//     chunk->tmpHeap = NULL;
+//     assert(chunkHasBytesFree(chunk, bytesRequested));
+
+//     HM_chunkList lis = getFreeListSmall(s);
+
+//     if(HM_getChunkSize(chunk) > s->nextChunkAllocSize ) {
+//       HM_unlinkChunk(getFreeListSmall(s), chunk);
+//       HM_prependChunk(getFreeListLarge(s), chunk);
+//       lis = getFreeListLarge(s);
+//     }
+//     splitChunkFront(lis, chunk, bytesRequested);
+//     HM_unlinkChunk(lis, chunk);
+//     return chunk;
+//   }
+
+
+//   size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
+//   size_t allocSize = max(bytesNeeded, s->nextChunkAllocSize);
+//   chunk = mmapNewChunk(allocSize);
+//   if (NULL != chunk) {
+//     /* success; on next mmap, get even more. */
+//     if (s->nextChunkAllocSize < (SIZE_MAX / 2)) {
+//       s->nextChunkAllocSize *= 2;
+//     }
+//   } else {
+//     /* the mmap failed. try again where we only request exactly what we need,
+//      * and if this still fails, then we're really out of memory and need to
+//      * abort. */
+
+//     LOG(LM_ALLOCATION, LL_INFO,
+//         "mmap of size %zu failed; trying again for %zu bytes",
+//         allocSize,
+//         bytesNeeded);
+
+//     chunk = mmapNewChunk(bytesNeeded);
+//     if (NULL == chunk) {
+//       DIE("Out of memory. Unable to allocate new chunk of size %zu.", bytesNeeded);
+//     }
+//     /* also, on next mmap, don't try to allocate so much. */
+//     if (s->nextChunkAllocSize > 2 * s->controls->allocChunkSize) {
+//       s->nextChunkAllocSize /= 2;
+//     }
+//   }
+
+//   HM_prependChunk(getFreeListLarge(s), chunk);
+//   assert(chunk->frontier == HM_getChunkStart(chunk));
+//   assert(chunkHasBytesFree(chunk, bytesRequested));
+//   chunk->mightContainMultipleObjects = TRUE;
+//   chunk->tmpHeap = NULL;
+//   splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
+//   HM_unlinkChunk(getFreeListLarge(s), chunk);
+//   return chunk;
+// }
+
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
-  HM_chunk chunk = getFreeListSmall(s)->firstChunk;
+  size_t chunkWidth =
+    align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
+  size_t numBlocks = chunkWidth / HM_BLOCK_SIZE;
+  pointer start = allocateBlocks(s, numBlocks);
+  HM_chunk result = HM_initializeChunk(start, start + chunkWidth);
+  return result;
+}
 
-  // can increase this number to cycle through more chunks
-  int remainingToCheck = 2;
-  while (chunk != NULL && remainingToCheck > 0) {
-    /* SAM_NOTE: Disabled for now, because chunkIsInList check has been
-     * deprecated.
-     *
-     * Coalescing wasn't getting much benefit anyway. Later, if we really need
-     * coalescing, a better approach would be to incrementally sort the freelist
-     * and look for physically adjacent chunks. The pointers {next,prev}Adjacent
-     * would still be necessary for this! So I'm leaving them in. */
-#if 0
-    if (s->controls->freeListCoalesce) {
-      HM_unlinkChunk(chunk);
-      if (chunkIsInList(chunk->prevAdjacent, s->freeListSmall)) {
-        assert(chunk->prevAdjacent->nextAdjacent == chunk);
-        HM_unlinkChunk(chunk->prevAdjacent);
-        chunk = chunk->prevAdjacent;
-        HM_coalesceChunks(chunk, chunk->nextAdjacent);
-      }
-      if (chunkIsInList(chunk->nextAdjacent, s->freeListSmall)) {
-        HM_unlinkChunk(chunk->nextAdjacent);
-        HM_coalesceChunks(chunk, chunk->nextAdjacent);
-      }
-      HM_prependChunk(s->freeListSmall, chunk);
-    }
-#endif
-    // chunks in freeListSmall might have frontiers/gaps that haven't been reset
-    getFreeListSmall(s)->usedSize -= HM_getChunkUsedSize(chunk);
-    chunk->startGap = 0;
-    chunk->frontier = HM_getChunkStart(chunk);
+void HM_freeChunk(GC_state s, HM_chunk chunk) {
+  size_t numBlocks = HM_getChunkSize(chunk) / HM_BLOCK_SIZE;
+  freeBlocks(s, (pointer)chunk, numBlocks);
+}
 
-    /* if this chunk is good, then we're done. */
-    if (chunkHasBytesFree(chunk, bytesRequested)) {
-      assert(chunk->frontier == HM_getChunkStart(chunk));
-      chunk->mightContainMultipleObjects = TRUE;
-      chunk->tmpHeap = NULL;
-      splitChunkFront(getFreeListSmall(s), chunk, bytesRequested);
-      HM_unlinkChunk(getFreeListSmall(s), chunk);
-      return chunk;
-    }
-
-    /* otherwise, rotate this chunk onto the end and keep searching. */
-    HM_unlinkChunk(getFreeListSmall(s), chunk);
-    HM_appendChunk(getFreeListSmall(s), chunk);
-    remainingToCheck--;
-    chunk = getFreeListSmall(s)->firstChunk;
+void HM_freeChunksInList(GC_state s, HM_chunkList list) {
+  HM_chunk chunk = list->firstChunk;
+  while (chunk != NULL) {
+    HM_chunk next = chunk->nextChunk;
+    HM_freeChunk(s, chunk);
+    chunk = next;
   }
-
-  chunk = getFreeListLarge(s)->firstChunk;
-  /* chunks in freeListLarge should always have properly set frontiers */
-  assert(chunk == NULL || chunk->frontier == HM_getChunkStart(chunk));
-
-  /* if this chunk is good, we're done. */
-  if (chunkHasBytesFree(chunk, bytesRequested)) {
-    chunk->mightContainMultipleObjects = TRUE;
-    chunk->tmpHeap = NULL;
-    splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
-    HM_unlinkChunk(getFreeListLarge(s), chunk);
-    return chunk;
-  }
-
-  /* otherwise, dump it into the freelist of small chunks and mmap a fresh
-   * large chunk. */
-
-  if (chunk != NULL) {
-    HM_unlinkChunk(getFreeListLarge(s), chunk);
-    HM_appendChunk(getFreeListSmall(s), chunk);
-  }
-
-  chunk = HM_checkSharedListForChunk(s, bytesRequested);
-
-  if(chunk!=NULL) {
-    chunk->startGap = 0;
-    chunk->frontier = HM_getChunkStart(chunk);
-    chunk->mightContainMultipleObjects = TRUE;
-    chunk->tmpHeap = NULL;
-    assert(chunkHasBytesFree(chunk, bytesRequested));
-
-    HM_chunkList lis = getFreeListSmall(s);
-
-    if(HM_getChunkSize(chunk) > s->nextChunkAllocSize ) {
-      HM_unlinkChunk(getFreeListSmall(s), chunk);
-      HM_prependChunk(getFreeListLarge(s), chunk);
-      lis = getFreeListLarge(s);
-    }
-    splitChunkFront(lis, chunk, bytesRequested);
-    HM_unlinkChunk(lis, chunk);
-    return chunk;
-  }
-
-
-  size_t bytesNeeded = align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
-  size_t allocSize = max(bytesNeeded, s->nextChunkAllocSize);
-  chunk = mmapNewChunk(allocSize);
-  if (NULL != chunk) {
-    /* success; on next mmap, get even more. */
-    if (s->nextChunkAllocSize < (SIZE_MAX / 2)) {
-      s->nextChunkAllocSize *= 2;
-    }
-  } else {
-    /* the mmap failed. try again where we only request exactly what we need,
-     * and if this still fails, then we're really out of memory and need to
-     * abort. */
-
-    LOG(LM_ALLOCATION, LL_INFO,
-        "mmap of size %zu failed; trying again for %zu bytes",
-        allocSize,
-        bytesNeeded);
-
-    chunk = mmapNewChunk(bytesNeeded);
-    if (NULL == chunk) {
-      DIE("Out of memory. Unable to allocate new chunk of size %zu.", bytesNeeded);
-    }
-    /* also, on next mmap, don't try to allocate so much. */
-    if (s->nextChunkAllocSize > 2 * s->controls->allocChunkSize) {
-      s->nextChunkAllocSize /= 2;
-    }
-  }
-
-  HM_prependChunk(getFreeListLarge(s), chunk);
-  assert(chunk->frontier == HM_getChunkStart(chunk));
-  assert(chunkHasBytesFree(chunk, bytesRequested));
-  chunk->mightContainMultipleObjects = TRUE;
-  chunk->tmpHeap = NULL;
-  splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
-  HM_unlinkChunk(getFreeListLarge(s), chunk);
-  return chunk;
+  HM_initChunkList(list);
 }
 
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
@@ -681,18 +705,18 @@ HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   return levelHead;
 }
 
-void HM_deleteChunks(GC_state s, HM_chunkList deleteList) {
-  while(!tryLockSharedList(s)) {}
-  assert(*(s->freeListLock));
-  HM_chunk chunk = deleteList->firstChunk;
-  while (chunk!=NULL) {
-    HM_chunk c = chunk;
-    chunk = chunk->nextChunk;
-    HM_unlinkChunk(deleteList, c);
-    GC_release (c, HM_getChunkSize(c));
-  }
-  unlockSharedList(s);
-}
+// void HM_deleteChunks(GC_state s, HM_chunkList deleteList) {
+//   while(!tryLockSharedList(s)) {}
+//   assert(*(s->freeListLock));
+//   HM_chunk chunk = deleteList->firstChunk;
+//   while (chunk!=NULL) {
+//     HM_chunk c = chunk;
+//     chunk = chunk->nextChunk;
+//     HM_unlinkChunk(deleteList, c);
+//     GC_release (c, HM_getChunkSize(c));
+//   }
+//   unlockSharedList(s);
+// }
 
 void HM_appendToSharedList(GC_state s, HM_chunkList list) {
   while (!tryLockSharedList(s)) {}

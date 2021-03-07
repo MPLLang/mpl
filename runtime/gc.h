@@ -27,6 +27,7 @@ typedef GC_state GCState_t;
 
 #include "gc/debug.h"
 #include "gc/logger.h"
+#include "gc/block-allocator.h"
 
 #include "gc/tls-objects.h"
 #include "gc/align.h"
