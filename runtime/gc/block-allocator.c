@@ -220,7 +220,7 @@ static SuperBlock findGoodSuperBlockAndLockIt(SuperBlockList list) {
 
 
 static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
-  if (sb->numBlocksFree == 0)
+  if (sb->numBlocksFree == SUPERBLOCK_SIZE)
     return COMPLETELY_EMPTY;
 
   float currentEmptiness = (float)sb->numBlocksFree / (float)SUPERBLOCK_SIZE;
@@ -248,7 +248,9 @@ void putSuperBlockInFullnessGroup(
     list = &(ball->sizeClassFullnessGroup[class][fg]);
 
   lockList(list);
+  lockSuperBlock(sb);
   prependSuperBlock(list, sb);
+  unlockSuperBlock(sb);
   unlockList(list);
 }
 
@@ -270,7 +272,7 @@ static pointer tryAllocateAndAdjustSuperBlocks(
     SuperBlock sb = findGoodSuperBlockAndLockIt(list);
 
     if (NULL == sb) {
-      unlockSuperBlock(sb);
+      unlockList(list);
       continue;
     }
 
@@ -285,9 +287,10 @@ static pointer tryAllocateAndAdjustSuperBlocks(
     }
 
     unlinkSuperBlock(sb);
+    unlockSuperBlock(sb);
     unlockList(list);
     putSuperBlockInFullnessGroup(dst, class, newfg, sb);
-    unlockSuperBlock(sb);
+    // unlockSuperBlock(sb);
     return result;
   }
 
@@ -298,12 +301,11 @@ static pointer tryAllocateAndAdjustSuperBlocks(
     SuperBlock sb = completelyEmpty->firstSuperBlock;
     lockSuperBlock(sb);
     unlinkSuperBlock(sb);
-    unlockList(completelyEmpty);
-
     setSuperBlockSizeClass(sb, class);
     pointer result = allocateInSuperBlock(s, sb, class);
-    putSuperBlockInFullnessGroup(dst, class, fullness(s, sb), sb);
     unlockSuperBlock(sb);
+    unlockList(completelyEmpty);
+    putSuperBlockInFullnessGroup(dst, class, fullness(s, sb), sb);
     return result;
   }
 
@@ -361,9 +363,28 @@ void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks) {
   size_t blockId =
     ((size_t)blockStart - (size_t)(pointer)sb) / s->controls->blockSize;
   assert(1 <= blockId && blockId < SUPERBLOCK_SIZE);
-  lockSuperBlock(sb);
+
+  /** This is a terrible hack to avoid deadlock. Ugh I hate locks. And there
+    * seems to be a bad performance issue somewhere, too. It could be
+    * associated with this spinloop?
+    */
   SuperBlockList owner = sb->owner;
-  lockList(owner);
+  while (TRUE) {
+    while (owner == NULL) {
+      GC_MayTerminateThread(s);
+      pthread_yield();
+      owner = sb->owner;
+    }
+    lockList(owner);
+    lockSuperBlock(sb);
+    if (sb->owner == owner) break;
+
+    /* oops! superblock must have changed hands?? */
+    unlockSuperBlock(sb);
+    unlockList(owner);
+  }
+
+  assert(owner == sb->owner);
 
   // enum FullnessGroup fg = fullness(s, sb);
   deallocateInSuperBlock(sb, blockId, class);
