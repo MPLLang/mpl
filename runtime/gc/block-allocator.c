@@ -115,13 +115,14 @@ static void setSuperBlockSizeClass(SuperBlock sb, int sizeClass) {
   assert(sb->owner == NULL);
   assert(sb->numBlocksFree == SUPERBLOCK_SIZE);
 
-  sb->allocationSize = (1 << sizeClass);
+  int allocationSize = 1 << sizeClass;
+  sb->sizeClass = sizeClass;
   sb->firstFree = 1;
 
   BlockId cursor = 1;
-  while (SUPERBLOCK_SIZE - cursor > sb->allocationSize) {
-    sb->nextFree[cursor] = cursor + sb->allocationSize;
-    cursor = cursor + sb->allocationSize;
+  while (SUPERBLOCK_SIZE - cursor > allocationSize) {
+    sb->nextFree[cursor] = cursor + allocationSize;
+    cursor = cursor + allocationSize;
   }
   sb->nextFree[cursor] = 0;
 }
@@ -173,14 +174,14 @@ static pointer allocateInSuperBlock(
   SuperBlock sb,
   ARG_USED_FOR_ASSERT int sizeClass)
 {
-  assert(sb->allocationSize == (1 << sizeClass));
-  assert(sb->numBlocksFree >= sb->allocationSize);
+  assert(sb->sizeClass == sizeClass);
+  assert(sb->numBlocksFree >= (1 << sizeClass));
 
   BlockId resultId = sb->firstFree;
   sb->firstFree = sb->nextFree[resultId];
-  sb->numBlocksFree -= sb->allocationSize;
+  sb->numBlocksFree -= (1 << sb->sizeClass);
 
-  assert(isAligned(resultId-1, sb->allocationSize));
+  assert(isAligned(resultId-1, 1 << sb->sizeClass));
   pointer result = ((pointer)sb) + (resultId * s->controls->blockSize);
   return result;
 }
@@ -191,13 +192,13 @@ static void deallocateInSuperBlock(
   BlockId blockId,
   ARG_USED_FOR_ASSERT int sizeClass)
 {
-  assert(sb->allocationSize == (1 << sizeClass));
-  assert(sb->numBlocksFree <= SUPERBLOCK_SIZE - sb->allocationSize);
-  assert(isAligned(blockId-1, sb->allocationSize));
+  assert(sb->sizeClass == sizeClass);
+  assert(sb->numBlocksFree <= SUPERBLOCK_SIZE - (1 << sb->sizeClass));
+  assert(isAligned(blockId-1, (1 << sb->sizeClass)));
 
   sb->nextFree[blockId] = sb->firstFree;
   sb->firstFree = blockId;
-  sb->numBlocksFree += sb->allocationSize;
+  sb->numBlocksFree += (1 << sb->sizeClass);
 }
 
 

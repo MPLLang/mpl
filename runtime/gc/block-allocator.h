@@ -52,17 +52,17 @@ typedef struct SuperBlock {
 
   struct SuperBlockList *owner;
 
-  /** Must be at least 1. Indicates the grouping of blocks allocated as a unit.
-    * E.g. allocationSize == 4 means that available blocks are
+  /** Superblocks only allocate in groups of 2^sizeClass contiguous blocks.
+    * E.g. sizeClass == 2 means that blocks are allocated in groups of 4:
     *   {1 2 3 4}  {5 6 7 8}  {9 10 11 12} ...
     * In the freeFlags and freeList, the only block-ids you will see are
     * the starting block-ids (1, 5, 9, etc in the above example)
     */
-  BlockId allocationSize;
+  int sizeClass;
 
   /** Number of blocks in this superblock that are currently free. For example
     * When we perform an alloction in this superblock, we do:
-    *   numBlocksFree -= allocationSize;
+    *   numBlocksFree -= 2^sizeClass;
     */
   int numBlocksFree;
 
@@ -99,9 +99,7 @@ enum FullnessGroup {
 
 typedef struct BlockAllocator {
 
-  /** The size class at index i has allocationSize = 1 << i
-    *
-    * There are 3 fullness groups in each size class:
+  /** There are 3 fullness groups in each size class:
     *   0 is nearly full, i.e. at least 1-emptinessFraction in use
     *   1 is neither nearly full nor nearly empty
     *   2 is nearly empty, i.e. less than emptinessFraction in use
