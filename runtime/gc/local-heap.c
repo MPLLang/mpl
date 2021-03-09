@@ -150,6 +150,7 @@ void HM_ensureHierarchicalHeapAssurances(
   }
 #endif
 
+  assert((size_t)s->limitPlusSlop - (size_t)s->frontier >= bytesRequested);
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
 }

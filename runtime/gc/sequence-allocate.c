@@ -45,31 +45,33 @@ pointer sequenceAllocateInHH(GC_state s,
 /** A small sequence is one which doesn't deserve its own chunk. */
 pointer allocateSmallSequence(
   GC_state s,
-  size_t sequenceSizeAligned)
+  size_t sequenceSizeAligned,
+  size_t ensureBytesFree)
 {
   assert(sequenceSizeAligned < s->controls->blockSize / 2);
-  size_t currentBytesFree = (size_t)(s->limitPlusSlop - s->frontier);
 
-  pointer result;
+  /** Very important to do this first! It might trigger a GC. If we instead
+    * did something like:
+    *
+    *   result = ...
+    *   HM_ensureHierarchicalHeapAssurances(..., ensureBytesFree, ...)
+    *
+    * then the potential GC could invalidate `result` !!
+    */
+  getThreadCurrent(s)->bytesNeeded = sequenceSizeAligned;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, sequenceSizeAligned, FALSE);
+  assert((size_t)s->limitPlusSlop - (size_t)s->frontier >= sequenceSizeAligned);
 
-  if (sequenceSizeAligned <= currentBytesFree) {
-    result = s->frontier;
-    s->frontier += sequenceSizeAligned;
-    HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  }
-  else {
-    if (!HM_HH_extend(s, getThreadCurrent(s), sequenceSizeAligned)) {
-      DIE("out of space. could not allocate new (small) sequence of size %zu",
-        sequenceSizeAligned);
+  GC_thread thread = getThreadCurrent(s);
+  pointer result = HM_HH_getFrontier(thread);
+  HM_HH_updateValues(thread, result + sequenceSizeAligned);
+
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree) {
+    if (!HM_HH_extend(s, getThreadCurrent(s), ensureBytesFree)) {
+      DIE("Ran out of space!");
     }
-    result = HM_HH_getFrontier(getThreadCurrent(s));
-    s->frontier = result + sequenceSizeAligned;
-    s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
-    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-    HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   }
-
-  assert(inFirstBlockOfChunk(getThreadCurrent(s)->currentChunk, s->frontier));
 
   return result;
 }
@@ -77,19 +79,28 @@ pointer allocateSmallSequence(
 
 pointer allocateLargeSequence(
   GC_state s,
-  size_t sequenceSizeAligned)
+  size_t sequenceSizeAligned,
+  size_t ensureBytesFree)
 {
   assert(sequenceSizeAligned >= s->controls->blockSize / 2);
 
+  /** Very important to do this first! It might trigger a GC. If we instead
+    * did something like:
+    *
+    *   result = ...
+    *   HM_ensureHierarchicalHeapAssurances(..., ensureBytesFree, ...)
+    *
+    * then the potential GC could invalidate `result` !!
+    */
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, ensureBytesFree, TRUE);
+  assert((size_t)s->limitPlusSlop - (size_t)s->frontier >= ensureBytesFree);
+
   GC_thread thread = getThreadCurrent(s);
   HM_chunk prevChunk = thread->currentChunk;
-  assert(s->frontier == HM_getChunkFrontier(prevChunk));
-
-  // HM_ensureHierarchicalHeapAssurances(s, FALSE, sequenceSizeAligned, TRUE);
 
   if (!HM_HH_extend(s, thread, sequenceSizeAligned)) {
-    DIE("out of space. could not allocate new (large) sequence of size %zu",
-      sequenceSizeAligned);
+    DIE("Ran out of space!");
   }
 
   pointer result = HM_HH_getFrontier(thread);
@@ -102,20 +113,11 @@ pointer allocateLargeSequence(
   /** Now we need to set the frontier of the thread to a safe value.
     * (We can't leave as is, because this chunk we just allocated is only
     * supposed to contain a single object.)
-    *
-    * If, by extending with a new chunk, we haven't advanced deeper into
-    * the hierarchy (recall the use-ancestor-chunk optimization...), then
-    * we can actually go back to the chunk we began with!
     */
 
-  if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
-    DIE("out of space. could not allocate new chunk.");
-  }
+  thread->currentChunk = prevChunk;
+  assert(HM_getChunkSizePastFrontier(prevChunk) >= ensureBytesFree);
 
-  s->frontier = HM_HH_getFrontier(thread);
-  s->limitPlusSlop = HM_HH_getLimit(thread);
-  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  assert(inFirstBlockOfChunk(thread->currentChunk, s->frontier));
   return result;
 }
 
@@ -240,17 +242,14 @@ pointer GC_sequenceAllocate (GC_state s,
 
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   assert(threadAndHeapOkay(s));
 
   if (sequenceSizeAligned < s->controls->blockSize / 2)
-    frontier = allocateSmallSequence(s, sequenceSizeAligned);
+    frontier = allocateSmallSequence(s, sequenceSizeAligned, ensureBytesFree);
   else
-    frontier = allocateLargeSequence(s, sequenceSizeAligned);
-
-  // frontier = sequenceAllocateInHH(s, sequenceSizeAligned, ensureBytesFree);
+    frontier = allocateLargeSequence(s, sequenceSizeAligned, ensureBytesFree);
 
   result = sequenceInitialize(s,
                               frontier,
@@ -261,10 +260,6 @@ pointer GC_sequenceAllocate (GC_state s,
                               numObjptrs);
 
   GC_profileAllocInc (s, sequenceSizeAligned);
-
-  // size_t bytesRequested =
-  //   ensureBytesFree < GC_HEAP_LIMIT_SLOP ? GC_HEAP_LIMIT_SLOP : ensureBytesFree;
-  HM_ensureHierarchicalHeapAssurances(s, FALSE, ensureBytesFree, FALSE);
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
