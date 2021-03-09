@@ -44,6 +44,12 @@ typedef uint8_t BlockId;
 // typedef uint8_t BlockId;
 
 
+/** Free blocks are used to the store the freelist. */
+typedef struct FreeBlock {
+  struct FreeBlock *nextFree;
+} *FreeBlock;
+
+
 struct SuperBlockList;
 
 typedef struct SuperBlock {
@@ -66,11 +72,8 @@ typedef struct SuperBlock {
     */
   int numBlocksFree;
 
-  /** The freelist is LIFO, for caching/efficiency. List is terminated by
-    * nextFree[x] == 0
-    */
-  BlockId firstFree;
-  BlockId nextFree[SUPERBLOCK_SIZE];
+  /** The freelist is LIFO, for caching/efficiency. */
+  FreeBlock firstFree;
 
   /** Each fullness group within a size-class is a doubly-linked list. */
   struct SuperBlock *nextSuperBlock;

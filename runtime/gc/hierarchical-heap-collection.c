@@ -279,6 +279,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   HM_foreachRemembered(s, &globalDownPtrs, &forwardDownPtrClosure);
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
   // HM_appendChunkList(getFreeListSmall(s), &globalDownPtrs);
+  HM_assertChunkListInvariants(getFreeListSmall(s));
   HM_freeChunksInList(s, &globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");

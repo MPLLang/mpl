@@ -1,4 +1,5 @@
-/* Copyright (C) 2016 Matthew Fluet.
+/* Copyright (C) 2021 Sam Westrick.
+ * Copyright (C) 2016 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -35,9 +36,89 @@ static inline pointer sequenceInitialize(ARG_USED_FOR_ASSERT GC_state s,
 pointer sequenceAllocateInHH(GC_state s,
                           size_t sequenceSizeAligned,
                           size_t ensureBytesFree);
+
 /************************/
 /* Function Definitions */
 /************************/
+
+
+/** A small sequence is one which doesn't deserve its own chunk. */
+pointer allocateSmallSequence(
+  GC_state s,
+  size_t sequenceSizeAligned)
+{
+  assert(sequenceSizeAligned < s->controls->blockSize / 2);
+  size_t currentBytesFree = (size_t)(s->limitPlusSlop - s->frontier);
+
+  pointer result;
+
+  if (sequenceSizeAligned <= currentBytesFree) {
+    result = s->frontier;
+    s->frontier += sequenceSizeAligned;
+    HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  }
+  else {
+    if (!HM_HH_extend(s, getThreadCurrent(s), sequenceSizeAligned)) {
+      DIE("out of space. could not allocate new (small) sequence of size %zu",
+        sequenceSizeAligned);
+    }
+    result = HM_HH_getFrontier(getThreadCurrent(s));
+    s->frontier = result + sequenceSizeAligned;
+    s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+    HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  }
+
+  assert(inFirstBlockOfChunk(getThreadCurrent(s)->currentChunk, s->frontier));
+
+  return result;
+}
+
+
+pointer allocateLargeSequence(
+  GC_state s,
+  size_t sequenceSizeAligned)
+{
+  assert(sequenceSizeAligned >= s->controls->blockSize / 2);
+
+  GC_thread thread = getThreadCurrent(s);
+  HM_chunk prevChunk = thread->currentChunk;
+  assert(s->frontier == HM_getChunkFrontier(prevChunk));
+
+  // HM_ensureHierarchicalHeapAssurances(s, FALSE, sequenceSizeAligned, TRUE);
+
+  if (!HM_HH_extend(s, thread, sequenceSizeAligned)) {
+    DIE("out of space. could not allocate new (large) sequence of size %zu",
+      sequenceSizeAligned);
+  }
+
+  pointer result = HM_HH_getFrontier(thread);
+  HM_chunk newChunk = thread->currentChunk;
+  assert(HM_getChunkStart(newChunk) == result);
+  HM_HH_updateValues(thread, result + sequenceSizeAligned);
+  assert(newChunk->mightContainMultipleObjects);
+  newChunk->mightContainMultipleObjects = FALSE;
+
+  /** Now we need to set the frontier of the thread to a safe value.
+    * (We can't leave as is, because this chunk we just allocated is only
+    * supposed to contain a single object.)
+    *
+    * If, by extending with a new chunk, we haven't advanced deeper into
+    * the hierarchy (recall the use-ancestor-chunk optimization...), then
+    * we can actually go back to the chunk we began with!
+    */
+
+  if (!HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP)) {
+    DIE("out of space. could not allocate new chunk.");
+  }
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  assert(inFirstBlockOfChunk(thread->currentChunk, s->frontier));
+  return result;
+}
+
 
 pointer sequenceAllocateInHH(GC_state s,
                              size_t sequenceSizeAligned,
@@ -157,8 +238,19 @@ pointer GC_sequenceAllocate (GC_state s,
       uintmaxToCommaString(sequenceSizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+
   assert(threadAndHeapOkay(s));
-  frontier = sequenceAllocateInHH(s, sequenceSizeAligned, ensureBytesFree);
+
+  if (sequenceSizeAligned < s->controls->blockSize / 2)
+    frontier = allocateSmallSequence(s, sequenceSizeAligned);
+  else
+    frontier = allocateLargeSequence(s, sequenceSizeAligned);
+
+  // frontier = sequenceAllocateInHH(s, sequenceSizeAligned, ensureBytesFree);
 
   result = sequenceInitialize(s,
                               frontier,
@@ -169,6 +261,14 @@ pointer GC_sequenceAllocate (GC_state s,
                               numObjptrs);
 
   GC_profileAllocInc (s, sequenceSizeAligned);
+
+  // size_t bytesRequested =
+  //   ensureBytesFree < GC_HEAP_LIMIT_SLOP ? GC_HEAP_LIMIT_SLOP : ensureBytesFree;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, ensureBytesFree, FALSE);
+
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   LOG(LM_ALLOCATION, LL_DEBUG,
       "GC_sequenceAllocate done.  result = "FMTPTR"  frontier = "FMTPTR" [%d]",
@@ -186,10 +286,9 @@ pointer GC_sequenceAllocate (GC_state s,
     assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
   }
   assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
-  /* Unfortunately, the invariant isn't quite true here, because
-   * unless we did the GC, we never set s->currentThread->stack->used
-   * to reflect what the mutator did with stackTop.
-   */
+
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
 #endif
 
   Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);

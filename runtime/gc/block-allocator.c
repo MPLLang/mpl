@@ -52,7 +52,7 @@ static inline void unlockSuperBlock(SuperBlock sb) {
 
 
 static int sizeClass(size_t numBlocks) {
-  assert(numBlocks <= SUPERBLOCK_SIZE / 2);
+  assert(numBlocks <= (SUPERBLOCK_SIZE-1) / 2);
 
   int class = 0;
   while (((size_t)1 << class) < numBlocks) {
@@ -62,6 +62,16 @@ static int sizeClass(size_t numBlocks) {
   assert(class < NUM_SIZE_CLASSES);
   return class;
 }
+
+
+// static inline FreeBlock getBlock(GC_state s, SuperBlock sb, BlockId id) {
+//   size_t bs = s->controls->blockSize;
+//   pointer start = (pointer)sb + bs;
+//   size_t offset = (size_t)(id-1) * bs * (1 << sb->sizeClass);
+//   pointer result = start + offset;
+//   assert(result <= (pointer)sb + (SUPERBLOCK_SIZE-1) * bs);
+//   return (FreeBlock)result;
+// }
 
 
 static void unlinkSuperBlock(SuperBlock sb) {
@@ -106,25 +116,28 @@ static void prependSuperBlock(SuperBlockList list, SuperBlock sb) {
 /** Change the size class of this super-block, and put it into a clean state.
   * Only call this if you already have the sb->superBlockLock...
   */
-static void setSuperBlockSizeClass(SuperBlock sb, int sizeClass) {
+static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
   /** This block should be currently unassigned to a size class and be
     * completely free.
     */
   assert(sb->nextSuperBlock == NULL);
   assert(sb->prevSuperBlock == NULL);
   assert(sb->owner == NULL);
-  assert(sb->numBlocksFree == SUPERBLOCK_SIZE);
+  assert(sb->numBlocksFree == (SUPERBLOCK_SIZE-1));
 
   int allocationSize = 1 << sizeClass;
   sb->sizeClass = sizeClass;
-  sb->firstFree = 1;
 
-  BlockId cursor = 1;
-  while (SUPERBLOCK_SIZE - cursor > allocationSize) {
-    sb->nextFree[cursor] = cursor + allocationSize;
-    cursor = cursor + allocationSize;
+  FreeBlock *cursor = &(sb->firstFree);
+  pointer next = (pointer)sb + s->controls->blockSize;
+  pointer limit = (pointer)sb + SUPERBLOCK_SIZE * s->controls->blockSize;
+  while ( (next + s->controls->blockSize * allocationSize) <= limit) {
+    FreeBlock b = (FreeBlock)next;
+    *cursor = b;
+    cursor = &(b->nextFree);
+    next = next + s->controls->blockSize * allocationSize;
   }
-  sb->nextFree[cursor] = 0;
+  *cursor = NULL;
 }
 
 
@@ -163,41 +176,45 @@ static SuperBlock mmapNewSuperBlock(GC_state s, int sizeClass) {
   sb->owner = NULL;
   sb->nextSuperBlock = NULL;
   sb->prevSuperBlock = NULL;
-  sb->numBlocksFree = SUPERBLOCK_SIZE;
-  setSuperBlockSizeClass(sb, sizeClass);
+  sb->numBlocksFree = SUPERBLOCK_SIZE-1;
+  setSuperBlockSizeClass(s, sb, sizeClass);
   return sb;
 }
 
 
 static pointer allocateInSuperBlock(
-  GC_state s,
+  ARG_USED_FOR_ASSERT GC_state s,
   SuperBlock sb,
   ARG_USED_FOR_ASSERT int sizeClass)
 {
   assert(sb->sizeClass == sizeClass);
   assert(sb->numBlocksFree >= (1 << sizeClass));
 
-  BlockId resultId = sb->firstFree;
-  sb->firstFree = sb->nextFree[resultId];
+  FreeBlock result = sb->firstFree;
+  assert(result != NULL);
+  assert(findSuperBlockFront(s, (pointer)result) == sb);
+  assert( ((size_t)(pointer)result / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
+
+  sb->firstFree = result->nextFree;
   sb->numBlocksFree -= (1 << sb->sizeClass);
 
-  assert(isAligned(resultId-1, 1 << sb->sizeClass));
-  pointer result = ((pointer)sb) + (resultId * s->controls->blockSize);
-  return result;
+  return (pointer)result;
 }
 
 
 static void deallocateInSuperBlock(
+  ARG_USED_FOR_ASSERT GC_state s,
   SuperBlock sb,
-  BlockId blockId,
+  FreeBlock block,
   ARG_USED_FOR_ASSERT int sizeClass)
 {
   assert(sb->sizeClass == sizeClass);
-  assert(sb->numBlocksFree <= SUPERBLOCK_SIZE - (1 << sb->sizeClass));
-  assert(isAligned(blockId-1, (1 << sb->sizeClass)));
+  assert(sb->numBlocksFree <= SUPERBLOCK_SIZE - 1 - (1 << sb->sizeClass));
+  assert( ((size_t)(pointer)block / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
+  assert(findSuperBlockFront(s, (pointer)block) == sb);
 
-  sb->nextFree[blockId] = sb->firstFree;
-  sb->firstFree = blockId;
+  block->nextFree = sb->firstFree;
+  sb->firstFree = block;
   sb->numBlocksFree += (1 << sb->sizeClass);
 }
 
@@ -208,7 +225,7 @@ static SuperBlock findGoodSuperBlockAndLockIt(SuperBlockList list) {
   while (NULL != sb) {
     lockSuperBlock(sb);
 
-    if (0 != sb->firstFree) {
+    if (NULL != sb->firstFree) {
       return sb;
     }
 
@@ -302,7 +319,7 @@ static pointer tryAllocateAndAdjustSuperBlocks(
     SuperBlock sb = completelyEmpty->firstSuperBlock;
     lockSuperBlock(sb);
     unlinkSuperBlock(sb);
-    setSuperBlockSizeClass(sb, class);
+    setSuperBlockSizeClass(s, sb, class);
     pointer result = allocateInSuperBlock(s, sb, class);
     unlockSuperBlock(sb);
     unlockList(completelyEmpty);
@@ -319,10 +336,13 @@ pointer allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator global = s->blockAllocatorGlobal;
   BlockAllocator local = s->blockAllocatorLocal;
 
-  if (numBlocks > SUPERBLOCK_SIZE / 2) {
+  if (numBlocks > (SUPERBLOCK_SIZE-1) / 2) {
     pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
     if (MAP_FAILED == start) {
       return NULL;
+    }
+    if (!isAligned((size_t)start, s->controls->blockSize)) {
+      DIE("whoops, mmap didn't align by the block-size.");
     }
     return start;
   }
@@ -353,7 +373,7 @@ void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks) {
   // BlockAllocator global = s->blockAllocatorGlobal;
   // BlockAllocator local = s->blockAllocatorLocal;
 
-  if (numBlocks > SUPERBLOCK_SIZE / 2) {
+  if (numBlocks > (SUPERBLOCK_SIZE-1) / 2) {
     GC_release(blockStart, s->controls->blockSize * numBlocks);
     return;
   }
@@ -361,9 +381,6 @@ void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks) {
   int class = sizeClass(numBlocks);
 
   SuperBlock sb = findSuperBlockFront(s, blockStart);
-  size_t blockId =
-    ((size_t)blockStart - (size_t)(pointer)sb) / s->controls->blockSize;
-  assert(1 <= blockId && blockId < SUPERBLOCK_SIZE);
 
   /** This is a terrible hack to avoid deadlock. Ugh I hate locks. And there
     * seems to be a bad performance issue somewhere, too. It could be
@@ -388,7 +405,7 @@ void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks) {
   assert(owner == sb->owner);
 
   // enum FullnessGroup fg = fullness(s, sb);
-  deallocateInSuperBlock(sb, blockId, class);
+  deallocateInSuperBlock(s, sb, (FreeBlock)blockStart, class);
   unlinkSuperBlock(sb);
   // enum FullnessGroup newfg = fullness(s, sb);
 

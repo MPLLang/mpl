@@ -17,6 +17,8 @@ bool invariantForGC(__attribute__((unused)) GC_state s) {
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
+      // && (s->frontier == HM_getChunkFrontier(thread->currentChunk))
+      // && (s->limitPlusSlop == HM_getChunkLimit(thread->currentChunk))
       && (TRUE == HM_getChunkOf(s->frontier)->mightContainMultipleObjects);
 }
 

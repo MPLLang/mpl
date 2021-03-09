@@ -62,6 +62,15 @@ void HM_ensureHierarchicalHeapAssurances(
         ((void*)(s->frontier)));
   }
 
+#if ASSERT
+  for (HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    HM_assertChunkListInvariants(HM_HH_getChunkList(cursor));
+  }
+#endif
+
   /* If we want to force a collection, then using a desired scope
    * of 1 will try to collect as much as possible. Otherwise, compute
    * a desired scope based on number of allocations performed. If we
@@ -120,7 +129,8 @@ void HM_ensureHierarchicalHeapAssurances(
   /* SAM_NOTE: TODO: clean this shit up */
   if (NULL == thread->currentChunk ||
       (ensureCurrentLevel && HM_HH_getDepth(HM_getLevelHead(thread->currentChunk)) != thread->currentDepth) ||
-      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE ||
+      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE - GC_SEQUENCE_METADATA_SIZE ||
+      !thread->currentChunk->mightContainMultipleObjects ||
       (size_t)(s->limitPlusSlop - s->frontier) < bytesRequested)
   {
     if (!HM_HH_extend(s, thread, bytesRequested)) {
