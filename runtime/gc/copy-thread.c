@@ -122,6 +122,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   fromThread = (GC_thread)(p + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, NULL));

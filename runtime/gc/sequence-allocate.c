@@ -66,9 +66,9 @@ pointer allocateSmallSequence(
   pointer result = HM_HH_getFrontier(thread);
   HM_HH_updateValues(thread, result + sequenceSizeAligned);
 
-  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  thread->bytesNeeded = ensureBytesFree;
   if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree) {
-    if (!HM_HH_extend(s, getThreadCurrent(s), ensureBytesFree)) {
+    if (!HM_HH_extend(s, thread, ensureBytesFree)) {
       DIE("Ran out of space!");
     }
   }
@@ -116,7 +116,8 @@ pointer allocateLargeSequence(
     */
 
   thread->currentChunk = prevChunk;
-  assert(HM_getChunkSizePastFrontier(prevChunk) >= ensureBytesFree);
+  assert(HM_getChunkSizePastFrontier(thread->currentChunk) >= ensureBytesFree);
+  assert(HM_HH_getDepth(HM_getLevelHead(thread->currentChunk)) == thread->currentDepth);
 
   return result;
 }

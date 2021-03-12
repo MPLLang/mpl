@@ -317,7 +317,7 @@ HM_chunk HM_checkSharedListForChunk(GC_state s, size_t bytesRequested) {
 /** 1 = USE OLD ALLOCATOR
   * 0 = USE NEW ALLOCATOR
   */
-#if 1
+#if 0
 
 HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   HM_chunk chunk = getFreeListSmall(s)->firstChunk;
@@ -716,8 +716,21 @@ HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   chunk->levelHead = topNode;
 
   while (cursor != topNode) {
+    assert(cursor != NULL);
     HM_UnionFindNode representative = cursor->representative;
     cursor->representative = topNode;
+
+    // if (representative == NULL) {
+    //   DIE("whoops HM_getLevelHeadPathCompress:\ncursor %p\ncursor->payload  %p\ntopNode %p\nlevelHead %p\nchunk %p\ndepth %zu\nthread %p",
+    //     (void*)cursor,
+    //     (void*)cursor->payload,
+    //     (void*)topNode,
+    //     (void*)levelHead,
+    //     (void*)chunk,
+    //     (size_t)HM_HH_getDepth(levelHead),
+    //     (void*)getThreadCurrent((GC_state)pthread_getspecific(gcstate_key)));
+    // }
+
     cursor = representative;
   }
 
