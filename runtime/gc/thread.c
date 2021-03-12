@@ -57,6 +57,15 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_thread thread = threadObjptrToStruct(s, threadop);
   GC_thread child = threadObjptrToStruct(s, childop);
 
+  size_t terminateCheckCounter = 0;
+  while (atomicLoadS32(&(child->currentProcNum)) >= 0) {
+    /* Spin while someone else is currently executing this thread. The
+     * termination checks happen rarely, and reset terminateCheckCounter to 0
+     * when they do. */
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+    if (terminateCheckCounter == 0) pthread_yield();
+  }
+
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);
   /* make sure thread is either mine or inactive */
