@@ -50,13 +50,12 @@ typedef struct FreeBlock {
 } *FreeBlock;
 
 
-struct SuperBlockList;
+struct BlockAllocator;
+
 
 typedef struct SuperBlock {
 
-  pthread_mutex_t superBlockLock;
-
-  struct SuperBlockList *owner;
+  struct BlockAllocator *owner;
 
   /** Superblocks only allocate in groups of 2^sizeClass contiguous blocks.
     * E.g. sizeClass == 2 means that blocks are allocated in groups of 4:
@@ -85,27 +84,34 @@ typedef struct SuperBlock {
 typedef struct SuperBlockList {
 
   SuperBlock firstSuperBlock;
-  pthread_mutex_t listLock;
 
 } *SuperBlockList;
 
 
-#define NUM_FULLNESS_GROUPS 3
-
+/** num groups is one less, because we handle COMPLETELY_EMPTY specially. */
+#define NUM_FULLNESS_GROUPS 4
 enum FullnessGroup {
-  NEARLY_FULL = 0,
-  SOMEWHAT_FULL = 1,
-  NEARLY_EMPTY = 2,
-  COMPLETELY_EMPTY = 3
+  COMPLETELY_FULL = 0,
+  NEARLY_FULL = 1,
+  SOMEWHAT_FULL = 2,
+  NEARLY_EMPTY = 3,
+  COMPLETELY_EMPTY = 4
 };
 
 
 typedef struct BlockAllocator {
 
+  /** These are used for local to decide to move things to global, but
+    * are ignored in global.
+    */
+  size_t numBlocks;
+  size_t numBlocksInUse;
+
   /** There are 3 fullness groups in each size class:
-    *   0 is nearly full, i.e. at least 1-emptinessFraction in use
-    *   1 is neither nearly full nor nearly empty
-    *   2 is nearly empty, i.e. less than emptinessFraction in use
+    *   0 is completely full, i.e. no free blocks available
+    *   1 is nearly full, i.e. at least 1-emptinessFraction in use
+    *   2 is neither nearly full nor nearly empty
+    *   3 is nearly empty, i.e. less than emptinessFraction in use
     */
   struct SuperBlockList sizeClassFullnessGroup[NUM_SIZE_CLASSES][NUM_FULLNESS_GROUPS];
 
@@ -113,6 +119,12 @@ typedef struct BlockAllocator {
     * reused for any size class.
     */
   struct SuperBlockList completelyEmptyGroup;
+
+  /** Concurrent freelist (blocks owned by this proc that were freed by some
+    * other proc). To make the concurrency simpler, these blocks are enqueued
+    * for this proc and then this proc may free them at its convenience.
+    */
+  FreeBlock firstFreedByOther;
 
 } *BlockAllocator;
 

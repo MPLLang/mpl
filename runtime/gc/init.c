@@ -283,6 +283,15 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die ("%s alloc-chunk missing argument.", atName);
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "emptiness-fraction")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s emptiness-fraction missing argument.", atName);
+          }
+          s->emptinessFraction = stringToFloat(argv[i++]);
+          if (s->emptinessFraction <= 0.0 || s->emptinessFraction >= 1.0) {
+            die("%s emptiness-fraction must be strictly between 0 and 1", atName);
+          }
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -390,7 +399,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->traceBufferSize = 10000;
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
-  s->emptinessFraction = 0.25;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
@@ -538,6 +546,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->globalCumulativeStatistics = s->globalCumulativeStatistics;
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
+  d->emptinessFraction = s->emptinessFraction;
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
