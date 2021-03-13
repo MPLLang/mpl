@@ -17,7 +17,6 @@ static void initBlockAllocator(BlockAllocator ball) {
   SuperBlockList elist = &(ball->completelyEmptyGroup);
   elist->firstSuperBlock = NULL;
 
-  // pthread_mutex_init(&(ball->ballLock), NULL);
   ball->numBlocks = 0;
   ball->numBlocksInUse = 0;
   ball->firstFreedByOther = NULL;
@@ -39,23 +38,6 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalBall) {
 }
 
 
-// static inline void lockBall(BlockAllocator ball) {
-//   pthread_mutex_lock(&(ball->ballLock));
-// }
-
-// static inline void unlockBall(BlockAllocator ball) {
-//   pthread_mutex_unlock(&(ball->ballLock));
-// }
-
-// static inline void lockSuperBlock(SuperBlock sb) {
-//   pthread_mutex_lock(&(sb->superBlockLock));
-// }
-
-// static inline void unlockSuperBlock(SuperBlock sb) {
-//   pthread_mutex_unlock(&(sb->superBlockLock));
-// }
-
-
 static int sizeClass(size_t numBlocks) {
   assert(numBlocks <= (SUPERBLOCK_SIZE-1) / 2);
 
@@ -67,16 +49,6 @@ static int sizeClass(size_t numBlocks) {
   assert(class < NUM_SIZE_CLASSES);
   return class;
 }
-
-
-// static inline FreeBlock getBlock(GC_state s, SuperBlock sb, BlockId id) {
-//   size_t bs = s->controls->blockSize;
-//   pointer start = (pointer)sb + bs;
-//   size_t offset = (size_t)(id-1) * bs * (1 << sb->sizeClass);
-//   pointer result = start + offset;
-//   assert(result <= (pointer)sb + (SUPERBLOCK_SIZE-1) * bs);
-//   return (FreeBlock)result;
-// }
 
 
 static void unlinkSuperBlock(SuperBlockList list, SuperBlock sb) {
@@ -140,13 +112,6 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
 }
 
 
-// static inline SuperBlock findSuperBlockFront(GC_state s, pointer p) {
-//   return
-//     (SuperBlock)(uintptr_t)
-//     alignDown((size_t)p, s->controls->blockSize * SUPERBLOCK_SIZE);
-// }
-
-
 static SuperBlock mmapNewSuperBlock(
   GC_state s,
   BlockAllocator ball,
@@ -158,17 +123,7 @@ static SuperBlock mmapNewSuperBlock(
   }
   assert(isAligned((size_t)start, s->controls->blockSize));
 
-  // pointer alignedStart =
-  //   (pointer)(uintptr_t)
-  //   align((uintptr_t)start, s->controls->blockSize * SUPERBLOCK_SIZE);
-
-  // assert(alignedStart + s->controls->blockSize * SUPERBLOCK_SIZE
-  //        <= start + s->controls->blockSize * SUPERBLOCK_SIZE * 2);
-  // assert((pointer)findSuperBlockFront(s, alignedStart) == alignedStart);
-  // assert((pointer)findSuperBlockFront(s, alignedStart + s->controls->blockSize * (SUPERBLOCK_SIZE-1)) == alignedStart);
-
   SuperBlock sb = (SuperBlock)start;
-  // pthread_mutex_init(&(sb->superBlockLock), NULL);
   sb->owner = ball;
   sb->nextSuperBlock = NULL;
   sb->prevSuperBlock = NULL;
@@ -249,45 +204,6 @@ static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
 
   return SOMEWHAT_FULL;
 }
-
-
-#if 0
-/** We use the diff, to compute fullness assuming a change has been made to
-  * the number of free blocks in sb. But we don't actually make the change
-  * yet, because of nasty concurrency.
-  */
-static enum FullnessGroup fullness(GC_state s, SuperBlock sb, size_t diff) {
-  size_t free = sb->numBlocksFree + diff;
-
-  if (free < (1 << sb->sizeClass))
-    return COMPLETELY_FULL;
-
-  if (free == SUPERBLOCK_SIZE)
-    return COMPLETELY_EMPTY;
-
-  float currentEmptiness = (float)free / (float)SUPERBLOCK_SIZE;
-
-  if (currentEmptiness >= 1.0 - s->emptinessFraction)
-    return NEARLY_FULL;
-  if (currentEmptiness < s->emptinessFraction)
-    return NEARLY_EMPTY;
-
-  return SOMEWHAT_FULL;
-}
-
-static enum FullnessGroup fullnessAfterAlloc(GC_state s, SuperBlock sb) {
-  return fullness(s, sb, -(1 << sb->sizeClass));
-}
-
-static enum FullnessGroup fullnessAfterDealloc(GC_state s, SuperBlock sb) {
-  return fullness(s, sb, 1 << sb->sizeClass);
-}
-#endif
-
-
-// static size_t numBlocksUsedInSuperBlock(SuperBlock sb) {
-//   return (SUPERBLOCK_SIZE - 1 - sb->numBlocksFree);
-// }
 
 
 void putSuperBlockInFullnessGroup(
