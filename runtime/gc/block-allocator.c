@@ -95,20 +95,9 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
   assert(sb->prevSuperBlock == NULL);
   assert(sb->numBlocksFree == (SUPERBLOCK_SIZE-1));
 
-  int allocationSize = 1 << sizeClass;
   sb->sizeClass = sizeClass;
-
-  FreeBlock *cursor = &(sb->firstFree);
-  pointer next = (pointer)sb + s->controls->blockSize;
-  pointer limit = (pointer)sb + SUPERBLOCK_SIZE * s->controls->blockSize;
-  while ( (next + s->controls->blockSize * allocationSize) <= limit) {
-    FreeBlock b = (FreeBlock)next;
-    b->container = sb;
-    *cursor = b;
-    cursor = &(b->nextFree);
-    next = next + s->controls->blockSize * allocationSize;
-  }
-  *cursor = NULL;
+  sb->firstFree = NULL;
+  sb->frontier = (pointer)sb + s->controls->blockSize;
 }
 
 
@@ -145,6 +134,19 @@ static Blocks allocateInSuperBlock(
 
   assert(sb->sizeClass == sizeClass);
   assert(sb->numBlocksFree >= (1 << sizeClass));
+
+  if (sb->firstFree == NULL) {
+    Blocks result = (Blocks)sb->frontier;
+    sb->frontier += s->controls->blockSize * (1 << sb->sizeClass);
+
+    sb->numBlocksFree -= (1 << sb->sizeClass);
+    assert(sb->owner != NULL);
+    sb->owner->numBlocksInUse += (1 << sb->sizeClass);
+
+    result->container = sb;
+    result->numBlocks = 1 << sb->sizeClass;
+    return result;
+  }
 
   FreeBlock result = sb->firstFree;
   assert(result != NULL);

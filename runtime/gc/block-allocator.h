@@ -65,6 +65,14 @@ typedef struct SuperBlock {
   /** The freelist is LIFO, for caching/efficiency. */
   FreeBlock firstFree;
 
+  /** The barrier between free blocks and unused space in the rest of the
+    * superblock. The frontier will always be aligned at a valid start for
+    * a freeblock, according to the size-class. The benefit of doing it
+    * this way is that we can change the size-class of a completely empty
+    * superblock in O(1)... it doesn't depend on the superblock size.
+    */
+  pointer frontier;
+
   /** Each fullness group within a size-class is a doubly-linked list. */
   struct SuperBlock *nextSuperBlock;
   struct SuperBlock *prevSuperBlock;
