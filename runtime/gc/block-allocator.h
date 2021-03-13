@@ -16,32 +16,20 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-/** Blocks are identified with numbers 1 through SUPERBLOCK_SIZE-1.
-  * (Block 0 is reserved for superblock metadata).
-  * WARNING: Don't change the SUPERBLOCK_SIZE without also changing the
-  * size of a BlockId and the number of size classes! See for example the
-  * commented-out definitions in the following lines, for other superblock
-  * sizes.
-  */
-#define SUPERBLOCK_SIZE 256
-#define NUM_SIZE_CLASSES 8
-typedef uint8_t BlockId;
+// #define SUPERBLOCK_SIZE 257
+// #define NUM_SIZE_CLASSES 8
 
-// #define SUPERBLOCK_SIZE 1024
+// #define SUPERBLOCK_SIZE 1025
 // #define NUM_SIZE_CLASSES 10
-// typedef uint16_t BlockId;
 
-// #define SUPERBLOCK_SIZE 512
+// #define SUPERBLOCK_SIZE 513
 // #define NUM_SIZE_CLASSES 9
-// typedef uint16_t BlockId;
 
-// #define SUPERBLOCK_SIZE 128
-// #define NUM_SIZE_CLASSES 7
-// typedef uint8_t BlockId;
+#define SUPERBLOCK_SIZE 129
+#define NUM_SIZE_CLASSES 7
 
-// #define SUPERBLOCK_SIZE 64
+// #define SUPERBLOCK_SIZE 65
 // #define NUM_SIZE_CLASSES 6
-// typedef uint8_t BlockId;
 
 
 struct SuperBlock;
