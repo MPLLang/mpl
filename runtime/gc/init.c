@@ -290,9 +290,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
           s->controls->emptinessFraction = stringToFloat(argv[i++]);
           if (s->controls->emptinessFraction <= 0.0 ||
-              s->controls->emptinessFraction >= 1.0)
+              s->controls->emptinessFraction >= 0.5)
           {
-            die("%s emptiness-fraction must be strictly between 0 and 1", atName);
+            die("%s emptiness-fraction must be strictly between 0 and 0.5", atName);
           }
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
@@ -399,6 +399,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->summaryFile = stderr;
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
+  s->controls->emptinessFraction = 0.25;
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 
