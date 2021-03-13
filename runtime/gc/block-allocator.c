@@ -131,6 +131,7 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
   pointer limit = (pointer)sb + SUPERBLOCK_SIZE * s->controls->blockSize;
   while ( (next + s->controls->blockSize * allocationSize) <= limit) {
     FreeBlock b = (FreeBlock)next;
+    b->container = sb;
     *cursor = b;
     cursor = &(b->nextFree);
     next = next + s->controls->blockSize * allocationSize;
@@ -139,11 +140,11 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
 }
 
 
-static inline SuperBlock findSuperBlockFront(GC_state s, pointer p) {
-  return
-    (SuperBlock)(uintptr_t)
-    alignDown((size_t)p, s->controls->blockSize * SUPERBLOCK_SIZE);
-}
+// static inline SuperBlock findSuperBlockFront(GC_state s, pointer p) {
+//   return
+//     (SuperBlock)(uintptr_t)
+//     alignDown((size_t)p, s->controls->blockSize * SUPERBLOCK_SIZE);
+// }
 
 
 static SuperBlock mmapNewSuperBlock(
@@ -151,29 +152,22 @@ static SuperBlock mmapNewSuperBlock(
   BlockAllocator ball,
   int sizeClass)
 {
-  /** This is an annoying hack, to make sure that we have an aligned start to
-    * the superblock. I wish mmap could take an alignment parameter, to
-    * enforce that the result was aligned to a certain number of pages. But
-    * instead what we do here is map twice the desired size, to guarantee that
-    * somewhere within that space, there is a superblock-sized amount of
-    * of aligned memory.
-    */
-  pointer start =
-    GC_mmapAnon(NULL, s->controls->blockSize * SUPERBLOCK_SIZE * 2);
+  pointer start = GC_mmapAnon(NULL, s->controls->blockSize * SUPERBLOCK_SIZE);
   if (MAP_FAILED == start) {
     DIE("I ran out of space!");
   }
+  assert(isAligned((size_t)start, s->controls->blockSize));
 
-  pointer alignedStart =
-    (pointer)(uintptr_t)
-    align((uintptr_t)start, s->controls->blockSize * SUPERBLOCK_SIZE);
+  // pointer alignedStart =
+  //   (pointer)(uintptr_t)
+  //   align((uintptr_t)start, s->controls->blockSize * SUPERBLOCK_SIZE);
 
-  assert(alignedStart + s->controls->blockSize * SUPERBLOCK_SIZE
-         <= start + s->controls->blockSize * SUPERBLOCK_SIZE * 2);
-  assert((pointer)findSuperBlockFront(s, alignedStart) == alignedStart);
-  assert((pointer)findSuperBlockFront(s, alignedStart + s->controls->blockSize * (SUPERBLOCK_SIZE-1)) == alignedStart);
+  // assert(alignedStart + s->controls->blockSize * SUPERBLOCK_SIZE
+  //        <= start + s->controls->blockSize * SUPERBLOCK_SIZE * 2);
+  // assert((pointer)findSuperBlockFront(s, alignedStart) == alignedStart);
+  // assert((pointer)findSuperBlockFront(s, alignedStart + s->controls->blockSize * (SUPERBLOCK_SIZE-1)) == alignedStart);
 
-  SuperBlock sb = (SuperBlock)alignedStart;
+  SuperBlock sb = (SuperBlock)start;
   // pthread_mutex_init(&(sb->superBlockLock), NULL);
   sb->owner = ball;
   sb->nextSuperBlock = NULL;
@@ -184,7 +178,7 @@ static SuperBlock mmapNewSuperBlock(
 }
 
 
-static pointer allocateInSuperBlock(
+static Blocks allocateInSuperBlock(
   ARG_USED_FOR_ASSERT GC_state s,
   SuperBlock sb,
   int sizeClass)
@@ -199,8 +193,8 @@ static pointer allocateInSuperBlock(
 
   FreeBlock result = sb->firstFree;
   assert(result != NULL);
-  assert(findSuperBlockFront(s, (pointer)result) == sb);
-  assert( ((size_t)(pointer)result / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
+  // assert(findSuperBlockFront(s, (pointer)result) == sb);
+  assert( ((size_t)((pointer)result - (pointer)sb) / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
 
   sb->firstFree = result->nextFree;
   sb->numBlocksFree -= (1 << sb->sizeClass);
@@ -208,7 +202,11 @@ static pointer allocateInSuperBlock(
   assert(sb->owner != NULL);
   sb->owner->numBlocksInUse += (1 << sb->sizeClass);
 
-  return (pointer)result;
+  Blocks bs = (Blocks)result;
+  bs->container = sb;
+  bs->numBlocks = (1 << sb->sizeClass);
+
+  return bs;
 }
 
 
@@ -220,8 +218,8 @@ static void deallocateInSuperBlock(
 {
   assert(sb->sizeClass == sizeClass);
   assert(sb->numBlocksFree <= SUPERBLOCK_SIZE - 1 - (1 << sb->sizeClass));
-  assert( ((size_t)(pointer)block / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
-  assert(findSuperBlockFront(s, (pointer)block) == sb);
+  assert( ((size_t)((pointer)block - (pointer)sb) / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
+  // assert(findSuperBlockFront(s, (pointer)block) == sb);
 
   block->nextFree = sb->firstFree;
   sb->firstFree = block;
@@ -309,7 +307,7 @@ void putSuperBlockInFullnessGroup(
 }
 
 
-static pointer tryAllocateAndAdjustSuperBlocks(
+static Blocks tryAllocateAndAdjustSuperBlocks(
   GC_state s,
   BlockAllocator ball,
   int class)
@@ -340,7 +338,7 @@ static pointer tryAllocateAndAdjustSuperBlocks(
   SuperBlock sb = targetList->firstSuperBlock;
   assert( sb != NULL );
   enum FullnessGroup fg = fullness(s, sb);
-  pointer result = allocateInSuperBlock(s, sb, class);
+  Blocks result = allocateInSuperBlock(s, sb, class);
   enum FullnessGroup newfg = fullness(s, sb);
 
   if (fg != newfg) {
@@ -378,7 +376,7 @@ static void clearOutOtherFrees(GC_state s) {
 
   while (topElem != NULL) {
     FreeBlock next = topElem->nextFree;
-    SuperBlock sb = findSuperBlockFront(s, (pointer)topElem);
+    SuperBlock sb = topElem->container;
     assert( sb->owner == local );
     localFreeBlocks(s, sb, topElem);
 
@@ -387,7 +385,7 @@ static void clearOutOtherFrees(GC_state s) {
 }
 
 
-pointer allocateBlocks(GC_state s, size_t numBlocks) {
+Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator local = s->blockAllocatorLocal;
 
   if (numBlocks > (SUPERBLOCK_SIZE-1) / 2) {
@@ -398,7 +396,11 @@ pointer allocateBlocks(GC_state s, size_t numBlocks) {
     if (!isAligned((size_t)start, s->controls->blockSize)) {
       DIE("whoops, mmap didn't align by the block-size.");
     }
-    return start;
+
+    Blocks bs = (Blocks)start;
+    bs->container = NULL;
+    bs->numBlocks = numBlocks;
+    return bs;
   }
 
   clearOutOtherFrees(s);
@@ -406,7 +408,7 @@ pointer allocateBlocks(GC_state s, size_t numBlocks) {
   int class = sizeClass(numBlocks);
 
   /** Look in local first. */
-  pointer result = tryAllocateAndAdjustSuperBlocks(s, local, class);
+  Blocks result = tryAllocateAndAdjustSuperBlocks(s, local, class);
   if (result != NULL) {
     return result;
   }
@@ -420,17 +422,22 @@ pointer allocateBlocks(GC_state s, size_t numBlocks) {
 }
 
 
-void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks) {
+void freeBlocks(GC_state s, Blocks bs) {
   // BlockAllocator global = s->blockAllocatorGlobal;
   BlockAllocator local = s->blockAllocatorLocal;
 
+  size_t numBlocks = bs->numBlocks;
+  SuperBlock sb = bs->container;
+  pointer blockStart = (pointer)bs;
+
   if (numBlocks > (SUPERBLOCK_SIZE-1) / 2) {
+    assert(sb == NULL);
     GC_release(blockStart, s->controls->blockSize * numBlocks);
     return;
   }
 
   FreeBlock elem = (FreeBlock)blockStart;
-  SuperBlock sb = findSuperBlockFront(s, blockStart);
+  elem->container = sb;
   BlockAllocator owner = sb->owner;
   assert( owner != NULL );
   assert( sb->sizeClass == sizeClass(numBlocks) );

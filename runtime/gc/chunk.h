@@ -65,6 +65,8 @@ struct HM_chunk {
   bool mightContainMultipleObjects;
   void* tmpHeap;
 
+  SuperBlock container;
+
   // for padding and sanity checks
   uint32_t magic;
 

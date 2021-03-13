@@ -44,9 +44,12 @@ typedef uint8_t BlockId;
 // typedef uint8_t BlockId;
 
 
+struct SuperBlock;
+
 /** Free blocks are used to the store the freelist. */
 typedef struct FreeBlock {
   struct FreeBlock *nextFree;
+  struct SuperBlock *container;
 } *FreeBlock;
 
 
@@ -129,6 +132,11 @@ typedef struct BlockAllocator {
 } *BlockAllocator;
 
 
+typedef struct Blocks {
+  SuperBlock container;
+  size_t numBlocks;
+} *Blocks;
+
 #else
 
 struct BlockAllocator;
@@ -144,10 +152,10 @@ BlockAllocator initGlobalBlockAllocator(GC_state s);
 void initLocalBlockAllocator(GC_state s, BlockAllocator globalAllocator);
 
 /** Get a pointer to the start of some number of free contiguous blocks. */
-pointer allocateBlocks(GC_state s, size_t numBlocks);
+Blocks allocateBlocks(GC_state s, size_t numBlocks);
 
 /** Free a group of contiguous blocks. */
-void freeBlocks(GC_state s, pointer blockStart, size_t numBlocks);
+void freeBlocks(GC_state s, Blocks bs);
 
 #endif
 
