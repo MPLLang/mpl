@@ -54,6 +54,7 @@ struct GC_controls {
   bool messages; /* Print a message at the start and end of each gc. */
   size_t allocChunkSize;
   size_t blockSize;
+  float emptinessFraction;
   bool freeListCoalesce;  /* disabled for now */
   bool setAffinity; /* whether or not to set processor affinity */
   int32_t affinityBase; /* First processor to use when setting affinity */

@@ -199,9 +199,9 @@ static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
 
   float currentEmptiness = (float)free / (float)SUPERBLOCK_SIZE;
 
-  if (currentEmptiness >= 1.0 - s->emptinessFraction)
+  if (currentEmptiness >= 1.0 - s->controls->emptinessFraction)
     return NEARLY_FULL;
-  if (currentEmptiness < s->emptinessFraction)
+  if (currentEmptiness < s->controls->emptinessFraction)
     return NEARLY_EMPTY;
 
   return SOMEWHAT_FULL;
@@ -237,7 +237,6 @@ static Blocks tryAllocateAndAdjustSuperBlocks(
     SuperBlockList list = &(ball->sizeClassFullnessGroup[class][fg]);
 
     if (list->firstSuperBlock != NULL) {
-      assert(list->firstSuperBlock->firstFree != NULL);
       targetList = list;
       break;
     }

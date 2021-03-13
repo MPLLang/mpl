@@ -288,8 +288,10 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
             die ("%s emptiness-fraction missing argument.", atName);
           }
-          s->emptinessFraction = stringToFloat(argv[i++]);
-          if (s->emptinessFraction <= 0.0 || s->emptinessFraction >= 1.0) {
+          s->controls->emptinessFraction = stringToFloat(argv[i++]);
+          if (s->controls->emptinessFraction <= 0.0 ||
+              s->controls->emptinessFraction >= 1.0)
+          {
             die("%s emptiness-fraction must be strictly between 0 and 1", atName);
           }
         } else if (0 == strcmp (arg, "collection-type")) {
@@ -546,7 +548,6 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->globalCumulativeStatistics = s->globalCumulativeStatistics;
   d->cumulativeStatistics = newCumulativeStatistics();
   d->currentThread = BOGUS_OBJPTR;
-  d->emptinessFraction = s->emptinessFraction;
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
