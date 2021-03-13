@@ -67,7 +67,9 @@ pointer allocateSmallSequence(
   HM_HH_updateValues(thread, result + sequenceSizeAligned);
 
   thread->bytesNeeded = ensureBytesFree;
-  if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree) {
+  if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree ||
+      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE - GC_SEQUENCE_METADATA_SIZE)
+  {
     if (!HM_HH_extend(s, thread, ensureBytesFree)) {
       DIE("Ran out of space!");
     }
