@@ -54,6 +54,7 @@ struct GC_controls {
   bool messages; /* Print a message at the start and end of each gc. */
   size_t allocChunkSize;
   size_t blockSize;
+  size_t allocBlocksMinSize;
   size_t numBlockSizeClasses;
   float emptinessFraction;
   bool freeListCoalesce;  /* disabled for now */

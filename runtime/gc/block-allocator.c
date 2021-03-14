@@ -202,26 +202,33 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
 }
 
 
-static SuperBlock mmapNewSuperBlock(
+static void mmapNewSuperBlocks(
   GC_state s,
-  BlockAllocator ball,
-  int sizeClass)
+  BlockAllocator ball)
 {
-  size_t width = s->controls->blockSize * (1 + SUPERBLOCK_SIZE(s));
-  pointer start = GC_mmapAnon(NULL, width);
+  size_t oneWidth = s->controls->blockSize * (1 + SUPERBLOCK_SIZE(s));
+  size_t count = 1 + (s->controls->allocBlocksMinSize-1) / oneWidth;
+  assert(count * oneWidth >= s->controls->allocBlocksMinSize);
+  pointer start = GC_mmapAnon(NULL, count * oneWidth);
   if (MAP_FAILED == start) {
-    DIE("I ran out of space!");
+    /** Try again, but the minimum amount of space we actually need. */
+    count = 1;
+    start = GC_mmapAnon(NULL, oneWidth);
+    if (MAP_FAILED == start)
+      DIE("I ran out of space!");
   }
   assert(isAligned((size_t)start, s->controls->blockSize));
 
-  SuperBlock sb = (SuperBlock)start;
-  sb->owner = ball;
-  sb->nextSuperBlock = NULL;
-  sb->prevSuperBlock = NULL;
-  sb->numBlocksFree = SUPERBLOCK_SIZE(s);
-  sb->magic = 0xabaddeed;
-  setSuperBlockSizeClass(s, sb, sizeClass);
-  return sb;
+  for (size_t i = 0; i < count; i++) {
+    SuperBlock sb = (SuperBlock)(start + oneWidth * i);
+    sb->owner = ball;
+    sb->nextSuperBlock = NULL;
+    sb->prevSuperBlock = NULL;
+    sb->numBlocksFree = SUPERBLOCK_SIZE(s);
+    sb->magic = 0xabaddeed;
+    setSuperBlockSizeClass(s, sb, 0);
+    prependSuperBlock(getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY), sb);
+  }
 }
 
 
@@ -400,12 +407,14 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
     return result;
   }
 
-  /** If both local fails, we need to mmap a new superchunk. */
-  SuperBlock sb = mmapNewSuperBlock(s, local, class);
-  local->numBlocks += SUPERBLOCK_SIZE(s);
-  result = allocateInSuperBlock(s, sb, class);
-  SuperBlockList list = getFullnessGroup(s, local, class, fullness(s, sb));
-  prependSuperBlock(list, sb);
+  /** If both local fails, we need to mmap new superchunks. */
+  mmapNewSuperBlocks(s, local);
+
+  result = tryAllocateAndAdjustSuperBlocks(s, local, class);
+  if (result == NULL) {
+    DIE("Ran out of space for new superblocks!");
+  }
+
   assertBlockAllocatorOkay(s, local);
   return result;
 }

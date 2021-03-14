@@ -283,6 +283,12 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die ("%s alloc-chunk missing argument.", atName);
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "alloc-blocks-min-size")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s alloc-blocks-min-size missing argument.", atName);
+          }
+          s->controls->allocBlocksMinSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "emptiness-fraction")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -415,6 +421,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
+  s->controls->allocBlocksMinSize = 1024 * s->controls->blockSize;
 
   /* check if still equal to 0 after process @mpl to see if the user wants
    * a particular size, and if not, set to default. */
@@ -520,6 +527,10 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   unless (isAligned(s->controls->allocChunkSize, s->controls->blockSize))
     die ("alloc-chunk must be a multiple of the block-size (%zu)", s->controls->blockSize);
+
+  unless (isAligned(s->controls->allocBlocksMinSize, s->controls->blockSize))
+    die("alloc-blocks-min-size must be a multiple of the block-size (%zu)",
+      s->controls->blockSize);
 
   return res;
 }
