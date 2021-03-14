@@ -294,6 +294,16 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           {
             die("%s emptiness-fraction must be strictly between 0 and 0.5", atName);
           }
+        } else if (0 == strcmp(arg, "num-size-classes")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s num-size-classes missing argument.", atName);
+          }
+          int xx = stringToInt(argv[i++]);
+          if (xx <= 0) {
+            die("%s num-size-classes must be at least 1", atName);
+          }
+          s->controls->numBlockSizeClasses = xx;
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -400,6 +410,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
   s->controls->emptinessFraction = 0.25;
+  s->controls->numBlockSizeClasses = 7;  // superblocks of 128 blocks
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 

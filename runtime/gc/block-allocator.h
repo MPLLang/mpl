@@ -16,22 +16,6 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-// #define SUPERBLOCK_SIZE 257
-// #define NUM_SIZE_CLASSES 8
-
-// #define SUPERBLOCK_SIZE 1025
-// #define NUM_SIZE_CLASSES 10
-
-// #define SUPERBLOCK_SIZE 513
-// #define NUM_SIZE_CLASSES 9
-
-#define SUPERBLOCK_SIZE 129
-#define NUM_SIZE_CLASSES 7
-
-// #define SUPERBLOCK_SIZE 65
-// #define NUM_SIZE_CLASSES 6
-
-
 struct SuperBlock;
 
 /** Free blocks are used to the store the freelist. */
@@ -77,6 +61,8 @@ typedef struct SuperBlock {
   struct SuperBlock *nextSuperBlock;
   struct SuperBlock *prevSuperBlock;
 
+  uint32_t magic;
+
 } *SuperBlock;
 
 
@@ -112,7 +98,7 @@ typedef struct BlockAllocator {
     *   2 is neither nearly full nor nearly empty
     *   3 is nearly empty, i.e. less than emptinessFraction in use
     */
-  struct SuperBlockList sizeClassFullnessGroup[NUM_SIZE_CLASSES][NUM_FULLNESS_GROUPS];
+  struct SuperBlockList *sizeClassFullnessGroup;
 
   /** Completely empty superblocks are special because these can be
     * reused for any size class.
