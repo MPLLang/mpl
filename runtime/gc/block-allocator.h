@@ -61,6 +61,7 @@ typedef struct SuperBlock {
   struct SuperBlock *nextSuperBlock;
   struct SuperBlock *prevSuperBlock;
 
+  /** For sanity checks. */
   uint32_t magic;
 
 } *SuperBlock;

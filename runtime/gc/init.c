@@ -412,8 +412,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->emptinessFraction = 0.25;
   s->controls->numBlockSizeClasses = 7;  // superblocks of 128 blocks
 
-  initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
-
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
@@ -526,12 +524,14 @@ int GC_init (GC_state s, int argc, char **argv) {
   return res;
 }
 
-void GC_lateInit (GC_state s) {
+void GC_lateInit(GC_state s) {
 
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
 
   HH_EBR_init(s);
+
+  initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 

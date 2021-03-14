@@ -6,25 +6,29 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-#if ASSERT
-static void assertSuperBlockListOkay(SuperBlockList list) {
-  if (list->firstSuperBlock == NULL)
-    return;
+static inline size_t SUPERBLOCK_SIZE(GC_state s) {
+  return (1 << s->controls->numBlockSizeClasses);
+}
 
-  SuperBlock prev = NULL;
-  SuperBlock curr = list->firstSuperBlock;
-  while (curr != NULL) {
-    assert(curr->magic == 0xabaddeed);
-    assert(curr->prevSuperBlock == prev);
-    prev = curr;
-    curr = curr->nextSuperBlock;
-  }
+static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
+  size_t free = sb->numBlocksFree;
+
+  if (free < ((size_t)1 << sb->sizeClass))
+    return COMPLETELY_FULL;
+
+  if (free == SUPERBLOCK_SIZE(s))
+    return COMPLETELY_EMPTY;
+
+  float currentEmptiness = (float)free / (float)SUPERBLOCK_SIZE(s);
+
+  if (currentEmptiness >= 1.0 - s->controls->emptinessFraction)
+    return NEARLY_FULL;
+  if (currentEmptiness < s->controls->emptinessFraction)
+    return NEARLY_EMPTY;
+
+  return SOMEWHAT_FULL;
 }
-#else
-static void assertSuperBlockListOkay(SuperBlockList list) {
-  (void)list;
-}
-#endif
+
 
 static inline SuperBlockList getFullnessGroup(
   ARG_USED_FOR_ASSERT GC_state s,
@@ -42,9 +46,74 @@ static inline SuperBlockList getFullnessGroup(
 }
 
 
-static inline size_t SUPERBLOCK_SIZE(GC_state s) {
-  return 1 + (1 << s->controls->numBlockSizeClasses);
+static inline bool isValidBlockStart(GC_state s, SuperBlock sb, pointer p) {
+  size_t blockId = ((size_t)(p - (size_t)sb) / s->controls->blockSize) - 1;
+  return (p > (pointer)sb)
+         && blockId % (1 << sb->sizeClass) == 0;
 }
+
+
+#if ASSERT
+
+static void assertSuperBlockOkay(
+  GC_state s,
+  SuperBlock sb,
+  BlockAllocator ball,
+  int class,
+  enum FullnessGroup fg)
+{
+  assert(sb->magic == 0xabaddeed);
+  assert(sb->owner == ball);
+  assert(fullness(s, sb) == fg);
+
+  if (fg != COMPLETELY_EMPTY) {
+    assert(sb->sizeClass == class);
+    assert(isValidBlockStart(s, sb, sb->frontier));
+    for (FreeBlock b = sb->firstFree; b != NULL; b = b->nextFree) {
+      assert(b->container == sb);
+      assert(isValidBlockStart(s, sb, (pointer)b));
+    }
+  }
+}
+
+
+static void assertSuperBlockListOkay(
+  GC_state s,
+  BlockAllocator ball,
+  int class,
+  enum FullnessGroup fg)
+{
+  SuperBlockList list = getFullnessGroup(s, ball, class, fg);
+  SuperBlock prev = NULL;
+  SuperBlock curr = list->firstSuperBlock;
+  while (curr != NULL) {
+    assert(curr->magic == 0xabaddeed);
+    assert(curr->prevSuperBlock == prev);
+    assertSuperBlockOkay(s, curr, ball, class, fg);
+    prev = curr;
+    curr = curr->nextSuperBlock;
+  }
+}
+
+
+static void assertBlockAllocatorOkay(GC_state s, BlockAllocator ball) {
+  for (size_t class = 0; class < s->controls->numBlockSizeClasses; class++) {
+    for (int fg = 0; fg < NUM_FULLNESS_GROUPS; fg++) {
+      assertSuperBlockListOkay(s, ball, class, fg);
+    }
+  }
+  assertSuperBlockListOkay(s, ball, 0, COMPLETELY_EMPTY);
+}
+
+#else
+
+static void assertBlockAllocatorOkay(GC_state s, BlockAllocator ball) {
+  (void)s;
+  (void)ball;
+}
+
+#endif
+
 
 static void initBlockAllocator(GC_state s, BlockAllocator ball) {
   ball->sizeClassFullnessGroup =
@@ -55,7 +124,7 @@ static void initBlockAllocator(GC_state s, BlockAllocator ball) {
     }
   }
 
-  getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY)->firstSuperBlock = NULL;
+  ball->completelyEmptyGroup.firstSuperBlock = NULL;
 
   ball->numBlocks = 0;
   ball->numBlocksInUse = 0;
@@ -79,7 +148,7 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalBall) {
 
 
 static int sizeClass(ARG_USED_FOR_ASSERT GC_state s, size_t numBlocks) {
-  assert(numBlocks <= (SUPERBLOCK_SIZE(s)-1) / 2);
+  assert(numBlocks <= SUPERBLOCK_SIZE(s) / 2);
 
   int class = 0;
   while (((size_t)1 << class) < numBlocks) {
@@ -124,16 +193,8 @@ static void prependSuperBlock(SuperBlockList list, SuperBlock sb) {
 }
 
 
-/** Change the size class of this super-block, and put it into a clean state.
-  * Only call this if you already have the sb->superBlockLock...
-  */
 static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
-  /** This block should be currently unassigned to a size class and be
-    * completely free.
-    */
-  assert(sb->nextSuperBlock == NULL);
-  assert(sb->prevSuperBlock == NULL);
-  assert((size_t)sb->numBlocksFree == (SUPERBLOCK_SIZE(s)-1));
+  assert((size_t)sb->numBlocksFree == SUPERBLOCK_SIZE(s));
 
   sb->sizeClass = sizeClass;
   sb->firstFree = NULL;
@@ -146,7 +207,8 @@ static SuperBlock mmapNewSuperBlock(
   BlockAllocator ball,
   int sizeClass)
 {
-  pointer start = GC_mmapAnon(NULL, s->controls->blockSize * SUPERBLOCK_SIZE(s));
+  size_t width = s->controls->blockSize * (1 + SUPERBLOCK_SIZE(s));
+  pointer start = GC_mmapAnon(NULL, width);
   if (MAP_FAILED == start) {
     DIE("I ran out of space!");
   }
@@ -156,7 +218,7 @@ static SuperBlock mmapNewSuperBlock(
   sb->owner = ball;
   sb->nextSuperBlock = NULL;
   sb->prevSuperBlock = NULL;
-  sb->numBlocksFree = SUPERBLOCK_SIZE(s)-1;
+  sb->numBlocksFree = SUPERBLOCK_SIZE(s);
   sb->magic = 0xabaddeed;
   setSuperBlockSizeClass(s, sb, sizeClass);
   return sb;
@@ -190,9 +252,7 @@ static Blocks allocateInSuperBlock(
   }
 
   FreeBlock result = sb->firstFree;
-  assert(result != NULL);
-  // assert(findSuperBlockFront(s, (pointer)result) == sb);
-  assert( ((size_t)((pointer)result - (pointer)sb) / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
+  assert(isValidBlockStart(s, sb, (pointer)result));
 
   sb->firstFree = result->nextFree;
   sb->numBlocksFree -= (1 << sb->sizeClass);
@@ -215,9 +275,8 @@ static void deallocateInSuperBlock(
   ARG_USED_FOR_ASSERT int sizeClass)
 {
   assert(sb->sizeClass == sizeClass);
-  assert((size_t)sb->numBlocksFree <= SUPERBLOCK_SIZE(s) - 1 - (1 << sb->sizeClass));
-  assert( ((size_t)((pointer)block - (pointer)sb) / s->controls->blockSize - 1) % (1 << sizeClass) == 0);
-  // assert(findSuperBlockFront(s, (pointer)block) == sb);
+  assert((size_t)sb->numBlocksFree <= SUPERBLOCK_SIZE(s) - (1 << sb->sizeClass));
+  assert(isValidBlockStart(s, sb, (pointer)block));
 
   block->nextFree = sb->firstFree;
   sb->firstFree = block;
@@ -227,43 +286,6 @@ static void deallocateInSuperBlock(
   assert(sb->owner->numBlocksInUse >= ((size_t)1 << sb->sizeClass));
   sb->owner->numBlocksInUse -= (1 << sb->sizeClass);
 }
-
-
-static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
-  size_t free = sb->numBlocksFree;
-
-  if (free < ((size_t)1 << sb->sizeClass))
-    return COMPLETELY_FULL;
-
-  if (free == SUPERBLOCK_SIZE(s))
-    return COMPLETELY_EMPTY;
-
-  float currentEmptiness = (float)free / (float)SUPERBLOCK_SIZE(s);
-
-  if (currentEmptiness >= 1.0 - s->controls->emptinessFraction)
-    return NEARLY_FULL;
-  if (currentEmptiness < s->controls->emptinessFraction)
-    return NEARLY_EMPTY;
-
-  return SOMEWHAT_FULL;
-}
-
-
-// void putSuperBlockInFullnessGroup(
-//   BlockAllocator ball,
-//   int class,
-//   enum FullnessGroup fg,
-//   SuperBlock sb)
-// {
-//   // SuperBlockList list;
-
-//   // if (fg == COMPLETELY_EMPTY)
-//   //   list = &(ball->completelyEmptyGroup);
-//   // else
-//   //   list = &(ball->sizeClassFullnessGroup[class * NUM_FULLNESS_GROUPS + fg]);
-
-//   prependSuperBlock(getFullnessGroup(s, ball, class, fg), sb);
-// }
 
 
 static Blocks tryAllocateAndAdjustSuperBlocks(
@@ -278,7 +300,6 @@ static Blocks tryAllocateAndAdjustSuperBlocks(
     SuperBlockList list = getFullnessGroup(s, ball, class, fg);
     if (list->firstSuperBlock != NULL) {
       targetList = list;
-      assertSuperBlockListOkay(targetList);
       break;
     }
   }
@@ -288,7 +309,6 @@ static Blocks tryAllocateAndAdjustSuperBlocks(
       getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY)->firstSuperBlock != NULL)
   {
     targetList = getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY);
-    assertSuperBlockListOkay(targetList);
   }
 
   /** At this point, if we haven't found a superblock, we're screwed. */
@@ -304,10 +324,8 @@ static Blocks tryAllocateAndAdjustSuperBlocks(
 
   if (fg != newfg) {
     unlinkSuperBlock(targetList, sb);
-    assertSuperBlockListOkay(targetList);
     SuperBlockList new = getFullnessGroup(s, ball, class, newfg);
     prependSuperBlock(new, sb);
-    assertSuperBlockListOkay(new);
   }
 
   return result;
@@ -325,9 +343,6 @@ static void localFreeBlocks(GC_state s, SuperBlock sb, FreeBlock b) {
   deallocateInSuperBlock(s, sb, b, sb->sizeClass);
   SuperBlockList newList = getFullnessGroup(s, ball, sb->sizeClass, fullness(s, sb));
   prependSuperBlock(newList, sb);
-
-  assertSuperBlockListOkay(oldList);
-  assertSuperBlockListOkay(newList);
 }
 
 
@@ -356,8 +371,9 @@ static void clearOutOtherFrees(GC_state s) {
 
 Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator local = s->blockAllocatorLocal;
+  assertBlockAllocatorOkay(s, local);
 
-  if (numBlocks > (SUPERBLOCK_SIZE(s)-1) / 2) {
+  if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
     pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
     if (MAP_FAILED == start) {
       return NULL;
@@ -373,12 +389,14 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   }
 
   clearOutOtherFrees(s);
+  assertBlockAllocatorOkay(s, local);
 
   int class = sizeClass(s, numBlocks);
 
   /** Look in local first. */
   Blocks result = tryAllocateAndAdjustSuperBlocks(s, local, class);
   if (result != NULL) {
+    assertBlockAllocatorOkay(s, local);
     return result;
   }
 
@@ -388,7 +406,7 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   result = allocateInSuperBlock(s, sb, class);
   SuperBlockList list = getFullnessGroup(s, local, class, fullness(s, sb));
   prependSuperBlock(list, sb);
-  assertSuperBlockListOkay(list);
+  assertBlockAllocatorOkay(s, local);
   return result;
 }
 
@@ -397,11 +415,13 @@ void freeBlocks(GC_state s, Blocks bs) {
   // BlockAllocator global = s->blockAllocatorGlobal;
   BlockAllocator local = s->blockAllocatorLocal;
 
+  assertBlockAllocatorOkay(s, local);
+
   size_t numBlocks = bs->numBlocks;
   SuperBlock sb = bs->container;
   pointer blockStart = (pointer)bs;
 
-  if (numBlocks > (SUPERBLOCK_SIZE(s)-1) / 2) {
+  if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
     assert(sb == NULL);
     GC_release(blockStart, s->controls->blockSize * numBlocks);
     return;
@@ -417,6 +437,7 @@ void freeBlocks(GC_state s, Blocks bs) {
 
   if (owner == local) {
     localFreeBlocks(s, sb, elem);
+    assertBlockAllocatorOkay(s, local);
     return;
   }
 
