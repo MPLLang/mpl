@@ -469,14 +469,16 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   size_t numBlocks = chunkWidth / HM_BLOCK_SIZE;
   Blocks start = allocateBlocks(s, numBlocks);
   SuperBlock container = start->container;
+  numBlocks = start->numBlocks;
   HM_chunk result =
     HM_initializeChunk((pointer)start, (pointer)start + chunkWidth);
   result->container = container;
+  result->numBlocks = numBlocks;
   return result;
 }
 
 void HM_freeChunk(GC_state s, HM_chunk chunk) {
-  size_t numBlocks = HM_getChunkSize(chunk) / HM_BLOCK_SIZE;
+  size_t numBlocks = chunk->numBlocks;
   SuperBlock container = chunk->container;
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;

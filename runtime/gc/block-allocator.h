@@ -74,6 +74,16 @@ typedef struct SuperBlockList {
 } *SuperBlockList;
 
 
+#define NUM_MEGA_BLOCK_SIZE_CLASSES 12
+
+/** Megablocks are really big, and are managed specially in the global block
+  * allocator. */
+typedef struct MegaBlock {
+  struct MegaBlock *nextMegaBlock;
+  size_t numBlocks;
+} *MegaBlock;
+
+
 /** num groups is one less, because we handle COMPLETELY_EMPTY specially. */
 #define NUM_FULLNESS_GROUPS 4
 enum FullnessGroup {
@@ -111,6 +121,11 @@ typedef struct BlockAllocator {
     * for this proc and then this proc may free them at its convenience.
     */
   FreeBlock firstFreedByOther;
+
+  /** Only used in the global allocator (always NULL in the local allocators).
+    */
+  MegaBlock megaBlockSizeClass[NUM_MEGA_BLOCK_SIZE_CLASSES];
+  pthread_mutex_t megaBlockLock;
 
 } *BlockAllocator;
 

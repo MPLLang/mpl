@@ -129,6 +129,11 @@ static void initBlockAllocator(GC_state s, BlockAllocator ball) {
   ball->numBlocks = 0;
   ball->numBlocksInUse = 0;
   ball->firstFreedByOther = NULL;
+
+  for (size_t i = 0; i < NUM_MEGA_BLOCK_SIZE_CLASSES; i++) {
+    ball->megaBlockSizeClass[i] = NULL;
+  }
+  pthread_mutex_init(&(ball->megaBlockLock), NULL);
 }
 
 
@@ -376,11 +381,90 @@ static void clearOutOtherFrees(GC_state s) {
 }
 
 
+static void freeMegaBlock(GC_state s, MegaBlock mb) {
+  BlockAllocator global = s->blockAllocatorGlobal;
+
+  int mbClass = 0;
+  size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
+  while (mb->numBlocks >= 2*lowerBound &&
+         mbClass+1 < NUM_MEGA_BLOCK_SIZE_CLASSES)
+  {
+    mbClass++;
+    lowerBound = lowerBound*2;
+  }
+
+  if (mb->numBlocks >= 2*lowerBound) {
+    GC_release((pointer)mb, s->controls->blockSize * mb->numBlocks);
+    return;
+  }
+
+  pthread_mutex_lock(&(global->megaBlockLock));
+  mb->nextMegaBlock = global->megaBlockSizeClass[mbClass];
+  global->megaBlockSizeClass[mbClass] = mb;
+  pthread_mutex_unlock(&(global->megaBlockLock));
+  return;
+}
+
+
+static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
+  BlockAllocator global = s->blockAllocatorGlobal;
+
+  int mbClass = 0;
+  size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
+  while (numBlocksNeeded >= 2*lowerBound &&
+         mbClass+1 < NUM_MEGA_BLOCK_SIZE_CLASSES)
+  {
+    mbClass++;
+    lowerBound = lowerBound*2;
+  }
+
+  if (numBlocksNeeded >= 2*lowerBound)
+    return NULL;
+
+  pthread_mutex_lock(&(global->megaBlockLock));
+
+  int i = mbClass;
+
+  while (TRUE) {
+    for (MegaBlock mb = global->megaBlockSizeClass[i];
+         mb != NULL;
+         mb = mb->nextMegaBlock)
+    {
+      if (mb->numBlocks >= numBlocksNeeded) {
+        global->megaBlockSizeClass[i] = mb->nextMegaBlock;
+        mb->nextMegaBlock = NULL;
+        pthread_mutex_unlock(&(global->megaBlockLock));
+        return mb;
+      }
+    }
+
+    if (i+1 > mbClass+1 || i+1 >= NUM_MEGA_BLOCK_SIZE_CLASSES)
+      break;
+
+    i++;
+  }
+
+  pthread_mutex_unlock(&(global->megaBlockLock));
+  return NULL;
+}
+
+
 Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator local = s->blockAllocatorLocal;
   assertBlockAllocatorOkay(s, local);
 
   if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
+
+    MegaBlock mb = tryFindMegaBlock(s, numBlocks);
+    if (NULL != mb) {
+      size_t mbSize = mb->numBlocks;
+      assert(mbSize >= numBlocks);
+      Blocks bs = (Blocks)mb;
+      bs->container = NULL;
+      bs->numBlocks = mbSize;
+      return bs;
+    }
+
     pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
     if (MAP_FAILED == start) {
       return NULL;
@@ -432,7 +516,17 @@ void freeBlocks(GC_state s, Blocks bs) {
 
   if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
     assert(sb == NULL);
-    GC_release(blockStart, s->controls->blockSize * numBlocks);
+    MegaBlock mb = (MegaBlock)blockStart;
+    mb->numBlocks = numBlocks;
+    mb->nextMegaBlock = NULL;
+    freeMegaBlock(s, mb);
+
+    // GC_release(blockStart, s->controls->blockSize * numBlocks);
+
+    // LOG(LM_CHUNK_POOL, LL_INFO,
+    //   "Released large allocation of %zu blocks",
+    //   numBlocks);
+
     return;
   }
 

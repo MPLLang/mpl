@@ -66,11 +66,13 @@ struct HM_chunk {
   void* tmpHeap;
 
   SuperBlock container;
+  size_t numBlocks;
 
   // for padding and sanity checks
   uint32_t magic;
 
 } __attribute__((aligned(8)));
+
 
 struct HM_chunkList {
   HM_chunk firstChunk;
