@@ -394,7 +394,12 @@ static void freeMegaBlock(GC_state s, MegaBlock mb) {
   }
 
   if (mb->numBlocks >= 2*lowerBound) {
+    size_t nb = mb->numBlocks;
     GC_release((pointer)mb, s->controls->blockSize * mb->numBlocks);
+    LOG(LM_CHUNK_POOL, LL_INFO,
+      "Released large allocation of %zu blocks (unmap threshold: %zu)",
+      nb,
+      2*lowerBound);
     return;
   }
 
@@ -424,16 +429,26 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
   pthread_mutex_lock(&(global->megaBlockLock));
 
   int i = mbClass;
+  int count = 0;
 
   while (TRUE) {
     for (MegaBlock mb = global->megaBlockSizeClass[i];
          mb != NULL;
          mb = mb->nextMegaBlock)
     {
+      count++;
+
       if (mb->numBlocks >= numBlocksNeeded) {
         global->megaBlockSizeClass[i] = mb->nextMegaBlock;
         mb->nextMegaBlock = NULL;
         pthread_mutex_unlock(&(global->megaBlockLock));
+
+        LOG(LM_CHUNK_POOL, LL_INFO,
+          "inspected %d, satisfied large alloc of %zu blocks using megablock of %zu",
+          count,
+          numBlocksNeeded,
+          mb->numBlocks);
+
         return mb;
       }
     }
