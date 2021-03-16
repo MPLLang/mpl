@@ -75,7 +75,6 @@ void growStackCurrent(GC_state s) {
 
   assert(getThreadCurrent(s)->currentChunk != chunk);
   HM_unlinkChunk(HM_HH_getChunkList(hh), chunk);
-  // HM_appendChunk(getFreeListSmall(s), chunk);
   HM_freeChunk(s, chunk);
 }
 

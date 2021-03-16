@@ -278,8 +278,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   HM_foreachRemembered(s, &globalDownPtrs, &forwardDownPtrClosure);
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
-  // HM_appendChunkList(getFreeListSmall(s), &globalDownPtrs);
-  HM_assertChunkListInvariants(getFreeListSmall(s));
   HM_freeChunksInList(s, &globalDownPtrs);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
@@ -347,7 +345,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
         chunkCursor = chunkCursor->nextChunk;
       }
 #endif
-      // HM_appendChunkList(getFreeListSmall(s), remset);
       HM_freeChunksInList(s, remset);
     }
 
@@ -362,7 +359,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     }
 #endif
 
-    // HM_appendChunkList(getFreeListSmall(s), level);
     HM_freeChunksInList(s, level);
     HM_HH_freeAllDependants(s, hhTail, FALSE);
     freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));

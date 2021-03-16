@@ -50,25 +50,12 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   s->stackLimit = getStackLimit (s, stack);
 }
 
-struct HM_chunkList* getFreeListSmall(GC_state s) {
-  return &(s->freeListSmall);
-}
-
-struct HM_chunkList* HM_getsharedFreeList(GC_state s)  {
-  return s->sharedfreeList;
-}
-
 struct FixedSizeAllocator* getHHAllocator(GC_state s) {
   return &(s->hhAllocator);
 }
 
 struct FixedSizeAllocator* getUFAllocator(GC_state s) {
   return &(s->hhUnionFindAllocator);
-}
-
-
-struct HM_chunkList* getFreeListLarge(GC_state s) {
-  return &(s->freeListLarge);
 }
 
 bool GC_getAmOriginal (GC_state s) {

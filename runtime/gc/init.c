@@ -456,12 +456,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
-  HM_initChunkList(getFreeListSmall(s));
-  HM_initChunkList(getFreeListLarge(s));
-  s->sharedfreeList = (HM_chunkList) (malloc (sizeof(struct HM_chunkList)));
-  HM_initChunkList(s->sharedfreeList);
-  s->freeListLock = (bool*) (malloc(sizeof(bool)));
-  *(s->freeListLock) = false;
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
 
@@ -591,13 +585,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
   initLocalBlockAllocator(d, s->blockAllocatorGlobal);
-  HM_initChunkList(getFreeListSmall(d));
-  HM_initChunkList(getFreeListLarge(d));
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
   d->hhEBR = s->hhEBR;
-  d->sharedfreeList = s->sharedfreeList;
-  d->freeListLock = s->freeListLock;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

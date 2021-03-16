@@ -112,7 +112,6 @@ void HM_deferredPromote(
 
   /* free the chunks that we used as temporary storage for bucketing */
   for (uint32_t i = 1; i < numLevels; i++) {
-    // HM_appendChunkList(getFreeListSmall(s), &(downPtrs[i]));
     HM_freeChunksInList(s, &(downPtrs[i]));
   }
 
