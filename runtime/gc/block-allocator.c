@@ -7,7 +7,7 @@
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static inline size_t SUPERBLOCK_SIZE(GC_state s) {
-  return (1 << s->controls->numBlockSizeClasses);
+  return (1 << s->controls->superblockThreshold);
 }
 
 static enum FullnessGroup fullness(GC_state s, SuperBlock sb) {
@@ -37,7 +37,7 @@ static inline SuperBlockList getFullnessGroup(
   enum FullnessGroup fg)
 {
   assert(0 <= fg && fg <= COMPLETELY_EMPTY);
-  assert(0 <= class && (size_t)class < s->controls->numBlockSizeClasses);
+  assert(0 <= class && (size_t)class < s->controls->superblockThreshold);
 
   if (fg == COMPLETELY_EMPTY)
     return &(ball->completelyEmptyGroup);
@@ -97,7 +97,7 @@ static void assertSuperBlockListOkay(
 
 
 static void assertBlockAllocatorOkay(GC_state s, BlockAllocator ball) {
-  for (size_t class = 0; class < s->controls->numBlockSizeClasses; class++) {
+  for (size_t class = 0; class < s->controls->superblockThreshold; class++) {
     for (int fg = 0; fg < NUM_FULLNESS_GROUPS; fg++) {
       assertSuperBlockListOkay(s, ball, class, fg);
     }
@@ -116,9 +116,15 @@ static void assertBlockAllocatorOkay(GC_state s, BlockAllocator ball) {
 
 
 static void initBlockAllocator(GC_state s, BlockAllocator ball) {
+  size_t numMegaBlockSizeClasses =
+    s->controls->megablockThreshold - s->controls->superblockThreshold;
+
   ball->sizeClassFullnessGroup =
-    malloc(s->controls->numBlockSizeClasses * NUM_FULLNESS_GROUPS * sizeof(struct SuperBlockList));
-  for (size_t i = 0; i < s->controls->numBlockSizeClasses; i++) {
+    malloc(s->controls->superblockThreshold * NUM_FULLNESS_GROUPS * sizeof(struct SuperBlockList));
+  ball->megaBlockSizeClass =
+    malloc(numMegaBlockSizeClasses * sizeof(struct MegaBlockList));
+
+  for (size_t i = 0; i < s->controls->superblockThreshold; i++) {
     for (int j = 0; j < NUM_FULLNESS_GROUPS; j++) {
       getFullnessGroup(s, ball, i, j)->firstSuperBlock = NULL;
     }
@@ -130,8 +136,8 @@ static void initBlockAllocator(GC_state s, BlockAllocator ball) {
   ball->numBlocksInUse = 0;
   ball->firstFreedByOther = NULL;
 
-  for (size_t i = 0; i < NUM_MEGA_BLOCK_SIZE_CLASSES; i++) {
-    ball->megaBlockSizeClass[i] = NULL;
+  for (size_t i = 0; i < numMegaBlockSizeClasses; i++) {
+    ball->megaBlockSizeClass[i].firstMegaBlock = NULL;
   }
   pthread_mutex_init(&(ball->megaBlockLock), NULL);
 }
@@ -152,15 +158,11 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalBall) {
 }
 
 
-static int sizeClass(ARG_USED_FOR_ASSERT GC_state s, size_t numBlocks) {
-  assert(numBlocks <= SUPERBLOCK_SIZE(s) / 2);
-
+static int sizeClass(size_t numBlocks) {
   int class = 0;
   while (((size_t)1 << class) < numBlocks) {
     class++;
   }
-
-  assert((size_t)class < s->controls->numBlockSizeClasses);
   return class;
 }
 
@@ -384,10 +386,13 @@ static void clearOutOtherFrees(GC_state s) {
 static void freeMegaBlock(GC_state s, MegaBlock mb) {
   BlockAllocator global = s->blockAllocatorGlobal;
 
+  int numMbSizeClasses =
+    s->controls->megablockThreshold - s->controls->superblockThreshold;
+
   int mbClass = 0;
   size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
   while (mb->numBlocks >= 2*lowerBound &&
-         mbClass+1 < NUM_MEGA_BLOCK_SIZE_CLASSES)
+         mbClass+1 < numMbSizeClasses)
   {
     mbClass++;
     lowerBound = lowerBound*2;
@@ -404,8 +409,8 @@ static void freeMegaBlock(GC_state s, MegaBlock mb) {
   }
 
   pthread_mutex_lock(&(global->megaBlockLock));
-  mb->nextMegaBlock = global->megaBlockSizeClass[mbClass];
-  global->megaBlockSizeClass[mbClass] = mb;
+  mb->nextMegaBlock = global->megaBlockSizeClass[mbClass].firstMegaBlock;
+  global->megaBlockSizeClass[mbClass].firstMegaBlock = mb;
   pthread_mutex_unlock(&(global->megaBlockLock));
   return;
 }
@@ -414,10 +419,13 @@ static void freeMegaBlock(GC_state s, MegaBlock mb) {
 static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
   BlockAllocator global = s->blockAllocatorGlobal;
 
+  int numMbSizeClasses =
+    s->controls->megablockThreshold - s->controls->superblockThreshold;
+
   int mbClass = 0;
   size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
   while (numBlocksNeeded >= 2*lowerBound &&
-         mbClass+1 < NUM_MEGA_BLOCK_SIZE_CLASSES)
+         mbClass+1 < numMbSizeClasses)
   {
     mbClass++;
     lowerBound = lowerBound*2;
@@ -432,14 +440,15 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
   int count = 0;
 
   while (TRUE) {
-    for (MegaBlock mb = global->megaBlockSizeClass[i];
-         mb != NULL;
-         mb = mb->nextMegaBlock)
+    for (MegaBlock *mbp = &(global->megaBlockSizeClass[i].firstMegaBlock);
+         *mbp != NULL;
+         mbp = &((*mbp)->nextMegaBlock))
     {
+      MegaBlock mb = *mbp;
       count++;
 
       if (mb->numBlocks >= numBlocksNeeded) {
-        global->megaBlockSizeClass[i] = mb->nextMegaBlock;
+        *mbp = mb->nextMegaBlock;
         mb->nextMegaBlock = NULL;
         pthread_mutex_unlock(&(global->megaBlockLock));
 
@@ -453,7 +462,7 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
       }
     }
 
-    if (i+1 > mbClass+1 || i+1 >= NUM_MEGA_BLOCK_SIZE_CLASSES)
+    if (i+1 > mbClass+1 || i+1 >= numMbSizeClasses)
       break;
 
     i++;
@@ -497,7 +506,7 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   clearOutOtherFrees(s);
   assertBlockAllocatorOkay(s, local);
 
-  int class = sizeClass(s, numBlocks);
+  int class = sizeClass(numBlocks);
 
   /** Look in local first. */
   Blocks result = tryAllocateAndAdjustSuperBlocks(s, local, class);
@@ -551,7 +560,7 @@ void freeBlocks(GC_state s, Blocks bs) {
   elem->container = sb;
   BlockAllocator owner = sb->owner;
   assert( owner != NULL );
-  assert( sb->sizeClass == sizeClass(s, numBlocks) );
+  assert( sb->sizeClass == sizeClass(numBlocks) );
 
   if (owner == local) {
     localFreeBlocks(s, sb, elem);

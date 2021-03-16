@@ -300,16 +300,26 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           {
             die("%s emptiness-fraction must be strictly between 0 and 0.5", atName);
           }
-        } else if (0 == strcmp(arg, "num-size-classes")) {
+        } else if (0 == strcmp(arg, "superblock-threshold")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s num-size-classes missing argument.", atName);
+            die ("%s superblock-threshold missing argument.", atName);
           }
           int xx = stringToInt(argv[i++]);
           if (xx <= 0) {
-            die("%s num-size-classes must be at least 1", atName);
+            die("%s superblock-threshold must be at least 1", atName);
           }
-          s->controls->numBlockSizeClasses = xx;
+          s->controls->superblockThreshold = xx;
+        } else if (0 == strcmp(arg, "megablock-threshold")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s megablock-threshold missing argument.", atName);
+          }
+          int xx = stringToInt(argv[i++]);
+          if (xx <= 0) {
+            die("%s megablock-threshold must be at least 1", atName);
+          }
+          s->controls->megablockThreshold = xx;
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -416,7 +426,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
   s->controls->emptinessFraction = 0.25;
-  s->controls->numBlockSizeClasses = 7;  // superblocks of 128 blocks
+  s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
+  s->controls->megablockThreshold = 18;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
@@ -531,6 +542,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocBlocksMinSize, s->controls->blockSize))
     die("alloc-blocks-min-size must be a multiple of the block-size (%zu)",
       s->controls->blockSize);
+
+  unless (s->controls->superblockThreshold <= s->controls->megablockThreshold)
+    die("superblock-threshold (currently %zu) must be at most the megablock-threshold (currently %zu)",
+      s->controls->superblockThreshold,
+      s->controls->megablockThreshold);
 
   return res;
 }

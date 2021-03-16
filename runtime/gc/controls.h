@@ -55,7 +55,8 @@ struct GC_controls {
   size_t allocChunkSize;
   size_t blockSize;
   size_t allocBlocksMinSize;
-  size_t numBlockSizeClasses;
+  size_t superblockThreshold; // upper bound on size-class of a superblock
+  size_t megablockThreshold; // upper bound on size-class of a megablock (unmap above this threshold)
   float emptinessFraction;
   bool freeListCoalesce;  /* disabled for now */
   bool setAffinity; /* whether or not to set processor affinity */
