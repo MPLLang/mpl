@@ -416,30 +416,27 @@ static void freeMegaBlock(GC_state s, MegaBlock mb) {
 }
 
 
-static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
+static MegaBlock tryFindMegaBlock(
+  GC_state s,
+  size_t numBlocksNeeded,
+  size_t sizeClass)
+{
   BlockAllocator global = s->blockAllocatorGlobal;
+  assert(sizeClass >= s->controls->superblockThreshold);
 
-  int numMbSizeClasses =
-    s->controls->megablockThreshold - s->controls->superblockThreshold;
-
-  int mbClass = 0;
-  size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
-  while (numBlocksNeeded >= 2*lowerBound &&
-         mbClass+1 < numMbSizeClasses)
-  {
-    mbClass++;
-    lowerBound = lowerBound*2;
-  }
-
-  if (numBlocksNeeded >= 2*lowerBound)
+  if (sizeClass >= s->controls->megablockThreshold)
     return NULL;
+
+  size_t numMbSizeClasses =
+    s->controls->megablockThreshold - s->controls->superblockThreshold;
 
   pthread_mutex_lock(&(global->megaBlockLock));
 
-  int i = mbClass;
-  int count = 0;
+  size_t lower = sizeClass - s->controls->superblockThreshold;
+  size_t upper = min(lower+2, numMbSizeClasses);
+  size_t count = 0;
 
-  while (TRUE) {
+  for (size_t i = lower; i < upper; i++) {
     for (MegaBlock *mbp = &(global->megaBlockSizeClass[i].firstMegaBlock);
          *mbp != NULL;
          mbp = &((*mbp)->nextMegaBlock))
@@ -453,7 +450,7 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
         pthread_mutex_unlock(&(global->megaBlockLock));
 
         LOG(LM_CHUNK_POOL, LL_INFO,
-          "inspected %d, satisfied large alloc of %zu blocks using megablock of %zu",
+          "inspected %zu, satisfied large alloc of %zu blocks using megablock of %zu",
           count,
           numBlocksNeeded,
           mb->numBlocks);
@@ -461,11 +458,6 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
         return mb;
       }
     }
-
-    if (i+1 > mbClass+1 || i+1 >= numMbSizeClasses)
-      break;
-
-    i++;
   }
 
   pthread_mutex_unlock(&(global->megaBlockLock));
@@ -473,40 +465,53 @@ static MegaBlock tryFindMegaBlock(GC_state s, size_t numBlocksNeeded) {
 }
 
 
+static MegaBlock mmapNewMegaBlock(GC_state s, size_t numBlocks)
+{
+  pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
+  if (MAP_FAILED == start) {
+    return NULL;
+  }
+  if (!isAligned((size_t)start, s->controls->blockSize)) {
+    DIE("whoops, mmap didn't align by the block-size.");
+  }
+
+  MegaBlock mb = (MegaBlock)start;
+  mb->numBlocks = numBlocks;
+  mb->nextMegaBlock = NULL;
+  return mb;
+}
+
+
 Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator local = s->blockAllocatorLocal;
   assertBlockAllocatorOkay(s, local);
 
-  if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
+  int class = sizeClass(numBlocks);
 
-    MegaBlock mb = tryFindMegaBlock(s, numBlocks);
-    if (NULL != mb) {
-      size_t mbSize = mb->numBlocks;
-      assert(mbSize >= numBlocks);
-      Blocks bs = (Blocks)mb;
-      bs->container = NULL;
-      bs->numBlocks = mbSize;
-      return bs;
-    }
+  if ((size_t)class >= s->controls->superblockThreshold) {
 
-    pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
-    if (MAP_FAILED == start) {
+    /** First see if we can reuse. If not, try mmap a new one. If that all
+      * fails, we're a bit screwed.
+      */
+
+    MegaBlock mb = tryFindMegaBlock(s, numBlocks, class);
+
+    if (NULL == mb)
+      mb = mmapNewMegaBlock(s, numBlocks);
+
+    if (NULL == mb)
       return NULL;
-    }
-    if (!isAligned((size_t)start, s->controls->blockSize)) {
-      DIE("whoops, mmap didn't align by the block-size.");
-    }
 
-    Blocks bs = (Blocks)start;
+    size_t actualNumBlocks = mb->numBlocks;
+    assert(actualNumBlocks >= numBlocks);
+    Blocks bs = (Blocks)mb;
     bs->container = NULL;
-    bs->numBlocks = numBlocks;
+    bs->numBlocks = actualNumBlocks;
     return bs;
   }
 
   clearOutOtherFrees(s);
   assertBlockAllocatorOkay(s, local);
-
-  int class = sizeClass(numBlocks);
 
   /** Look in local first. */
   Blocks result = tryAllocateAndAdjustSuperBlocks(s, local, class);
