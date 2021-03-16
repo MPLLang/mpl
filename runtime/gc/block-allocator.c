@@ -222,7 +222,7 @@ static void mmapNewSuperBlocks(
     count = 1;
     start = GC_mmapAnon(NULL, oneWidth);
     if (MAP_FAILED == start)
-      DIE("I ran out of space!");
+      DIE("ran out of space!");
   }
   assert(isAligned((size_t)start, s->controls->blockSize));
 
@@ -490,7 +490,7 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
       mb = mmapNewMegaBlock(s, numBlocks);
 
     if (NULL == mb)
-      return NULL;
+      DIE("ran out of space!");
 
     size_t actualNumBlocks = mb->numBlocks;
     assert(actualNumBlocks >= numBlocks);
