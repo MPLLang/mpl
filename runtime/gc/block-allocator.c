@@ -158,7 +158,7 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalBall) {
 }
 
 
-static int sizeClass(size_t numBlocks) {
+static int computeSizeClass(size_t numBlocks) {
   int class = 0;
   while (((size_t)1 << class) < numBlocks) {
     class++;
@@ -383,30 +383,20 @@ static void clearOutOtherFrees(GC_state s) {
 }
 
 
-static void freeMegaBlock(GC_state s, MegaBlock mb) {
+static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
   BlockAllocator global = s->blockAllocatorGlobal;
 
-  int numMbSizeClasses =
-    s->controls->megablockThreshold - s->controls->superblockThreshold;
-
-  int mbClass = 0;
-  size_t lowerBound = SUPERBLOCK_SIZE(s) / 2;
-  while (mb->numBlocks >= 2*lowerBound &&
-         mbClass+1 < numMbSizeClasses)
-  {
-    mbClass++;
-    lowerBound = lowerBound*2;
-  }
-
-  if (mb->numBlocks >= 2*lowerBound) {
+  if (sizeClass >= s->controls->megablockThreshold) {
     size_t nb = mb->numBlocks;
     GC_release((pointer)mb, s->controls->blockSize * mb->numBlocks);
     LOG(LM_CHUNK_POOL, LL_INFO,
       "Released large allocation of %zu blocks (unmap threshold: %zu)",
       nb,
-      2*lowerBound);
+      (size_t)1 << (s->controls->megablockThreshold - 1));
     return;
   }
+
+  size_t mbClass = sizeClass - s->controls->superblockThreshold;
 
   pthread_mutex_lock(&(global->megaBlockLock));
   mb->nextMegaBlock = global->megaBlockSizeClass[mbClass].firstMegaBlock;
@@ -486,7 +476,7 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
   BlockAllocator local = s->blockAllocatorLocal;
   assertBlockAllocatorOkay(s, local);
 
-  int class = sizeClass(numBlocks);
+  int class = computeSizeClass(numBlocks);
 
   if ((size_t)class >= s->controls->superblockThreshold) {
 
@@ -534,28 +524,22 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
 
 
 void freeBlocks(GC_state s, Blocks bs) {
-  // BlockAllocator global = s->blockAllocatorGlobal;
   BlockAllocator local = s->blockAllocatorLocal;
-
   assertBlockAllocatorOkay(s, local);
 
   size_t numBlocks = bs->numBlocks;
   SuperBlock sb = bs->container;
   pointer blockStart = (pointer)bs;
 
-  if (numBlocks > SUPERBLOCK_SIZE(s) / 2) {
+  size_t sizeClass =
+    NULL != sb ? sb->sizeClass : computeSizeClass(numBlocks);
+
+  if (sizeClass >= s->controls->superblockThreshold) {
     assert(sb == NULL);
     MegaBlock mb = (MegaBlock)blockStart;
     mb->numBlocks = numBlocks;
     mb->nextMegaBlock = NULL;
-    freeMegaBlock(s, mb);
-
-    // GC_release(blockStart, s->controls->blockSize * numBlocks);
-
-    // LOG(LM_CHUNK_POOL, LL_INFO,
-    //   "Released large allocation of %zu blocks",
-    //   numBlocks);
-
+    freeMegaBlock(s, mb, sizeClass);
     return;
   }
 
@@ -564,8 +548,8 @@ void freeBlocks(GC_state s, Blocks bs) {
   FreeBlock elem = (FreeBlock)blockStart;
   elem->container = sb;
   BlockAllocator owner = sb->owner;
-  assert( owner != NULL );
-  assert( sb->sizeClass == sizeClass(numBlocks) );
+  assert(owner != NULL);
+  assert(sb->sizeClass == computeSizeClass(numBlocks));
 
   if (owner == local) {
     localFreeBlocks(s, sb, elem);
