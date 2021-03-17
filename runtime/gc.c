@@ -38,6 +38,7 @@ extern C_Pthread_Key_t gcstate_key;
 
 #include "gc/assign.c"
 #include "gc/atomic.c"
+#include "gc/block-allocator.c"
 #include "gc/call-stack.c"
 #include "gc/chunk.c"
 #include "gc/concurrent-collection.c"

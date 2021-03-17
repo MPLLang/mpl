@@ -1,4 +1,5 @@
-/* Copyright (C) 2016 Matthew Fluet.
+/* Copyright (C) 2021 Sam Westrick.
+ * Copyright (C) 2016 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -32,78 +33,93 @@ static inline pointer sequenceInitialize(ARG_USED_FOR_ASSERT GC_state s,
                                       uint16_t bytesNonObjptrs,
                                       uint16_t numObjptrs);
 
-pointer sequenceAllocateInHH(GC_state s,
-                          size_t sequenceSizeAligned,
-                          size_t ensureBytesFree);
 /************************/
 /* Function Definitions */
 /************************/
 
-pointer sequenceAllocateInHH(GC_state s,
-                             size_t sequenceSizeAligned,
-                             size_t ensureBytesFree) {
-  assert(ensureBytesFree <= s->controls->blockSize - sizeof(struct HM_chunk));
-  size_t sequenceChunkBytes = align(sequenceSizeAligned, s->controls->blockSize);
-  size_t bytesRequested = sequenceSizeAligned + ensureBytesFree;
-  bool giveWholeChunk = sequenceSizeAligned >= s->controls->blockSize / 2;
-  if (giveWholeChunk) {
-    bytesRequested = sequenceChunkBytes + s->controls->blockSize;
-  }
 
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
-  /* ensure free bytes at the most up-to-date level */
-  HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
+/** A small sequence is one which doesn't deserve its own chunk. */
+pointer allocateSmallSequence(
+  GC_state s,
+  size_t sequenceSizeAligned,
+  size_t ensureBytesFree)
+{
+  assert(sequenceSizeAligned < s->controls->blockSize / 2);
+
+  /** Very important to do this first! It might trigger a GC. If we instead
+    * did something like:
+    *
+    *   result = ...
+    *   HM_ensureHierarchicalHeapAssurances(..., ensureBytesFree, ...)
+    *
+    * then the potential GC could invalidate `result` !!
+    */
+  getThreadCurrent(s)->bytesNeeded = sequenceSizeAligned;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, sequenceSizeAligned, FALSE);
+  assert((size_t)s->limitPlusSlop - (size_t)s->frontier >= sequenceSizeAligned);
 
   GC_thread thread = getThreadCurrent(s);
+  pointer result = HM_HH_getFrontier(thread);
+  HM_HH_updateValues(thread, result + sequenceSizeAligned);
 
-  assert((((size_t)(s->limitPlusSlop)) - ((size_t)(s->frontier))) >=
-         bytesRequested);
-
-  if (giveWholeChunk) {
-    /* split the large chunk so that we have space for the sequence at the end;
-     * this guarantees that the single chunk holding the sequence is not a
-     * level-head which makes it easy to move it during a GC */
-    assert(thread->currentChunk->frontier == s->frontier);
-    assert(thread->currentChunk->limit == s->limitPlusSlop);
-    HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(thread->currentChunk);
-    HM_chunk sequenceChunk = HM_splitChunk(HM_HH_getChunkList(hh), thread->currentChunk, sequenceChunkBytes);
-    assert(sequenceChunk != NULL);
-    pointer result = HM_getChunkFrontier(sequenceChunk);
-    HM_updateChunkFrontierInList(
-      HM_HH_getChunkList(hh),
-      sequenceChunk,
-      result + sequenceSizeAligned);
-    sequenceChunk->mightContainMultipleObjects = FALSE;
-
-    assert(s->frontier == HM_HH_getFrontier(thread));
-    s->limitPlusSlop = HM_HH_getLimit(thread);
-    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-    return result;
+  thread->bytesNeeded = ensureBytesFree;
+  if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree ||
+      HM_getChunkFrontier(thread->currentChunk) >= (pointer)thread->currentChunk + HM_BLOCK_SIZE - GC_SEQUENCE_METADATA_SIZE)
+  {
+    if (!HM_HH_extend(s, thread, ensureBytesFree)) {
+      DIE("Ran out of space!");
+    }
   }
-
-  pointer result = s->frontier;
-  pointer newFrontier = result + sequenceSizeAligned;
-  assert (isFrontierAligned (s, newFrontier));
-  s->frontier = newFrontier;
-
-  assert(HM_getChunkOf(result) == thread->currentChunk);
-  if (!inFirstBlockOfChunk(thread->currentChunk, s->frontier)) {
-    /* force a new chunk to be created so that no new objects lie after this
-     * sequence, which crossed a block boundary. */
-    HM_HH_updateValues(thread, s->frontier);
-    HM_HH_extend(s, thread, ensureBytesFree);
-    s->frontier = HM_HH_getFrontier(thread);
-    s->limitPlusSlop = HM_HH_getLimit(thread);
-    s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  }
-
-  assert(inFirstBlockOfChunk(thread->currentChunk, s->frontier));
-  assert((size_t)(s->limitPlusSlop - s->frontier) >= ensureBytesFree);
 
   return result;
 }
+
+
+pointer allocateLargeSequence(
+  GC_state s,
+  size_t sequenceSizeAligned,
+  size_t ensureBytesFree)
+{
+  assert(sequenceSizeAligned >= s->controls->blockSize / 2);
+
+  /** Very important to do this first! It might trigger a GC. If we instead
+    * did something like:
+    *
+    *   result = ...
+    *   HM_ensureHierarchicalHeapAssurances(..., ensureBytesFree, ...)
+    *
+    * then the potential GC could invalidate `result` !!
+    */
+  getThreadCurrent(s)->bytesNeeded = ensureBytesFree;
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, ensureBytesFree, TRUE);
+  assert((size_t)s->limitPlusSlop - (size_t)s->frontier >= ensureBytesFree);
+
+  GC_thread thread = getThreadCurrent(s);
+  HM_chunk prevChunk = thread->currentChunk;
+
+  if (!HM_HH_extend(s, thread, sequenceSizeAligned)) {
+    DIE("Ran out of space!");
+  }
+
+  pointer result = HM_HH_getFrontier(thread);
+  HM_chunk newChunk = thread->currentChunk;
+  assert(HM_getChunkStart(newChunk) == result);
+  HM_HH_updateValues(thread, result + sequenceSizeAligned);
+  assert(newChunk->mightContainMultipleObjects);
+  newChunk->mightContainMultipleObjects = FALSE;
+
+  /** Now we need to set the frontier of the thread to a safe value.
+    * (We can't leave as is, because this chunk we just allocated is only
+    * supposed to contain a single object.)
+    */
+
+  thread->currentChunk = prevChunk;
+  assert(HM_getChunkSizePastFrontier(thread->currentChunk) >= ensureBytesFree);
+  assert(HM_HH_getDepth(HM_getLevelHead(thread->currentChunk)) == thread->currentDepth);
+
+  return result;
+}
+
 
 pointer GC_sequenceAllocate (GC_state s,
                              size_t ensureBytesFree,
@@ -157,8 +173,16 @@ pointer GC_sequenceAllocate (GC_state s,
       uintmaxToCommaString(sequenceSizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+
   assert(threadAndHeapOkay(s));
-  frontier = sequenceAllocateInHH(s, sequenceSizeAligned, ensureBytesFree);
+
+  if (sequenceSizeAligned < s->controls->blockSize / 2)
+    frontier = allocateSmallSequence(s, sequenceSizeAligned, ensureBytesFree);
+  else
+    frontier = allocateLargeSequence(s, sequenceSizeAligned, ensureBytesFree);
 
   result = sequenceInitialize(s,
                               frontier,
@@ -169,6 +193,10 @@ pointer GC_sequenceAllocate (GC_state s,
                               numObjptrs);
 
   GC_profileAllocInc (s, sequenceSizeAligned);
+
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   LOG(LM_ALLOCATION, LL_DEBUG,
       "GC_sequenceAllocate done.  result = "FMTPTR"  frontier = "FMTPTR" [%d]",
@@ -186,10 +214,9 @@ pointer GC_sequenceAllocate (GC_state s,
     assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
   }
   assert(ensureBytesFree <= (size_t)(s->limitPlusSlop - s->frontier));
-  /* Unfortunately, the invariant isn't quite true here, because
-   * unless we did the GC, we never set s->currentThread->stack->used
-   * to reflect what the mutator did with stackTop.
-   */
+
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
 #endif
 
   Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);

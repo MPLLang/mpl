@@ -457,19 +457,34 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   return pointerToObjptr(stackCopy, NULL);
 }
 
-pointer HM_HH_getRoot(pointer threadp) {
+pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
 
+  /** Superfluous argument to function... */
+#if ASSERT
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-  if (HM_HH_getDepth(thread->hierarchicalHeap)!= 1) {
-    DIE("not root heap");
+  assert(getThreadCurrent(s) == thread);
+#endif
+
+  if (getThreadCurrent(s)->currentDepth != 1) {
+    DIE("not at root");
   }
 
-  if (NULL == thread->hierarchicalHeap->subHeapForRootCC) {
-    thread->hierarchicalHeap->subHeapForRootCC = HM_HH_new(s, 1);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+  assert(HM_HH_getDepth(getThreadCurrent(s)->hierarchicalHeap) == 1);
+
+  if (NULL == getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC) {
+    getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC = HM_HH_new(s, 1);
   }
 
-  return (void*)(thread->hierarchicalHeap->subHeapForRootCC);
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  return (void*)(getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC);
 }
 
 // Story: ccstate for each hh has three values

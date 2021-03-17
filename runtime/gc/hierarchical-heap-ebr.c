@@ -65,7 +65,7 @@ static void rotateAndReclaim(GC_state s) {
     }
   }
 
-  HM_appendChunkList(getFreeListSmall(s), limboBag);
+  HM_freeChunksInList(s, limboBag);
   HM_initChunkList(limboBag); // clear it out
 }
 

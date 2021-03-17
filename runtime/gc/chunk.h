@@ -65,10 +65,14 @@ struct HM_chunk {
   bool mightContainMultipleObjects;
   void* tmpHeap;
 
+  SuperBlock container;
+  size_t numBlocks;
+
   // for padding and sanity checks
   uint32_t magic;
 
 } __attribute__((aligned(8)));
+
 
 struct HM_chunkList {
   HM_chunk firstChunk;
@@ -144,26 +148,17 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
 
 void HM_initChunkList(HM_chunkList list);
 
-void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
-void HM_appendToSharedList(GC_state s, HM_chunkList list);
+void HM_freeChunk(GC_state s, HM_chunk chunk);
+void HM_freeChunksInList(GC_state s, HM_chunkList list);
+
+// void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);
+void HM_prependChunk(HM_chunkList list, HM_chunk chunk);
 
 /* Remove chunk from this list */
 void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk);
-
-/* Requires: chunk->limit - chunk->frontier >= bytesRequested
- * Requires: chunk is in the given list
- *
- * Attempts to split chunk into two, so that the result chunk contains at
- * least the requested number of bytes
- *   BEFORE: ... <-> chunk <-> ...
- *   AFTER:  ... <-> chunk <-> result <-> ...
- * if chunk cannot be split as such, returns NULL. */
-HM_chunk HM_splitChunk(HM_chunkList list, HM_chunk chunk, size_t bytesRequested);
-
-void HM_coalesceChunks(HM_chunk left, HM_chunk right);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which

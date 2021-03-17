@@ -283,6 +283,43 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die ("%s alloc-chunk missing argument.", atName);
           }
           s->controls->allocChunkSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "alloc-blocks-min-size")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s alloc-blocks-min-size missing argument.", atName);
+          }
+          s->controls->allocBlocksMinSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "emptiness-fraction")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s emptiness-fraction missing argument.", atName);
+          }
+          s->controls->emptinessFraction = stringToFloat(argv[i++]);
+          if (s->controls->emptinessFraction <= 0.0 ||
+              s->controls->emptinessFraction >= 0.5)
+          {
+            die("%s emptiness-fraction must be strictly between 0 and 0.5", atName);
+          }
+        } else if (0 == strcmp(arg, "superblock-threshold")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s superblock-threshold missing argument.", atName);
+          }
+          int xx = stringToInt(argv[i++]);
+          if (xx <= 0) {
+            die("%s superblock-threshold must be at least 1", atName);
+          }
+          s->controls->superblockThreshold = xx;
+        } else if (0 == strcmp(arg, "megablock-threshold")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s megablock-threshold missing argument.", atName);
+          }
+          int xx = stringToInt(argv[i++]);
+          if (xx <= 0) {
+            die("%s megablock-threshold must be at least 1", atName);
+          }
+          s->controls->megablockThreshold = xx;
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -388,10 +425,14 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->summaryFile = stderr;
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
+  s->controls->emptinessFraction = 0.25;
+  s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
+  s->controls->megablockThreshold = 18;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
+  s->controls->allocBlocksMinSize = 1024 * s->controls->blockSize;
 
   /* check if still equal to 0 after process @mpl to see if the user wants
    * a particular size, and if not, set to default. */
@@ -415,12 +456,6 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
-  HM_initChunkList(getFreeListSmall(s));
-  HM_initChunkList(getFreeListLarge(s));
-  s->sharedfreeList = (HM_chunkList) (malloc (sizeof(struct HM_chunkList)));
-  HM_initChunkList(s->sharedfreeList);
-  s->freeListLock = (bool*) (malloc(sizeof(bool)));
-  *(s->freeListLock) = false;
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
 
@@ -498,15 +533,26 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->blockSize))
     die ("alloc-chunk must be a multiple of the block-size (%zu)", s->controls->blockSize);
 
+  unless (isAligned(s->controls->allocBlocksMinSize, s->controls->blockSize))
+    die("alloc-blocks-min-size must be a multiple of the block-size (%zu)",
+      s->controls->blockSize);
+
+  unless (s->controls->superblockThreshold <= s->controls->megablockThreshold)
+    die("superblock-threshold (currently %zu) must be at most the megablock-threshold (currently %zu)",
+      s->controls->superblockThreshold,
+      s->controls->megablockThreshold);
+
   return res;
 }
 
-void GC_lateInit (GC_state s) {
+void GC_lateInit(GC_state s) {
 
   /* this has to happen AFTER pthread_setspecific for the main thread */
   HM_configChunks(s);
 
   HH_EBR_init(s);
+
+  initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
@@ -538,13 +584,10 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueue = BOGUS_OBJPTR;
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
-  HM_initChunkList(getFreeListSmall(d));
-  HM_initChunkList(getFreeListLarge(d));
+  initLocalBlockAllocator(d, s->blockAllocatorGlobal);
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
   d->hhEBR = s->hhEBR;
-  d->sharedfreeList = s->sharedfreeList;
-  d->freeListLock = s->freeListLock;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
