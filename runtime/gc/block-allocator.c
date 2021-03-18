@@ -236,6 +236,8 @@ static void mmapNewSuperBlocks(
     setSuperBlockSizeClass(s, sb, 0);
     prependSuperBlock(getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY), sb);
   }
+
+  ball->numBlocks += count*(SUPERBLOCK_SIZE(s));
 }
 
 
