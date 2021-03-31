@@ -559,6 +559,25 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);
   assert(HM_HH_getConcurrentPack(hh) != NULL);
 
+  /** This is subtle. Notice that we always copy the stack, regardless of
+    * whether or not this heap is going to be collected truly concurrently,
+    * or by the left-hand-side processor.
+    *
+    * It might seem like we could get away with using the left-hand-side stack
+    * for roots, at least for CCs in a processor's spine, because this stack
+    * is used for the continuation, after the join. HOWEVER, THIS IS NOT SAFE!
+    * Why? Because we currently don't trace up-pointers outside of local
+    * collections. So, an object might be reachable via current stack at fork,
+    * but then later only be reachable via an up-pointer (removed from stack
+    * and "hidden" in a data-structure).
+    *
+    * In the future, if we do proper spine collections as described in the
+    * POPL'21 paper, then all up-pointers would be properly tracked, and we
+    * could get away with no copying the stack here. This would require
+    * integrating local (copying) with internal (mark-sweep) collections,
+    * because a local collection might discover an up-pointer which should be
+    * treated as a root for mark-sweep.
+    */
   HM_HH_getConcurrentPack(hh)->snapLeft  =  pointerToObjptr(kl, NULL);
   HM_HH_getConcurrentPack(hh)->snapRight =  pointerToObjptr(kr, NULL);
   HM_HH_getConcurrentPack(hh)->snapTemp =   pointerToObjptr(k, NULL);
