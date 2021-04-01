@@ -494,7 +494,7 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
 // 2. CC_REG:   This means that the root-set has been constructed but the collection hasn't started
 // 3. CC_COLLECTING: The collector sets this value to ccstate when it starts collecting using cas.
 //                   After its finished, the flag is set to CC_UNREG indicating that a new root set is needed.
-void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
+Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
@@ -535,7 +535,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
       assert(invariantForMutatorFrontier (s));
       assert(invariantForMutatorStack (s));
       endAtomic(s);
-      return;
+      return FALSE;
     }
   }
   else {
@@ -552,7 +552,7 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
       assert(invariantForMutatorFrontier (s));
       assert(invariantForMutatorStack (s));
       endAtomic(s);
-      return;
+      return FALSE;
     }
   }
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
@@ -593,6 +593,8 @@ void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
   endAtomic(s);
+
+  return TRUE;
 }
 
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {

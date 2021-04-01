@@ -52,7 +52,7 @@ signature MLTON_THREAD =
           (*force the runtime to create a hh for the left child*)
           val forceLeftHeap : int * thread -> unit
 
-          val registerCont : (('a) array) * (('b) array) * (('c) array) * thread -> unit
+          val registerCont : 'a array * 'b array * 'c array * thread -> bool
           val resetList    : thread -> unit
 
           (*Collect the depth = 1 HH of this thread*)
@@ -69,6 +69,8 @@ signature MLTON_THREAD =
 
           (* "put a new thread in the hierarchy *)
           val moveNewThreadToDepth : thread * int -> unit
+
+          val checkFinishedCCReadyToJoin: unit -> bool
         end
 
       type 'a t

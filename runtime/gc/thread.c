@@ -17,6 +17,30 @@
 /************************/
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
+Bool GC_HH_checkFinishedCCReadyToJoin(GC_state s) {
+  GC_thread thread = getThreadCurrent(s);
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  thread->exnStack = s->exnStack;
+  HM_HH_updateValues(thread, s->frontier);
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  /** Check that we are immediately below a root CC.
+    * TODO: eliminate the subHeapForRootCC to simplify.
+    */
+  bool inRightPlace =
+    thread->currentDepth == 2 &&
+    HM_HH_getDepth(hh) == 2 &&
+    hh->nextAncestor != NULL && HM_HH_getDepth(hh->nextAncestor) == 1 &&
+    hh->nextAncestor->subHeapForRootCC != NULL;
+
+  if (!inRightPlace)
+    return FALSE;
+
+  HM_HierarchicalHeap rhh = hh->nextAncestor->subHeapForRootCC;
+  return HM_HH_getConcurrentPack(rhh)->ccstate == CC_UNREG;
+}
+
+
 Word32 GC_HH_getDepth(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

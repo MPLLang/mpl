@@ -94,6 +94,8 @@ PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
  */
 PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word32 depth);
 
+PRIVATE Bool GC_HH_checkFinishedCCReadyToJoin(GC_state s);
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

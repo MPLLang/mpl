@@ -86,6 +86,8 @@ struct
     Prim.setMinLocalCollectionDepth (t, Word32.fromInt d)
   fun moveNewThreadToDepth (t, d) =
     Prim.moveNewThreadToDepth (t, Word32.fromInt d)
+  fun checkFinishedCCReadyToJoin () =
+    Prim.checkFinishedCCReadyToJoin (gcState ())
 end
 
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =

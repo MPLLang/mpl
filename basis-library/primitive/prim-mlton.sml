@@ -412,9 +412,9 @@ structure Thread =
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
-      val registerCont: ('a array) * ('b array) * ('c array) * thread -> unit =
-            _import "HM_HH_registerCont" runtime private:
-            ('a array) * ('b array) * ('c array) * thread -> unit;
+      val registerCont =
+        _import "HM_HH_registerCont" runtime private:
+        'a array * 'b array * 'c array * thread -> bool;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 
@@ -426,6 +426,7 @@ structure Thread =
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
       val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word32.word -> unit;
+      val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
    end
 
 structure Weak =

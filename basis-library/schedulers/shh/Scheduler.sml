@@ -61,6 +61,20 @@ struct
       )
     end
 
+(*
+  fun dbgmsg' m =
+    let
+      val p = myWorkerId ()
+      val _ = MLton.Parallel.Deprecated.takeLock printLock
+      val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
+    in
+      ( TextIO.output (TextIO.stdErr, msg)
+      ; TextIO.flushOut TextIO.stdErr
+      ; MLton.Parallel.Deprecated.releaseLock printLock
+      )
+    end
+*)
+
   (* ========================================================================
    * IDLENESS TRACKING
    *)
@@ -267,56 +281,61 @@ struct
         (extractResult fr, extractResult gr)
       end
 
-    fun forkGC (f : unit -> 'a, g : unit -> 'b) =
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
 
+    fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
+      let
         val rootHH = HH.getRoot thread
 
         fun gcFunc() =
-            (HH.collectThreadRoot(thread, rootHH)
-            ; returnToSched ()
-            )
+          ( HH.collectThreadRoot(thread, rootHH)
+          ; returnToSched ()
+          )
 
-        val cont_arr1 =  Array.array (1, SOME(f))
-        val cont_arr2 =  Array.array (1, SOME(g))
-        val cont_arr3 =  Array.array (1, SOME(gcFunc))
-        val _ = HH.registerCont(cont_arr1, cont_arr2, cont_arr3, thread)
-        val _ = HH.setDepth (thread, depth + 1)
-
-        (*force left heap must be after set Depth*)
-        val _ = HH.forceLeftHeap(myWorkerId(), thread)
-        val _ = push gcFunc
-        val fr = fork(f, g)
-        val gr =
-          if popDiscard() then
-            let
-              val _ = HH.collectThreadRoot(thread, rootHH)
-              val _ = HH.promoteChunks thread
-            in
-              HH.setDepth (thread, depth)
-              ; ()
-            end
-          else
-            ( clear()
-            ; setQueueDepth (myWorkerId ()) depth
-            ; HH.promoteChunks thread
-            ; HH.setDepth (thread, depth)
-            ; ()
-            )
+        val cont_arr1 = Array.array (1, SOME f)
+        val cont_arr2 = Array.array (1, SOME g)
+        val cont_arr3 = Array.array (1, SOME gcFunc)
       in
-        fr
+        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
+          fork (f, g)
+        else
+          ( HH.setDepth (thread, depth + 1)
+          ; HH.forceLeftHeap(myWorkerId(), thread)
+          ; push gcFunc
+          ; let
+              val result = fork (f, g)
+            in
+              if popDiscard() then
+                ( HH.collectThreadRoot(thread, rootHH)
+                ; HH.promoteChunks thread
+                ; HH.setDepth (thread, depth)
+                )
+              else
+                ();
+
+              result
+            end
+          )
       end
+
 
     and fork (f, g) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
+        val depth =
+          if not (depth = 2 andalso HH.checkFinishedCCReadyToJoin ()) then
+            depth
+          else
+            ( clear()
+            ; setQueueDepth (myWorkerId ()) (depth-1)
+            ; HH.promoteChunks thread
+            ; HH.setDepth (thread, depth-1)
+            ; depth-1
+            )
       in
         (* don't let us hit an error, just sequentialize instead *)
         if depth = 1 then
-          forkGC(f, g)
+          forkGC thread depth (f, g)
         else if depth < Queue.capacity then
           parfork thread depth (f, g)
         else
