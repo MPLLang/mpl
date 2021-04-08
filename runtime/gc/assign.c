@@ -63,9 +63,19 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   pointer srcp = objptrToPointer(src, NULL);
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
-  /* Internal or up-pointer. */
-  if (dstHH->depth >= srcHH->depth)
+  /* Up-pointer. */
+  if (dstHH->depth > srcHH->depth)
     return;
+
+  /* Internal pointer */
+  if (dstHH->depth == srcHH->depth) {
+    /* For concurrent collection of subregions. */
+    if (dstHH != srcHH && HM_HH_getConcurrentPack(srcHH)->ccstate == CC_UNREG) {
+      // HM_rememberAtLevel(srcHH, dst, field, src);
+      HM_HH_addRootForCollector(srcHH, srcp);
+    }
+    return;
+  }
 
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)

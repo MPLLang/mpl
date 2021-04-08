@@ -423,6 +423,16 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   newHH->subHeapForCC = subhh;
 }
 
+bool checkAllSubheapCCsCompleted(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  while (hh->subHeapForCC != NULL) {
+    hh = hh->subHeapForCC;
+    if (HM_HH_getConcurrentPack(hh)->ccstate != CC_UNREG)
+      return FALSE;
+  }
+  return TRUE;
+}
+
 void mergeCompletedCCs(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(HM_HH_isLevelHead(hh));
@@ -546,12 +556,14 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   CC_initStack(HM_HH_getConcurrentPack(hh));
 
-  mergeCompletedCCs(s, thread);
+  if (checkAllSubheapCCsCompleted(s, thread))
+    mergeCompletedCCs(s, thread);
 
   if (!checkPolicyforRoot(s, thread))
     return FALSE;
 
   splitHeapForCC(s, thread);
+  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
