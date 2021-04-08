@@ -243,7 +243,7 @@ struct
               returnToSched ()
           end
         val _ = push g'
-        val _ =
+        (* val _ =
               if (depth < internalGCThresh) then
                 let
                   val cont_arr1 =  Array.array (1, SOME(f))
@@ -255,7 +255,8 @@ struct
                   ; HH.forceLeftHeap(myWorkerId(), thread)
                 end
               else
-                (HH.setDepth (thread, depth + 1))
+                (HH.setDepth (thread, depth + 1)) *)
+        val _ = HH.setDepth (thread, depth + 1)
         (*force left heap must be after set Depth*)
         val fr = result f
         val gr =

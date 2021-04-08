@@ -204,6 +204,7 @@ void HM_HH_promoteChunks(
     /* There is a heap immediately above the leaf, so merge into that heap. */
     assert(NULL != hh->nextAncestor);
     assert(HM_HH_getDepth(hh->nextAncestor) == currentDepth-1);
+    assert(hh->subHeapForCC == NULL);
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
 
@@ -409,13 +410,55 @@ void mergeHeapForRootCC(GC_state s, GC_thread thread) {
   newHH->subHeapForCC = subhh;
 }
 
+void splitHeapForCC(GC_state s, GC_thread thread) {
+  assert(HM_HH_isLevelHead(thread->hierarchicalHeap));
+  HM_HierarchicalHeap subhh = thread->hierarchicalHeap;
+  HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(subhh));
+  assert(HM_HH_getDepth(subhh) == 1);
+  thread->hierarchicalHeap = newHH;
+  HM_chunk chunk =
+    HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
+  chunk->levelHead = HM_HH_getUFNode(newHH);
+  thread->currentChunk = chunk;
+  newHH->subHeapForCC = subhh;
+}
+
+void mergeCompletedCCs(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  assert(HM_HH_isLevelHead(hh));
+
+  HM_HierarchicalHeap *cursor = &(hh->subHeapForCC);
+  HM_HierarchicalHeap subhh = *cursor;
+  while (subhh != NULL) {
+    assert(HM_HH_isLevelHead(subhh));
+    assert(HM_HH_getDepth(hh) == HM_HH_getDepth(subhh));
+
+    if (HM_HH_getConcurrentPack(subhh)->ccstate != CC_UNREG) {
+      // This CC still in progress. Skip.
+      cursor = &(subhh->subHeapForCC);
+      subhh = *cursor;
+      continue;
+    }
+
+    // Otherwise, CC on this subheap is done. Merge it in.
+    HM_HierarchicalHeap next = subhh->subHeapForCC;
+    *cursor = next;
+    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
+      HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
+    HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(subhh));
+    HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(subhh));
+    linkInto(s, hh, subhh);
+    subhh = next;
+  }
+}
+
 bool checkPolicyforRoot(
   __attribute__((unused)) GC_state s,
   GC_thread thread)
 {
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == 1);
   assert(NULL != thread->hierarchicalHeap);
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap->subHeapForCC;
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
     HM_getChunkListSize(HM_HH_getChunkList(hh));
@@ -475,17 +518,67 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
   assert(HM_HH_getDepth(getThreadCurrent(s)->hierarchicalHeap) == 1);
 
-  if (NULL == getThreadCurrent(s)->hierarchicalHeap->subHeapForCC) {
-    getThreadCurrent(s)->hierarchicalHeap->subHeapForCC = HM_HH_new(s, 1);
-  }
+  // if (NULL == getThreadCurrent(s)->hierarchicalHeap->subHeapForCC) {
+  //   getThreadCurrent(s)->hierarchicalHeap->subHeapForCC = HM_HH_new(s, 1);
+  // }
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
-  return (void*)(getThreadCurrent(s)->hierarchicalHeap->subHeapForCC);
+  return (void*)(getThreadCurrent(s)->hierarchicalHeap);
 }
 
+
+// =============================================================================
+
+Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
+  GC_state s = pthread_getspecific(gcstate_key);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+
+  // So, we should really get rid of the extra argument.
+  assert(thread == getThreadCurrent(s));
+
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  CC_initStack(HM_HH_getConcurrentPack(hh));
+
+  mergeCompletedCCs(s, thread);
+
+  if (!checkPolicyforRoot(s, thread))
+    return FALSE;
+
+  splitHeapForCC(s, thread);
+  assert(thread->hierarchicalHeap->subHeapForCC == hh);
+
+  assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
+  assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);
+  assert(HM_getLevelHead(HM_getChunkOf(k)) == hh);
+  assert(HM_HH_getConcurrentPack(hh) != NULL);
+
+  HM_HH_getConcurrentPack(hh)->snapLeft = pointerToObjptr(kl, NULL);
+  HM_HH_getConcurrentPack(hh)->snapRight = pointerToObjptr(kr, NULL);
+  HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
+  HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
+
+  CC_clearStack(HM_HH_getConcurrentPack(hh));
+  // __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
+  HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  assert(invariantForMutatorFrontier (s));
+  assert(invariantForMutatorStack (s));
+  return TRUE;
+}
+
+
+#if 0
 // Story: ccstate for each hh has three values
 // 1. CC_UNREG: This means that the root-set for the next collection (if we want to collect) needs to be constructed.
 //              Either the previous root-set has already been used for a collection (which has finished) or this
@@ -595,6 +688,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
 
   return TRUE;
 }
+#endif
 
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {
   return getThreadCurrent(s)->hierarchicalHeap;

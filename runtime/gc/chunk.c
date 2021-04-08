@@ -456,7 +456,8 @@ void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier) {
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
-#if ASSERT
+#if 0
+//ASSERT
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
   // return;
   size_t size = 0;

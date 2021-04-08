@@ -465,6 +465,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // origList are added to the free list.
 
   bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
+  assert(isConcurrent);
 
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);
@@ -650,7 +651,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   /** This is safe (no race with any zips), because `targetHH` is split off
     * from the main spine of the program.
     */
-  HM_HH_freeAllDependants(s, targetHH, TRUE);
+  // HM_HH_freeAllDependants(s, targetHH, TRUE);
 
   HM_assertChunkListInvariants(origList);
 
