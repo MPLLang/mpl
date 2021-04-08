@@ -59,7 +59,7 @@ typedef struct HM_HierarchicalHeap {
     * and their union-find dependants, having a completely separate HH object
     * is nice because then we can free dependants during root CC.
     */
-  struct HM_HierarchicalHeap *subHeapForRootCC;
+  struct HM_HierarchicalHeap *subHeapForCC;
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage concurrentPack;

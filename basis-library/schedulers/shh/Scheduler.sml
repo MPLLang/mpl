@@ -294,27 +294,24 @@ struct
         val cont_arr1 = Array.array (1, SOME f)
         val cont_arr2 = Array.array (1, SOME g)
         val cont_arr3 = Array.array (1, SOME gcFunc)
-      in
-        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
-          fork (f, g)
-        else
-          ( HH.setDepth (thread, depth + 1)
-          ; HH.forceLeftHeap(myWorkerId(), thread)
-          ; push gcFunc
-          ; let
-              val result = fork (f, g)
-            in
-              if popDiscard() then
-                ( HH.collectThreadRoot(thread, rootHH)
-                ; HH.promoteChunks thread
-                ; HH.setDepth (thread, depth)
-                )
-              else
-                ();
+        val _ = HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)
+        val _ = HH.setDepth (thread, depth + 1)
+        val _ = HH.forceLeftHeap(myWorkerId(), thread)
+        val _ = push gcFunc
+        val result = fork (f, g)
 
-              result
-            end
-          )
+        val _ =
+          if popDiscard() then
+            HH.collectThreadRoot(thread, rootHH)
+          else
+            ( clear()
+            ; setQueueDepth (myWorkerId ()) depth
+            )
+
+        val _ = HH.promoteChunks thread
+        val _ = HH.setDepth (thread, depth)
+      in
+        result
       end
 
 
@@ -322,23 +319,13 @@ struct
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
-        val depth =
-          if not (depth = 2 andalso HH.checkFinishedCCReadyToJoin ()) then
-            depth
-          else
-            ( clear()
-            ; setQueueDepth (myWorkerId ()) (depth-1)
-            ; HH.promoteChunks thread
-            ; HH.setDepth (thread, depth-1)
-            ; depth-1
-            )
       in
-        (* don't let us hit an error, just sequentialize instead *)
         if depth = 1 then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity then
           parfork thread depth (f, g)
         else
+          (* don't let us hit an error, just sequentialize instead *)
           (f (), g ())
       end
   end

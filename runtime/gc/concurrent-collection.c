@@ -357,9 +357,6 @@ bool claimHeap(HM_HierarchicalHeap heap) {
     return FALSE;
   }
 
-  /** We should never be working on a (root) heap that was split. */
-  assert(NULL == heap->subHeapForRootCC);
-
   ConcurrentPackage cp = HM_HH_getConcurrentPack(heap);
   if(!readyforCollection(cp)) {
     return FALSE;
@@ -444,7 +441,6 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   /** There is no race here, because for truly concurrent GC (depth 1), the
     * hh has been split.
     */
-  assert(NULL == hh->subHeapForRootCC);
   HM_chunkList y = HM_HH_getRemSet(hh);
   struct HM_foreachDownptrClosure bucketIfValidAtListClosure =
   {.fun = bucketIfValidAtList, .env = (void*)x};
@@ -460,8 +456,6 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct timespec stopTime;
 
   timespec_now(&startTime);
-
-  assert(NULL == targetHH->subHeapForRootCC);
 
   ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
   ensureCallSanity(s, targetHH, cp);

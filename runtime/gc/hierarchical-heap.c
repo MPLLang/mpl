@@ -246,7 +246,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 
   // hh->representative = NULL;
   hh->ufNode = uf;
-  hh->subHeapForRootCC = NULL;
+  hh->subHeapForCC = NULL;
   hh->depth = depth;
   hh->nextAncestor = NULL;
   // hh->dependant1 = NULL;
@@ -386,13 +386,13 @@ void HM_HH_forceLeftHeap(
   endAtomic(s);
 }
 
-/** Migrate all chunks of the thread's HH into the side heap (subHeapForRootCC),
+/** Migrate all chunks of the thread's HH into the side heap (subHeapForCC),
   * used for concurrent collection. Also allocate a fresh hierarchical heap
   * for the thread.
   */
 void mergeHeapForRootCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  HM_HierarchicalHeap subhh = hh->subHeapForRootCC;
+  HM_HierarchicalHeap subhh = hh->subHeapForCC;
   assert(HM_HH_getDepth(hh) == 1);
   assert(NULL != subhh);
 
@@ -406,7 +406,7 @@ void mergeHeapForRootCC(GC_state s, GC_thread thread) {
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = HM_HH_getUFNode(newHH);
   thread->currentChunk = chunk;
-  newHH->subHeapForRootCC = subhh;
+  newHH->subHeapForCC = subhh;
 }
 
 bool checkPolicyforRoot(
@@ -415,9 +415,8 @@ bool checkPolicyforRoot(
 {
   assert(HM_HH_getDepth(thread->hierarchicalHeap) == 1);
   assert(NULL != thread->hierarchicalHeap);
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap->subHeapForRootCC;
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap->subHeapForCC;
   assert(NULL != hh);
-  assert(NULL == hh->subHeapForRootCC);
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
     HM_getChunkListSize(HM_HH_getChunkList(hh));
   // return true;
@@ -476,15 +475,15 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
   assert(HM_HH_getDepth(getThreadCurrent(s)->hierarchicalHeap) == 1);
 
-  if (NULL == getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC) {
-    getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC = HM_HH_new(s, 1);
+  if (NULL == getThreadCurrent(s)->hierarchicalHeap->subHeapForCC) {
+    getThreadCurrent(s)->hierarchicalHeap->subHeapForCC = HM_HH_new(s, 1);
   }
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
-  return (void*)(getThreadCurrent(s)->hierarchicalHeap->subHeapForRootCC);
+  return (void*)(getThreadCurrent(s)->hierarchicalHeap->subHeapForCC);
 }
 
 // Story: ccstate for each hh has three values
@@ -514,17 +513,17 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
         ((void*)(s->frontier)));
   }
 
-  /** At depth 1, there is a special secondary "subHeapForRootCC" which is
+  /** At depth 1, there is a special secondary "subHeapForCC" which is
     * used instead of the thread's hh at depth 1. This is to avoid races
     * between the processor evaluating the thread, and the processor working
     * on root CC.
     */
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   if (1 == HM_HH_getDepth(hh)) {
-    assert(NULL != hh->subHeapForRootCC);
-    hh = hh->subHeapForRootCC;
+    assert(NULL != hh->subHeapForCC);
+    hh = hh->subHeapForCC;
   }
-  assert(NULL == hh->subHeapForRootCC);
+  assert(NULL == hh->subHeapForCC);
 
   CC_initStack(HM_HH_getConcurrentPack(hh));
 
