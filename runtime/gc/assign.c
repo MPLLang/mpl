@@ -67,21 +67,20 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (dstHH->depth > srcHH->depth)
     return;
 
-  /* Internal pointer */
-  if (dstHH->depth == srcHH->depth) {
-    /* For concurrent collection of subregions. */
-    if (dstHH != srcHH && HM_HH_getConcurrentPack(srcHH)->ccstate == CC_UNREG) {
-      // HM_rememberAtLevel(srcHH, dst, field, src);
-      HM_HH_addRootForCollector(srcHH, srcp);
-    }
+  /* Internal pointer. It's safe to ignore an internal pointer if:
+   *   1. it's contained entirely within one subheap, or
+   *   2. the pointed-to object (src) lives in an already snapshotted subregion
+   */
+  if ( (dstHH == srcHH) ||
+       (dstHH->depth == srcHH->depth &&
+         HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG) )
     return;
-  }
 
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
     return;
 
-  /* Otherwise, remember the down-pointer! */
+  /* Otherwise, remember the pointer! */
   uint32_t d = srcHH->depth;
   GC_thread thread = getThreadCurrent(s);
   HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);

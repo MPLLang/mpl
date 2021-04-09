@@ -158,19 +158,25 @@ bool checkValid(objptr dst, objptr* field, objptr src) {
   if (*field != src) {
     /* Another write to this location has since invalidated this particular
      * remembered entry. */
-    return false;
+    return FALSE;
   }
 
-  uint32_t dstDepth = HM_getObjptrDepth(dst);
-  uint32_t srcDepth = HM_getObjptrDepth(src);
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+  HM_HierarchicalHeap srchh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
 
+#if ASSERT
+  uint32_t dstDepth = dsthh->depth;
+  uint32_t srcDepth = srchh->depth;
   assert(dstDepth <= srcDepth);
+#endif
 
-  if (dstDepth == srcDepth) {
+  if (dsthh == srchh) {
     /* levels have coincided due to joins, so ignore this entry. */
-    return false;
+    return FALSE;
   }
-  return true;
+  return TRUE;
 }
 
 void bucketIfValidAtList(__attribute__((unused)) GC_state s,
