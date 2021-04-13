@@ -400,7 +400,8 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
     live,
     100.0 * (1.0 - (double)live / (double)afterSize));
 
-  HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
+  // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
+  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_UNREG, __ATOMIC_SEQ_CST);
   s->amInCC = FALSE;
 }
 
@@ -434,7 +435,8 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   // Mark that collection is complete
-  HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
+  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_UNREG, __ATOMIC_SEQ_CST);
+  // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
 }
 
 void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
@@ -651,7 +653,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   /** This is safe (no race with any zips), because `targetHH` is split off
     * from the main spine of the program.
     */
-  // HM_HH_freeAllDependants(s, targetHH, TRUE);
+  HM_HH_freeAllDependants(s, targetHH, TRUE);
 
   HM_assertChunkListInvariants(origList);
 

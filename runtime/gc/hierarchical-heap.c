@@ -433,9 +433,12 @@ bool checkAllSubheapCCsCompleted(GC_state s, GC_thread thread) {
   return TRUE;
 }
 
-void mergeCompletedCCs(GC_state s, GC_thread thread) {
+#if 0
+size_t mergeCompletedCCs(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(HM_HH_isLevelHead(hh));
+
+  size_t count = 0;
 
   HM_HierarchicalHeap *cursor = &(hh->subHeapForCC);
   HM_HierarchicalHeap subhh = *cursor;
@@ -459,7 +462,40 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(subhh));
     linkInto(s, hh, subhh);
     subhh = next;
+
+    count++;
   }
+
+  return count;
+}
+#endif
+
+size_t mergeCompletedCCs(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  assert(HM_HH_isLevelHead(hh));
+
+  HM_HierarchicalHeap subhh = hh->subHeapForCC;
+  hh->subHeapForCC = NULL;
+
+  size_t count = 0;
+
+  while (subhh != NULL) {
+    assert(HM_HH_isLevelHead(subhh));
+    assert(HM_HH_getDepth(hh) == HM_HH_getDepth(subhh));
+    assert( HM_HH_getConcurrentPack(subhh)->ccstate == CC_UNREG );
+
+    HM_HierarchicalHeap next = subhh->subHeapForCC;
+    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
+      HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
+    HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(subhh));
+    HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(subhh));
+    linkInto(s, hh, subhh);
+    subhh = next;
+
+    count++;
+  }
+
+  return count;
 }
 
 bool checkPolicyforRoot(
@@ -556,15 +592,18 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   CC_initStack(HM_HH_getConcurrentPack(hh));
 
-  if (checkAllSubheapCCsCompleted(s, thread))
-    mergeCompletedCCs(s, thread);
+  if (checkAllSubheapCCsCompleted(s, thread)) {
+    size_t numMerged = mergeCompletedCCs(s, thread);
+    if (numMerged > 0) {
+      LOG(LM_CC_COLLECTION, LL_INFO,
+        "merged %zu finished CCs",
+        numMerged);
+    }
+    assert(NULL == thread->hierarchicalHeap->subHeapForCC);
+  }
 
   if (!checkPolicyforRoot(s, thread))
     return FALSE;
-
-  splitHeapForCC(s, thread);
-  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
-  assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);
@@ -577,8 +616,12 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
 
   CC_clearStack(HM_HH_getConcurrentPack(hh));
-  // __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
-  HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
+  __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
+  // HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
+
+  splitHeapForCC(s, thread);
+  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
+  assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);

@@ -243,8 +243,20 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   assert(args->fromSpace[args->toDepth] != NULL);
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
-  assert(HM_getObjptrDepth(*field) == args->toDepth);
+  objptr newloc = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = newloc;
+  assert(HM_getObjptrDepth(newloc) == args->toDepth);
+
+  // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
+
+  if (args->toDepth == 1) {
+    LOG(LM_HH_PROMOTION, LL_INFO, "remembering "FMTOBJPTR" at root", newloc);
+    HM_rememberAtLevel(
+      args->fromSpace[args->toDepth],
+      args->containingObject,
+      field,
+      newloc);
+  }
 }
 
 /* SAM_NOTE: TODO: DRY: very similar to promoteDownPtr */
@@ -285,6 +297,18 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
-  assert(HM_getObjptrDepth(*field) == args->toDepth);
+  objptr newloc = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = newloc;
+  assert(HM_getObjptrDepth(newloc) == args->toDepth);
+
+  // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
+
+  if (args->toDepth == 1) {
+    LOG(LM_HH_PROMOTION, LL_INFO, "remembering "FMTOBJPTR" at root", newloc);
+    HM_rememberAtLevel(
+      args->fromSpace[args->toDepth],
+      args->containingObject,
+      field,
+      newloc);
+  }
 }
