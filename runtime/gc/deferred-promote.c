@@ -164,7 +164,7 @@ bool checkValid(objptr dst, objptr* field, objptr src) {
   HM_HierarchicalHeap dsthh =
     HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
   HM_HierarchicalHeap srchh =
-    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
 
 #if ASSERT
   uint32_t dstDepth = dsthh->depth;
@@ -207,7 +207,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,
-                    __attribute__((unused)) objptr dst,
+                    objptr dst,
                     objptr* field,
                     objptr src,
                     void* rawArgs)
@@ -253,7 +253,7 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
     LOG(LM_HH_PROMOTION, LL_INFO, "remembering "FMTOBJPTR" at root", newloc);
     HM_rememberAtLevel(
       args->fromSpace[args->toDepth],
-      args->containingObject,
+      dst,
       field,
       newloc);
   }

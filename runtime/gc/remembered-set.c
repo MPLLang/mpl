@@ -27,6 +27,7 @@ void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src) {
 
 void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objptr src) {
   assert(hh != NULL);
+  assert(isObjptr(dst));
   HM_remember(HM_HH_getRemSet(hh), dst, field, src);
 }
 
