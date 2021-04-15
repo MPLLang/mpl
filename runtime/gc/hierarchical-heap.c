@@ -163,7 +163,7 @@ void HM_HH_merge(
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
 
   // free stack of joining heap
-  CC_freeStack(HM_HH_getConcurrentPack(childHH));
+  CC_freeFSet(HM_HH_getConcurrentPack(childHH));
 
   /* Merge levels. */
   parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
@@ -212,7 +212,7 @@ void HM_HH_promoteChunks(
     /* shortcut.  */
     thread->hierarchicalHeap = hh->nextAncestor;
     /* don't need the snapshot for this heap now. */
-    CC_freeStack(HM_HH_getConcurrentPack(hh));
+    CC_freeFSet(HM_HH_getConcurrentPack(hh));
     linkInto(s, hh->nextAncestor, hh);
   }
 
@@ -238,7 +238,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   uf->representative = NULL;
   uf->payload = hh;
 
-  HM_HH_getConcurrentPack(hh)->rootList = NULL;
+  HM_HH_getConcurrentPack(hh)->fSet = NULL;
   HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
@@ -598,7 +598,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  CC_initStack(HM_HH_getConcurrentPack(hh));
+  CC_initFSet(HM_HH_getConcurrentPack(hh));
 
   mergeCompletedCCs(s, thread);
 
@@ -620,12 +620,12 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
   HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
 
-  CC_clearStack(HM_HH_getConcurrentPack(hh));
+  CC_clearFSet(HM_HH_getConcurrentPack(hh));
   __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
   // HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
 
   splitHeapForCC(s, thread);
-  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
+  CC_initFSet(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   s->frontier = HM_HH_getFrontier(thread);
@@ -744,7 +744,7 @@ bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
 void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
   assert(hh!=NULL);
   if(HM_HH_getConcurrentPack(hh)!=NULL){
-    CC_addToStack(HM_HH_getConcurrentPack(hh), p);
+    CC_addToFSet(HM_HH_getConcurrentPack(hh), p);
   }
 }
 

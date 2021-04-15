@@ -13,40 +13,43 @@
 
 void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
 void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
+
+static size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
+                         GC_thread thread);
 #define ASSERT2 0
 
-void CC_initStack(ConcurrentPackage cp) {
+void CC_initFSet(ConcurrentPackage cp) {
   // don't re-initialize
-  if(cp->rootList!=NULL) {
+  if(cp->fSet!=NULL) {
     return;
   }
 
-  CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-  CC_stack_init(temp, 2);
-  cp->rootList = temp;
+  CC_forgotten* temp  = (struct CC_forgotten*) malloc(sizeof(struct CC_forgotten));
+  CC_forgotten_init(temp, 2);
+  cp->fSet = temp;
 }
 
-void CC_addToStack (ConcurrentPackage cp, pointer p) {
-  if(cp->rootList==NULL) {
+void CC_addToFSet (ConcurrentPackage cp, pointer p) {
+  if(cp->fSet==NULL) {
     // Its NULL because we won't collect this heap. so no need to snapshot
     return;
     // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     // CC_initStack(cp);
   }
-  CC_stack_push(cp->rootList, (void*)p);
+  CC_forgotten_push(cp->fSet, (void*)p);
 }
 
-void CC_clearStack(ConcurrentPackage cp) {
-  if(cp->rootList!=NULL) {
-    CC_stack_clear(cp->rootList);
+void CC_clearFSet(ConcurrentPackage cp) {
+  if(cp->fSet!=NULL) {
+    CC_forgotten_clear(cp->fSet);
   }
 }
 
-void CC_freeStack(ConcurrentPackage cp) {
-  if(cp->rootList!=NULL) {
-    CC_stack_free(cp->rootList);
-    free(cp->rootList);
-    cp->rootList = NULL;
+void CC_freeFSet(ConcurrentPackage cp) {
+  if(cp->fSet!=NULL) {
+    CC_forgotten_free(cp->fSet);
+    free(cp->fSet);
+    cp->fSet = NULL;
   }
 }
 
@@ -343,7 +346,7 @@ HM_HierarchicalHeap findHeap (GC_thread thread, uint32_t depth) {
 bool readyforCollection(ConcurrentPackage cp) {
   bool ready =  (cp != NULL && cp->ccstate == CC_REG);
   if (ready) {
-    assert(cp->rootList!=NULL);
+    assert(cp->fSet!=NULL);
     assert(cp->snapLeft != BOGUS_OBJPTR);
     assert(cp->snapRight != BOGUS_OBJPTR);
     assert(cp->stack != BOGUS_OBJPTR);
@@ -452,7 +455,7 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   *y = *x;
 }
 
-size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
+static size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
   struct timespec startTime;
   struct timespec stopTime;
@@ -540,7 +543,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // Scanning the stack races with the thread using it.
   saveNoForward(s, (void*)(thread->stack), &lists);
   saveNoForward(s, (void*)thread, &lists);
-  forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
+  forEachForgottenPointer(s, cp->fSet, forwardPtrChunk, &lists);
 
 #if ASSERT
   if (HM_HH_getDepth(targetHH) != 1){
@@ -564,7 +567,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceUnmark(s, &(cp->snapTemp), &lists);
   forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
-  forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
+  forEachForgottenPointer(s, cp->fSet, unmarkPtrChunk, &lists);
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
