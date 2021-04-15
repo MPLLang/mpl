@@ -60,6 +60,7 @@ typedef struct HM_HierarchicalHeap {
     * is nice because then we can free dependants during root CC.
     */
   struct HM_HierarchicalHeap *subHeapForCC;
+  struct HM_HierarchicalHeap *subHeapCompletedCC;
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage concurrentPack;
