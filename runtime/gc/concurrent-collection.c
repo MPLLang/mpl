@@ -393,7 +393,8 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   size_t diff = beforeSize > afterSize ? beforeSize - afterSize : 0;
 
   LOG(LM_CC_COLLECTION, LL_INFO,
-    "before: %zu after: %zu (-%.01lf%%) live: %zu (%.01lf%% fragmented)",
+    "finished at depth %u. before: %zu after: %zu (-%.01lf%%) live: %zu (%.01lf%% fragmented)",
+    heap->depth,
     beforeSize,
     afterSize,
     100.0 * ((double)diff / (double)beforeSize),
@@ -467,7 +468,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // origList are added to the free list.
 
   bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
-  assert(isConcurrent);
+  // assert(isConcurrent);
 
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);

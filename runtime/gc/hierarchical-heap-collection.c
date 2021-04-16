@@ -83,6 +83,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     return;
   }
 
+  if (NULL != hh->subHeapForCC) {
+    LOG(LM_HH_COLLECTION, LL_INFO,
+      "Skipping local collection at depth %u due to outstanding CC",
+      HM_HH_getDepth(hh));
+    return;
+  }
+
   if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
     LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection, deque not registered yet");
     return;

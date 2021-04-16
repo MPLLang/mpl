@@ -37,6 +37,66 @@ static inline void linkInto(
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+
+/** link the CC-chain of hh2 into hh1. */
+void linkCCChains(
+  GC_state s,
+  HM_HierarchicalHeap hh1,
+  HM_HierarchicalHeap hh2)
+{
+  assert(hh1 != NULL);
+  assert(hh2 != NULL);
+  // assert(HM_HH_getDepth(hh1) == HM_HH_getDepth(hh2));
+
+  if (NULL == hh1->subHeapForCC) {
+    assert(NULL == hh1->subHeapCompletedCC);
+    hh1->subHeapForCC = hh2->subHeapForCC;
+    hh1->subHeapCompletedCC = hh2->subHeapCompletedCC;
+    hh2->subHeapForCC = NULL;
+    hh2->subHeapCompletedCC = NULL;
+    return;
+  }
+
+  if (NULL == hh2->subHeapForCC) {
+    assert(NULL == hh2->subHeapCompletedCC);
+    return;
+  }
+
+  assert(NULL != hh1->subHeapForCC);
+  assert(NULL != hh1->subHeapCompletedCC);
+  assert(NULL != hh2->subHeapForCC);
+  assert(NULL != hh2->subHeapCompletedCC);
+
+  HM_HierarchicalHeap cc1 = hh1->subHeapCompletedCC;
+  HM_HierarchicalHeap cc2 = hh2->subHeapCompletedCC;
+
+  /** Link the two chains:
+    *   1. traverse the hh2 cc-chain and set all the subHeapCompletedCC
+    *      pointers to point towards hh1's completed subheap.
+    *   2. at the end of hh2's cc-chain, link its next-pointer to the first
+    *      subheap of hh1
+    *   3. set hh1 first subheap to first subheap of second.
+    */
+  HM_HierarchicalHeap cursor = hh2->subHeapForCC;
+  while (cursor != NULL) {
+    cursor->subHeapCompletedCC = cc1;
+    if (NULL == cursor->subHeapForCC) {
+      cursor->subHeapForCC = hh1->subHeapForCC;
+      break;
+    }
+    cursor = cursor->subHeapForCC;
+  }
+  hh1->subHeapForCC = hh2->subHeapForCC;
+
+  /** Finally, merge the completed subheaps. */
+  HM_appendChunkList(HM_HH_getChunkList(cc1), HM_HH_getChunkList(cc2));
+  HM_appendChunkList(HM_HH_getRemSet(cc1), HM_HH_getRemSet(cc2));
+  HM_HH_getConcurrentPack(cc1)->bytesSurvivedLastCollection +=
+      HM_HH_getConcurrentPack(cc2)->bytesSurvivedLastCollection;
+  linkInto(s, cc1, cc2);
+}
+
+
 HM_HierarchicalHeap HM_HH_zip(
   GC_state s,
   HM_HierarchicalHeap hh1,
@@ -71,6 +131,7 @@ HM_HierarchicalHeap HM_HH_zip(
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
       HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
+      linkCCChains(s, hh1, hh2);
 
       // This has to happen before linkInto (which frees hh2)
       HM_HierarchicalHeap hh2anc = hh2->nextAncestor;
@@ -208,15 +269,29 @@ void HM_HH_promoteChunks(
     assert(hh->subHeapCompletedCC == NULL);
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
+    linkCCChains(s, hh->nextAncestor, hh);
 
     /* shortcut.  */
     thread->hierarchicalHeap = hh->nextAncestor;
     /* don't need the snapshot for this heap now. */
     CC_freeStack(HM_HH_getConcurrentPack(hh));
     linkInto(s, hh->nextAncestor, hh);
+    hh = thread->hierarchicalHeap;
   }
 
-  assert(HM_HH_getDepth(thread->hierarchicalHeap) < thread->currentDepth);
+  assert(hh == thread->hierarchicalHeap);
+  uint32_t newDepth = HM_HH_getDepth(hh);
+
+  if (hh->subHeapCompletedCC != NULL) hh->subHeapCompletedCC->depth = newDepth;
+
+  for (HM_HierarchicalHeap cursor = hh->subHeapForCC;
+       NULL != cursor;
+       cursor = cursor->subHeapForCC)
+  {
+    cursor->depth = newDepth;
+  }
+
+  assert(newDepth < thread->currentDepth);
   assertInvariants(thread);
 }
 
@@ -392,7 +467,6 @@ void HM_HH_forceLeftHeap(
 void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(HM_HH_isLevelHead(hh));
-  assert(HM_HH_getDepth(hh) == 1);
   assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_REG);
 
   HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
@@ -465,9 +539,10 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     hh->subHeapCompletedCC = NULL;
   }
 
-  if (numMerged > 0) {
+  if (numMerged > 0 || numInProgress > 0) {
     LOG(LM_CC_COLLECTION, LL_INFO,
-      "merged %zu finished CCs; still %zu in progress",
+      "depth %u: merged %zu finished CCs; still %zu in progress",
+      HM_HH_getDepth(hh),
       numMerged,
       numInProgress);
   }
@@ -480,7 +555,6 @@ bool checkPolicyforRoot(
   __attribute__((unused)) GC_state s,
   GC_thread thread)
 {
-  assert(HM_HH_getDepth(thread->hierarchicalHeap) == 1);
   assert(NULL != thread->hierarchicalHeap);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
@@ -534,15 +608,10 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   assert(getThreadCurrent(s) == thread);
 #endif
 
-  if (getThreadCurrent(s)->currentDepth != 1) {
-    DIE("not at root");
-  }
-
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
-  assert(HM_HH_getDepth(getThreadCurrent(s)->hierarchicalHeap) == 1);
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
