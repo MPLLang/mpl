@@ -391,6 +391,12 @@ void HM_HH_forceLeftHeap(
 
 void splitHeapForCC(GC_state s, GC_thread thread) {
   assert(HM_HH_isLevelHead(thread->hierarchicalHeap));
+
+  if (NULL == thread->hierarchicalHeap->subHeapCompletedCC) {
+    thread->hierarchicalHeap->subHeapCompletedCC =
+      HM_HH_new(s, HM_HH_getDepth(thread->hierarchicalHeap));
+  }
+
   HM_HierarchicalHeap subhh = thread->hierarchicalHeap;
   HM_HierarchicalHeap completed = subhh->subHeapCompletedCC;
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(subhh));
@@ -402,7 +408,6 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   thread->currentChunk = chunk;
   newHH->subHeapForCC = subhh;
   newHH->subHeapCompletedCC = completed;
-  subhh->subHeapCompletedCC = NULL;
 }
 
 // bool checkAllSubheapCCsCompleted(GC_state s, GC_thread thread) {
@@ -427,7 +432,8 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
   while (subhh != NULL) {
     assert(HM_HH_isLevelHead(subhh));
     assert(HM_HH_getDepth(hh) == HM_HH_getDepth(subhh));
-    assert(NULL == subhh->subHeapCompletedCC);
+    assert(NULL != subhh->subHeapCompletedCC);
+    assert(hh->subHeapCompletedCC == subhh->subHeapCompletedCC);
 
     if (HM_HH_getConcurrentPack(subhh)->ccstate != CC_UNREG) {
       // This CC still in progress. Skip.
@@ -442,22 +448,20 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     *cursor = next;
     subhh->subHeapForCC = NULL;
 
-    if (NULL == hh->subHeapCompletedCC) {
-      hh->subHeapCompletedCC = subhh;
-    }
-    else {
-      HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
-      HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection +=
-        HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
-      HM_appendChunkList(HM_HH_getChunkList(completed), HM_HH_getChunkList(subhh));
-      HM_appendChunkList(HM_HH_getRemSet(completed), HM_HH_getRemSet(subhh));
-      linkInto(s, completed, subhh);
-    }
+    HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
+    HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection +=
+      HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
+    HM_appendChunkList(HM_HH_getChunkList(completed), HM_HH_getChunkList(subhh));
+    HM_appendChunkList(HM_HH_getRemSet(completed), HM_HH_getRemSet(subhh));
+    linkInto(s, completed, subhh);
 
     subhh = next;
     numMerged++;
   }
 
+  /** All subheap CCs finished and merged into subHeapCompletedCC, so now we
+    * can merge back into main heap.
+    */
   if (NULL == hh->subHeapForCC && NULL != hh->subHeapCompletedCC) {
     HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
     HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
@@ -478,35 +482,6 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
   return;
 }
 
-#if 0
-size_t mergeCompletedCCs(GC_state s, GC_thread thread) {
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  assert(HM_HH_isLevelHead(hh));
-
-  HM_HierarchicalHeap subhh = hh->subHeapForCC;
-  hh->subHeapForCC = NULL;
-
-  size_t count = 0;
-
-  while (subhh != NULL) {
-    assert(HM_HH_isLevelHead(subhh));
-    assert(HM_HH_getDepth(hh) == HM_HH_getDepth(subhh));
-    assert( HM_HH_getConcurrentPack(subhh)->ccstate == CC_UNREG );
-
-    HM_HierarchicalHeap next = subhh->subHeapForCC;
-    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
-      HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
-    HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(subhh));
-    HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(subhh));
-    linkInto(s, hh, subhh);
-    subhh = next;
-
-    count++;
-  }
-
-  return count;
-}
-#endif
 
 bool checkPolicyforRoot(
   __attribute__((unused)) GC_state s,
