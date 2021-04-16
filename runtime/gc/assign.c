@@ -101,7 +101,13 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   GC_thread thread = getThreadCurrent(s);
   HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
   assert(NULL != hh);
-  HM_rememberAtLevel(hh, dst, field, src);
+  if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
+    HM_rememberAtLevel(hh, dst, field, src);
+  }
+  else {
+    assert(NULL != hh->subHeapCompletedCC);
+    HM_rememberAtLevel(hh->subHeapCompletedCC, dst, field, src);
+  }
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */
