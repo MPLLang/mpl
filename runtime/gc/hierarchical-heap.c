@@ -390,35 +390,28 @@ void HM_HH_forceLeftHeap(
 }
 
 void splitHeapForCC(GC_state s, GC_thread thread) {
-  assert(HM_HH_isLevelHead(thread->hierarchicalHeap));
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  assert(HM_HH_isLevelHead(hh));
+  assert(HM_HH_getDepth(hh) == 1);
+  assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_REG);
 
-  if (NULL == thread->hierarchicalHeap->subHeapCompletedCC) {
-    thread->hierarchicalHeap->subHeapCompletedCC =
-      HM_HH_new(s, HM_HH_getDepth(thread->hierarchicalHeap));
+  HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
+  if (NULL == completed) {
+    completed = HM_HH_new(s, HM_HH_getDepth(hh));
+    HM_HH_getConcurrentPack(completed)->ccstate = CC_DONE;
+    hh->subHeapCompletedCC = completed;
   }
 
-  HM_HierarchicalHeap subhh = thread->hierarchicalHeap;
-  HM_HierarchicalHeap completed = subhh->subHeapCompletedCC;
-  HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(subhh));
-  assert(HM_HH_getDepth(subhh) == 1);
+  HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk =
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = HM_HH_getUFNode(newHH);
   thread->currentChunk = chunk;
-  newHH->subHeapForCC = subhh;
+  newHH->subHeapForCC = hh;
   newHH->subHeapCompletedCC = completed;
 }
 
-// bool checkAllSubheapCCsCompleted(GC_state s, GC_thread thread) {
-//   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-//   while (hh->subHeapForCC != NULL) {
-//     hh = hh->subHeapForCC;
-//     if (HM_HH_getConcurrentPack(hh)->ccstate != CC_UNREG)
-//       return FALSE;
-//   }
-//   return TRUE;
-// }
 
 void mergeCompletedCCs(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
@@ -435,7 +428,7 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     assert(NULL != subhh->subHeapCompletedCC);
     assert(hh->subHeapCompletedCC == subhh->subHeapCompletedCC);
 
-    if (HM_HH_getConcurrentPack(subhh)->ccstate != CC_UNREG) {
+    if (HM_HH_getConcurrentPack(subhh)->ccstate != CC_DONE) {
       // This CC still in progress. Skip.
       cursor = &(subhh->subHeapForCC);
       subhh = *cursor;

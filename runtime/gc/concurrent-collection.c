@@ -401,7 +401,7 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
     100.0 * (1.0 - (double)live / (double)afterSize));
 
   // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
-  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_UNREG, __ATOMIC_SEQ_CST);
+  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_DONE, __ATOMIC_SEQ_CST);
   s->amInCC = FALSE;
 }
 
@@ -435,7 +435,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   }
 
   // Mark that collection is complete
-  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_UNREG, __ATOMIC_SEQ_CST);
+  __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_DONE, __ATOMIC_SEQ_CST);
   // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
 }
 

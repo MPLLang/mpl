@@ -30,9 +30,10 @@ typedef struct ConcurrentCollectArgs {
 
 
 enum CCState{
-	CC_UNREG,
-	CC_REG,
-	CC_COLLECTING
+  CC_UNREG,
+  CC_REG,
+  CC_COLLECTING,
+  CC_DONE
 };
 
 typedef struct ConcurrentPackage {
