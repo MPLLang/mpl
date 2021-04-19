@@ -83,9 +83,9 @@ void HM_ensureHierarchicalHeapAssurances(
 
   if (desiredScope <= thread->currentDepth) {
     /* too much allocated, so let's collect */
-    for(uint32_t i = 2; i < desiredScope; i++) {
-        CC_collectAtPublicLevel(s, thread, i);
-    }
+    // for(uint32_t i = 2; i < desiredScope; i++) {
+    //     CC_collectAtPublicLevel(s, thread, i);
+    // }
 
     HM_HHC_collectLocal(desiredScope);
 

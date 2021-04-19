@@ -166,13 +166,10 @@ bool checkValid(objptr dst, objptr* field, objptr src) {
   HM_HierarchicalHeap srchh =
     HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
 
-#if ASSERT
   uint32_t dstDepth = dsthh->depth;
   uint32_t srcDepth = srchh->depth;
-  assert(dstDepth <= srcDepth);
-#endif
 
-  if (dsthh == srchh) {
+  if ( (dstDepth > srcDepth) || (dsthh == srchh) ) {
     /* levels have coincided due to joins, so ignore this entry. */
     return FALSE;
   }
@@ -249,8 +246,16 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
 
   // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
 
-  if (args->toDepth == 1) {
-    LOG(LM_HH_PROMOTION, LL_INFO, "remembering "FMTOBJPTR" at root", newloc);
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+  assert(HM_HH_getDepth(dsthh) == args->toDepth);
+
+  if (dsthh != args->fromSpace[args->toDepth]) {
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembering "FMTOBJPTR" at depth %u",
+      newloc,
+      args->toDepth);
+
     HM_rememberAtLevel(
       args->fromSpace[args->toDepth],
       dst,
@@ -303,8 +308,16 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
   // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
 
-  if (args->toDepth == 1) {
-    LOG(LM_HH_PROMOTION, LL_INFO, "remembering "FMTOBJPTR" at root", newloc);
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(args->containingObject, NULL)));
+  assert(HM_HH_getDepth(dsthh) == args->toDepth);
+
+  if (dsthh != args->fromSpace[args->toDepth]) {
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembering "FMTOBJPTR" at depth %u",
+      newloc,
+      args->toDepth);
+
     HM_rememberAtLevel(
       args->fromSpace[args->toDepth],
       args->containingObject,

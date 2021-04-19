@@ -543,18 +543,18 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   saveNoForward(s, (void*)thread, &lists);
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
-#if ASSERT
-  if (HM_HH_getDepth(targetHH) != 1){
-    struct GC_foreachObjptrClosure printObjPtrInScopeClosure =
-    {.fun = printObjPtrInScopeFunction, .env =  &lists};
-    foreachObjptrInObject(
-      s,
-      objptrToPointer(thread->stack, NULL),
-      &trueObjptrPredicateClosure,
-      &printObjPtrInScopeClosure,
-      FALSE);
-  }
-#endif
+// #if ASSERT
+//   if (HM_HH_getDepth(targetHH) != 1){
+//     struct GC_foreachObjptrClosure printObjPtrInScopeClosure =
+//     {.fun = printObjPtrInScopeFunction, .env =  &lists};
+//     foreachObjptrInObject(
+//       s,
+//       objptrToPointer(thread->stack, NULL),
+//       &trueObjptrPredicateClosure,
+//       &printObjPtrInScopeClosure,
+//       FALSE);
+//   }
+// #endif
 
   struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
   {.fun = unmarkDownPtrChunk, .env = &lists};

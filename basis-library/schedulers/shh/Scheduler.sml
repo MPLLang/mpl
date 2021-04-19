@@ -299,7 +299,7 @@ struct
         val _ = HH.setDepth (thread, depth + 1)
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
         val _ = push gcFunc
-        val result = fork (f, g)
+        val result = fork' {ccOkayAtThisDepth=false} (f, g)
 
         val _ =
           if popDiscard() then
@@ -316,12 +316,12 @@ struct
       end
 
 
-    and fork (f, g) =
+    and fork' {ccOkayAtThisDepth} (f, g) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
-        if depth = 1 then
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 5 then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity then
           parfork thread depth (f, g)
@@ -329,6 +329,8 @@ struct
           (* don't let us hit an error, just sequentialize instead *)
           (f (), g ())
       end
+
+    fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
   end
 
   (* ========================================================================

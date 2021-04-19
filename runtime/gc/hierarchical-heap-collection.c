@@ -67,6 +67,27 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+uint32_t minDepthWithoutCC(GC_thread thread) {
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+
+  if (cursor->subHeapForCC != NULL)
+    return thread->currentDepth+1;
+
+  while (cursor->nextAncestor != NULL &&
+         cursor->nextAncestor->subHeapForCC == NULL)
+  {
+    cursor = cursor->nextAncestor;
+  }
+
+  assert(cursor->subHeapForCC == NULL);
+  assert(cursor->subHeapCompletedCC == NULL);
+  assert(cursor->nextAncestor == NULL ||
+         cursor->nextAncestor->subHeapForCC != NULL);
+
+  return HM_HH_getDepth(cursor);
+}
 
 void HM_HHC_collectLocal(uint32_t desiredScope) {
   GC_state s = pthread_getspecific(gcstate_key);
@@ -83,41 +104,56 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     return;
   }
 
-  if (NULL != hh->subHeapForCC) {
-    LOG(LM_HH_COLLECTION, LL_INFO,
-      "Skipping local collection at depth %u due to outstanding CC",
-      HM_HH_getDepth(hh));
-    return;
-  }
+  // if (NULL != hh->subHeapForCC) {
+  //   LOG(LM_HH_COLLECTION, LL_INFO,
+  //     "Skipping local collection at depth %u due to outstanding CC",
+  //     HM_HH_getDepth(hh));
+  //   return;
+  // }
 
   if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection, deque not registered yet");
+    LOG(LM_HH_COLLECTION, LL_DEBUG, "Skipping collection, deque not registered yet");
     return;
   }
 
   uint64_t topval = *(uint64_t*)objptrToPointer(s->wsQueueTop, NULL);
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
-
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
+
+  /** Compute the min depth for local collection. We claim as many levels
+    * as we can without interfering with CC, but only so far as desired.
+    *
+    * Note that we could permit local collection at the same level as a
+    * registered (but not yet stolen) CC, as long as we update the rootsets
+    * stored for the CC. But this is tricky. Much simpler to just avoid CC'ed
+    * levels entirely.
+    */
+  uint32_t minNoCC = minDepthWithoutCC(thread);
+  uint32_t minOkay = desiredScope;
+  minOkay = max(minOkay, thread->minLocalCollectionDepth);
+  minOkay = max(minOkay, minNoCC);
   uint32_t minDepth = max(thread->minLocalCollectionDepth, originalLocalScope);
-  // claim as many levels as we can, but only as far as desired
-  while (minDepth > desiredScope &&
-         minDepth > thread->minLocalCollectionDepth &&
-         tryClaimLocalScope(s)) {
+  while (minDepth > minOkay && tryClaimLocalScope(s)) {
     minDepth--;
   }
 
-  if (minDepth == 0) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
-    releaseLocalScope(s, originalLocalScope);
-    return;
-  }
+  if ( minDepth == 0 ||
+       minOkay > minDepth ||
+       minDepth > thread->currentDepth )
+  {
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Skipping collection:\n"
+      "  minDepth %u\n"
+      "  currentDepth %u\n"
+      "  minNoCC %u\n"
+      "  desiredScope %u\n"
+      "  potentialLocalScope %u\n",
+      minDepth,
+      thread->currentDepth,
+      minNoCC,
+      desiredScope,
+      potentialLocalScope);
 
-  if (minDepth > thread->currentDepth) {
-    LOG(LM_HH_COLLECTION, LL_INFO,
-        "Skipping collection because minDepth > current depth (%u > %u)",
-        minDepth,
-        thread->currentDepth);
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -158,6 +194,18 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   struct GC_foreachObjptrClosure forwardHHObjptrClosure =
     {.fun = forwardHHObjptr, .env = &forwardHHObjptrArgs};
 
+  LOG(LM_HH_COLLECTION, LL_INFO,
+      "collecting hh %p (L: %u):\n"
+      "  potential local scope is %u -> %u\n"
+      "  collection scope is      %u -> %u\n",
+      // "  lchs %"PRIu64" lcs %"PRIu64,
+      ((void*)(hh)),
+      thread->currentDepth,
+      potentialLocalScope,
+      thread->currentDepth,
+      forwardHHObjptrArgs.minDepth,
+      forwardHHObjptrArgs.maxDepth);
+
   size_t sizesBefore[maxDepth+1];
   for (uint32_t i = 0; i <= maxDepth; i++)
     sizesBefore[i] = 0;
@@ -193,18 +241,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   timespec_now(&startTime);
-
-  LOG(LM_HH_COLLECTION, LL_INFO,
-      "collecting hh %p (L: %u):\n"
-      "  potential local scope is %u -> %u\n"
-      "  collection scope is      %u -> %u\n",
-      // "  lchs %"PRIu64" lcs %"PRIu64,
-      ((void*)(hh)),
-      thread->currentDepth,
-      potentialLocalScope,
-      thread->currentDepth,
-      forwardHHObjptrArgs.minDepth,
-      forwardHHObjptrArgs.maxDepth);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "START root copy");
 
@@ -337,6 +373,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   HM_HierarchicalHeap hhTail = hh;
   while (NULL != hhTail && HM_HH_getDepth(hhTail) >= minDepth)
   {
+    assert(hhTail->subHeapForCC == NULL);
+    assert(hhTail->subHeapCompletedCC == NULL);
     HM_HierarchicalHeap nextAncestor = hhTail->nextAncestor;
 
     HM_chunkList level = HM_HH_getChunkList(hhTail);
@@ -386,7 +424,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   /* merge in toSpace */
-  hh = HM_HH_zip(s, hhTail, hhToSpace);
+  if (NULL == hhTail && NULL == hhToSpace) {
+    /** SAM_NOTE: If we collected everything, I suppose this is possible.
+      * But shouldn't the stack and thread at least be in the root-to-leaf
+      * path? Should look into this...
+      */
+    hh = HM_HH_new(s, thread->currentDepth);
+  }
+  else {
+    hh = HM_HH_zip(s, hhTail, hhToSpace);
+  }
+
   thread->hierarchicalHeap = hh;
 
   /* update currentChunk and associated */

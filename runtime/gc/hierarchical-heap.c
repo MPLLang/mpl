@@ -37,6 +37,35 @@ static inline void linkInto(
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+void assertCCChainInvariants(HM_HierarchicalHeap hh) {
+  assert(hh != NULL);
+
+  if (NULL == hh->subHeapForCC) {
+    assert(NULL == hh->subHeapCompletedCC);
+    return;
+  }
+
+  HM_HierarchicalHeap cursor = hh->subHeapForCC;
+  while (cursor != NULL) {
+    assert(cursor->subHeapCompletedCC == hh->subHeapCompletedCC);
+    assert(HM_HH_getConcurrentPack(cursor)->ccstate != CC_UNREG);
+    cursor = cursor->subHeapForCC;
+  }
+}
+
+size_t lengthOfCCChain(HM_HierarchicalHeap hh) {
+  assert(NULL != hh);
+
+  HM_HierarchicalHeap cursor = hh->subHeapForCC;
+  size_t count = 0;
+  while (cursor != NULL) {
+    count++;
+    cursor = cursor->subHeapForCC;
+  }
+
+  assert(count > 0 || (count == 0 && hh->subHeapCompletedCC == NULL));
+  return count;
+}
 
 /** link the CC-chain of hh2 into hh1. */
 void linkCCChains(
@@ -44,9 +73,14 @@ void linkCCChains(
   HM_HierarchicalHeap hh1,
   HM_HierarchicalHeap hh2)
 {
+#if ASSERT
   assert(hh1 != NULL);
   assert(hh2 != NULL);
-  // assert(HM_HH_getDepth(hh1) == HM_HH_getDepth(hh2));
+  assertCCChainInvariants(hh1);
+  assertCCChainInvariants(hh2);
+  size_t len1 = lengthOfCCChain(hh1);
+  size_t len2 = lengthOfCCChain(hh2);
+#endif
 
   if (NULL == hh1->subHeapForCC) {
     assert(NULL == hh1->subHeapCompletedCC);
@@ -54,11 +88,19 @@ void linkCCChains(
     hh1->subHeapCompletedCC = hh2->subHeapCompletedCC;
     hh2->subHeapForCC = NULL;
     hh2->subHeapCompletedCC = NULL;
+    assertCCChainInvariants(hh1);
+    assertCCChainInvariants(hh2);
+    assert(lengthOfCCChain(hh1) == len1+len2);
+    assert(lengthOfCCChain(hh2) == 0);
     return;
   }
 
   if (NULL == hh2->subHeapForCC) {
     assert(NULL == hh2->subHeapCompletedCC);
+    assertCCChainInvariants(hh1);
+    assertCCChainInvariants(hh2);
+    assert(lengthOfCCChain(hh1) == len1+len2);
+    assert(lengthOfCCChain(hh2) == 0);
     return;
   }
 
@@ -87,6 +129,8 @@ void linkCCChains(
     cursor = cursor->subHeapForCC;
   }
   hh1->subHeapForCC = hh2->subHeapForCC;
+  hh2->subHeapForCC = NULL;
+  hh2->subHeapCompletedCC = NULL;
 
   /** Finally, merge the completed subheaps. */
   HM_appendChunkList(HM_HH_getChunkList(cc1), HM_HH_getChunkList(cc2));
@@ -94,6 +138,11 @@ void linkCCChains(
   HM_HH_getConcurrentPack(cc1)->bytesSurvivedLastCollection +=
       HM_HH_getConcurrentPack(cc2)->bytesSurvivedLastCollection;
   linkInto(s, cc1, cc2);
+
+  assertCCChainInvariants(hh1);
+  assertCCChainInvariants(hh2);
+  assert(lengthOfCCChain(hh1) == len1+len2);
+  assert(lengthOfCCChain(hh2) == 0);
 }
 
 
