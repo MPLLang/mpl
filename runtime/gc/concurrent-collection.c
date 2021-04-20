@@ -29,14 +29,13 @@ void CC_initFSet(ConcurrentPackage cp) {
   cp->fSet = temp;
 }
 
+
+// It does nothing if fSet is NULL because I assume we won't collect the
+// heap in that case.
 void CC_addToFSet (ConcurrentPackage cp, pointer p) {
-  if(cp->fSet==NULL) {
-    // Its NULL because we won't collect this heap. so no need to snapshot
-    return;
-    // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
-    // CC_initStack(cp);
+  if(cp->fSet!=NULL) {
+    CC_forgotten_push(cp->fSet, (void*)p);
   }
-  CC_forgotten_push(cp->fSet, (void*)p);
 }
 
 void CC_clearFSet(ConcurrentPackage cp) {

@@ -3,13 +3,20 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-typedef struct CC_forgotten {
+typedef struct CC_localSet {
     size_t size;
     size_t capacity;
     void** elements;
     pthread_mutex_t mutex;
 }
+CC_localSet;
+
+typedef struct CC_forgotten {
+  CC_localSet* localSets;
+}
 CC_forgotten;
+
+
 
 #else
 
@@ -23,10 +30,6 @@ typedef struct CC_forgotten CC_forgotten;
 void CC_forgotten_init(CC_forgotten* fSet, size_t capacity);
 
 bool CC_forgotten_push(CC_forgotten* fSet, void* datum);
-
-size_t CC_forgotten_size(CC_forgotten* fSet);
-
-size_t CC_forgotten_capacity(CC_forgotten* fSet);
 
 void CC_forgotten_free(CC_forgotten* fSet);
 void CC_forgotten_clear(CC_forgotten* fSet);
