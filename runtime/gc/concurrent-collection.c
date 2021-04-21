@@ -456,6 +456,8 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 
 size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
+
+  return HM_getChunkListSize(HM_HH_getChunkList(targetHH));
   struct timespec startTime;
   struct timespec stopTime;
 
