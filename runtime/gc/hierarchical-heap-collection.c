@@ -168,6 +168,16 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     totalSizeBefore += sz;
   }
 
+  HM_HierarchicalHeap fromSpace[maxDepth+1];
+  for (uint32_t i = 0; i <= maxDepth; i++) fromSpace[i] = NULL;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
+  forwardHHObjptrArgs.fromSpace = &(fromSpace[0]);
+
   Trace0(EVENT_PROMOTION_ENTER);
   timespec_now(&startTime);
 
