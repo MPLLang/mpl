@@ -108,10 +108,6 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
    */
   assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
 
-  traverseEachObjInChunkList(s, HM_HH_getChunkList(thread->hierarchicalHeap));
-  traverseEachObjInChunkList(s, HM_HH_getChunkList(child->hierarchicalHeap));
-
-
   HM_HH_merge(s, thread, child);
 }
 
