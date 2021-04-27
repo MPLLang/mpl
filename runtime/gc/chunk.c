@@ -277,6 +277,26 @@ pointer HM_getChunkLimit(HM_chunk chunk) {
   return chunk->limit;
 }
 
+void HM_foreachObjInChunk(GC_state s, HM_chunk chunk, HM_foreachObjClosure f) {
+    pointer p = HM_getChunkStart(chunk);
+    pointer frontier = HM_getChunkFrontier(chunk);
+    while (p < frontier) {
+      p = advanceToObjectData(s, p);
+      f->fun(s, p, f->env);
+      p += sizeofObjectNoMetaData(s, p);
+    }
+}
+
+
+void HM_foreachObjInChunkList(GC_state s, HM_chunkList list,
+                                        HM_foreachObjClosure f) {
+  HM_chunk chunk = HM_getChunkListFirstChunk(list);
+  while(chunk!=NULL) {
+    HM_foreachObjInChunk(s, chunk, f);
+    chunk = chunk->nextChunk;
+  }
+}
+
 size_t HM_getChunkUsedSize(HM_chunk chunk) {
   return (size_t)chunk->frontier - (size_t)HM_getChunkStart(chunk);
 }
