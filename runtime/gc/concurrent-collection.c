@@ -97,6 +97,12 @@ void markObj(pointer p) {
   *headerp = header;
 }
 
+void unmarkObj(GC_state s, pointer p, void*args) {
+  if (CC_isPointerMarked(p)){
+    markObj(p);
+  }
+}
+
 // This function is exactly the same as in chunk.c.
 // The only difference is, it doesn't NULL the levelHead of the unlinking chunk.
 void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
@@ -488,6 +494,8 @@ static size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   HH_EBR_enterQuiescentState(s);
 
+  traverseEachObjInChunkList(s, origList);
+
   // JATIN_NOTE: Some HM_hierarchical objects in origList
   // might not be reachable from the mutator roots.
   // So, I assign the levelHead of all chunks in the list to targetHH.
@@ -525,6 +533,8 @@ static size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   HM_initChunkList(&downPtrs);
   CC_filterDownPointers(s, &downPtrs, targetHH);
 
+
+
   struct HM_foreachDownptrClosure forwardDownPtrChunkClosure =
   {.fun = forwardDownPtrChunk, .env = &lists};
   HM_foreachRemembered(s, &downPtrs, &forwardDownPtrChunkClosure);
@@ -557,16 +567,23 @@ static size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
 #endif
 
-  struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
-  {.fun = unmarkDownPtrChunk, .env = &lists};
-  HM_foreachRemembered(s, &downPtrs, &unmarkDownPtrChunkClosure);
+  // struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
+  // {.fun = unmarkDownPtrChunk, .env = &lists};
+  // HM_foreachRemembered(s, &downPtrs, &unmarkDownPtrChunkClosure);
 
-  forceUnmark(s, &(cp->snapLeft), &lists);
-  forceUnmark(s, &(cp->snapRight), &lists);
-  forceUnmark(s, &(cp->snapTemp), &lists);
-  forceUnmark(s, &(s->wsQueue), &lists);
-  forceUnmark(s, &(cp->stack), &lists);
-  forEachForgottenPointer(s, cp->fSet, unmarkPtrChunk, &lists);
+  struct HM_foreachObjClosure unmarkObjClosure = {
+    .fun  = unmarkObj,
+    .env = NULL
+  };
+
+  HM_foreachObjInChunkList(s, repList, &unmarkObjClosure);
+
+  // forceUnmark(s, &(cp->snapLeft), &lists);
+  // forceUnmark(s, &(cp->snapRight), &lists);
+  // forceUnmark(s, &(cp->snapTemp), &lists);
+  // forceUnmark(s, &(s->wsQueue), &lists);
+  // forceUnmark(s, &(cp->stack), &lists);
+  // forEachForgottenPointer(s, cp->fSet, unmarkPtrChunk, &lists);
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);

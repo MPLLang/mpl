@@ -175,7 +175,7 @@ void forEachForgottenPointer(GC_state s,
       if(newSize > sizes[p]) clean = false;
       sizes[p] = newSize;
     }
-  }while(!clean);
+  } while(!clean);
 }
 
 #endif
