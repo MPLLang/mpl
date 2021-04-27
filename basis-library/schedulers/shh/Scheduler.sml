@@ -227,14 +227,21 @@ struct
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
-        val rightSide = ref (NONE : ('b result * Thread.t) option)
+        (** NOTE: these cannot be safely combined into a single ref. After
+          * the join, reading the thread is safe because the thread object
+          * is stored at a safe depth. But reading the result is entangled
+          * until after the merge happens.
+          *)
+        val rightSideThread = ref (NONE: Thread.t option)
+        val rightSideResult = ref (NONE: 'b result option)
         val incounter = ref 2
         fun g' () =
           let
             val gr = result g
             val t = Thread.current ()
           in
-            rightSide := SOME (gr, t);
+            rightSideThread := SOME t;
+            rightSideResult := SOME gr;
             if decrementHitsZero incounter then
               ( setQueueDepth (myWorkerId ()) (depth+1)
               ; threadSwitch thread
@@ -268,14 +275,16 @@ struct
           else
             ( clear () (* this should be safe after popDiscard fails? *)
             ; if decrementHitsZero incounter then () else returnToSched ()
-            ; case !rightSide of
+            ; case !rightSideThread of
                 NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME (gr, t) =>
+              | SOME t =>
                   ( HH.mergeThreads (thread, t)
                   ; setQueueDepth (myWorkerId ()) depth
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
-                  ; gr
+                  ; case !rightSideResult of
+                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                    | SOME gr => gr
                   )
             )
       in
