@@ -48,15 +48,18 @@ void growStackCurrent(GC_state s) {
     return;
   }
 
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap newhh =
+    HM_HH_getHeapAtDepth(s, thread, HM_HH_getDepth(hh));
   /* in this case, the new stack needs more space, so allocate a new chunk,
    * copy the stack, and throw away the old chunk. */
-  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(newhh), stackSize);
   if (NULL == newChunk) {
     DIE("Ran out of space to grow stack!");
   }
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
-  newChunk->levelHead = HM_HH_getUFNode(hh);
+  newChunk->levelHead = HM_HH_getUFNode(newhh);
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));
@@ -66,7 +69,7 @@ void growStackCurrent(GC_state s) {
   stack->reserved = reserved;
   stack->used = 0;
   HM_updateChunkFrontierInList(
-    HM_HH_getChunkList(hh),
+    HM_HH_getChunkList(newhh),
     newChunk,
     frontier + stackSize);
 
@@ -74,8 +77,8 @@ void growStackCurrent(GC_state s) {
   getThreadCurrent(s)->stack = pointerToObjptr((pointer)stack, NULL);
 
   assert(getThreadCurrent(s)->currentChunk != chunk);
-  HM_unlinkChunk(HM_HH_getChunkList(hh), chunk);
-  HM_freeChunk(s, chunk);
+  // HM_unlinkChunk(HM_HH_getChunkList(hh), chunk);
+  // HM_freeChunk(s, chunk);
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
