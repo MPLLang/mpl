@@ -287,7 +287,6 @@ void HM_foreachObjInChunk(GC_state s, HM_chunk chunk, HM_foreachObjClosure f) {
     }
 }
 
-
 void HM_foreachObjInChunkList(GC_state s, HM_chunkList list,
                                         HM_foreachObjClosure f) {
   HM_chunk chunk = HM_getChunkListFirstChunk(list);
@@ -295,6 +294,26 @@ void HM_foreachObjInChunkList(GC_state s, HM_chunkList list,
     HM_foreachObjInChunk(s, chunk, f);
     chunk = chunk->nextChunk;
   }
+}
+
+void checkObj(GC_state s, pointer p, void*args) {
+  assert(!hasFwdPtr(p));
+  (void)s;
+  (void)p;
+  (void)args;
+}
+
+void traverseEachObjInChunkList(GC_state s, HM_chunkList list) {
+  #if ASSERT
+  struct HM_foreachObjClosure checkObjClosure = {
+    .fun  = checkObj,
+    .env = NULL
+  };
+  HM_foreachObjInChunkList(s, list, &checkObjClosure);
+  #endif
+
+  (void)s;
+  (void)list;
 }
 
 size_t HM_getChunkUsedSize(HM_chunk chunk) {

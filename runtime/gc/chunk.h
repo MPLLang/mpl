@@ -207,6 +207,8 @@ typedef struct HM_foreachObjClosure {
 
 void HM_foreachObjInChunk(GC_state s, HM_chunk chunk, HM_foreachObjClosure f);
 void HM_foreachObjInChunkList(GC_state s, HM_chunkList list, HM_foreachObjClosure f);
+
+void traverseEachObjInChunkList(GC_state s, HM_chunkList list);
 /**
  * This function returns the size of the chunk in bytes.
  *

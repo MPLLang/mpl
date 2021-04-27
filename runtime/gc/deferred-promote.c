@@ -44,16 +44,15 @@ void HM_deferredPromote(
       &bucketIfValidClosure);
   }
 
-  /* memoize the fromSpace chunkLists for quick access */
-  HM_HierarchicalHeap fromSpace[numLevels];
-  for (uint32_t i = 0; i < numLevels; i++) fromSpace[i] = NULL;
+  HM_HierarchicalHeap *fromSpace = args->fromSpace;
+#if ASSERT
   for (HM_HierarchicalHeap cursor = args->hh;
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
-    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+    assert(fromSpace[HM_HH_getDepth(cursor)] == cursor);
   }
-  args->fromSpace = &(fromSpace[0]);
+#endif
 
   /* Next, promote objects to the appropriate level, beginning below the root and
    * working downwards towards to the leaf. Any resulting downptr that cannot

@@ -159,11 +159,24 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
        NULL != cursor;
        cursor = cursor->nextAncestor)
   {
+#if ASSERT
+    traverseEachObjInChunkList(s, HM_HH_getChunkList(cursor));
+#endif
     uint32_t d = HM_HH_getDepth(cursor);
     size_t sz = HM_getChunkListSize(HM_HH_getChunkList(cursor));
     sizesBefore[d] = sz;
     totalSizeBefore += sz;
   }
+
+  HM_HierarchicalHeap fromSpace[maxDepth+1];
+  for (uint32_t i = 0; i <= maxDepth; i++) fromSpace[i] = NULL;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
+  forwardHHObjptrArgs.fromSpace = &(fromSpace[0]);
 
   Trace0(EVENT_PROMOTION_ENTER);
   timespec_now(&startTime);
@@ -175,6 +188,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   hh = thread->hierarchicalHeap;
 
   assertInvariants(thread);
+
+#if ASSERT
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    assert(forwardHHObjptrArgs.fromSpace[HM_HH_getDepth(cursor)] == cursor);
+  }
+#endif
 
   timespec_now(&stopTime);
   timespec_sub(&stopTime, &startTime);
@@ -440,6 +462,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
 #if ASSERT
     HM_assertChunkListInvariants(lev);
+    traverseEachObjInChunkList(s, lev);
 #endif
 
     if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO) &&
@@ -668,6 +691,7 @@ void forwardHHObjptr (GC_state s,
     *opp = op;
   } else {
     assert(!isObjptrInToSpace(op, args));
+    assert(HM_getLevelHead(HM_getChunkOf(p)) == args->fromSpace[HM_getObjptrDepth(op)]);
     assert(HM_getObjptrDepth(op) >= args->minDepth);
     assert(HM_getObjptrDepth(op) == opDepth);
     /* forward the object */
