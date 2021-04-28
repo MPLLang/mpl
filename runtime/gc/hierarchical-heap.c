@@ -314,8 +314,6 @@ void HM_HH_promoteChunks(
     /* There is a heap immediately above the leaf, so merge into that heap. */
     assert(NULL != hh->nextAncestor);
     assert(HM_HH_getDepth(hh->nextAncestor) == currentDepth-1);
-    assert(hh->subHeapForCC == NULL);
-    assert(hh->subHeapCompletedCC == NULL);
     HM_appendChunkList(HM_HH_getChunkList(hh->nextAncestor), HM_HH_getChunkList(hh));
     HM_appendChunkList(HM_HH_getRemSet(hh->nextAncestor), HM_HH_getRemSet(hh));
     linkCCChains(s, hh->nextAncestor, hh);
@@ -693,8 +691,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     assert(NULL == thread->hierarchicalHeap->subHeapCompletedCC);
 #endif
 
-  if (!checkPolicyforRoot(s, thread))
-    return FALSE;
+  // if (!checkPolicyforRoot(s, thread))
+  //   return FALSE;
 
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);

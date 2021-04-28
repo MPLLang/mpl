@@ -330,7 +330,8 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 5 then
+        (* if ccOkayAtThisDepth andalso depth = 1 then *)
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 9 then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity then
           parfork thread depth (f, g)

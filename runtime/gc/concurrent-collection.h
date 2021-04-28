@@ -70,6 +70,14 @@ typedef struct ConcurrentPackage *ConcurrentPackage;
 #endif
 
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+
+PRIVATE void GC_updateObjectHeader(GC_state s, pointer p, GC_header newHeader);
+
+#endif
+
+
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 // Assume complete access in this function

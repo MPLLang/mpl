@@ -533,6 +533,11 @@ void freeBlocks(GC_state s, Blocks bs) {
   SuperBlock sb = bs->container;
   pointer blockStart = (pointer)bs;
 
+#if ASSERT
+  /** Clear out memory to try and catch errors quickly... */
+  memset((void*)bs, 0xBF, numBlocks * s->controls->blockSize);
+#endif
+
   size_t sizeClass =
     NULL != sb ? sb->sizeClass : computeSizeClass(numBlocks);
 

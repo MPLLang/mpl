@@ -178,6 +178,30 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_writeBarrier"}
 
+
+      fun updateObjectHeader {obj} =
+        T {args = Vector.new3 (Type.gcState(),
+                               obj,
+                               Type.objptrHeader()),
+           convention = Cdecl,
+           inline = false,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = false,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new3 (CType.gcState,
+                                     CType.objptr,
+                                     CType.objptrHeader ()),
+                        NONE),
+          return = Type.unit,
+          symbolScope = Private,
+          target = Direct "GC_updateObjectHeader"}
+
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1292,17 +1316,34 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           case Type.deObjptr arrTy of
                                              NONE => Error.bug "SsaToRssa.translateStatementsTransfer: PrimApp,Array_toArray"
                                            | SOME arrOpt => arrOpt
-                                    in
-                                       add2
-                                       (Move
-                                        {dst = (Offset
-                                                {base = rawarr,
-                                                 offset = Runtime.headerOffset (),
-                                                 ty = Type.objptrHeader ()}),
-                                         src = ObjptrTycon arrOpt},
-                                        Bind {dst = (valOf var, arrTy),
+
+                                       (*
+                                       val headerUpdate =
+                                         Move
+                                         {dst = (Offset
+                                                 {base = rawarr,
+                                                  offset = Runtime.headerOffset (),
+                                                  ty = Type.objptrHeader ()}),
+                                          src = ObjptrTycon arrOpt}
+                                       *)
+
+                                       val castBind =
+                                         Bind {dst = (valOf var, arrTy),
                                               pinned = false,
-                                              src = Operand.cast (rawarr, arrTy)})
+                                              src = Operand.cast (rawarr, arrTy)}
+
+                                       val huArgs = Vector.new3 (GCState, rawarr, ObjptrTycon arrOpt)
+                                       val func = CFunction.updateObjectHeader {obj = Operand.ty rawarr}
+                                    in
+                                       split
+                                       (Vector.new0 (), Kind.CReturn {func = func}, castBind :: ss,
+                                        fn l =>
+                                        ([],
+                                         Transfer.CCall {args = huArgs,
+                                                         func = func,
+                                                         return = SOME l}))
+
+                                       (* add2 (headerUpdate, castBind) *)
                                     end
                                | Prim.Array_toVector =>
                                     let

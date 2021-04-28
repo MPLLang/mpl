@@ -25,7 +25,7 @@ struct GC_state {
   /* Alphabetized fields follow. */
   size_t alignment; /* */
   bool amInGC;
-  bool amInCC;
+  struct HM_HierarchicalHeap *currentCCTargetHH;
   bool amOriginal;
   char **atMLtons; /* Initial @MLton args, processed before command line. */
   int atMLtonsLength;

@@ -8,6 +8,29 @@
  */
 #include "concurrent-collection.h"
 
+
+
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+
+void GC_updateObjectHeader(
+  __attribute__((unused)) GC_state s,
+  pointer p,
+  GC_header newHeader)
+{
+  while (TRUE) {
+    GC_header oldHeader = getHeader(p);
+    GC_header desired = (oldHeader & MARK_MASK) | newHeader;
+    if (__sync_bool_compare_and_swap(getHeaderp(p), oldHeader, desired)) {
+      assert((oldHeader & MARK_MASK) == (desired & MARK_MASK));
+      return;
+    }
+  }
+}
+
+#endif
+
+
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 #define casCC(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
 
@@ -54,16 +77,24 @@ bool CC_isPointerMarked (pointer p) {
   return ((MARK_MASK & getHeader (p)) == MARK_MASK);
 }
 
-/** Is it in the from space? */
-bool isInScope(HM_chunk chunk, ConcurrentCollectArgs* args) {
+bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
+  for (HM_chunk cursor = list->firstChunk;
+       cursor != NULL;
+       cursor = cursor->nextChunk)
+  {
+    if (cursor == chunk)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+bool isChunkInFromSpace(HM_chunk chunk, ConcurrentCollectArgs* args) {
   return chunk->tmpHeap == args->fromHead;
 }
 
-/** Is it in the to-space? */
-bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
-  return chunk->tmpHeap==args->toHead;
+bool isChunkInToSpace(HM_chunk chunk, ConcurrentCollectArgs* args) {
+  return chunk->tmpHeap == args->toHead;
 }
-
 
 // JATIN_NOTE: this function should be called only for in scope objects.
 // for out of scope objects the assertion and sanctity of *p is uncertain
@@ -75,9 +106,16 @@ bool isChunkSaved(HM_chunk chunk, ConcurrentCollectArgs* args) {
 pointer getTransitivePtr(pointer p, ConcurrentCollectArgs* args) {
   objptr op;
 
-  assert(isInScope(HM_getChunkOf(p), args) ||
-          isChunkSaved(HM_getChunkOf(p), args));
+  assert(isChunkInFromSpace(HM_getChunkOf(p), args) ||
+          isChunkInToSpace(HM_getChunkOf(p), args));
+
+  assert(!hasFwdPtr(p));
+
   while (hasFwdPtr(p)) {
+    fprintf(stderr,
+      "getTransitivePtr: "FMTPTR" has forwarding ptr",
+      (uintptr_t)p);
+
     HM_chunk chunk = HM_getChunkOf(p);
     if(chunk->tmpHeap == args->fromHead){
       saveChunk(chunk, args);
@@ -89,15 +127,17 @@ pointer getTransitivePtr(pointer p, ConcurrentCollectArgs* args) {
 }
 
 void markObj(pointer p) {
-  GC_header* headerp = getHeaderp(p);
-  GC_header header = *headerp;
-  header ^= MARK_MASK;
-  *headerp = header;
+  __sync_fetch_and_xor(getHeaderp(p), MARK_MASK);
+  // GC_header* headerp = getHeaderp(p);
+  // GC_header header = *headerp;
+  // header ^= MARK_MASK;
+  // *headerp = header;
 }
 
 // This function is exactly the same as in chunk.c.
 // The only difference is, it doesn't NULL the levelHead of the unlinking chunk.
 void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+  // assert(chunkIsInList(chunk, list));
 
   if (NULL == chunk->prevChunk) {
     assert(list->firstChunk == chunk);
@@ -141,20 +181,51 @@ bool saveNoForward(
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
   HM_chunk cand_chunk = HM_getChunkOf(p);
-  bool chunkSaved = isChunkSaved(cand_chunk, args);
-  bool chunkOrig  = (chunkSaved)?TRUE:isInScope(cand_chunk, args);
+  bool chunkSaved = isChunkInToSpace(cand_chunk, args);
+  bool chunkOrig  = (chunkSaved)?TRUE:isChunkInFromSpace(cand_chunk, args);
 
   if(chunkOrig && !chunkSaved) {
+    assert(isChunkInFromSpace(cand_chunk, args));
     assert(getTransitivePtr(p, rawArgs) == p);
     saveChunk(cand_chunk, args);
   }
-  return (chunkSaved || chunkOrig);
+
+  bool result = (chunkSaved || chunkOrig);
+
+  assert((!result) || isChunkInToSpace(cand_chunk, args));
+  return result;
 }
 
 void markAndScan(GC_state s, pointer p, void* rawArgs) {
+  ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
+
+#if ASSERT
+  GC_header headerBefore = getHeader(p) & (~MARK_MASK);
+  // GC_objectTypeTag tag;
+  // uint16_t bytesNonObjptrs;
+  // uint16_t numObjptrs;
+  // bool hasIdentity;
+  // splitHeader(s, getHeader(p), &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
+#endif
+
   if(!CC_isPointerMarked(p)) {
     markObj(p);
-    ((ConcurrentCollectArgs*)rawArgs)->bytesSaved += sizeofObject(s, p);
+    args->bytesSaved += sizeofObject(s, p);
+
+#if ASSERT
+    GC_header headerAfter = getHeader(p) & (~MARK_MASK);
+    assert(headerBefore == headerAfter);
+    // GC_objectTypeTag ttag;
+    // uint16_t bbytesNonObjptrs;
+    // uint16_t nnumObjptrs;
+    // bool hhasIdentity;
+    // splitHeader(s, getHeader(p), &ttag, &hhasIdentity, &bbytesNonObjptrs, &nnumObjptrs);
+    // assert(tag == ttag);
+    // assert(hasIdentity == hhasIdentity);
+    // assert(bytesNonObjptrs == bbytesNonObjptrs);
+    // assert(numObjptrs == nnumObjptrs);
+#endif
+
     assert(CC_isPointerMarked(p));
 
     struct GC_foreachObjptrClosure forwardPtrClosure =
@@ -174,8 +245,8 @@ void printObjPtrInScopeFunction(
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
-  if (isInScope(HM_getChunkOf(p), rawArgs)
-     && !isChunkSaved(HM_getChunkOf(p), rawArgs)) {
+  if (isChunkInFromSpace(HM_getChunkOf(p), rawArgs)
+     && !isChunkInToSpace(HM_getChunkOf(p), rawArgs)) {
     printf("%p \n", (void *) *opp);
   }
 }
@@ -218,8 +289,8 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
-  if (isInScope(HM_getChunkOf(p), rawArgs)
-     || isChunkSaved(HM_getChunkOf(p), rawArgs)) {
+  if (isChunkInFromSpace(HM_getChunkOf(p), rawArgs)
+     || isChunkInToSpace(HM_getChunkOf(p), rawArgs)) {
     p = getTransitivePtr(p, rawArgs);
   }
   bool saved = saveNoForward(s, p, rawArgs);
@@ -239,6 +310,11 @@ void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
 }
 
 void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
+
+#if ASSERT
+  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
+#endif
+
   objptr op = *opp;
   assert(isObjptr(op));
 
@@ -246,13 +322,17 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
   HM_chunk chunk = HM_getChunkOf(p);
 
   // check that getTransitivePtr can be called.
-  if (!isChunkSaved(chunk, rawArgs)) {
+  if (!isChunkInToSpace(chunk, rawArgs)) {
     return;
   }
+
   p = getTransitivePtr(p, rawArgs);
 
+  assert(!isChunkInFromSpace(chunk, args));
+
   if(CC_isPointerMarked (p)) {
-    assert(chunk->tmpHeap == ((ConcurrentCollectArgs*)rawArgs)->toHead);
+    assert(isChunkInToSpace(chunk, args));
+    // assert(chunk->tmpHeap == ((ConcurrentCollectArgs*)rawArgs)->toHead);
     markObj(p);
 
     assert(!CC_isPointerMarked(p));
@@ -279,6 +359,7 @@ void unmarkDownPtrChunk(
 // It scans the object pointed by the pointer even if its not in scope.
 // Recursively however it only calls forwardPtrChunk and not itself
 void forceForward(GC_state s, objptr *opp, void* rawArgs) {
+  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
   pointer p = objptrToPointer(*opp, NULL);
 
   bool saved = saveNoForward(s, p, rawArgs);
@@ -286,7 +367,8 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   if(saved && !CC_isPointerMarked(p)) {
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
-    ((ConcurrentCollectArgs*)rawArgs)->bytesSaved += sizeofObject(s, p);
+    assert(CC_isPointerMarked(p));
+    args->bytesSaved += sizeofObject(s, p);
   }
 
   struct GC_foreachObjptrClosure forwardPtrClosure =
@@ -300,6 +382,7 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
   if(CC_isPointerMarked(p)){
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
+    assert(!CC_isPointerMarked(p));
   }
   struct GC_foreachObjptrClosure unmarkPtrClosure =
   {.fun = unmarkPtrChunk, .env = rawArgs};
@@ -383,8 +466,17 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
   }
 
   // for exiting even if CC is going on.
-  assert(!s->amInCC);
-  s->amInCC = TRUE;
+  assert(NULL == s->currentCCTargetHH);
+  s->currentCCTargetHH = heap;
+  // assert(!s->amInCC);
+  // s->amInCC = TRUE;
+
+#if ASSERT
+  for (int other = 0; other < (int)s->numberOfProcs; other++) {
+    if (other != s->procNumber)
+      assert(heap != s->procStates[other].currentCCTargetHH);
+  }
+#endif
 
   size_t beforeSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
   size_t live = CC_collectWithRoots(s, heap, thread);
@@ -403,7 +495,8 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
 
   // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
   __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_DONE, __ATOMIC_SEQ_CST);
-  s->amInCC = FALSE;
+  // s->amInCC = FALSE;
+  s->currentCCTargetHH = NULL;
 }
 
 uint32_t minPrivateLevel(GC_state s) {
@@ -504,20 +597,9 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     assert(T->tmpHeap == NULL);
     T->tmpHeap = lists.fromHead;
     T->levelHead = HM_HH_getUFNode(targetHH);
+    assert(T->levelHead->representative == NULL);
+    assert(T->levelHead->payload == targetHH);
   }
-
-  /** SAM_NOTE: This code is no longer needed, because HH objects are not
-    * stored in their own chunks. I'm leaving it commented for now (just for
-    * reference), and will remove later.
-    */
-  // HM_chunk baseChunk = HM_getChunkOf((void *)targetHH);
-  // if(isInScope(baseChunk, &lists)) {
-  //   saveChunk(baseChunk, &lists);
-  // }
-  // else if (baseChunk == (targetHH->chunkList).firstChunk && isConcurrent) {}
-  // else {
-  //   // assert(0);
-  // }
 
   // forward down pointers
   struct HM_chunkList downPtrs;

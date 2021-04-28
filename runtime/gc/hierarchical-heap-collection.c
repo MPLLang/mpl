@@ -404,26 +404,26 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     if (NULL != remset) {
 #if ASSERT
       /* clear out memory to quickly catch some memory safety errors */
-      HM_chunk chunkCursor = remset->firstChunk;
-      while (chunkCursor != NULL) {
-        pointer start = HM_getChunkStart(chunkCursor);
-        size_t length = (size_t)(chunkCursor->limit - start);
-        memset(start, 0xBF, length);
-        chunkCursor = chunkCursor->nextChunk;
-      }
+      // HM_chunk chunkCursor = remset->firstChunk;
+      // while (chunkCursor != NULL) {
+      //   pointer start = HM_getChunkStart(chunkCursor);
+      //   size_t length = (size_t)(chunkCursor->limit - start);
+      //   memset(start, 0xBF, length);
+      //   chunkCursor = chunkCursor->nextChunk;
+      // }
 #endif
       HM_freeChunksInList(s, remset);
     }
 
 #if ASSERT
     /* clear out memory to quickly catch some memory safety errors */
-    HM_chunk chunkCursor = level->firstChunk;
-    while (chunkCursor != NULL) {
-      pointer start = HM_getChunkStart(chunkCursor);
-      size_t length = (size_t)(chunkCursor->limit - start);
-      memset(start, 0xBF, length);
-      chunkCursor = chunkCursor->nextChunk;
-    }
+    // HM_chunk chunkCursor = level->firstChunk;
+    // while (chunkCursor != NULL) {
+    //   pointer start = HM_getChunkStart(chunkCursor);
+    //   size_t length = (size_t)(chunkCursor->limit - start);
+    //   memset(start, 0xBF, length);
+    //   chunkCursor = chunkCursor->nextChunk;
+    // }
 #endif
 
     HM_freeChunksInList(s, level);
