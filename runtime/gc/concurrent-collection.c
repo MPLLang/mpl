@@ -517,6 +517,9 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   struct HM_foreachDownptrClosure bucketIfValidAtListClosure =
   {.fun = bucketIfValidAtList, .env = (void*)x};
 
+  /** Save "valid" entries to x, throw away old entries in y, before storing
+    * valid entries back in y.
+    */
   HM_foreachRemembered(s, y, &bucketIfValidAtListClosure);
   HM_freeChunksInList(s, y);
   *y = *x;

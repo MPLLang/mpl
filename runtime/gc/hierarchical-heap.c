@@ -557,32 +557,37 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
       continue;
     }
 
-    // Otherwise, CC on this subheap is done. Merge it in.
+    /** Otherwise, CC on this subheap is done. Put it in the "completed" chain,
+      * to be merged as soon as all subheap CCs have completed.
+      */
     HM_HierarchicalHeap next = subhh->subHeapForCC;
     *cursor = next;
     subhh->subHeapForCC = NULL;
 
     HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
-    HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection +=
-      HM_HH_getConcurrentPack(subhh)->bytesSurvivedLastCollection;
-    HM_appendChunkList(HM_HH_getChunkList(completed), HM_HH_getChunkList(subhh));
-    HM_appendChunkList(HM_HH_getRemSet(completed), HM_HH_getRemSet(subhh));
-    linkInto(s, completed, subhh);
+    subhh->subHeapCompletedCC = completed->subHeapCompletedCC;
+    completed->subHeapCompletedCC = subhh;
 
     subhh = next;
     numMerged++;
   }
 
-  /** All subheap CCs finished and merged into subHeapCompletedCC, so now we
-    * can merge back into main heap.
+  /** All subheap CCs finished, so now we can merge the "completed" chain back
+    * into main heap.
     */
   if (NULL == hh->subHeapForCC && NULL != hh->subHeapCompletedCC) {
+
     HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
-    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
-      HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
-    HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
-    HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
-    linkInto(s, hh, completed);
+    while (completed != NULL) {
+      HM_HierarchicalHeap next = completed->subHeapCompletedCC;
+      HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
+        HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
+      HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
+      HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
+      linkInto(s, hh, completed);
+      completed = next;
+    }
+
     hh->subHeapCompletedCC = NULL;
   }
 

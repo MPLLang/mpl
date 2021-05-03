@@ -105,6 +105,15 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     HM_rememberAtLevel(hh, dst, field, src);
   }
   else {
+    /** This special subheap is guaranteed to exist while at least one CC
+      * is registered or in-progress. Its sole purpose is to contain new
+      * remembered-set entries. We can't use the remembered-set of the heap
+      * that is undergoing CC, because the CC will be concurrently accessing
+      * that remset.
+      *
+      * It's a bit strange... a bit of a hack... because this subheap is
+      * always "empty" and is only used for its remset.
+      */
     assert(NULL != hh->subHeapCompletedCC);
     HM_rememberAtLevel(hh->subHeapCompletedCC, dst, field, src);
   }
