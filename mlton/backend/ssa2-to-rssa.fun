@@ -1353,17 +1353,22 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           case Type.deObjptr vecTy of
                                              NONE => Error.bug "SsaToRssa.translateStatementsTransfer: PrimApp,Array_toVector"
                                            | SOME vecOpt => vecOpt
+
+                                       val castBind =
+                                         Bind {dst = (valOf var, vecTy),
+                                               pinned = false,
+                                               src = Operand.cast (sequence, vecTy)}
+
+                                       val huArgs = Vector.new3 (GCState, sequence, ObjptrTycon vecOpt)
+                                       val func = CFunction.updateObjectHeader {obj = Operand.ty sequence}
                                     in
-                                       add2
-                                       (Move
-                                        {dst = (Offset
-                                                {base = sequence,
-                                                 offset = Runtime.headerOffset (),
-                                                 ty = Type.objptrHeader ()}),
-                                         src = ObjptrTycon vecOpt},
-                                        Bind {dst = (valOf var, vecTy),
-                                              pinned = false,
-                                              src = Operand.cast (sequence, vecTy)})
+                                       split
+                                       (Vector.new0 (), Kind.CReturn {func = func}, castBind :: ss,
+                                        fn l =>
+                                        ([],
+                                         Transfer.CCall {args = huArgs,
+                                                         func = func,
+                                                         return = SOME l}))
                                     end
                                | Prim.Array_uninit =>
                                     let
