@@ -37,7 +37,8 @@ static inline void linkInto(
 /************************/
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void assertCCChainInvariants(HM_HierarchicalHeap hh) {
+void assertCCChainInvariants(ARG_USED_FOR_ASSERT HM_HierarchicalHeap hh) {
+#if ASSERT
   assert(hh != NULL);
 
   if (NULL == hh->subHeapForCC) {
@@ -47,10 +48,22 @@ void assertCCChainInvariants(HM_HierarchicalHeap hh) {
 
   HM_HierarchicalHeap cursor = hh->subHeapForCC;
   while (cursor != NULL) {
-    assert(cursor->subHeapCompletedCC == hh->subHeapCompletedCC);
     assert(HM_HH_getConcurrentPack(cursor)->ccstate != CC_UNREG);
+    /** Make sure its "completed" pointer is in the completed chain. */
+    bool foundIt = FALSE;
+    for (HM_HierarchicalHeap completedCursor = hh->subHeapCompletedCC;
+         completedCursor != NULL;
+         completedCursor = completedCursor->subHeapCompletedCC)
+    {
+      if (completedCursor == cursor->subHeapCompletedCC) {
+        foundIt = TRUE;
+        break;
+      }
+    }
+    assert(foundIt);
     cursor = cursor->subHeapForCC;
   }
+#endif
 }
 
 size_t lengthOfCCChain(HM_HierarchicalHeap hh) {
@@ -69,7 +82,7 @@ size_t lengthOfCCChain(HM_HierarchicalHeap hh) {
 
 /** link the CC-chain of hh2 into hh1. */
 void linkCCChains(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   HM_HierarchicalHeap hh1,
   HM_HierarchicalHeap hh2)
 {
@@ -109,35 +122,25 @@ void linkCCChains(
   assert(NULL != hh2->subHeapForCC);
   assert(NULL != hh2->subHeapCompletedCC);
 
-  HM_HierarchicalHeap cc1 = hh1->subHeapCompletedCC;
-  HM_HierarchicalHeap cc2 = hh2->subHeapCompletedCC;
-
   /** Link the two chains:
-    *   1. traverse the hh2 cc-chain and set all the subHeapCompletedCC
-    *      pointers to point towards hh1's completed subheap.
-    *   2. at the end of hh2's cc-chain, link its next-pointer to the first
-    *      subheap of hh1
-    *   3. set hh1 first subheap to first subheap of second.
+    *   1. Find the end of the chain on hh2
+    *   2. Set the next pointer to the front of the chain of hh1
+    *   3. Set the front pointer of the chain hh1 to front of chain2
+    * And do this for both subHeapForCC and subHeapCompletedCC chains.
     */
-  HM_HierarchicalHeap cursor = hh2->subHeapForCC;
-  while (cursor != NULL) {
-    cursor->subHeapCompletedCC = cc1;
-    if (NULL == cursor->subHeapForCC) {
-      cursor->subHeapForCC = hh1->subHeapForCC;
-      break;
-    }
-    cursor = cursor->subHeapForCC;
-  }
+  HM_HierarchicalHeap endOfChain2 = hh2->subHeapForCC;
+  while (NULL != endOfChain2->subHeapForCC)
+    endOfChain2 = endOfChain2->subHeapForCC;
+  endOfChain2->subHeapForCC = hh1->subHeapForCC;
   hh1->subHeapForCC = hh2->subHeapForCC;
   hh2->subHeapForCC = NULL;
-  hh2->subHeapCompletedCC = NULL;
 
-  /** Finally, merge the completed subheaps. */
-  HM_appendChunkList(HM_HH_getChunkList(cc1), HM_HH_getChunkList(cc2));
-  HM_appendChunkList(HM_HH_getRemSet(cc1), HM_HH_getRemSet(cc2));
-  HM_HH_getConcurrentPack(cc1)->bytesSurvivedLastCollection +=
-      HM_HH_getConcurrentPack(cc2)->bytesSurvivedLastCollection;
-  linkInto(s, cc1, cc2);
+  HM_HierarchicalHeap endOfCompletedChain2 = hh2->subHeapCompletedCC;
+  while (NULL != endOfCompletedChain2->subHeapCompletedCC)
+    endOfCompletedChain2 = endOfCompletedChain2->subHeapCompletedCC;
+  endOfCompletedChain2->subHeapCompletedCC = hh1->subHeapCompletedCC;
+  hh1->subHeapCompletedCC = hh2->subHeapCompletedCC;
+  hh2->subHeapCompletedCC = NULL;
 
   assertCCChainInvariants(hh1);
   assertCCChainInvariants(hh2);
@@ -537,6 +540,7 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
 void mergeCompletedCCs(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(HM_HH_isLevelHead(hh));
+  assertCCChainInvariants(hh);
 
   size_t numMerged = 0;
   size_t numInProgress = 0;
@@ -547,7 +551,6 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     assert(HM_HH_isLevelHead(subhh));
     assert(HM_HH_getDepth(hh) == HM_HH_getDepth(subhh));
     assert(NULL != subhh->subHeapCompletedCC);
-    assert(hh->subHeapCompletedCC == subhh->subHeapCompletedCC);
 
     if (HM_HH_getConcurrentPack(subhh)->ccstate != CC_DONE) {
       // This CC still in progress. Skip.
