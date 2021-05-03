@@ -199,33 +199,9 @@ bool saveNoForward(
 void markAndScan(GC_state s, pointer p, void* rawArgs) {
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
-#if ASSERT
-  GC_header headerBefore = getHeader(p) & (~MARK_MASK);
-  // GC_objectTypeTag tag;
-  // uint16_t bytesNonObjptrs;
-  // uint16_t numObjptrs;
-  // bool hasIdentity;
-  // splitHeader(s, getHeader(p), &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
-#endif
-
   if(!CC_isPointerMarked(p)) {
     markObj(p);
     args->bytesSaved += sizeofObject(s, p);
-
-#if ASSERT
-    GC_header headerAfter = getHeader(p) & (~MARK_MASK);
-    assert(headerBefore == headerAfter);
-    // GC_objectTypeTag ttag;
-    // uint16_t bbytesNonObjptrs;
-    // uint16_t nnumObjptrs;
-    // bool hhasIdentity;
-    // splitHeader(s, getHeader(p), &ttag, &hhasIdentity, &bbytesNonObjptrs, &nnumObjptrs);
-    // assert(tag == ttag);
-    // assert(hasIdentity == hhasIdentity);
-    // assert(bytesNonObjptrs == bbytesNonObjptrs);
-    // assert(numObjptrs == nnumObjptrs);
-#endif
-
     assert(CC_isPointerMarked(p));
 
     struct GC_foreachObjptrClosure forwardPtrClosure =
