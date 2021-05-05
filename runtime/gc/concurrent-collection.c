@@ -600,8 +600,9 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   // often changes the level it is at. So it might in fact be at depth = 1.
   // It is important that we only mark the stack and not scan it.
   // Scanning the stack races with the thread using it.
-  saveNoForward(s, (void*)(thread->stack), &lists);
-  saveNoForward(s, (void*)thread, &lists);
+
+  // saveNoForward(s, (void*)(thread->stack), &lists);
+  // saveNoForward(s, (void*)thread, &lists);
   forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
 // #if ASSERT

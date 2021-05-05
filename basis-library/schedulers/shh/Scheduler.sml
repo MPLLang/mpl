@@ -21,6 +21,10 @@ struct
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
 
+  datatype task =
+    NormalTask of unit -> unit
+  | GCTask of Thread.t * Word64.word
+
   val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
@@ -138,7 +142,7 @@ struct
    *)
 
   type worker_local_data =
-    { queue : (unit -> unit) Queue.t
+    { queue : task Queue.t
     , schedThread : Thread.t option ref
     }
 
@@ -249,7 +253,7 @@ struct
             else
               returnToSched ()
           end
-        val _ = push g'
+        val _ = push (NormalTask g')
         (* val _ =
               if (depth < internalGCThresh) then
                 let
@@ -279,9 +283,9 @@ struct
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME t =>
                   ( HH.mergeThreads (thread, t)
-                  ; setQueueDepth (myWorkerId ()) depth
                   ; HH.promoteChunks thread
                   ; HH.setDepth (thread, depth)
+                  ; setQueueDepth (myWorkerId ()) depth
                   ; case !rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
                     | SOME gr => gr
@@ -296,18 +300,19 @@ struct
       let
         val rootHH = HH.getRoot thread
 
-        fun gcFunc() =
+        (* fun gcFunc() =
           ( HH.collectThreadRoot(thread, rootHH)
           ; returnToSched ()
-          )
+          ) *)
 
+        val gcTask = GCTask (thread, rootHH)
         val cont_arr1 = Array.array (1, SOME f)
         val cont_arr2 = Array.array (1, SOME g)
-        val cont_arr3 = Array.array (1, SOME gcFunc)
+        val cont_arr3 = Array.array (1, SOME (fn _ => gcTask)) (* a hack, I hope it works. *)
         val _ = HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)
+        val _ = push gcTask
         val _ = HH.setDepth (thread, depth + 1)
         val _ = HH.forceLeftHeap(myWorkerId(), thread)
-        val _ = push gcFunc
         val result = fork' {ccOkayAtThisDepth=false} (f, g)
 
         val _ =
@@ -400,18 +405,27 @@ struct
         let
           val idleTimer = startTimer myId
           val (task, depth, idleTimer') = request idleTimer
-          val taskThread = Thread.copy prototypeThread
         in
-          if depth >= 1 then () else
-            die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
-          Queue.setDepth myQueue (depth+1);
-          HH.moveNewThreadToDepth (taskThread, depth);
-          HH.setDepth (taskThread, depth+1);
-          setTaskBox myId task;
-          stopTimer idleTimer';
-          threadSwitch taskThread;
-          Queue.setDepth myQueue 1;
-          acquireWork ()
+          case task of
+            GCTask (thread, hh) =>
+              ( HH.collectThreadRoot (thread, hh)
+              ; acquireWork ()
+              )
+          | NormalTask t =>
+              let
+                val taskThread = Thread.copy prototypeThread
+              in
+                if depth >= 1 then () else
+                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
+                Queue.setDepth myQueue (depth+1);
+                HH.moveNewThreadToDepth (taskThread, depth);
+                HH.setDepth (taskThread, depth+1);
+                setTaskBox myId t;
+                stopTimer idleTimer';
+                threadSwitch taskThread;
+                Queue.setDepth myQueue 1;
+                acquireWork ()
+              end
         end
 
     in

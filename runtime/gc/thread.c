@@ -145,8 +145,12 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
 #pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"
 void GC_HH_promoteChunks(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
-  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
 
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
   HM_HH_promoteChunks(s, thread);

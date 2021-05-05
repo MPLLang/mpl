@@ -13,6 +13,11 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
+struct bucketIfValidArgs {
+  struct HM_chunkList *downPtrs;
+  size_t numLevels;
+};
+
 /* ========================================================================= */
 
 void HM_deferredPromote(
@@ -31,8 +36,12 @@ void HM_deferredPromote(
     HM_initChunkList(&(downPtrs[i]));
   }
 
+  struct bucketIfValidArgs bivArgs =
+    { .downPtrs = &(downPtrs[0]),
+      .numLevels = numLevels };
+
   struct HM_foreachDownptrClosure bucketIfValidClosure =
-  {.fun = bucketIfValid, .env = &(downPtrs[0])};
+  {.fun = bucketIfValid, .env = &bivArgs};
 
   for (HM_HierarchicalHeap cursor = args->hh;
        (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
@@ -190,12 +199,12 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
                    objptr dst,
                    objptr* field,
                    objptr src,
-                   void* arg)
+                   void* rawArgs)
 {
-
-  struct HM_chunkList* downPtrs = arg;
+  struct bucketIfValidArgs *args = rawArgs;
   uint32_t dstDepth = HM_getObjptrDepth(dst);
-  bucketIfValidAtList(s, dst, field, src, &(downPtrs[dstDepth]));
+  assert(dstDepth < args->numLevels);
+  bucketIfValidAtList(s, dst, field, src, &(args->downPtrs[dstDepth]));
   // if (checkValid(dst, field, src)) {
   //   struct HM_chunkList* downPtrs = arg;
   //   HM_remember(&(downPtrs[dstDepth]), dst, field, src);

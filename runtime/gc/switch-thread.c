@@ -49,6 +49,8 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 
   GC_thread oldCurrentThread = getThreadCurrent(s);
 
+  assert(HM_HH_getDepth(oldCurrentThread->hierarchicalHeap) <= oldCurrentThread->currentDepth);
+
   //ENTER1 (s, p);
   /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */

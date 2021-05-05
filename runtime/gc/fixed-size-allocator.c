@@ -104,6 +104,11 @@ void freeFixedSize(FixedSizeAllocator myfsa, void* arg) {
   FixedSizeAllocator owner = *(FixedSizeAllocator *)gap;
   struct FixedSizeElement *elem = arg;
 
+#if ASSERT
+  /** Clear out memory to try and find errors quicker. */
+  memset(arg, 0xCF, myfsa->fixedSize);
+#endif
+
   /** Fast path! When I own the object, just use the fast free-list. */
   if (myfsa == owner) {
     elem->nextFree = myfsa->freeList;
