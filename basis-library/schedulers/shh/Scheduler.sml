@@ -309,26 +309,30 @@ struct
         val cont_arr1 = Array.array (1, SOME f)
         val cont_arr2 = Array.array (1, SOME g)
         val cont_arr3 = Array.array (1, SOME (fn _ => gcTask)) (* a hack, I hope it works. *)
-        val _ = HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)
-        val _ = push gcTask
-        val _ = HH.setDepth (thread, depth + 1)
-        val _ = HH.forceLeftHeap(myWorkerId(), thread)
-        val result = fork' {ccOkayAtThisDepth=false} (f, g)
-
-        val _ =
-          if popDiscard() then
-            HH.collectThreadRoot(thread, rootHH)
-          else
-            ( clear()
-            ; setQueueDepth (myWorkerId ()) depth
-            )
-
-        val _ = HH.promoteChunks thread
-        val _ = HH.setDepth (thread, depth)
       in
-        result
-      end
+        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
+          fork' {ccOkayAtThisDepth=false} (f, g)
+        else
+          let
+            val _ = push gcTask
+            val _ = HH.setDepth (thread, depth + 1)
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            val result = fork' {ccOkayAtThisDepth=false} (f, g)
 
+            val _ =
+              if popDiscard() then
+                HH.collectThreadRoot(thread, rootHH)
+              else
+                ( clear()
+                ; setQueueDepth (myWorkerId ()) depth
+                )
+
+            val _ = HH.promoteChunks thread
+            val _ = HH.setDepth (thread, depth)
+          in
+            result
+          end
+      end
 
     and fork' {ccOkayAtThisDepth} (f, g) =
       let
@@ -336,7 +340,7 @@ struct
         val depth = HH.getDepth thread
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 9 then
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity then
           parfork thread depth (f, g)

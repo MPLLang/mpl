@@ -755,10 +755,23 @@ bool checkPolicyforRoot(
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
     HM_getChunkListSize(HM_HH_getChunkList(hh));
 
+  size_t chainLen = 0;
+  for (HM_HierarchicalHeap cursor = hh->subHeapForCC;
+       NULL != cursor;
+       cursor = cursor->subHeapForCC)
+  {
+    chainLen++;
+    if (chainLen > 2)
+      return FALSE;
+  }
+
   size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
-  if (NULL != hh->subHeapCompletedCC) {
+  for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
+       NULL != cursor;
+       cursor = cursor->subHeapCompletedCC)
+  {
     bytesSurvived +=
-      HM_HH_getConcurrentPack(hh->subHeapCompletedCC)->bytesSurvivedLastCollection;
+      HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
   }
 
   if((2*bytesSurvived) >
@@ -838,8 +851,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     assert(NULL == thread->hierarchicalHeap->subHeapCompletedCC);
 #endif
 
-  // if (!checkPolicyforRoot(s, thread))
-  //   return FALSE;
+  if (!checkPolicyforRoot(s, thread))
+    return FALSE;
 
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);
