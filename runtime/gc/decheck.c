@@ -185,6 +185,28 @@ static inline int bitIndex(uint32_t x) {
   return __builtin_ctz(x);
 }
 
+/** The heap depth of the LCA. Recall that heap depths are off-by-one; the
+  * "root" of the hierarchy is at depth 1. So, returning the length of the
+  * LCA path is the correct heap depth.
+  */
+static int lcaHeapDepth(GC_thread thread, decheck_tid_t t1)
+{
+  /** This code is copied from isOrdered... */
+  uint32_t p1 = norm_path(t1);
+  uint32_t p1mask = (1 << tree_depth(t1)) - 1;
+  uint32_t p2 = norm_path(thread->decheckState);
+  uint32_t p2mask = (1 << tree_depth(thread->decheckState)) - 1;
+  assert(p1 != p2);
+  uint32_t shared_mask = p1mask & p2mask;
+  uint32_t shared_upper_bit = shared_mask+1;
+  uint32_t x = ((p1 ^ p2) & shared_mask) | shared_upper_bit;
+  uint32_t lca_bit = x & -x;
+  // uint32_t lca_mask = lca_bit-1;
+  int llen = bitIndex(lca_bit);
+  assert(llen == lcaLen(p1, p2));
+  return llen;
+}
+
 static bool isOrdered(GC_thread thread, decheck_tid_t t1)
 {
   uint32_t p1 = norm_path(t1);
@@ -225,7 +247,12 @@ void decheckRead(GC_state s, objptr ptr) {
     decheck_tid_t allocator = chunk->decheckState;
     if (allocator.bits == DECHECK_BOGUS_BITS)
         return;
-    if (!isOrdered(thread, allocator)) {
+    if (isOrdered(thread, allocator))
+        return;
+
+    /** If we get here, there is entanglement. Next is how to handle it. */
+
+    if (!s->controls->manageEntanglement) {
         printf("Entanglement detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
         printf("Allocator path: 0x%x\n", allocator.internal.path);
@@ -234,6 +261,26 @@ void decheckRead(GC_state s, objptr ptr) {
         printf("Reader path: 0x%x\n", tid.internal.path);
         printf("Reader dag depth: %d\n", dag_depth(tid));
         exit(-1);
+    }
+
+    /** set the chunk's disentangled depth. This synchronizes with GC, if there
+      * is GC happening by the owner of this chunk.
+      */
+    int32_t newDD = lcaHeapDepth(thread, allocator);
+    assert(newDD >= 1);
+    while (TRUE) {
+      int32_t oldDD = atomicLoadS32(&(chunk->disentangledDepth));
+
+      /** Negative means it's frozen for GC. Wait until it's unfrozen... */
+      while (oldDD < 0) {
+        pthread_yield();
+        oldDD = atomicLoadS32(&(chunk->disentangledDepth));
+      }
+
+      /** And then attempt to update. */
+      if (newDD >= oldDD ||
+          __sync_bool_compare_and_swap(&(chunk->disentangledDepth), oldDD, newDD))
+        break;
     }
 }
 

@@ -107,6 +107,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
   chunk->decheckState = DECHECK_BOGUS_TID;
+  chunk->disentangledDepth = INT32_MAX;
   chunk->magic = CHUNK_MAGIC;
 
 #if ASSERT
@@ -292,6 +293,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   /* if this chunk is good, we're done. */
   if (chunkHasBytesFree(chunk, bytesRequested)) {
     chunk->mightContainMultipleObjects = TRUE;
+    chunk->disentangledDepth = INT32_MAX;
+    chunk->decheckState = DECHECK_BOGUS_TID;
     splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
     HM_unlinkChunk(getFreeListLarge(s), chunk);
     return chunk;
@@ -338,6 +341,7 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   assert(chunkHasBytesFree(chunk, bytesRequested));
   chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
+  chunk->disentangledDepth = INT32_MAX;
   chunk->decheckState = DECHECK_BOGUS_TID;
   splitChunkFront(getFreeListLarge(s), chunk, bytesRequested);
   HM_unlinkChunk(getFreeListLarge(s), chunk);

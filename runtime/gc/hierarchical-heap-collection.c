@@ -22,6 +22,9 @@
 
 // void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
+void checkDisentangledDepthAndFreeze(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepth(GC_state s, objptr op, void* rawArgs);
+
 void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs);
 void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs);
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
@@ -191,6 +194,43 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     size_t sz = HM_getChunkListSize(HM_HH_getChunkList(cursor));
     sizesBefore[d] = sz;
     totalSizeBefore += sz;
+  }
+
+  /* ===================================================================== */
+
+  /** When we're managing entanglement carefully, check if we're allowed to
+    * do this GC.
+    */
+  if (s->controls->manageEntanglement) {
+    int32_t minDisentangledDepth = INT32_MAX;
+    bool allowedToGC = TRUE;
+
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+         cursor = cursor->nextAncestor)
+    {
+      HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+        &checkDisentangledDepthAndFreeze, &minDisentangledDepth);
+
+      assert(minDisentangledDepth > 0);
+      if ((uint32_t)minDisentangledDepth < maxDepth) {
+        allowedToGC = FALSE;
+        break;
+      }
+    }
+
+    if (!allowedToGC) {
+      for (HM_HierarchicalHeap cursor = hh;
+           NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+           cursor = cursor->nextAncestor)
+      {
+        HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+          &unfreezeDisentangledDepth, NULL);
+      }
+
+      releaseLocalScope(s, originalLocalScope);
+      return;
+    }
   }
 
   /* ===================================================================== */
@@ -483,6 +523,19 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
+
+  /** Finally, unfreeze chunks if we need to. */
+  if (s->controls->manageEntanglement) {
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+         cursor = cursor->nextAncestor)
+    {
+      HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+        &unfreezeDisentangledDepth, NULL);
+    }
+  }
+
+
 #if ASSERT
   assertInvariants(thread);
 
@@ -680,6 +733,42 @@ void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* raw
   HM_rememberAtLevel(args->toSpace[srcDepth], dst, field, src);
 }
 #endif
+
+/* ========================================================================= */
+
+void checkDisentangledDepthAndFreeze(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  int32_t* minDisentangledDepth = rawArgs;
+  int32_t minDD = *minDisentangledDepth;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  int32_t thisDD = atomicLoadS32(&(chunk->disentangledDepth));
+  while (thisDD > 0 && thisDD < minDD) {
+    if (__sync_bool_compare_and_swap(&(chunk->disentangledDepth), thisDD, -thisDD))
+      break;
+    thisDD = atomicLoadS32(&(chunk->disentangledDepth));
+  }
+  assert(chunk->disentangledDepth < 0);
+  thisDD = -(chunk->disentangledDepth);
+  if (thisDD < minDD)
+    *minDisentangledDepth = thisDD;
+}
+
+void unfreezeDisentangledDepth(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  ARG_USED_FOR_ASSERT void* rawArgs)
+{
+  assert(isPinned(op));
+  assert(rawArgs == NULL);
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  if (chunk->disentangledDepth < 0) {
+    chunk->disentangledDepth = -(chunk->disentangledDepth);
+  }
+}
 
 /* ========================================================================= */
 

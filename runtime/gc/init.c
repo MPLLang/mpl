@@ -197,6 +197,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (!initLogLevels(levelString)) {
             die ("%s log-level invalid argument", atName);
           }
+        } else if (0 == strcmp (arg, "manage-entanglement")) {
+          i++;
+          s->controls->manageEntanglement = TRUE;
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
@@ -387,6 +390,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->summaryFile = stderr;
   s->controls->collectionType = ALL;
   s->controls->traceBufferSize = 10000;
+  s->controls->manageEntanglement = FALSE;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */

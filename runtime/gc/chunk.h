@@ -66,8 +66,13 @@ struct HM_chunk {
    * have pinned objects. outside of a collection, it is always false. */
   bool pinnedDuringCollection;
 
+  /** set during entanglement when in "safe" mode, to help temporarily disable
+    * local GCs while the entanglement persists.
+    */
+  int32_t disentangledDepth;
+
   bool mightContainMultipleObjects;
-  
+
   decheck_tid_t decheckState;
 
   // for padding and sanity checks
