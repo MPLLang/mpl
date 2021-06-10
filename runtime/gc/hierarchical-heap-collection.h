@@ -45,6 +45,13 @@ struct ForwardHHObjptrArgs {
   uint64_t objectsMoved;
 };
 
+struct checkDEDepthsArgs {
+  int32_t minDisentangledDepth;
+  HM_HierarchicalHeap* fromSpace;
+  HM_HierarchicalHeap* toSpace;
+  uint32_t maxDepth;
+};
+
 #define MAX_NUM_HOLES 512
 
 #endif /* MLTON_GC_INTERNAL_TYPES */

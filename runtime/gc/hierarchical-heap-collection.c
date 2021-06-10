@@ -23,7 +23,8 @@
 // void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
 void checkDisentangledDepthAndFreeze(GC_state s, objptr op, void* rawArgs);
-void unfreezeDisentangledDepth(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepthBefore(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepthAfter(GC_state s, objptr op, void* rawArgs);
 
 void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs);
 void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs);
@@ -202,7 +203,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     * do this GC.
     */
   if (s->controls->manageEntanglement) {
-    int32_t minDisentangledDepth = INT32_MAX;
+    struct checkDEDepthsArgs ddArgs = {
+      .minDisentangledDepth = INT32_MAX,
+      .fromSpace = forwardHHObjptrArgs.fromSpace,
+      .toSpace = forwardHHObjptrArgs.toSpace,
+      .maxDepth = forwardHHObjptrArgs.maxDepth
+    };
+
     bool allowedToGC = TRUE;
 
     for (HM_HierarchicalHeap cursor = hh;
@@ -210,10 +217,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
          cursor = cursor->nextAncestor)
     {
       HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
-        &checkDisentangledDepthAndFreeze, &minDisentangledDepth);
+        &checkDisentangledDepthAndFreeze, &ddArgs);
 
-      assert(minDisentangledDepth > 0);
-      if ((uint32_t)minDisentangledDepth < maxDepth) {
+      assert(ddArgs.minDisentangledDepth > 0);
+      if ((uint32_t)ddArgs.minDisentangledDepth < maxDepth) {
         allowedToGC = FALSE;
         break;
       }
@@ -225,7 +232,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
            cursor = cursor->nextAncestor)
       {
         HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
-          &unfreezeDisentangledDepth, NULL);
+          &unfreezeDisentangledDepthBefore, &ddArgs);
       }
 
       releaseLocalScope(s, originalLocalScope);
@@ -494,6 +501,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   /* merge in toSpace */
   hh = HM_HH_zip(hhTail, hhToSpace);
   thread->hierarchicalHeap = hh;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    toSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
 
   /* update currentChunk and associated */
   HM_chunk lastChunk = NULL;
@@ -526,12 +539,19 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   /** Finally, unfreeze chunks if we need to. */
   if (s->controls->manageEntanglement) {
+    struct checkDEDepthsArgs ddArgs = {
+      .minDisentangledDepth = INT32_MAX,
+      .fromSpace = forwardHHObjptrArgs.fromSpace,
+      .toSpace = forwardHHObjptrArgs.toSpace,
+      .maxDepth = forwardHHObjptrArgs.maxDepth
+    };
+
     for (HM_HierarchicalHeap cursor = hh;
          NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
          cursor = cursor->nextAncestor)
     {
       HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
-        &unfreezeDisentangledDepth, NULL);
+        &unfreezeDisentangledDepthAfter, &ddArgs);
     }
   }
 
@@ -742,29 +762,92 @@ void checkDisentangledDepthAndFreeze(
   void* rawArgs)
 {
   assert(isPinned(op));
-  int32_t* minDisentangledDepth = rawArgs;
-  int32_t minDD = *minDisentangledDepth;
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our from-space, then it's entangled, so skip it.
+    * (Note: we can't just check if it's entangled, because even if it's
+    * entangled, we might still have it in our local heap...)
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+
+  if (opDepth <= unpinDepthOf(op)) {
+    /* don't freeze anything that is going to get unpinned! */
+    return;
+  }
+
   int32_t thisDD = atomicLoadS32(&(chunk->disentangledDepth));
-  while (thisDD > 0 && thisDD < minDD) {
+  while (thisDD > 0) {
     if (__sync_bool_compare_and_swap(&(chunk->disentangledDepth), thisDD, -thisDD))
       break;
     thisDD = atomicLoadS32(&(chunk->disentangledDepth));
   }
   assert(chunk->disentangledDepth < 0);
   thisDD = -(chunk->disentangledDepth);
-  if (thisDD < minDD)
-    *minDisentangledDepth = thisDD;
+  if (thisDD < args->minDisentangledDepth)
+    args->minDisentangledDepth = thisDD;
 }
 
-void unfreezeDisentangledDepth(
+void unfreezeDisentangledDepthBefore(
   __attribute__((unused)) GC_state s,
   objptr op,
-  ARG_USED_FOR_ASSERT void* rawArgs)
+  void* rawArgs)
 {
   assert(isPinned(op));
-  assert(rawArgs == NULL);
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our from-space, then it's entangled, so skip it.
+    * (Note: we can't just check if it's entangled, because even if it's
+    * entangled, we might still have it in our local heap...)
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+  assert(chunk->disentangledDepth != 0);
+
+  if (chunk->disentangledDepth < 0) {
+    chunk->disentangledDepth = -(chunk->disentangledDepth);
+  }
+}
+
+void unfreezeDisentangledDepthAfter(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our to-space (now we're AFTER collection completed),
+    * then it's entangled, so skip it.
+    */
+  if (opDepth > args->maxDepth || args->toSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->toSpace[opDepth], chunk));
+  assert(chunk->disentangledDepth != 0);
+
   if (chunk->disentangledDepth < 0) {
     chunk->disentangledDepth = -(chunk->disentangledDepth);
   }
@@ -780,6 +863,25 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
    * (getLevelHead, etc.), but this should be faster. The toDepth field
    * is set by the loop that calls this function */
   uint32_t opDepth = args->toDepth;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+
+  if (NULL == args->toSpace[opDepth]) {
+    /** BUG HERE. chunk->decheckState is WRONG for entangled shit. */
+    args->toSpace[opDepth] = HM_HH_new(s, opDepth, chunk->decheckState);
+  }
+
+  /** If it's not in our from-space, then it's entangled.
+    * KEEP THE ENTRY but don't do any of the other nasty stuff.
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+
+    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
+    return;
+  }
+
   assert(HM_getObjptrDepth(op) == opDepth);
 
   if (opDepth <= unpinDepthOf(op)) {
@@ -789,11 +891,6 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
 
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-
-  if (NULL == args->toSpace[opDepth]) {
-    args->toSpace[opDepth] = HM_HH_new(s, opDepth, chunk->decheckState);
-  }
 
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
 

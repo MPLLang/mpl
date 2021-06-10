@@ -204,7 +204,7 @@ static int lcaHeapDepth(GC_thread thread, decheck_tid_t t1)
   // uint32_t lca_mask = lca_bit-1;
   int llen = bitIndex(lca_bit);
   assert(llen == lcaLen(p1, p2));
-  return llen;
+  return llen+1;
 }
 
 static bool isOrdered(GC_thread thread, decheck_tid_t t1)

@@ -78,6 +78,15 @@ void Assignable_writeBarrier(
   /* Otherwise, remember the down-pointer! */
   uint32_t d = srcHH->depth;
   GC_thread thread = getThreadCurrent(s);
+
+  /** Fix a silly issue where, when we are dealing with entanglement, the
+    * lower object is actually deeper than the current thread (which is
+    * possible because of entanglement! the thread is peeking inside of
+    * some other thread's heaps, and the other thread might be deeper).
+    */
+  if (d > thread->currentDepth && s->controls->manageEntanglement)
+    d = thread->currentDepth;
+
   HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
 
   if (hh == NULL)
