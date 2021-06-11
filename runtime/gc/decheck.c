@@ -263,6 +263,8 @@ void decheckRead(GC_state s, objptr ptr) {
         exit(-1);
     }
 
+    s->cumulativeStatistics->numEntanglementsDetected++;
+
     /** set the chunk's disentangled depth. This synchronizes with GC, if there
       * is GC happening by the owner of this chunk.
       */

@@ -11,7 +11,7 @@ objptr Assignable_readBarrier(
   __attribute__((unused)) objptr obj,
   objptr* field)
 {
-  s->numberDisentanglementChecks++;
+  s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
   decheckRead(s, ptr);
   return ptr;

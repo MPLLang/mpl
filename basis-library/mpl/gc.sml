@@ -27,6 +27,9 @@ struct
 
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
+
+    fun numberEntanglementsDetected () =
+      C_UIntmax.toLargeInt (GC.numberEntanglementsDetected (gcState ()))
   end
 
   exception NotYetImplemented of string

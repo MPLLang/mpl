@@ -156,7 +156,9 @@ structure GC =
       val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
       "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
-      val numberDisentanglementChecks = _import "GC_numberDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
+      val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
+
+      val numberEntanglementsDetected = _import "GC_numEntanglementsDetected" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =

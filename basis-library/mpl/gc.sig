@@ -17,6 +17,10 @@ sig
    *)
   val numberDisentanglementChecks: unit -> IntInf.int
 
+  (* How many times entanglement has been detected at a read barrier.
+   *)
+  val numberEntanglementsDetected: unit -> IntInf.int
+
   (* The following are all cumulative statistics (initially 0, and only
    * increase throughout execution).
    *
