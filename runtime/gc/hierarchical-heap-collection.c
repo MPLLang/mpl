@@ -112,8 +112,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     minDepth--;
   }
 
-  if (minDepth == 0) {
-    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection that includes root heap");
+  if (minDepth < thread->minLocalCollectionDepth) {
+    LOG(LM_HH_COLLECTION, LL_INFO, "Skipping collection too shallow");
     releaseLocalScope(s, originalLocalScope);
     return;
   }
@@ -633,6 +633,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   timespec_now(&stopTime);
   timespec_sub(&stopTime, &startTime);
   timespec_add(&(s->cumulativeStatistics->timeLocalGC), &stopTime);
+
+  // if (stopTime.tv_sec >= 1 || stopTime.tv_nsec > 999999999 / 2) {
+  //   printf("[WARN] long GC %lld.%.9ld s, %d -> %d, %d\n",
+  //     (long long)stopTime.tv_sec,
+  //     stopTime.tv_nsec,
+  //     (int)minDepth,
+  //     (int)maxDepth,
+  //     (int)thread->minLocalCollectionDepth);
+  // }
 
   if (needGCTime(s)) {
     if (detailedGCTime(s)) {
