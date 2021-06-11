@@ -72,8 +72,9 @@ void HM_ensureHierarchicalHeapAssurances(
   uint32_t desiredScope = 1;
   if (!forceGC) desiredScope = HM_HH_desiredCollectionScope(s, thread);
 
-  if (desiredScope <= thread->currentDepth) {
-
+  if (desiredScope <= thread->currentDepth &&
+      thread->currentDepth <= (uint32_t)thread->disentangledDepth)
+  {
     HM_HHC_collectLocal(desiredScope);
 
     /* post-collection, the thread might have been moved? */

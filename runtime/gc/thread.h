@@ -46,6 +46,11 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  /** Everything at this depth or below is disentangled. This is only relevant
+    * for managing entanglement on-the-fly.
+    */
+  int32_t disentangledDepth;
+
   decheck_tid_t decheckState;
   uint32_t decheckSyncDepths[DECHECK_DEPTHS_LEN];
 
@@ -68,6 +73,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(size_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
+                    sizeof(uint32_t) + // disentangledDepth
                     sizeof(decheck_tid_t) + // disentanglement checker state
                     DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
                     sizeof(uint32_t) + // minLocalCollectionDepth

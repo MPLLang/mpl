@@ -226,6 +226,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       }
     }
 
+    if (ddArgs.minDisentangledDepth < thread->disentangledDepth) {
+      thread->disentangledDepth = ddArgs.minDisentangledDepth;
+    }
+
     if (!allowedToGC) {
       for (HM_HierarchicalHeap cursor = hh;
            NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;

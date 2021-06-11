@@ -437,6 +437,8 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
+                  val bytesDisentangledDepth =
+                     Bits.toBytes (Type.width Type.word32)
                   val bytesDecheckState =
                      Bits.toBytes (Type.width Type.word64)
                   val bytesMinLocalCollectionDepth =
@@ -462,6 +464,7 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesDisentangledDepth +
                         bytesDecheckState +
                         bytesDecheckSyncDepths +
                         bytesMinLocalCollectionDepth +
@@ -485,6 +488,7 @@ structure ObjectType =
                                                Type.word32,
                                                Type.csize (),
                                                Type.exnStack (),
+                                               Type.word32,
                                                Type.word32,
                                                Type.word64,
                                                Type.bits (Bytes.toBits bytesDecheckSyncDepths),

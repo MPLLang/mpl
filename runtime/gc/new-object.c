@@ -111,6 +111,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->hierarchicalHeap = NULL;
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->disentangledDepth = INT32_MAX;
   thread->decheckState = DECHECK_BOGUS_TID;
   memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
   if (DEBUG_THREADS)
@@ -172,6 +173,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->hierarchicalHeap = hh;
   thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->disentangledDepth = INT32_MAX;
   thread->decheckState = DECHECK_BOGUS_TID;
   memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
 
