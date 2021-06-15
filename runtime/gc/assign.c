@@ -25,6 +25,7 @@ void Assignable_writeBarrier(
 {
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
+  pointer srcp = objptrToPointer(src, NULL);
 
 #if ASSERT
   // check that field is actually inside this object
@@ -62,17 +63,46 @@ void Assignable_writeBarrier(
   if (!isObjptr(src))
     return;
 
-  HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
+  /* deque down-pointers are handled separately during collection. */
+  if (dst == s->wsQueue)
+    return;
 
-  pointer srcp = objptrToPointer(src, NULL);
+  if (s->controls->manageEntanglement &&
+      getThreadCurrent(s)->decheckState.bits != DECHECK_BOGUS_BITS &&
+
+      ((HM_getChunkOf(srcp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(srcp)->decheckState))
+      ||
+      (HM_getChunkOf(dstp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(dstp)->decheckState))))
+  {
+    /** Nasty entanglement. To be safe, just pin the object. A safe unpin
+      * depth is the overall lca.
+      */
+
+    int unpinDepth1 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(srcp)->decheckState);
+
+    int unpinDepth2 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(dstp)->decheckState);
+
+    int unpinDepth = (unpinDepth1 < unpinDepth2 ? unpinDepth1 : unpinDepth2);
+
+    if (pinObject(src, (uint32_t)unpinDepth)) {
+      /** Just remember it at some arbitrary place... */
+      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, src);
+    }
+
+    return;
+  }
+
+  HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* Internal or up-pointer. */
   if (dstHH->depth >= srcHH->depth)
-    return;
-
-  /* deque down-pointers are handled separately during collection. */
-  if (dst == s->wsQueue)
     return;
 
   /* Otherwise, remember the down-pointer! */

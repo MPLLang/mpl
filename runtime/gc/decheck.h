@@ -9,6 +9,9 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+struct GC_thread;
+typedef struct GC_thread *GC_thread;
+
 typedef union {
     struct {
         uint32_t path;
@@ -36,6 +39,8 @@ PRIVATE void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uin
 
 void decheckInit(GC_state s);
 void decheckRead(GC_state s, objptr ptr);
+bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1);
+int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 

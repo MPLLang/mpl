@@ -186,16 +186,15 @@ static inline int bitIndex(uint32_t x) {
 }
 
 /** The heap depth of the LCA. Recall that heap depths are off-by-one; the
-  * "root" of the hierarchy is at depth 1. So, returning the length of the
-  * LCA path is the correct heap depth.
+  * "root" of the hierarchy is at depth 1.
   */
-static int lcaHeapDepth(GC_thread thread, decheck_tid_t t1)
+int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2)
 {
   /** This code is copied from isOrdered... */
   uint32_t p1 = norm_path(t1);
   uint32_t p1mask = (1 << tree_depth(t1)) - 1;
-  uint32_t p2 = norm_path(thread->decheckState);
-  uint32_t p2mask = (1 << tree_depth(thread->decheckState)) - 1;
+  uint32_t p2 = norm_path(t2);
+  uint32_t p2mask = (1 << tree_depth(t2)) - 1;
   assert(p1 != p2);
   uint32_t shared_mask = p1mask & p2mask;
   uint32_t shared_upper_bit = shared_mask+1;
@@ -207,7 +206,7 @@ static int lcaHeapDepth(GC_thread thread, decheck_tid_t t1)
   return llen+1;
 }
 
-static bool isOrdered(GC_thread thread, decheck_tid_t t1)
+bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1)
 {
   uint32_t p1 = norm_path(t1);
   uint32_t p1mask = (1 << tree_depth(t1)) - 1;
@@ -247,7 +246,7 @@ void decheckRead(GC_state s, objptr ptr) {
     decheck_tid_t allocator = chunk->decheckState;
     if (allocator.bits == DECHECK_BOGUS_BITS)
         return;
-    if (isOrdered(thread, allocator))
+    if (decheckIsOrdered(thread, allocator))
         return;
 
     /** If we get here, there is entanglement. Next is how to handle it. */
@@ -268,7 +267,7 @@ void decheckRead(GC_state s, objptr ptr) {
     /** set the chunk's disentangled depth. This synchronizes with GC, if there
       * is GC happening by the owner of this chunk.
       */
-    int32_t newDD = lcaHeapDepth(thread, allocator);
+    int32_t newDD = lcaHeapDepth(thread->decheckState, allocator);
     assert(newDD >= 1);
     while (TRUE) {
       int32_t oldDD = atomicLoadS32(&(chunk->disentangledDepth));
