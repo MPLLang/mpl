@@ -6,6 +6,14 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
+
+void Assignable_decheckObjptr(objptr op)
+{
+  GC_state s = pthread_getspecific(gcstate_key);
+  s->cumulativeStatistics->numDisentanglementChecks++;
+  decheckRead(s, op);
+}
+
 objptr Assignable_readBarrier(
   GC_state s,
   __attribute__((unused)) objptr obj,
