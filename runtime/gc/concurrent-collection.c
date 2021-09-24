@@ -711,6 +711,13 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   *(origList) = *(repList);
 
+  HM_chunk stackChunk = HM_getChunkOf(cp->stack);
+  assert(!(stackChunk->mightContainMultipleObjects));
+  assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
+  HM_unlinkChunk(origList, stackChunk);
+  HM_freeChunk(s, stackChunk);
+  cp->stack = BOGUS_OBJPTR;
+
   HH_EBR_leaveQuiescentState(s);
 
   /** This is safe (no race with any zips), because `targetHH` is split off

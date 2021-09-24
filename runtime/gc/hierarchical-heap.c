@@ -793,6 +793,7 @@ bool checkPolicyforRoot(
   return TRUE;
 }
 
+/*
 objptr copyCurrentStack(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   pointer stackPtr = objptrToPointer(getStackCurrentObjptr(s), NULL);
@@ -811,6 +812,38 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   stackCopy += metaDataSize;
   ((GC_stack)stackCopy)->reserved = ((GC_stack)stackCopy)->used;
   return pointerToObjptr(stackCopy, NULL);
+}
+*/
+
+objptr copyCurrentStack(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  size_t reserved = getStackCurrent(s)->reserved;
+  assert(isStackReservedAligned(s, reserved));
+  size_t stackSize = sizeofStackWithMetaData(s, reserved);
+
+  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  if (NULL == newChunk) {
+    DIE("Ran out of space to copy stack!");
+  }
+  assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
+  newChunk->mightContainMultipleObjects = FALSE;
+  newChunk->levelHead = HM_HH_getUFNode(hh);
+
+  pointer frontier = HM_getChunkFrontier(newChunk);
+  assert(frontier == HM_getChunkStart(newChunk));
+  assert(GC_STACK_METADATA_SIZE == GC_HEADER_SIZE);
+  *((GC_header*)frontier) = GC_STACK_HEADER;
+  GC_stack stack = (GC_stack)(frontier + GC_HEADER_SIZE);
+  stack->reserved = reserved;
+  stack->used = 0;
+  HM_updateChunkFrontierInList(
+    HM_HH_getChunkList(hh),
+    newChunk,
+    frontier + stackSize);
+  copyStack(s, getStackCurrent(s), stack);
+
+  return pointerToObjptr((pointer)stack, NULL);
 }
 
 pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
