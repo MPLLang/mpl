@@ -321,7 +321,10 @@ struct
 
             val _ =
               if popDiscard() then
-                HH.collectThreadRoot(thread, rootHH)
+                if depth = 1 then
+                  HH.collectThreadRoot (thread, rootHH)
+                else
+                  HH.cancelCC (thread, rootHH)
               else
                 ( clear()
                 ; setQueueDepth (myWorkerId ()) depth

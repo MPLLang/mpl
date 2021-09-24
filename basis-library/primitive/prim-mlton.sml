@@ -415,6 +415,9 @@ structure Thread =
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
         'a array * 'b array * 'c array * thread -> bool;
+      val cancelCC =
+        _import "HM_HH_cancelCC" runtime private:
+        GCState.t * thread * Word64.word -> unit;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 

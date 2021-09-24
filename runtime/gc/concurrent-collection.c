@@ -711,7 +711,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   *(origList) = *(repList);
 
-  HM_chunk stackChunk = HM_getChunkOf(cp->stack);
+  HM_chunk stackChunk = HM_getChunkOf(objptrToPointer(cp->stack, NULL));
   assert(!(stackChunk->mightContainMultipleObjects));
   assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
   HM_unlinkChunk(origList, stackChunk);

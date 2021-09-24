@@ -56,6 +56,7 @@ signature MLTON_THREAD =
           val resetList    : thread -> unit
 
           (*Collect the depth = 1 HH of this thread*)
+          val cancelCC: thread * Word64.word -> unit
           val collectThreadRoot : thread * Word64.word -> unit
           val getRoot : thread -> Word64.word
 

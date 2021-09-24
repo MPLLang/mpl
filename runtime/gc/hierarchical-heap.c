@@ -867,6 +867,61 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   return (void*)(getThreadCurrent(s)->hierarchicalHeap);
 }
 
+// ============================================================================
+
+void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
+  HM_HierarchicalHeap heap = (HM_HierarchicalHeap)hhp;
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(getThreadCurrent(s) == thread);
+
+  bool gotIt = claimHeap(heap);
+#if ASSERT
+  assert(gotIt);
+#else
+  ((void)gotIt);
+#endif
+
+  HM_HierarchicalHeap mainhh =
+    HM_HH_getHeapAtDepth(s, thread, HM_HH_getDepth(heap));
+  assert(mainhh->subHeapForCC == heap);
+
+  CC_freeStack(HM_HH_getConcurrentPack(heap));
+
+  pointer stackP = objptrToPointer(HM_HH_getConcurrentPack(heap)->stack, NULL);
+  HM_chunk stackChunk = HM_getChunkOf(stackP);
+  assert(HM_getLevelHead(stackChunk) == heap);
+  assert(!(stackChunk->mightContainMultipleObjects));
+  HM_unlinkChunk(HM_HH_getChunkList(HM_getLevelHead(stackChunk)), stackChunk);
+  HM_freeChunk(s, stackChunk);
+  HM_HH_getConcurrentPack(heap)->stack = BOGUS_OBJPTR;
+
+  mainhh->subHeapForCC = heap->subHeapForCC;
+  HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(heap));
+  HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(heap));
+  linkInto(s, mainhh, heap);
+
+
+  /** preserve annoying subHeapForCC and subHeapCompletedCC chain invariants */
+  if (NULL == mainhh->subHeapForCC && NULL != mainhh->subHeapCompletedCC) {
+
+    HM_HierarchicalHeap completed = mainhh->subHeapCompletedCC;
+    while (completed != NULL) {
+      HM_HierarchicalHeap next = completed->subHeapCompletedCC;
+      HM_HH_getConcurrentPack(mainhh)->bytesSurvivedLastCollection +=
+        HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
+      HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(completed));
+      HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(completed));
+      linkInto(s, mainhh, completed);
+      completed = next;
+    }
+
+    mainhh->subHeapCompletedCC = NULL;
+  }
+
+  assertCCChainInvariants(mainhh);
+  return;
+}
+
 
 // =============================================================================
 

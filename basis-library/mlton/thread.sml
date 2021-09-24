@@ -77,6 +77,7 @@ struct
   fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
   fun resetList (t) = Prim.resetList(t)
 
+  fun cancelCC (t, hh) = Prim.cancelCC (gcState (), t, hh)
   fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
   fun getRoot t = Prim.getRoot t
 
