@@ -355,6 +355,13 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.minCollectionSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "min-cc-size")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s min-cc-size missing argument.", atName);
+          }
+
+          s->controls->hhConfig.minCCSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -419,6 +426,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackShrink = 0.5f;
   s->controls->hhConfig.collectionThresholdRatio = 8.0;
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
+  s->controls->hhConfig.minCCSize = 1024L * 1024L;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;

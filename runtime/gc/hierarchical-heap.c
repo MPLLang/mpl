@@ -746,12 +746,19 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
 
 
 bool checkPolicyforRoot(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   GC_thread thread)
 {
   assert(NULL != thread->hierarchicalHeap);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
+
+  if (HM_getChunkListSize(HM_HH_getChunkList(hh))
+      < s->controls->hhConfig.minCCSize)
+  {
+    return FALSE;
+  }
+
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
     HM_getChunkListSize(HM_HH_getChunkList(hh));
 
@@ -851,8 +858,20 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     assert(NULL == thread->hierarchicalHeap->subHeapCompletedCC);
 #endif
 
-  if (!checkPolicyforRoot(s, thread))
+  if (!checkPolicyforRoot(s, thread)) {
+    HM_HierarchicalHeap heap = thread->hierarchicalHeap;
+    uint32_t depth = heap->depth;
+    size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
+    size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
+    size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
+    LOG(LM_CC_COLLECTION, LL_INFO,
+      "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
+      depth,
+      lastSurvived,
+      freshAlloc,
+      size);
     return FALSE;
+  }
 
   assert(HM_getLevelHead(HM_getChunkOf(kl)) == hh);
   assert(HM_getLevelHead(HM_getChunkOf(kr)) == hh);
