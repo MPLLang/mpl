@@ -374,6 +374,8 @@ static void clearOutOtherFrees(GC_state s) {
     }
   }
 
+  size_t numFreed = 0;
+
   while (topElem != NULL) {
     FreeBlock next = topElem->nextFree;
     SuperBlock sb = topElem->container;
@@ -381,6 +383,13 @@ static void clearOutOtherFrees(GC_state s) {
     localFreeBlocks(s, sb, topElem);
 
     topElem = next;
+    numFreed++;
+  }
+
+  if (numFreed > 400) {
+    LOG(LM_CHUNK_POOL, LL_INFO,
+      "number of freed blocks: %zu",
+      numFreed);
   }
 }
 
