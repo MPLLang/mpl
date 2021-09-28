@@ -13,3 +13,5 @@
 #include "util/log.c"
 #include "util/spinlock.c"
 #include "util/to-string.c"
+
+#include "tracing.c"
