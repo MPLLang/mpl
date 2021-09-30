@@ -26,6 +26,8 @@ struct
   | GCTask of Thread.t * Word64.word
 
   structure DE = MLton.Thread.Disentanglement
+  (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
+  val maxDisetanglementCheckDepth = 31
 
   val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
@@ -316,7 +318,7 @@ struct
           else
             ( clear () (* this should be safe after popDiscard fails? *)
             ; if decrementHitsZero incounter then () else returnToSched ()
-            ; case !rightSideThread of
+            ; case HM.refDerefNoBarrier rightSideThread of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME t =>
                   let
@@ -326,7 +328,7 @@ struct
                     HH.promoteChunks thread;
                     HH.setDepth (thread, depth);
                     setQueueDepth (myWorkerId ()) depth;
-                    case !rightSideResult of
+                    case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
                     | SOME gr => (gr, tr)
                   end
@@ -385,9 +387,10 @@ struct
         val depth = HH.getDepth thread
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
+        (*if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
           forkGC thread depth (f, g)
-        else if depth < Queue.capacity then
+        else*) if depth < Queue.capacity andalso
+                  depth < maxDisetanglementCheckDepth then
           parfork thread depth (f, g)
         else
           (* don't let us hit an error, just sequentialize instead *)

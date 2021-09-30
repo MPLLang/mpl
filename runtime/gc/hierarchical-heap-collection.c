@@ -250,7 +250,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
        cursor = cursor->nextAncestor)
   {
 #if ASSERT
-    traverseEachObjInChunkList(s, HM_HH_getChunkList(cursor));
+    /** SAM_NOTE: can't do this here, because pinned chunks contain garbage. */
+    // traverseEachObjInChunkList(s, HM_HH_getChunkList(cursor));
 #endif
     uint32_t d = HM_HH_getDepth(cursor);
     size_t sz = HM_getChunkListSize(HM_HH_getChunkList(cursor));
@@ -486,6 +487,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       continue;
     }
 
+#if ASSERT
+    // SAM_NOTE: safe to check here, because pinned chunks are separate.
+    traverseEachObjInChunkList(s, HM_HH_getChunkList(toSpaceLevel));
+#endif
+
     /* unset the flags on pinned chunks and update their HH pointer */
     for (HM_chunk chunkCursor = pinned[depth].firstChunk;
          chunkCursor != NULL;
@@ -646,7 +652,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
        cursor = cursor->nextAncestor)
   {
     struct HM_foreachDownptrClosure closure =
-      {.fun = checkRememberedEntry, .env = (void*)&cursor};
+      {.fun = checkRememberedEntry, .env = (void*)cursor};
     HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
   }
 #endif
@@ -679,7 +685,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
 #if ASSERT
     HM_assertChunkListInvariants(lev);
-    traverseEachObjInChunkList(s, lev);
+
+    // SAM_NOTE: can't do this here, because pinned chunks contain garbage.
+    // traverseEachObjInChunkList(s, lev);
 #endif
 
     if (LOG_ENABLED(LM_HH_COLLECTION, LL_INFO) &&
@@ -986,7 +994,7 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
 
   chunk->pinnedDuringCollection = TRUE;
   assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
-  assert(HM_getLevelHead(chunk) == HM_HH_getUFNode(args->fromSpace[opDepth]));
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
   /* SAM_NOTE: unlinkChunk unsets levelHead, which is a little strange. */
   HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
