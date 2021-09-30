@@ -136,7 +136,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   /* Allocate and initialize the heap that will be assigned to this thread.
    * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
    * yet. */
-  HM_HierarchicalHeap hh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
+  HM_HierarchicalHeap hh = HM_HH_new(s, depth);
 
   HM_chunk tChunk = HM_allocateChunk(HM_HH_getChunkList(hh), threadSize);
   HM_chunk sChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);

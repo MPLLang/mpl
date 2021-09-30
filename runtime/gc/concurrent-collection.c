@@ -513,6 +513,13 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   /** There is no race here, because for truly concurrent GC (depth 1), the
     * hh has been split.
     */
+
+  DIE(
+    "TODO: CC_filterDownPointers: need to handle pinning. "
+    "Fix this function as well as HM_foreachRemembered calls in "
+    "CC_collectWithRoots"
+  );
+
   HM_chunkList y = HM_HH_getRemSet(hh);
   struct HM_foreachDownptrClosure bucketIfValidAtListClosure =
   {.fun = bucketIfValidAtList, .env = (void*)x};

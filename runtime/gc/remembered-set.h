@@ -16,7 +16,7 @@ struct HM_remembered {
   objptr object;
 };
 
-typedef void (*HM_foreachDownptrFun)(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+typedef void (*HM_foreachDownptrFun)(GC_state s, objptr src, void* args);
 
 typedef struct HM_foreachDownptrClosure {
   HM_foreachDownptrFun fun;

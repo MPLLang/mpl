@@ -465,10 +465,7 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
       && (NULL == HM_HH_getUFNode(hh)->representative);
 }
 
-HM_HierarchicalHeap HM_HH_new(
-  GC_state s,
-  uint32_t depth,
-  decheck_tid_t decheckState)
+HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
   HM_UnionFindNode uf = allocateFixedSize(getUFAllocator(s));
   HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
@@ -531,9 +528,7 @@ HM_HierarchicalHeap HM_HH_getHeapAtDepth(
   /* otherwise, either missed it or at end of list. */
   assert(NULL == hh || HM_HH_getDepth(hh) < depth);
 
-  /* SAM_NOTE: TODO: how to compute an appropriate thread id for this
-   * missing ancestor?? */
-  HM_HierarchicalHeap newhh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
+  HM_HierarchicalHeap newhh = HM_HH_new(s, depth);
   newhh->nextAncestor = hh;
   *cursor = newhh;
   return newhh;
@@ -572,7 +567,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 
   if (HM_HH_getDepth(hh) < currentDepth)
   {
-    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth, thread->decheckState);
+    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth);
     newhh->nextAncestor = hh;
     thread->hierarchicalHeap = newhh;
 

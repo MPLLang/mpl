@@ -40,7 +40,7 @@ void HM_foreachRemembered(
     pointer frontier = HM_getChunkFrontier(chunk);
     while (p < frontier) {
       struct HM_remembered* r = (struct HM_remembered*)p;
-      f(s, r->object, fArgs);
+      f->fun(s, r->object, f->env);
       p += sizeof(struct HM_remembered);
     }
     chunk = chunk->nextChunk;

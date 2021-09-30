@@ -31,6 +31,7 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList);
 size_t HM_BLOCK_SIZE;
 size_t HM_ALLOC_SIZE;
 
+/*
 HM_chunk mmapNewChunk(size_t chunkWidth);
 HM_chunk mmapNewChunk(size_t chunkWidth) {
   assert(isAligned(chunkWidth, HM_BLOCK_SIZE));
@@ -48,6 +49,7 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
 
   return result;
 }
+*/
 
 void HM_configChunks(GC_state s) {
   assert(isAligned(s->controls->blockSize, GC_MODEL_MINALIGN));
