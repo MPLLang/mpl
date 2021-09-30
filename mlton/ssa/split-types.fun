@@ -182,12 +182,12 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                   in
                      (ty, TypeInfo.Array)
                   end
-               | Prim.Array_sub => derefPrim args
+               | Prim.Array_sub _ => derefPrim args
                | Prim.Array_toArray => Vector.sub (args, 0)
                | Prim.Array_toVector => Vector.sub (args, 0)
                | Prim.Array_update _ => updatePrim TypeInfo.Array args
                | Prim.Ref_ref => refPrim TypeInfo.Ref args
-               | Prim.Ref_deref => derefPrim args
+               | Prim.Ref_deref _ => derefPrim args
                | Prim.Ref_assign _ => assignPrim TypeInfo.Ref args
                | Prim.Vector_sub => derefPrim args
                | Prim.Vector_vector => TypeInfo.Heap

@@ -465,7 +465,10 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
       && (NULL == HM_HH_getUFNode(hh)->representative);
 }
 
-HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
+HM_HierarchicalHeap HM_HH_new(
+  GC_state s,
+  uint32_t depth,
+  decheck_tid_t decheckState)
 {
   HM_UnionFindNode uf = allocateFixedSize(getUFAllocator(s));
   HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
@@ -497,11 +500,6 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
 
-  // printf("[%d] new at depth %d: %p\n",
-  //   Proc_processorNumber(s),
-  //   (int)depth,
-  //   (void*)hh);
-
   return hh;
 }
 
@@ -511,7 +509,7 @@ uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh)
 }
 
 HM_HierarchicalHeap HM_HH_getHeapAtDepth(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   GC_thread thread,
   uint32_t depth)
 {
@@ -533,7 +531,9 @@ HM_HierarchicalHeap HM_HH_getHeapAtDepth(
   /* otherwise, either missed it or at end of list. */
   assert(NULL == hh || HM_HH_getDepth(hh) < depth);
 
-  HM_HierarchicalHeap newhh = HM_HH_new(s, depth);
+  /* SAM_NOTE: TODO: how to compute an appropriate thread id for this
+   * missing ancestor?? */
+  HM_HierarchicalHeap newhh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
   newhh->nextAncestor = hh;
   *cursor = newhh;
   return newhh;
@@ -572,7 +572,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 
   if (HM_HH_getDepth(hh) < currentDepth)
   {
-    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth);
+    HM_HierarchicalHeap newhh = HM_HH_new(s, currentDepth, thread->decheckState);
     newhh->nextAncestor = hh;
     thread->hierarchicalHeap = newhh;
 
@@ -585,6 +585,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
+  chunk->decheckState = thread->decheckState;
   chunk->levelHead = HM_HH_getUFNode(hh);
 
   thread->currentChunk = chunk;
@@ -1239,6 +1240,7 @@ void assertInvariants(GC_thread thread)
          chunk = chunk->nextChunk)
     {
       assert(HM_getLevelHead(chunk) == cursor);
+      assert(chunk->disentangledDepth >= 1);
     }
   }
 

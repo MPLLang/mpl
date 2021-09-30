@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor Zone (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM = 
+functor Zone (S: SSA2_TRANSFORM_STRUCTS): SSA2_TRANSFORM =
 struct
 
 open S
@@ -125,7 +125,7 @@ fun zoneFunction f =
           | Local {blockCache, defScope, ty, uses, ...} =>
                case !blockCache of
                   SOME y => y
-                | _ => 
+                | _ =>
                      if Scope.equals (defScope, scope)
                         then x
                      else
@@ -135,8 +135,11 @@ fun zoneFunction f =
                                  val offset = !numComponents
                                  val () = List.push (componentsRev, x)
                                  val () = numComponents := 1 + offset
+                                 (* SAM_NOTE: seems okay to not read barrier
+                                  * here? the created tuple is immutable? *)
                                  val exp = Select {base = Base.Object tuple,
-                                                   offset = offset}
+                                                   offset = offset,
+                                                   readBarrier = false}
                                  val () = List.push (uses, {exp = exp,
                                                             scope = scope})
                               in
@@ -166,7 +169,7 @@ fun zoneFunction f =
          let
             val Block.T {args, label, statements, transfer} = b
             val {isCut = ref isCut, ...} = labelInfo label
-            val info' = 
+            val info' =
                if isCut
                   then newInfo ()
                else info

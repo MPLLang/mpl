@@ -62,11 +62,22 @@ struct HM_chunk {
    */
   uint8_t startGap;
 
+  /* this bool is only used during local collections, to mark which chunks
+   * have pinned objects. outside of a collection, it is always false. */
+  bool pinnedDuringCollection;
+
+  /** set during entanglement when in "safe" mode, to help temporarily disable
+    * local GCs while the entanglement persists.
+    */
+  int32_t disentangledDepth;
+
   bool mightContainMultipleObjects;
   void* tmpHeap;
 
   SuperBlock container;
   size_t numBlocks;
+
+  decheck_tid_t decheckState;
 
   // for padding and sanity checks
   uint32_t magic;

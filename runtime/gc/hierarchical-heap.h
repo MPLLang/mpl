@@ -108,7 +108,7 @@ static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
   return &(hh->rememberedSet);
 }
 
-HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);
+HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth, decheck_tid_t decheckState);
 
 uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh);
 

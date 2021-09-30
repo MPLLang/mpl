@@ -74,6 +74,27 @@ signature MLTON_THREAD =
           val checkFinishedCCReadyToJoin: unit -> bool
         end
 
+      (* disentanglement checking *)
+      structure Disentanglement :
+        sig
+          type thread = Basic.t
+
+          (* fork the current thread ID, returning the two child IDs *)
+          val decheckFork : unit -> Word64.word * Word64.word
+
+          (* join two child IDs and update the current thread ID *)
+          val decheckJoin : Word64.word * Word64.word -> unit
+
+          (* set the current thread ID *)
+          val decheckSetTid : Word64.word -> unit
+
+          (* get the current thread ID of a thread *)
+          val decheckGetTid : thread -> Word64.word
+
+          (* arguments are (victim thread, steal depth) *)
+          val copySyncDepthsFromThread : thread * int -> unit
+        end
+
       type 'a t
 
       (* atomicSwitch f

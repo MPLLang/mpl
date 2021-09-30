@@ -178,6 +178,24 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_writeBarrier"}
 
+      fun readBarrier {return, obj, field} =
+        T {args = Vector.new3 (Type.gcState(), obj, field),
+           convention = Cdecl,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = true,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new3 (CType.gcState,
+                                     CType.objptr,
+                                     CType.cpointer),
+                        SOME CType.objptr),
+          return = return,
+          symbolScope = Private,
+          target = Direct "GC_readBarrier"}
 
       fun updateObjectHeader {obj} =
         T {args = Vector.new3 (Type.gcState(),
@@ -1732,19 +1750,65 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                     (CFunction.worldSave ())
                                | _ => simpleCodegenOrC prim
                            end
-                      | S.Exp.Select {base, offset} =>
+                      | S.Exp.Select {base, offset, readBarrier} =>
                            (case var of
                                NONE => none ()
                              | SOME var =>
                                   (case toRtype ty of
                                       NONE => none ()
                                     | SOME ty =>
-                                         adds
-                                         (select
-                                          {base = Base.map (base, varOp),
-                                           baseTy = varType (Base.object base),
-                                           dst = (var, ty),
-                                           offset = offset})))
+                                         if not (readBarrier andalso Type.isObjptr ty) then
+                                            adds
+                                            (select
+                                             {base = Base.map (base, varOp),
+                                              baseTy = varType (Base.object base),
+                                              dst = (var, ty),
+                                              offset = offset})
+                                         else let
+                                            val baseOp = Base.map (base, varOp)
+                                            val baseTy = varType (Base.object base)
+                                            val ss' = select
+                                               {base = baseOp,
+                                                baseTy = baseTy,
+                                                dst = (var, ty),
+                                                offset = offset}
+
+                                            val (ss'', {dst=finalDst, isMutable, src=field}) =
+                                              case List.splitLast ss' of
+                                                (ss'', Bind stuff) => (ss'', stuff)
+                                              | _ => Error.bug "SsaToRssa.translateStatementsTransfer: Select with read barrier: no final Bind statement"
+
+                                            (* the read barrier returns a result
+                                             * that we'll put into this tmpVar,
+                                             * then finally create one more
+                                             * statement to move into the
+                                             * original destination. *)
+                                            val tmpVar = Var.newNoname ()
+                                            val theBind =
+                                              Bind {dst = finalDst,
+                                                    isMutable = isMutable,
+                                                    src = Operand.Var
+                                                      {var = tmpVar,
+                                                       ty = ty}}
+
+                                            val args = Vector.new3
+                                               (GCState,
+                                                Base.object baseOp,
+                                                Operand.Address field)
+                                            val func = CFunction.readBarrier
+                                               {return = ty,
+                                                obj = Operand.ty (Base.object baseOp),
+                                                field = Operand.ty (Operand.Address field)}
+                                            val formals = Vector.new1 (tmpVar, ty)
+                                         in
+                                            split
+                                            (formals, Kind.CReturn {func = func}, theBind :: ss,
+                                             fn l =>
+                                             (ss'',
+                                              Transfer.CCall {args = args,
+                                                              func = func,
+                                                              return = SOME l}))
+                                         end))
                       | S.Exp.Sequence {args} =>
                            (case toRtype ty of
                                NONE => none ()

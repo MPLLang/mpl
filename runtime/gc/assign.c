@@ -7,9 +7,30 @@
  * See the file MLton-LICENSE for details.
  */
 
-// #define cas(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
+void Assignable_decheckObjptr(objptr op)
+{
+  GC_state s = pthread_getspecific(gcstate_key);
+  s->cumulativeStatistics->numDisentanglementChecks++;
+  decheckRead(s, op);
+}
 
-void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {
+objptr Assignable_readBarrier(
+  GC_state s,
+  __attribute__((unused)) objptr obj,
+  objptr* field)
+{
+  s->cumulativeStatistics->numDisentanglementChecks++;
+  objptr ptr = *field;
+  decheckRead(s, ptr);
+  return ptr;
+}
+
+void Assignable_writeBarrier(
+  GC_state s,
+  objptr dst,
+  ARG_USED_FOR_ASSERT objptr* field,
+  objptr src)
+{
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
 
@@ -67,7 +88,43 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (!isObjptr(src))
     return;
 
+  /* deque down-pointers are handled separately during collection. */
+  if (dst == s->wsQueue)
+    return;
+
   pointer srcp = objptrToPointer(src, NULL);
+
+  if (s->controls->manageEntanglement &&
+      getThreadCurrent(s)->decheckState.bits != DECHECK_BOGUS_BITS &&
+
+      ((HM_getChunkOf(srcp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(srcp)->decheckState))
+      ||
+      (HM_getChunkOf(dstp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(dstp)->decheckState))))
+  {
+    /** Nasty entanglement. To be safe, just pin the object. A safe unpin
+      * depth is the overall lca.
+      */
+
+    int unpinDepth1 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(srcp)->decheckState);
+
+    int unpinDepth2 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(dstp)->decheckState);
+
+    int unpinDepth = (unpinDepth1 < unpinDepth2 ? unpinDepth1 : unpinDepth2);
+
+    if (pinObject(src, (uint32_t)unpinDepth)) {
+      /** Just remember it at some arbitrary place... */
+      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, src);
+    }
+
+    return;
+  }
+
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* Up-pointer. */
@@ -92,31 +149,43 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
     return;
   }
 
-  /* deque down-pointers are handled separately during collection. */
-  if (dst == s->wsQueue)
-    return;
-
   /* Otherwise, remember the pointer! */
   uint32_t d = srcHH->depth;
   GC_thread thread = getThreadCurrent(s);
+
+  /** Fix a silly issue where, when we are dealing with entanglement, the
+    * lower object is actually deeper than the current thread (which is
+    * possible because of entanglement! the thread is peeking inside of
+    * some other thread's heaps, and the other thread might be deeper).
+    */
+  if (d > thread->currentDepth && s->controls->manageEntanglement)
+    d = thread->currentDepth;
+
   HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
   assert(NULL != hh);
-  if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
-    HM_rememberAtLevel(hh, dst, field, src);
+  if (pinObject(src, dstHH->depth)) {
+    if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
+      HM_rememberAtLevel(hh, src);
+    }
+    else {
+      /** This special subheap is guaranteed to exist while at least one CC
+        * is registered or in-progress. Its sole purpose is to contain new
+        * remembered-set entries. We can't use the remembered-set of the heap
+        * that is undergoing CC, because the CC will be concurrently accessing
+        * that remset.
+        *
+        * It's a bit strange... a bit of a hack... because this subheap is
+        * always "empty" and is only used for its remset.
+        */
+      assert(NULL != hh->subHeapCompletedCC);
+      HM_rememberAtLevel(hh->subHeapCompletedCC, src);
+    }
   }
-  else {
-    /** This special subheap is guaranteed to exist while at least one CC
-      * is registered or in-progress. Its sole purpose is to contain new
-      * remembered-set entries. We can't use the remembered-set of the heap
-      * that is undergoing CC, because the CC will be concurrently accessing
-      * that remset.
-      *
-      * It's a bit strange... a bit of a hack... because this subheap is
-      * always "empty" and is only used for its remset.
-      */
-    assert(NULL != hh->subHeapCompletedCC);
-    HM_rememberAtLevel(hh->subHeapCompletedCC, dst, field, src);
-  }
+
+  LOG(LM_HH_PROMOTION, LL_INFO,
+    "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+    dstHH->depth, srcHH->depth,
+    dst, src);
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */

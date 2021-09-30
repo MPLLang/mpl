@@ -161,6 +161,8 @@ void initWorld(GC_state s) {
   s->cumulativeStatistics->bytesAllocated += currentSize;
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 
+  decheckInit(s);
+
 #if ASSERT
   HM_chunk current = HM_getChunkOf(s->frontier);
   assert(HM_HH_getDepth(hh) == 0);

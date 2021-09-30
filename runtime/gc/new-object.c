@@ -111,6 +111,9 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->hierarchicalHeap = NULL;
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->disentangledDepth = INT32_MAX;
+  thread->decheckState = DECHECK_BOGUS_TID;
+  memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -133,7 +136,7 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   /* Allocate and initialize the heap that will be assigned to this thread.
    * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
    * yet. */
-  HM_HierarchicalHeap hh = HM_HH_new(s, depth);
+  HM_HierarchicalHeap hh = HM_HH_new(s, depth, DECHECK_BOGUS_TID);
 
   HM_chunk tChunk = HM_allocateChunk(HM_HH_getChunkList(hh), threadSize);
   HM_chunk sChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
@@ -170,6 +173,9 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   thread->hierarchicalHeap = hh;
   thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
+  thread->disentangledDepth = INT32_MAX;
+  thread->decheckState = DECHECK_BOGUS_TID;
+  memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
 
   HM_updateChunkFrontierInList(
     HM_HH_getChunkList(hh),

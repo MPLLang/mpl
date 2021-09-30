@@ -20,7 +20,20 @@
 /* Static Function Prototypes */
 /******************************/
 
-void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+// void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
+
+void checkDisentangledDepthAndFreeze(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepthBefore(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepthAfter(GC_state s, objptr op, void* rawArgs);
+
+void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs);
+void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs);
+// void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
+
+#if ASSERT
+void checkRememberedEntry(GC_state s, objptr object, void* args);
+bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
+#endif
 
 /**
  * Compute the size of the object, how much of it has to be copied, as well as
@@ -186,10 +199,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     .toDepth = HM_HH_INVALID_DEPTH,
     .fromSpace = NULL,
     .toSpace = NULL,
+    .pinned = NULL,
     .containingObject = BOGUS_OBJPTR,
     .bytesCopied = 0,
     .objectsCopied = 0,
-    .stacksCopied = 0
+    .stacksCopied = 0,
+    .bytesMoved = 0,
+    .objectsMoved = 0
   };
   struct GC_foreachObjptrClosure forwardHHObjptrClosure =
     {.fun = forwardHHObjptr, .env = &forwardHHObjptrArgs};
@@ -206,6 +222,25 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       forwardHHObjptrArgs.minDepth,
       forwardHHObjptrArgs.maxDepth);
 
+  struct HM_chunkList pinned[maxDepth+1];
+  forwardHHObjptrArgs.pinned = &(pinned[0]);
+  for (uint32_t i = 0; i <= maxDepth; i++) HM_initChunkList(&(pinned[i]));
+
+  HM_HierarchicalHeap toSpace[maxDepth+1];
+  forwardHHObjptrArgs.toSpace = &(toSpace[0]);
+  for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
+
+  HM_HierarchicalHeap fromSpace[maxDepth+1];
+  forwardHHObjptrArgs.fromSpace = &(fromSpace[0]);
+  for (uint32_t i = 0; i <= maxDepth; i++) fromSpace[i] = NULL;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor) {
+    fromSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
+
+  /* =====================================================================
+   * logging */
   size_t sizesBefore[maxDepth+1];
   for (uint32_t i = 0; i <= maxDepth; i++)
     sizesBefore[i] = 0;
@@ -223,26 +258,73 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     totalSizeBefore += sz;
   }
 
-  HM_HierarchicalHeap fromSpace[maxDepth+1];
-  for (uint32_t i = 0; i <= maxDepth; i++) fromSpace[i] = NULL;
-  for (HM_HierarchicalHeap cursor = hh;
-       NULL != cursor;
-       cursor = cursor->nextAncestor)
-  {
-    fromSpace[HM_HH_getDepth(cursor)] = cursor;
-  }
-  forwardHHObjptrArgs.fromSpace = &(fromSpace[0]);
+  /* ===================================================================== */
 
+  /** When we're managing entanglement carefully, check if we're allowed to
+    * do this GC.
+    */
+  if (s->controls->manageEntanglement) {
+    struct checkDEDepthsArgs ddArgs = {
+      .minDisentangledDepth = INT32_MAX,
+      .fromSpace = forwardHHObjptrArgs.fromSpace,
+      .toSpace = forwardHHObjptrArgs.toSpace,
+      .maxDepth = forwardHHObjptrArgs.maxDepth
+    };
+
+    bool allowedToGC = TRUE;
+
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+         cursor = cursor->nextAncestor)
+    {
+      HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+        &checkDisentangledDepthAndFreeze, &ddArgs);
+
+      assert(ddArgs.minDisentangledDepth > 0);
+      if ((uint32_t)ddArgs.minDisentangledDepth < maxDepth) {
+        allowedToGC = FALSE;
+        break;
+      }
+    }
+
+    if (ddArgs.minDisentangledDepth < thread->disentangledDepth) {
+      thread->disentangledDepth = ddArgs.minDisentangledDepth;
+    }
+
+    if (!allowedToGC) {
+      for (HM_HierarchicalHeap cursor = hh;
+           NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+           cursor = cursor->nextAncestor)
+      {
+        HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+          &unfreezeDisentangledDepthBefore, &ddArgs);
+      }
+
+      releaseLocalScope(s, originalLocalScope);
+      return;
+    }
+  }
+
+  /* ===================================================================== */
+
+  /* SAM_NOTE: the name "promotion" is no longer true but these trace
+   * events are hardcoded, ugh. */
   Trace0(EVENT_PROMOTION_ENTER);
   timespec_now(&startTime);
 
-  struct HM_chunkList globalDownPtrs;
-  HM_initChunkList(&globalDownPtrs);
-  HM_deferredPromote(s, thread, &globalDownPtrs, &forwardHHObjptrArgs);
+  /* For each remembered entry, if possible, unpin and discard the entry.
+   * otherwise, copy the remembered entry to the toSpace remembered set. */
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+       cursor = cursor->nextAncestor)
+  {
+    forwardHHObjptrArgs.toDepth = HM_HH_getDepth(cursor);
+    HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+      &tryUnpinOrKeepPinned, &forwardHHObjptrArgs);
+  }
+  forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
-  hh = thread->hierarchicalHeap;
-
-  assertInvariants(thread);
+  // assertInvariants(thread);
 
 #if ASSERT
   for (HM_HierarchicalHeap cursor = hh;
@@ -258,6 +340,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   timespec_add(&(s->cumulativeStatistics->timeLocalPromo), &stopTime);
   Trace0(EVENT_PROMOTION_LEAVE);
 
+  /* ===================================================================== */
+
   if (needGCTime(s)) {
     startTiming (RUSAGE_THREAD, &ru_start);
   }
@@ -270,6 +354,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   for (uint32_t i = 0; i <= maxDepth; i++) toSpace[i] = NULL;
   forwardHHObjptrArgs.toSpace = &(toSpace[0]);
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
+
   /* forward contents of stack */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,
@@ -333,18 +418,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    forwardHHObjptrArgs.objectsCopied,
    forwardHHObjptrArgs.stacksCopied);
 
-  /* preserve remaining down-pointers from global heap */
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-    "START forwarding %zu global down-pointers",
-    HM_numRemembered(&globalDownPtrs));
-
-  struct HM_foreachDownptrClosure forwardDownPtrClosure =
-    {.fun = forwardDownPtr, .env = &forwardHHObjptrArgs};
-
-  HM_foreachRemembered(s, &globalDownPtrs, &forwardDownPtrClosure);
-  LOG(LM_HH_COLLECTION, LL_DEBUG, "END forwarding global down-pointers");
-  HM_freeChunksInList(s, &globalDownPtrs);
-
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
   /* do copy-collection */
@@ -353,30 +426,73 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    * I skip the stack and thread since they are already forwarded as roots
    * above
    */
-  struct SSATOPredicateArgs ssatoPredicateArgs = {
-    .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
-                                            NULL),
-    .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
-                                             NULL)
-  };
+  // struct SSATOPredicateArgs ssatoPredicateArgs = {
+  //   .expectedStackPointer = objptrToPointer(getStackCurrentObjptr(s),
+  //                                           NULL),
+  //   .expectedThreadPointer = objptrToPointer(getThreadCurrentObjptr(s),
+  //                                            NULL)
+  // };
 
   /* off-by-one to prevent underflow */
   uint32_t depth = thread->currentDepth+1;
   while (depth > forwardHHObjptrArgs.minDepth) {
     depth--;
     HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
-    assert(NULL == toSpaceLevel || NULL != HM_HH_getChunkList(toSpaceLevel));
-    if (NULL != toSpaceLevel && NULL != HM_HH_getChunkList(toSpaceLevel)->firstChunk) {
+    if (NULL == toSpaceLevel) {
+      continue;
+    }
+
+    LOG(LM_HH_COLLECTION, LL_INFO,
+      "level %"PRIu32": num pinned: %zu",
+      depth,
+      HM_numRemembered(HM_HH_getRemSet(toSpaceLevel)));
+
+    /* use the remembered (pinned) entries at this level as extra roots */
+    HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel),
+      &forwardObjptrsOfRemembered, &forwardHHObjptrArgs);
+
+    if (NULL != HM_HH_getChunkList(toSpaceLevel)->firstChunk)
+    {
       HM_chunkList toSpaceList = HM_HH_getChunkList(toSpaceLevel);
       HM_forwardHHObjptrsInChunkList(
         s,
         toSpaceList->firstChunk,
         HM_getChunkStart(toSpaceList->firstChunk),
-        &skipStackAndThreadObjptrPredicate,
-        &ssatoPredicateArgs,
+        // &skipStackAndThreadObjptrPredicate,
+        // &ssatoPredicateArgs,
+        &trueObjptrPredicate,
+        NULL,
         &forwardHHObjptr,
         &forwardHHObjptrArgs);
     }
+  }
+
+  /* after everything has been scavenged, we have to move the pinned chunks */
+  depth = thread->currentDepth+1;
+  while (depth > forwardHHObjptrArgs.minDepth) {
+    depth--;
+    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
+    if (NULL == toSpaceLevel) {
+      /* check that there are also no pinned chunks at this level
+       * (if there was pinned chunk, then we would have also created a
+       * toSpace HH at this depth, because we would have scavenged the
+       * remembered entry) */
+      assert(pinned[depth].firstChunk == NULL);
+      continue;
+    }
+
+    /* unset the flags on pinned chunks and update their HH pointer */
+    for (HM_chunk chunkCursor = pinned[depth].firstChunk;
+         chunkCursor != NULL;
+         chunkCursor = chunkCursor->nextChunk)
+    {
+      assert(chunkCursor->pinnedDuringCollection);
+      chunkCursor->pinnedDuringCollection = FALSE;
+      chunkCursor->levelHead = toSpaceLevel;
+    }
+
+    /* put the pinned chunks into the toSpace */
+    HM_appendChunkList(HM_HH_getChunkList(toSpaceLevel), &(pinned[depth]));
   }
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -389,6 +505,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    forwardHHObjptrArgs.bytesCopied,
    forwardHHObjptrArgs.objectsCopied,
    forwardHHObjptrArgs.stacksCopied);
+
+  /* ===================================================================== */
 
   /* Free old chunks and find the tail (upper segment) of the original hh
    * that will be merged with the toSpace */
@@ -458,6 +576,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   thread->hierarchicalHeap = hh;
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    toSpace[HM_HH_getDepth(cursor)] = cursor;
+  }
 
   /* update currentChunk and associated */
   HM_chunk lastChunk = NULL;
@@ -487,7 +611,36 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    * assert(lastChunk->frontier < (pointer)lastChunk + HM_BLOCK_SIZE);
    */
 
+
+  /** Finally, unfreeze chunks if we need to. */
+  if (s->controls->manageEntanglement) {
+    struct checkDEDepthsArgs ddArgs = {
+      .minDisentangledDepth = INT32_MAX,
+      .fromSpace = forwardHHObjptrArgs.fromSpace,
+      .toSpace = forwardHHObjptrArgs.toSpace,
+      .maxDepth = forwardHHObjptrArgs.maxDepth
+    };
+
+    for (HM_HierarchicalHeap cursor = hh;
+         NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+         cursor = cursor->nextAncestor)
+    {
+      HM_foreachRemembered(s, HM_HH_getRemSet(cursor),
+        &unfreezeDisentangledDepthAfter, &ddArgs);
+    }
+  }
+
+
+#if ASSERT
   assertInvariants(thread);
+
+  /* some additional assertions for pinned objects */
+  for (HM_HierarchicalHeap cursor = hh;
+       cursor != NULL && HM_HH_getDepth(cursor) >= minDepth;
+       cursor = cursor->nextAncestor) {
+    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &checkRememberedEntry, cursor);
+  }
+#endif
 
   s->cumulativeStatistics->bytesHHLocaled += forwardHHObjptrArgs.bytesCopied;
 
@@ -557,6 +710,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   timespec_sub(&stopTime, &startTime);
   timespec_add(&(s->cumulativeStatistics->timeLocalGC), &stopTime);
 
+  // if (stopTime.tv_sec >= 1 || stopTime.tv_nsec > 999999999 / 2) {
+  //   printf("[WARN] long GC %lld.%.9ld s, %d -> %d, %d\n",
+  //     (long long)stopTime.tv_sec,
+  //     stopTime.tv_nsec,
+  //     (int)minDepth,
+  //     (int)maxDepth,
+  //     (int)thread->minLocalCollectionDepth);
+  // }
+
   if (needGCTime(s)) {
     if (detailedGCTime(s)) {
       stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
@@ -593,8 +755,6 @@ bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args)
 
 /* ========================================================================= */
 
-/* SAM_NOTE: TODO: DRY: this code is similar (but not identical) to
- * forwardHHObjptr */
 objptr relocateObject(
   GC_state s,
   objptr op,
@@ -655,6 +815,7 @@ objptr relocateObject(
 
 /* ========================================================================= */
 
+#if 0
 void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   uint32_t srcDepth = HM_getObjptrDepth(src);
@@ -668,6 +829,268 @@ void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* raw
 
   *field = src;
   HM_rememberAtLevel(args->toSpace[srcDepth], dst, field, src);
+}
+#endif
+
+/* ========================================================================= */
+
+void checkDisentangledDepthAndFreeze(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our from-space, then it's entangled, so skip it.
+    * (Note: we can't just check if it's entangled, because even if it's
+    * entangled, we might still have it in our local heap...)
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+
+  if (opDepth <= unpinDepthOf(op)) {
+    /* don't freeze anything that is going to get unpinned! */
+    return;
+  }
+
+  int32_t thisDD = atomicLoadS32(&(chunk->disentangledDepth));
+  while (thisDD > 0) {
+    if (__sync_bool_compare_and_swap(&(chunk->disentangledDepth), thisDD, -thisDD))
+      break;
+    thisDD = atomicLoadS32(&(chunk->disentangledDepth));
+  }
+  assert(chunk->disentangledDepth < 0);
+  thisDD = -(chunk->disentangledDepth);
+  if (thisDD < args->minDisentangledDepth)
+    args->minDisentangledDepth = thisDD;
+}
+
+void unfreezeDisentangledDepthBefore(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our from-space, then it's entangled, so skip it.
+    * (Note: we can't just check if it's entangled, because even if it's
+    * entangled, we might still have it in our local heap...)
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+  assert(chunk->disentangledDepth != 0);
+
+  if (chunk->disentangledDepth < 0) {
+    chunk->disentangledDepth = -(chunk->disentangledDepth);
+  }
+}
+
+void unfreezeDisentangledDepthAfter(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+  struct checkDEDepthsArgs *args = rawArgs;
+  uint32_t opDepth = HM_HH_getDepth(hh);
+
+  /** If it's not in our to-space (now we're AFTER collection completed),
+    * then it's entangled, so skip it.
+    */
+  if (opDepth > args->maxDepth || args->toSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+    return;
+  }
+
+  assert(hhContainsChunk(args->toSpace[opDepth], chunk));
+  assert(chunk->disentangledDepth != 0);
+
+  if (chunk->disentangledDepth < 0) {
+    chunk->disentangledDepth = -(chunk->disentangledDepth);
+  }
+}
+
+/* ========================================================================= */
+
+void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
+  assert(isPinned(op));
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
+
+  /* We could just look up the depth of `op`, with the normal technique
+   * (getLevelHead, etc.), but this should be faster. The toDepth field
+   * is set by the loop that calls this function */
+  uint32_t opDepth = args->toDepth;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
+
+  if (NULL == args->toSpace[opDepth]) {
+    /** BUG HERE. chunk->decheckState is WRONG for entangled shit. */
+    args->toSpace[opDepth] = HM_HH_new(s, opDepth, chunk->decheckState);
+  }
+
+  /** If it's not in our from-space, then it's entangled.
+    * KEEP THE ENTRY but don't do any of the other nasty stuff.
+    */
+  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
+    assert(s->controls->manageEntanglement);
+    /** TODO: assert entangled here */
+
+    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
+    return;
+  }
+
+  assert(HM_getObjptrDepth(op) == opDepth);
+
+  if (opDepth <= unpinDepthOf(op)) {
+    unpinObject(op);
+    return;
+  }
+
+  /* otherwise, object stays pinned. we have to scavenge this remembered
+   * entry into the toSpace. */
+
+  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
+
+  if (chunk->pinnedDuringCollection) {
+    return;
+  }
+
+  chunk->pinnedDuringCollection = TRUE;
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
+
+  /* SAM_NOTE: unlinkChunk unsets levelHead, which is a little strange. */
+  HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
+  HM_appendChunk(&(args->pinned[opDepth]), chunk);
+  chunk->levelHead = args->fromSpace[opDepth];
+}
+
+/* ========================================================================= */
+
+#if 0
+void scavengeChunkOfPinnedObject(
+  GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
+  /* The toDepth field is set by the loop that calls this function.
+   * Note: Can't do HM_getObjptrDepth or similar here! We broke that by
+   * moving chunks around during this phase! */
+  uint32_t opDepth = args->toDepth;
+
+  /* can't be NULL, because when we filtered the remembered set, we scavenged
+   * all entries into the toSpace */
+  assert(NULL != args->toSpace[opDepth]);
+
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+
+  if (!chunk->pinnedDuringCollection) {
+    assert(isObjptrInToSpace(op, args));
+    return;
+  }
+
+#if ASSERT
+  /* make sure we're removing the chunk from the correct list!! */
+  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+#endif
+
+  /* Can't do HM_getLevelHead here! We broke that by moving chunks around! */
+  HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
+  HM_appendChunk(HM_HH_getChunkList(args->toSpace[opDepth]), chunk);
+  chunk->levelHead = args->toSpace[opDepth];
+  chunk->pinnedDuringCollection = FALSE;
+
+  /* All unpinned objects need to be replaced by gaps!!
+   * These objects were scavenged out of these chunks, and so now the
+   * leftover space is meaningless bits. If we interpret this leftover space
+   * as actual objects in a subsequent collection, it will be incorrect.
+   *
+   * TODO: coalesce gaps (easy to do; just need to hop forward until we find
+   * the next pinned object and then create a single large gap)
+   *
+   * TODO: this could be more efficient if we have special pinned chunks that
+   * do not contain unpinned objects? Then we can leave all the gaps alone,
+   * and we know that these chunks will never need to be scanned. But it is
+   * tricky to guarantee that a chunk contains no unpinned objects... here's
+   * a brainstorm.
+   *   - (Bad idea) At write barrier, eagerly forward freshly pinned object
+   *   into a pinned chunk. Difficult to implement because then the mutator
+   *   needs a read barrier to follow forwarding pointers created at pins.
+   *   And how do you unpin?
+   *   - (Possible?) For each heap, maintain a separate space of pinned chunks.
+   *   At write barrier, we could buffer newly pinned objects and pin their
+   *   chunks later. At local GC, make sure to scavenge all unpinned objects
+   *   out of these chunks...
+   */
+  pointer p = HM_getChunkStart(chunk);
+  while (p < HM_getChunkFrontier(chunk)) {
+    pointer objStart = advanceToObjectData(s, p);
+
+    /* to calculate the object's size, we have to handle the case where it
+     * was forwarded out of this chunk. */
+    size_t objSize;
+    if (hasFwdPtr(objStart)) {
+      objSize = objectSize(s, objptrToPointer(getFwdPtr(objStart), NULL));
+    } else {
+      objSize = objectSize(s, objStart);
+    }
+
+    pointer objEnd = objStart + objSize;
+    assert(objEnd <= HM_getChunkFrontier(chunk));
+
+    /* leave pinned objects alone */
+    if (!hasFwdPtr(objStart) && isPinned(pointerToObjptr(objStart, NULL))) {
+      p = objEnd;
+      continue;
+    }
+
+    /* fill garbage object with a gap */
+    fillGap(s, p, objEnd);
+    p = objEnd;
+  }
+
+  assert(p == HM_getChunkFrontier(chunk));
+  assert(isObjptrInToSpace(op, args));
+}
+#endif
+
+/* ========================================================================= */
+
+void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs) {
+  assert(isPinned(op));
+
+  foreachObjptrInObject(
+    s,
+    objptrToPointer(op, NULL),
+    FALSE,
+    &trueObjptrPredicate,
+    NULL,
+    &forwardHHObjptr,
+    rawArgs
+  );
 }
 
 /* ========================================================================= */
@@ -733,22 +1156,46 @@ void forwardHHObjptr (GC_state s,
 
   assert(HM_getObjptrDepth(op) >= args->minDepth);
 
-  while (hasFwdPtr(p)) {
-    op = getFwdPtr(p);
-    opDepth = HM_getObjptrDepthPathCompress(op);
-    p = objptrToPointer(op, NULL);
+  if (isObjptrInToSpace(op, args)) {
+    assert(!hasFwdPtr(objptrToPointer(op, NULL)));
+    assert(!isPinned(op));
+    return;
   }
 
-  if (HM_getObjptrDepth(op) < args->minDepth) {
-    *opp = op;
-    assert(!isObjptrInToSpace(op, args));
-  } else if (isObjptrInToSpace(op, args)) {
-    *opp = op;
-  } else {
+  /* Assert is in from space. This holds for pinned objects, too, because
+   * their levelHead is still set to the fromSpace HH. (Pinned objects are
+   * stored in a different chunklist during collection through.) */
+  assert( HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL)))
+          ==
+          args->fromSpace[HM_getObjptrDepth(op)] );
+
+  if (hasFwdPtr(p)) {
+    objptr fop = getFwdPtr(p);
+    assert(!hasFwdPtr(objptrToPointer(fop, NULL)));
+    assert(isObjptrInToSpace(fop, args));
+    assert(HM_getObjptrDepth(fop) == opDepth);
+    *opp = fop;
+    return;
+  }
+
+  assert(!hasFwdPtr(p));
+
+  if (isPinned(op)) {
+    return;
+  }
+
+  /* ========================================================================
+   * if we get here, we have to actually scavenge the object:
+   * we know this object is in the from-space, is not pinned, and is
+   * in-scope of collection.
+   */
+  {
+    assert(!isPinned(op));
     assert(!isObjptrInToSpace(op, args));
     assert(HM_getLevelHead(HM_getChunkOf(p)) == args->fromSpace[HM_getObjptrDepth(op)]);
     assert(HM_getObjptrDepth(op) >= args->minDepth);
     assert(HM_getObjptrDepth(op) == opDepth);
+    assert(opDepth >= args->minDepth);
     /* forward the object */
     GC_objectTypeTag tag;
     size_t metaDataBytes;
@@ -777,10 +1224,9 @@ void forwardHHObjptr (GC_state s,
 
     HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
     if (tgtHeap == NULL) {
-      /** Level does not exist, so create it. Relocating an object allocates
-        * chunks lazily, so we don't need a fresh chunk here.
-        */
-      tgtHeap = HM_HH_new(s, opDepth);
+      /* Level does not exist, so create it */
+      /* SAM_NOTE: new heaps are initialized with one free chunk. */
+      tgtHeap = HM_HH_new(s, opDepth, HM_getChunkOf(p)->decheckState);
       args->toSpace[opDepth] = tgtHeap;
     }
     assert(p == objptrToPointer(op, NULL));
@@ -826,11 +1272,14 @@ pointer copyObject(pointer p,
   }
 
   if (mustExtend) {
-    /* need to allocate a new chunk */
+    /* Need to allocate a new chunk. Safe to use the dechecker state of where
+     * the object came from, as all objects in the same heap can be safely
+     * reassigned to any dechecker state of that heap. */
     chunk = HM_allocateChunk(tgtChunkList, objectSize);
     if (NULL == chunk) {
       DIE("Ran out of space for Hierarchical Heap!");
     }
+    chunk->decheckState = HM_getChunkOf(p)->decheckState;
     chunk->levelHead = HM_HH_getUFNode(tgtHeap);
   }
 
@@ -920,6 +1369,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
     return tag;
 }
 
+
 bool skipStackAndThreadObjptrPredicate(GC_state s,
                                        pointer p,
                                        void* rawArgs) {
@@ -943,3 +1393,37 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
   return TRUE;
 }
+
+#if ASSERT
+
+void checkRememberedEntry(
+  __attribute__((unused)) GC_state s,
+  objptr object,
+  void* args)
+{
+  HM_HierarchicalHeap hh = (HM_HierarchicalHeap)args;
+
+  assert(isPinned(object));
+  assert(unpinDepthOf(object) < HM_HH_getDepth(hh));
+
+  HM_chunk theChunk = HM_getChunkOf(objptrToPointer(object, NULL));
+
+  assert(hhContainsChunk(hh, theChunk));
+  assert(HM_getLevelHead(theChunk) == hh);
+}
+
+bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
+{
+  for (HM_chunk chunk = HM_HH_getChunkList(hh)->firstChunk;
+       chunk != NULL;
+       chunk = chunk->nextChunk)
+  {
+    if (chunk == theChunk) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+#endif

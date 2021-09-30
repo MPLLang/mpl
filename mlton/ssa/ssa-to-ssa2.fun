@@ -121,11 +121,18 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                         simple
                         (S2.Exp.Select {base = Base.SequenceSub {index = arg 1,
                                                                  sequence = arg 0},
-                                        offset = 0})
+                                        offset = 0,
+                                        readBarrier = false})
                    in
                       case prim of
                          Prim.Array_array => sequence ()
-                       | Prim.Array_sub => sub ()
+                       | Prim.Array_sub {readBarrier} =>
+                            simple
+                            (S2.Exp.Select
+                             {base = Base.SequenceSub {index = arg 1,
+                                                       sequence = arg 0},
+                              offset = 0,
+                              readBarrier = readBarrier})
                        | Prim.Array_update {writeBarrier} =>
                             maybeBindUnit
                             (S2.Statement.Update
@@ -141,9 +148,10 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                               offset = 0,
                               value = arg 1,
                               writeBarrier = writeBarrier})
-                       | Prim.Ref_deref =>
+                       | Prim.Ref_deref {readBarrier} =>
                             simple (S2.Exp.Select {base = Base.Object (arg 0),
-                                                   offset = 0})
+                                                   offset = 0,
+                                                   readBarrier = readBarrier})
                        | Prim.Ref_ref =>
                             simple (S2.Exp.Object {args = Vector.new1 (arg 0),
                                                    con = NONE})
@@ -158,8 +166,11 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                    end
              | S.Exp.Profile e => maybeBindUnit (S2.Statement.Profile e)
              | S.Exp.Select {offset, tuple} =>
+                  (* SAM_NOTE: TODO: check that SSA1 selects are all
+                   * immutable??? *)
                   simple (S2.Exp.Select {base = Base.Object tuple,
-                                         offset = offset})
+                                         offset = offset,
+                                         readBarrier = false})
              | S.Exp.Tuple v => simple (S2.Exp.Object {args = v, con = NONE})
              | S.Exp.Var x => simple (S2.Exp.Var x)
          end
@@ -204,10 +215,13 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                     (Prod.dest args, fn (i, {elt = ty, ...}) =>
                                      let
                                         val x = Var.newNoname ()
+                                        (* SAM_NOTE: okay to not use a read
+                                         * barrier here? *)
                                         val exp =
                                            S2.Exp.Select
                                            {base = Base.Object object,
-                                            offset = i}
+                                            offset = i,
+                                            readBarrier = false}
                                      in
                                         (x,
                                          S2.Statement.Bind {exp = exp,

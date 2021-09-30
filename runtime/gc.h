@@ -35,6 +35,7 @@ typedef GC_state GCState_t;
 #include "gc/pointer.h"
 #include "gc/objptr.h"
 #include "gc/object.h"
+#include "gc/decheck.h"
 #include "gc/sequence.h"
 #include "gc/sources.h"
 #include "gc/frame.h"
@@ -80,6 +81,7 @@ typedef GC_state GCState_t;
 #include "gc/share.h"
 #include "gc/parallel.h"
 #include "gc/processor.h"
+#include "gc/pin.h"
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-ebr.h"
 #include "gc/hierarchical-heap-collection.h"
@@ -87,6 +89,7 @@ typedef GC_state GCState_t;
 #include "gc/local-heap.h"
 #include "gc/assign.h"
 #include "gc/remembered-set.h"
-#include "gc/deferred-promote.h"
+#include "gc/gap.h"
+// #include "gc/deferred-promote.h"
 
 #endif /* _MLTON_GC_H_ */

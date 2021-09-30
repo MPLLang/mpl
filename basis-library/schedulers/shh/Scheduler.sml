@@ -25,6 +25,8 @@ struct
     NormalTask of unit -> unit
   | GCTask of Thread.t * Word64.word
 
+  structure DE = MLton.Thread.Disentanglement
+
   val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
@@ -107,6 +109,25 @@ struct
   fun tickTimer _ = ()
   fun stopTimer _ = ()
   *)
+
+  (** ========================================================================
+    * MAXIMUM FORK DEPTHS
+    *)
+
+  val maxForkDepths = Array.array (P, 0)
+
+  fun maxForkDepthSoFar () =
+    Array.foldl Int.max 0 maxForkDepths
+
+  fun recordForkDepth d =
+    let
+      val p = myWorkerId ()
+    in
+      if arraySub (maxForkDepths, p) >= d then
+        ()
+      else
+        arrayUpdate (maxForkDepths, p, d)
+    end
 
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
@@ -239,8 +260,13 @@ struct
         val rightSideThread = ref (NONE: Thread.t option)
         val rightSideResult = ref (NONE: 'b result option)
         val incounter = ref 2
+
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
         fun g' () =
           let
+            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
           in
@@ -268,13 +294,24 @@ struct
               else
                 (HH.setDepth (thread, depth + 1)) *)
         val _ = HH.setDepth (thread, depth + 1)
-        (*force left heap must be after set Depth*)
+
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
+
+        val _ = DE.decheckSetTid tidLeft
         val fr = result f
-        val gr =
+        val tidLeft = DE.decheckGetTid thread
+
+        val (gr, tidRight) =
           if popDiscard () then
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
-            ; result g
+            ; DE.decheckSetTid tidRight
+            ; let
+                val gr = result g
+              in
+                (gr, DE.decheckGetTid thread)
+              end
             )
           else
             ( clear () (* this should be safe after popDiscard fails? *)
@@ -282,15 +319,20 @@ struct
             ; case !rightSideThread of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME t =>
-                  ( HH.mergeThreads (thread, t)
-                  ; HH.promoteChunks thread
-                  ; HH.setDepth (thread, depth)
-                  ; setQueueDepth (myWorkerId ()) depth
-                  ; case !rightSideResult of
+                  let
+                    val tr = DE.decheckGetTid t
+                  in
+                    HH.mergeThreads (thread, t);
+                    HH.promoteChunks thread;
+                    HH.setDepth (thread, depth);
+                    setQueueDepth (myWorkerId ()) depth;
+                    case !rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr => gr
-                  )
+                    | SOME gr => (gr, tr)
+                  end
             )
+
+        val () = DE.decheckJoin (tidLeft, tidRight)
       in
         (extractResult fr, extractResult gr)
       end
@@ -519,4 +561,6 @@ struct
     in
       ArrayExtra.Raw.unsafeToArray a
     end
+
+  val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
 end

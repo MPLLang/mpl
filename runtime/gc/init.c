@@ -197,6 +197,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (!initLogLevels(levelString)) {
             die ("%s log-level invalid argument", atName);
           }
+        } else if (0 == strcmp (arg, "manage-entanglement")) {
+          i++;
+          s->controls->manageEntanglement = TRUE;
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
@@ -437,6 +440,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->emptinessFraction = 0.25;
   s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
   s->controls->megablockThreshold = 18;
+  s->controls->manageEntanglement = FALSE;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
@@ -467,6 +471,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
+  s->numberDisentanglementChecks = 0;
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -601,6 +606,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
+  d->numberDisentanglementChecks = 0;
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;

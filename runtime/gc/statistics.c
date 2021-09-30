@@ -69,6 +69,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numHHLocalGCs = 0;
   cumulativeStatistics->numRootCCs = 0;
   cumulativeStatistics->numInternalCCs = 0;
+  cumulativeStatistics->numDisentanglementChecks = 0;
+  cumulativeStatistics->numEntanglementsDetected = 0;
 
   cumulativeStatistics->timeLocalGC.tv_sec = 0;
   cumulativeStatistics->timeLocalGC.tv_nsec = 0;

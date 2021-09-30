@@ -30,7 +30,7 @@ signature PRIM =
        | Array_copyArray (* to rssa (as runtime C fn) *)
        | Array_copyVector (* to rssa (as runtime C fn) *)
        | Array_length (* to rssa *)
-       | Array_sub (* to ssa2 *)
+       | Array_sub of {readBarrier: bool} (* to ssa2 *)
        | Array_toArray (* to rssa *)
        | Array_toVector (* to rssa *)
        | Array_uninit (* to rssa *)
@@ -132,7 +132,7 @@ signature PRIM =
        | Real_sub of RealSize.t (* codegen *)
        | Ref_assign of {writeBarrier: bool} (* to ssa2 *)
        | Ref_cas of CType.t option (* codegen *)
-       | Ref_deref (* to ssa2 *)
+       | Ref_deref of {readBarrier: bool} (* to ssa2 *)
        | Ref_ref (* to ssa2 *)
        | String_toWord8Vector (* defunctorize *)
        | Thread_atomicBegin (* to rssa *)
@@ -228,8 +228,8 @@ signature PRIM =
                                       vector: 'a -> 'a,
                                       weak: 'a -> 'a,
                                       word: WordSize.t -> 'a}} -> bool
-      val cpointerGet: CType.t -> 'a t 
-      val cpointerSet: CType.t -> 'a t 
+      val cpointerGet: CType.t -> 'a t
+      val cpointerSet: CType.t -> 'a t
       val equals: 'a t * 'a t -> bool
       val extractTargs: 'a t * {args: 'b vector,
                                 result: 'b,

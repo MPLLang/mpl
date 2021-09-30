@@ -91,6 +91,30 @@ struct
     Prim.checkFinishedCCReadyToJoin (gcState ())
 end
 
+structure Disentanglement =
+struct
+  type thread = Basic.t
+
+  fun decheckFork () =
+    let
+      val left = ref (0w0: Word64.word)
+      val right = ref (0w0: Word64.word)
+    in
+      Prim.decheckFork (gcState (), left, right);
+      (!left, !right)
+    end
+
+  fun decheckJoin (left, right) =
+    Prim.decheckJoin (gcState (), left, right)
+
+  fun decheckSetTid tid = Prim.decheckSetTid (gcState (), tid)
+
+  fun decheckGetTid thread = Prim.decheckGetTid (gcState (), thread)
+
+  fun copySyncDepthsFromThread (victim, stealDepth) =
+    Prim.copySyncDepthsFromThread (gcState (), victim, Word32.fromInt stealDepth)
+end
+
 fun prepend (T r: 'a t, f: 'b -> 'a): 'b t =
    let
       val t =

@@ -40,7 +40,7 @@ datatype 'a t =
  | Array_copyArray (* to rssa (as runtime C fn) *)
  | Array_copyVector (* to rssa (as runtime C fn) *)
  | Array_length (* to rssa *)
- | Array_sub (* to ssa2 *)
+ | Array_sub of {readBarrier: bool} (* to ssa2 *)
  | Array_toArray (* to rssa *)
  | Array_toVector (* to rssa *)
  | Array_uninit (* to rssa *)
@@ -142,7 +142,7 @@ datatype 'a t =
  | Real_sub of RealSize.t (* codegen *)
  | Ref_assign of {writeBarrier : bool} (* to ssa2 *)
  | Ref_cas of CType.t option (* codegen *)
- | Ref_deref (* to ssa2 *)
+ | Ref_deref of {readBarrier: bool} (* to ssa2 *)
  | Ref_ref (* to ssa2 *)
  | String_toWord8Vector (* defunctorize *)
  | Thread_atomicBegin (* to rssa *)
@@ -230,7 +230,8 @@ fun toString (n: 'a t): string =
        | Array_copyArray => "Array_copyArray"
        | Array_copyVector => "Array_copyVector"
        | Array_length => "Array_length"
-       | Array_sub => "Array_sub"
+       | Array_sub {readBarrier=true} => "Array_sub"
+       | Array_sub {readBarrier=false} => "Array_sub_noReadBarrier"
        | Array_toArray => "Array_toArray"
        | Array_toVector => "Array_toVector"
        | Array_uninit => "Array_uninit"
@@ -320,7 +321,8 @@ fun toString (n: 'a t): string =
        | Ref_assign {writeBarrier=false} => "Ref_assign_noWriteBarrier"
        | Ref_cas NONE => "Ref_cas"
        | Ref_cas (SOME ctype) => concat ["Ref", CType.name ctype, "_cas"]
-       | Ref_deref => "Ref_deref"
+       | Ref_deref {readBarrier=true} => "Ref_deref"
+       | Ref_deref {readBarrier=false} => "Ref_deref_noReadBarrier"
        | Ref_ref => "Ref_ref"
        | String_toWord8Vector => "String_toWord8Vector"
        | Thread_atomicBegin => "Thread_atomicBegin"
@@ -390,7 +392,7 @@ val equals: 'a t * 'a t -> bool =
     | (Array_copyArray, Array_copyArray) => true
     | (Array_copyVector, Array_copyVector) => true
     | (Array_length, Array_length) => true
-    | (Array_sub, Array_sub) => true
+    | (Array_sub {readBarrier=rb1}, Array_sub {readBarrier=rb2}) => (rb1 = rb2)
     | (Array_toArray, Array_toArray) => true
     | (Array_toVector, Array_toVector) => true
     | (Array_uninit, Array_uninit) => true
@@ -484,7 +486,7 @@ val equals: 'a t * 'a t -> bool =
     | (Ref_assign wb1, Ref_assign wb2) => wb1 = wb2
     | (Ref_cas NONE, Ref_cas NONE) => true
     | (Ref_cas (SOME ctype1), Ref_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
-    | (Ref_deref, Ref_deref) => true
+    | (Ref_deref {readBarrier=rb1}, Ref_deref {readBarrier=rb2}) => (rb1 = rb2)
     | (Ref_ref, Ref_ref) => true
     | (String_toWord8Vector, String_toWord8Vector) => true
     | (Thread_atomicBegin, Thread_atomicBegin) => true
@@ -571,7 +573,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Array_copyArray => Array_copyArray
     | Array_copyVector => Array_copyVector
     | Array_length => Array_length
-    | Array_sub => Array_sub
+    | Array_sub rb => Array_sub rb
     | Array_toArray => Array_toArray
     | Array_toVector => Array_toVector
     | Array_uninit => Array_uninit
@@ -658,7 +660,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Real_sub z => Real_sub z
     | Ref_assign wb => Ref_assign wb
     | Ref_cas ctyp => Ref_cas ctyp
-    | Ref_deref => Ref_deref
+    | Ref_deref rb => Ref_deref rb
     | Ref_ref => Ref_ref
     | String_toWord8Vector => String_toWord8Vector
     | Thread_atomicBegin => Thread_atomicBegin
@@ -711,7 +713,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
 
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
-fun cpointerGet ctype = 
+fun cpointerGet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -728,7 +730,7 @@ fun cpointerGet ctype =
        | Word32 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 32))
        | Word64 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 64))
    end
-fun cpointerSet ctype = 
+fun cpointerSet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -775,7 +777,7 @@ val kind: 'a t -> Kind.t =
        | Array_copyArray => SideEffect
        | Array_copyVector => SideEffect
        | Array_length => Functional
-       | Array_sub => DependsOnState
+       | Array_sub _ => DependsOnState
        | Array_toArray => DependsOnState
        | Array_toVector => DependsOnState
        | Array_uninit => SideEffect
@@ -865,7 +867,7 @@ val kind: 'a t -> Kind.t =
        | Real_sub _ => DependsOnState (* depends on rounding mode *)
        | Ref_assign _ => SideEffect
        | Ref_cas _ => SideEffect
-       | Ref_deref => DependsOnState
+       | Ref_deref _ => DependsOnState
        | Ref_ref => Moveable
        | String_toWord8Vector => Functional
        | Thread_atomicBegin => SideEffect
@@ -988,7 +990,8 @@ in
        Array_copyArray,
        Array_copyVector,
        Array_length,
-       Array_sub,
+       Array_sub {readBarrier=true},
+       Array_sub {readBarrier=false},
        Array_toArray,
        Array_toVector,
        Array_uninit,
@@ -1044,7 +1047,8 @@ in
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
        Ref_cas NONE,
-       Ref_deref,
+       Ref_deref {readBarrier=true},
+       Ref_deref {readBarrier=false},
        Ref_ref,
        String_toWord8Vector,
        Thread_atomicBegin,
@@ -1286,7 +1290,7 @@ fun 'a checkApp (prim: 'a t,
        | Array_copyArray => oneTarg (fn t => (fiveArgs (array t, seqIndex, array t, seqIndex, seqIndex), unit))
        | Array_copyVector => oneTarg (fn t => (fiveArgs (array t, seqIndex, vector t, seqIndex, seqIndex), unit))
        | Array_length => oneTarg (fn t => (oneArg (array t), seqIndex))
-       | Array_sub => oneTarg (fn t => (twoArgs (array t, seqIndex), t))
+       | Array_sub _ => oneTarg (fn t => (twoArgs (array t, seqIndex), t))
        | Array_toArray => oneTarg (fn t => (oneArg (array t), array t))
        | Array_toVector => oneTarg (fn t => (oneArg (array t), vector t))
        | Array_uninit =>
@@ -1397,7 +1401,7 @@ fun 'a checkApp (prim: 'a t,
        | Real_sub s => realBinary s
        | Ref_assign _ => oneTarg (fn t => (twoArgs (reff t, t), unit))
        | Ref_cas _ => oneTarg (fn t => (threeArgs (reff t, t, t), t))
-       | Ref_deref => oneTarg (fn t => (oneArg (reff t), t))
+       | Ref_deref _ => oneTarg (fn t => (oneArg (reff t), t))
        | Ref_ref => oneTarg (fn t => (oneArg t, reff t))
        | Thread_atomicBegin => noTargs (fn () => (noArgs, unit))
        | Thread_atomicEnd => noTargs (fn () => (noArgs, unit))
@@ -1484,7 +1488,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Array_copyArray => one (deArray (arg 0))
        | Array_copyVector => one (deArray (arg 0))
        | Array_length => one (deArray (arg 0))
-       | Array_sub => one (deArray (arg 0))
+       | Array_sub _ => one (deArray (arg 0))
        | Array_toArray => one (deArray (arg 0))
        | Array_toVector => one (deArray (arg 0))
        | Array_uninit => one (deArray (arg 0))
@@ -1505,7 +1509,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_touch => one (arg 0)
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
-       | Ref_deref => one (deRef (arg 0))
+       | Ref_deref _ => one (deRef (arg 0))
        | Ref_ref => one (deRef result)
        | Vector_length => one (deVector (arg 0))
        | Vector_sub => one (deVector (arg 0))

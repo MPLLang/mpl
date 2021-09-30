@@ -103,8 +103,11 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   // chunk->prevAdjacent = NULL;
   chunk->levelHead = NULL;
   chunk->startGap = 0;
+  chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
   chunk->tmpHeap = NULL;
+  chunk->decheckState = DECHECK_BOGUS_TID;
+  chunk->disentangledDepth = INT32_MAX;
   chunk->magic = CHUNK_MAGIC;
 
 #if ASSERT

@@ -61,6 +61,7 @@ struct GC_state {
   bool mutatorMarksCards;
   /* The maximum amount of concurrency */
   uint32_t numberOfProcs;
+  size_t numberDisentanglementChecks;  /** TODO: remove. now in cumulativeStatistics */
   GC_objectType objectTypes; /* Array of object types. */
   uint32_t objectTypesLength; /* Cardinality of objectTypes array. */
   int32_t procNumber;
@@ -136,6 +137,8 @@ PRIVATE uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_numDisentanglementChecks(GC_state s);
+PRIVATE uintmax_t GC_numEntanglementsDetected(GC_state s);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
 PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);

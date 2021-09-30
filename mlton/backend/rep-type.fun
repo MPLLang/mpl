@@ -139,7 +139,7 @@ structure Type =
       val word32: t = word WordSize.word32
       val word64: t = word WordSize.word64
 
-      val wordVector: WordSize.t -> t = 
+      val wordVector: WordSize.t -> t =
          objptr o ObjptrTycon.wordVector
 
       val word8Vector: unit -> t =  fn () =>
@@ -476,6 +476,16 @@ structure ObjectType =
 
       val thread = fn () =>
          let
+            (* see in runtime/gc/thread.h:
+             * #define DECHECK_DEPTHS_LEN 32
+             *)
+            val numDecheckSyncDepths = 32
+
+            val bytesDecheckSyncDepths =
+               Bytes.fromIntInf (IntInf.*
+                 (numDecheckSyncDepths,
+                  Bytes.toIntInf (Bits.toBytes (Type.width Type.word32))))
+
             val padding =
                let
                   val align =
@@ -492,6 +502,10 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
+                  val bytesDisentangledDepth =
+                     Bits.toBytes (Type.width Type.word32)
+                  val bytesDecheckState =
+                     Bits.toBytes (Type.width Type.word64)
                   val bytesMinLocalCollectionDepth =
                      Bits.toBytes (Type.width Type.word32)
                   val bytesAllocatedSinceLastCollection =
@@ -515,6 +529,9 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesDisentangledDepth +
+                        bytesDecheckState +
+                        bytesDecheckSyncDepths +
                         bytesMinLocalCollectionDepth +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
@@ -530,10 +547,20 @@ structure ObjectType =
                   Type.bits (Bytes.toBits bytesPad)
                end
             val components =
-               Vector.fromList [Type.word32, Type.csize (), Type.exnStack (),
-                                Type.word32, Type.word32, Type.csize (),
-                                Type.csize (), Type.cpointer (), Type.cpointer (),
-                                Type.stack ()]
+               Vector.fromList
+                  [Type.word32,
+                   Type.csize (),
+                   Type.exnStack (),
+                   Type.word32,
+                   Type.word32,
+                   Type.word64,
+                   Type.bits (Bytes.toBits bytesDecheckSyncDepths),
+                   Type.word32,
+                   Type.csize (),
+                   Type.csize (),
+                   Type.cpointer (),
+                   Type.cpointer (),
+                   Type.stack ()]
             val components =
                Vector.map (components, fn ty => {elt = ty, isMutable = true})
             val components =
