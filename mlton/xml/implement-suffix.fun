@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor ImplementSuffix (S: XML_TRANSFORM_STRUCTS): XML_TRANSFORM = 
+functor ImplementSuffix (S: XML_TRANSFORM_STRUCTS): XML_TRANSFORM =
 struct
 
 open S
@@ -63,7 +63,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                   let
                      fun deref (var, ty) =
                         primExp
-                        (PrimApp {prim = Prim.Ref_deref,
+                        (PrimApp {prim = Prim.Ref_deref {readBarrier = true},
                                   targs = Vector.new1 ty,
                                   args = Vector.new1 (VarExp.mono var)})
                      fun assign (var, ty) =

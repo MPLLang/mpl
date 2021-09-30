@@ -126,7 +126,7 @@ structure Pat =
 
       local
          fun make c = T {con = c, targs = Vector.new0 (), arg = NONE}
-      in 
+      in
          val falsee = make Con.falsee
          val truee = make Con.truee
       end
@@ -757,7 +757,7 @@ structure Exp =
                 | Case {cases, default, ...} =>
                      (Cases.foreach' (cases, clearExp, clearPat)
                       ; Option.app (default, clearExp))
-                | Handle {try, catch, handler, ...} => 
+                | Handle {try, catch, handler, ...} =>
                      (clearExp try
                       ; Var.clear (#1 catch)
                       ; clearExp handler)
@@ -891,7 +891,7 @@ structure DirectExp =
                      (ConApp {con = con, targs = targs, arg = arg}, ty))
 
       local
-         fun make c () = 
+         fun make c () =
             conApp {con = c,
                     targs = Vector.new0 (),
                     arg = NONE,
@@ -947,7 +947,7 @@ structure DirectExp =
                   let
                      val t = Type.deRef t
                   in
-                     (PrimApp {prim = Prim.Ref_deref,
+                     (PrimApp {prim = Prim.Ref_deref {readBarrier = true},
                                targs = Vector.new1 t,
                                args = Vector.new1 x},
                       t)
@@ -992,7 +992,7 @@ structure DirectExp =
       fun vall {var, exp}: Dec.t list =
          let val t = ref Type.unit
             val Exp {decs, result} =
-               sendName (exp, fn (x, t') => (t := t';                    
+               sendName (exp, fn (x, t') => (t := t';
                                              Exp {decs = [], result = x}))
          in decs @ [MonoVal {var = var, ty = !t, exp = Var result}]
          end
@@ -1016,7 +1016,7 @@ structure DirectExp =
       fun lett {decs, body} = fn k => Exp.prefixs (send (body, k), decs)
 
       fun let1 {var, exp, body} =
-         fn k => 
+         fn k =>
          send (exp, fn (exp, ty) =>
                Exp.prefix (send (body, k),
                            Dec.MonoVal {var = var, ty = ty, exp = exp}))

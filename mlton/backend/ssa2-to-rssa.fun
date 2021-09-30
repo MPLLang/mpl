@@ -181,6 +181,7 @@ structure CFunction =
       fun readBarrier {return, obj, field} =
         T {args = Vector.new3 (Type.gcState(), obj, field),
            convention = Cdecl,
+           inline = false,
            kind = Kind.Runtime {bytesNeeded = NONE,
                                 ensuresBytesFree = NONE,
                                 mayGC = false,
@@ -1773,7 +1774,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                 dst = (var, ty),
                                                 offset = offset}
 
-                                            val (ss'', {dst=finalDst, isMutable, src=field}) =
+                                            val (ss'', {dst=finalDst, pinned, src=field}) =
                                               case List.splitLast ss' of
                                                 (ss'', Bind stuff) => (ss'', stuff)
                                               | _ => Error.bug "SsaToRssa.translateStatementsTransfer: Select with read barrier: no final Bind statement"
@@ -1786,7 +1787,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                             val tmpVar = Var.newNoname ()
                                             val theBind =
                                               Bind {dst = finalDst,
-                                                    isMutable = isMutable,
+                                                    pinned = pinned,
                                                     src = Operand.Var
                                                       {var = tmpVar,
                                                        ty = ty}}
