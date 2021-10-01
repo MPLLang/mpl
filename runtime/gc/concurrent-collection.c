@@ -136,6 +136,7 @@ void markObj(pointer p) {
 
 // This function is exactly the same as in chunk.c.
 // The only difference is, it doesn't NULL the levelHead of the unlinking chunk.
+// TODO: replace with HM_unlinkChunkPreserveLevelHead (see chunk.c)
 void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   // assert(chunkIsInList(chunk, list));
 

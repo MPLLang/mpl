@@ -168,8 +168,14 @@ void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkLis
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);
 void HM_prependChunk(HM_chunkList list, HM_chunk chunk);
 
-/* Remove chunk from this list */
+/* Remove chunk from a list. Requires that the list actually contains the
+ * chunk (this is not checked).
+ *
+ * The first form sets chunk->levelHead to NULL; the second leaves it
+ * untouched.
+ */
 void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk);
+void HM_unlinkChunkPreserveLevelHead(HM_chunkList list, HM_chunk chunk);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which

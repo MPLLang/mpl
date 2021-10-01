@@ -182,7 +182,8 @@ void HM_initChunkList(HM_chunkList list) {
   list->usedSize = 0;
 }
 
-void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+void unlinkChunk_(HM_chunkList list, HM_chunk chunk, bool preserveLevelHead)
+{
 
 // #if ASSERT
 //   HM_assertChunkListInvariants(list);
@@ -207,7 +208,7 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   list->size -= HM_getChunkSize(chunk);
   list->usedSize -= HM_getChunkUsedSize(chunk);
 
-  chunk->levelHead = NULL;
+  if (!preserveLevelHead) chunk->levelHead = NULL;
   chunk->prevChunk = NULL;
   chunk->nextChunk = NULL;
 
@@ -216,6 +217,16 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
 // #endif
 
 }
+
+
+void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+  unlinkChunk_(list, chunk, FALSE);
+}
+
+void HM_unlinkChunkPreserveLevelHead(HM_chunkList list, HM_chunk chunk) {
+  unlinkChunk_(list, chunk, TRUE);
+}
+
 
 void HM_forwardHHObjptrsInChunkList(
   GC_state s,

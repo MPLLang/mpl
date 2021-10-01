@@ -967,6 +967,9 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
 
   /** If it's not in our from-space, then it's entangled.
     * KEEP THE ENTRY but don't do any of the other nasty stuff.
+    *
+    * SAM_NOTE: pinned chunks still have their HH set to the from-space,
+    * despite living in separate chunklists.
     */
   if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
     assert(s->controls->manageEntanglement);
@@ -977,6 +980,7 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
   }
 
   assert(HM_getObjptrDepth(op) == opDepth);
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
   if (opDepth <= unpinDepthOf(op)) {
     unpinObject(op);
@@ -996,10 +1000,12 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
   assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
-  /* SAM_NOTE: unlinkChunk unsets levelHead, which is a little strange. */
-  HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
+  HM_unlinkChunkPreserveLevelHead(
+    HM_HH_getChunkList(args->fromSpace[opDepth]),
+    chunk);
   HM_appendChunk(&(args->pinned[opDepth]), chunk);
-  chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
+
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 }
 
 /* ========================================================================= */
