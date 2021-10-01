@@ -365,10 +365,10 @@ struct
 
             val _ =
               if popDiscard() then
-                if depth = 1 then
+                (* if depth = 1 then *)
                   HH.collectThreadRoot (thread, rootHH)
-                else
-                  HH.cancelCC (thread, rootHH)
+                (* else
+                  HH.cancelCC (thread, rootHH) *)
               else
                 ( clear()
                 ; setQueueDepth (myWorkerId ()) depth
@@ -387,10 +387,10 @@ struct
         val depth = HH.getDepth thread
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        (*if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
           forkGC thread depth (f, g)
-        else*) if depth < Queue.capacity andalso
-                  depth < maxDisetanglementCheckDepth then
+        else if depth < Queue.capacity andalso
+                depth < maxDisetanglementCheckDepth then
           parfork thread depth (f, g)
         else
           (* don't let us hit an error, just sequentialize instead *)

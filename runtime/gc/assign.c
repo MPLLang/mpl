@@ -14,11 +14,46 @@ void Assignable_decheckObjptr(objptr op)
   decheckRead(s, op);
 }
 
+
 objptr Assignable_readBarrier(
   GC_state s,
-  __attribute__((unused)) objptr obj,
+  ARG_USED_FOR_ASSERT objptr obj,
   objptr* field)
 {
+
+#if ASSERT
+  assert(isObjptr(obj));
+  // check that field is actually inside this object
+  pointer objp = objptrToPointer(obj, NULL);
+  GC_header header = getHeader(objp);
+  GC_objectTypeTag tag;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  bool hasIdentity;
+  splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
+  pointer objend = objp;
+  if (!hasIdentity) {
+    DIE("read barrier: attempting to read immutable object "FMTOBJPTR, obj);
+  }
+  if (NORMAL_TAG == tag) {
+    objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+  }
+  else if (SEQUENCE_TAG == tag) {
+    size_t dataBytes = getSequenceLength(objp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+    objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
+  }
+  else {
+    DIE("read barrier: cannot handle tag %u", tag);
+  }
+  pointer fieldp = (pointer)field;
+  ASSERTPRINT(
+    objp <= fieldp && fieldp + OBJPTR_SIZE <= objend,
+    "read barrier: objptr field %p outside object "FMTOBJPTR" of size %zu",
+    (void*)field,
+    obj,
+    (size_t)(objend - objp));
+#endif
+
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
   decheckRead(s, ptr);

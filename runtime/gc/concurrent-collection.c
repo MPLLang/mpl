@@ -266,10 +266,13 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
+
+  // SAM_NOTE: can just remove this???
   if (isChunkInFromSpace(HM_getChunkOf(p), rawArgs)
      || isChunkInToSpace(HM_getChunkOf(p), rawArgs)) {
     p = getTransitivePtr(p, rawArgs);
   }
+
   bool saved = saveNoForward(s, p, rawArgs);
 
   if(saved) {
@@ -277,9 +280,7 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   }
 }
 
-void forwardDownPtrChunk(GC_state s, __attribute__((unused)) objptr dst,
-                          __attribute__((unused)) objptr* field,
-                          objptr src, void* rawArgs) {
+void forwardPinned(GC_state s, objptr src, void* rawArgs) {
   forwardPtrChunk(s, &src, rawArgs);
   // the runtime needs dst to be saved in case it is in the scope of collection.
   // can potentially remove the downPointer, but there are some race issues with the write Barrier
@@ -321,15 +322,20 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
   }
 }
 
-void unmarkDownPtrChunk(
+void unmarkPinned(
   GC_state s,
-  objptr dst,
-  __attribute__((unused)) objptr* field,
+  // objptr dst,
+  // __attribute__((unused)) objptr* field,
   objptr src,
   void* rawArgs)
 {
+  if (HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection) {
+    HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection = FALSE;
+  }
   unmarkPtrChunk(s, &src, rawArgs);
-  unmarkPtrChunk(s, &dst, rawArgs);
+
+  // TODO: SAM_NOTE: check this??
+  // unmarkPtrChunk(s, &dst, rawArgs);
 }
 
 // This function does more than forwardPtrChunk.
@@ -510,6 +516,106 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
 }
 
+/* ========================================================================= */
+
+struct CC_tryUnpinOrKeepPinnedArgs {
+  HM_chunkList newRemSet;
+  HM_HierarchicalHeap tgtHeap;
+
+  void* fromSpaceMarker;
+  void* toSpaceMarker;
+};
+
+
+void CC_tryUnpinOrKeepPinned(
+  __attribute__((unused)) GC_state s,
+  objptr op,
+  void* rawArgs)
+{
+  assert(isPinned(op));
+  struct CC_tryUnpinOrKeepPinnedArgs* args =
+    (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
+
+  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+
+  if ( (chunk->tmpHeap != args->fromSpaceMarker) &&
+       (chunk->tmpHeap != args->toSpaceMarker) )
+  {
+    /** outside scope of CC. must be entangled? just keep it remembered and
+      * move on.
+      */
+    assert(s->controls->manageEntanglement);
+    HM_remember(args->newRemSet, op);
+    return;
+  }
+
+  assert(HM_getObjptrDepth(op) == opDepth);
+  assert(HM_getLevelHead(chunk) == args->tgtHeap);
+
+  if (opDepth <= unpinDepthOf(op)) {
+    assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
+    unpinObject(op);
+    return;
+  }
+
+  /* otherwise, object stays pinned. we have to scavenge this remembered
+   * entry into the toSpace. */
+
+  HM_remember(args->newRemSet, op);
+
+  if (chunk->pinnedDuringCollection) {
+    return;
+  }
+
+  chunk->pinnedDuringCollection = TRUE;
+  assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
+  assert(HM_getLevelHead(chunk) == args->tgtHeap);
+
+/*
+  HM_unlinkChunkPreserveLevelHead(
+    HM_HH_getChunkList(args->tgtHeap),
+    chunk);
+  HM_appendChunk(args->pinnedChunks, chunk);
+
+  assert(HM_getLevelHead(chunk) == args->tgtHeap);
+*/
+}
+
+
+void CC_filterPinned(
+  GC_state s,
+  HM_HierarchicalHeap hh,
+  void* fromSpaceMarker,
+  void* toSpaceMarker)
+{
+  HM_chunkList oldRemSet = HM_HH_getRemSet(hh);
+  struct HM_chunkList newRemSet;
+  HM_initChunkList(&newRemSet);
+
+  struct CC_tryUnpinOrKeepPinnedArgs args =
+    { .newRemSet = &newRemSet
+    , .tgtHeap = hh
+    , .fromSpaceMarker = fromSpaceMarker
+    , .toSpaceMarker = toSpaceMarker
+    };
+
+  struct HM_foreachDownptrClosure closure =
+    { .fun = CC_tryUnpinOrKeepPinned
+    , .env = (void*)&args
+    };
+
+  /** Save "valid" entries to newRemSet, throw away old entries, and store
+    * valid entries back into the main remembered set.
+    */
+  HM_foreachRemembered(s, oldRemSet, &closure);
+  HM_freeChunksInList(s, oldRemSet);
+  *oldRemSet = newRemSet;  // this moves all data into remset of hh
+}
+
+/* ========================================================================= */
+
+#if 0
 void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   /** There is no race here, because for truly concurrent GC (depth 1), the
     * hh has been split.
@@ -532,6 +638,8 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   HM_freeChunksInList(s, y);
   *y = *x;
 }
+#endif
+
 
 size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
@@ -589,13 +697,17 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   }
 
   // forward down pointers
-  struct HM_chunkList downPtrs;
-  HM_initChunkList(&downPtrs);
-  CC_filterDownPointers(s, &downPtrs, targetHH);
+  // struct HM_chunkList downPtrs;
+  // HM_initChunkList(&downPtrs);
+  // CC_filterDownPointers(s, &downPtrs, targetHH);
 
-  struct HM_foreachDownptrClosure forwardDownPtrChunkClosure =
-  {.fun = forwardDownPtrChunk, .env = &lists};
-  HM_foreachRemembered(s, &downPtrs, &forwardDownPtrChunkClosure);
+  // struct HM_chunkList pinnedChunks;
+  // HM_initChunkList(&pinnedChunks);
+  CC_filterPinned(s, targetHH, lists.fromHead, lists.toHead);
+
+  struct HM_foreachDownptrClosure forwardPinnedClosure =
+    {.fun = forwardPinned, .env = (void*)&lists};
+  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &forwardPinnedClosure);
 
   // forward closures, stack and deque?
   forceForward(s, &(cp->snapLeft), &lists);
@@ -626,9 +738,9 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 //   }
 // #endif
 
-  struct HM_foreachDownptrClosure unmarkDownPtrChunkClosure =
-  {.fun = unmarkDownPtrChunk, .env = &lists};
-  HM_foreachRemembered(s, &downPtrs, &unmarkDownPtrChunkClosure);
+  struct HM_foreachDownptrClosure unmarkPinnedClosure =
+    {.fun = unmarkPinned, .env = &lists};
+  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &unmarkPinnedClosure);
 
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
