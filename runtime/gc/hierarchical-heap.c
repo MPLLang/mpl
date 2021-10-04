@@ -654,6 +654,7 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_chunk chunk =
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = HM_HH_getUFNode(newHH);
+  chunk->decheckState = thread->decheckState;
   thread->currentChunk = chunk;
   newHH->subHeapForCC = hh;
   newHH->subHeapCompletedCC = completed;
@@ -839,6 +840,7 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
   newChunk->levelHead = HM_HH_getUFNode(hh);
+  newChunk->decheckState = thread->decheckState;
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));

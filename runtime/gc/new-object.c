@@ -125,7 +125,12 @@ GC_thread newThread(GC_state s, size_t reserved) {
   return thread;
 }
 
-GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
+GC_thread newThreadWithHeap(
+  GC_state s,
+  size_t reserved,
+  uint32_t depth,
+  bool existsCurrentThread)
+{
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
@@ -146,6 +151,13 @@ GC_thread newThreadWithHeap(GC_state s, size_t reserved, uint32_t depth) {
   tChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->mightContainMultipleObjects = FALSE;
+
+  decheck_tid_t decheckState =
+    (existsCurrentThread ?
+    getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
+
+  tChunk->decheckState = decheckState;
+  sChunk->decheckState = decheckState;
 
   assert(threadSize < HM_getChunkSizePastFrontier(tChunk));
   assert(stackSize < HM_getChunkSizePastFrontier(sChunk));

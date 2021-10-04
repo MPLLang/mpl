@@ -123,7 +123,8 @@ void initDynHeap(GC_state s, GC_thread thread) {
 }
 
 GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
-  GC_thread thread = newThreadWithHeap(s, sizeofStackInitialReserved(s), depth);
+  GC_thread thread =
+    newThreadWithHeap(s, sizeofStackInitialReserved(s), depth, FALSE);
 
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);

@@ -139,6 +139,7 @@ void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
 #if ASSERT
 
 static inline int msbPosition(uint32_t x) {
+  assert(x != 0);
   int i = 0;
   while (x != 1) {
     x = x >> 1;
