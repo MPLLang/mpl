@@ -553,11 +553,13 @@ void CC_tryUnpinOrKeepPinned(
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
+/*
   if (opDepth <= unpinDepthOf(op)) {
     assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
     unpinObject(op);
     return;
   }
+*/
 
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */
