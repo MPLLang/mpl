@@ -280,7 +280,8 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   }
 }
 
-void forwardPinned(GC_state s, objptr src, void* rawArgs) {
+void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
+  objptr src = remElem->object;
   forwardPtrChunk(s, &src, rawArgs);
   // the runtime needs dst to be saved in case it is in the scope of collection.
   // can potentially remove the downPointer, but there are some race issues with the write Barrier
@@ -324,11 +325,11 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
 
 void unmarkPinned(
   GC_state s,
-  // objptr dst,
-  // __attribute__((unused)) objptr* field,
-  objptr src,
+  HM_remembered remElem,
   void* rawArgs)
 {
+  objptr src = remElem->object;
+
   if (HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection) {
     HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection = FALSE;
   }
@@ -529,9 +530,11 @@ struct CC_tryUnpinOrKeepPinnedArgs {
 
 void CC_tryUnpinOrKeepPinned(
   __attribute__((unused)) GC_state s,
-  objptr op,
+  HM_remembered remElem,
   void* rawArgs)
 {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
@@ -546,7 +549,7 @@ void CC_tryUnpinOrKeepPinned(
       * move on.
       */
     assert(s->controls->manageEntanglement);
-    HM_remember(args->newRemSet, op);
+    HM_remember(args->newRemSet, remElem);
     return;
   }
 
@@ -564,7 +567,7 @@ void CC_tryUnpinOrKeepPinned(
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */
 
-  HM_remember(args->newRemSet, op);
+  HM_remember(args->newRemSet, remElem);
 
   if (chunk->pinnedDuringCollection) {
     return;

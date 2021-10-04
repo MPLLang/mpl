@@ -22,16 +22,35 @@
 
 // void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
-void checkDisentangledDepthAndFreeze(GC_state s, objptr op, void* rawArgs);
-void unfreezeDisentangledDepthBefore(GC_state s, objptr op, void* rawArgs);
-void unfreezeDisentangledDepthAfter(GC_state s, objptr op, void* rawArgs);
+void checkDisentangledDepthAndFreeze(
+  GC_state s,
+  HM_remembered remElem,
+  void* rawArgs);
 
-void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs);
-void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs);
+void unfreezeDisentangledDepthBefore(
+  GC_state s,
+  HM_remembered remElem,
+  void* rawArgs);
+
+void unfreezeDisentangledDepthAfter(
+  GC_state s,
+  HM_remembered remElem,
+  void* rawArgs);
+
+void tryUnpinOrKeepPinned(
+  GC_state s,
+  HM_remembered remElem,
+  void* rawArgs);
+
+void forwardObjptrsOfRemembered(
+  GC_state s,
+  HM_remembered remElem,
+  void* rawArgs);
+
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 #if ASSERT
-void checkRememberedEntry(GC_state s, objptr object, void* args);
+void checkRememberedEntry(GC_state s, HM_remembered remElem, void* args);
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
 #endif
 
@@ -853,9 +872,11 @@ void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* raw
 
 void checkDisentangledDepthAndFreeze(
   __attribute__((unused)) GC_state s,
-  objptr op,
+  HM_remembered remElem,
   void* rawArgs)
 {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
   HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
@@ -893,9 +914,11 @@ void checkDisentangledDepthAndFreeze(
 
 void unfreezeDisentangledDepthBefore(
   __attribute__((unused)) GC_state s,
-  objptr op,
+  HM_remembered remElem,
   void* rawArgs)
 {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
   HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
@@ -922,9 +945,11 @@ void unfreezeDisentangledDepthBefore(
 
 void unfreezeDisentangledDepthAfter(
   __attribute__((unused)) GC_state s,
-  objptr op,
+  HM_remembered remElem,
   void* rawArgs)
 {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
   HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
@@ -950,7 +975,9 @@ void unfreezeDisentangledDepthAfter(
 
 /* ========================================================================= */
 
-void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
+void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
 
@@ -975,7 +1002,7 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
     assert(s->controls->manageEntanglement);
     /** TODO: assert entangled here */
 
-    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
+    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
     return;
   }
 
@@ -990,7 +1017,7 @@ void tryUnpinOrKeepPinned(GC_state s, objptr op, void* rawArgs) {
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */
 
-  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), op);
+  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
 
   if (chunk->pinnedDuringCollection) {
     return;
@@ -1101,7 +1128,9 @@ void scavengeChunkOfPinnedObject(
 
 /* ========================================================================= */
 
-void forwardObjptrsOfRemembered(GC_state s, objptr op, void* rawArgs) {
+void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void* rawArgs) {
+  objptr op = remElem->object;
+
   assert(isPinned(op));
 
   struct GC_foreachObjptrClosure closure =
@@ -1420,9 +1449,11 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 void checkRememberedEntry(
   __attribute__((unused)) GC_state s,
-  objptr object,
+  HM_remembered remElem,
   void* args)
 {
+  objptr object = remElem->object;
+
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)args;
 
   assert(isPinned(object));

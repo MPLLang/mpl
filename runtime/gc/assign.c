@@ -127,6 +127,9 @@ void Assignable_writeBarrier(
   if (dst == s->wsQueue)
     return;
 
+  struct HM_remembered remElem_ = {.object = src};
+  HM_remembered remElem = &remElem_;
+
   pointer srcp = objptrToPointer(src, NULL);
 
   if (s->controls->manageEntanglement &&
@@ -154,7 +157,7 @@ void Assignable_writeBarrier(
 
     if (pinObject(src, (uint32_t)unpinDepth)) {
       /** Just remember it at some arbitrary place... */
-      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, src);
+      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, remElem);
     }
 
     return;
@@ -200,7 +203,7 @@ void Assignable_writeBarrier(
   assert(NULL != hh);
   if (pinObject(src, dstHH->depth)) {
     if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
-      HM_rememberAtLevel(hh, src);
+      HM_rememberAtLevel(hh, remElem);
     }
     else {
       /** This special subheap is guaranteed to exist while at least one CC
@@ -213,7 +216,7 @@ void Assignable_writeBarrier(
         * always "empty" and is only used for its remset.
         */
       assert(NULL != hh->subHeapCompletedCC);
-      HM_rememberAtLevel(hh->subHeapCompletedCC, src);
+      HM_rememberAtLevel(hh->subHeapCompletedCC, remElem);
     }
   }
 
