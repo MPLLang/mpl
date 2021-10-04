@@ -556,13 +556,18 @@ void CC_tryUnpinOrKeepPinned(
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-/*
-  if (opDepth <= unpinDepthOf(op)) {
+  bool unpinningOkay =
+    ! (HM_HH_getConcurrentPack(args->tgtHeap)
+       ->mightBeMutablePointersFromPastDataAtSameLevel);
+
+  if ( unpinningOkay && opDepth <= unpinDepthOf(op)) {
+    // If unpinning is okay, we must be the oldest in the chain.
+    assert(NULL == args->tgtHeap->subHeapForCC);
+
     assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
     unpinObject(op);
     return;
   }
-*/
 
   /* otherwise, object stays pinned. we have to scavenge this remembered
    * entry into the toSpace. */

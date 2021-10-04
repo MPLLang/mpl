@@ -480,6 +480,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
+  HM_HH_getConcurrentPack(hh)->mightBeMutablePointersFromPastDataAtSameLevel = TRUE;
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
 
@@ -632,11 +633,20 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   assert(HM_HH_isLevelHead(hh));
   assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_REG);
 
+  assert(
+    HM_HH_getConcurrentPack(hh)
+    ->mightBeMutablePointersFromPastDataAtSameLevel
+  );
+
   HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
   if (NULL == completed) {
+    assert(NULL == hh->subHeapForCC);
     completed = HM_HH_new(s, HM_HH_getDepth(hh));
     HM_HH_getConcurrentPack(completed)->ccstate = CC_DONE;
     hh->subHeapCompletedCC = completed;
+
+    /** No outstanding CCs, so can unset this (which allows unpinning). */
+    HM_HH_getConcurrentPack(hh)->mightBeMutablePointersFromPastDataAtSameLevel = FALSE;
   }
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
@@ -687,6 +697,10 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
     HM_HierarchicalHeap next = subhh->subHeapForCC;
     *cursor = next;
     subhh->subHeapForCC = NULL;
+
+    // Set again just to be safe, although this shouldn't matter.
+    HM_HH_getConcurrentPack(subhh)
+      ->mightBeMutablePointersFromPastDataAtSameLevel = TRUE;
 
     subhh->subHeapCompletedCC = hh->subHeapCompletedCC;
     hh->subHeapCompletedCC = subhh;

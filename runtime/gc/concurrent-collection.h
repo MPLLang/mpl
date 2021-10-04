@@ -50,6 +50,15 @@ typedef struct ConcurrentPackage {
 	enum CCState ccstate;
 	objptr stack;
 
+  /** FALSE when triggering the "first" CC in a chain, and TRUE otherwise.
+    *
+    * This is significant for unpinning: the unpin depth keeps track of
+    * when all down-pointers have become internal, but doesn't keep track
+    * of whether or not these "now internal" pointers are in the same
+    * subheap.
+    */
+  bool mightBeMutablePointersFromPastDataAtSameLevel;
+
   /** For deciding when to collect. Could be cleaned up.
     */
 	size_t bytesAllocatedSinceLastCollection;
