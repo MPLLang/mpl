@@ -978,6 +978,11 @@ void unfreezeDisentangledDepthAfter(
 void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr op = remElem->object;
 
+  if (!isPinned(op)) {
+    // If previously unpinned, then no need to remember this object.
+    return;
+  }
+
   assert(isPinned(op));
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
 
@@ -1009,12 +1014,30 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
-  if (opDepth <= unpinDepthOf(op)) {
+  uint32_t unpinDepth = unpinDepthOf(op);
+
+  if (opDepth <= unpinDepth) {
     unpinObject(op);
     return;
   }
 
-  /* otherwise, object stays pinned. we have to scavenge this remembered
+  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+
+  if (fromDepth > unpinDepth) {
+    /** If this particular remembered entry came from closer than some other
+      * down-pointer, then we don't need to keep it around. There will be some
+      * other remembered entry coming from the unpinDepth level.
+      *
+      * But note that it is very important that the condition is a strict
+      * inequality: we need to keep all remembered entries that came from the
+      * same shallowest level. (CC-chaining depends on this.)
+      */
+    return;
+  }
+
+  assert(fromDepth == unpinDepth);
+
+  /* otherwise, object stays pinned, and we have to scavenge this remembered
    * entry into the toSpace. */
 
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
@@ -1463,6 +1486,9 @@ void checkRememberedEntry(
 
   assert(hhContainsChunk(hh, theChunk));
   assert(HM_getLevelHead(theChunk) == hh);
+
+  assert(!hasFwdPtr(objptrToPointer(object, NULL)));
+  assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
 }
 
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)

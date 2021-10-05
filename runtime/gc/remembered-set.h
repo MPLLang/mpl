@@ -13,6 +13,7 @@
 /* Remembering that there exists a downpointer to this object. The unpin
  * depth of the object will be stored in the object header. */
 typedef struct HM_remembered {
+  objptr from;
   objptr object;
 } * HM_remembered;
 

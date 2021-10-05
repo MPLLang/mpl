@@ -329,10 +329,7 @@ void unmarkPinned(
   void* rawArgs)
 {
   objptr src = remElem->object;
-
-  if (HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection) {
-    HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection = FALSE;
-  }
+  assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   unmarkPtrChunk(s, &src, rawArgs);
 
   // TODO: SAM_NOTE: check this??
@@ -535,7 +532,15 @@ void CC_tryUnpinOrKeepPinned(
 {
   objptr op = remElem->object;
 
+  if (!isPinned(op)) {
+    /** If we're already decided to unpin the object, then no more remembered
+      * entries are needed on this object.
+      */
+    return;
+  }
+
   assert(isPinned(op));
+
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
 
@@ -553,43 +558,43 @@ void CC_tryUnpinOrKeepPinned(
     return;
   }
 
-  assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-  bool unpinningOkay =
-    ! (HM_HH_getConcurrentPack(args->tgtHeap)
-       ->mightBeMutablePointersFromPastDataAtSameLevel);
+  uint32_t unpinDepth = unpinDepthOf(op);
 
-  if ( unpinningOkay && opDepth <= unpinDepthOf(op)) {
-    // If unpinning is okay, we must be the oldest in the chain.
-    assert(NULL == args->tgtHeap->subHeapForCC);
-
+  // unpin when the object has gotten shallow enough
+  if ( opDepth < unpinDepth ) {
     assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
     unpinObject(op);
     return;
   }
 
-  /* otherwise, object stays pinned. we have to scavenge this remembered
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
+
+  if (fromDepth > unpinDepth) {
+    /** Can forget any down-pointer that came from shallower than the
+      * shallowest from-object.
+      */
+    return;
+  }
+
+  assert(fromDepth == unpinDepth);
+
+  if ( (fromChunk->tmpHeap == args->fromSpaceMarker) ||
+       (fromChunk->tmpHeap == args->toSpaceMarker) )
+  {
+    // fromChunk is in-scope of CC. Don't need to keep this remembered entry.
+    return;
+  }
+
+  /* otherwise, object stays pinned, and we have to keep this remembered
    * entry into the toSpace. */
 
   HM_remember(args->newRemSet, remElem);
 
-  if (chunk->pinnedDuringCollection) {
-    return;
-  }
-
-  chunk->pinnedDuringCollection = TRUE;
   assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
-
-/*
-  HM_unlinkChunkPreserveLevelHead(
-    HM_HH_getChunkList(args->tgtHeap),
-    chunk);
-  HM_appendChunk(args->pinnedChunks, chunk);
-
-  assert(HM_getLevelHead(chunk) == args->tgtHeap);
-*/
 }
 
 

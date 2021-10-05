@@ -25,6 +25,7 @@ void HM_remember(HM_chunkList remSet, HM_remembered remElem) {
   *r = *remElem;
 
   assert(r->object == remElem->object);
+  assert(r->from == remElem->from);
 }
 
 void HM_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem) {

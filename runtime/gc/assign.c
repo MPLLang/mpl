@@ -127,7 +127,7 @@ void Assignable_writeBarrier(
   if (dst == s->wsQueue)
     return;
 
-  struct HM_remembered remElem_ = {.object = src};
+  struct HM_remembered remElem_ = {.object = src, .from = dst};
   HM_remembered remElem = &remElem_;
 
   pointer srcp = objptrToPointer(src, NULL);
@@ -188,20 +188,28 @@ void Assignable_writeBarrier(
   }
 
   /* Otherwise, remember the pointer! */
-  uint32_t d = srcHH->depth;
-  GC_thread thread = getThreadCurrent(s);
 
-  /** Fix a silly issue where, when we are dealing with entanglement, the
-    * lower object is actually deeper than the current thread (which is
-    * possible because of entanglement! the thread is peeking inside of
-    * some other thread's heaps, and the other thread might be deeper).
-    */
-  if (d > thread->currentDepth && s->controls->manageEntanglement)
-    d = thread->currentDepth;
+  bool success = pinObject(src, dstHH->depth);
+  uint32_t unpinDepth = unpinDepthOf(src);
 
-  HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
-  assert(NULL != hh);
-  if (pinObject(src, dstHH->depth)) {
+  if (success || dstHH->depth <= unpinDepth) {
+    // Only remember shallowest down-pointers.
+    assert(dstHH->depth == unpinDepth);
+
+    uint32_t d = srcHH->depth;
+    GC_thread thread = getThreadCurrent(s);
+
+    /** Fix a silly issue where, when we are dealing with entanglement, the
+      * lower object is actually deeper than the current thread (which is
+      * possible because of entanglement! the thread is peeking inside of
+      * some other thread's heaps, and the other thread might be deeper).
+      */
+    if (d > thread->currentDepth && s->controls->manageEntanglement)
+      d = thread->currentDepth;
+
+    HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
+    assert(NULL != hh);
+
     if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
       HM_rememberAtLevel(hh, remElem);
     }
