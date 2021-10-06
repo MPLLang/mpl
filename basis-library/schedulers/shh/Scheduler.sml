@@ -92,6 +92,7 @@ struct
   fun updateIdleTime (p, deltaTime) =
     arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
 
+(*
   val timerGrain = 256
   fun startTimer myId = (myId, 0, Time.now ())
   fun tickTimer (p, count, t) =
@@ -105,12 +106,11 @@ struct
     end
   fun stopTimer (p, _, t) =
     (tickTimer (p, timerGrain, t); ())
+*)
 
-  (*
   fun startTimer _ = ()
   fun tickTimer _ = ()
   fun stopTimer _ = ()
-  *)
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -142,14 +142,15 @@ struct
   local
     val amOriginal = ref true
     val taskBoxes = Array.array (P, NONE)
-    fun upd i x = MLton.HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
+    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
+    fun sub i = HM.arraySubNoBarrier (taskBoxes, Int64.fromInt i)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
     if !amOriginal then
       (amOriginal := false; Thread.savedPre ())
     else
-      case Array.sub (taskBoxes, myWorkerId ()) of
+      case sub (myWorkerId ()) of
         NONE => die (fn _ => "scheduler bug: task box is empty")
       | SOME t =>
           ( upd (myWorkerId ()) NONE
@@ -226,7 +227,7 @@ struct
       val myId = myWorkerId ()
       val {schedThread, ...} = vectorSub (workerLocalData, myId)
     in
-      threadSwitch (Option.valOf (!schedThread))
+      threadSwitch (Option.valOf (HM.refDerefNoBarrier schedThread))
     end
 
   (* ========================================================================
