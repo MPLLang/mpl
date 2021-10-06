@@ -560,26 +560,30 @@ void CC_tryUnpinOrKeepPinned(
 
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-  uint32_t unpinDepth = unpinDepthOf(op);
+  // uint32_t unpinDepth = unpinDepthOf(op);
 
   // unpin when the object has gotten shallow enough
+/*
   if ( opDepth < unpinDepth ) {
     assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
     unpinObject(op);
     return;
   }
+*/
 
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
   uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
 
+#if 0
   if (fromDepth > unpinDepth) {
     /** Can forget any down-pointer that came from shallower than the
       * shallowest from-object.
       */
     return;
   }
+#endif
 
-  assert(fromDepth == unpinDepth);
+  // assert(fromDepth == unpinDepth);
 
   if ( (fromChunk->tmpHeap == args->fromSpaceMarker) ||
        (fromChunk->tmpHeap == args->toSpaceMarker) )

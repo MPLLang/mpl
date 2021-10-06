@@ -976,15 +976,21 @@ void unfreezeDisentangledDepthAfter(
 /* ========================================================================= */
 
 void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
+  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   objptr op = remElem->object;
 
   if (!isPinned(op)) {
     // If previously unpinned, then no need to remember this object.
+
+#if ASSERT
+    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+    assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
+#endif
+
     return;
   }
 
   assert(isPinned(op));
-  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
 
   /* We could just look up the depth of `op`, with the normal technique
    * (getLevelHead, etc.), but this should be faster. The toDepth field
