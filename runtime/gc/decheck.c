@@ -252,6 +252,7 @@ void decheckRead(GC_state s, objptr ptr) {
 
     /** If we get here, there is entanglement. Next is how to handle it. */
 
+    assert(!s->controls->manageEntanglement);
     if (!s->controls->manageEntanglement) {
         printf("Entanglement detected: object at %p\n", (void *) ptr);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
@@ -263,6 +264,7 @@ void decheckRead(GC_state s, objptr ptr) {
         exit(-1);
     }
 
+#if 0
     s->cumulativeStatistics->numEntanglementsDetected++;
 
     /** set the chunk's disentangled depth. This synchronizes with GC, if there
@@ -284,6 +286,7 @@ void decheckRead(GC_state s, objptr ptr) {
           __sync_bool_compare_and_swap(&(chunk->disentangledDepth), oldDD, newDD))
         break;
     }
+#endif
 }
 
 void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth) {

@@ -547,6 +547,12 @@ void CC_tryUnpinOrKeepPinned(
   uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
 
+  assert(
+    (chunk->tmpHeap == args->fromSpaceMarker) ||
+    (chunk->tmpHeap == args->toSpaceMarker)
+  );
+
+#if 0
   if ( (chunk->tmpHeap != args->fromSpaceMarker) &&
        (chunk->tmpHeap != args->toSpaceMarker) )
   {
@@ -557,6 +563,7 @@ void CC_tryUnpinOrKeepPinned(
     HM_remember(args->newRemSet, remElem);
     return;
   }
+#endif
 
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 

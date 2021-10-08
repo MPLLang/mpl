@@ -280,6 +280,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   /* ===================================================================== */
 
+#if 0
   /** When we're managing entanglement carefully, check if we're allowed to
     * do this GC.
     */
@@ -326,6 +327,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       return;
     }
   }
+#endif
 
   /* ===================================================================== */
 
@@ -642,6 +644,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    */
 
 
+#if 0
   /** Finally, unfreeze chunks if we need to. */
   if (s->controls->manageEntanglement) {
     struct checkDEDepthsArgs ddArgs = {
@@ -660,7 +663,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
     }
   }
-
+#endif
 
 #if ASSERT
   assertInvariants(thread);
@@ -1003,6 +1006,10 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
   }
 
+  assert(opDepth <= args->maxDepth);
+  assert(args->fromSpace[opDepth] == hh);
+
+#if 0
   /** If it's not in our from-space, then it's entangled.
     * KEEP THE ENTRY but don't do any of the other nasty stuff.
     *
@@ -1016,6 +1023,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
     return;
   }
+#endif
 
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);

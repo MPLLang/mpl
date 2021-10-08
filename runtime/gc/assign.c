@@ -132,6 +132,10 @@ void Assignable_writeBarrier(
 
   pointer srcp = objptrToPointer(src, NULL);
 
+#if 0
+  /** This is disabled for now. In the future we will come back to
+    * managing entanglement.
+    */
   if (s->controls->manageEntanglement &&
       getThreadCurrent(s)->decheckState.bits != DECHECK_BOGUS_BITS &&
 
@@ -162,6 +166,7 @@ void Assignable_writeBarrier(
 
     return;
   }
+#endif
 
   HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
@@ -199,6 +204,8 @@ void Assignable_writeBarrier(
     uint32_t d = srcHH->depth;
     GC_thread thread = getThreadCurrent(s);
 
+
+#if 0
     /** Fix a silly issue where, when we are dealing with entanglement, the
       * lower object is actually deeper than the current thread (which is
       * possible because of entanglement! the thread is peeking inside of
@@ -206,6 +213,7 @@ void Assignable_writeBarrier(
       */
     if (d > thread->currentDepth && s->controls->manageEntanglement)
       d = thread->currentDepth;
+#endif
 
     HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
     assert(NULL != hh);

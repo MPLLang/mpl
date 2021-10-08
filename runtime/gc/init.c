@@ -199,6 +199,7 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
         } else if (0 == strcmp (arg, "manage-entanglement")) {
           i++;
+          die ("%s manage-entanglement not supported at the moment", atName);
           s->controls->manageEntanglement = TRUE;
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
