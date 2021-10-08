@@ -74,6 +74,7 @@ struct
   type t = MLtonPointer.t
 
   fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
+  fun forceNewChunk () = Prim.forceNewChunk (gcState ())
   fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
   fun resetList (t) = Prim.resetList(t)
 

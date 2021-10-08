@@ -310,6 +310,7 @@ struct
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
             ; DE.decheckSetTid tidRight
+            (* ; HH.forceNewChunk () *)
             ; let
                 val gr = result g
               in

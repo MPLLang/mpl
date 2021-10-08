@@ -423,6 +423,7 @@ structure Thread =
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
+      val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
         'a array * 'b array * 'c array * thread -> bool;

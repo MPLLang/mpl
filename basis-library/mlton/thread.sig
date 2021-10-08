@@ -52,6 +52,8 @@ signature MLTON_THREAD =
           (*force the runtime to create a hh for the left child*)
           val forceLeftHeap : int * thread -> unit
 
+          val forceNewChunk : unit -> unit
+
           val registerCont : 'a array * 'b array * 'c array * thread -> bool
           val resetList    : thread -> unit
 

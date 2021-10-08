@@ -627,6 +627,24 @@ void HM_HH_forceLeftHeap(
   endAtomic(s);
 }
 
+void HM_HH_forceNewChunk(GC_state s) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
+  assert(threadAndHeapOkay(s));
+
+  if (!HM_HH_extend(s, getThreadCurrent(s), GC_HEAP_LIMIT_SLOP)) {
+    DIE("Ran out of space for new chunk");
+  }
+
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  assert(invariantForMutatorFrontier(s));
+  assert(invariantForMutatorStack(s));
+}
+
 void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(HM_HH_isLevelHead(hh));
