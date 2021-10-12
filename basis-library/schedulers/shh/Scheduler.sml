@@ -305,16 +305,17 @@ struct
         val fr = result f
         val tidLeft = DE.decheckGetTid thread
 
-        val (gr, tidRight) =
+        val gr =
           if popDiscard () then
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
-            ; DE.decheckSetTid tidRight
+            ; DE.decheckJoin (tidLeft, tidRight)
             (* ; HH.forceNewChunk () *)
             ; let
                 val gr = result g
               in
-                (gr, DE.decheckGetTid thread)
+                (* (gr, DE.decheckGetTid thread) *)
+                gr
               end
             )
           else
@@ -324,19 +325,20 @@ struct
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME t =>
                   let
-                    val tr = DE.decheckGetTid t
+                    val tidRight = DE.decheckGetTid t
                   in
                     HH.mergeThreads (thread, t);
                     HH.promoteChunks thread;
                     HH.setDepth (thread, depth);
+                    DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) depth;
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr => (gr, tr)
+                    | SOME gr => gr
                   end
             )
 
-        val () = DE.decheckJoin (tidLeft, tidRight)
+        (* val () = DE.decheckJoin (tidLeft, tidRight) *)
       in
         (extractResult fr, extractResult gr)
       end

@@ -85,6 +85,11 @@ void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
     assert(dag_depth(t1) == dag_depth(tid)+1);
     assert(dag_depth(t2) == dag_depth(tid)+1);
     assert((norm_path(t1) ^ norm_path(t2)) == (uint32_t)(1 << h));
+
+#if ASSERT
+    synch_depths[norm_path(t1)] = dag_depth(t1);
+    synch_depths[norm_path(t2)] = dag_depth(t2);
+#endif
 }
 
 void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
@@ -94,9 +99,9 @@ void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
     GC_thread thread = getThreadCurrent(s);
     thread->decheckState = tid;
 
-#if ASSERT
-    synch_depths[norm_path(tid)] = dag_depth(tid);
-#endif
+// #if ASSERT
+//     synch_depths[norm_path(tid)] = dag_depth(tid);
+// #endif
     decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
 
     assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
