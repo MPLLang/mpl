@@ -283,6 +283,13 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
   forwardPtrChunk(s, &src, rawArgs);
+
+#if ASSERT
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  assert(!isChunkInFromSpace(fromChunk, rawArgs));
+  assert(!isChunkInToSpace(fromChunk, rawArgs));
+#endif
+
   // the runtime needs dst to be saved in case it is in the scope of collection.
   // can potentially remove the downPointer, but there are some race issues with the write Barrier
   // forwardPtrChunk(s, &dst, rawArgs);
@@ -331,6 +338,12 @@ void unmarkPinned(
   objptr src = remElem->object;
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   unmarkPtrChunk(s, &src, rawArgs);
+
+#if ASSERT
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  assert(!isChunkInFromSpace(fromChunk, rawArgs));
+  assert(!isChunkInToSpace(fromChunk, rawArgs));
+#endif
 
   // TODO: SAM_NOTE: check this??
   // unmarkPtrChunk(s, &dst, rawArgs);
@@ -530,19 +543,26 @@ void CC_tryUnpinOrKeepPinned(
   HM_remembered remElem,
   void* rawArgs)
 {
+  struct CC_tryUnpinOrKeepPinnedArgs* args =
+    (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
+
   objptr op = remElem->object;
 
   if (!isPinned(op)) {
     /** If we're already decided to unpin the object, then no more remembered
       * entries are needed on this object.
       */
+#if ASSERT
+    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+    assert(
+      (fromChunk->tmpHeap == args->fromSpaceMarker) ||
+      (fromChunk->tmpHeap == args->toSpaceMarker)
+    );
+#endif
     return;
   }
 
   assert(isPinned(op));
-
-  struct CC_tryUnpinOrKeepPinnedArgs* args =
-    (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
 
   uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
