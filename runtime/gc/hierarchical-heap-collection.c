@@ -1180,6 +1180,8 @@ void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void* rawArgs
     &closure,
     FALSE
   );
+
+  forwardHHObjptr(s, &(remElem->from), rawArgs);
 }
 
 /* ========================================================================= */
