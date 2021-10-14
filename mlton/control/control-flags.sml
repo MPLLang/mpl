@@ -290,6 +290,11 @@ val defaultWord = control {name = "defaultWord",
                            default = "word32",
                            toString = fn s => s}
 
+val detectEntanglement =
+  control {name = "detect-entanglement",
+           default = false,
+           toString = Bool.toString}
+
 val diagPasses =
    control {name = "diag passes",
             default = [],

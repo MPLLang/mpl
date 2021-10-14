@@ -1758,7 +1758,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                   (case toRtype ty of
                                       NONE => none ()
                                     | SOME ty =>
-                                         if not (readBarrier andalso Type.isObjptr ty) then
+                                         if not (!Control.detectEntanglement
+                                                 andalso readBarrier
+                                                 andalso Type.isObjptr ty)
+                                         then
                                             adds
                                             (select
                                              {base = Base.map (base, varOp),
