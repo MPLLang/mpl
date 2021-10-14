@@ -38,6 +38,44 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
 void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 #define ASSERT2 0
 
+
+enum CC_freedChunkType {
+  CC_FREED_REMSET_CHUNK,
+  CC_FREED_STACK_CHUNK,
+  CC_FREED_NORMAL_CHUNK
+};
+
+static const char* CC_freedChunkTypeToString[] = {
+  "CC_FREED_REMSET_CHUNK",
+  "CC_FREED_STACK_CHUNK",
+  "CC_FREED_NORMAL_CHUNK"
+};
+
+struct CC_chunkInfo {
+  uint32_t initialDepth;
+  uint32_t finalDepth;
+  int32_t procNum;
+  enum CC_freedChunkType freedType;
+};
+
+
+void CC_writeFreeChunkInfo(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* env)
+{
+  struct CC_chunkInfo *info = env;
+
+  snprintf(infoBuffer, bufferLen,
+    "freed %s by CC at depth [%u,%u] by proc %d",
+    CC_freedChunkTypeToString[info->freedType],
+    info->initialDepth,
+    info->finalDepth,
+    info->procNum);
+}
+
+
 void CC_initStack(ConcurrentPackage cp) {
   // don't re-initialize
   if(cp->rootList!=NULL) {
@@ -631,6 +669,7 @@ void CC_tryUnpinOrKeepPinned(
 
 void CC_filterPinned(
   GC_state s,
+  uint32_t initialDepth,
   HM_HierarchicalHeap hh,
   void* fromSpaceMarker,
   void* toSpaceMarker)
@@ -655,7 +694,16 @@ void CC_filterPinned(
     * valid entries back into the main remembered set.
     */
   HM_foreachRemembered(s, oldRemSet, &closure);
-  HM_freeChunksInList(s, oldRemSet);
+
+  struct CC_chunkInfo info =
+    {.initialDepth = initialDepth,
+     .finalDepth = HM_HH_getDepth(hh),
+     .procNum = s->procNumber,
+     .freedType = CC_FREED_REMSET_CHUNK};
+  struct writeFreedBlockInfoFnClosure infoc =
+    {.fun = CC_writeFreeChunkInfo, .env = &info};
+
+  HM_freeChunksInListWithInfo(s, oldRemSet, &infoc);
   *oldRemSet = newRemSet;  // this moves all data into remset of hh
 }
 
@@ -685,27 +733,6 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
   *y = *x;
 }
 #endif
-
-struct CC_chunkInfo {
-  uint32_t initialDepth;
-  uint32_t finalDepth;
-  int32_t procNum;
-};
-
-void CC_writeFreeChunkInfo(
-  GC_state s,
-  char* infoBuffer,
-  size_t bufferLen,
-  void* env)
-{
-  struct CC_chunkInfo *info = env;
-
-  snprintf(infoBuffer, bufferLen,
-    "freed by CC at depth [%u,%u] by proc %d",
-    info->initialDepth,
-    info->finalDepth,
-    info->procNum);
-}
 
 
 size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
@@ -772,7 +799,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   // struct HM_chunkList pinnedChunks;
   // HM_initChunkList(&pinnedChunks);
-  CC_filterPinned(s, targetHH, lists.fromHead, lists.toHead);
+  CC_filterPinned(s, initialDepth, targetHH, lists.fromHead, lists.toHead);
 
   struct HM_foreachDownptrClosure forwardPinnedClosure =
     {.fun = forwardPinned, .env = (void*)&lists};
@@ -892,7 +919,8 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct CC_chunkInfo info =
     {.initialDepth = initialDepth,
      .finalDepth = finalDepth,
-     .procNum = s->procNumber};
+     .procNum = s->procNumber,
+     .freedType = CC_FREED_NORMAL_CHUNK};
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = CC_writeFreeChunkInfo, .env = &info};
 
@@ -913,8 +941,10 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   assert(!(stackChunk->mightContainMultipleObjects));
   assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
   HM_unlinkChunk(origList, stackChunk);
+  info.freedType = CC_FREED_STACK_CHUNK;
   HM_freeChunkWithInfo(s, stackChunk, &infoc);
   cp->stack = BOGUS_OBJPTR;
+  info.freedType = CC_FREED_NORMAL_CHUNK;
 
   HH_EBR_leaveQuiescentState(s);
 

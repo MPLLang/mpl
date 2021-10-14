@@ -99,6 +99,41 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+enum LGC_freedChunkType {
+  LGC_FREED_REMSET_CHUNK,
+  LGC_FREED_STACK_CHUNK,
+  LGC_FREED_NORMAL_CHUNK
+};
+
+static const char* LGC_freedChunkTypeToString[] = {
+  "LGC_FREED_REMSET_CHUNK",
+  "LGC_FREED_STACK_CHUNK",
+  "LGC_FREED_NORMAL_CHUNK"
+};
+
+struct LGC_chunkInfo {
+  uint32_t depth;
+  int32_t procNum;
+  enum LGC_freedChunkType freedType;
+};
+
+
+void LGC_writeFreeChunkInfo(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* env)
+{
+  struct LGC_chunkInfo *info = env;
+
+  snprintf(infoBuffer, bufferLen,
+    "freed %s by LGC at depth %u by proc %d",
+    LGC_freedChunkTypeToString[info->freedType],
+    info->depth,
+    info->procNum);
+}
+
+
 uint32_t minDepthWithoutCC(GC_thread thread) {
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
@@ -540,6 +575,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   /* ===================================================================== */
 
+  struct LGC_chunkInfo info =
+    {.depth = 0,
+     .procNum = s->procNumber,
+     .freedType = LGC_FREED_NORMAL_CHUNK};
+  struct writeFreedBlockInfoFnClosure infoc =
+    {.fun = LGC_writeFreeChunkInfo, .env = &info};
+
   /* Free old chunks and find the tail (upper segment) of the original hh
    * that will be merged with the toSpace */
   HM_HierarchicalHeap hhTail = hh;
@@ -562,7 +604,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
       //   chunkCursor = chunkCursor->nextChunk;
       // }
 #endif
-      HM_freeChunksInList(s, remset);
+      info.depth = HM_HH_getDepth(hhTail);
+      info.freedType = LGC_FREED_REMSET_CHUNK;
+      HM_freeChunksInListWithInfo(s, remset, &infoc);
     }
 
 #if ASSERT
@@ -576,7 +620,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     // }
 #endif
 
-    HM_freeChunksInList(s, level);
+    info.depth = HM_HH_getDepth(hhTail);
+    info.freedType = LGC_FREED_NORMAL_CHUNK;
+    HM_freeChunksInListWithInfo(s, level, &infoc);
     HM_HH_freeAllDependants(s, hhTail, FALSE);
     freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
     freeFixedSize(getHHAllocator(s), hhTail);
