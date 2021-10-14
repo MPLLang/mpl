@@ -6,6 +6,8 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+#define INFO_BUFFER_LEN 256
+
 static inline size_t SUPERBLOCK_SIZE(GC_state s) {
   return (1 << s->controls->superblockThreshold);
 }
@@ -534,7 +536,7 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks) {
 }
 
 
-void freeBlocks(GC_state s, Blocks bs) {
+void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f) {
   BlockAllocator local = s->blockAllocatorLocal;
   assertBlockAllocatorOkay(s, local);
 
@@ -546,6 +548,33 @@ void freeBlocks(GC_state s, Blocks bs) {
   /** Clear out memory to try and catch errors quickly... */
   memset((void*)bs, 0xBF, numBlocks * s->controls->blockSize);
 #endif
+
+  if (s->controls->debugKeepFreeBlocks) {
+    /** use the end of the first chunk as an info buffer, and populate it
+      * with info from the call-site.
+      */
+    char* infoBuffer =
+      blockStart + s->controls->blockSize - (INFO_BUFFER_LEN+1);
+    infoBuffer[INFO_BUFFER_LEN] = '\0';
+
+    if (NULL != f)
+      f->fun(s, infoBuffer, INFO_BUFFER_LEN, f->env);
+    else
+      snprintf(infoBuffer, INFO_BUFFER_LEN, "No info provided.");
+
+    for (size_t idx = 0; idx < numBlocks; idx++) {
+      DebugKeptFreeBlock bb =
+        (DebugKeptFreeBlock)
+        (blockStart + idx * s->controls->blockSize);
+      bb->magic = 0xfeedbadbed;
+      bb->blockIdxInGroup = idx;
+      bb->numBlocksInGroup = numBlocks;
+      bb->infoBuffer = infoBuffer;
+      bb->infoBufferLen = INFO_BUFFER_LEN;
+    }
+
+    return;
+  }
 
   size_t sizeClass =
     NULL != sb ? sb->sizeClass : computeSizeClass(numBlocks);

@@ -135,23 +135,39 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   return result;
 }
 
-void HM_freeChunk(GC_state s, HM_chunk chunk) {
+void HM_freeChunkWithInfo(
+  GC_state s,
+  HM_chunk chunk,
+  writeFreedBlockInfoFnClosure f)
+{
   size_t numBlocks = chunk->numBlocks;
   SuperBlock container = chunk->container;
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;
   bs->container = container;
-  freeBlocks(s, bs);
+  freeBlocks(s, bs, f);
 }
 
-void HM_freeChunksInList(GC_state s, HM_chunkList list) {
+void HM_freeChunk(GC_state s, HM_chunk chunk) {
+  HM_freeChunkWithInfo(s, chunk, NULL);
+}
+
+void HM_freeChunksInListWithInfo(
+  GC_state s,
+  HM_chunkList list,
+  writeFreedBlockInfoFnClosure f)
+{
   HM_chunk chunk = list->firstChunk;
   while (chunk != NULL) {
     HM_chunk next = chunk->nextChunk;
-    HM_freeChunk(s, chunk);
+    HM_freeChunkWithInfo(s, chunk, f);
     chunk = next;
   }
   HM_initChunkList(list);
+}
+
+void HM_freeChunksInList(GC_state s, HM_chunkList list) {
+  HM_freeChunksInListWithInfo(s, list, NULL);
 }
 
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {

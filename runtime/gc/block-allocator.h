@@ -16,7 +16,33 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+/** This is used for debugging, to write info about freed blocks when
+  * s->controls->debugKeepFreedBlocks is enabled.
+  *
+  * A function of this type should write info into infoBuffer[0..bufferLen].
+  * Then when debugging with gdb, if we find that a freed block is being
+  * accessed, we can look at the info string.
+  */
+typedef void (*writeFreedBlockInfoFn)(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* env);
+
+typedef struct writeFreedBlockInfoFnClosure {
+  writeFreedBlockInfoFn fun;
+  void* env;
+} *writeFreedBlockInfoFnClosure;
+
 struct SuperBlock;
+
+typedef struct DebugKeptFreeBlock {
+  uint64_t magic;
+  size_t blockIdxInGroup;
+  size_t numBlocksInGroup;
+  char* infoBuffer;
+  size_t infoBufferLen;
+} *DebugKeptFreeBlock;
 
 /** Free blocks are used to the store the freelist. */
 typedef struct FreeBlock {
@@ -154,7 +180,7 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalAllocator);
 Blocks allocateBlocks(GC_state s, size_t numBlocks);
 
 /** Free a group of contiguous blocks. */
-void freeBlocks(GC_state s, Blocks bs);
+void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);
 
 #endif
 

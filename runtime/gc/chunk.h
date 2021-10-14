@@ -162,6 +162,9 @@ void HM_initChunkList(HM_chunkList list);
 void HM_freeChunk(GC_state s, HM_chunk chunk);
 void HM_freeChunksInList(GC_state s, HM_chunkList list);
 
+void HM_freeChunkWithInfo(GC_state s, HM_chunk chunk, writeFreedBlockInfoFnClosure f);
+void HM_freeChunksInListWithInfo(GC_state s, HM_chunkList list, writeFreedBlockInfoFnClosure f);
+
 // void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 

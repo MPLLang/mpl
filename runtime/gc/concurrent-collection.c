@@ -686,6 +686,27 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 }
 #endif
 
+struct CC_chunkInfo {
+  uint32_t initialDepth;
+  uint32_t finalDepth;
+  int32_t procNum;
+};
+
+void CC_writeFreeChunkInfo(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* env)
+{
+  struct CC_chunkInfo *info = env;
+
+  snprintf(infoBuffer, bufferLen,
+    "freed by CC at depth [%u,%u] by proc %d",
+    info->initialDepth,
+    info->finalDepth,
+    info->procNum);
+}
+
 
 size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
                          GC_thread thread) {
@@ -703,6 +724,8 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
 
   bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
   // assert(isConcurrent);
+
+  uint32_t initialDepth = HM_HH_getDepth(targetHH);
 
   struct HM_chunkList _repList;
   HM_chunkList repList = &(_repList);
@@ -864,11 +887,20 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     chunk = tChunk;
   }
 
+  uint32_t finalDepth = HM_HH_getDepth(targetHH);
+
+  struct CC_chunkInfo info =
+    {.initialDepth = initialDepth,
+     .finalDepth = finalDepth,
+     .procNum = s->procNumber};
+  struct writeFreedBlockInfoFnClosure infoc =
+    {.fun = CC_writeFreeChunkInfo, .env = &info};
+
   /** SAM_NOTE: TODO: deleteList no longer needed, because
     * block allocator handles that.
     */
-  HM_freeChunksInList(s, origList);
-  HM_freeChunksInList(s, deleteList);
+  HM_freeChunksInListWithInfo(s, origList, &infoc);
+  HM_freeChunksInListWithInfo(s, deleteList, &infoc);
 
   for(HM_chunk chunk = repList->firstChunk;
     chunk!=NULL; chunk = chunk->nextChunk) {
@@ -881,7 +913,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   assert(!(stackChunk->mightContainMultipleObjects));
   assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
   HM_unlinkChunk(origList, stackChunk);
-  HM_freeChunk(s, stackChunk);
+  HM_freeChunkWithInfo(s, stackChunk, &infoc);
   cp->stack = BOGUS_OBJPTR;
 
   HH_EBR_leaveQuiescentState(s);

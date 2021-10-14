@@ -162,6 +162,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("%s affinity-stride missing argument.", atName);
           s->controls->affinityStride = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "debug-keep-free-blocks")) {
+          i++;
+          s->controls->debugKeepFreeBlocks = TRUE;
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -453,6 +456,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 0;
 
   s->controls->freeListCoalesce = FALSE;
+  s->controls->debugKeepFreeBlocks = FALSE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
