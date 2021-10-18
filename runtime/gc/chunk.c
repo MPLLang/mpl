@@ -480,6 +480,7 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
+  assert(chunk->magic == CHUNK_MAGIC);
   HM_UnionFindNode cursor = chunk->levelHead;
   while (cursor->representative != NULL) {
     cursor = cursor->representative;

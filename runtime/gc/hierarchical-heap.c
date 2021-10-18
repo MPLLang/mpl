@@ -1002,6 +1002,12 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
 
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
+
+  LOG(LM_CC_COLLECTION, LL_INFO,
+    "registered CC for heap %p at depth %u",
+    (void*)hh,
+    HM_HH_getDepth(hh));
+
   return TRUE;
 }
 

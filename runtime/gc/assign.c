@@ -234,12 +234,12 @@ void Assignable_writeBarrier(
       assert(NULL != hh->subHeapCompletedCC);
       HM_rememberAtLevel(hh->subHeapCompletedCC, remElem);
     }
-  }
 
-  LOG(LM_HH_PROMOTION, LL_INFO,
-    "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
-    dstHH->depth, srcHH->depth,
-    dst, src);
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+      dstHH->depth, srcHH->depth,
+      dst, src);
+  }
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */

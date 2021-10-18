@@ -51,6 +51,7 @@ void forwardObjptrsOfRemembered(
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void* args);
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk);
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
 #endif
 
@@ -114,6 +115,7 @@ static const char* LGC_freedChunkTypeToString[] = {
 struct LGC_chunkInfo {
   uint32_t depth;
   int32_t procNum;
+  uintmax_t collectionNumber;
   enum LGC_freedChunkType freedType;
 };
 
@@ -127,10 +129,11 @@ void LGC_writeFreeChunkInfo(
   struct LGC_chunkInfo *info = env;
 
   snprintf(infoBuffer, bufferLen,
-    "freed %s by LGC at depth %u by proc %d",
+    "freed %s at depth %u by LGC %d:%zu",
     LGC_freedChunkTypeToString[info->freedType],
     info->depth,
-    info->procNum);
+    info->procNum,
+    info->collectionNumber);
 }
 
 
@@ -145,6 +148,7 @@ uint32_t minDepthWithoutCC(GC_thread thread) {
   while (cursor->nextAncestor != NULL &&
          cursor->nextAncestor->subHeapForCC == NULL)
   {
+    assert(HM_HH_getConcurrentPack(cursor)->ccstate == CC_UNREG);
     cursor = cursor->nextAncestor;
   }
 
@@ -152,6 +156,7 @@ uint32_t minDepthWithoutCC(GC_thread thread) {
   assert(cursor->subHeapCompletedCC == NULL);
   assert(cursor->nextAncestor == NULL ||
          cursor->nextAncestor->subHeapForCC != NULL);
+  assert(HM_HH_getConcurrentPack(cursor)->ccstate == CC_UNREG);
 
   return HM_HH_getDepth(cursor);
 }
@@ -266,11 +271,22 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
 
   LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
-      "  potential local scope is %u -> %u\n"
-      "  collection scope is      %u -> %u\n",
+      "  LGC id %d:%zu\n"
+      "  thread min-local depth is %u\n"
+      "  min without CC is         %u\n"
+      "  min okay is               %u\n"
+      "  desired min is            %u\n"
+      "  potential local scope is  %u -> %u\n"
+      "  collection scope is       %u -> %u\n",
       // "  lchs %"PRIu64" lcs %"PRIu64,
       ((void*)(hh)),
       thread->currentDepth,
+      s->procNumber,
+      s->cumulativeStatistics->numHHLocalGCs,
+      thread->minLocalCollectionDepth,
+      minNoCC,
+      minOkay,
+      desiredScope,
       potentialLocalScope,
       thread->currentDepth,
       forwardHHObjptrArgs.minDepth,
@@ -578,6 +594,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   struct LGC_chunkInfo info =
     {.depth = 0,
      .procNum = s->procNumber,
+     .collectionNumber = s->cumulativeStatistics->numHHLocalGCs,
      .freedType = LGC_FREED_NORMAL_CHUNK};
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = LGC_writeFreeChunkInfo, .env = &info};
@@ -610,14 +627,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     }
 
 #if ASSERT
-    /* clear out memory to quickly catch some memory safety errors */
-    // HM_chunk chunkCursor = level->firstChunk;
-    // while (chunkCursor != NULL) {
-    //   pointer start = HM_getChunkStart(chunkCursor);
-    //   size_t length = (size_t)(chunkCursor->limit - start);
-    //   memset(start, 0xBF, length);
-    //   chunkCursor = chunkCursor->nextChunk;
-    // }
+    HM_chunk chunkCursor = level->firstChunk;
+    while (chunkCursor != NULL) {
+      assert(!chunkCursor->pinnedDuringCollection);
+      chunkCursor = chunkCursor->nextChunk;
+    }
 #endif
 
     info.depth = HM_HH_getDepth(hhTail);
@@ -1036,6 +1050,10 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
 #endif
 
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
+      remElem->from, op);
+
     return;
   }
 
@@ -1052,8 +1070,14 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
   }
 
+#if ASSERT
   assert(opDepth <= args->maxDepth);
   assert(args->fromSpace[opDepth] == hh);
+  if (chunk->pinnedDuringCollection)
+    assert(listContainsChunk(&(args->pinned[opDepth]), chunk));
+  else
+    assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+#endif
 
 #if 0
   /** If it's not in our from-space, then it's entangled.
@@ -1078,6 +1102,11 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
   if (opDepth <= unpinDepth) {
     unpinObject(op);
+
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
+      remElem->from, op);
+
     return;
   }
 
@@ -1092,6 +1121,11 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
       * inequality: we need to keep all remembered entries that came from the
       * same shallowest level. (CC-chaining depends on this.)
       */
+
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
+      remElem->from, op);
+
     return;
   }
 
@@ -1553,9 +1587,9 @@ void checkRememberedEntry(
   assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
 }
 
-bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
 {
-  for (HM_chunk chunk = HM_HH_getChunkList(hh)->firstChunk;
+  for (HM_chunk chunk = list->firstChunk;
        chunk != NULL;
        chunk = chunk->nextChunk)
   {
@@ -1563,8 +1597,12 @@ bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
       return TRUE;
     }
   }
-
   return FALSE;
+}
+
+bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
+{
+  return listContainsChunk(HM_HH_getChunkList(hh), theChunk);
 }
 
 #endif

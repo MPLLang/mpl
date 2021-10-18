@@ -324,8 +324,14 @@ void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
 #if ASSERT
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_chunk objChunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
   assert(!isChunkInFromSpace(fromChunk, rawArgs));
   assert(!isChunkInToSpace(fromChunk, rawArgs));
+  assert(
+    HM_HH_getDepth(HM_getLevelHead(fromChunk))
+    <=
+    HM_HH_getDepth(HM_getLevelHead(objChunk))
+  );
 #endif
 
   // the runtime needs dst to be saved in case it is in the scope of collection.
@@ -741,6 +747,11 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   struct timespec stopTime;
 
   timespec_now(&startTime);
+
+  LOG(LM_CC_COLLECTION, LL_INFO,
+    "CC collecting heap %p at depth %u",
+    (void*)targetHH,
+    HM_HH_getDepth(targetHH));
 
   ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
   ensureCallSanity(s, targetHH, cp);
