@@ -135,17 +135,73 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   return result;
 }
 
+
+struct writeChunkInfoArgs {
+  writeFreedBlockInfoFn fun;
+  void* env;
+  pointer chunkFront;
+  struct HM_chunk descriptor;
+};
+
+void writeChunkInfo(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* rawArgs)
+{
+  struct writeChunkInfoArgs *args = rawArgs;
+
+  pointer chunkStart =
+    args->chunkFront + sizeof(struct HM_chunk) + args->descriptor.startGap;
+
+  int numCharsWritten =
+    snprintf(infoBuffer, bufferLen,
+      "[multiobject %s; gap %u; used %zu] ",
+      (args->descriptor.mightContainMultipleObjects? "yes" : "no"),
+      args->descriptor.startGap,
+      (size_t)(args->descriptor.frontier - chunkStart));
+
+  if (numCharsWritten < 0)
+    DIE("writeChunkInfo failed");
+
+  char* newBufferStart = infoBuffer + numCharsWritten;
+  size_t newBufferLen = bufferLen - numCharsWritten;
+
+  // Now call the block info fn
+  if (NULL != args->fun)
+    args->fun(s, newBufferStart, newBufferLen, args->env);
+}
+
+
 void HM_freeChunkWithInfo(
   GC_state s,
   HM_chunk chunk,
   writeFreedBlockInfoFnClosure f)
 {
+
+  struct writeChunkInfoArgs args;
+  if (NULL != f) {
+    args.fun = f->fun;
+    args.env = f->env;
+  }
+  else {
+    args.fun = NULL;
+    args.env = NULL;
+  }
+  args.chunkFront = (pointer)chunk;
+  args.descriptor = *chunk;
+  struct writeFreedBlockInfoFnClosure c =
+    {.fun = writeChunkInfo, .env = &args};
+
+  // ensure the sanity check is disrupted, for debugging
+  chunk->magic = 0xfacefade;
+
   size_t numBlocks = chunk->numBlocks;
   SuperBlock container = chunk->container;
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;
   bs->container = container;
-  freeBlocks(s, bs, f);
+  freeBlocks(s, bs, &c);
 }
 
 void HM_freeChunk(GC_state s, HM_chunk chunk) {

@@ -545,8 +545,10 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f) {
   pointer blockStart = (pointer)bs;
 
 #if ASSERT
-  /** Clear out memory to try and catch errors quickly... */
-  memset((void*)bs, 0xBF, numBlocks * s->controls->blockSize);
+  if (!s->controls->debugKeepFreeBlocks) {
+    /** Clear out memory to try and catch errors quickly... */
+    memset((void*)bs, 0xBF, numBlocks * s->controls->blockSize);
+  }
 #endif
 
   if (s->controls->debugKeepFreeBlocks) {
@@ -554,7 +556,7 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f) {
       * with info from the call-site.
       */
     char* infoBuffer =
-      blockStart + s->controls->blockSize - (INFO_BUFFER_LEN+1);
+      ((char*)blockStart) + s->controls->blockSize - (INFO_BUFFER_LEN+1);
     infoBuffer[INFO_BUFFER_LEN] = '\0';
 
     if (NULL != f)
