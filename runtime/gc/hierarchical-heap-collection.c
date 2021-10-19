@@ -192,6 +192,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
+  assert(thread->currentDepth == originalLocalScope);
+
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.
     *
@@ -204,10 +206,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t minOkay = desiredScope;
   minOkay = max(minOkay, thread->minLocalCollectionDepth);
   minOkay = max(minOkay, minNoCC);
-  uint32_t minDepth = max(thread->minLocalCollectionDepth, originalLocalScope);
+  uint32_t minDepth = originalLocalScope;
   while (minDepth > minOkay && tryClaimLocalScope(s)) {
     minDepth--;
+    assert(minDepth == pollCurrentLocalScope(s));
   }
+  assert(minDepth == pollCurrentLocalScope(s));
 
   if ( minDepth == 0 ||
        minOkay > minDepth ||
@@ -1099,9 +1103,13 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
   uint32_t unpinDepth = unpinDepthOf(op);
+  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+
+  assert(fromDepth <= opDepth);
 
   if (opDepth <= unpinDepth) {
     unpinObject(op);
+    assert(fromDepth == opDepth);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
@@ -1110,8 +1118,11 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     return;
   }
 
-  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+  if (fromDepth == opDepth) {
+    return;
+  }
 
+#if 0
   if (fromDepth > unpinDepth) {
     /** If this particular remembered entry came from closer than some other
       * down-pointer, then we don't need to keep it around. There will be some
@@ -1128,8 +1139,9 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
     return;
   }
+#endif
 
-  assert(fromDepth == unpinDepth);
+  // assert(fromDepth == unpinDepth);
 
   /* otherwise, object stays pinned, and we have to scavenge this remembered
    * entry into the toSpace. */
