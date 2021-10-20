@@ -195,11 +195,12 @@ void Assignable_writeBarrier(
   /* Otherwise, remember the pointer! */
 
   bool success = pinObject(src, dstHH->depth);
-  uint32_t unpinDepth = unpinDepthOf(src);
 
-  if (TRUE /*success ||
-      dstHH->depth <= unpinDepth ||
-      HM_HH_getConcurrentPack(dstHH)->ccstate != CC_UNREG*/)
+  // any concurrent pin can only decrease unpinDepth
+  uint32_t unpinDepth = unpinDepthOf(src);
+  assert(unpinDepth <= dstHH->depth);
+
+  if (success || dstHH->depth == unpinDepth)
   {
     uint32_t d = srcHH->depth;
     GC_thread thread = getThreadCurrent(s);
