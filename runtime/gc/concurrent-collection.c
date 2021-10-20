@@ -603,40 +603,12 @@ void CC_tryUnpinOrKeepPinned(
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
 
   objptr op = remElem->object;
-
-#if 0
-  if (!isPinned(op)) {
-    /** If we're already decided to unpin the object, then no more remembered
-      * entries are needed on this object.
-      */
-#if ASSERT
-    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-    // assert(
-    //   (fromChunk->tmpHeap == args->fromSpaceMarker) ||
-    //   (fromChunk->tmpHeap == args->toSpaceMarker)
-    // );
-    assert(fromChunk->tmpHeap == args->fromSpaceMarker);
-#endif
-    return;
-  }
-#endif
-
   assert(isPinned(op));
-
-  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-
-  assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
-
-  // assert(
-  //   (chunk->tmpHeap == args->fromSpaceMarker) ||
-  //   (chunk->tmpHeap == args->toSpaceMarker)
-  // );
-  assert(chunk->tmpHeap == args->fromSpaceMarker);
+  assert(chunk->tmpHeap != args->toSpaceMarker);
 
 #if 0
-  if ( (chunk->tmpHeap != args->fromSpaceMarker) &&
-       (chunk->tmpHeap != args->toSpaceMarker) )
+  if (chunk->tmpHeap != args->fromSpaceMarker)
   {
     /** outside scope of CC. must be entangled? just keep it remembered and
       * move on.
@@ -647,32 +619,33 @@ void CC_tryUnpinOrKeepPinned(
   }
 #endif
 
+  assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
+  assert(chunk->tmpHeap == args->fromSpaceMarker);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-  // uint32_t unpinDepth = unpinDepthOf(op);
-
-  // unpin when the object has gotten shallow enough
-/*
-  if ( opDepth < unpinDepth ) {
-    assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
-    unpinObject(op);
-    return;
-  }
-*/
-
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-  uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
 
+  /** SAM_NOTE: The goal of the following was to filter remset entries
+    * to only keep the "shallowest" entries. But this is really tricky,
+    * because all three of the unpinDepth, opDepth, and fromDepth can
+    * concurrently change (due to joins, concurrent pins, etc.)
+    *
+    * Perhaps the concurrency really isn't that bad, because we know that
+    * all three values can only decrease due to concurrent operations. But
+    * for now, I don't feel like working through all the cases.
+    */
 #if 0
+  uint32_t unpinDepth = unpinDepthOf(op);
+  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
+  uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
   if (fromDepth > unpinDepth) {
     /** Can forget any down-pointer that came from shallower than the
       * shallowest from-object.
       */
     return;
   }
+  assert(opDepth < unpinDepth || fromDepth == unpinDepth);
 #endif
-
-  // assert(fromDepth == unpinDepth);
 
   assert(fromChunk->tmpHeap != args->toSpaceMarker);
 
