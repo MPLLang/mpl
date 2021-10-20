@@ -1046,13 +1046,13 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   objptr op = remElem->object;
 
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+  assert(HM_HH_getDepth(fromHH) <= args->toDepth);
+
   if (!isPinned(op)) {
     // If previously unpinned, then no need to remember this object.
-
-#if ASSERT
-    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
     assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
-#endif
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
@@ -1357,14 +1357,28 @@ void forwardHHObjptr (GC_state s,
     assert(!hasFwdPtr(objptrToPointer(fop, NULL)));
     assert(isObjptrInToSpace(fop, args));
     assert(HM_getObjptrDepth(fop) == opDepth);
+    assert(!isPinned(fop));
     *opp = fop;
     return;
   }
 
   assert(!hasFwdPtr(p));
 
-  if (isPinned(op)) {
+  /** REALLY SUBTLE. CC clears out remset entries, but can't safely perform
+    * unpinning. So, there could be objects that (for the purposes of LC) are
+    * semantically unpinned, but just haven't been marked as such yet. Here,
+    * we are lazily checking to see if this object should have been unpinned.
+    */
+  if (isPinned(op) && unpinDepthOf(op) < opDepth) {
+    // This is a truly pinned object
+    assert(listContainsChunk( &(args->pinned[opDepth]),
+                              HM_getChunkOf(objptrToPointer(op, NULL))
+    ));
     return;
+  }
+  else {
+    // This object should have been previously unpinned
+    unpinObject(op);
   }
 
   /* ========================================================================
@@ -1597,6 +1611,10 @@ void checkRememberedEntry(
 
   assert(!hasFwdPtr(objptrToPointer(object, NULL)));
   assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
+
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+  assert(HM_HH_getDepth(fromHH) <= HM_HH_getDepth(hh));
 }
 
 bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
