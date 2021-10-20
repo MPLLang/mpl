@@ -988,13 +988,22 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
   HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
 
+  HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
+  assert(listContainsChunk( HM_HH_getChunkList(hh),
+                            HM_getChunkOf(HM_HH_getConcurrentPack(hh)->stack)));
+
   CC_clearStack(HM_HH_getConcurrentPack(hh));
+  assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
   __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
   // HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
 
   splitHeapForCC(s, thread);
   CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
+
+  HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
+  assert(listContainsChunk( HM_HH_getChunkList(hh),
+                            HM_getChunkOf(HM_HH_getConcurrentPack(hh)->stack)));
 
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);

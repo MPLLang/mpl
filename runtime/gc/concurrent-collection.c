@@ -767,6 +767,7 @@ size_t CC_collectWithRoots(
     HM_HH_getDepth(targetHH));
 
   ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
+  HM_assertChunkListInvariants(HM_HH_getChunkList(targetHH));
   ensureCallSanity(s, targetHH, cp);
   // At the end of collection, repList will contain all the chunks that have
   // some object that is reachable from the roots. origList will contain the
@@ -836,10 +837,6 @@ size_t CC_collectWithRoots(
   forceForward(s, &(s->wsQueue), &lists);
   forceForward(s, &(cp->stack), &lists);
 
-  // if (getThreadCurrent(s) == thread) {
-  //   forceForward(s, &(thread->stack), &lists);
-  // }
-
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
   // often changes the level it is at. So it might in fact be at depth = 1.
   // It is important that we only mark the stack and not scan it.
@@ -873,9 +870,6 @@ size_t CC_collectWithRoots(
   forceUnmark(s, &(cp->stack), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
-  // if (getThreadCurrent(s) == thread) {
-  //   forceUnmark(s, &(thread->stack), &lists);
-  // }
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
@@ -970,14 +964,14 @@ size_t CC_collectWithRoots(
   // HM_appendChunkList(repList, origList);
   *(origList) = *(repList);
 
-  // HM_chunk stackChunk = HM_getChunkOf(objptrToPointer(cp->stack, NULL));
-  // assert(!(stackChunk->mightContainMultipleObjects));
-  // assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
-  // assert(isChunkInList(origList, stackChunk));
-  // HM_unlinkChunk(origList, stackChunk);
-  // info.freedType = CC_FREED_STACK_CHUNK;
-  // HM_freeChunkWithInfo(s, stackChunk, &infoc);
-  // info.freedType = CC_FREED_NORMAL_CHUNK;
+  HM_chunk stackChunk = HM_getChunkOf(objptrToPointer(cp->stack, NULL));
+  assert(!(stackChunk->mightContainMultipleObjects));
+  assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
+  assert(isChunkInList(stackChunk, origList));
+  HM_unlinkChunk(origList, stackChunk);
+  info.freedType = CC_FREED_STACK_CHUNK;
+  HM_freeChunkWithInfo(s, stackChunk, &infoc);
+  info.freedType = CC_FREED_NORMAL_CHUNK;
   cp->stack = BOGUS_OBJPTR;
 
   HH_EBR_leaveQuiescentState(s);

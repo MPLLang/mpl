@@ -53,7 +53,6 @@ void forwardObjptrsOfRemembered(
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void* args);
-bool listContainsChunk(HM_chunkList list, HM_chunk theChunk);
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
 #endif
 
@@ -1503,19 +1502,6 @@ void checkRememberedEntry(
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
   HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
   assert(HM_HH_getDepth(fromHH) <= HM_HH_getDepth(hh));
-}
-
-bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
-{
-  for (HM_chunk chunk = list->firstChunk;
-       chunk != NULL;
-       chunk = chunk->nextChunk)
-  {
-    if (chunk == theChunk) {
-      return TRUE;
-    }
-  }
-  return FALSE;
 }
 
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)

@@ -300,6 +300,10 @@ uint32_t HM_getObjptrDepthPathCompress(objptr op);
 struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
 struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
 
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk);
+
+void HM_assertChunkListInvariants(HM_chunkList list);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* CHUNK_H_ */
