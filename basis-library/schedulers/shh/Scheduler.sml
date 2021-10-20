@@ -399,7 +399,7 @@ struct
         val depth = HH.getDepth thread
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 5 then
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity andalso
                 depth < maxDisetanglementCheckDepth then
