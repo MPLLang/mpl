@@ -22,6 +22,7 @@
 
 // void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
+#if 0
 void checkDisentangledDepthAndFreeze(
   GC_state s,
   HM_remembered remElem,
@@ -36,6 +37,7 @@ void unfreezeDisentangledDepthAfter(
   GC_state s,
   HM_remembered remElem,
   void* rawArgs);
+#endif
 
 void tryUnpinOrKeepPinned(
   GC_state s,
@@ -51,7 +53,6 @@ void forwardObjptrsOfRemembered(
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void* args);
-bool listContainsChunk(HM_chunkList list, HM_chunk theChunk);
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
 #endif
 
@@ -121,7 +122,7 @@ struct LGC_chunkInfo {
 
 
 void LGC_writeFreeChunkInfo(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   char* infoBuffer,
   size_t bufferLen,
   void* env)
@@ -192,6 +193,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
+  assert(thread->currentDepth == originalLocalScope);
+
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.
     *
@@ -204,10 +207,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t minOkay = desiredScope;
   minOkay = max(minOkay, thread->minLocalCollectionDepth);
   minOkay = max(minOkay, minNoCC);
-  uint32_t minDepth = max(thread->minLocalCollectionDepth, originalLocalScope);
+  uint32_t minDepth = originalLocalScope;
   while (minDepth > minOkay && tryClaimLocalScope(s)) {
     minDepth--;
+    assert(minDepth == pollCurrentLocalScope(s));
   }
+  assert(minDepth == pollCurrentLocalScope(s));
 
   if ( minDepth == 0 ||
        minOkay > minDepth ||
@@ -915,24 +920,6 @@ objptr relocateObject(
 /* ========================================================================= */
 
 #if 0
-void forwardDownPtr(GC_state s, objptr dst, objptr* field, objptr src, void* rawArgs) {
-  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  uint32_t srcDepth = HM_getObjptrDepth(src);
-
-  assert(args->minDepth <= srcDepth);
-  assert(srcDepth <= args->maxDepth);
-  assert(args->toDepth == HM_HH_INVALID_DEPTH);
-
-  forwardHHObjptr(s, &src, rawArgs);
-  assert(NULL != args->toSpace[srcDepth]);
-
-  *field = src;
-  HM_rememberAtLevel(args->toSpace[srcDepth], dst, field, src);
-}
-#endif
-
-/* ========================================================================= */
-
 void checkDisentangledDepthAndFreeze(
   __attribute__((unused)) GC_state s,
   HM_remembered remElem,
@@ -1035,6 +1022,7 @@ void unfreezeDisentangledDepthAfter(
     chunk->disentangledDepth = -(chunk->disentangledDepth);
   }
 }
+#endif
 
 /* ========================================================================= */
 
@@ -1042,13 +1030,15 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   objptr op = remElem->object;
 
+#if ASSERT
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+  assert(HM_HH_getDepth(fromHH) <= args->toDepth);
+#endif
+
   if (!isPinned(op)) {
     // If previously unpinned, then no need to remember this object.
-
-#if ASSERT
-    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
     assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
-#endif
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
@@ -1064,7 +1054,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
    * is set by the loop that calls this function */
   uint32_t opDepth = args->toDepth;
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
 
   if (NULL == args->toSpace[opDepth]) {
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
@@ -1072,6 +1061,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
 #if ASSERT
   assert(opDepth <= args->maxDepth);
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
   assert(args->fromSpace[opDepth] == hh);
   if (chunk->pinnedDuringCollection)
     assert(listContainsChunk(&(args->pinned[opDepth]), chunk));
@@ -1099,9 +1089,13 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
   uint32_t unpinDepth = unpinDepthOf(op);
+  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+
+  assert(fromDepth <= opDepth);
 
   if (opDepth <= unpinDepth) {
     unpinObject(op);
+    assert(fromDepth == opDepth);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "forgetting remset entry from "FMTOBJPTR" to "FMTOBJPTR,
@@ -1110,10 +1104,8 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     return;
   }
 
-  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
-
   if (fromDepth > unpinDepth) {
-    /** If this particular remembered entry came from closer than some other
+    /** If this particular remembered entry came from deeper than some other
       * down-pointer, then we don't need to keep it around. There will be some
       * other remembered entry coming from the unpinDepth level.
       *
@@ -1151,97 +1143,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 }
-
-/* ========================================================================= */
-
-#if 0
-void scavengeChunkOfPinnedObject(
-  GC_state s,
-  objptr op,
-  void* rawArgs)
-{
-  assert(isPinned(op));
-  struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
-  /* The toDepth field is set by the loop that calls this function.
-   * Note: Can't do HM_getObjptrDepth or similar here! We broke that by
-   * moving chunks around during this phase! */
-  uint32_t opDepth = args->toDepth;
-
-  /* can't be NULL, because when we filtered the remembered set, we scavenged
-   * all entries into the toSpace */
-  assert(NULL != args->toSpace[opDepth]);
-
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-
-  if (!chunk->pinnedDuringCollection) {
-    assert(isObjptrInToSpace(op, args));
-    return;
-  }
-
-#if ASSERT
-  /* make sure we're removing the chunk from the correct list!! */
-  assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
-#endif
-
-  /* Can't do HM_getLevelHead here! We broke that by moving chunks around! */
-  HM_unlinkChunk(HM_HH_getChunkList(args->fromSpace[opDepth]), chunk);
-  HM_appendChunk(HM_HH_getChunkList(args->toSpace[opDepth]), chunk);
-  chunk->levelHead = args->toSpace[opDepth];
-  chunk->pinnedDuringCollection = FALSE;
-
-  /* All unpinned objects need to be replaced by gaps!!
-   * These objects were scavenged out of these chunks, and so now the
-   * leftover space is meaningless bits. If we interpret this leftover space
-   * as actual objects in a subsequent collection, it will be incorrect.
-   *
-   * TODO: coalesce gaps (easy to do; just need to hop forward until we find
-   * the next pinned object and then create a single large gap)
-   *
-   * TODO: this could be more efficient if we have special pinned chunks that
-   * do not contain unpinned objects? Then we can leave all the gaps alone,
-   * and we know that these chunks will never need to be scanned. But it is
-   * tricky to guarantee that a chunk contains no unpinned objects... here's
-   * a brainstorm.
-   *   - (Bad idea) At write barrier, eagerly forward freshly pinned object
-   *   into a pinned chunk. Difficult to implement because then the mutator
-   *   needs a read barrier to follow forwarding pointers created at pins.
-   *   And how do you unpin?
-   *   - (Possible?) For each heap, maintain a separate space of pinned chunks.
-   *   At write barrier, we could buffer newly pinned objects and pin their
-   *   chunks later. At local GC, make sure to scavenge all unpinned objects
-   *   out of these chunks...
-   */
-  pointer p = HM_getChunkStart(chunk);
-  while (p < HM_getChunkFrontier(chunk)) {
-    pointer objStart = advanceToObjectData(s, p);
-
-    /* to calculate the object's size, we have to handle the case where it
-     * was forwarded out of this chunk. */
-    size_t objSize;
-    if (hasFwdPtr(objStart)) {
-      objSize = objectSize(s, objptrToPointer(getFwdPtr(objStart), NULL));
-    } else {
-      objSize = objectSize(s, objStart);
-    }
-
-    pointer objEnd = objStart + objSize;
-    assert(objEnd <= HM_getChunkFrontier(chunk));
-
-    /* leave pinned objects alone */
-    if (!hasFwdPtr(objStart) && isPinned(pointerToObjptr(objStart, NULL))) {
-      p = objEnd;
-      continue;
-    }
-
-    /* fill garbage object with a gap */
-    fillGap(s, p, objEnd);
-    p = objEnd;
-  }
-
-  assert(p == HM_getChunkFrontier(chunk));
-  assert(isObjptrInToSpace(op, args));
-}
-#endif
 
 /* ========================================================================= */
 
@@ -1345,14 +1246,28 @@ void forwardHHObjptr (GC_state s,
     assert(!hasFwdPtr(objptrToPointer(fop, NULL)));
     assert(isObjptrInToSpace(fop, args));
     assert(HM_getObjptrDepth(fop) == opDepth);
+    assert(!isPinned(fop));
     *opp = fop;
     return;
   }
 
   assert(!hasFwdPtr(p));
 
-  if (isPinned(op)) {
+  /** REALLY SUBTLE. CC clears out remset entries, but can't safely perform
+    * unpinning. So, there could be objects that (for the purposes of LC) are
+    * semantically unpinned, but just haven't been marked as such yet. Here,
+    * we are lazily checking to see if this object should have been unpinned.
+    */
+  if (isPinned(op) && unpinDepthOf(op) < opDepth) {
+    // This is a truly pinned object
+    assert(listContainsChunk( &(args->pinned[opDepth]),
+                              HM_getChunkOf(objptrToPointer(op, NULL))
+    ));
     return;
+  }
+  else {
+    // This object should have been previously unpinned
+    unpinObject(op);
   }
 
   /* ========================================================================
@@ -1585,19 +1500,10 @@ void checkRememberedEntry(
 
   assert(!hasFwdPtr(objptrToPointer(object, NULL)));
   assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
-}
 
-bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
-{
-  for (HM_chunk chunk = list->firstChunk;
-       chunk != NULL;
-       chunk = chunk->nextChunk)
-  {
-    if (chunk == theChunk) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+  assert(HM_HH_getDepth(fromHH) <= HM_HH_getDepth(hh));
 }
 
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)

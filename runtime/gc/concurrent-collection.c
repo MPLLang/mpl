@@ -60,7 +60,7 @@ struct CC_chunkInfo {
 
 
 void CC_writeFreeChunkInfo(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   char* infoBuffer,
   size_t bufferLen,
   void* env)
@@ -321,7 +321,9 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
   forwardPtrChunk(s, &src, rawArgs);
+  forwardPtrChunk(s, &(remElem->from), rawArgs);
 
+#if 0
 #if ASSERT
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
   HM_chunk objChunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
@@ -332,6 +334,7 @@ void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
     <=
     HM_HH_getDepth(HM_getLevelHead(objChunk))
   );
+#endif
 #endif
 
   // the runtime needs dst to be saved in case it is in the scope of collection.
@@ -382,11 +385,20 @@ void unmarkPinned(
   objptr src = remElem->object;
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   unmarkPtrChunk(s, &src, rawArgs);
+  unmarkPtrChunk(s, &(remElem->from), rawArgs);
 
+#if 0
 #if ASSERT
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  HM_chunk objChunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
   assert(!isChunkInFromSpace(fromChunk, rawArgs));
   assert(!isChunkInToSpace(fromChunk, rawArgs));
+  assert(
+    HM_HH_getDepth(HM_getLevelHead(fromChunk))
+    <=
+    HM_HH_getDepth(HM_getLevelHead(objChunk))
+  );
+#endif
 #endif
 
   // TODO: SAM_NOTE: check this??
@@ -590,35 +602,14 @@ void CC_tryUnpinOrKeepPinned(
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
 
-  objptr op = remElem->object;
-
-  if (!isPinned(op)) {
-    /** If we're already decided to unpin the object, then no more remembered
-      * entries are needed on this object.
-      */
 #if ASSERT
-    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-    assert(
-      (fromChunk->tmpHeap == args->fromSpaceMarker) ||
-      (fromChunk->tmpHeap == args->toSpaceMarker)
-    );
+  assert(isPinned(remElem->object));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
+  assert(chunk->tmpHeap != args->toSpaceMarker);
 #endif
-    return;
-  }
-
-  assert(isPinned(op));
-
-  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-
-  assert(
-    (chunk->tmpHeap == args->fromSpaceMarker) ||
-    (chunk->tmpHeap == args->toSpaceMarker)
-  );
 
 #if 0
-  if ( (chunk->tmpHeap != args->fromSpaceMarker) &&
-       (chunk->tmpHeap != args->toSpaceMarker) )
+  if (chunk->tmpHeap != args->fromSpaceMarker)
   {
     /** outside scope of CC. must be entangled? just keep it remembered and
       * move on.
@@ -629,37 +620,40 @@ void CC_tryUnpinOrKeepPinned(
   }
 #endif
 
+  assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
+  assert(chunk->tmpHeap == args->fromSpaceMarker);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-  // uint32_t unpinDepth = unpinDepthOf(op);
-
-  // unpin when the object has gotten shallow enough
-/*
-  if ( opDepth < unpinDepth ) {
-    assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
-    unpinObject(op);
-    return;
-  }
-*/
-
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-  uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
 
+  /** SAM_NOTE: The goal of the following was to filter remset entries
+    * to only keep the "shallowest" entries. But this is really tricky,
+    * because all three of the unpinDepth, opDepth, and fromDepth can
+    * concurrently change (due to joins, concurrent pins, etc.)
+    *
+    * Perhaps the concurrency really isn't that bad, because we know that
+    * all three values can only decrease due to concurrent operations. But
+    * for now, I don't feel like working through all the cases.
+    */
 #if 0
+  uint32_t unpinDepth = unpinDepthOf(op);
+  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
+  uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
   if (fromDepth > unpinDepth) {
     /** Can forget any down-pointer that came from shallower than the
       * shallowest from-object.
       */
     return;
   }
+  assert(opDepth < unpinDepth || fromDepth == unpinDepth);
 #endif
 
-  // assert(fromDepth == unpinDepth);
+  assert(fromChunk->tmpHeap != args->toSpaceMarker);
 
-  if ( (fromChunk->tmpHeap == args->fromSpaceMarker) ||
-       (fromChunk->tmpHeap == args->toSpaceMarker) )
+  if (fromChunk->tmpHeap == args->fromSpaceMarker)
   {
     // fromChunk is in-scope of CC. Don't need to keep this remembered entry.
+    assert(isChunkInList(fromChunk, HM_HH_getChunkList(args->tgtHeap)));
     return;
   }
 
@@ -683,6 +677,10 @@ void CC_filterPinned(
   HM_chunkList oldRemSet = HM_HH_getRemSet(hh);
   struct HM_chunkList newRemSet;
   HM_initChunkList(&newRemSet);
+
+  LOG(LM_CC_COLLECTION, LL_INFO,
+    "num pinned initially: %zu",
+    HM_numRemembered(HM_HH_getRemSet(hh)));
 
   struct CC_tryUnpinOrKeepPinnedArgs args =
     { .newRemSet = &newRemSet
@@ -711,6 +709,15 @@ void CC_filterPinned(
 
   HM_freeChunksInListWithInfo(s, oldRemSet, &infoc);
   *oldRemSet = newRemSet;  // this moves all data into remset of hh
+
+  assert(HM_HH_getRemSet(hh)->firstChunk == newRemSet.firstChunk);
+  assert(HM_HH_getRemSet(hh)->lastChunk == newRemSet.lastChunk);
+  assert(HM_HH_getRemSet(hh)->size == newRemSet.size);
+  assert(HM_HH_getRemSet(hh)->usedSize == newRemSet.usedSize);
+
+  LOG(LM_CC_COLLECTION, LL_INFO,
+    "num pinned after filter: %zu",
+    HM_numRemembered(HM_HH_getRemSet(hh)));
 }
 
 /* ========================================================================= */
@@ -741,8 +748,15 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 #endif
 
 
-size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
-                         GC_thread thread) {
+size_t CC_collectWithRoots(
+  GC_state s,
+  HM_HierarchicalHeap targetHH,
+  __attribute__((unused)) GC_thread thread)
+{
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+
   struct timespec startTime;
   struct timespec stopTime;
 
@@ -754,6 +768,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     HM_HH_getDepth(targetHH));
 
   ConcurrentPackage cp = HM_HH_getConcurrentPack(targetHH);
+  HM_assertChunkListInvariants(HM_HH_getChunkList(targetHH));
   ensureCallSanity(s, targetHH, cp);
   // At the end of collection, repList will contain all the chunks that have
   // some object that is reachable from the roots. origList will contain the
@@ -856,6 +871,7 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
   forceUnmark(s, &(cp->stack), &lists);
   forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
 
+
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
   HM_assertChunkListInvariants(repList);
@@ -946,16 +962,18 @@ size_t CC_collectWithRoots(GC_state s, HM_HierarchicalHeap targetHH,
     chunk->tmpHeap = NULL;
   }
 
+  // HM_appendChunkList(repList, origList);
   *(origList) = *(repList);
 
   HM_chunk stackChunk = HM_getChunkOf(objptrToPointer(cp->stack, NULL));
   assert(!(stackChunk->mightContainMultipleObjects));
   assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
+  assert(isChunkInList(stackChunk, origList));
   HM_unlinkChunk(origList, stackChunk);
   info.freedType = CC_FREED_STACK_CHUNK;
   HM_freeChunkWithInfo(s, stackChunk, &infoc);
-  cp->stack = BOGUS_OBJPTR;
   info.freedType = CC_FREED_NORMAL_CHUNK;
+  cp->stack = BOGUS_OBJPTR;
 
   HH_EBR_leaveQuiescentState(s);
 

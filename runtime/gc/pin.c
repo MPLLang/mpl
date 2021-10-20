@@ -41,9 +41,11 @@ bool pinObject(objptr op, uint32_t unpinDepth)
     }
     else {
       /* if the object was previously pinned, we still need to do a writeMin */
-      if ( (previousUnpinDepth <= unpinDepth)
-           || __sync_bool_compare_and_swap(getHeaderp(p), header, newHeader) )
+      if (previousUnpinDepth <= unpinDepth)
         return FALSE;
+
+      if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader))
+        return TRUE;
     }
   }
 

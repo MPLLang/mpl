@@ -195,15 +195,15 @@ void Assignable_writeBarrier(
   /* Otherwise, remember the pointer! */
 
   bool success = pinObject(src, dstHH->depth);
+
+  // any concurrent pin can only decrease unpinDepth
   uint32_t unpinDepth = unpinDepthOf(src);
+  assert(unpinDepth <= dstHH->depth);
 
-  if (success || dstHH->depth <= unpinDepth) {
-    // Only remember shallowest down-pointers.
-    assert(dstHH->depth == unpinDepth);
-
+  if (success || dstHH->depth == unpinDepth)
+  {
     uint32_t d = srcHH->depth;
     GC_thread thread = getThreadCurrent(s);
-
 
 #if 0
     /** Fix a silly issue where, when we are dealing with entanglement, the
@@ -217,23 +217,8 @@ void Assignable_writeBarrier(
 
     HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
     assert(NULL != hh);
-
-    if (HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG) {
-      HM_rememberAtLevel(hh, remElem);
-    }
-    else {
-      /** This special subheap is guaranteed to exist while at least one CC
-        * is registered or in-progress. Its sole purpose is to contain new
-        * remembered-set entries. We can't use the remembered-set of the heap
-        * that is undergoing CC, because the CC will be concurrently accessing
-        * that remset.
-        *
-        * It's a bit strange... a bit of a hack... because this subheap is
-        * always "empty" and is only used for its remset.
-        */
-      assert(NULL != hh->subHeapCompletedCC);
-      HM_rememberAtLevel(hh->subHeapCompletedCC, remElem);
-    }
+    assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
+    HM_rememberAtLevel(hh, remElem);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,

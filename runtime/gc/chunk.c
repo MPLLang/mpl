@@ -11,8 +11,6 @@
 /* Static Function Prototypes */
 /******************************/
 
-static void HM_assertChunkListInvariants(HM_chunkList chunkList);
-
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
  * from a level list
@@ -584,8 +582,7 @@ void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier) {
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
-#if 0
-//ASSERT
+#if ASSERT
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
   // return;
   size_t size = 0;
@@ -618,4 +615,17 @@ uint32_t HM_getObjptrDepth(objptr op) {
 
 uint32_t HM_getObjptrDepthPathCompress(objptr op) {
   return HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
+}
+
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
+{
+  for (HM_chunk chunk = list->firstChunk;
+       chunk != NULL;
+       chunk = chunk->nextChunk)
+  {
+    if (chunk == theChunk) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }

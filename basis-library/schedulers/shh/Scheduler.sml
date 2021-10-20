@@ -23,7 +23,7 @@ struct
 
   datatype task =
     NormalTask of unit -> unit
-  | GCTask of Thread.t * Word64.word
+  | GCTask of Thread.t * (Word64.word ref)
 
   structure DE = MLton.Thread.Disentanglement
   (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
@@ -69,8 +69,7 @@ struct
       )
     end
 
-(*
-  fun dbgmsg' m =
+  (* fun dbgmsg' m =
     let
       val p = myWorkerId ()
       val _ = MLton.Parallel.Deprecated.takeLock printLock
@@ -80,8 +79,9 @@ struct
       ; TextIO.flushOut TextIO.stdErr
       ; MLton.Parallel.Deprecated.releaseLock printLock
       )
-    end
-*)
+    end *)
+
+  fun dbgmsg' _ = ()
 
   (* ========================================================================
    * IDLENESS TRACKING
@@ -255,6 +255,8 @@ struct
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
+        (* val _ = dbgmsg' (fn _ => "fork at depth " ^ Int.toString depth) *)
+
         (** NOTE: these cannot be safely combined into a single ref. After
           * the join, reading the thread is safe because the thread object
           * is stored at a safe depth. But reading the result is entangled
@@ -298,6 +300,9 @@ struct
                 (HH.setDepth (thread, depth + 1)) *)
         val _ = HH.setDepth (thread, depth + 1)
 
+        (* val _ =
+          if depth <= 3 then HH.forceLeftHeap(myWorkerId(), thread) else () *)
+
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
         val _ = recordForkDepth depth
 
@@ -310,6 +315,7 @@ struct
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
             ; DE.decheckJoin (tidLeft, tidRight)
+            (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
             (* ; HH.forceNewChunk () *)
             ; let
                 val gr = result g
@@ -332,6 +338,7 @@ struct
                     HH.setDepth (thread, depth);
                     DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) depth;
+                    (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
                     | SOME gr => gr
@@ -346,17 +353,16 @@ struct
 
     fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
-        val rootHH = HH.getRoot thread
-
-        (* fun gcFunc() =
-          ( HH.collectThreadRoot(thread, rootHH)
-          ; returnToSched ()
-          ) *)
-
-        val gcTask = GCTask (thread, rootHH)
+        val heapId = ref (HH.getRoot thread)
+        val gcTask = GCTask (thread, heapId)
         val cont_arr1 = Array.array (1, SOME f)
         val cont_arr2 = Array.array (1, SOME g)
         val cont_arr3 = Array.array (1, SOME (fn _ => gcTask)) (* a hack, I hope it works. *)
+
+        (** The above could trigger a local GC and invalidate the hh
+          * identifier... :'(
+          *)
+        val _ = heapId := HH.getRoot thread
       in
         if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
           fork' {ccOkayAtThisDepth=false} (f, g)
@@ -365,12 +371,13 @@ struct
             val _ = push gcTask
             val _ = HH.setDepth (thread, depth + 1)
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            (* val _ = dbgmsg' (fn _ => "fork CC at depth " ^ Int.toString depth) *)
             val result = fork' {ccOkayAtThisDepth=false} (f, g)
 
             val _ =
               if popDiscard() then
                 (* if depth = 1 then *)
-                  HH.collectThreadRoot (thread, rootHH)
+                  HH.collectThreadRoot (thread, !heapId)
                 (* else
                   HH.cancelCC (thread, rootHH) *)
               else
@@ -380,6 +387,7 @@ struct
 
             val _ = HH.promoteChunks thread
             val _ = HH.setDepth (thread, depth)
+            (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
           in
             result
           end
@@ -464,7 +472,7 @@ struct
         in
           case task of
             GCTask (thread, hh) =>
-              ( HH.collectThreadRoot (thread, hh)
+              ( HH.collectThreadRoot (thread, !hh)
               ; acquireWork ()
               )
           | NormalTask t =>
