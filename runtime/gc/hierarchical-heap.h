@@ -150,6 +150,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
 void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp);
 void HM_HH_resetList(pointer threadp);
 
+void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh);
+
 
 /** Very fancy (constant-space) loop that frees each dependant union-find
   * node of hh. Specifically, calls this on each dependant ufnode:

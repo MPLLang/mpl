@@ -32,7 +32,6 @@ static inline void linkInto(
   HM_HierarchicalHeap right
 );
 
-static void mergeCompletedCCs(GC_state s, GC_thread thread);
 
 /************************/
 /* Function Definitions */
@@ -372,7 +371,8 @@ void HM_HH_promoteChunks(
     HM_HierarchicalHeap parent = hh->nextAncestor;
 
     assert(hh == thread->hierarchicalHeap);
-    mergeCompletedCCs(s, thread);
+    mergeCompletedCCs(s, hh);
+    assert(hh == thread->hierarchicalHeap);
 
     if (NULL == hh->subHeapForCC) {
       assert(NULL == hh->subHeapCompletedCC);
@@ -674,8 +674,8 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
 }
 
 
-void mergeCompletedCCs(GC_state s, GC_thread thread) {
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
+  // HM_HierarchicalHeap hh = thread->hierarchicalHeap;
 #if ASSERT
   assert(HM_HH_isLevelHead(hh));
   assertCCChainInvariants(hh);
@@ -754,7 +754,6 @@ void mergeCompletedCCs(GC_state s, GC_thread thread) {
       numInProgress);
   }
 
-  assert(thread->hierarchicalHeap == hh);
   assert(HM_HH_isLevelHead(hh));
   assertCCChainInvariants(hh);
   return;
@@ -956,7 +955,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   CC_initStack(HM_HH_getConcurrentPack(hh));
 
-  mergeCompletedCCs(s, thread);
+  mergeCompletedCCs(s, hh);
+  assert(thread->hierarchicalHeap == hh);
 
 #if ASSERT
   if (NULL == thread->hierarchicalHeap->subHeapForCC)
