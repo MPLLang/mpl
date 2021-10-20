@@ -60,7 +60,7 @@ struct CC_chunkInfo {
 
 
 void CC_writeFreeChunkInfo(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   char* infoBuffer,
   size_t bufferLen,
   void* env)
@@ -602,10 +602,11 @@ void CC_tryUnpinOrKeepPinned(
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
 
-  objptr op = remElem->object;
-  assert(isPinned(op));
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+#if ASSERT
+  assert(isPinned(remElem->object));
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
   assert(chunk->tmpHeap != args->toSpaceMarker);
+#endif
 
 #if 0
   if (chunk->tmpHeap != args->fromSpaceMarker)
@@ -750,7 +751,7 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 size_t CC_collectWithRoots(
   GC_state s,
   HM_HierarchicalHeap targetHH,
-  GC_thread thread)
+  __attribute__((unused)) GC_thread thread)
 {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;

@@ -969,12 +969,12 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
     size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
     size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
-    /*LOG(LM_CC_COLLECTION, LL_INFO,
+    LOG(LM_CC_COLLECTION, LL_INFO,
       "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
       depth,
       lastSurvived,
       freshAlloc,
-      size);*/
+      size);
     return FALSE;
   }
 
@@ -986,11 +986,14 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapLeft = pointerToObjptr(kl, NULL);
   HM_HH_getConcurrentPack(hh)->snapRight = pointerToObjptr(kr, NULL);
   HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
-  HM_HH_getConcurrentPack(hh)->stack = copyCurrentStack(s, thread);
+  objptr snapstack = copyCurrentStack(s, thread);
+  HM_HH_getConcurrentPack(hh)->stack = snapstack;
 
+#if ASSERT
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
-  assert(listContainsChunk( HM_HH_getChunkList(hh),
-                            HM_getChunkOf(HM_HH_getConcurrentPack(hh)->stack)));
+  pointer snapstackp = objptrToPointer(snapstack, NULL);
+  assert(listContainsChunk(HM_HH_getChunkList(hh), HM_getChunkOf(snapstackp)));
+#endif
 
   CC_clearStack(HM_HH_getConcurrentPack(hh));
   assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
@@ -1002,8 +1005,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
-  assert(listContainsChunk( HM_HH_getChunkList(hh),
-                            HM_getChunkOf(HM_HH_getConcurrentPack(hh)->stack)));
+  assert(listContainsChunk(HM_HH_getChunkList(hh), HM_getChunkOf(snapstackp)));
 
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);

@@ -122,7 +122,7 @@ struct LGC_chunkInfo {
 
 
 void LGC_writeFreeChunkInfo(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   char* infoBuffer,
   size_t bufferLen,
   void* env)
@@ -1030,9 +1030,11 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
   objptr op = remElem->object;
 
+#if ASSERT
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
   HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
   assert(HM_HH_getDepth(fromHH) <= args->toDepth);
+#endif
 
   if (!isPinned(op)) {
     // If previously unpinned, then no need to remember this object.
@@ -1052,7 +1054,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
    * is set by the loop that calls this function */
   uint32_t opDepth = args->toDepth;
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
 
   if (NULL == args->toSpace[opDepth]) {
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
@@ -1060,6 +1061,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
 
 #if ASSERT
   assert(opDepth <= args->maxDepth);
+  HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
   assert(args->fromSpace[opDepth] == hh);
   if (chunk->pinnedDuringCollection)
     assert(listContainsChunk(&(args->pinned[opDepth]), chunk));
