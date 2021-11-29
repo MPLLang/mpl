@@ -368,9 +368,9 @@ struct
         val gcTaskTuple = (thread, heapId)
         val gcTaskData = SOME gcTaskTuple
         val gcTask = GCTask gcTaskTuple
-        val cont_arr1 = Array.array (1, SOME f)
-        val cont_arr2 = Array.array (1, SOME g)
-        val cont_arr3 = Array.array (1, SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+        val cont_arr1 = ref (SOME f)
+        val cont_arr2 = ref (SOME g)
+        val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
 
         (** The above could trigger a local GC and invalidate the hh
           * identifier... :'(

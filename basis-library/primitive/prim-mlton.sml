@@ -426,7 +426,7 @@ structure Thread =
       val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
-        'a array * 'b array * 'c array * thread -> bool;
+        'a ref * 'b ref * 'c ref * thread -> bool;
       val cancelCC =
         _import "HM_HH_cancelCC" runtime private:
         GCState.t * thread * Word64.word -> unit;
