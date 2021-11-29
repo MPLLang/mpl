@@ -20,10 +20,13 @@ struct
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
+  type hh_address = Word64.word
+  type gctask_data = Thread.t * (hh_address ref)
 
   datatype task =
     NormalTask of unit -> unit
-  | GCTask of Thread.t * (Word64.word ref)
+  | Continuation of Thread.t * int
+  | GCTask of gctask_data
 
   structure DE = MLton.Thread.Disentanglement
   (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
@@ -168,14 +171,22 @@ struct
   type worker_local_data =
     { queue : task Queue.t
     , schedThread : Thread.t option ref
+    , gcTask: gctask_data option ref
     }
 
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
     , schedThread = ref NONE
+    , gcTask = ref NONE
     }
 
   val workerLocalData = Vector.tabulate (P, wldInit)
+
+  fun setGCTask p data =
+    #gcTask (vectorSub (workerLocalData, p)) := data
+
+  fun getGCTask p =
+    ! (#gcTask (vectorSub (workerLocalData, p)))
 
   fun setQueueDepth p d =
     let
@@ -354,10 +365,12 @@ struct
     fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
         val heapId = ref (HH.getRoot thread)
-        val gcTask = GCTask (thread, heapId)
-        val cont_arr1 = Array.array (1, SOME f)
-        val cont_arr2 = Array.array (1, SOME g)
-        val cont_arr3 = Array.array (1, SOME (fn _ => gcTask)) (* a hack, I hope it works. *)
+        val gcTaskTuple = (thread, heapId)
+        val gcTaskData = SOME gcTaskTuple
+        val gcTask = GCTask gcTaskTuple
+        val cont_arr1 = ref (SOME f)
+        val cont_arr2 = ref (SOME g)
+        val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
 
         (** The above could trigger a local GC and invalidate the hh
           * identifier... :'(
@@ -376,10 +389,13 @@ struct
 
             val _ =
               if popDiscard() then
-                (* if depth = 1 then *)
-                  HH.collectThreadRoot (thread, !heapId)
-                (* else
-                  HH.cancelCC (thread, rootHH) *)
+                ( (*dbgmsg' (fn _ => "push current (" ^ Int.toString depth ^ ") and switch to scheduler for GCtask")
+                ;*)
+                  setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+                ; push (Continuation (thread, depth))
+                ; returnToSched ()
+                )
+                (* HH.collectThreadRoot (thread, !heapId) *)
               else
                 ( clear()
                 ; setQueueDepth (myWorkerId ()) depth
@@ -465,14 +481,41 @@ struct
 
       (* ------------------------------------------------------------------- *)
 
+      fun afterReturnToSched () =
+        case getGCTask myId of
+          NONE => (*dbgmsg' (fn _ => "back in sched; no GC task")*) ()
+        | SOME (thread, hh) => 
+            ( (*dbgmsg' (fn _ => "back in sched; found GC task")
+            ;*) setGCTask myId NONE
+            ; HH.collectThreadRoot (thread, !hh)
+            ; if popDiscard () then
+                ( (*dbgmsg' (fn _ => "resume task thread")
+                ;*) threadSwitch thread
+                ; afterReturnToSched ()
+                )
+              else
+                ()
+            )
+
+
       fun acquireWork () : unit =
         let
           val idleTimer = startTimer myId
           val (task, depth, idleTimer') = request idleTimer
+          val _ = stopTimer idleTimer'
         in
           case task of
             GCTask (thread, hh) =>
               ( HH.collectThreadRoot (thread, !hh)
+              ; acquireWork ()
+              )
+          | Continuation (thread, depth) =>
+              ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
+              ; dbgmsg' (fn _ => "resume task thread")
+              ;*) Queue.setDepth myQueue depth
+              ; threadSwitch thread
+              ; afterReturnToSched ()
+              ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
           | NormalTask t =>
@@ -485,15 +528,16 @@ struct
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId t;
-                stopTimer idleTimer';
+                (* dbgmsg' (fn _ => "switch to new task thread"); *)
                 threadSwitch taskThread;
+                afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
               end
         end
 
     in
-      acquireWork
+      (afterReturnToSched, acquireWork)
     end
 
   (* ========================================================================
@@ -502,7 +546,7 @@ struct
 
   fun sched () =
     let
-      val acquireWork = setupSchedLoop ()
+      val (_, acquireWork) = setupSchedLoop ()
     in
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
@@ -537,9 +581,10 @@ struct
       end
     else
       let
-        val acquireWork = setupSchedLoop ()
+        val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
         threadSwitch originalThread;
+        afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
