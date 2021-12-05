@@ -106,15 +106,9 @@ void Assignable_writeBarrier(
   if (dstHH->depth >= 1 && isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
     pointer currp = objptrToPointer(readVal, NULL);
     HM_HierarchicalHeap currHH = HM_getLevelHead(HM_getChunkOf(currp));
-    if (currHH->depth == dstHH->depth) {
-    // if(currHH == dstHH) {
-      assert(currHH->depth == 1 || (currHH == dstHH));
-      // printf("old pointer tracked dst="FMTPTR" old="FMTPTR" new="FMTPTR". currHH == dstHH? %d\n",
-      //   (uintptr_t)dstp,
-      //   (uintptr_t)currp,
-      //   (uintptr_t)src,
-      //   currHH == dstHH);
-      HM_HH_addRootForCollector(currHH, currp);
+    if (currHH->depth == dstHH->depth
+        && HM_HH_getConcurrentPack(currHH)->ccstate != CC_UNREG) {
+      HM_HH_addRootForCollector(s, currHH, currp);
     }
   }
 

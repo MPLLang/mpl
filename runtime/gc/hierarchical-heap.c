@@ -953,7 +953,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  CC_initStack(HM_HH_getConcurrentPack(hh));
+  CC_initStack(s, HM_HH_getConcurrentPack(hh));
 
   mergeCompletedCCs(s, hh);
   assert(thread->hierarchicalHeap == hh);
@@ -1001,7 +1001,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   // HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
 
   splitHeapForCC(s, thread);
-  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
+  CC_initStack(s, HM_HH_getConcurrentPack(thread->hierarchicalHeap));
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
@@ -1126,10 +1126,10 @@ bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
   return false;
 }
 
-void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
+void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p) {
   assert(hh!=NULL);
   if(HM_HH_getConcurrentPack(hh)!=NULL){
-    CC_addToStack(HM_HH_getConcurrentPack(hh), p);
+    CC_addToStack(s, HM_HH_getConcurrentPack(hh), p);
   }
 }
 

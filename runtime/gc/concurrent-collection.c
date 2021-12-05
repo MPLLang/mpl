@@ -76,25 +76,25 @@ void CC_writeFreeChunkInfo(
 }
 
 
-void CC_initStack(ConcurrentPackage cp) {
+void CC_initStack(GC_state s, ConcurrentPackage cp) {
   // don't re-initialize
   if(cp->rootList!=NULL) {
     return;
   }
 
   CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-  CC_stack_init(temp, 2);
+  CC_stack_init(s, temp, 2);
   cp->rootList = temp;
 }
 
-void CC_addToStack (ConcurrentPackage cp, pointer p) {
+void CC_addToStack (GC_state s, ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
     // Its NULL because we won't collect this heap. so no need to snapshot
     return;
     // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     // CC_initStack(cp);
   }
-  CC_stack_push(cp->rootList, (void*)p);
+  CC_stack_push(s, cp->rootList, (void*)p);
 }
 
 void CC_clearStack(ConcurrentPackage cp) {
