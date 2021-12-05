@@ -19,6 +19,7 @@ void CC_stack_init(GC_state s, CC_stack* stack, size_t capacity) {
     stack->stacks[i].size = 0;
     stack->stacks[i].capacity = capacity;
     stack->stacks[i].storage = NULL;
+    stack->stacks[i].isClosed = FALSE;
     pthread_mutex_init(&(stack->stacks[i].mutex), NULL);
   }
 }
@@ -32,15 +33,19 @@ bool increaseCapacity(CC_stack_data* stack, int factor){
     if(new_store!=NULL){
         stack->storage = new_store;
         stack->capacity*=factor;
-        return true;
+        return TRUE;
     }
     else {
-        return false;
+        return FALSE;
     }
 }
 
 // return false if the push failed. true if push succeeds
 bool CC_stack_data_push(CC_stack_data* stack, void* datum){
+    if (stack->isClosed) {
+        return FALSE;
+    }
+
     pthread_mutex_lock(&stack->mutex);
 
     if (NULL == stack->storage) {
@@ -57,7 +62,7 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
 
     stack->storage[stack->size++] = datum;
     pthread_mutex_unlock(&stack->mutex);
-    return true;
+    return TRUE;
 }
 
 bool CC_stack_push(GC_state s, CC_stack* stack, void* datum) {
@@ -113,7 +118,10 @@ size_t CC_stack_data_capacity(CC_stack_data* stack){
 }
 
 void CC_stack_data_free(CC_stack_data* stack){
-    if (NULL != stack->storage) free(stack->storage);
+    if (NULL != stack->storage) {
+      free(stack->storage);
+      stack->storage = NULL;
+    }
     pthread_mutex_destroy(&stack->mutex);
 }
 
@@ -121,6 +129,8 @@ void CC_stack_free(CC_stack* stack) {
   for (size_t i = 0; i < stack->numStacks; i++) {
     CC_stack_data_free(&(stack->stacks[i]));
   }
+  free(stack->stacks);
+  stack->stacks = NULL;
 }
 
 void CC_stack_data_clear(CC_stack_data* stack){
@@ -133,6 +143,15 @@ void CC_stack_data_clear(CC_stack_data* stack){
 void CC_stack_clear(CC_stack* stack) {
   for (size_t i = 0; i < stack->numStacks; i++) {
     CC_stack_data_clear(&(stack->stacks[i]));
+  }
+}
+
+
+void CC_stack_close(CC_stack* stack) {
+  for (size_t i = 0; i < stack->numStacks; i++) {
+    pthread_mutex_lock(&(stack->stacks[i].mutex));
+    stack->stacks[i].isClosed = TRUE;
+    pthread_mutex_unlock(&(stack->stacks[i].mutex));
   }
 }
 

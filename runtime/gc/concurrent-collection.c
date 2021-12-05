@@ -111,6 +111,12 @@ void CC_freeStack(ConcurrentPackage cp) {
   }
 }
 
+void CC_closeStack(ConcurrentPackage cp) {
+  if (cp->rootList != NULL) {
+    CC_stack_close(cp->rootList);
+  }
+}
+
 bool CC_isPointerMarked (pointer p) {
   return ((MARK_MASK & getHeader (p)) == MARK_MASK);
 }
@@ -981,6 +987,8 @@ size_t CC_collectWithRoots(
     * from the main spine of the program.
     */
   HM_HH_freeAllDependants(s, targetHH, TRUE);
+
+  CC_closeStack(cp);
 
   HM_assertChunkListInvariants(origList);
 

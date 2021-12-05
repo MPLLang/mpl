@@ -8,6 +8,7 @@ typedef struct CC_stack_data {
     size_t capacity;
     // The actual array holding the data of the stack.
     void** storage;
+    bool isClosed;
     pthread_mutex_t mutex;
 } CC_stack_data;
 
@@ -34,6 +35,9 @@ bool CC_stack_push(GC_state s, CC_stack* stack, void* datum);
 
 void CC_stack_free(CC_stack* stack);
 void CC_stack_clear(CC_stack* stack);
+
+// Prevent further pushes
+void CC_stack_close(CC_stack* stack);
 
 void forEachObjptrinStack(GC_state s,
                           CC_stack* stack,
