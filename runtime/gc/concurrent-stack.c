@@ -11,6 +11,7 @@
 void CC_stack_init(GC_state s, CC_stack* stack) {
 
   // very important that this is equal to number of processors
+  stack->allClosed = FALSE;
   stack->numStacks = (size_t)s->numberOfProcs;
   // capacity = MAX(capacity, MINIMUM_CAPACITY);
 
@@ -45,11 +46,14 @@ bool increaseCapacity(CC_stack_data* stack, int factor){
 
 // return false if the push failed. true if push succeeds
 bool CC_stack_data_push(CC_stack_data* stack, void* datum){
+    pthread_mutex_lock(&stack->mutex);
+
+
     if (stack->isClosed) {
+        pthread_mutex_unlock(&stack->mutex);
         return FALSE;
     }
 
-    pthread_mutex_lock(&stack->mutex);
 
 #if 0
     if (NULL == stack->storage) {
@@ -93,6 +97,7 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
 }
 
 bool CC_stack_push(GC_state s, CC_stack* stack, void* datum) {
+  if (stack->allClosed) return FALSE;
   return CC_stack_data_push(&(stack->stacks[s->procNumber]), datum);
 }
 
@@ -181,12 +186,75 @@ void CC_stack_clear(GC_state s, CC_stack* stack) {
 }
 
 
-void CC_stack_close(CC_stack* stack) {
+// void CC_stack_close(CC_stack* stack) {
+//   for (size_t i = 0; i < stack->numStacks; i++) {
+//     pthread_mutex_lock(&(stack->stacks[i].mutex));
+//     stack->stacks[i].isClosed = TRUE;
+//     pthread_mutex_unlock(&(stack->stacks[i].mutex));
+//   }
+// }
+
+
+bool CC_stack_try_close(CC_stack* stack, HM_chunkList removed) {
+
+  // First, do a quick check to avoid taking locks unnecessarily
+  bool allEmpty = TRUE;
   for (size_t i = 0; i < stack->numStacks; i++) {
-    pthread_mutex_lock(&(stack->stacks[i].mutex));
-    stack->stacks[i].isClosed = TRUE;
-    pthread_mutex_unlock(&(stack->stacks[i].mutex));
+    HM_chunkList thisBag = &(stack->stacks[i].storage);
+    if (NULL != thisBag->firstChunk) {
+      allEmpty = FALSE;
+      break;
+    }
   }
+
+  /** We checked that all are empty; now just have to confirm and close. This
+    * works by taking all the locks, verying that each is empty, and closing
+    * it. If any has been extended in the meantime, we have to abort.
+    */
+  if (allEmpty) {
+    size_t i;
+    for (i = 0; i < stack->numStacks; i++) {
+      pthread_mutex_lock(&(stack->stacks[i].mutex));
+      HM_chunkList thisBag = &(stack->stacks[i].storage);
+      if (NULL != thisBag->firstChunk)
+        break;
+      stack->stacks[i].isClosed = TRUE;
+    }
+
+    if (i == stack->numStacks) {
+      // success! unlock everything and return.
+      stack->allClosed = TRUE;
+      for (size_t j = 0; j < i; j++) {
+        pthread_mutex_unlock(&(stack->stacks[j].mutex));
+      }
+      return TRUE;
+    }
+
+    // Otherwise, we failed to close. Unlock everything before continuing.
+    for (size_t j = 0; j < i; j++) {
+      pthread_mutex_unlock(&(stack->stacks[j].mutex));
+    }
+  }
+
+
+  /** If we reach here, then there is at least one bag which is non-empty,
+    * and we're currently holding no locks. Proceed by taking a batch of
+    * elements and returning them.
+    */
+
+  for (size_t i = 0; i < stack->numStacks; i++) {
+    HM_chunkList thisBag = &(stack->stacks[i].storage);
+    if (NULL != HM_getChunkListFirstChunk(thisBag)) {
+      pthread_mutex_lock(&(stack->stacks[i].mutex));
+      HM_chunk chunk = HM_getChunkListFirstChunk(thisBag);
+      HM_unlinkChunk(thisBag, chunk);
+      pthread_mutex_unlock(&(stack->stacks[i].mutex));
+
+      HM_appendChunk(removed, chunk);
+    }
+  }
+
+  return FALSE;
 }
 
 
@@ -231,6 +299,29 @@ void forEachObjptrInStackData(
     pthread_mutex_unlock(&stack->mutex);
 }
 #endif
+
+
+void forEachObjptrInCCStackBag(
+  GC_state s,
+  HM_chunkList storage,
+  GC_foreachObjptrFun f,
+  void* rawArgs)
+{
+  struct GC_foreachObjptrClosure fObjptrClosure =
+  {.fun = f, .env = rawArgs};
+
+  HM_chunk chunk = HM_getChunkListFirstChunk(storage);
+  while (chunk != NULL) {
+    pointer p = HM_getChunkStart(chunk);
+    pointer frontier = HM_getChunkFrontier(chunk);
+    while (p < frontier) {
+      // objptr* opp = (objptr*)p;
+      callIfIsObjptr(s, &fObjptrClosure, (objptr*)p);
+      p += sizeof(void*);
+    }
+    chunk = chunk->nextChunk;
+  }
+}
 
 
 void forEachObjptrInStackData(

@@ -111,10 +111,8 @@ void CC_freeStack(GC_state s, ConcurrentPackage cp) {
   }
 }
 
-void CC_closeStack(ConcurrentPackage cp) {
-  if (cp->rootList != NULL) {
-    CC_stack_close(cp->rootList);
-  }
+bool CC_closeStack(ConcurrentPackage cp, HM_chunkList removed) {
+  return CC_stack_try_close(cp->rootList, removed);
 }
 
 bool CC_isPointerMarked (pointer p) {
@@ -849,9 +847,25 @@ size_t CC_collectWithRoots(
   // It is important that we only mark the stack and not scan it.
   // Scanning the stack races with the thread using it.
 
+
+  struct HM_chunkList removedFromCCBag_;
+  HM_chunkList removedFromCCBag = &removedFromCCBag_;
+  HM_initChunkList(removedFromCCBag);
+
+  struct HM_chunkList tempRemovedFromCCBag_;
+  HM_chunkList tempRemovedFromCCBag = &tempRemovedFromCCBag_;
+  HM_initChunkList(tempRemovedFromCCBag);
+
+  while (!CC_closeStack(cp, tempRemovedFromCCBag)) {
+    forEachObjptrInCCStackBag(s, tempRemovedFromCCBag, forwardPtrChunk, &lists);
+    HM_appendChunkList(removedFromCCBag, tempRemovedFromCCBag);
+    HM_initChunkList(tempRemovedFromCCBag);
+  }
+
   // saveNoForward(s, (void*)(thread->stack), &lists);
   // saveNoForward(s, (void*)thread, &lists);
-  forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
+
+  // forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
 // #if ASSERT
 //   if (HM_HH_getDepth(targetHH) != 1){
@@ -875,7 +889,10 @@ size_t CC_collectWithRoots(
   forceUnmark(s, &(cp->snapTemp), &lists);
   forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
-  forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
+
+  // forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
+  forEachObjptrInCCStackBag(s, removedFromCCBag, unmarkPtrChunk, &lists);
+  HM_freeChunksInList(s, removedFromCCBag);
 
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
@@ -987,8 +1004,6 @@ size_t CC_collectWithRoots(
     * from the main spine of the program.
     */
   HM_HH_freeAllDependants(s, targetHH, TRUE);
-
-  CC_closeStack(cp);
 
   HM_assertChunkListInvariants(origList);
 
