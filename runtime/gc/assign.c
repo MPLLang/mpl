@@ -107,7 +107,9 @@ void Assignable_writeBarrier(
     pointer currp = objptrToPointer(readVal, NULL);
     HM_HierarchicalHeap currHH = HM_getLevelHead(HM_getChunkOf(currp));
     if (currHH->depth == dstHH->depth
-        && HM_HH_getConcurrentPack(currHH)->ccstate != CC_UNREG) {
+        && HM_HH_getConcurrentPack(currHH)->ccstate != CC_UNREG
+        && !CC_isPointerMarked(currp))
+    {
       HM_HH_addRootForCollector(s, currHH, currp);
     }
   }
