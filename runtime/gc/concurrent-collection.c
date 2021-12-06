@@ -83,7 +83,7 @@ void CC_initStack(GC_state s, ConcurrentPackage cp) {
   }
 
   CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-  CC_stack_init(s, temp, 2);
+  CC_stack_init(s, temp);
   cp->rootList = temp;
 }
 
@@ -97,15 +97,15 @@ void CC_addToStack (GC_state s, ConcurrentPackage cp, pointer p) {
   CC_stack_push(s, cp->rootList, (void*)p);
 }
 
-void CC_clearStack(ConcurrentPackage cp) {
+void CC_clearStack(GC_state s, ConcurrentPackage cp) {
   if(cp->rootList!=NULL) {
-    CC_stack_clear(cp->rootList);
+    CC_stack_clear(s, cp->rootList);
   }
 }
 
-void CC_freeStack(ConcurrentPackage cp) {
+void CC_freeStack(GC_state s, ConcurrentPackage cp) {
   if(cp->rootList!=NULL) {
-    CC_stack_free(cp->rootList);
+    CC_stack_free(s, cp->rootList);
     free(cp->rootList);
     cp->rootList = NULL;
   }
