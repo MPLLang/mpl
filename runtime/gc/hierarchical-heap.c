@@ -236,7 +236,7 @@ HM_HierarchicalHeap HM_HH_zip(
 
       // This has to happen before linkInto (which frees hh2)
       HM_HierarchicalHeap hh2anc = hh2->nextAncestor;
-
+      CC_freeStack(s, HM_HH_getConcurrentPack(hh2));
       linkInto(s, hh1, hh2);
 
       *cursor = hh1;
@@ -325,7 +325,7 @@ void HM_HH_merge(
   Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
 
   // free stack of joining heap
-  CC_freeStack(HM_HH_getConcurrentPack(childHH));
+  CC_freeStack(s, HM_HH_getConcurrentPack(childHH));
 
   /* Merge levels. */
   parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
@@ -382,7 +382,7 @@ void HM_HH_promoteChunks(
       /* shortcut.  */
       thread->hierarchicalHeap = parent;
       /* don't need the snapshot for this heap now. */
-      CC_freeStack(HM_HH_getConcurrentPack(hh));
+      CC_freeStack(s, HM_HH_getConcurrentPack(hh));
       linkInto(s, parent, hh);
       hh = parent;
     }
@@ -739,6 +739,7 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
       HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
       HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
+      CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
       completed = next;
     }
@@ -885,6 +886,7 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
 
 // ============================================================================
 
+#if 0
 void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
   HM_HierarchicalHeap heap = (HM_HierarchicalHeap)hhp;
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
@@ -937,6 +939,14 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
   assertCCChainInvariants(mainhh);
   return;
 }
+#endif
+
+void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
+  (void)s;
+  (void)threadp;
+  (void)hhp;
+  DIE("HM_HH_cancelCC deprecated");
+}
 
 
 // =============================================================================
@@ -953,7 +963,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
-  CC_initStack(HM_HH_getConcurrentPack(hh));
+  CC_initStack(s, HM_HH_getConcurrentPack(hh));
 
   mergeCompletedCCs(s, hh);
   assert(thread->hierarchicalHeap == hh);
@@ -995,13 +1005,13 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   assert(listContainsChunk(HM_HH_getChunkList(hh), HM_getChunkOf(snapstackp)));
 #endif
 
-  CC_clearStack(HM_HH_getConcurrentPack(hh));
+  CC_clearStack(s, HM_HH_getConcurrentPack(hh));
   assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
   __atomic_store_n(&(HM_HH_getConcurrentPack(hh)->ccstate), CC_REG, __ATOMIC_SEQ_CST);
   // HM_HH_getConcurrentPack(hh)->ccstate = CC_REG;
 
   splitHeapForCC(s, thread);
-  CC_initStack(HM_HH_getConcurrentPack(thread->hierarchicalHeap));
+  CC_initStack(s, HM_HH_getConcurrentPack(thread->hierarchicalHeap));
   assert(thread->hierarchicalHeap->subHeapForCC == hh);
 
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
@@ -1126,10 +1136,10 @@ bool HM_HH_isCCollecting(HM_HierarchicalHeap hh) {
   return false;
 }
 
-void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p) {
+void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p) {
   assert(hh!=NULL);
   if(HM_HH_getConcurrentPack(hh)!=NULL){
-    CC_addToStack(HM_HH_getConcurrentPack(hh), p);
+    CC_addToStack(s, HM_HH_getConcurrentPack(hh), p);
   }
 }
 

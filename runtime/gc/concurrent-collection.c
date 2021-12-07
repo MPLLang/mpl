@@ -76,39 +76,43 @@ void CC_writeFreeChunkInfo(
 }
 
 
-void CC_initStack(ConcurrentPackage cp) {
+void CC_initStack(GC_state s, ConcurrentPackage cp) {
   // don't re-initialize
   if(cp->rootList!=NULL) {
     return;
   }
 
   CC_stack* temp  = (struct CC_stack*) malloc(sizeof(struct CC_stack));
-  CC_stack_init(temp, 2);
+  CC_stack_init(s, temp);
   cp->rootList = temp;
 }
 
-void CC_addToStack (ConcurrentPackage cp, pointer p) {
+void CC_addToStack (GC_state s, ConcurrentPackage cp, pointer p) {
   if(cp->rootList==NULL) {
     // Its NULL because we won't collect this heap. so no need to snapshot
     return;
     // LOG(LM_HH_COLLECTION, LL_FORCE, "Concurrent Stack is not initialised\n");
     // CC_initStack(cp);
   }
-  CC_stack_push(cp->rootList, (void*)p);
+  CC_stack_push(s, cp->rootList, (void*)p);
 }
 
-void CC_clearStack(ConcurrentPackage cp) {
+void CC_clearStack(GC_state s, ConcurrentPackage cp) {
   if(cp->rootList!=NULL) {
-    CC_stack_clear(cp->rootList);
+    CC_stack_clear(s, cp->rootList);
   }
 }
 
-void CC_freeStack(ConcurrentPackage cp) {
+void CC_freeStack(GC_state s, ConcurrentPackage cp) {
   if(cp->rootList!=NULL) {
-    CC_stack_free(cp->rootList);
+    CC_stack_free(s, cp->rootList);
     free(cp->rootList);
     cp->rootList = NULL;
   }
+}
+
+bool CC_closeStack(ConcurrentPackage cp, HM_chunkList removed) {
+  return CC_stack_try_close(cp->rootList, removed);
 }
 
 bool CC_isPointerMarked (pointer p) {
@@ -843,9 +847,25 @@ size_t CC_collectWithRoots(
   // It is important that we only mark the stack and not scan it.
   // Scanning the stack races with the thread using it.
 
+
+  struct HM_chunkList removedFromCCBag_;
+  HM_chunkList removedFromCCBag = &removedFromCCBag_;
+  HM_initChunkList(removedFromCCBag);
+
+  struct HM_chunkList tempRemovedFromCCBag_;
+  HM_chunkList tempRemovedFromCCBag = &tempRemovedFromCCBag_;
+  HM_initChunkList(tempRemovedFromCCBag);
+
+  while (!CC_closeStack(cp, tempRemovedFromCCBag)) {
+    forEachObjptrInCCStackBag(s, tempRemovedFromCCBag, forwardPtrChunk, &lists);
+    HM_appendChunkList(removedFromCCBag, tempRemovedFromCCBag);
+    HM_initChunkList(tempRemovedFromCCBag);
+  }
+
   // saveNoForward(s, (void*)(thread->stack), &lists);
   // saveNoForward(s, (void*)thread, &lists);
-  forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
+
+  // forEachObjptrinStack(s, cp->rootList, forwardPtrChunk, &lists);
 
 // #if ASSERT
 //   if (HM_HH_getDepth(targetHH) != 1){
@@ -869,7 +889,10 @@ size_t CC_collectWithRoots(
   forceUnmark(s, &(cp->snapTemp), &lists);
   forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
-  forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
+
+  // forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
+  forEachObjptrInCCStackBag(s, removedFromCCBag, unmarkPtrChunk, &lists);
+  HM_freeChunksInList(s, removedFromCCBag);
 
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.

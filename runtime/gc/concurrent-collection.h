@@ -90,8 +90,8 @@ PRIVATE void GC_updateObjectHeader(GC_state s, pointer p, GC_header newHeader);
 size_t CC_collectWithRoots(GC_state s, struct HM_HierarchicalHeap * targetHH, GC_thread thread);
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth);
-void CC_addToStack(ConcurrentPackage cp, pointer p);
-void CC_initStack(ConcurrentPackage cp);
+void CC_addToStack(GC_state s, ConcurrentPackage cp, pointer p);
+void CC_initStack(GC_state s, ConcurrentPackage cp);
 
 
 bool CC_isPointerMarked (pointer p);
