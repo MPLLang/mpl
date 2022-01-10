@@ -186,7 +186,7 @@ struct
         NONE
       else
         let
-          val x = Array.sub (data, idx)
+          val x = MLton.HM.arraySubNoBarrier (data, idx)
           val newTop = TagIdx.pack {tag=tag, idx=idx+1}
         in
           if oldTop = cas top (oldTop, newTop) then
@@ -210,7 +210,7 @@ struct
            * compare-and-swap. *)
           (* val _ = bot := newBot *)
           val _ = cas32 bot (oldBot, newBot)
-          val x = Array.sub (data, newBot)
+          val x = MLton.HM.arraySubNoBarrier (data, newBot)
           val oldTop = !top
           val {tag, idx} = TagIdx.unpack oldTop
         in

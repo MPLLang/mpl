@@ -4,7 +4,7 @@
  * See the file MLton-LICENSE for details.
  */
 
-void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src) {
+void HM_remember(HM_chunkList remSet, HM_remembered remElem) {
   HM_chunk chunk = HM_getChunkListLastChunk(remSet);
   if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < sizeof(struct HM_remembered)) {
     chunk = HM_allocateChunk(remSet, sizeof(struct HM_remembered));
@@ -19,15 +19,18 @@ void HM_remember(HM_chunkList remSet, objptr dst, objptr* field, objptr src) {
     chunk,
     frontier + sizeof(struct HM_remembered));
 
-  struct HM_remembered* r = (struct HM_remembered*)frontier;
-  r->dst = dst;
-  r->field = field;
-  r->src = src;
+  assert(NULL != remElem);
+
+  HM_remembered r = (HM_remembered)frontier;
+  *r = *remElem;
+
+  assert(r->object == remElem->object);
+  assert(r->from == remElem->from);
 }
 
-void HM_rememberAtLevel(HM_HierarchicalHeap hh, objptr dst, objptr* field, objptr src) {
+void HM_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem) {
   assert(hh != NULL);
-  HM_remember(HM_HH_getRemSet(hh), dst, field, src);
+  HM_remember(HM_HH_getRemSet(hh), remElem);
 }
 
 void HM_foreachRemembered(
@@ -41,8 +44,7 @@ void HM_foreachRemembered(
     pointer p = HM_getChunkStart(chunk);
     pointer frontier = HM_getChunkFrontier(chunk);
     while (p < frontier) {
-      struct HM_remembered* r = (struct HM_remembered*)p;
-      f->fun(s, r->dst, r->field, r->src, f->env);
+      f->fun(s, (HM_remembered)p, f->env);
       p += sizeof(struct HM_remembered);
     }
     chunk = chunk->nextChunk;

@@ -1580,6 +1580,8 @@ structure Objptrs =
                                                offset = Runtime.headerOffset (),
                                                ty = Type.objptrHeader ()},
                                        shift)
+                  (* We mask 19 bits, because header words reserve 19 bits for the
+                   * type index. See runtime/gc/object.h *)
                   val wmask = 0wx7ffff
                   val wmaskint = Word.toInt wmask
                   val wmaskintInf = IntInf.fromInt wmaskint

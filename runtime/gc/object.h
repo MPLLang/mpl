@@ -60,11 +60,16 @@ typedef GC_HEADER_TYPE GC_header;
 COMPILE_TIME_ASSERT(sizeof_objptr__eq__sizeof_header,
                     sizeof(objptr) == sizeof(GC_header));
 
+/* SAM_NOTE: mlton/backend/packed-representation.fun relies
+ * on TYPE_INDEX_BITS = 19 in order to mask headers in case expressions.
+ *
+ * pin.{c,h} relies on these values too.
+ */
 #define GC_VALID_HEADER_MASK ((GC_header)0x1)
 #define TYPE_INDEX_BITS    19
 #define TYPE_INDEX_MASK    ((GC_header)0x000FFFFE)
 #define TYPE_INDEX_SHIFT   1
-#define COUNTER_BITS       10
+#define COUNTER_BITS       11
 #define COUNTER_MASK       ((GC_header)0x7FF00000)
 #define COUNTER_SHIFT      20
 #define MARK_BITS          1
@@ -176,5 +181,6 @@ static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,
                                 uint16_t *bytesNonObjptrsRet, uint16_t *numObjptrsRet);
 static inline pointer advanceToObjectData (GC_state s, pointer p);
+static inline size_t objectSize(GC_state s, pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

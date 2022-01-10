@@ -11,8 +11,6 @@
 /* Static Function Prototypes */
 /******************************/
 
-static void HM_assertChunkListInvariants(HM_chunkList chunkList);
-
 /**
  * A function to pass to ChunkPool_iteratedFree() for batch freeing of chunks
  * from a level list
@@ -31,6 +29,7 @@ static void HM_assertChunkListInvariants(HM_chunkList chunkList);
 size_t HM_BLOCK_SIZE;
 size_t HM_ALLOC_SIZE;
 
+/*
 HM_chunk mmapNewChunk(size_t chunkWidth);
 HM_chunk mmapNewChunk(size_t chunkWidth) {
   assert(isAligned(chunkWidth, HM_BLOCK_SIZE));
@@ -48,6 +47,7 @@ HM_chunk mmapNewChunk(size_t chunkWidth) {
 
   return result;
 }
+*/
 
 void HM_configChunks(GC_state s) {
   assert(isAligned(s->controls->blockSize, GC_MODEL_MINALIGN));
@@ -103,8 +103,11 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   // chunk->prevAdjacent = NULL;
   chunk->levelHead = NULL;
   chunk->startGap = 0;
+  chunk->pinnedDuringCollection = FALSE;
   chunk->mightContainMultipleObjects = TRUE;
   chunk->tmpHeap = NULL;
+  chunk->decheckState = DECHECK_BOGUS_TID;
+  chunk->disentangledDepth = INT32_MAX;
   chunk->magic = CHUNK_MAGIC;
 
 #if ASSERT
@@ -130,23 +133,95 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   return result;
 }
 
-void HM_freeChunk(GC_state s, HM_chunk chunk) {
+
+struct writeChunkInfoArgs {
+  writeFreedBlockInfoFn fun;
+  void* env;
+  pointer chunkFront;
+  struct HM_chunk descriptor;
+};
+
+void writeChunkInfo(
+  GC_state s,
+  char* infoBuffer,
+  size_t bufferLen,
+  void* rawArgs)
+{
+  struct writeChunkInfoArgs *args = rawArgs;
+
+  pointer chunkStart =
+    args->chunkFront + sizeof(struct HM_chunk) + args->descriptor.startGap;
+
+  int numCharsWritten =
+    snprintf(infoBuffer, bufferLen,
+      "[multiobject %s; gap %u; used %zu] ",
+      (args->descriptor.mightContainMultipleObjects? "yes" : "no"),
+      args->descriptor.startGap,
+      (size_t)(args->descriptor.frontier - chunkStart));
+
+  if (numCharsWritten < 0)
+    DIE("writeChunkInfo failed");
+
+  char* newBufferStart = infoBuffer + numCharsWritten;
+  size_t newBufferLen = bufferLen - numCharsWritten;
+
+  // Now call the block info fn
+  if (NULL != args->fun)
+    args->fun(s, newBufferStart, newBufferLen, args->env);
+}
+
+
+void HM_freeChunkWithInfo(
+  GC_state s,
+  HM_chunk chunk,
+  writeFreedBlockInfoFnClosure f)
+{
+
+  struct writeChunkInfoArgs args;
+  if (NULL != f) {
+    args.fun = f->fun;
+    args.env = f->env;
+  }
+  else {
+    args.fun = NULL;
+    args.env = NULL;
+  }
+  args.chunkFront = (pointer)chunk;
+  args.descriptor = *chunk;
+  struct writeFreedBlockInfoFnClosure c =
+    {.fun = writeChunkInfo, .env = &args};
+
+  // ensure the sanity check is disrupted, for debugging
+  chunk->magic = 0xfacefade;
+
   size_t numBlocks = chunk->numBlocks;
   SuperBlock container = chunk->container;
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;
   bs->container = container;
-  freeBlocks(s, bs);
+  freeBlocks(s, bs, &c);
 }
 
-void HM_freeChunksInList(GC_state s, HM_chunkList list) {
+void HM_freeChunk(GC_state s, HM_chunk chunk) {
+  HM_freeChunkWithInfo(s, chunk, NULL);
+}
+
+void HM_freeChunksInListWithInfo(
+  GC_state s,
+  HM_chunkList list,
+  writeFreedBlockInfoFnClosure f)
+{
   HM_chunk chunk = list->firstChunk;
   while (chunk != NULL) {
     HM_chunk next = chunk->nextChunk;
-    HM_freeChunk(s, chunk);
+    HM_freeChunkWithInfo(s, chunk, f);
     chunk = next;
   }
   HM_initChunkList(list);
+}
+
+void HM_freeChunksInList(GC_state s, HM_chunkList list) {
+  HM_freeChunksInListWithInfo(s, list, NULL);
 }
 
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
@@ -177,7 +252,8 @@ void HM_initChunkList(HM_chunkList list) {
   list->usedSize = 0;
 }
 
-void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+void unlinkChunk_(HM_chunkList list, HM_chunk chunk, bool preserveLevelHead)
+{
 
 // #if ASSERT
 //   HM_assertChunkListInvariants(list);
@@ -202,7 +278,7 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   list->size -= HM_getChunkSize(chunk);
   list->usedSize -= HM_getChunkUsedSize(chunk);
 
-  chunk->levelHead = NULL;
+  if (!preserveLevelHead) chunk->levelHead = NULL;
   chunk->prevChunk = NULL;
   chunk->nextChunk = NULL;
 
@@ -211,6 +287,16 @@ void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
 // #endif
 
 }
+
+
+void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
+  unlinkChunk_(list, chunk, FALSE);
+}
+
+void HM_unlinkChunkPreserveLevelHead(HM_chunkList list, HM_chunk chunk) {
+  unlinkChunk_(list, chunk, TRUE);
+}
+
 
 void HM_forwardHHObjptrsInChunkList(
   GC_state s,
@@ -392,6 +478,7 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);
+  assert(chunk->magic == CHUNK_MAGIC);
   HM_UnionFindNode cursor = chunk->levelHead;
   while (cursor->representative != NULL) {
     cursor = cursor->representative;
@@ -528,4 +615,17 @@ uint32_t HM_getObjptrDepth(objptr op) {
 
 uint32_t HM_getObjptrDepthPathCompress(objptr op) {
   return HM_getLevelHeadPathCompress(HM_getChunkOf(objptrToPointer(op, NULL)))->depth;
+}
+
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk)
+{
+  for (HM_chunk chunk = list->firstChunk;
+       chunk != NULL;
+       chunk = chunk->nextChunk)
+  {
+    if (chunk == theChunk) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }

@@ -4,16 +4,17 @@ usage() {
     cat <<EOF
 Usage: $0 VERB OPTIONS
 Verbs:
-  help                   display this message
-  record COMMAND         run and record traces for COMMAND
-  logcat [FILE.trace.gz] display latest trace or FILE
-  corelog [BIN CORE]     flush the buffers of core dump to disk
-  export [FILE.trace.gz] export latest trace or FILE to sqlite3
-  sqlite [FILE.sqlite]   open latest db or FILE in sqlite3
-  visu [FILE.sqlite]     visualize FILE using the veezuh tool
-  gcstats [FILE.sqlite]  show GC statistics about FILE using the veezuh tool
-  objstats [FILE.sqlite] show object statistics about FILE
-  clean                  erase trace files in the current directory
+  help                    display this message
+  record COMMAND          run and record traces for COMMAND
+  logcat [FILE.trace.gz]  display latest trace or FILE
+  corelog [BIN CORE]      flush the buffers of core dump to disk
+  export [FILE.trace.gz]  export latest trace or FILE to sqlite3
+  exportj [FILE.trace.gz] export latest trace or FILE to chrome tracing JSON
+  sqlite [FILE.sqlite]    open latest db or FILE in sqlite3
+  visu [FILE.sqlite]      visualize FILE using the veezuh tool
+  gcstats [FILE.sqlite]   show GC statistics about FILE using the veezuh tool
+  objstats [FILE.sqlite]  show object statistics about FILE
+  clean                   erase trace files in the current directory
 EOF
 }
 
@@ -141,6 +142,24 @@ case "$verb" in
         gunzip -c $FILE | $TOOL -c > $TMP
         export_sqlite3 $DB $TMP
         rm -f $TMP
+        echo "*** Wrote $DB" >&2
+        ;;
+
+    exportj)
+        if [ $# -ge 1 ]; then
+            FILE=$1
+        else
+            FILE=`ls -t *.trace.gz | head -n 1`
+        fi
+        DB=`basename $FILE .trace.gz`.json
+
+        if [ -f $DB ]; then
+            echo "*** File $DB already exists, aborting"
+            exit 1
+        fi
+
+        echo "*** Exporting $FILE to Chrome Tracing JSON" >&2
+        gunzip -c $FILE | $TOOL -j > $DB
         echo "*** Wrote $DB" >&2
         ;;
 

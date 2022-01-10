@@ -31,6 +31,9 @@ struct HM_HierarchicalHeapConfig {
    * local collection */
   size_t minCollectionSize;
 
+  /* smallest amount for a CC */
+  size_t minCCSize;
+
   /* the shallowest depth that will be claimed for a local
    * collection. */
   uint32_t minLocalDepth;
@@ -58,6 +61,8 @@ struct GC_controls {
   size_t superblockThreshold; // upper bound on size-class of a superblock
   size_t megablockThreshold; // upper bound on size-class of a megablock (unmap above this threshold)
   float emptinessFraction;
+  bool debugKeepFreeBlocks;
+  bool manageEntanglement;
   bool freeListCoalesce;  /* disabled for now */
   bool setAffinity; /* whether or not to set processor affinity */
   int32_t affinityBase; /* First processor to use when setting affinity */

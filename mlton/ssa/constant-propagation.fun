@@ -1041,7 +1041,7 @@ fun transform (program: Program.t): Program.t =
                 | Prim.Array_copyVector =>
                      update (arg 0, devector (arg 2))
                 | Prim.Array_length => arrayLength (arg 0)
-                | Prim.Array_sub => dearray (arg 0)
+                | Prim.Array_sub _ => dearray (arg 0)
                 | Prim.Array_toArray => arrayFromArray (arg 0)
                 | Prim.Array_toVector => vectorFromArray (arg 0)
                 | Prim.Array_update _ => update (arg 0, arg 2)
@@ -1050,7 +1050,7 @@ fun transform (program: Program.t): Program.t =
                 | Prim.Ref_cas _ =>
                     (coerce {from = arg 2, to = deref (arg 0)}
                      ; deref (arg 0))
-                | Prim.Ref_deref => deref (arg 0)
+                | Prim.Ref_deref _ => deref (arg 0)
                 | Prim.Ref_ref =>
                      let
                         val v = arg 0

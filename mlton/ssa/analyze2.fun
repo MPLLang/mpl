@@ -227,7 +227,7 @@ fun 'a analyze
                         args = values args,
                         resultType = ty,
                         resultVar = var}
-          | Select {base, offset} =>
+          | Select {base, offset, readBarrier} =>
                select {base = baseValue base,
                        offset = offset,
                        resultType = ty}

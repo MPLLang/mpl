@@ -52,10 +52,13 @@ signature MLTON_THREAD =
           (*force the runtime to create a hh for the left child*)
           val forceLeftHeap : int * thread -> unit
 
-          val registerCont : (('a) array) * (('b) array) * (('c) array) * thread -> unit
+          val forceNewChunk : unit -> unit
+
+          val registerCont : 'a ref * 'b ref * 'c ref * thread -> bool
           val resetList    : thread -> unit
 
           (*Collect the depth = 1 HH of this thread*)
+          val cancelCC: thread * Word64.word -> unit
           val collectThreadRoot : thread * Word64.word -> unit
           val getRoot : thread -> Word64.word
 
@@ -69,6 +72,29 @@ signature MLTON_THREAD =
 
           (* "put a new thread in the hierarchy *)
           val moveNewThreadToDepth : thread * int -> unit
+
+          val checkFinishedCCReadyToJoin: unit -> bool
+        end
+
+      (* disentanglement checking *)
+      structure Disentanglement :
+        sig
+          type thread = Basic.t
+
+          (* fork the current thread ID, returning the two child IDs *)
+          val decheckFork : unit -> Word64.word * Word64.word
+
+          (* join two child IDs and update the current thread ID *)
+          val decheckJoin : Word64.word * Word64.word -> unit
+
+          (* set the current thread ID *)
+          val decheckSetTid : Word64.word -> unit
+
+          (* get the current thread ID of a thread *)
+          val decheckGetTid : thread -> Word64.word
+
+          (* arguments are (victim thread, steal depth) *)
+          val copySyncDepthsFromThread : thread * int -> unit
         end
 
       type 'a t

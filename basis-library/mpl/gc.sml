@@ -36,6 +36,12 @@ struct
       GC.getRootCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
     fun getInternalCCBytesReclaimedOfProc p =
       GC.getInternalCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+
+    fun numberDisentanglementChecks () =
+      C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
+
+    fun numberEntanglementsDetected () =
+      C_UIntmax.toLargeInt (GC.numberEntanglementsDetected (gcState ()))
   end
 
   exception NotYetImplemented of string

@@ -197,6 +197,22 @@ uintmax_t GC_getPromoMillisecondsOfProc(GC_state s, uint32_t proc) {
   return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
 }
 
+uintmax_t GC_numDisentanglementChecks(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count += s->procStates[p].cumulativeStatistics->numDisentanglementChecks;
+  }
+  return count;
+}
+
+uintmax_t GC_numEntanglementsDetected(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count += s->procStates[p].cumulativeStatistics->numEntanglementsDetected;
+  }
+  return count;
+}
+
 __attribute__((noreturn))
 void GC_setHashConsDuringGC(__attribute__((unused)) GC_state s, __attribute__((unused)) bool b) {
   DIE("GC_setHashConsDuringGC unsupported");

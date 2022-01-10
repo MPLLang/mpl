@@ -341,6 +341,9 @@ fun makeOptions {usage} =
            (fn s => reportAnnotation (s, flag,
                                       Control.Elaborate.processDefault s)))
        end,
+       (Normal, "detect-entanglement", " {false|true}",
+        "detect entanglement dynamically during execution",
+        Bool (fn b => detectEntanglement := b)),
        (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
         boolRef traceRuntime),
        (Expert, "lto-runtime", " {false|true}", "perform C-level whole-program optimization",

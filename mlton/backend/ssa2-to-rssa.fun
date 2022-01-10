@@ -178,6 +178,49 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_writeBarrier"}
 
+      fun readBarrier {return, obj, field} =
+        T {args = Vector.new3 (Type.gcState(), obj, field),
+           convention = Cdecl,
+           inline = false,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = true,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new3 (CType.gcState,
+                                     CType.objptr,
+                                     CType.cpointer),
+                        SOME CType.objptr),
+          return = return,
+          symbolScope = Private,
+          target = Direct "GC_readBarrier"}
+
+      fun updateObjectHeader {obj} =
+        T {args = Vector.new3 (Type.gcState(),
+                               obj,
+                               Type.objptrHeader()),
+           convention = Cdecl,
+           inline = false,
+           kind = Kind.Runtime {bytesNeeded = NONE,
+                                ensuresBytesFree = NONE,
+                                mayGC = false,
+                                maySwitchThreadsFrom = false,
+                                maySwitchThreadsTo = false,
+                                modifiesFrontier = false,
+                                readsStackTop = false,
+                                writesStackTop = false},
+           prototype = (Vector.new3 (CType.gcState,
+                                     CType.objptr,
+                                     CType.objptrHeader ()),
+                        NONE),
+          return = Type.unit,
+          symbolScope = Private,
+          target = Direct "GC_updateObjectHeader"}
+
+
       val returnToC = fn () =>
          T {args = Vector.new0 (),
             convention = Cdecl,
@@ -1292,17 +1335,34 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           case Type.deObjptr arrTy of
                                              NONE => Error.bug "SsaToRssa.translateStatementsTransfer: PrimApp,Array_toArray"
                                            | SOME arrOpt => arrOpt
-                                    in
-                                       add2
-                                       (Move
-                                        {dst = (Offset
-                                                {base = rawarr,
-                                                 offset = Runtime.headerOffset (),
-                                                 ty = Type.objptrHeader ()}),
-                                         src = ObjptrTycon arrOpt},
-                                        Bind {dst = (valOf var, arrTy),
+
+                                       (*
+                                       val headerUpdate =
+                                         Move
+                                         {dst = (Offset
+                                                 {base = rawarr,
+                                                  offset = Runtime.headerOffset (),
+                                                  ty = Type.objptrHeader ()}),
+                                          src = ObjptrTycon arrOpt}
+                                       *)
+
+                                       val castBind =
+                                         Bind {dst = (valOf var, arrTy),
                                               pinned = false,
-                                              src = Operand.cast (rawarr, arrTy)})
+                                              src = Operand.cast (rawarr, arrTy)}
+
+                                       val huArgs = Vector.new3 (GCState, rawarr, ObjptrTycon arrOpt)
+                                       val func = CFunction.updateObjectHeader {obj = Operand.ty rawarr}
+                                    in
+                                       split
+                                       (Vector.new0 (), Kind.CReturn {func = func}, castBind :: ss,
+                                        fn l =>
+                                        ([],
+                                         Transfer.CCall {args = huArgs,
+                                                         func = func,
+                                                         return = SOME l}))
+
+                                       (* add2 (headerUpdate, castBind) *)
                                     end
                                | Prim.Array_toVector =>
                                     let
@@ -1312,17 +1372,22 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           case Type.deObjptr vecTy of
                                              NONE => Error.bug "SsaToRssa.translateStatementsTransfer: PrimApp,Array_toVector"
                                            | SOME vecOpt => vecOpt
+
+                                       val castBind =
+                                         Bind {dst = (valOf var, vecTy),
+                                               pinned = false,
+                                               src = Operand.cast (sequence, vecTy)}
+
+                                       val huArgs = Vector.new3 (GCState, sequence, ObjptrTycon vecOpt)
+                                       val func = CFunction.updateObjectHeader {obj = Operand.ty sequence}
                                     in
-                                       add2
-                                       (Move
-                                        {dst = (Offset
-                                                {base = sequence,
-                                                 offset = Runtime.headerOffset (),
-                                                 ty = Type.objptrHeader ()}),
-                                         src = ObjptrTycon vecOpt},
-                                        Bind {dst = (valOf var, vecTy),
-                                              pinned = false,
-                                              src = Operand.cast (sequence, vecTy)})
+                                       split
+                                       (Vector.new0 (), Kind.CReturn {func = func}, castBind :: ss,
+                                        fn l =>
+                                        ([],
+                                         Transfer.CCall {args = huArgs,
+                                                         func = func,
+                                                         return = SOME l}))
                                     end
                                | Prim.Array_uninit =>
                                     let
@@ -1686,19 +1751,68 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                     (CFunction.worldSave ())
                                | _ => simpleCodegenOrC prim
                            end
-                      | S.Exp.Select {base, offset} =>
+                      | S.Exp.Select {base, offset, readBarrier} =>
                            (case var of
                                NONE => none ()
                              | SOME var =>
                                   (case toRtype ty of
                                       NONE => none ()
                                     | SOME ty =>
-                                         adds
-                                         (select
-                                          {base = Base.map (base, varOp),
-                                           baseTy = varType (Base.object base),
-                                           dst = (var, ty),
-                                           offset = offset})))
+                                         if not (!Control.detectEntanglement
+                                                 andalso readBarrier
+                                                 andalso Type.isObjptr ty)
+                                         then
+                                            adds
+                                            (select
+                                             {base = Base.map (base, varOp),
+                                              baseTy = varType (Base.object base),
+                                              dst = (var, ty),
+                                              offset = offset})
+                                         else let
+                                            val baseOp = Base.map (base, varOp)
+                                            val baseTy = varType (Base.object base)
+                                            val ss' = select
+                                               {base = baseOp,
+                                                baseTy = baseTy,
+                                                dst = (var, ty),
+                                                offset = offset}
+
+                                            val (ss'', {dst=finalDst, pinned, src=field}) =
+                                              case List.splitLast ss' of
+                                                (ss'', Bind stuff) => (ss'', stuff)
+                                              | _ => Error.bug "SsaToRssa.translateStatementsTransfer: Select with read barrier: no final Bind statement"
+
+                                            (* the read barrier returns a result
+                                             * that we'll put into this tmpVar,
+                                             * then finally create one more
+                                             * statement to move into the
+                                             * original destination. *)
+                                            val tmpVar = Var.newNoname ()
+                                            val theBind =
+                                              Bind {dst = finalDst,
+                                                    pinned = pinned,
+                                                    src = Operand.Var
+                                                      {var = tmpVar,
+                                                       ty = ty}}
+
+                                            val args = Vector.new3
+                                               (GCState,
+                                                Base.object baseOp,
+                                                Operand.Address field)
+                                            val func = CFunction.readBarrier
+                                               {return = ty,
+                                                obj = Operand.ty (Base.object baseOp),
+                                                field = Operand.ty (Operand.Address field)}
+                                            val formals = Vector.new1 (tmpVar, ty)
+                                         in
+                                            split
+                                            (formals, Kind.CReturn {func = func}, theBind :: ss,
+                                             fn l =>
+                                             (ss'',
+                                              Transfer.CCall {args = args,
+                                                              func = func,
+                                                              return = SOME l}))
+                                         end))
                       | S.Exp.Sequence {args} =>
                            (case toRtype ty of
                                NONE => none ()

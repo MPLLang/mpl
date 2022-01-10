@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "trace.h"
 
@@ -63,9 +64,11 @@ static const char *EventKindStrings[] = {
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
+void processFilesChromeTracingJSON(size_t filecount, FILE **files);
 
 void printEventText(struct Event *);
 void printEventCSV(struct Event *);
+void printEventChromeTracingJSON(struct Event *);
 
 void usage() {
   fprintf(stderr,
@@ -73,6 +76,7 @@ void usage() {
           "options:\n"
           "  -d                 display contents in human-readable format\n"
           "  -c                 display contents in CSV format\n"
+          "  -j                 display contents in Chrome Tracing JSON format\n"
           "  -h                 display this message\n"
     );
 }
@@ -80,19 +84,22 @@ void usage() {
 int main(int argc, char *argv[]) {
   int opt;
   size_t fcount;
-  bool display = false, csv = false;
+  bool display = false, csv = false, chromeTracingJSON = false;
   bool read_stdin = false;
   FILE **files;
 
   /* Parse command line arguments. */
 
-  while ((opt = getopt(argc, argv, "dhc")) != -1) {
+  while ((opt = getopt(argc, argv, "dhcj")) != -1) {
     switch (opt) {
     case 'd':
       display = true;
       break;
     case 'c':
       csv = true;
+      break;
+    case 'j':
+      chromeTracingJSON = true;
       break;
     case 'h':
       usage();
@@ -138,6 +145,9 @@ int main(int argc, char *argv[]) {
   if (csv)
     processFiles(fcount, files, printEventCSV);
 
+  if (chromeTracingJSON)
+    processFilesChromeTracingJSON(fcount, files);
+
   /* Close and free files. */
 
   if (!read_stdin)
@@ -170,6 +180,37 @@ void processFiles(size_t filecount, FILE **files,
   }
 }
 
+void processFilesChromeTracingJSON(size_t filecount, FILE **files)
+{
+  struct Event events[BUFFER_SIZE];
+
+  printf("[\n");
+
+  bool first = true;
+
+  for (size_t i = 0; i < filecount; ++i) {
+    size_t evcount = 0, evbatchsize;
+
+    do {
+      evbatchsize = fread(events, sizeof *events, BUFFER_SIZE,
+                          files[i]);
+      evcount += evbatchsize;
+
+      for (int j = 0; j < evbatchsize; j++) {
+
+        if (first) first = false;
+        else printf(",\n");
+
+        printf("  ");
+        printEventChromeTracingJSON(&events[j]);
+      }
+
+    } while (evbatchsize == BUFFER_SIZE);
+  }
+
+  printf("]\n");
+}
+
 void printEventKind(int kind) {
   if (kind > 0 && (size_t)kind < EventKindCount) {
     printf("%s", EventKindStrings[kind]);
@@ -178,11 +219,107 @@ void printEventKind(int kind) {
   }
 }
 
+/** print the name without _ENTER or _LEAVE at end */
+void printEventKindStripEnterLeave(int kind) {
+  char buf[100];
+  buf[99] = '\0';
+
+  const char *str = EventKindStrings[kind];
+  size_t len = strlen(str);
+  strncpy(buf, str, len-6);
+  buf[len-6] = '\0';
+
+  printf("%s", buf);
+}
+
+/** chrome tracing documented here:
+  * https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU
+  *
+  * if this document eventually disappears from the eternal web,
+  * see chrome-tracing-docs.txt
+  */
+enum ChromeTracingPhaseType {
+  CT_Begin,    // "B"
+  CT_End,      // "E"
+  CT_Instant   // "i"
+};
+
+enum ChromeTracingPhaseType
+EventKindChromeTracingPhaseType(int kind)
+{
+  // default to "instant" event; most general.
+  if (!(kind > 0 && (size_t)kind < EventKindCount))
+    return CT_Instant;
+
+  // check for "_ENTER" or "_LEAVE", which is the mltrace convention
+  const char *str = EventKindStrings[kind];
+  size_t len = strlen(str);
+
+  if (len > 6 && 0 == strncmp(str+len-6, "_ENTER", 6))
+    return CT_Begin;
+
+  if (len > 6 && 0 == strncmp(str+len-6, "_LEAVE", 6))
+    return CT_End;
+
+  return CT_Instant;
+}
+
 void printEventTime(struct Event *event) {
   double time;
 
   time = event->ts.tv_sec + event->ts.tv_nsec / 1E9;
   printf("%.9f", time);
+}
+
+void printEventTimeMicroseconds(struct Event *event) {
+  unsigned long long us;
+  us = ((unsigned long long)event->ts.tv_sec) * 1000000ULL;
+  us = us + ((unsigned long long)event->ts.tv_nsec) / 1000ULL;
+
+  printf("%llu", us);
+}
+
+void printEventTimeNanoseconds(struct Event *event) {
+  unsigned long long ns;
+  ns = ((unsigned long long)event->ts.tv_sec) * 1000000000ULL;
+  ns = ns + ((unsigned long long)event->ts.tv_nsec);
+
+  printf("%llu", ns);
+}
+
+void printEventChromeTracingJSON(struct Event *event) {
+  printf("{ ");
+
+  /** name and ph */
+  switch (EventKindChromeTracingPhaseType(event->kind)) {
+    case CT_Begin:
+      printf("\"name\": \"");
+      printEventKindStripEnterLeave(event->kind);
+      printf("\", ");
+      printf("\"ph\": \"B\", ");
+      break;
+
+    case CT_End:
+      printf("\"name\": \"");
+      printEventKindStripEnterLeave(event->kind);
+      printf("\", ");
+      printf("\"ph\": \"E\", ");
+      break;
+
+    default:
+      printf("\"name\": \""); printEventKind(event->kind); printf("\", ");
+      printf("\"ph\": \"i\", ");
+      break;
+  }
+
+  printf("\"cat\": \"RUNTIME\", ");
+  printf("\"pid\": 0, ");
+  printf("\"tid\": %"PRIdPTR", ", event->argptr);
+  printf("\"ts\": "); printEventTimeMicroseconds(event); printf(", ");
+  printf("\"args\": { \"1\": %lld, \"2\": %lld, \"3\": %lld }",
+    event->arg1, event->arg2, event->arg3);
+
+  printf("}");
 }
 
 void printEventCSV(struct Event *event) {

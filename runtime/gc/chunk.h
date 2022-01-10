@@ -62,11 +62,22 @@ struct HM_chunk {
    */
   uint8_t startGap;
 
+  /* this bool is only used during local collections, to mark which chunks
+   * have pinned objects. outside of a collection, it is always false. */
+  bool pinnedDuringCollection;
+
+  /** set during entanglement when in "safe" mode, to help temporarily disable
+    * local GCs while the entanglement persists.
+    */
+  int32_t disentangledDepth;
+
   bool mightContainMultipleObjects;
   void* tmpHeap;
 
   SuperBlock container;
   size_t numBlocks;
+
+  decheck_tid_t decheckState;
 
   // for padding and sanity checks
   uint32_t magic;
@@ -151,14 +162,23 @@ void HM_initChunkList(HM_chunkList list);
 void HM_freeChunk(GC_state s, HM_chunk chunk);
 void HM_freeChunksInList(GC_state s, HM_chunkList list);
 
+void HM_freeChunkWithInfo(GC_state s, HM_chunk chunk, writeFreedBlockInfoFnClosure f);
+void HM_freeChunksInListWithInfo(GC_state s, HM_chunkList list, writeFreedBlockInfoFnClosure f);
+
 // void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
 
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);
 void HM_prependChunk(HM_chunkList list, HM_chunk chunk);
 
-/* Remove chunk from this list */
+/* Remove chunk from a list. Requires that the list actually contains the
+ * chunk (this is not checked).
+ *
+ * The first form sets chunk->levelHead to NULL; the second leaves it
+ * untouched.
+ */
 void HM_unlinkChunk(HM_chunkList list, HM_chunk chunk);
+void HM_unlinkChunkPreserveLevelHead(HM_chunkList list, HM_chunk chunk);
 
 /**
  * Calls foreachHHObjptrInObject() on every object starting at 'start', which
@@ -279,6 +299,10 @@ uint32_t HM_getObjptrDepth(objptr op);
 uint32_t HM_getObjptrDepthPathCompress(objptr op);
 struct HM_HierarchicalHeap* HM_getLevelHead(HM_chunk chunk);
 struct HM_HierarchicalHeap* HM_getLevelHeadPathCompress(HM_chunk chunk);
+
+bool listContainsChunk(HM_chunkList list, HM_chunk theChunk);
+
+void HM_assertChunkListInvariants(HM_chunkList list);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 

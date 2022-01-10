@@ -30,9 +30,10 @@ typedef struct ConcurrentCollectArgs {
 
 
 enum CCState{
-	CC_UNREG,
-	CC_REG,
-	CC_COLLECTING
+  CC_UNREG,
+  CC_REG,
+  CC_COLLECTING,
+  CC_DONE
 };
 
 typedef struct ConcurrentPackage {
@@ -69,6 +70,14 @@ typedef struct ConcurrentPackage *ConcurrentPackage;
 #endif
 
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+
+PRIVATE void GC_updateObjectHeader(GC_state s, pointer p, GC_header newHeader);
+
+#endif
+
+
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 // Assume complete access in this function
@@ -81,8 +90,8 @@ typedef struct ConcurrentPackage *ConcurrentPackage;
 size_t CC_collectWithRoots(GC_state s, struct HM_HierarchicalHeap * targetHH, GC_thread thread);
 
 void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth);
-void CC_addToStack(ConcurrentPackage cp, pointer p);
-void CC_initStack(ConcurrentPackage cp);
+void CC_addToStack(GC_state s, ConcurrentPackage cp, pointer p);
+void CC_initStack(GC_state s, ConcurrentPackage cp);
 
 
 bool CC_isPointerMarked (pointer p);

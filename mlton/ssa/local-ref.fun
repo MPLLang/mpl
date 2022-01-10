@@ -325,7 +325,7 @@ fun transform (program: Program.t): Program.t =
                               case prim
                                  of Prim.Ref_ref => rewriteReff ()
                                | Prim.Ref_assign _ => rewriteAssign ()
-                               | Prim.Ref_deref => rewriteDeref ()
+                               | Prim.Ref_deref _ => rewriteDeref ()
                                | _ => s
                            end
                       | _ => s)
@@ -427,7 +427,7 @@ fun transform (program: Program.t): Program.t =
                              of Prim.Ref_ref => (setReff (); default ())
                               | Prim.Ref_assign _ => (setAssign (arg 0);
                                                       nonLocal (arg 1))
-                              | Prim.Ref_deref => setDeref (arg 0)
+                              | Prim.Ref_deref _ => setDeref (arg 0)
                               | _ => default ()
                          end
                       | _ => default ()

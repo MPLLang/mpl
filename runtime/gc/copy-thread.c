@@ -49,7 +49,7 @@ GC_thread copyThreadWithHeap (GC_state s, GC_thread from, size_t used) {
    */
   assert (s->savedThread == BOGUS_OBJPTR);
   s->savedThread = pointerToObjptr((pointer)from - offsetofThread (s), NULL);
-  to = newThreadWithHeap (s, alignStackReserved(s, used), 0);
+  to = newThreadWithHeap (s, alignStackReserved(s, used), 0, TRUE);
   from = (GC_thread)(objptrToPointer(s->savedThread, NULL) + offsetofThread (s));
   s->savedThread = BOGUS_OBJPTR;
   if (DEBUG_THREADS) {

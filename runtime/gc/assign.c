@@ -7,9 +7,65 @@
  * See the file MLton-LICENSE for details.
  */
 
-// #define cas(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
+void Assignable_decheckObjptr(objptr op)
+{
+  GC_state s = pthread_getspecific(gcstate_key);
+  s->cumulativeStatistics->numDisentanglementChecks++;
+  decheckRead(s, op);
+}
 
-void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) {
+
+objptr Assignable_readBarrier(
+  GC_state s,
+  ARG_USED_FOR_ASSERT objptr obj,
+  objptr* field)
+{
+
+#if ASSERT
+  assert(isObjptr(obj));
+  // check that field is actually inside this object
+  pointer objp = objptrToPointer(obj, NULL);
+  GC_header header = getHeader(objp);
+  GC_objectTypeTag tag;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  bool hasIdentity;
+  splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
+  pointer objend = objp;
+  if (!hasIdentity) {
+    DIE("read barrier: attempting to read immutable object "FMTOBJPTR, obj);
+  }
+  if (NORMAL_TAG == tag) {
+    objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+  }
+  else if (SEQUENCE_TAG == tag) {
+    size_t dataBytes = getSequenceLength(objp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+    objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
+  }
+  else {
+    DIE("read barrier: cannot handle tag %u", tag);
+  }
+  pointer fieldp = (pointer)field;
+  ASSERTPRINT(
+    objp <= fieldp && fieldp + OBJPTR_SIZE <= objend,
+    "read barrier: objptr field %p outside object "FMTOBJPTR" of size %zu",
+    (void*)field,
+    obj,
+    (size_t)(objend - objp));
+#endif
+
+  s->cumulativeStatistics->numDisentanglementChecks++;
+  objptr ptr = *field;
+  decheckRead(s, ptr);
+  return ptr;
+}
+
+void Assignable_writeBarrier(
+  GC_state s,
+  objptr dst,
+  ARG_USED_FOR_ASSERT objptr* field,
+  objptr src)
+{
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
 
@@ -50,8 +106,11 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (dstHH->depth >= 1 && isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
     pointer currp = objptrToPointer(readVal, NULL);
     HM_HierarchicalHeap currHH = HM_getLevelHead(HM_getChunkOf(currp));
-    if(currHH == dstHH) {
-      HM_HH_addRootForCollector(dstHH, currp);
+    if (currHH->depth == dstHH->depth
+        && HM_HH_getConcurrentPack(currHH)->ccstate != CC_UNREG
+        && !CC_isPointerMarked(currp))
+    {
+      HM_HH_addRootForCollector(s, currHH, currp);
     }
   }
 
@@ -60,23 +119,108 @@ void Assignable_writeBarrier(GC_state s, objptr dst, objptr* field, objptr src) 
   if (!isObjptr(src))
     return;
 
-  pointer srcp = objptrToPointer(src, NULL);
-  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
-
-  /* Internal or up-pointer. */
-  if (dstHH->depth >= srcHH->depth)
-    return;
-
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
     return;
 
-  /* Otherwise, remember the down-pointer! */
-  uint32_t d = srcHH->depth;
-  GC_thread thread = getThreadCurrent(s);
-  HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
-  assert(NULL != hh);
-  HM_rememberAtLevel(hh, dst, field, src);
+  struct HM_remembered remElem_ = {.object = src, .from = dst};
+  HM_remembered remElem = &remElem_;
+
+  pointer srcp = objptrToPointer(src, NULL);
+
+#if 0
+  /** This is disabled for now. In the future we will come back to
+    * managing entanglement.
+    */
+  if (s->controls->manageEntanglement &&
+      getThreadCurrent(s)->decheckState.bits != DECHECK_BOGUS_BITS &&
+
+      ((HM_getChunkOf(srcp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(srcp)->decheckState))
+      ||
+      (HM_getChunkOf(dstp)->decheckState.bits != DECHECK_BOGUS_BITS &&
+      !decheckIsOrdered(getThreadCurrent(s), HM_getChunkOf(dstp)->decheckState))))
+  {
+    /** Nasty entanglement. To be safe, just pin the object. A safe unpin
+      * depth is the overall lca.
+      */
+
+    int unpinDepth1 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(srcp)->decheckState);
+
+    int unpinDepth2 =
+      lcaHeapDepth(getThreadCurrent(s)->decheckState,
+                   HM_getChunkOf(dstp)->decheckState);
+
+    int unpinDepth = (unpinDepth1 < unpinDepth2 ? unpinDepth1 : unpinDepth2);
+
+    if (pinObject(src, (uint32_t)unpinDepth)) {
+      /** Just remember it at some arbitrary place... */
+      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, remElem);
+    }
+
+    return;
+  }
+#endif
+
+  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
+
+  /* Up-pointer. */
+  if (dstHH->depth > srcHH->depth)
+    return;
+
+  /* Internal pointer. It's safe to ignore an internal pointer if:
+   *   1. it's contained entirely within one subheap, or
+   *   2. the pointed-to object (src) lives in an already snapshotted subregion
+   */
+  if ( (dstHH == srcHH) ||
+       (dstHH->depth == srcHH->depth &&
+         HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG) ) {
+    // assert(...);
+    // if (dstHH != srcHH) {
+    //   printf(
+    //     "ignore internal pointer "FMTPTR" --> "FMTPTR". dstHH == srcHH? %d\n",
+    //     (uintptr_t)dstp,
+    //     (uintptr_t)srcp,
+    //     srcHH == dstHH);
+    // }
+    return;
+  }
+
+  /* Otherwise, remember the pointer! */
+
+  bool success = pinObject(src, dstHH->depth);
+
+  // any concurrent pin can only decrease unpinDepth
+  uint32_t unpinDepth = unpinDepthOf(src);
+  assert(unpinDepth <= dstHH->depth);
+
+  if (success || dstHH->depth == unpinDepth)
+  {
+    uint32_t d = srcHH->depth;
+    GC_thread thread = getThreadCurrent(s);
+
+#if 0
+    /** Fix a silly issue where, when we are dealing with entanglement, the
+      * lower object is actually deeper than the current thread (which is
+      * possible because of entanglement! the thread is peeking inside of
+      * some other thread's heaps, and the other thread might be deeper).
+      */
+    if (d > thread->currentDepth && s->controls->manageEntanglement)
+      d = thread->currentDepth;
+#endif
+
+    HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
+    assert(NULL != hh);
+    assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
+    HM_rememberAtLevel(hh, remElem);
+
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+      dstHH->depth, srcHH->depth,
+      dst, src);
+  }
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */

@@ -669,7 +669,7 @@ fun transform (program: Program.t): Program.t =
                               | _ => Error.bug "Useless.primApp: Array_copyVector"
                          end
                    | Prim.Array_length => return (arrayLength (arg 0))
-                   | Prim.Array_sub => sub ()
+                   | Prim.Array_sub _ => sub ()
                    | Prim.Array_toArray =>
                         (case (value (arg 0), value result) of
                             (Array {length = l, elt = e, ...},
@@ -717,7 +717,7 @@ fun transform (program: Program.t): Program.t =
                          makeWanted (arg 0))
                    | Prim.MLton_touch => shallowMakeUseful (arg 0)
                    | Prim.Ref_assign _ => coerce {from = arg 1, to = deref (arg 0)}
-                   | Prim.Ref_deref => return (deref (arg 0))
+                   | Prim.Ref_deref _ => return (deref (arg 0))
                    | Prim.Ref_ref => coerce {from = arg 0, to = deref result}
                    (* SAM_NOTE: unification is certainly "correct" but we should
                     * investigate whether coercions are possible. *)

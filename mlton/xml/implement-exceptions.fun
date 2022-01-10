@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor ImplementExceptions (S: XML_TRANSFORM_STRUCTS): XML_TRANSFORM = 
+functor ImplementExceptions (S: XML_TRANSFORM_STRUCTS): XML_TRANSFORM =
 struct
 
 open S
@@ -187,15 +187,15 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                       make: VarExp.t option -> Dexp.t} option,
            set = setExconInfo, destroy} =
          Property.destGetSetOnce (Con.plist, Property.initConst NONE)
-      val setExconInfo = 
-         Trace.trace2 
-         ("ImplementExceptions.setExconInfo", 
-          Con.layout, Layout.ignore, Unit.layout) 
+      val setExconInfo =
+         Trace.trace2
+         ("ImplementExceptions.setExconInfo",
+          Con.layout, Layout.ignore, Unit.layout)
          setExconInfo
       val exconInfo =
-         Trace.trace 
-         ("ImplementExceptions.exconInfo", 
-          Con.layout, Layout.ignore) 
+         Trace.trace
+         ("ImplementExceptions.exconInfo",
+          Con.layout, Layout.ignore)
          exconInfo
       fun isExcon c =
          case exconInfo c of
@@ -383,7 +383,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                   let
                      fun deref (var, ty) =
                         primExp
-                        (PrimApp {prim = Prim.Ref_deref,
+                        (PrimApp {prim = Prim.Ref_deref {readBarrier = true},
                                   targs = Vector.new1 ty,
                                   args = Vector.new1 (VarExp.mono var)})
                      fun assign (var, ty) =

@@ -1,4 +1,5 @@
-(* Copyright (C) 2010-2011,2013-2014,2017,2019 Matthew Fluet.
+(* Copyright (C) 2020 Sam Westrick
+ * Copyright (C) 2010-2011,2013-2014,2017,2019 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -162,6 +163,10 @@ structure GC =
       val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
       val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
       val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+
+      val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
+
+      val numberEntanglementsDetected = _import "GC_numEntanglementsDetected" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
@@ -183,6 +188,12 @@ structure HM =
 
         val refAssignNoBarrier : 'a ref * 'a -> unit =
             _prim "Ref_assign_noWriteBarrier" : 'a ref * 'a -> unit;
+
+        val arraySubNoBarrier : 'a array * SeqIndex.int -> 'a =
+            _prim "Array_sub_noReadBarrier" : 'a array * SeqIndex.int -> 'a;
+
+        val refDerefNoBarrier : 'a ref -> 'a =
+            _prim "Ref_deref_noReadBarrier" : 'a ref -> 'a;
     end
 
 structure Parallel =
@@ -412,9 +423,13 @@ structure Thread =
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
-      val registerCont: ('a array) * ('b array) * ('c array) * thread -> unit =
-            _import "HM_HH_registerCont" runtime private:
-            ('a array) * ('b array) * ('c array) * thread -> unit;
+      val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
+      val registerCont =
+        _import "HM_HH_registerCont" runtime private:
+        'a ref * 'b ref * 'c ref * thread -> bool;
+      val cancelCC =
+        _import "HM_HH_cancelCC" runtime private:
+        GCState.t * thread * Word64.word -> unit;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 
@@ -425,7 +440,24 @@ structure Thread =
       val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+
+      val decheckFork = _import "GC_HH_decheckFork" runtime private:
+        GCState.t * Word64.word ref * Word64.word ref -> unit;
+
+      val decheckSetTid = _import "GC_HH_decheckSetTid" runtime private:
+        GCState.t * Word64.word -> unit;
+
+      val decheckGetTid = _import "GC_HH_decheckGetTid" runtime private:
+        GCState.t * thread -> Word64.word;
+
+      val decheckJoin = _import "GC_HH_decheckJoin" runtime private:
+        GCState.t * Word64.word * Word64.word -> unit;
+
+      val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
+        runtime private: GCState.t * thread * Word32.word -> unit;
+
       val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word32.word -> unit;
+      val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
    end
 
 structure Weak =

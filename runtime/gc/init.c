@@ -162,6 +162,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("%s affinity-stride missing argument.", atName);
           s->controls->affinityStride = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "debug-keep-free-blocks")) {
+          i++;
+          s->controls->debugKeepFreeBlocks = TRUE;
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -197,6 +200,10 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (!initLogLevels(levelString)) {
             die ("%s log-level invalid argument", atName);
           }
+        } else if (0 == strcmp (arg, "manage-entanglement")) {
+          i++;
+          die ("%s manage-entanglement not supported at the moment", atName);
+          s->controls->manageEntanglement = TRUE;
         } else if (0 == strcmp (arg, "no-load-world")) {
           i++;
           s->controls->mayLoadWorld = FALSE;
@@ -355,6 +362,13 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.minCollectionSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "min-cc-size")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s min-cc-size missing argument.", atName);
+          }
+
+          s->controls->hhConfig.minCCSize = stringToBytes(argv[i++]);
         } else if (0 == strcmp(arg, "min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -397,7 +411,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   assert (sizeofWeak (s) == sizeofWeak (s));
 
   s->amInGC = TRUE;
-  s->amInCC = FALSE;
+  s->currentCCTargetHH = NULL;
+  // s->amInCC = FALSE;
   s->amOriginal = TRUE;
   s->atomicState = 0;
   s->callFromCHandlerThread = BOGUS_OBJPTR;
@@ -418,6 +433,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->ratios.stackShrink = 0.5f;
   s->controls->hhConfig.collectionThresholdRatio = 8.0;
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
+  s->controls->hhConfig.minCCSize = 1024L * 1024L;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
@@ -428,6 +444,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->emptinessFraction = 0.25;
   s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
   s->controls->megablockThreshold = 18;
+  s->controls->manageEntanglement = FALSE;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
@@ -439,6 +456,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->allocChunkSize = 0;
 
   s->controls->freeListCoalesce = FALSE;
+  s->controls->debugKeepFreeBlocks = FALSE;
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
@@ -458,6 +476,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
+  s->numberDisentanglementChecks = 0;
 
   s->signalHandlerThread = BOGUS_OBJPTR;
   s->signalsInfo.amInSignalHandler = FALSE;
@@ -573,7 +592,8 @@ void GC_lateInit(GC_state s) {
 void GC_duplicate (GC_state d, GC_state s) {
   // GC_init
   d->amInGC = s->amInGC;
-  d->amInCC = s->amInCC;
+  d->currentCCTargetHH = NULL;
+  // d->amInCC = s->amInCC;
   d->amOriginal = s->amOriginal;
   d->atomicState = 0;
   d->callFromCHandlerThread = BOGUS_OBJPTR;
@@ -591,6 +611,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
+  d->numberDisentanglementChecks = 0;
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;

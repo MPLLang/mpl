@@ -1010,7 +1010,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                       (extraSelects,
                        Bind
                        {exp = Select {base = Base.Object object,
-                                      offset = objectOffset (obj, i)},
+                                      offset = objectOffset (obj, i),
+                                      readBarrier = false},
                         ty = valueType elt,
                         var = SOME var})
                 in
@@ -1074,7 +1075,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                       end))
              | PrimApp {args, prim} =>
                   make (PrimApp {args = args, prim = prim})
-             | Select {base, offset} =>
+             | Select {base, offset, readBarrier} =>
                   (case var of
                       NONE => none ()
                     | SOME var =>
@@ -1091,7 +1092,8 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                         else (Select
                                               {base = base,
                                                offset = (objectOffset
-                                                         (obj, offset))})))
+                                                         (obj, offset)),
+                                               readBarrier = readBarrier})))
                            | Base.SequenceSub _ => make exp))
              | _ => make exp
          end

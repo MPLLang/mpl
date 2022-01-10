@@ -59,7 +59,8 @@ typedef struct HM_HierarchicalHeap {
     * and their union-find dependants, having a completely separate HH object
     * is nice because then we can free dependants during root CC.
     */
-  struct HM_HierarchicalHeap *subHeapForRootCC;
+  struct HM_HierarchicalHeap *subHeapForCC;
+  struct HM_HierarchicalHeap *subHeapCompletedCC;
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage concurrentPack;
@@ -114,7 +115,7 @@ uint32_t HM_HH_getDepth(HM_HierarchicalHeap hh);
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh);
 
 bool HM_HH_isCCollecting(HM_HierarchicalHeap hh);
-void HM_HH_addRootForCollector(HM_HierarchicalHeap hh, pointer p);
+void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
@@ -143,9 +144,13 @@ size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
 uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
+void HM_HH_forceNewChunk(GC_state s);
 pointer HM_HH_getRoot(pointer threadp);
-void HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
+Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
+void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp);
 void HM_HH_resetList(pointer threadp);
+
+void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh);
 
 
 /** Very fancy (constant-space) loop that frees each dependant union-find

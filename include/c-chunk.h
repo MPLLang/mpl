@@ -54,6 +54,10 @@
 /*                 References                        */
 /* ------------------------------------------------- */
 
+extern void Assignable_writeBarrier(CPointer, Objptr, Objptr*, Objptr);
+extern Objptr Assignable_readBarrier(CPointer, Objptr, Objptr*);
+extern void Assignable_decheckObjptr(Objptr);
+
 static inline
 Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
   Word64 result =
@@ -69,8 +73,15 @@ Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
 #define RefR32_cas(r, x, y) __sync_val_compare_and_swap((Real32*)(r), (x), (y))
 #define RefR64_cas(r, x, y) __sync_val_compare_and_swap((Real64*)(r), (x), (y))
 
-#define RefP_cas(r, x, y) __sync_val_compare_and_swap((Objptr*)(r), (x), (y))
+// #define RefP_cas(r, x, y) __sync_val_compare_and_swap((Objptr*)(r), (x), (y))
 #define RefQ_cas(r, x, y) __sync_val_compare_and_swap((CPointer*)(r), (x), (y))
+
+static inline
+Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
+  Objptr result = __sync_val_compare_and_swap(r, x, y);
+  Assignable_decheckObjptr(result);
+  return result;
+}
 
 #define ArrayW8_cas(a, i, x, y) __sync_val_compare_and_swap(((Word8*)(a)) + (i), (x), (y))
 #define ArrayW16_cas(a, i, x, y) __sync_val_compare_and_swap(((Word16*)(a)) + (i), (x), (y))
@@ -80,13 +91,22 @@ Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
 #define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
 // #define ArrayR64_cas(a, i, x, y) __sync_val_compare_and_swap(((Real64*)(a)) + (i), (x), (y))
 
-#define ArrayP_cas(a, i, x, y) __sync_val_compare_and_swap(((Objptr*)(a)) + (i), (x), (y))
+// #define ArrayP_cas(a, i, x, y) __sync_val_compare_and_swap(((Objptr*)(a)) + (i), (x), (y))
 #define ArrayQ_cas(a, i, x, y) __sync_val_compare_and_swap(((CPointer*)(a)) + (i), (x), (y))
 
-extern void Assignable_writeBarrier(CPointer, Objptr, Objptr*, Objptr);
+static inline
+Objptr ArrayP_cas(Objptr* a, Word64 i, Objptr x, Objptr y) {
+  Objptr result = __sync_val_compare_and_swap(a + i, x, y);
+  Assignable_decheckObjptr(result);
+  return result;
+}
 
 static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {
   Assignable_writeBarrier(s, obj, dst, src);
+}
+
+static inline Objptr GC_readBarrier(CPointer s, Objptr obj, CPointer field) {
+  return Assignable_readBarrier(s, obj, field);
 }
 
 #endif /* #ifndef _C_CHUNK_H_ */

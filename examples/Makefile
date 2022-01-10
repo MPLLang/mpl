@@ -1,6 +1,7 @@
 MPL=../build/bin/mpl
 FLAGS=-default-type int64 -default-type word64
 DBG_FLAGS=-debug true -debug-runtime true -keep g
+TRACE_FLAGS=-trace true -trace-runtime true
 
 PROGRAMS= \
 	fib \
@@ -17,6 +18,7 @@ PROGRAMS= \
 	seam-carve \
 	coins
 
+TRACE_PROGRAMS := $(addsuffix .trace,$(PROGRAMS))
 DBG_PROGRAMS := $(addsuffix .dbg,$(PROGRAMS))
 SYSMPL_PROGRAMS := $(addsuffix .sysmpl,$(PROGRAMS))
 
@@ -35,6 +37,11 @@ $(DBG_PROGRAMS): %.dbg: phony
 	@mkdir -p bin
 	$(MPL) $(FLAGS) $(DBG_FLAGS) -output bin/$*.dbg src/$*/sources.mlb
 	@echo "successfully built bin/$*.dbg"
+
+$(TRACE_PROGRAMS): %.trace: phony
+	@mkdir -p bin
+	$(MPL) $(FLAGS) $(TRACE_FLAGS) -output bin/$*.trace src/$*/sources.mlb
+	@echo "successfully built bin/$*.trace"
 
 $(SYSMPL_PROGRAMS): %.sysmpl: phony
 	@mkdir -p bin

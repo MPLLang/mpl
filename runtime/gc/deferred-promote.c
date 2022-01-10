@@ -13,6 +13,11 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
 
 void bucketIfValid(GC_state s, objptr dst, objptr* field, objptr src, void* args);
 
+struct bucketIfValidArgs {
+  struct HM_chunkList *downPtrs;
+  size_t numLevels;
+};
+
 /* ========================================================================= */
 
 void HM_deferredPromote(
@@ -31,8 +36,12 @@ void HM_deferredPromote(
     HM_initChunkList(&(downPtrs[i]));
   }
 
+  struct bucketIfValidArgs bivArgs =
+    { .downPtrs = &(downPtrs[0]),
+      .numLevels = numLevels };
+
   struct HM_foreachDownptrClosure bucketIfValidClosure =
-  {.fun = bucketIfValid, .env = &(downPtrs[0])};
+  {.fun = bucketIfValid, .env = &bivArgs};
 
   for (HM_HierarchicalHeap cursor = args->hh;
        (NULL != cursor) && (HM_HH_getDepth(cursor) >= args->minDepth);
@@ -157,19 +166,22 @@ bool checkValid(objptr dst, objptr* field, objptr src) {
   if (*field != src) {
     /* Another write to this location has since invalidated this particular
      * remembered entry. */
-    return false;
+    return FALSE;
   }
 
-  uint32_t dstDepth = HM_getObjptrDepth(dst);
-  uint32_t srcDepth = HM_getObjptrDepth(src);
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+  HM_HierarchicalHeap srchh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(src, NULL)));
 
-  assert(dstDepth <= srcDepth);
+  uint32_t dstDepth = dsthh->depth;
+  uint32_t srcDepth = srchh->depth;
 
-  if (dstDepth == srcDepth) {
+  if ( (dstDepth > srcDepth) || (dsthh == srchh) ) {
     /* levels have coincided due to joins, so ignore this entry. */
-    return false;
+    return FALSE;
   }
-  return true;
+  return TRUE;
 }
 
 void bucketIfValidAtList(__attribute__((unused)) GC_state s,
@@ -187,12 +199,12 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
                    objptr dst,
                    objptr* field,
                    objptr src,
-                   void* arg)
+                   void* rawArgs)
 {
-
-  struct HM_chunkList* downPtrs = arg;
+  struct bucketIfValidArgs *args = rawArgs;
   uint32_t dstDepth = HM_getObjptrDepth(dst);
-  bucketIfValidAtList(s, dst, field, src, &(downPtrs[dstDepth]));
+  assert(dstDepth < args->numLevels);
+  bucketIfValidAtList(s, dst, field, src, &(args->downPtrs[dstDepth]));
   // if (checkValid(dst, field, src)) {
   //   struct HM_chunkList* downPtrs = arg;
   //   HM_remember(&(downPtrs[dstDepth]), dst, field, src);
@@ -200,7 +212,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
 }
 
 void promoteDownPtr(__attribute__((unused)) GC_state s,
-                    __attribute__((unused)) objptr dst,
+                    objptr dst,
                     objptr* field,
                     objptr src,
                     void* rawArgs)
@@ -236,8 +248,28 @@ void promoteDownPtr(__attribute__((unused)) GC_state s,
   }
 
   assert(args->fromSpace[args->toDepth] != NULL);
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
-  assert(HM_getObjptrDepth(*field) == args->toDepth);
+  objptr newloc = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = newloc;
+  assert(HM_getObjptrDepth(newloc) == args->toDepth);
+
+  // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
+
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(dst, NULL)));
+  assert(HM_HH_getDepth(dsthh) == args->toDepth);
+
+  if (dsthh != args->fromSpace[args->toDepth]) {
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembering "FMTOBJPTR" at depth %u",
+      newloc,
+      args->toDepth);
+
+    HM_rememberAtLevel(
+      args->fromSpace[args->toDepth],
+      dst,
+      field,
+      newloc);
+  }
 }
 
 /* SAM_NOTE: TODO: DRY: very similar to promoteDownPtr */
@@ -278,6 +310,26 @@ void promoteIfPointingDownIntoLocalScope(GC_state s, objptr* field, void* rawArg
     return;
   }
 
-  *field = relocateObject(s, src, args->fromSpace[args->toDepth], args);
-  assert(HM_getObjptrDepth(*field) == args->toDepth);
+  objptr newloc = relocateObject(s, src, args->fromSpace[args->toDepth], args);
+  *field = newloc;
+  assert(HM_getObjptrDepth(newloc) == args->toDepth);
+
+  // LOG(LM_HH_PROMOTION, LL_INFO, "relocated "FMTOBJPTR" to "FMTOBJPTR, src, newloc);
+
+  HM_HierarchicalHeap dsthh =
+    HM_getLevelHead(HM_getChunkOf(objptrToPointer(args->containingObject, NULL)));
+  assert(HM_HH_getDepth(dsthh) == args->toDepth);
+
+  if (dsthh != args->fromSpace[args->toDepth]) {
+    LOG(LM_HH_PROMOTION, LL_INFO,
+      "remembering "FMTOBJPTR" at depth %u",
+      newloc,
+      args->toDepth);
+
+    HM_rememberAtLevel(
+      args->fromSpace[args->toDepth],
+      args->containingObject,
+      field,
+      newloc);
+  }
 }
