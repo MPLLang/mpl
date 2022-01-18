@@ -475,6 +475,24 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
   return list->usedSize;
 }
 
+pointer HM_storeInchunkList(HM_chunkList chunkList, void* p, size_t objSize) {
+  HM_chunk chunk = HM_getChunkListLastChunk(chunkList);
+  if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < objSize) {
+    chunk = HM_allocateChunk(chunkList, objSize);
+  }
+
+  assert(NULL != chunk);
+  assert(HM_getChunkSizePastFrontier(chunk) >= objSize);
+  pointer frontier = HM_getChunkFrontier(chunk);
+  HM_updateChunkFrontierInList(
+      chunkList,
+      chunk,
+      frontier + objSize);
+
+  memcpy(frontier, p, objSize);
+  return frontier;
+}
+
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);

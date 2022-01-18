@@ -71,26 +71,28 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
     stack->storage[stack->size++] = datum;
 #endif
 
-    HM_chunkList storage = &(stack->storage);
+    HM_storeInchunkList(&(stack->storage), &(datum), sizeof(datum));
 
-    HM_chunk chunk = HM_getChunkListLastChunk(storage);
-    if (NULL == chunk
-        || HM_getChunkSizePastFrontier(chunk) < sizeof(void*))
-    {
-      chunk = HM_allocateChunk(storage, sizeof(void*));
-    }
+    // HM_chunkList storage = &(stack->storage);
 
-    assert(NULL != chunk);
-    assert(HM_getChunkSizePastFrontier(chunk) >= sizeof(void*));
-    pointer frontier = HM_getChunkFrontier(chunk);
+    // HM_chunk chunk = HM_getChunkListLastChunk(storage);
+    // if (NULL == chunk
+    //     || HM_getChunkSizePastFrontier(chunk) < sizeof(void*))
+    // {
+    //   chunk = HM_allocateChunk(storage, sizeof(void*));
+    // }
 
-    HM_updateChunkFrontierInList(
-      storage,
-      chunk,
-      frontier + sizeof(void*));
+    // assert(NULL != chunk);
+    // assert(HM_getChunkSizePastFrontier(chunk) >= sizeof(void*));
+    // pointer frontier = HM_getChunkFrontier(chunk);
 
-    void** r = (void**)frontier;
-    *r = datum;
+    // HM_updateChunkFrontierInList(
+    //   storage,
+    //   chunk,
+    //   frontier + sizeof(void*));
+
+    // void** r = (void**)frontier;
+    // *r = datum;
 
     pthread_mutex_unlock(&stack->mutex);
     return TRUE;
