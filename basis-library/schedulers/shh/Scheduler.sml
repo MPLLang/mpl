@@ -475,6 +475,28 @@ struct
       end
 
 
+    fun contBasedFork (f: unit -> 'a, g: unit -> 'b) =
+      let
+        val cont: ('a result -> ('a * 'b)) ref =
+          ref (fn fr => (extractResult fr, g()))
+
+        fun promote () =
+          let
+            val j = spawn g
+          in
+            cont := (fn fr =>
+              let val gr = sync j
+              in (extractResult fr, extractResult gr)
+              end)
+          end
+
+        val _ = promote ()
+        val fr = result f
+      in
+        (!cont) fr
+      end
+
+
     fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
         val heapId = ref (HH.getRoot thread)
@@ -533,7 +555,8 @@ struct
         else if depth < Queue.capacity andalso
                 depth < maxDisetanglementCheckDepth then
           (* parfork thread depth (f, g) *)
-          simplefork (f, g)
+          (* simplefork (f, g) *)
+          contBasedFork (f, g)
         else
           (* don't let us hit an error, just sequentialize instead *)
           (f (), g ())
