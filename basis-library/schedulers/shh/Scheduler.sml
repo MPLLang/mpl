@@ -263,6 +263,7 @@ struct
     val communicate = communicate
     val getIdleTime = getIdleTime
 
+(*
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
@@ -360,6 +361,118 @@ struct
       in
         (extractResult fr, extractResult gr)
       end
+*)
+
+    datatype 'a joinpoint =
+      J of
+        { rightSideThread: Thread.t option ref
+        , rightSideResult: 'a result option ref
+        , incounter: int ref
+        , tidRight: Word64.word
+        , func: unit -> 'a
+        }
+
+    fun spawn (g: unit -> 'b) : 'b joinpoint =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
+        val rightSideThread = ref (NONE: Thread.t option)
+        val rightSideResult = ref (NONE: 'b result option)
+        val incounter = ref 2
+
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
+        fun g' () =
+          let
+            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            val () = DE.decheckSetTid tidRight
+            val gr = result g
+            val t = Thread.current ()
+          in
+            rightSideThread := SOME t;
+            rightSideResult := SOME gr;
+            if decrementHitsZero incounter then
+              ( setQueueDepth (myWorkerId ()) (depth+1)
+              ; threadSwitch thread
+              )
+            else
+              returnToSched ()
+          end
+        val _ = push (NormalTask g')
+        val _ = HH.setDepth (thread, depth + 1)
+
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
+
+        val _ = DE.decheckSetTid tidLeft
+      in
+        J { rightSideThread = rightSideThread
+          , rightSideResult = rightSideResult
+          , incounter = incounter
+          , tidRight = tidRight
+          , func = g
+          }
+      end
+
+
+    fun sync (J {rightSideThread, rightSideResult, incounter, tidRight, func=g}) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+        val newDepth = depth-1
+        val tidLeft = DE.decheckGetTid thread
+      in
+        if popDiscard () then
+          ( HH.promoteChunks thread
+          ; HH.setDepth (thread, newDepth)
+          ; DE.decheckJoin (tidLeft, tidRight)
+          (* ; HH.forceNewChunk () *)
+          ; let
+              val gr = result g
+            in
+              (* (gr, DE.decheckGetTid thread) *)
+              gr
+            end
+          )
+        else
+          ( clear () (* this should be safe after popDiscard fails? *)
+          ; if decrementHitsZero incounter then () else returnToSched ()
+          ; case HM.refDerefNoBarrier rightSideThread of
+              NONE => die (fn _ => "scheduler bug: join failed")
+            | SOME t =>
+                let
+                  val tidRight = DE.decheckGetTid t
+                in
+                  HH.mergeThreads (thread, t);
+                  HH.promoteChunks thread;
+                  HH.setDepth (thread, newDepth);
+                  DE.decheckJoin (tidLeft, tidRight);
+                  setQueueDepth (myWorkerId ()) newDepth;
+                  case HM.refDerefNoBarrier rightSideResult of
+                    NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                  | SOME gr => gr
+                end
+          )
+      end
+
+
+    fun simplefork (f, g) =
+      let
+        (** This code is a bit deceiving in the sense that spawn and sync, as
+          * defined here, are not as general as they might seem. This code is
+          * only correct because each spawn is paired with exactly one sync,
+          * in a nested fashion (for every spawn, any spawn after it on the
+          * same thread must be sync'ed before the original spawn is sync'ed).
+          *
+          * Deviating from this will cause terrible things to happen.
+          *)
+        val j = spawn g
+        val fr = result f
+        val gr = sync j
+      in
+        (extractResult fr, extractResult gr)
+      end
 
 
     fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
@@ -419,13 +532,28 @@ struct
           forkGC thread depth (f, g)
         else if depth < Queue.capacity andalso
                 depth < maxDisetanglementCheckDepth then
-          parfork thread depth (f, g)
+          (* parfork thread depth (f, g) *)
+          simplefork (f, g)
         else
           (* don't let us hit an error, just sequentialize instead *)
           (f (), g ())
       end
 
     fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
+
+
+
+    (* fun fastfork (f, g) =
+      let
+        val fastCont = ref (fn fr => (fr, g()))
+
+        fun promote() =
+          let
+            val joinpoint = newJoin ()
+          in
+          end
+      in
+      end *)
   end
 
   (* ========================================================================
@@ -484,7 +612,7 @@ struct
       fun afterReturnToSched () =
         case getGCTask myId of
           NONE => (*dbgmsg' (fn _ => "back in sched; no GC task")*) ()
-        | SOME (thread, hh) => 
+        | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
             ;*) setGCTask myId NONE
             ; HH.collectThreadRoot (thread, !hh)
