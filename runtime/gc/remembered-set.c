@@ -6,27 +6,6 @@
 
 void HM_remember(HM_chunkList remSet, HM_remembered remElem) {
   HM_storeInchunkList(remSet, (void*)remElem, sizeof(struct HM_remembered));
-  // HM_chunk chunk = HM_getChunkListLastChunk(remSet);
-  // if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < sizeof(struct HM_remembered)) {
-  //   chunk = HM_allocateChunk(remSet, sizeof(struct HM_remembered));
-  // }
-
-  // assert(NULL != chunk);
-  // assert(HM_getChunkSizePastFrontier(chunk) >= sizeof(struct HM_remembered));
-  // pointer frontier = HM_getChunkFrontier(chunk);
-
-  // HM_updateChunkFrontierInList(
-  //   remSet,
-  //   chunk,
-  //   frontier + sizeof(struct HM_remembered));
-
-  // assert(NULL != remElem);
-
-  // HM_remembered r = (HM_remembered)frontier;
-  // *r = *remElem;
-
-  // assert(r->object == remElem->object);
-  // assert(r->from == remElem->from);
 }
 
 void HM_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem) {

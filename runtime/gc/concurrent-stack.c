@@ -72,28 +72,6 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
 #endif
 
     HM_storeInchunkList(&(stack->storage), &(datum), sizeof(datum));
-
-    // HM_chunkList storage = &(stack->storage);
-
-    // HM_chunk chunk = HM_getChunkListLastChunk(storage);
-    // if (NULL == chunk
-    //     || HM_getChunkSizePastFrontier(chunk) < sizeof(void*))
-    // {
-    //   chunk = HM_allocateChunk(storage, sizeof(void*));
-    // }
-
-    // assert(NULL != chunk);
-    // assert(HM_getChunkSizePastFrontier(chunk) >= sizeof(void*));
-    // pointer frontier = HM_getChunkFrontier(chunk);
-
-    // HM_updateChunkFrontierInList(
-    //   storage,
-    //   chunk,
-    //   frontier + sizeof(void*));
-
-    // void** r = (void**)frontier;
-    // *r = datum;
-
     pthread_mutex_unlock(&stack->mutex);
     return TRUE;
 }
