@@ -205,6 +205,36 @@ uintmax_t GC_numDisentanglementChecks(GC_state s) {
   return count;
 }
 
+uintmax_t GC_numChecksSkipped(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numChecksSkipped;
+  }
+  return count;
+}
+
+uintmax_t GC_numSuspectsMarked(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numSuspectsMarked;
+  }
+  return count;
+}
+
+uintmax_t GC_numSuspectsCleared(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numSuspectsCleared;
+  }
+  return count;
+}
+
 uintmax_t GC_numEntanglementsDetected(GC_state s) {
   uintmax_t count = 0;
   for (uint32_t p = 0; p < s->numberOfProcs; p++) {

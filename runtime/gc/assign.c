@@ -6,18 +6,20 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-
-void Assignable_decheckObjptr(objptr op)
+void Assignable_decheckObjptr(objptr* obj, objptr op)
 {
+  objptr ptr = *obj;
+  if (!isObjptr(ptr))
+    return;
   GC_state s = pthread_getspecific(gcstate_key);
+  assert(ES_contains(NULL, ptr));
   s->cumulativeStatistics->numDisentanglementChecks++;
   decheckRead(s, op);
 }
 
-
 objptr Assignable_readBarrier(
   GC_state s,
-  ARG_USED_FOR_ASSERT objptr obj,
+  objptr obj,
   objptr* field)
 {
 
@@ -53,10 +55,11 @@ objptr Assignable_readBarrier(
     obj,
     (size_t)(objend - objp));
 #endif
-
+  assert(ES_contains(NULL, obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
   decheckRead(s, ptr);
+
   return ptr;
 }
 
@@ -116,8 +119,9 @@ void Assignable_writeBarrier(
 
   /* If src does not reference an object, then no need to check for
    * down-pointers. */
-  if (!isObjptr(src))
+  if (!isObjptr(src)){
     return;
+  }
 
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
@@ -187,20 +191,32 @@ void Assignable_writeBarrier(
     // }
     return;
   }
+  /** Otherwise, its a down-pointer, so
+    *  (i) make dst a suspect for entanglement, i.e., mark the suspect bit of dst's header
+    *      (see pin.h for header-layout).
+    *      the compiler checks this suspect bit and calls the read-barrier
+    *      only when the bit is set.
+    *  (ii) pin the src object
+    *  (iii) remember the down pointer
+    */
 
-  /* Otherwise, remember the pointer! */
+  /* make dst a suspect for entanglement */
+  uint32_t dd = dstHH->depth;
+  GC_thread thread = getThreadCurrent(s);
+  if (dd > 0) {
+    HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, thread, dd);
+    ES_add(s, HM_HH_getSuspects(dhh), dst);
+  }
 
-  bool success = pinObject(src, dstHH->depth);
+  bool success = pinObject(src, dd);
 
   // any concurrent pin can only decrease unpinDepth
   uint32_t unpinDepth = unpinDepthOf(src);
-  assert(unpinDepth <= dstHH->depth);
+  assert(unpinDepth <= dd);
 
-  if (success || dstHH->depth == unpinDepth)
+  if (success || dd == unpinDepth)
   {
-    uint32_t d = srcHH->depth;
-    GC_thread thread = getThreadCurrent(s);
-
+    uint32_t sd = srcHH->depth;
 #if 0
     /** Fix a silly issue where, when we are dealing with entanglement, the
       * lower object is actually deeper than the current thread (which is
@@ -211,10 +227,10 @@ void Assignable_writeBarrier(
       d = thread->currentDepth;
 #endif
 
-    HM_HierarchicalHeap hh = HM_HH_getHeapAtDepth(s, thread, d);
-    assert(NULL != hh);
-    assert(HM_HH_getConcurrentPack(hh)->ccstate == CC_UNREG);
-    HM_rememberAtLevel(hh, remElem);
+    HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, thread, sd);
+    assert(NULL != shh);
+    assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+    HM_rememberAtLevel(shh, remElem);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,

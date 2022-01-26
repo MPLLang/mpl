@@ -82,6 +82,7 @@ typedef GC_state GCState_t;
 #include "gc/parallel.h"
 #include "gc/processor.h"
 #include "gc/pin.h"
+#include "gc/entanglement-suspects.h"
 #include "gc/hierarchical-heap.h"
 #include "gc/hierarchical-heap-ebr.h"
 #include "gc/hierarchical-heap-collection.h"

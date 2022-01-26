@@ -66,6 +66,9 @@ struct GC_cumulativeStatistics {
   uintmax_t numRootCCs;
   uintmax_t numInternalCCs;
   uintmax_t numDisentanglementChecks;
+  uintmax_t numChecksSkipped;
+  uintmax_t numSuspectsMarked;
+  uintmax_t numSuspectsCleared;
   uintmax_t numEntanglementsDetected;
 
   struct timespec timeLocalGC;
