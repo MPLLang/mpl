@@ -44,6 +44,8 @@ void tryUnpinOrKeepPinned(
   HM_remembered remElem,
   void* rawArgs);
 
+void copySuspect(GC_state s, objptr *opp, void *rawArghh);
+
 void forwardObjptrsOfRemembered(
   GC_state s,
   HM_remembered remElem,
@@ -104,13 +106,15 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 enum LGC_freedChunkType {
   LGC_FREED_REMSET_CHUNK,
   LGC_FREED_STACK_CHUNK,
-  LGC_FREED_NORMAL_CHUNK
+  LGC_FREED_NORMAL_CHUNK,
+  LGC_FREED_SUSPECT_CHUNK
 };
 
 static const char* LGC_freedChunkTypeToString[] = {
   "LGC_FREED_REMSET_CHUNK",
   "LGC_FREED_STACK_CHUNK",
-  "LGC_FREED_NORMAL_CHUNK"
+  "LGC_FREED_NORMAL_CHUNK",
+  "LGC_FREED_SUSPECT_CHUNK"
 };
 
 struct LGC_chunkInfo {
@@ -604,6 +608,22 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = LGC_writeFreeChunkInfo, .env = &info};
 
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+       cursor = cursor->nextAncestor) {
+    HM_chunkList suspects = HM_HH_getSuspects(cursor);
+    if (suspects->size != 0) {
+      uint32_t depth = HM_HH_getDepth(cursor);
+      forwardHHObjptrArgs.toDepth = depth;
+      struct GC_foreachObjptrClosure fObjptrClosure =
+        {.fun = copySuspect, .env = &forwardHHObjptrArgs};
+      ES_foreachSuspect(s, suspects, &fObjptrClosure);
+      info.depth = depth;
+      info.freedType = LGC_FREED_SUSPECT_CHUNK;
+      HM_freeChunksInListWithInfo(s, suspects, &infoc);
+    }
+  }
+
   /* Free old chunks and find the tail (upper segment) of the original hh
    * that will be merged with the toSpace */
   HM_HierarchicalHeap hhTail = hh;
@@ -1025,6 +1045,22 @@ void unfreezeDisentangledDepthAfter(
 #endif
 
 /* ========================================================================= */
+void copySuspect(GC_state s, objptr *opp, void *rawArghh)  {
+  struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArghh;
+  objptr op = *opp;
+  assert(isObjptr(op));
+  pointer p = objptrToPointer(op, NULL);
+  objptr new_ptr = op;
+  if (hasFwdPtr(p)) {
+    new_ptr = getFwdPtr(p);
+  }
+  uint32_t opDepth = args->toDepth;
+  if (NULL == args->toSpace[opDepth])
+  {
+    args->toSpace[opDepth] = HM_HH_new(s, opDepth);
+  }
+  HM_storeInchunkList(HM_HH_getSuspects(args->toSpace[opDepth]), &new_ptr, sizeof(objptr));
+}
 
 void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;

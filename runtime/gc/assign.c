@@ -19,8 +19,8 @@ void Assignable_decheckObjptr(objptr* obj, objptr op)
 
 objptr Assignable_readBarrier(
   GC_state s,
-  objptr obj,
-  objptr* field)
+  ARG_USED_FOR_ASSERT objptr obj,
+  objptr *field)
 {
 
 #if ASSERT

@@ -74,13 +74,14 @@ void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)
   HM_storeInchunkList(es, &op, sizeof(objptr));
 }
 
-void forEachObjptrInProcSet(
+int ES_foreachSuspect(
     GC_state s,
     HM_chunkList storage,
     GC_foreachObjptrClosure fObjptrClosure)
 {
   if (storage == NULL)
-    return;
+    return 0;
+  int count = 0;
   HM_chunk chunk = HM_getChunkListFirstChunk(storage);
   while (chunk != NULL)
   {
@@ -89,12 +90,13 @@ void forEachObjptrInProcSet(
     while (p < frontier)
     {
       // objptr* opp = (objptr*)p;
-      s->cumulativeStatistics->numSuspectsCleared++;
       callIfIsObjptr(s, fObjptrClosure, (objptr *)p);
       p += sizeof(void *);
     }
+    count += ((int)(frontier - HM_getChunkStart(chunk)))/(sizeof(void*));
     chunk = chunk->nextChunk;
   }
+  return count;
 }
 
 HM_chunkList ES_append(
@@ -111,6 +113,8 @@ void ES_clear(GC_state s, HM_chunkList es)
 {
   struct GC_foreachObjptrClosure fObjptrClosure =
     {.fun = clear_suspect, .env = NULL};
-  forEachObjptrInProcSet(s, es, &fObjptrClosure);
+  int numSuspects = ES_foreachSuspect(s, es, &fObjptrClosure);
+  s->cumulativeStatistics->numSuspectsCleared+=numSuspects;
+
   HM_freeChunksInList(s, es);
 }
