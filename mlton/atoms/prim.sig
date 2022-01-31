@@ -102,6 +102,7 @@ signature PRIM =
        | MLton_share (* to rssa (as nop or runtime C fn) *)
        | MLton_size (* to rssa (as runtime C fn) *)
        | MLton_touch (* to rssa (as nop) or backend (as nop) *)
+       | ParWrap (* defunctorize *)
        | Real_Math_acos of RealSize.t (* codegen *)
        | Real_Math_asin of RealSize.t (* codegen *)
        | Real_Math_atan of RealSize.t (* codegen *)

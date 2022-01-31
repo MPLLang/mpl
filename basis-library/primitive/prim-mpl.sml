@@ -10,6 +10,13 @@ open Primitive
 structure MPL =
 struct
 
+  structure ForkJoin =
+  struct
+    type 'a thunk = unit -> 'a
+    val parWrapper = _prim "parWrap":
+      ('a thunk * 'b thunk -> 'a * 'b) * 'a thunk * 'b thunk -> 'a * 'b;
+  end
+
   structure File =
   struct
     val copyCharsToBuffer = _import "GC_memcpyToBuffer" runtime private:

@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor Defunctorize (S: DEFUNCTORIZE_STRUCTS): DEFUNCTORIZE = 
+functor Defunctorize (S: DEFUNCTORIZE_STRUCTS): DEFUNCTORIZE =
 struct
 
 open S
@@ -146,16 +146,16 @@ fun casee {ctxt: unit -> Layout.t,
                if let
                      open Control
                   in
-                     !profile <> ProfileNone 
+                     !profile <> ProfileNone
                      andalso !profileIL = ProfileSource
                      andalso !profileRaise
                   end
                   then case mayWrap of
                           NONE => exp
-                        | SOME kind => 
-                             enterLeave 
+                        | SOME kind =>
+                             enterLeave
                              (exp, caseType,
-                              SourceInfo.function 
+                              SourceInfo.function
                               {name = (concat ["<raise ", kind, ">"]) :: nest,
                                region = region})
                else exp
@@ -181,7 +181,7 @@ fun casee {ctxt: unit -> Layout.t,
              | RaiseBind => raiseExn (fn _ => Xexp.bind, SOME "Bind")
              | RaiseMatch => raiseExn (fn _ => Xexp.match, SOME "Match")
          end
-      fun matchCompile () =                                  
+      fun matchCompile () =
          let
             val testVar = Var.newNoname ()
             val decs = ref []
@@ -552,8 +552,8 @@ fun defunctorize (CoreML.Program.T {decs}) =
          Property.getSetOnce (Tycon.plist,
                               Property.initRaise ("tyconCons", Tycon.layout))
       val setConTycon =
-         Trace.trace2 
-         ("Defunctorize.setConTycon", 
+         Trace.trace2
+         ("Defunctorize.setConTycon",
           Con.layout, Tycon.layout, Unit.layout)
          setConTycon
       val datatypes = ref []
@@ -628,7 +628,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                               ; {arg = Option.map (arg, loopTy),
                                  con = con}))
 
-                         val _ = 
+                         val _ =
                             if Tycon.equals (tycon, Tycon.reff)
                                then ()
                             else
@@ -675,7 +675,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
             val (p, t) = Cpat.dest p
             val t' = loopTy t
             datatype z = datatype Cpat.node
-            val p = 
+            val p =
                case p of
                   Con {arg, con, targs} =>
                      NestedPat.Con {arg = Option.map (arg, loopPat),
@@ -956,7 +956,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                                       con = con,
                                       targs = conTargs (con, targs),
                                       ty = ty}
-                         | _ => 
+                         | _ =>
                               Xexp.app {arg = e2,
                                         func = #1 (loopExp e1),
                                         ty = ty}
@@ -1044,7 +1044,8 @@ fun defunctorize (CoreML.Program.T {decs}) =
                      end
                 | PrimApp {args, prim, targs} =>
                      let
-                        val args = Vector.map (args, #1 o loopExp)
+                        val argsWithTypes = Vector.map (args, loopExp)
+                        val (args, tys) = Vector.unzip argsWithTypes
                      in
                         if (case prim of
                                Prim.Real_rndToReal (s1, s2) =>
@@ -1055,6 +1056,12 @@ fun defunctorize (CoreML.Program.T {decs}) =
                              | Prim.Word8Vector_toString => true
                              | _ => false)
                            then Vector.first args
+                        else if (case prim of Prim.ParWrap => true | _ => false) then
+                           Xexp.app {func = Vector.sub (args, 0),
+                                     arg = Xexp.tuple
+                                        {exps = Vector.new2 (Vector.sub (args, 1), Vector.sub (args, 2)),
+                                         ty = Xtype.tuple (Vector.new2 (Vector.sub (tys, 1), Vector.sub (tys, 2)))},
+                                     ty = ty}
                         else
                            Xexp.primApp {args = args,
                                          prim = Prim.map (prim, loopTy),
@@ -1064,7 +1071,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                      end
                 | Raise e => Xexp.raisee {exn = #1 (loopExp e), extend = true, ty = ty}
                 | Record r =>
-                     (* The components of the record have to be evaluated left to 
+                     (* The components of the record have to be evaluated left to
                       * right as they appeared in the source program, but then
                       * ordered according to sorted field name within the tuple.
                       *)

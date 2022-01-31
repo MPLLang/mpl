@@ -112,6 +112,7 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
+ | ParWrap (* defunctorize *)
  | Real_Math_acos of RealSize.t (* codegen *)
  | Real_Math_asin of RealSize.t (* codegen *)
  | Real_Math_atan of RealSize.t (* codegen *)
@@ -289,6 +290,7 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
+       | ParWrap => "parWrap"
        | Real_Math_acos s => real (s, "Math_acos")
        | Real_Math_asin s => real (s, "Math_asin")
        | Real_Math_atan s => real (s, "Math_atan")
@@ -449,6 +451,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
+    | (ParWrap, ParWrap) => true
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
     | (Real_Math_asin s, Real_Math_asin s') => RealSize.equals (s, s')
     | (Real_Math_atan s, Real_Math_atan s') => RealSize.equals (s, s')
@@ -630,6 +633,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
+    | ParWrap => ParWrap
     | Real_Math_acos z => Real_Math_acos z
     | Real_Math_asin z => Real_Math_asin z
     | Real_Math_atan z => Real_Math_atan z
@@ -837,6 +841,7 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
+       | ParWrap => Functional
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_asin _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_atan _ => DependsOnState (* depends on rounding mode *)
@@ -1044,6 +1049,7 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
+       ParWrap,
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
        Ref_cas NONE,
@@ -1368,6 +1374,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
+       | ParWrap => false (* par should be eliminated before we need to check? *)
        | Real_Math_acos s => realUnary s
        | Real_Math_asin s => realUnary s
        | Real_Math_atan s => realUnary s
@@ -1478,6 +1485,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                                        deWeak: 'a -> 'a}}) =
    let
       val one = Vector.new1
+      val two = Vector.new2
       fun arg i = Vector.sub (args, i)
       datatype z = datatype t
    in
@@ -1507,6 +1515,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
+       | ParWrap => two (#2 (deArrow (arg 1)), #2 (deArrow (arg 2)))
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref _ => one (deRef (arg 0))
