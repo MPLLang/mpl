@@ -363,17 +363,90 @@ struct
       end
 *)
 
+    val maxPermittedCCDepth = 3
+
+
+    datatype gc_joinpoint =
+      GCJ of {gcTaskData: gctask_data option}
+      (** The fact that the gcTaskData is an option here is a questionable
+        * hack... the data will always be SOME. But unwrapping it may affect
+        * how many allocations occur when spawning a gc task, which in turn
+        * affects the GC snapshot, which is already murky.
+        *)
+
+
+    fun spawnGC () : gc_joinpoint option =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+      in
+        if depth > maxPermittedCCDepth then
+          NONE
+        else
+          let
+            val heapId = ref (HH.getRoot thread)
+            val gcTaskTuple = (thread, heapId)
+            val gcTaskData = SOME gcTaskTuple
+            val gcTask = GCTask gcTaskTuple
+            val cont_arr1 = ref NONE
+            val cont_arr2 = ref NONE
+            val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+
+            (** The above could trigger a local GC and invalidate the hh
+              * identifier... :'(
+              *)
+            val _ = heapId := HH.getRoot thread
+          in
+            if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
+              NONE
+            else
+              let
+                val _ = push gcTask
+                val _ = HH.setDepth (thread, depth + 1)
+                val _ = HH.forceLeftHeap(myWorkerId(), thread)
+              in
+                SOME (GCJ {gcTaskData = gcTaskData})
+              end
+          end
+      end
+
+
+    fun syncGC (GCJ {gcTaskData}) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+        val newDepth = depth-1
+      in
+        if popDiscard() then
+          ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+          ; push (Continuation (thread, newDepth))
+          ; returnToSched ()
+          )
+        else
+          ( clear()
+          ; setQueueDepth (myWorkerId ()) newDepth
+          );
+
+        HH.promoteChunks thread;
+        HH.setDepth (thread, newDepth)
+      end
+
+
     datatype 'a joinpoint =
       J of
         { rightSideThread: Thread.t option ref
         , rightSideResult: 'a result option ref
         , incounter: int ref
         , tidRight: Word64.word
+        , gcj: gc_joinpoint option
         , func: unit -> 'a
         }
 
+
     fun spawn (g: unit -> 'b) : 'b joinpoint =
       let
+        val gcj = spawnGC ()
+
         val thread = Thread.current ()
         val depth = HH.getDepth thread
 
@@ -411,49 +484,63 @@ struct
           , rightSideResult = rightSideResult
           , incounter = incounter
           , tidRight = tidRight
+          , gcj = gcj
           , func = g
           }
       end
 
 
-    fun sync (J {rightSideThread, rightSideResult, incounter, tidRight, func=g}) =
+    fun sync (J { rightSideThread
+                , rightSideResult
+                , incounter
+                , tidRight
+                , gcj
+                , func=g
+                }) =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
         val newDepth = depth-1
         val tidLeft = DE.decheckGetTid thread
+
+        val result =
+          if popDiscard () then
+            ( HH.promoteChunks thread
+            ; HH.setDepth (thread, newDepth)
+            ; DE.decheckJoin (tidLeft, tidRight)
+            (* ; HH.forceNewChunk () *)
+            ; let
+                val gr = result g
+              in
+                (* (gr, DE.decheckGetTid thread) *)
+                gr
+              end
+            )
+          else
+            ( clear () (* this should be safe after popDiscard fails? *)
+            ; if decrementHitsZero incounter then () else returnToSched ()
+            ; case HM.refDerefNoBarrier rightSideThread of
+                NONE => die (fn _ => "scheduler bug: join failed")
+              | SOME t =>
+                  let
+                    val tidRight = DE.decheckGetTid t
+                  in
+                    HH.mergeThreads (thread, t);
+                    HH.promoteChunks thread;
+                    HH.setDepth (thread, newDepth);
+                    DE.decheckJoin (tidLeft, tidRight);
+                    setQueueDepth (myWorkerId ()) newDepth;
+                    case HM.refDerefNoBarrier rightSideResult of
+                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                    | SOME gr => gr
+                  end
+            )
       in
-        if popDiscard () then
-          ( HH.promoteChunks thread
-          ; HH.setDepth (thread, newDepth)
-          ; DE.decheckJoin (tidLeft, tidRight)
-          (* ; HH.forceNewChunk () *)
-          ; let
-              val gr = result g
-            in
-              (* (gr, DE.decheckGetTid thread) *)
-              gr
-            end
-          )
-        else
-          ( clear () (* this should be safe after popDiscard fails? *)
-          ; if decrementHitsZero incounter then () else returnToSched ()
-          ; case HM.refDerefNoBarrier rightSideThread of
-              NONE => die (fn _ => "scheduler bug: join failed")
-            | SOME t =>
-                let
-                  val tidRight = DE.decheckGetTid t
-                in
-                  HH.mergeThreads (thread, t);
-                  HH.promoteChunks thread;
-                  HH.setDepth (thread, newDepth);
-                  DE.decheckJoin (tidLeft, tidRight);
-                  setQueueDepth (myWorkerId ()) newDepth;
-                  case HM.refDerefNoBarrier rightSideResult of
-                    NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                  | SOME gr => gr
-                end
-          )
+        case gcj of
+          NONE => ()
+        | SOME gcj => syncGC gcj;
+
+        result
       end
 
 
@@ -494,66 +581,6 @@ struct
         val fr = result f
       in
         (!cont) fr
-      end
-
-
-    datatype gc_joinpoint =
-      GCJ of {gcTaskData: gctask_data option}
-      (** The fact that the gcTaskData is an option here is a questionable
-        * hack... the data will always be SOME. But unwrapping it may affect
-        * how many allocations occur when spawning a gc task, which in turn
-        * affects the GC snapshot, which is already murky.
-        *)
-
-
-    fun spawnGC () : gc_joinpoint option =
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val heapId = ref (HH.getRoot thread)
-        val gcTaskTuple = (thread, heapId)
-        val gcTaskData = SOME gcTaskTuple
-        val gcTask = GCTask gcTaskTuple
-        val cont_arr1 = ref NONE
-        val cont_arr2 = ref NONE
-        val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
-
-        (** The above could trigger a local GC and invalidate the hh
-          * identifier... :'(
-          *)
-        val _ = heapId := HH.getRoot thread
-      in
-        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
-          NONE
-        else
-          let
-            val _ = push gcTask
-            val _ = HH.setDepth (thread, depth + 1)
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
-          in
-            SOME (GCJ {gcTaskData = gcTaskData})
-          end
-      end
-
-
-    fun syncGC (GCJ {gcTaskData}) =
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
-      in
-        if popDiscard() then
-          ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, newDepth))
-          ; returnToSched ()
-          )
-        else
-          ( clear()
-          ; setQueueDepth (myWorkerId ()) newDepth
-          );
-
-        HH.promoteChunks thread;
-        HH.setDepth (thread, newDepth)
       end
 
 
@@ -606,6 +633,7 @@ struct
       end
 *)
 
+(*
     fun simpleForkGC (f, g) =
       case spawnGC () of
         NONE => fork' {ccOkayAtThisDepth=false} (f, g)
@@ -636,8 +664,19 @@ struct
           (* don't let us hit an error, just sequentialize instead *)
           (f (), g ())
       end
+*)
 
-    fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
+    fun fork (f, g) =
+      let
+        val depth = HH.getDepth (Thread.current ())
+      in
+        if depth < Queue.capacity andalso depth < maxDisetanglementCheckDepth
+        then
+          (* simplefork (f, g) *)
+          contBasedFork (f, g)
+        else
+          (f (), g ())
+      end
 
 
 
