@@ -232,8 +232,7 @@ HM_HierarchicalHeap HM_HH_zip(
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
       HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
-      // union es_sets
-      HM_appendChunkList(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
+      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
       linkCCChains(s, hh1, hh2);
 
       // This has to happen before linkInto (which frees hh2)
@@ -381,7 +380,7 @@ void HM_HH_promoteChunks(
       assert(NULL == hh->subHeapCompletedCC);
       HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
       HM_appendChunkList(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
-      HM_appendChunkList(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
+      ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
       linkCCChains(s, parent, hh);
       /* shortcut.  */
       thread->hierarchicalHeap = parent;
@@ -428,7 +427,7 @@ void HM_HH_promoteChunks(
       hh->depth--;
       /* in this case, hh becomes the primary, so we store suspects in hh instead.
       */
-      HM_appendChunkList(HM_HH_getSuspects(hh), HM_HH_getSuspects(parent));
+      ES_move(HM_HH_getSuspects(hh), HM_HH_getSuspects(parent));
 
 #if 0
       linkCCChains(s, hh, parent);
@@ -679,8 +678,7 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   newHH->subHeapCompletedCC = completed;
   newHH->nextAncestor = hh->nextAncestor;
   hh->nextAncestor = NULL;
-  *(HM_HH_getSuspects(newHH)) = *(HM_HH_getSuspects(hh));
-
+  ES_move(HM_HH_getSuspects(newHH), HM_HH_getSuspects(hh));
   assertCCChainInvariants(newHH);
 }
 

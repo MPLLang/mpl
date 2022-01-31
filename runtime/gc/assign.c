@@ -6,13 +6,10 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-void Assignable_decheckObjptr(objptr* obj, objptr op)
+void Assignable_decheckObjptr(ARG_USED_FOR_ASSERT objptr *obj, objptr op)
 {
-  objptr ptr = *obj;
-  if (!isObjptr(ptr))
-    return;
   GC_state s = pthread_getspecific(gcstate_key);
-  assert(ES_contains(NULL, ptr));
+  assert(!isObjptr(*obj) || ES_contains(NULL, *obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   decheckRead(s, op);
 }
@@ -203,7 +200,7 @@ void Assignable_writeBarrier(
   /* make dst a suspect for entanglement */
   uint32_t dd = dstHH->depth;
   GC_thread thread = getThreadCurrent(s);
-  if (dd > 0) {
+  if (dd > 0 && !ES_contains(NULL, dst)) {
     HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, thread, dd);
     ES_add(s, HM_HH_getSuspects(dhh), dst);
   }

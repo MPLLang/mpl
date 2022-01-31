@@ -1054,6 +1054,12 @@ void copySuspect(GC_state s, objptr *opp, void *rawArghh)  {
   if (hasFwdPtr(p)) {
     new_ptr = getFwdPtr(p);
   }
+  else if (!isPinned(op)) {
+    /* the suspect does not have a fwd-ptr and is not pinned
+     * ==> its garbage, so skip it
+     */
+    return;
+  }
   uint32_t opDepth = args->toDepth;
   if (NULL == args->toSpace[opDepth])
   {

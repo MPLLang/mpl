@@ -14,6 +14,8 @@ HM_chunkList ES_append (GC_state s, HM_chunkList es1, HM_chunkList es2);
 
 void ES_clear(GC_state s, HM_chunkList es);
 
+void ES_move(HM_chunkList list1, HM_chunkList list2);
+
 int ES_foreachSuspect(GC_state s, HM_chunkList storage, struct GC_foreachObjptrClosure* fObjptrClosure);
 
 #endif

@@ -1,28 +1,15 @@
+static inline bool suspicious_header(GC_header h) {
+  return (1 == ((h & SUSPECT_MASK) >> SUSPECT_SHIFT));
+}
+
 static inline bool mark_suspect(objptr op)
 {
   pointer p = objptrToPointer(op, NULL);
-  while (TRUE)
-  {
-    GC_header header = getHeader(p);
-    GC_header newHeader = header | SUSPECT_MASK;
-    if (header == newHeader)
-    {
-      /*
-        just return because the suspect bit is already set
-      */
-      return false;
-    }
-    else
-    {
-      /*
-        otherwise, install the new header with the bit set. this might fail
-        if a concurrent thread changes the header first.
-      */
-      if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader))
-        return true;
-    }
-  }
-  DIE("should be impossible to reach here");
+  GC_header header = __sync_fetch_and_or(getHeaderp(p), SUSPECT_MASK);
+  assert (1 == (header & GC_VALID_HEADER_MASK));
+
+  /*return true if this call marked the header, false if someone else did*/
+  return !suspicious_header(header);
 }
 
 static inline bool is_suspect(objptr op)
@@ -33,8 +20,7 @@ static inline bool is_suspect(objptr op)
   /* have to check first that the header is valid
    * (otherwise, there could be a forward pointer in this spot)
    */
-  return (1 == (h & GC_VALID_HEADER_MASK)) &&
-         (1 == ((h & SUSPECT_MASK) >> SUSPECT_SHIFT));
+  return (1 == (h & GC_VALID_HEADER_MASK)) && suspicious_header(h);
 }
 
 void clear_suspect(
@@ -43,18 +29,9 @@ void clear_suspect(
     __attribute__((unused)) void *rawArgs)
 {
   objptr op = *opp;
-  assert(isObjptr(op));
   pointer p = objptrToPointer(op, NULL);
-  while (TRUE)
-  {
-    assert(is_suspect(op)); // no one else should clear it!
-    GC_header header = getHeader(p);
-    GC_header newHeader = header & (~SUSPECT_MASK);
-    // the header may be updated concurrently by a CC
-    if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader))
-      return;
-  }
-  DIE("should be impossible to reach here");
+  assert(isObjptr(op) && is_suspect(p));
+  __sync_fetch_and_add(getHeaderp(p), ~(SUSPECT_MASK));
 }
 
 bool ES_contains(__attribute__((unused)) HM_chunkList es, objptr op)
@@ -107,6 +84,11 @@ HM_chunkList ES_append(
   assert(es1 != NULL);
   HM_appendChunkList(es1 ,es2);
   return es1;
+}
+
+void ES_move(HM_chunkList list1, HM_chunkList list2) {
+  HM_appendChunkList(list1, list2);
+  HM_initChunkList(list2);
 }
 
 void ES_clear(GC_state s, HM_chunkList es)
