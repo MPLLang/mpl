@@ -497,6 +497,67 @@ struct
       end
 
 
+    datatype gc_joinpoint =
+      GCJ of {gcTaskData: gctask_data option}
+      (** The fact that the gcTaskData is an option here is a questionable
+        * hack... the data will always be SOME. But unwrapping it may affect
+        * how many allocations occur when spawning a gc task, which in turn
+        * affects the GC snapshot, which is already murky.
+        *)
+
+
+    fun spawnGC () : gc_joinpoint option =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+        val heapId = ref (HH.getRoot thread)
+        val gcTaskTuple = (thread, heapId)
+        val gcTaskData = SOME gcTaskTuple
+        val gcTask = GCTask gcTaskTuple
+        val cont_arr1 = ref NONE
+        val cont_arr2 = ref NONE
+        val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+
+        (** The above could trigger a local GC and invalidate the hh
+          * identifier... :'(
+          *)
+        val _ = heapId := HH.getRoot thread
+      in
+        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
+          NONE
+        else
+          let
+            val _ = push gcTask
+            val _ = HH.setDepth (thread, depth + 1)
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+          in
+            SOME (GCJ {gcTaskData = gcTaskData})
+          end
+      end
+
+
+    fun syncGC (GCJ {gcTaskData}) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+        val newDepth = depth-1
+      in
+        if popDiscard() then
+          ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+          ; push (Continuation (thread, newDepth))
+          ; returnToSched ()
+          )
+        else
+          ( clear()
+          ; setQueueDepth (myWorkerId ()) newDepth
+          );
+
+        HH.promoteChunks thread;
+        HH.setDepth (thread, newDepth)
+      end
+
+
+(*
     fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
         val heapId = ref (HH.getRoot thread)
@@ -543,6 +604,19 @@ struct
             result
           end
       end
+*)
+
+    fun simpleForkGC (f, g) =
+      case spawnGC () of
+        NONE => fork' {ccOkayAtThisDepth=false} (f, g)
+      | SOME gcj =>
+          let
+            val result = fork' {ccOkayAtThisDepth=false} (f, g)
+          in
+            syncGC gcj;
+            result
+          end
+
 
     and fork' {ccOkayAtThisDepth} (f, g) =
       let
@@ -551,7 +625,8 @@ struct
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
         if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
-          forkGC thread depth (f, g)
+          (* forkGC thread depth (f, g) *)
+          simpleForkGC (f, g)
         else if depth < Queue.capacity andalso
                 depth < maxDisetanglementCheckDepth then
           (* parfork thread depth (f, g) *)
