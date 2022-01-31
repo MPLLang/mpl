@@ -6,10 +6,9 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-void Assignable_decheckObjptr(ARG_USED_FOR_ASSERT objptr *obj, objptr op)
+void Assignable_decheckObjptr(objptr op)
 {
   GC_state s = pthread_getspecific(gcstate_key);
-  assert(!isObjptr(*obj) || ES_contains(NULL, *obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   decheckRead(s, op);
 }
