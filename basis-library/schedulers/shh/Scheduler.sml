@@ -443,50 +443,60 @@ struct
         }
 
 
-    fun spawn (g: unit -> 'b) : 'b joinpoint =
+    fun spawn (g: unit -> 'b) : 'b joinpoint option =
       let
-        val gcj = spawnGC ()
-
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-
-        val rightSideThread = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: 'b result option)
-        val incounter = ref 2
-
-        val (tidLeft, tidRight) = DE.decheckFork ()
-
-        fun g' () =
-          let
-            val () = DE.copySyncDepthsFromThread (thread, depth+1)
-            val () = DE.decheckSetTid tidRight
-            val gr = result g
-            val t = Thread.current ()
-          in
-            rightSideThread := SOME t;
-            rightSideResult := SOME gr;
-            if decrementHitsZero incounter then
-              ( setQueueDepth (myWorkerId ()) (depth+1)
-              ; threadSwitch thread
-              )
-            else
-              returnToSched ()
-          end
-        val _ = push (NormalTask g')
-        val _ = HH.setDepth (thread, depth + 1)
-
-        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
-        val _ = recordForkDepth depth
-
-        val _ = DE.decheckSetTid tidLeft
+        val depth = HH.getDepth (Thread.current ())
       in
-        J { rightSideThread = rightSideThread
-          , rightSideResult = rightSideResult
-          , incounter = incounter
-          , tidRight = tidRight
-          , gcj = gcj
-          , func = g
-          }
+        if depth >= Queue.capacity orelse depth >= maxDisetanglementCheckDepth
+        then
+          NONE
+        else
+
+        let
+          val gcj = spawnGC ()
+
+          val thread = Thread.current ()
+          val depth = HH.getDepth thread
+
+          val rightSideThread = ref (NONE: Thread.t option)
+          val rightSideResult = ref (NONE: 'b result option)
+          val incounter = ref 2
+
+          val (tidLeft, tidRight) = DE.decheckFork ()
+
+          fun g' () =
+            let
+              val () = DE.copySyncDepthsFromThread (thread, depth+1)
+              val () = DE.decheckSetTid tidRight
+              val gr = result g
+              val t = Thread.current ()
+            in
+              rightSideThread := SOME t;
+              rightSideResult := SOME gr;
+              if decrementHitsZero incounter then
+                ( setQueueDepth (myWorkerId ()) (depth+1)
+                ; threadSwitch thread
+                )
+              else
+                returnToSched ()
+            end
+          val _ = push (NormalTask g')
+          val _ = HH.setDepth (thread, depth + 1)
+
+          (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+          val _ = recordForkDepth depth
+
+          val _ = DE.decheckSetTid tidLeft
+        in
+          SOME (J
+            { rightSideThread = rightSideThread
+            , rightSideResult = rightSideResult
+            , incounter = incounter
+            , tidRight = tidRight
+            , gcj = gcj
+            , func = g
+            })
+        end
       end
 
 
@@ -556,9 +566,15 @@ struct
           *)
         val j = spawn g
         val fr = result f
-        val gr = sync j
       in
-        (extractResult fr, extractResult gr)
+        case j of
+          NONE => (extractResult fr, g ())
+        | SOME j =>
+            let
+              val gr = sync j
+            in
+              (extractResult fr, extractResult gr)
+            end
       end
 
 
@@ -567,17 +583,18 @@ struct
         val cont: ('a result -> ('a * 'b)) ref =
           ref (fn fr => (extractResult fr, g()))
 
-        fun promote () =
-          let
-            val j = spawn g
-          in
-            cont := (fn fr =>
-              let val gr = sync j
-              in (extractResult fr, extractResult gr)
-              end)
-          end
+        fun activate () =
+          case spawn g of
+            NONE => ()
+          | SOME j =>
+              cont := (fn fr =>
+                let
+                  val gr = sync j
+                in
+                  (extractResult fr, extractResult gr)
+                end)
 
-        val _ = promote ()
+        val _ = activate ()
         val fr = result f
       in
         (!cont) fr
@@ -667,30 +684,8 @@ struct
 *)
 
     fun fork (f, g) =
-      let
-        val depth = HH.getDepth (Thread.current ())
-      in
-        if depth < Queue.capacity andalso depth < maxDisetanglementCheckDepth
-        then
-          (* simplefork (f, g) *)
-          contBasedFork (f, g)
-        else
-          (f (), g ())
-      end
+      contBasedFork (f, g)
 
-
-
-    (* fun fastfork (f, g) =
-      let
-        val fastCont = ref (fn fr => (fr, g()))
-
-        fun promote() =
-          let
-            val joinpoint = newJoin ()
-          in
-          end
-      in
-      end *)
   end
 
   (* ========================================================================
@@ -862,7 +857,8 @@ struct
   open Scheduler.ForkJoin
 
   fun par (f, g) =
-    Primitive.MPL.ForkJoin.parWrapper (fork, f, g)
+    (* Primitive.MPL.ForkJoin.parWrapper (fork, f, g) *)
+    fork (f, g)
 
   fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
 
