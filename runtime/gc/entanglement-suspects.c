@@ -5,11 +5,32 @@ static inline bool suspicious_header(GC_header h) {
 static inline bool mark_suspect(objptr op)
 {
   pointer p = objptrToPointer(op, NULL);
-  GC_header header = __sync_fetch_and_or(getHeaderp(p), SUSPECT_MASK);
-  assert (1 == (header & GC_VALID_HEADER_MASK));
-
+  // GC_header header = __sync_fetch_and_or(getHeaderp(p), SUSPECT_MASK);
+  // assert (1 == (header & GC_VALID_HEADER_MASK));
+  while (TRUE)
+  {
+    GC_header header = getHeader(p);
+    GC_header newHeader = header | SUSPECT_MASK;
+    if (header == newHeader)
+    {
+      /*
+         just return because the suspect bit is already set
+       */
+      return false;
+    }
+    else
+    {
+      /*
+         otherwise, install the new header with the bit set. this might fail
+         if a concurrent thread changes the header first.
+       */
+      if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader))
+        return true;
+    }
+  }
+  DIE("should be impossible to reach here");
   /*return true if this call marked the header, false if someone else did*/
-  return !suspicious_header(header);
+  // return !suspicious_header(header);
 }
 
 static inline bool is_suspect(objptr op)
@@ -28,10 +49,21 @@ void clear_suspect(
     objptr *opp,
     __attribute__((unused)) void *rawArgs)
 {
+
   objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
-  assert(isObjptr(op) && is_suspect(p));
-  __sync_fetch_and_add(getHeaderp(p), ~(SUSPECT_MASK));
+  while (TRUE)
+  {
+    assert(is_suspect(op)); // no one else should clear it!
+    GC_header header = getHeader(p);
+    GC_header newHeader = header & (~SUSPECT_MASK);
+    // the header may be updated concurrently by a CC
+    if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader))
+      return;
+  }
+  DIE("should be impossible to reach here");
+  // assert(isObjptr(op) && is_suspect(p));
+  // __sync_fetch_and_add(getHeaderp(p), ~(SUSPECT_MASK));
 }
 
 bool ES_contains(__attribute__((unused)) HM_chunkList es, objptr op)
