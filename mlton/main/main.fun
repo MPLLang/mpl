@@ -74,6 +74,7 @@ val llvm_optOpts: {opt: string, pred: OptPred.t} list ref = ref []
 
 val debugRuntime: bool ref = ref false
 val traceRuntime: bool ref = ref false
+val detectEntanglementRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunkify: Control.Chunkify.t option ref = ref NONE
@@ -342,7 +343,11 @@ fun makeOptions {usage} =
        end,
        (Normal, "detect-entanglement", " {false|true}",
         "detect entanglement dynamically during execution",
-        Bool (fn b => detectEntanglement := b)),
+        Bool (fn b => (detectEntanglement := b
+                       ; detectEntanglementRuntime := b))),
+       (Expert, "detect-entanglement-runtime", " {false|true}",
+        "link with detect-entanglement runtime",
+        Bool (fn b => detectEntanglementRuntime := b)),
        (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
         boolRef traceRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
@@ -1118,6 +1123,7 @@ fun commandLine (args: string list): unit =
          fun addMD s =
             if !debugRuntime then s ^ "-dbg" else
             if !traceRuntime then s ^ "-trace" else
+            if !detectEntanglementRuntime then s ^ "-detect" else
             s
          fun addPI s =
             s ^ (Control.PositionIndependentStyle.toSuffix positionIndependentStyle)
@@ -1457,6 +1463,8 @@ fun commandLine (args: string list): unit =
                              positionIndependentStyle,
                              if !traceRuntime
                              then ["-DENABLE_TRACING=1"] else [],
+                             if !detectEntanglementRuntime
+                             then ["-DDETECT_ENTANGLEMENT=1"] else [],
                              [ "-I" ^ targetIncDir ],
                              ccOpts,
                              ["-o", output],
