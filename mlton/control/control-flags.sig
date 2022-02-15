@@ -109,6 +109,7 @@ signature CONTROL_FLAGS =
       val defaultWord: string ref
 
       val detectEntanglement: bool ref
+      val detectEntanglementRuntime: bool ref
 
       (* List of pass names to keep diagnostic info on. *)
       val diagPasses: Regexp.Compiled.t list ref

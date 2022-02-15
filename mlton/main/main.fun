@@ -1091,6 +1091,10 @@ fun commandLine (args: string list): unit =
                          | _ => usage "can't use '-profile-stack true' without '-profile {alloc,count,time}'")
                   else ()
 
+      val () = if !detectEntanglement andalso not (!detectEntanglementRuntime)
+                  then usage "can't use '-detect-entanglement true' with '-detect-entanglement-runtime false'"
+                  else ()
+
       val () =
          Control.setCommandLineConst
          {name = "CallStack.keep",
