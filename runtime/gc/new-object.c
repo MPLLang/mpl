@@ -112,8 +112,12 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->disentangledDepth = INT32_MAX;
+
+#ifdef DETECT_ENTANGLEMENT
   thread->decheckState = DECHECK_BOGUS_TID;
   memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
+#endif
+
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
@@ -129,7 +133,7 @@ GC_thread newThreadWithHeap(
   GC_state s,
   size_t reserved,
   uint32_t depth,
-  bool existsCurrentThread)
+  ARG_USED_FOR_DETECT_ENTANGLEMENT bool existsCurrentThread)
 {
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
   size_t threadSize = sizeofThread(s);
@@ -152,9 +156,13 @@ GC_thread newThreadWithHeap(
   sChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->mightContainMultipleObjects = FALSE;
 
+#ifdef DETECT_ENTANGLEMENT
   decheck_tid_t decheckState =
     (existsCurrentThread ?
     getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
+#else
+  decheck_tid_t decheckState = DECHECK_BOGUS_TID;
+#endif
 
   tChunk->decheckState = decheckState;
   sChunk->decheckState = decheckState;
@@ -186,8 +194,11 @@ GC_thread newThreadWithHeap(
   thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
   thread->disentangledDepth = INT32_MAX;
+
+#ifdef DETECT_ENTANGLEMENT
   thread->decheckState = DECHECK_BOGUS_TID;
   memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
+#endif
 
   HM_updateChunkFrontierInList(
     HM_HH_getChunkList(hh),

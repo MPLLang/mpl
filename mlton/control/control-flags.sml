@@ -295,6 +295,11 @@ val detectEntanglement =
            default = false,
            toString = Bool.toString}
 
+val detectEntanglementRuntime =
+  control {name = "detect-entanglement-runtime",
+           default = false,
+           toString = Bool.toString}
+
 val diagPasses =
    control {name = "diag passes",
             default = [],
