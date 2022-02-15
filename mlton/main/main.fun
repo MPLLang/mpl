@@ -74,7 +74,6 @@ val llvm_optOpts: {opt: string, pred: OptPred.t} list ref = ref []
 
 val debugRuntime: bool ref = ref false
 val traceRuntime: bool ref = ref false
-val ltoRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunkify: Control.Chunkify.t option ref = ref NONE
@@ -346,8 +345,6 @@ fun makeOptions {usage} =
         Bool (fn b => detectEntanglement := b)),
        (Expert, "trace-runtime", " {false|true}", "produce executable with tracing",
         boolRef traceRuntime),
-       (Expert, "lto-runtime", " {false|true}", "perform C-level whole-program optimization",
-        boolRef ltoRuntime),
        (Normal, "default-type", " '<ty><N>'", "set default type",
         SpaceString
         (fn s => (case s of
@@ -1121,7 +1118,7 @@ fun commandLine (args: string list): unit =
          fun addMD s =
             if !debugRuntime then s ^ "-dbg" else
             if !traceRuntime then s ^ "-trace" else
-            if !ltoRuntime then s ^ "-lto" else s
+            s
          fun addPI s =
             s ^ (Control.PositionIndependentStyle.toSuffix positionIndependentStyle)
       in
@@ -1145,7 +1142,6 @@ fun commandLine (args: string list): unit =
       val asOpts = addTargetOpts asOpts
       val ccOpts = addTargetOpts ccOpts
       val linkOpts = addTargetOpts linkOpts
-      val linkOpts = if !ltoRuntime then "-O3" :: "-flto" :: linkOpts else linkOpts
       val linkOpts =
          List.map (["mlton", "gdtoa"], fn lib => "-l" ^ mkLibName lib)
          @ [!mathLinkOpt, !gmpLinkOpt]
@@ -1459,8 +1455,6 @@ fun commandLine (args: string list): unit =
                              then [] else [ "-DLIBNAME=" ^ !libname ],
                              Control.PositionIndependentStyle.ccOpts
                              positionIndependentStyle,
-                             if !ltoRuntime
-                             then ["-O3", "-flto"] else [],
                              if !traceRuntime
                              then ["-DENABLE_TRACING=1"] else [],
                              [ "-I" ^ targetIncDir ],

@@ -20,13 +20,12 @@ endif
 
 EXE :=
 
-MDVARIANTS := OPT DBG TRACE LTO
+MDVARIANTS := OPT DBG TRACE
 PIVARIANTS := DPI NPI PIC PIE
 
 OPTSUFFIX :=
 DBGSUFFIX := -dbg
 TRACESUFFIX := -trace
-LTOSUFFIX := -lto
 DPISUFFIX :=
 NPISUFFIX := -npi
 PICSUFFIX := -pic
@@ -35,7 +34,6 @@ PIESUFFIX := -pie
 WITH_OPT_RUNTIME := true
 WITH_DBG_RUNTIME := true
 WITH_TRACE_RUNTIME := true
-WITH_LTO_RUNTIME := true
 WITH_DPI_RUNTIME := true
 WITH_NPI_RUNTIME := $(or $(findstring true,$(RELEASE) $(WITH_ALL_RUNTIME)),false)
 WITH_PIC_RUNTIME := $(or $(findstring true,$(RELEASE) $(WITH_ALL_RUNTIME)),false)
@@ -55,7 +53,6 @@ XCFLAGS := -fno-common -pedantic -Wall -Wextra
 OPTXCFLAGS := -Wdisabled-optimization -O2
 DBGXCFLAGS := -g -DASSERT=1 -Wno-uninitialized -O0
 TRACEXCFLAGS := -DENABLE_TRACING $(OPTXCFLAGS)
-LTOXCFLAGS := -flto $(OPTXCFLAGS)
 DPIXCFLAGS :=
 NPIXCFLAGS := -fno-pic -fno-pie
 PICXCFLAGS := -fPIC
