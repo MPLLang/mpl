@@ -10,6 +10,21 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
+  fun search key args =
+    case args of
+      [] => NONE
+    | x :: args' =>
+        if key = x
+        then SOME args'
+        else search key args'
+
+  fun parseFlag key =
+    case search ("--" ^ key) (CommandLine.arguments ()) of
+      NONE => false
+    | SOME _ => true
+
+  val activatePar = parseFlag "activate-par"
+
   structure Queue = DequeABP (*ArrayQueue*)
 
   structure Thread = MLton.Thread.Basic
@@ -432,24 +447,26 @@ struct
       end
 
 
-    datatype 'a joinpoint =
-      J of
+    datatype 'a joinpoint_data =
+      JD of
         { rightSideThread: Thread.t option ref
         , rightSideResult: 'a result option ref
         , incounter: int ref
         , tidRight: Word64.word
         , gcj: gc_joinpoint option
-        , func: unit -> 'a
         }
 
+    datatype 'a joinpoint =
+      J of {data: 'a joinpoint_data option, func: unit -> 'a}
 
-    fun spawn (g: unit -> 'b) : 'b joinpoint option =
+
+    fun spawn (g: unit -> 'b) : 'b joinpoint =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse depth >= maxDisetanglementCheckDepth
         then
-          NONE
+          J {data = NONE, func = g}
         else
 
         let
@@ -488,70 +505,68 @@ struct
 
           val _ = DE.decheckSetTid tidLeft
         in
-          SOME (J
-            { rightSideThread = rightSideThread
-            , rightSideResult = rightSideResult
-            , incounter = incounter
-            , tidRight = tidRight
-            , gcj = gcj
-            , func = g
-            })
+          J { func = g
+            , data = SOME (JD
+                { rightSideThread = rightSideThread
+                , rightSideResult = rightSideResult
+                , incounter = incounter
+                , tidRight = tidRight
+                , gcj = gcj
+                })
+            }
         end
       end
 
 
-    fun sync (J { rightSideThread
-                , rightSideResult
-                , incounter
-                , tidRight
-                , gcj
-                , func=g
-                }) =
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
-        val tidLeft = DE.decheckGetTid thread
+    fun sync (J {data, func=g}) =
+      case data of
+        NONE => result g
+      | SOME (JD {rightSideThread, rightSideResult, incounter, tidRight, gcj}) =>
+          let
+            val thread = Thread.current ()
+            val depth = HH.getDepth thread
+            val newDepth = depth-1
+            val tidLeft = DE.decheckGetTid thread
 
-        val result =
-          if popDiscard () then
-            ( HH.promoteChunks thread
-            ; HH.setDepth (thread, newDepth)
-            ; DE.decheckJoin (tidLeft, tidRight)
-            (* ; HH.forceNewChunk () *)
-            ; let
-                val gr = result g
-              in
-                (* (gr, DE.decheckGetTid thread) *)
-                gr
-              end
-            )
-          else
-            ( clear () (* this should be safe after popDiscard fails? *)
-            ; if decrementHitsZero incounter then () else returnToSched ()
-            ; case HM.refDerefNoBarrier rightSideThread of
-                NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME t =>
-                  let
-                    val tidRight = DE.decheckGetTid t
+            val result =
+              if popDiscard () then
+                ( HH.promoteChunks thread
+                ; HH.setDepth (thread, newDepth)
+                ; DE.decheckJoin (tidLeft, tidRight)
+                (* ; HH.forceNewChunk () *)
+                ; let
+                    val gr = result g
                   in
-                    HH.mergeThreads (thread, t);
-                    HH.promoteChunks thread;
-                    HH.setDepth (thread, newDepth);
-                    DE.decheckJoin (tidLeft, tidRight);
-                    setQueueDepth (myWorkerId ()) newDepth;
-                    case HM.refDerefNoBarrier rightSideResult of
-                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr => gr
+                    (* (gr, DE.decheckGetTid thread) *)
+                    gr
                   end
-            )
-      in
-        case gcj of
-          NONE => ()
-        | SOME gcj => syncGC gcj;
+                )
+              else
+                ( clear () (* this should be safe after popDiscard fails? *)
+                ; if decrementHitsZero incounter then () else returnToSched ()
+                ; case HM.refDerefNoBarrier rightSideThread of
+                    NONE => die (fn _ => "scheduler bug: join failed")
+                  | SOME t =>
+                      let
+                        val tidRight = DE.decheckGetTid t
+                      in
+                        HH.mergeThreads (thread, t);
+                        HH.promoteChunks thread;
+                        HH.setDepth (thread, newDepth);
+                        DE.decheckJoin (tidLeft, tidRight);
+                        setQueueDepth (myWorkerId ()) newDepth;
+                        case HM.refDerefNoBarrier rightSideResult of
+                          NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                        | SOME gr => gr
+                      end
+                )
+          in
+            case gcj of
+              NONE => ()
+            | SOME gcj => syncGC gcj;
 
-        result
-      end
+            result
+          end
 
 
     fun simplefork (f, g) =
@@ -566,15 +581,9 @@ struct
           *)
         val j = spawn g
         val fr = result f
+        val gr = sync j
       in
-        case j of
-          NONE => (extractResult fr, g ())
-        | SOME j =>
-            let
-              val gr = sync j
-            in
-              (extractResult fr, extractResult gr)
-            end
+        (extractResult fr, extractResult gr)
       end
 
 
@@ -584,20 +593,65 @@ struct
           ref (fn fr => (extractResult fr, g()))
 
         fun activate () =
-          case spawn g of
-            NONE => ()
-          | SOME j =>
-              cont := (fn fr =>
-                let
-                  val gr = sync j
-                in
-                  (extractResult fr, extractResult gr)
-                end)
+          let
+            val j = spawn g
+          in
+            cont := (fn fr =>
+              let
+                val gr = sync j
+              in
+                (extractResult fr, extractResult gr)
+              end)
+          end
 
-        val _ = activate ()
+        val _ = if activatePar then activate () else ()
         val fr = result f
       in
         (!cont) fr
+      end
+
+
+    structure Activator :>
+    sig
+      type 'a t
+      datatype 'a status = NotActivated | Activated of 'a joinpoint
+      val make: (unit -> 'a joinpoint) -> 'a t
+      val tryCancel: 'a t -> 'a status
+    end =
+    struct
+      datatype 'a status = NotActivated | Activated of 'a joinpoint
+      datatype 'a t = T of 'a status ref
+
+      fun make doSpawn =
+        let
+          val status = ref NotActivated
+          fun activate () =
+            status := Activated (doSpawn ())
+        in
+          (** TODO: add `activate` to the thread-local activation stack. *)
+          if activatePar then activate () else ();
+          T status
+        end
+
+      fun tryCancel (T status) =
+        (** TODO: pop one element from thread-local activation stack. *)
+        !status
+    end
+
+
+    fun activatorBasedFork (f: unit -> 'a, g: unit -> 'b) =
+      let
+        val x = Activator.make (fn _ => spawn g)
+        val fr = result f
+      in
+        case Activator.tryCancel x of
+          Activator.NotActivated =>
+            (extractResult fr, g ())
+
+        | Activator.Activated j =>
+            let val gr = sync j
+            in (extractResult fr, extractResult gr)
+            end
       end
 
 
@@ -684,7 +738,8 @@ struct
 *)
 
     fun fork (f, g) =
-      contBasedFork (f, g)
+      (* contBasedFork (f, g) *)
+      activatorBasedFork (f, g)
 
   end
 
