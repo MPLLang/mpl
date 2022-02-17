@@ -22,6 +22,8 @@ local
   FORK_JOIN.sig
   SimpleRandom.sml
   queue/DequeABP.sml
+  Stack.sml
+  Result.sml
   Scheduler.sml
 in
   structure ForkJoin

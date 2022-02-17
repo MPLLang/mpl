@@ -10,6 +10,14 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
+  val P = MLton.Parallel.numberOfProcessors
+  val myWorkerId = MLton.Parallel.processorNumber
+
+  fun die strfn =
+    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
+    ; OS.Process.exit OS.Process.failure
+    )
+
   fun search key args =
     case args of
       [] => NONE
@@ -23,7 +31,17 @@ struct
       NONE => false
     | SOME _ => true
 
+  fun parseInt key default =
+    case search ("-" ^ key) (CommandLine.arguments ()) of
+      NONE => default
+    | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
+    | SOME (s :: _) =>
+        case Int.fromString s of
+          NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
+        | SOME x => x
+
   val activatePar = parseFlag "activate-par"
+  val heartbeatInterval = parseInt "heartbeat-interval" 10
 
   structure Queue = DequeABP (*ArrayQueue*)
 
@@ -38,19 +56,12 @@ struct
   type hh_address = Word64.word
   type gctask_data = Thread.t * (hh_address ref)
 
-  datatype task =
-    NormalTask of unit -> unit
-  | Continuation of Thread.t * int
-  | GCTask of gctask_data
-
   structure DE = MLton.Thread.Disentanglement
   (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
   val maxDisetanglementCheckDepth = 31
 
-  val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
-  val myWorkerId = MLton.Parallel.processorNumber
 
   (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
   (* fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old) *)
@@ -61,14 +72,31 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
+
+  datatype gc_joinpoint =
+    GCJ of {gcTaskData: gctask_data option}
+    (** The fact that the gcTaskData is an option here is a questionable
+      * hack... the data will always be SOME. But unwrapping it may affect
+      * how many allocations occur when spawning a gc task, which in turn
+      * affects the GC snapshot, which is already murky.
+      *)
+
+  datatype 'a joinpoint_data =
+    JD of
+      { rightSideThread: Thread.t option ref
+      , rightSideResult: 'a Result.t option ref
+      , incounter: int ref
+      , tidRight: Word64.word
+      , gcj: gc_joinpoint option
+      }
+
+  datatype 'a joinpoint =
+    J of {data: 'a joinpoint_data option, func: unit -> 'a}
+
+
   (* ========================================================================
    * DEBUGGING
    *)
-
-  fun die strfn =
-    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
-    ; OS.Process.exit OS.Process.failure
-    )
 
   val doDebugMsg = false
 
@@ -100,6 +128,95 @@ struct
     end *)
 
   fun dbgmsg' _ = ()
+
+
+  (* ========================================================================
+   * Activators and activator stacks
+   *)
+
+  datatype activation_stack =
+    AStack of {stack: (unit -> unit) Stack.t, pushCounter: int ref}
+
+  fun maybeActivateOne s =
+    case Stack.popOldest s of
+      SOME a => a ()
+    | NONE => ()
+
+  fun astackNew () =
+    AStack {stack = Stack.new (), pushCounter = ref 0}
+
+  val astacks: activation_stack array =
+    Array.tabulate (P, fn _ => astackNew ())
+
+  fun astackSetCurrent astack =
+    Array.update (astacks, myWorkerId (), astack)
+
+  fun astackSetCurrentNew () =
+    Array.update (astacks, myWorkerId (), astackNew ())
+
+  fun astackGetCurrent () =
+    Array.sub (astacks, myWorkerId ())
+
+  fun astackPush x =
+    let
+      val AStack {stack, pushCounter} = astackGetCurrent ()
+      val c = !pushCounter
+    in
+      Stack.push (x, stack);
+
+      if c < heartbeatInterval then
+        pushCounter := c + 1
+      else
+        (maybeActivateOne stack; pushCounter := 0)
+    end
+
+  fun astackPop () =
+    let
+      val AStack {stack, ...} = astackGetCurrent ()
+    in
+      Stack.pop stack
+    end
+
+
+  structure Activator :>
+  sig
+    type 'a t
+    datatype 'a status = Pending | Activated of 'a joinpoint
+    val make: (unit -> 'a joinpoint) -> 'a t
+    val cancel: 'a t -> 'a status
+  end =
+  struct
+    datatype 'a status = Pending | Activated of 'a joinpoint
+    datatype 'a t = T of 'a status ref
+
+    fun make doSpawn =
+      let
+        val status = ref Pending
+
+        fun activate () =
+          case !status of
+            Pending => status := Activated (doSpawn ())
+          | _ => die (fn _ => "multiple activate")
+      in
+        astackPush activate;
+        T status
+      end
+
+    fun cancel (T status) =
+      ( astackPop ()
+      ; !status
+      )
+  end
+
+
+  (* ========================================================================
+   * TASKS
+   *)
+
+  datatype task =
+    NormalTask of unit -> unit
+  | Continuation of Thread.t * activation_stack * int
+  | GCTask of gctask_data
 
   (* ========================================================================
    * IDLENESS TRACKING
@@ -263,132 +380,10 @@ struct
   structure ForkJoin =
   struct
 
-    datatype 'a result =
-      Finished of 'a
-    | Raised of exn
-
-    fun result f =
-      Finished (f ()) handle e => Raised e
-
-    fun extractResult r =
-      case r of
-        Finished x => x
-      | Raised e => raise e
-
     val communicate = communicate
     val getIdleTime = getIdleTime
 
-(*
-    (* Must be called from a "user" thread, which has an associated HH *)
-    fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
-      let
-        (* val _ = dbgmsg' (fn _ => "fork at depth " ^ Int.toString depth) *)
-
-        (** NOTE: these cannot be safely combined into a single ref. After
-          * the join, reading the thread is safe because the thread object
-          * is stored at a safe depth. But reading the result is entangled
-          * until after the merge happens.
-          *)
-        val rightSideThread = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: 'b result option)
-        val incounter = ref 2
-
-        val (tidLeft, tidRight) = DE.decheckFork ()
-
-        fun g' () =
-          let
-            val () = DE.copySyncDepthsFromThread (thread, depth+1)
-            val () = DE.decheckSetTid tidRight
-            val gr = result g
-            val t = Thread.current ()
-          in
-            rightSideThread := SOME t;
-            rightSideResult := SOME gr;
-            if decrementHitsZero incounter then
-              ( setQueueDepth (myWorkerId ()) (depth+1)
-              ; threadSwitch thread
-              )
-            else
-              returnToSched ()
-          end
-        val _ = push (NormalTask g')
-        (* val _ =
-              if (depth < internalGCThresh) then
-                let
-                  val cont_arr1 =  Array.array (1, SOME(f))
-                  val cont_arr2 =  Array.array (1, SOME(g))
-                  val cont_arr3 =  Array.array (0, NONE)
-                in
-                    HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
-                  ; HH.setDepth (thread, depth + 1)
-                  ; HH.forceLeftHeap(myWorkerId(), thread)
-                end
-              else
-                (HH.setDepth (thread, depth + 1)) *)
-        val _ = HH.setDepth (thread, depth + 1)
-
-        (* val _ =
-          if depth <= 3 then HH.forceLeftHeap(myWorkerId(), thread) else () *)
-
-        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
-        val _ = recordForkDepth depth
-
-        val _ = DE.decheckSetTid tidLeft
-        val fr = result f
-        val tidLeft = DE.decheckGetTid thread
-
-        val gr =
-          if popDiscard () then
-            ( HH.promoteChunks thread
-            ; HH.setDepth (thread, depth)
-            ; DE.decheckJoin (tidLeft, tidRight)
-            (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
-            (* ; HH.forceNewChunk () *)
-            ; let
-                val gr = result g
-              in
-                (* (gr, DE.decheckGetTid thread) *)
-                gr
-              end
-            )
-          else
-            ( clear () (* this should be safe after popDiscard fails? *)
-            ; if decrementHitsZero incounter then () else returnToSched ()
-            ; case HM.refDerefNoBarrier rightSideThread of
-                NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME t =>
-                  let
-                    val tidRight = DE.decheckGetTid t
-                  in
-                    HH.mergeThreads (thread, t);
-                    HH.promoteChunks thread;
-                    HH.setDepth (thread, depth);
-                    DE.decheckJoin (tidLeft, tidRight);
-                    setQueueDepth (myWorkerId ()) depth;
-                    (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
-                    case HM.refDerefNoBarrier rightSideResult of
-                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr => gr
-                  end
-            )
-
-        (* val () = DE.decheckJoin (tidLeft, tidRight) *)
-      in
-        (extractResult fr, extractResult gr)
-      end
-*)
-
     val maxPermittedCCDepth = 3
-
-
-    datatype gc_joinpoint =
-      GCJ of {gcTaskData: gctask_data option}
-      (** The fact that the gcTaskData is an option here is a questionable
-        * hack... the data will always be SOME. But unwrapping it may affect
-        * how many allocations occur when spawning a gc task, which in turn
-        * affects the GC snapshot, which is already murky.
-        *)
-
 
     fun spawnGC () : gc_joinpoint option =
       let
@@ -434,7 +429,7 @@ struct
       in
         if popDiscard() then
           ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, newDepth))
+          ; push (Continuation (thread, astackGetCurrent (), newDepth))
           ; returnToSched ()
           )
         else
@@ -445,19 +440,6 @@ struct
         HH.promoteChunks thread;
         HH.setDepth (thread, newDepth)
       end
-
-
-    datatype 'a joinpoint_data =
-      JD of
-        { rightSideThread: Thread.t option ref
-        , rightSideResult: 'a result option ref
-        , incounter: int ref
-        , tidRight: Word64.word
-        , gcj: gc_joinpoint option
-        }
-
-    datatype 'a joinpoint =
-      J of {data: 'a joinpoint_data option, func: unit -> 'a}
 
 
     fun spawn (g: unit -> 'b) : 'b joinpoint =
@@ -473,25 +455,28 @@ struct
           val gcj = spawnGC ()
 
           val thread = Thread.current ()
+          val astack = astackGetCurrent ()
           val depth = HH.getDepth thread
 
           val rightSideThread = ref (NONE: Thread.t option)
-          val rightSideResult = ref (NONE: 'b result option)
+          val rightSideResult = ref (NONE: 'b Result.t option)
           val incounter = ref 2
 
           val (tidLeft, tidRight) = DE.decheckFork ()
 
           fun g' () =
             let
+              val () = astackSetCurrentNew ()
               val () = DE.copySyncDepthsFromThread (thread, depth+1)
               val () = DE.decheckSetTid tidRight
-              val gr = result g
+              val gr = Result.result g
               val t = Thread.current ()
             in
               rightSideThread := SOME t;
               rightSideResult := SOME gr;
               if decrementHitsZero incounter then
                 ( setQueueDepth (myWorkerId ()) (depth+1)
+                ; astackSetCurrent astack
                 ; threadSwitch thread
                 )
               else
@@ -520,7 +505,7 @@ struct
 
     fun sync (J {data, func=g}) =
       case data of
-        NONE => result g
+        NONE => Result.result g
       | SOME (JD {rightSideThread, rightSideResult, incounter, tidRight, gcj}) =>
           let
             val thread = Thread.current ()
@@ -535,7 +520,7 @@ struct
                 ; DE.decheckJoin (tidLeft, tidRight)
                 (* ; HH.forceNewChunk () *)
                 ; let
-                    val gr = result g
+                    val gr = Result.result g
                   in
                     (* (gr, DE.decheckGetTid thread) *)
                     gr
@@ -580,17 +565,17 @@ struct
           * Deviating from this will cause terrible things to happen.
           *)
         val j = spawn g
-        val fr = result f
+        val fr = Result.result f
         val gr = sync j
       in
-        (extractResult fr, extractResult gr)
+        (Result.extractResult fr, Result.extractResult gr)
       end
 
 
     fun contBasedFork (f: unit -> 'a, g: unit -> 'b) =
       let
-        val cont: ('a result -> ('a * 'b)) ref =
-          ref (fn fr => (extractResult fr, g()))
+        val cont: ('a Result.t -> ('a * 'b)) ref =
+          ref (fn fr => (Result.extractResult fr, g()))
 
         fun activate () =
           let
@@ -600,142 +585,32 @@ struct
               let
                 val gr = sync j
               in
-                (extractResult fr, extractResult gr)
+                (Result.extractResult fr, Result.extractResult gr)
               end)
           end
 
         val _ = if activatePar then activate () else ()
-        val fr = result f
+        val fr = Result.result f
       in
         (!cont) fr
       end
 
 
-    structure Activator :>
-    sig
-      type 'a t
-      datatype 'a status = NotActivated | Activated of 'a joinpoint
-      val make: (unit -> 'a joinpoint) -> 'a t
-      val tryCancel: 'a t -> 'a status
-    end =
-    struct
-      datatype 'a status = NotActivated | Activated of 'a joinpoint
-      datatype 'a t = T of 'a status ref
-
-      fun make doSpawn =
-        let
-          val status = ref NotActivated
-          fun activate () =
-            status := Activated (doSpawn ())
-        in
-          (** TODO: add `activate` to the thread-local activation stack. *)
-          if activatePar then activate () else ();
-          T status
-        end
-
-      fun tryCancel (T status) =
-        (** TODO: pop one element from thread-local activation stack. *)
-        !status
-    end
-
-
     fun activatorBasedFork (f: unit -> 'a, g: unit -> 'b) =
       let
         val x = Activator.make (fn _ => spawn g)
-        val fr = result f
+        val fr = Result.result f
       in
-        case Activator.tryCancel x of
-          Activator.NotActivated =>
-            (extractResult fr, g ())
+        case Activator.cancel x of
+          Activator.Pending =>
+            (Result.extractResult fr, g ())
 
         | Activator.Activated j =>
             let val gr = sync j
-            in (extractResult fr, extractResult gr)
+            in (Result.extractResult fr, Result.extractResult gr)
             end
       end
 
-
-(*
-    fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
-      let
-        val heapId = ref (HH.getRoot thread)
-        val gcTaskTuple = (thread, heapId)
-        val gcTaskData = SOME gcTaskTuple
-        val gcTask = GCTask gcTaskTuple
-        val cont_arr1 = ref (SOME f)
-        val cont_arr2 = ref (SOME g)
-        val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
-
-        (** The above could trigger a local GC and invalidate the hh
-          * identifier... :'(
-          *)
-        val _ = heapId := HH.getRoot thread
-      in
-        if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
-          fork' {ccOkayAtThisDepth=false} (f, g)
-        else
-          let
-            val _ = push gcTask
-            val _ = HH.setDepth (thread, depth + 1)
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            (* val _ = dbgmsg' (fn _ => "fork CC at depth " ^ Int.toString depth) *)
-            val result = fork' {ccOkayAtThisDepth=false} (f, g)
-
-            val _ =
-              if popDiscard() then
-                ( (*dbgmsg' (fn _ => "push current (" ^ Int.toString depth ^ ") and switch to scheduler for GCtask")
-                ;*)
-                  setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-                ; push (Continuation (thread, depth))
-                ; returnToSched ()
-                )
-                (* HH.collectThreadRoot (thread, !heapId) *)
-              else
-                ( clear()
-                ; setQueueDepth (myWorkerId ()) depth
-                )
-
-            val _ = HH.promoteChunks thread
-            val _ = HH.setDepth (thread, depth)
-            (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
-          in
-            result
-          end
-      end
-*)
-
-(*
-    fun simpleForkGC (f, g) =
-      case spawnGC () of
-        NONE => fork' {ccOkayAtThisDepth=false} (f, g)
-      | SOME gcj =>
-          let
-            val result = fork' {ccOkayAtThisDepth=false} (f, g)
-          in
-            syncGC gcj;
-            result
-          end
-
-
-    and fork' {ccOkayAtThisDepth} (f, g) =
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-      in
-        (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
-          (* forkGC thread depth (f, g) *)
-          simpleForkGC (f, g)
-        else if depth < Queue.capacity andalso
-                depth < maxDisetanglementCheckDepth then
-          (* parfork thread depth (f, g) *)
-          (* simplefork (f, g) *)
-          contBasedFork (f, g)
-        else
-          (* don't let us hit an error, just sequentialize instead *)
-          (f (), g ())
-      end
-*)
 
     fun fork (f, g) =
       (* contBasedFork (f, g) *)
@@ -824,10 +699,11 @@ struct
               ( HH.collectThreadRoot (thread, !hh)
               ; acquireWork ()
               )
-          | Continuation (thread, depth) =>
+          | Continuation (thread, astack, depth) =>
               ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               ; dbgmsg' (fn _ => "resume task thread")
               ;*) Queue.setDepth myQueue depth
+              ; astackSetCurrent astack
               ; threadSwitch thread
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
