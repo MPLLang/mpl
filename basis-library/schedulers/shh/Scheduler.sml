@@ -156,8 +156,8 @@ struct
   local
     val amOriginal = ref true
     val taskBoxes = Array.array (P, NONE)
-    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
-    fun sub i = HM.arraySubNoBarrier (taskBoxes, Int64.fromInt i)
+    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, i, x)
+    fun sub i = HM.arraySubNoBarrier (taskBoxes, i)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
