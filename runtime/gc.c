@@ -20,6 +20,14 @@
 #define LOCAL_USED_FOR_ASSERT  __attribute__ ((unused))
 #endif
 
+#ifdef DETECT_ENTANGLEMENT
+#define ARG_USED_FOR_DETECT_ENTANGLEMENT
+#define LOCAL_USED_FOR_DETECT_ENTANGLEMENT
+#else
+#define ARG_USED_FOR_DETECT_ENTANGLEMENT  __attribute__ ((unused))
+#define LOCAL_USED_FOR_DETECT_ENTANGLEMENT  __attribute__ ((unused))
+#endif
+
 #ifdef ENABLE_TRACING
 #define ARG_USED_FOR_TRACING
 #define LOCAL_USED_FOR_TRACING

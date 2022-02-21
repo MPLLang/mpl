@@ -33,6 +33,8 @@ PRIVATE uint64_t GC_HH_decheckGetTid(GC_state s, objptr thread);
 PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
 PRIVATE void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth);
 
+PRIVATE bool GC_HH_decheckMaxDepth(objptr resultRef);
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

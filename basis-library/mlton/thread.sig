@@ -81,6 +81,8 @@ signature MLTON_THREAD =
         sig
           type thread = Basic.t
 
+          val decheckMaxDepth: unit -> int option
+
           (* fork the current thread ID, returning the two child IDs *)
           val decheckFork : unit -> Word64.word * Word64.word
 
