@@ -167,6 +167,10 @@ structure GC =
       val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
 
       val numberEntanglementsDetected = _import "GC_numEntanglementsDetected" runtime private: GCState.t -> C_UIntmax.t;
+
+      val numberSuspectsMarked = _import "GC_numSuspectsMarked" runtime private: GCState.t -> C_UIntmax.t;
+
+      val numberSuspectsCleared = _import "GC_numSuspectsCleared" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
