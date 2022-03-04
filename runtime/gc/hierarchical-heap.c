@@ -995,7 +995,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
     size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
     size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
-    LOG(LM_CC_COLLECTION, LL_INFO,
+    LOG(LM_CC_COLLECTION, LL_DEBUG,
       "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
       depth,
       lastSurvived,

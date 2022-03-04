@@ -14,6 +14,26 @@ void CC_workList_init(
 }
 
 
+bool CC_workList_isEmpty(
+  __attribute__((unused)) GC_state s,
+  CC_workList w)
+{
+  HM_chunkList list = &(w->storage);
+  HM_chunk curr = w->currentChunk;
+
+  return
+    (list->firstChunk == curr)
+    &&
+    ((list->lastChunk == curr) || (list->lastChunk == curr->nextChunk))
+    &&
+    (HM_getChunkFrontier(curr) == HM_getChunkStart(curr))
+    &&
+    ( curr->nextChunk == NULL
+      || HM_getChunkFrontier(curr->nextChunk) == HM_getChunkStart(curr->nextChunk)
+    );
+}
+
+
 void CC_workList_push(
   __attribute__((unused)) GC_state s,
   CC_workList w,

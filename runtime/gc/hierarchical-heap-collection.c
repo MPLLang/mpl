@@ -193,7 +193,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
-  assert(thread->currentDepth == originalLocalScope);
+  if (thread->currentDepth != originalLocalScope) {
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Skipping collection:\n"
+      "  currentDepth %u\n"
+      "  originalLocalScope %u\n"
+      "  potentialLocalScope %u\n",
+      thread->currentDepth,
+      originalLocalScope,
+      potentialLocalScope);
+    return;
+  }
 
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.

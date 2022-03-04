@@ -17,6 +17,7 @@ typedef struct CC_workList * CC_workList;
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+bool CC_workList_isEmpty(GC_state s, CC_workList w);
 void CC_workList_init(GC_state s, CC_workList w);
 void CC_workList_push(GC_state s, CC_workList w, objptr op);
 
