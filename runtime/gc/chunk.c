@@ -581,15 +581,21 @@ void HM_appendChunkList(HM_chunkList list1, HM_chunkList list2) {
 void HM_updateChunkFrontierInList(
   HM_chunkList list,
   HM_chunk chunk,
-  pointer frontier)
+  pointer newFrontier)
 {
+  assert(HM_getChunkStart(chunk) <= newFrontier);
+  assert(newFrontier <= chunk->limit);
+
   pointer oldFrontier = chunk->frontier;
-  assert(oldFrontier <= frontier && frontier <= chunk->limit);
+  chunk->frontier = newFrontier;
 
-  chunk->frontier = frontier;
+  if (NULL == list)
+    return;
 
-  if (NULL != list) {
-    list->usedSize += (size_t)frontier - (size_t)oldFrontier;
+  if (oldFrontier <= newFrontier) {
+    list->usedSize += (size_t)newFrontier - (size_t)oldFrontier;
+  } else {
+    list->usedSize -= (size_t)oldFrontier - (size_t)newFrontier;
   }
 }
 
