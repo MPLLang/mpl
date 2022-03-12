@@ -353,15 +353,9 @@ void markLoop(GC_state s, ConcurrentCollectArgs* args) {
 
   CC_workList worklist = &(args->worklist);
 
-  objptr current = CC_workList_pop(s, worklist);
-  while (current != BOGUS_OBJPTR) {
-    foreachObjptrInObject(
-      s,
-      objptrToPointer(current, NULL),
-      &trueObjptrPredicateClosure,
-      &markAddClosure,
-      FALSE);
-
+  objptr* current = CC_workList_pop(s, worklist);
+  while (NULL != current) {
+    callIfIsObjptr(s, &markAddClosure, current);
     current = CC_workList_pop(s, worklist);
   }
 }
@@ -372,15 +366,9 @@ void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
 
   CC_workList worklist = &(args->worklist);
 
-  objptr current = CC_workList_pop(s, worklist);
-  while (current != BOGUS_OBJPTR) {
-    foreachObjptrInObject(
-      s,
-      objptrToPointer(current, NULL),
-      &trueObjptrPredicateClosure,
-      &unmarkAddClosure,
-      FALSE);
-
+  objptr* current = CC_workList_pop(s, worklist);
+  while (NULL != current) {
+    callIfIsObjptr(s, &unmarkAddClosure, current);
     current = CC_workList_pop(s, worklist);
   }
 }

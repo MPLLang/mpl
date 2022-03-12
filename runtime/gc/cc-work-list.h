@@ -8,10 +8,27 @@ typedef struct CC_workList {
   HM_chunk currentChunk;
 } * CC_workList;
 
+typedef struct CC_workList_elem {
+  objptr op;    // object front
+  pointer pos;  // where inside object did we leave off?
+} * CC_workList_elem;
+
+// struct CC_workList_range {
+//   objptr op;
+//   pointer start;
+//   pointer stop;
+// } * CC_workList_range;
+
 #else
 
 struct CC_workList;
 typedef struct CC_workList * CC_workList;
+
+struct CC_workList_elem;
+typedef struct CC_workList_elem * CC_workList_elem;
+
+struct CC_workList_range;
+typedef struct CC_workList_range * CC_workList_range;
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
@@ -21,8 +38,11 @@ bool CC_workList_isEmpty(GC_state s, CC_workList w);
 void CC_workList_init(GC_state s, CC_workList w);
 void CC_workList_push(GC_state s, CC_workList w, objptr op);
 
-// returns BOGUS_OBJPTR if empty
-objptr CC_workList_pop(GC_state s, CC_workList w);
+/** Returns a single field of an object that still needs to be traced.
+  * So, note that a single push can result in many pops.
+  *
+  * Returns NULL if work list is empty */
+objptr* CC_workList_pop(GC_state s, CC_workList w);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
