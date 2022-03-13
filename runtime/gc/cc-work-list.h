@@ -10,14 +10,16 @@ typedef struct CC_workList {
 
 typedef struct CC_workList_elem {
   objptr op;    // object front
-  pointer pos;  // where inside object did we leave off?
+  union data {
+    struct normal {
+      uint16_t objptrIdx;
+    } normal;
+    struct sequence {
+      size_t cellIdx;
+      uint16_t objptrIdx;
+    } sequence;
+  } data;
 } * CC_workList_elem;
-
-// struct CC_workList_range {
-//   objptr op;
-//   pointer start;
-//   pointer stop;
-// } * CC_workList_range;
 
 #else
 

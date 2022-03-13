@@ -34,14 +34,39 @@ bool CC_workList_isEmpty(
 }
 
 
-bool mightHaveObjptrs(GC_state s, objptr op) {
+// returns FALSE if object has no objptrs and doesn't need to be traced
+bool makeInitialElem(GC_state s, objptr op, CC_workList_elem result) {
   GC_header header;
   uint16_t numObjptrs;
   GC_objectTypeTag tag;
   header = getHeader(objptrToPointer(op, NULL));
   splitHeader(s, header, &tag, NULL, NULL, &numObjptrs);
 
-  return (STACK_TAG == tag) || (numObjptrs > 0);
+  if (NORMAL_TAG == tag) {
+    if (0 == numObjptrs) return FALSE;
+
+    result->op = op;
+    result->data.normal.objptrIdx = 0;
+    return TRUE;
+  }
+
+  if (SEQUENCE_TAG == tag) {
+    if (0 == numObjptrs) return FALSE;
+    if (0 == getSequenceLength(objptrToPointer(op, NULL))) return FALSE;
+
+    result->op = op;
+    result->data.sequence.cellIdx = 0;
+    result->data.sequence.objptrIdx = 0;
+    return TRUE;
+  }
+
+  if (STACK_TAG == tag) {
+    DIE("makeInitialElem: stack objects not implemented yet");
+    return FALSE;
+  }
+
+  DIE("makeInitialElem: cannot handle tag %u", tag);
+  return FALSE;
 }
 
 
@@ -50,7 +75,8 @@ void CC_workList_push(
   CC_workList w,
   objptr op)
 {
-  if (!mightHaveObjptrs(s, op))
+  struct CC_workList_elem elem;
+  if (!makeInitialElem(s, op, &elem))
     return;
 
   HM_chunkList list = &(w->storage);
@@ -76,10 +102,7 @@ void CC_workList_push(
     chunk,
     frontier + elemSize);
 
-  CC_workList_elem elem = (CC_workList_elem)frontier;
-  elem->op = op;
-  elem->pos = objptrToPointer(op, NULL);
-
+  *(CC_workList_elem)frontier = elem;
   return;
 }
 
@@ -95,7 +118,6 @@ void advanceOneField(
   struct advanceOneFieldResult * result)
 {
   pointer p = objptrToPointer(elem->op, NULL);
-  pointer pos = elem->pos;
 
   // inspect the object
   GC_header header;
@@ -108,58 +130,42 @@ void advanceOneField(
   // ======================== NORMAL OBJECTS ========================
 
   if (NORMAL_TAG == tag) {
-    pointer end = p + bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-    pointer fieldsStart = p + bytesNonObjptrs;
-
-    if (pos < fieldsStart) pos = fieldsStart;
-
-    if (pos < end) {
-      result->field = (objptr*)pos;
-      pos = pos + OBJPTR_SIZE;
-    } else {
-      result->field = NULL;
-    }
-
-    elem->pos = pos;
-    result->objectDone = (pos >= end);
+    uint16_t objptrIdx = elem->data.normal.objptrIdx;
+    assert(objptrIdx < numObjptrs);
+    result->field = (objptr*)(p + bytesNonObjptrs + (objptrIdx * OBJPTR_SIZE));
+    result->objectDone = (objptrIdx+1 == numObjptrs);
+    elem->data.normal.objptrIdx++;
     return;
   }
 
   // ======================== SEQUENCE OBJECTS ========================
 
   if (SEQUENCE_TAG == tag) {
-
-    if (0 == numObjptrs) {
-      /* No objptrs to process. */
-      result->field = NULL;
-      result->objectDone = TRUE;
-      return;
-    }
-
     GC_sequenceLength numCells = getSequenceLength(p);
     size_t bytesPerCell = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-    size_t dataBytes = numCells * bytesPerCell;
-    pointer last = p + dataBytes;
 
-    size_t posOffset = (size_t)(pos-p);
-    // pointer cellStart = p + alignDown(posOffset, bytesPerCell);
-    pointer cellStart = pos - ((size_t)posOffset % bytesPerCell);
+    size_t cellIdx = elem->data.sequence.cellIdx;
+    uint16_t objptrIdx = elem->data.sequence.objptrIdx;
+    assert(cellIdx < numCells);
+    assert(objptrIdx < numObjptrs);
 
-    pointer cellEnd = cellStart + bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-    pointer fieldsStart = cellStart + bytesNonObjptrs;
+    result->field =
+      (objptr*)(
+        p                            // object start
+        + (cellIdx * bytesPerCell)   // cell offset
+        + bytesNonObjptrs            // objptrs offset
+        + (objptrIdx * OBJPTR_SIZE)  // current objptr offset
+      );
 
-    if (pos < fieldsStart) pos = fieldsStart;
+    result->objectDone = FALSE;
 
-    if (pos < cellEnd) {
-      result->field = (objptr*)pos;
-      pos = pos + OBJPTR_SIZE;
-    } else {
-      result->field = NULL;
+    elem->data.sequence.objptrIdx++;
+    if (objptrIdx+1 == numObjptrs) {
+      elem->data.sequence.cellIdx++;
+      elem->data.sequence.objptrIdx = 0;
+      if (cellIdx+1 == numCells)
+        result->objectDone = TRUE;
     }
-
-    elem->pos = pos;
-    result->objectDone = (pos >= last);
-
     return;
   }
 
@@ -182,62 +188,53 @@ objptr* CC_workList_pop(
   CC_workList w)
 {
   HM_chunkList list = &(w->storage);
+  HM_chunk chunk = w->currentChunk;
 
-  /** It's possible to not succeed in finding a field in the most recent
-    * object (if the object doesn't have remaining objptrs). So, if we fail,
-    * try again. Eventually this will either return NULL because the worklist
-    * is empty, or it will return a field pointer.
-    */
-  while (TRUE) {
-    HM_chunk chunk = w->currentChunk;
+  if (HM_getChunkFrontier(chunk) <= HM_getChunkStart(chunk)) {
+    // chunk is empty; try to move backwards
 
-    if (HM_getChunkFrontier(chunk) <= HM_getChunkStart(chunk)) {
-      // chunk is empty; try to move backwards
-
-      HM_chunk prevChunk = chunk->prevChunk;
-      if (prevChunk == NULL) {
-        // whole worklist is empty
-        return NULL;
-      }
-
-      /** Otherwise, there is a chunk before us. It's now safe (for cost
-        * amortization) to delete the chunk after us, if there is one.
-        */
-      if (NULL != chunk->nextChunk) {
-        HM_chunk nextChunk = chunk->nextChunk;
-        HM_unlinkChunk(list, nextChunk);
-        HM_freeChunk(s, nextChunk);
-      }
-
-      assert(NULL == chunk->nextChunk);
-      assert(prevChunk == chunk->prevChunk);
-
-      chunk = prevChunk;
-      w->currentChunk = chunk;
+    HM_chunk prevChunk = chunk->prevChunk;
+    if (prevChunk == NULL) {
+      // whole worklist is empty
+      return NULL;
     }
 
-    assert(w->currentChunk == chunk);
-    assert(HM_getChunkFrontier(chunk) >= HM_getChunkStart(chunk) + sizeof(struct CC_workList_elem));
-
-    pointer frontier = HM_getChunkFrontier(chunk);
-    pointer elemPtr = frontier - sizeof(struct CC_workList_elem);
-    CC_workList_elem elem = (CC_workList_elem)elemPtr;
-
-    struct advanceOneFieldResult r;
-    advanceOneField(s, elem, &r);
-
-    if (r.objectDone) {
-      pointer newFrontier = elemPtr;
-      HM_updateChunkFrontierInList(
-        list,
-        chunk,
-        newFrontier);
+    /** Otherwise, there is a chunk before us. It's now safe (for cost
+      * amortization) to delete the chunk after us, if there is one.
+      */
+    if (NULL != chunk->nextChunk) {
+      HM_chunk nextChunk = chunk->nextChunk;
+      HM_unlinkChunk(list, nextChunk);
+      HM_freeChunk(s, nextChunk);
     }
 
-    // We should only return NULL if the work list is empty.
-    if (NULL != r.field)
-      return r.field;
+    assert(NULL == chunk->nextChunk);
+    assert(prevChunk == chunk->prevChunk);
+
+    chunk = prevChunk;
+    w->currentChunk = chunk;
   }
+
+  assert(w->currentChunk == chunk);
+  assert(HM_getChunkFrontier(chunk) >= HM_getChunkStart(chunk) + sizeof(struct CC_workList_elem));
+
+  pointer frontier = HM_getChunkFrontier(chunk);
+  pointer elemPtr = frontier - sizeof(struct CC_workList_elem);
+  CC_workList_elem elem = (CC_workList_elem)elemPtr;
+
+  struct advanceOneFieldResult r;
+  advanceOneField(s, elem, &r);
+
+  if (r.objectDone) {
+    pointer newFrontier = elemPtr;
+    HM_updateChunkFrontierInList(
+      list,
+      chunk,
+      newFrontier);
+  }
+
+  assert(NULL != r.field);
+  return r.field;
 }
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */
