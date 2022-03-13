@@ -61,8 +61,45 @@ bool makeInitialElem(GC_state s, objptr op, CC_workList_elem result) {
   }
 
   if (STACK_TAG == tag) {
-    DIE("makeInitialElem: stack objects not implemented yet");
-    return FALSE;
+    // printf("makeInitialElem stack\n");
+
+    GC_stack stack = (GC_stack)objptrToPointer(op, NULL);
+    pointer bottom = getStackBottom(s, stack);
+    pointer top = getStackTop(s, stack);
+
+    assert (stack->used <= stack->reserved);
+
+    pointer firstTop = NULL;
+
+    while (top > bottom) {
+      /* Invariant: top points just past a "return address". */
+      GC_returnAddress returnAddress =
+        *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
+      GC_frameInfo frameInfo = getFrameInfoFromReturnAddress (s, returnAddress);
+      // index zero of this array is size
+      GC_frameOffsets frameOffsets = frameInfo->offsets;
+
+      if (frameOffsets[0] > 0) {
+        firstTop = top;
+        break;
+      }
+
+      top -= frameInfo->size;
+    }
+
+    if (NULL == firstTop) {
+      // printf("makeInitialElem: skipping stack "FMTOBJPTR"\n", op);
+      return FALSE;
+    }
+
+    assert(firstTop > bottom);
+
+    result->op = op;
+    result->data.stack.topCursor = firstTop;
+    result->data.stack.frameOffsetsIdx = 0;
+
+    // printf("makeInitialElem: push stack "FMTOBJPTR"\n", op);
+    return TRUE;
   }
 
   DIE("makeInitialElem: cannot handle tag %u", tag);
@@ -172,7 +209,56 @@ void advanceOneField(
   // ======================== STACK OBJECTS ========================
 
   if (STACK_TAG == tag) {
-    DIE("advanceOneField: stack objects not implemented yet");
+    GC_stack stack = (GC_stack)p;
+    pointer bottom = getStackBottom(s, stack);
+    pointer top = elem->data.stack.topCursor;
+    unsigned int i = elem->data.stack.frameOffsetsIdx;
+
+    // printf(
+    //   "advanceOneField: stack "FMTOBJPTR" top="FMTPTR" bottom="FMTPTR" i=%u\n",
+    //   elem->op,
+    //   top,
+    //   bottom,
+    //   i
+    // );
+
+    /* Invariant: top points just past a "return address". */
+    GC_returnAddress returnAddress =
+      *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
+    GC_frameInfo frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
+    // index zero of this array is size
+    GC_frameOffsets frameOffsets = frameInfo->offsets;
+
+    assert(frameOffsets[0] > 0);
+    assert(i < frameOffsets[0]);
+
+    result->field = (objptr*)(top - frameInfo->size + frameOffsets[i+1]);
+    elem->data.stack.frameOffsetsIdx++;
+
+    result->objectDone = FALSE;
+
+    if (i+1 == frameOffsets[0]) {
+      /** walk backwards until we find a frame that has at least one objptr
+        * or, until we find the end of the stack.
+        */
+
+      pointer newTop = top - frameInfo->size;
+      while (newTop > bottom) {
+        returnAddress = *((GC_returnAddress*)(newTop - GC_RETURNADDRESS_SIZE));
+        frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
+        frameOffsets = frameInfo->offsets;
+        if (frameOffsets[0] > 0) break;
+        newTop -= frameInfo->size;
+      }
+
+      assert( (newTop > bottom && frameOffsets[0] > 0) || (newTop == bottom) );
+
+      elem->data.stack.topCursor = newTop;
+      elem->data.stack.frameOffsetsIdx = 0;
+
+      if (newTop == bottom) result->objectDone = TRUE;
+    }
+
     return;
   }
 

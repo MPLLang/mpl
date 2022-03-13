@@ -532,22 +532,8 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
     args->bytesSaved += sizeofObject(s, p);
   }
 
-  // struct GC_foreachObjptrClosure forwardPtrClosure =
-  // {.fun = forwardPtrChunk, .env = rawArgs};
-  // foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-  //         &forwardPtrClosure, FALSE);
-
-  // TODO: update cc-worklist to allow for stacks...
-  GC_objectTypeTag tag;
-  splitHeader(s, getHeader(p), &tag, NULL, NULL, NULL);
-  if (STACK_TAG == tag) {
-    struct GC_foreachObjptrClosure markAddClosure =
-      {.fun = tryMarkAndMarkLoop, .env = rawArgs};
-    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &markAddClosure, FALSE);
-  } else {
-    CC_workList_push(s, &(args->worklist), op);
-    markLoop(s, rawArgs);
-  }
+  CC_workList_push(s, &(args->worklist), op);
+  markLoop(s, rawArgs);
 }
 
 void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
@@ -563,18 +549,8 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
     assert(!CC_isPointerMarked(p));
   }
 
-  // TODO: update cc-worklist to allow for stacks...
-  GC_objectTypeTag tag;
-  splitHeader(s, getHeader(p), &tag, NULL, NULL, NULL);
-  if (STACK_TAG == tag) {
-    struct GC_foreachObjptrClosure unmarkClosure =
-      {.fun = tryUnmarkAndUnmarkLoop, .env = rawArgs};
-    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-            &unmarkClosure, FALSE);
-  } else {
-    CC_workList_push(s, &(args->worklist), op);
-    unmarkLoop(s, rawArgs);
-  }
+  CC_workList_push(s, &(args->worklist), op);
+  unmarkLoop(s, rawArgs);
 }
 
 void ensureCallSanity(

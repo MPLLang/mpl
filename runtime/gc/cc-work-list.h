@@ -18,6 +18,10 @@ typedef struct CC_workList_elem {
       size_t cellIdx;
       uint16_t objptrIdx;
     } sequence;
+    struct stack {
+      pointer topCursor;
+      unsigned int frameOffsetsIdx;
+    } stack;
   } data;
 } * CC_workList_elem;
 
