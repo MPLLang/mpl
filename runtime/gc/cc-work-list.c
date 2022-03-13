@@ -36,11 +36,10 @@ bool CC_workList_isEmpty(
 
 bool mightHaveObjptrs(GC_state s, objptr op) {
   GC_header header;
-  uint16_t bytesNonObjptrs;
   uint16_t numObjptrs;
   GC_objectTypeTag tag;
   header = getHeader(objptrToPointer(op, NULL));
-  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+  splitHeader(s, header, &tag, NULL, NULL, &numObjptrs);
 
   return (STACK_TAG == tag) || (numObjptrs > 0);
 }
@@ -142,9 +141,9 @@ void advanceOneField(
     size_t dataBytes = numCells * bytesPerCell;
     pointer last = p + dataBytes;
 
-    // size_t posOffset = (size_t)(pos-p);
+    size_t posOffset = (size_t)(pos-p);
     // pointer cellStart = p + alignDown(posOffset, bytesPerCell);
-    pointer cellStart = pos - ((size_t)pos % bytesPerCell);
+    pointer cellStart = pos - ((size_t)posOffset % bytesPerCell);
 
     pointer cellEnd = cellStart + bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
     pointer fieldsStart = cellStart + bytesNonObjptrs;

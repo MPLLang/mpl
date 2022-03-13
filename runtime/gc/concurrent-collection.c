@@ -358,6 +358,8 @@ void markLoop(GC_state s, ConcurrentCollectArgs* args) {
     callIfIsObjptr(s, &markAddClosure, current);
     current = CC_workList_pop(s, worklist);
   }
+
+  assert(CC_workList_isEmpty(s, worklist));
 }
 
 void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
@@ -371,6 +373,8 @@ void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
     callIfIsObjptr(s, &unmarkAddClosure, current);
     current = CC_workList_pop(s, worklist);
   }
+
+  assert(CC_workList_isEmpty(s, worklist));
 }
 
 #if 0
