@@ -377,6 +377,16 @@ void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
   assert(CC_workList_isEmpty(s, worklist));
 }
 
+void tryMarkAndMarkLoop(GC_state s, objptr *opp, void* rawArgs) {
+  tryMarkAndAddToWorkList(s, opp, rawArgs);
+  markLoop(s, rawArgs);
+}
+
+void tryUnmarkAndUnmarkLoop(GC_state s, objptr *opp, void* rawArgs) {
+  tryUnmarkAndAddToWorkList(s, opp, rawArgs);
+  unmarkLoop(s, rawArgs);
+}
+
 #if 0
 void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
@@ -399,10 +409,8 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
-  tryMarkAndAddToWorkList(s, &src, rawArgs);
-  markLoop(s, rawArgs);
-  tryMarkAndAddToWorkList(s, &(remElem->from), rawArgs);
-  markLoop(s, rawArgs);
+  tryMarkAndMarkLoop(s, &src, rawArgs);
+  tryMarkAndMarkLoop(s, &(remElem->from), rawArgs);
 
 #if 0
 #if ASSERT
@@ -484,10 +492,8 @@ void unmarkPinned(
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   // unmarkPtrChunk(s, &src, rawArgs);
   // unmarkPtrChunk(s, &(remElem->from), rawArgs);
-  tryUnmarkAndAddToWorkList(s, &src, rawArgs);
-  unmarkLoop(s, rawArgs);
-  tryUnmarkAndAddToWorkList(s, &(remElem->from), rawArgs);
-  unmarkLoop(s, rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &src, rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &(remElem->from), rawArgs);
 
 #if 0
 #if ASSERT
@@ -512,7 +518,10 @@ void unmarkPinned(
 // Recursively however it only calls forwardPtrChunk and not itself
 void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
-  pointer p = objptrToPointer(*opp, NULL);
+  objptr op = *opp;
+  pointer p = objptrToPointer(op, NULL);
+
+  assert(isObjptr(op));
 
   bool saved = saveNoForward(s, p, rawArgs);
 
@@ -528,22 +537,44 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   // foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
   //         &forwardPtrClosure, FALSE);
 
-  struct GC_foreachObjptrClosure markAddClosure =
-    {.fun = tryMarkAndAddToWorkList, .env = rawArgs};
-  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &markAddClosure, FALSE);
+  // TODO: update cc-worklist to allow for stacks...
+  GC_objectTypeTag tag;
+  splitHeader(s, getHeader(p), &tag, NULL, NULL, NULL);
+  if (STACK_TAG == tag) {
+    struct GC_foreachObjptrClosure markAddClosure =
+      {.fun = tryMarkAndMarkLoop, .env = rawArgs};
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &markAddClosure, FALSE);
+  } else {
+    CC_workList_push(s, &(args->worklist), op);
+    markLoop(s, rawArgs);
+  }
 }
 
 void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
-  pointer p = objptrToPointer(*opp, NULL);
+  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
+  objptr op = *opp;
+  pointer p = objptrToPointer(op, NULL);
+
+  assert(isObjptr(op));
+
   if(CC_isPointerMarked(p)){
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
     assert(!CC_isPointerMarked(p));
   }
-  struct GC_foreachObjptrClosure unmarkClosure =
-  {.fun = tryUnmarkAndAddToWorkList, .env = rawArgs};
-  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-          &unmarkClosure, FALSE);
+
+  // TODO: update cc-worklist to allow for stacks...
+  GC_objectTypeTag tag;
+  splitHeader(s, getHeader(p), &tag, NULL, NULL, NULL);
+  if (STACK_TAG == tag) {
+    struct GC_foreachObjptrClosure unmarkClosure =
+      {.fun = tryUnmarkAndUnmarkLoop, .env = rawArgs};
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
+            &unmarkClosure, FALSE);
+  } else {
+    CC_workList_push(s, &(args->worklist), op);
+    unmarkLoop(s, rawArgs);
+  }
 }
 
 void ensureCallSanity(
@@ -981,7 +1012,7 @@ size_t CC_collectWithRoots(
     forEachObjptrInCCStackBag(
       s,
       tempRemovedFromCCBag,
-      tryMarkAndAddToWorkList,
+      tryMarkAndMarkLoop,
       &lists);
     HM_appendChunkList(removedFromCCBag, tempRemovedFromCCBag);
     HM_initChunkList(tempRemovedFromCCBag);
@@ -1023,7 +1054,7 @@ size_t CC_collectWithRoots(
   unmarkLoop(s, &lists);
 
   // forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
-  forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndAddToWorkList, &lists);
+  forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndUnmarkLoop, &lists);
   unmarkLoop(s, &lists);
 
   HM_freeChunksInList(s, removedFromCCBag);
