@@ -180,6 +180,7 @@ enum {
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,
                                 uint16_t *bytesNonObjptrsRet, uint16_t *numObjptrsRet);
+static inline bool isMutable(GC_state s, pointer p);
 static inline pointer advanceToObjectData (GC_state s, pointer p);
 static inline size_t objectSize(GC_state s, pointer p);
 
