@@ -89,6 +89,7 @@ typedef GC_state GCState_t;
 #include "gc/local-scope.h"
 #include "gc/local-heap.h"
 #include "gc/assign.h"
+#include "gc/concurrent-list.h"
 #include "gc/remembered-set.h"
 #include "gc/gap.h"
 // #include "gc/deferred-promote.h"

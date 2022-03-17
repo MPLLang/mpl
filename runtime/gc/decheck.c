@@ -237,16 +237,16 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1)
   return p1 == lca_path || dag_depth(t1) <= decheckGetSyncDepth(thread, llen);
 }
 
-void decheckRead(GC_state s, objptr ptr) {
+void decheckRead(GC_state s, objptr dst, objptr src) {
     GC_thread thread = getThreadCurrent(s);
     if (thread == NULL)
         return;
     decheck_tid_t tid = thread->decheckState;
     if (tid.bits == DECHECK_BOGUS_BITS)
         return;
-    if (!isObjptr(ptr))
+    if (!isObjptr(src))
         return;
-    HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+    HM_chunk chunk = HM_getChunkOf(objptrToPointer(src, NULL));
     if (chunk == NULL)
         return;
     decheck_tid_t allocator = chunk->decheckState;
@@ -257,9 +257,9 @@ void decheckRead(GC_state s, objptr ptr) {
 
     /** If we get here, there is entanglement. Next is how to handle it. */
 
-    assert(!s->controls->manageEntanglement);
-    if (!s->controls->manageEntanglement) {
-        printf("Entanglement detected: object at %p\n", (void *) ptr);
+    assert(!s->controls->manageEntanglement || true);
+    if (!s->controls->manageEntanglement && false) {
+        printf("Entanglement detected: object at %p\n", (void *) src);
         printf("Allocator tree depth: %d\n", tree_depth(allocator));
         printf("Allocator path: 0x%x\n", allocator.internal.path);
         printf("Allocator dag depth: %d\n", dag_depth(allocator));
@@ -267,6 +267,19 @@ void decheckRead(GC_state s, objptr ptr) {
         printf("Reader path: 0x%x\n", tid.internal.path);
         printf("Reader dag depth: %d\n", dag_depth(tid));
         exit(-1);
+    }
+    else {
+      uint32_t unpinDepth = lcaHeapDepth(tid, allocator);
+      bool headerChange, pinChange;
+      pinObjectInfo(src, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+      if (pinChange) {
+        struct HM_remembered remElem_ = {.object = src, .from = BOGUS_OBJPTR};
+        HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+      }
+      if (isMutable(s, objptrToPointer(src, NULL)) && !ES_contains(NULL, src)) {
+        HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
+        ES_add(s, HM_HH_getSuspects(lcaHeap), src);
+      }
     }
 
 #if 0
@@ -318,4 +331,13 @@ void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t st
    * off-by-one error...
    */
   memcpy(to, from, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
+}
+
+void disentangleObject(GC_state s, objptr ptr) {
+  if (isPinned(ptr)) {
+    unpinObject(ptr);
+    if (ES_contains(NULL, ptr)) {
+      ES_unmark(s, ptr);
+    }
+  }
 }

@@ -81,6 +81,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/pin.c"
 #include "gc/pointer.c"
 #include "gc/profiling.c"
+#include "gc/concurrent-list.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"
 #include "gc/sequence-allocate.c"
