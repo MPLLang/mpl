@@ -10,6 +10,7 @@
 
 #include "chunk.h"
 #include "concurrent-collection.h"
+#include "remembered-set.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
@@ -62,7 +63,7 @@ typedef struct HM_HierarchicalHeap {
   struct HM_HierarchicalHeap *subHeapForCC;
   struct HM_HierarchicalHeap *subHeapCompletedCC;
 
-  struct HM_chunkList rememberedSet;
+  struct HM_remSet rememberedSet;
   struct ConcurrentPackage concurrentPack;
   struct HM_chunkList entanglementSuspects;
 
@@ -104,7 +105,7 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
   return &(hh->chunkList);
 }
 
-static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
+static inline HM_remSet HM_HH_getRemSet(HM_HierarchicalHeap hh)
 {
   return &(hh->rememberedSet);
 }
@@ -122,6 +123,7 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh);
 
 bool HM_HH_isCCollecting(HM_HierarchicalHeap hh);
 void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p);
+void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool conc);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);

@@ -231,7 +231,7 @@ HM_HierarchicalHeap HM_HH_zip(
     if (depth1 == depth2)
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
-      HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
+      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
       ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
       linkCCChains(s, hh1, hh2);
 
@@ -349,7 +349,7 @@ void HM_HH_promoteChunks(
   {
     /* no need to do anything; this function only guarantees that the
      * current depth has been completely evacuated. */
-    ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
+    ES_clear(s, thread->hierarchicalHeap);
     return;
   }
 
@@ -379,7 +379,7 @@ void HM_HH_promoteChunks(
     if (NULL == hh->subHeapForCC) {
       assert(NULL == hh->subHeapCompletedCC);
       HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
-      HM_appendChunkList(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
+      HM_appendRemSet(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
       ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
       linkCCChains(s, parent, hh);
       /* shortcut.  */
@@ -454,7 +454,7 @@ void HM_HH_promoteChunks(
     assert(HM_HH_getDepth(hh) == currentDepth-1);
   }
 
-  ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
+  ES_clear(s, thread->hierarchicalHeap);
 
 #if ASSERT
   assert(hh == thread->hierarchicalHeap);
@@ -503,7 +503,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->heightDependants = 0;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
-  HM_initChunkList(HM_HH_getRemSet(hh));
+  HM_initRemSet(HM_HH_getRemSet(hh));
   HM_initChunkList(HM_HH_getSuspects(hh));
 
   return hh;
@@ -591,6 +591,17 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 
   chunk->decheckState = thread->decheckState;
   chunk->levelHead = HM_HH_getUFNode(hh);
+  // hh->chunkList <--> og
+  // toList --> hh
+  // 1. in-place collection of unionFind nodes?
+  // 2. How do you make the hh fully concurrent?
+  // how do you make the union-find fully concurrent and collectible?
+      // what is the hh?? list of heaps
+          // ->
+          // ->
+          // ->
+          // ->
+  // 3.
 
   thread->currentChunk = chunk;
   HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
@@ -747,7 +758,7 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
       HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
       HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
-      HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
+      HM_appendRemSet(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
       CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
       completed = next;
@@ -924,7 +935,7 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
   mainhh->subHeapForCC = heap->subHeapForCC;
   HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(heap));
-  HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(heap));
+  HM_appendRemSet(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(heap));
   linkInto(s, mainhh, heap);
 
 
@@ -937,7 +948,7 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
       HM_HH_getConcurrentPack(mainhh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
       HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(completed));
-      HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(completed));
+      HM_appendRemSet(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(completed));
       linkInto(s, mainhh, completed);
       completed = next;
     }
@@ -1152,6 +1163,32 @@ void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p) {
   }
 }
 
+void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool conc) {
+  assert(hh != NULL);
+  if (!conc) {
+    HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+  } else {
+    HM_UnionFindNode cursor = HM_HH_getUFNode(hh);
+    while(true) {
+      while (NULL != cursor->representative) {
+        cursor = cursor->representative;
+      }
+      hh = cursor->payload;
+      if (hh == NULL){
+        /* race with a join that changed the cursor, iterate again */
+        /*should not happen if we retire hh just like ufnodes*/
+        assert (false);
+        continue;
+      }
+      HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+      if (NULL == cursor->representative) {
+        return;
+      }
+    }
+  }
+
+}
+
 
 void HM_HH_freeAllDependants(
   GC_state s,
@@ -1263,8 +1300,8 @@ static inline void linkInto(
 
   assert(NULL == HM_HH_getUFNode(left)->dependant2);
 
-  HM_HH_getUFNode(right)->payload = NULL;
-  freeFixedSize(getHHAllocator(s), right);
+  // HM_HH_getUFNode(right)->payload = NULL;
+  // freeFixedSize(getHHAllocator(s), right);
 
   assert(HM_HH_isLevelHead(left));
 }
