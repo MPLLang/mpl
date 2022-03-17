@@ -90,6 +90,16 @@ void splitHeader(GC_state s, GC_header header,
     *numObjptrsRet = numObjptrs;
 }
 
+static inline bool isMutable(GC_state s, pointer p) {
+  GC_header header = getHeader(p);
+  GC_objectTypeTag tag;
+  uint16_t bytesNonObjptrs;
+  uint16_t numObjptrs;
+  bool hasIdentity;
+  splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
+  return hasIdentity;
+}
+
 /* advanceToObjectData (s, p)
  *
  * If p points at the beginning of an object, then advanceToObjectData
