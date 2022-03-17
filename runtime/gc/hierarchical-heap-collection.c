@@ -550,39 +550,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     }
   }
 
-  /* after everything has been scavenged, we have to move the pinned chunks */
-  depth = thread->currentDepth+1;
-  while (depth > forwardHHObjptrArgs.minDepth) {
-    depth--;
-    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
-    if (NULL == toSpaceLevel) {
-      /* check that there are also no pinned chunks at this level
-       * (if there was pinned chunk, then we would have also created a
-       * toSpace HH at this depth, because we would have scavenged the
-       * remembered entry) */
-      assert(pinned[depth].firstChunk == NULL);
-      continue;
-    }
-
-#if ASSERT
-    // SAM_NOTE: safe to check here, because pinned chunks are separate.
-    traverseEachObjInChunkList(s, HM_HH_getChunkList(toSpaceLevel));
-#endif
-
-    /* unset the flags on pinned chunks and update their HH pointer */
-    for (HM_chunk chunkCursor = pinned[depth].firstChunk;
-         chunkCursor != NULL;
-         chunkCursor = chunkCursor->nextChunk)
-    {
-      assert(chunkCursor->pinnedDuringCollection);
-      chunkCursor->pinnedDuringCollection = FALSE;
-      chunkCursor->levelHead = HM_HH_getUFNode(toSpaceLevel);
-    }
-
-    /* put the pinned chunks into the toSpace */
-    HM_appendChunkList(HM_HH_getChunkList(toSpaceLevel), &(pinned[depth]));
-  }
-
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %"PRIu64" objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
@@ -642,12 +609,42 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     info.depth = HM_HH_getDepth(hhTail);
     info.freedType = LGC_FREED_NORMAL_CHUNK;
     HM_freeChunksInListWithInfo(s, level, &infoc);
-    HM_HH_freeAllDependants(s, hhTail, FALSE);
-    freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
-    freeFixedSize(getHHAllocator(s), hhTail);
+    HM_HH_freeAllDependants(s, hhTail, TRUE);
+    // freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
+    // freeFixedSize(getHHAllocator(s), hhTail);
 
     hhTail = nextAncestor;
   }
+
+
+  /* after everything has been scavenged, we have to move the pinned chunks */
+  depth = thread->currentDepth+1;
+  while (depth > forwardHHObjptrArgs.minDepth) {
+    depth--;
+    HM_HierarchicalHeap fromSpaceLevel = fromSpace[depth];
+    if (NULL == fromSpaceLevel) {
+      /* check that there are also no pinned chunks at this level
+       * (if there was pinned chunk, then there must also have been a
+       * fromSpace HH at this depth which originally stored the chunk)
+       */
+      assert(pinned[depth].firstChunk == NULL);
+      continue;
+    }
+
+    /* unset the flags on pinned chunks and update their HH pointer */
+    for (HM_chunk chunkCursor = pinned[depth].firstChunk;
+         chunkCursor != NULL;
+         chunkCursor = chunkCursor->nextChunk)
+    {
+      assert(chunkCursor->levelHead == HM_HH_getUFNode(fromSpaceLevel));
+      assert(chunkCursor->pinnedDuringCollection);
+      chunkCursor->pinnedDuringCollection = FALSE;
+    }
+
+    /* put the pinned chunks into the toSpace */
+    HM_appendChunkList(HM_HH_getChunkList(fromSpaceLevel), &(pinned[depth]));
+  }
+
 
   /* Build the toSpace hh */
   HM_HierarchicalHeap hhToSpace = NULL;
@@ -661,7 +658,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   }
 
   /* merge in toSpace */
-  if (NULL == hhTail && NULL == hhToSpace) {
+  if (NULL == hh && NULL == hhToSpace) {
     /** SAM_NOTE: If we collected everything, I suppose this is possible.
       * But shouldn't the stack and thread at least be in the root-to-leaf
       * path? Should look into this...
@@ -669,7 +666,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     hh = HM_HH_new(s, thread->currentDepth);
   }
   else {
-    hh = HM_HH_zip(s, hhTail, hhToSpace);
+    hh = HM_HH_zip(s, hh, hhToSpace);
   }
 
   thread->hierarchicalHeap = hh;
@@ -741,6 +738,16 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     struct HM_foreachDownptrClosure closure =
       {.fun = checkRememberedEntry, .env = (void*)cursor};
     HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
+  }
+
+  // make sure that original representatives haven't been messed up
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    if (NULL != fromSpace[HM_HH_getDepth(cursor)]) {
+      assert(fromSpace[HM_HH_getDepth(cursor)] == cursor);
+    }
   }
 #endif
 
@@ -1136,12 +1143,20 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
+  if (chunk->levelHead != HM_HH_getUFNode(args->fromSpace[opDepth])) {
+    chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
+  }
+
   HM_unlinkChunkPreserveLevelHead(
     HM_HH_getChunkList(args->fromSpace[opDepth]),
     chunk);
   HM_appendChunk(&(args->pinned[opDepth]), chunk);
 
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
+  /** stronger version of previous assertion, needed for safe freeing of
+    * hh dependants after LGC completes
+    */
+  assert(chunk->levelHead == HM_HH_getUFNode(args->fromSpace[opDepth]));
 }
 
 /* ========================================================================= */
