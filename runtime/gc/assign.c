@@ -6,16 +6,16 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-void Assignable_decheckObjptr(objptr op)
+void Assignable_decheckObjptr(objptr dst, objptr src)
 {
   GC_state s = pthread_getspecific(gcstate_key);
   s->cumulativeStatistics->numDisentanglementChecks++;
-  decheckRead(s, op);
+  decheckRead(s, dst, src);
 }
 
 objptr Assignable_readBarrier(
   GC_state s,
-  ARG_USED_FOR_ASSERT objptr obj,
+  objptr obj,
   objptr *field)
 {
 
@@ -54,7 +54,7 @@ objptr Assignable_readBarrier(
   assert(ES_contains(NULL, obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
-  decheckRead(s, ptr);
+  decheckRead(s, ptr, obj);
 
   return ptr;
 }
@@ -157,7 +157,7 @@ void Assignable_writeBarrier(
 
     if (pinObject(src, (uint32_t)unpinDepth)) {
       /** Just remember it at some arbitrary place... */
-      HM_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, remElem);
+      HM_HH_rememberAtLevel(getThreadCurrent(s)->hierarchicalHeap, remElem);
     }
 
     return;
@@ -204,7 +204,7 @@ void Assignable_writeBarrier(
     ES_add(s, HM_HH_getSuspects(dhh), dst);
   }
 
-  bool success = pinObject(src, dd);
+  bool success = pinObject(src, dd, PIN_DOWN);
 
   // any concurrent pin can only decrease unpinDepth
   uint32_t unpinDepth = unpinDepthOf(src);
@@ -226,7 +226,7 @@ void Assignable_writeBarrier(
     HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, thread, sd);
     assert(NULL != shh);
     assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
-    HM_rememberAtLevel(shh, remElem);
+    HM_HH_rememberAtLevel(shh, remElem, false);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
       "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
