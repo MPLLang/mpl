@@ -34,6 +34,28 @@ bool CC_workList_isEmpty(
 }
 
 
+pointer findStackNonEmptyFrameTop(GC_state s, pointer bottom, pointer top) {
+  assert(bottom <= top);
+
+  while (top > bottom) {
+    /* Invariant: top points just past a "return address". */
+    GC_returnAddress returnAddress =
+      *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
+    GC_frameInfo frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
+    // index zero of this array is size
+    GC_frameOffsets frameOffsets = frameInfo->offsets;
+
+    if (frameOffsets[0] > 0) {
+      return top;
+    }
+
+    top -= frameInfo->size;
+  }
+
+  return NULL;
+}
+
+
 // returns FALSE if object has no objptrs and doesn't need to be traced
 bool makeInitialElem(GC_state s, objptr op, CC_workList_elem result) {
   GC_header header;
@@ -64,28 +86,10 @@ bool makeInitialElem(GC_state s, objptr op, CC_workList_elem result) {
     // printf("makeInitialElem stack\n");
 
     GC_stack stack = (GC_stack)objptrToPointer(op, NULL);
+    assert (stack->used <= stack->reserved);
     pointer bottom = getStackBottom(s, stack);
     pointer top = getStackTop(s, stack);
-
-    assert (stack->used <= stack->reserved);
-
-    pointer firstTop = NULL;
-
-    while (top > bottom) {
-      /* Invariant: top points just past a "return address". */
-      GC_returnAddress returnAddress =
-        *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
-      GC_frameInfo frameInfo = getFrameInfoFromReturnAddress (s, returnAddress);
-      // index zero of this array is size
-      GC_frameOffsets frameOffsets = frameInfo->offsets;
-
-      if (frameOffsets[0] > 0) {
-        firstTop = top;
-        break;
-      }
-
-      top -= frameInfo->size;
-    }
+    pointer firstTop = findStackNonEmptyFrameTop(s, bottom, top);
 
     if (NULL == firstTop) {
       // printf("makeInitialElem: skipping stack "FMTOBJPTR"\n", op);
@@ -216,9 +220,9 @@ void advanceOneField(
 
     // printf(
     //   "advanceOneField: stack "FMTOBJPTR" top="FMTPTR" bottom="FMTPTR" i=%u\n",
-    //   elem->op,
-    //   top,
-    //   bottom,
+    //   (uintptr_t)elem->op,
+    //   (uintptr_t)top,
+    //   (uintptr_t)bottom,
     //   i
     // );
 
@@ -228,11 +232,13 @@ void advanceOneField(
     GC_frameInfo frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
     // index zero of this array is size
     GC_frameOffsets frameOffsets = frameInfo->offsets;
+    pointer frameStart = top - frameInfo->size;
 
     assert(frameOffsets[0] > 0);
     assert(i < frameOffsets[0]);
+    assert(frameStart >= bottom);
 
-    result->field = (objptr*)(top - frameInfo->size + frameOffsets[i+1]);
+    result->field = (objptr*)(frameStart + frameOffsets[i+1]);
     elem->data.stack.frameOffsetsIdx++;
 
     result->objectDone = FALSE;
@@ -241,22 +247,14 @@ void advanceOneField(
       /** walk backwards until we find a frame that has at least one objptr
         * or, until we find the end of the stack.
         */
+      pointer newTop = findStackNonEmptyFrameTop(s, bottom, frameStart);
 
-      pointer newTop = top - frameInfo->size;
-      while (newTop > bottom) {
-        returnAddress = *((GC_returnAddress*)(newTop - GC_RETURNADDRESS_SIZE));
-        frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
-        frameOffsets = frameInfo->offsets;
-        if (frameOffsets[0] > 0) break;
-        newTop -= frameInfo->size;
+      if (NULL == newTop) {
+        result->objectDone = TRUE;
+      } else {
+        elem->data.stack.topCursor = newTop;
+        elem->data.stack.frameOffsetsIdx = 0;
       }
-
-      assert( (newTop > bottom && frameOffsets[0] > 0) || (newTop == bottom) );
-
-      elem->data.stack.topCursor = newTop;
-      elem->data.stack.frameOffsetsIdx = 0;
-
-      if (newTop == bottom) result->objectDone = TRUE;
     }
 
     return;

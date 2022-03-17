@@ -965,7 +965,7 @@ size_t CC_collectWithRoots(
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
   forceForward(s, &(cp->snapTemp), &lists);
-  forceForward(s, &(s->wsQueue), &lists);
+  // forceForward(s, &(s->wsQueue), &lists);
   forceForward(s, &(cp->stack), &lists);
 
   markLoop(s, &lists);
@@ -1024,7 +1024,7 @@ size_t CC_collectWithRoots(
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
   forceUnmark(s, &(cp->snapTemp), &lists);
-  forceUnmark(s, &(s->wsQueue), &lists);
+  // forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
 
   unmarkLoop(s, &lists);
