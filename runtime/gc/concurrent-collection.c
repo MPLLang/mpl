@@ -37,8 +37,6 @@ void GC_updateObjectHeader(
 // void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
 void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
 
-void tryMarkAndAddToWorkList(GC_state s, objptr* opp, void* rawArgs);
-
 #define ASSERT2 0
 
 
@@ -309,9 +307,13 @@ bool isChunkInList(HM_chunk chunk, HM_chunkList list) {
   return FALSE;
 }
 
-void tryMarkAndAddToWorkList(GC_state s, objptr *opp, void* rawArgs) {
+void tryMarkAndAddToWorkList(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  void* rawArgs)
+{
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
-  objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
 
@@ -328,9 +330,13 @@ void tryMarkAndAddToWorkList(GC_state s, objptr *opp, void* rawArgs) {
   }
 }
 
-void tryUnmarkAndAddToWorkList(GC_state s, objptr *opp, void* rawArgs) {
+void tryUnmarkAndAddToWorkList(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  void* rawArgs)
+{
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
-  objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
   HM_chunk chunk = HM_getChunkOf(p);
@@ -377,13 +383,13 @@ void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
   assert(CC_workList_isEmpty(s, worklist));
 }
 
-void tryMarkAndMarkLoop(GC_state s, objptr *opp, void* rawArgs) {
-  tryMarkAndAddToWorkList(s, opp, rawArgs);
+void tryMarkAndMarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
+  tryMarkAndAddToWorkList(s, opp, op, rawArgs);
   markLoop(s, rawArgs);
 }
 
-void tryUnmarkAndUnmarkLoop(GC_state s, objptr *opp, void* rawArgs) {
-  tryUnmarkAndAddToWorkList(s, opp, rawArgs);
+void tryUnmarkAndUnmarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
+  tryUnmarkAndAddToWorkList(s, opp, op, rawArgs);
   unmarkLoop(s, rawArgs);
 }
 
@@ -409,8 +415,8 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
-  tryMarkAndMarkLoop(s, &src, rawArgs);
-  tryMarkAndMarkLoop(s, &(remElem->from), rawArgs);
+  tryMarkAndMarkLoop(s, &src, src, rawArgs);
+  tryMarkAndMarkLoop(s, &(remElem->from), remElem->from, rawArgs);
 
 #if 0
 #if ASSERT
@@ -492,8 +498,8 @@ void unmarkPinned(
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   // unmarkPtrChunk(s, &src, rawArgs);
   // unmarkPtrChunk(s, &(remElem->from), rawArgs);
-  tryUnmarkAndUnmarkLoop(s, &src, rawArgs);
-  tryUnmarkAndUnmarkLoop(s, &(remElem->from), rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &src, src, rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &(remElem->from), remElem->from, rawArgs);
 
 #if 0
 #if ASSERT

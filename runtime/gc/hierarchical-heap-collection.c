@@ -485,7 +485,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     "Trying to forward current thread %p",
     (void*)s->currentThread);
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  forwardHHObjptr(s, &(s->currentThread), s->currentThread, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from GC_state" : "Did not copy thread from GC_state");
@@ -1172,16 +1172,18 @@ void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void* rawArgs
     FALSE
   );
 
-  forwardHHObjptr(s, &(remElem->from), rawArgs);
+  forwardHHObjptr(s, &(remElem->from), remElem->from, rawArgs);
 }
 
 /* ========================================================================= */
 
-void forwardHHObjptr (GC_state s,
-                      objptr* opp,
-                      void* rawArgs) {
+void forwardHHObjptr(
+  GC_state s,
+  objptr* opp,
+  objptr op,
+  void* rawArgs)
+{
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
-  objptr op = *opp;
   pointer p = objptrToPointer (op, NULL);
 
   assert(args->toDepth == HM_HH_INVALID_DEPTH);
