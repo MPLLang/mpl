@@ -662,7 +662,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     HM_HierarchicalHeap nextAncestor = hhTail->nextAncestor;
 
     HM_chunkList level = HM_HH_getChunkList(hhTail);
-    HM_chunkList remset = HM_HH_getRemSet(hhTail);
+    HM_remSet remset = HM_HH_getRemSet(hhTail);
     if (NULL != remset)
     {
 #if ASSERT
@@ -677,7 +677,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 #endif
       info.depth = HM_HH_getDepth(hhTail);
       info.freedType = LGC_FREED_REMSET_CHUNK;
-      HM_freeChunksInListWithInfo(s, remset, &infoc);
+      HM_freeRemSetWithInfo(s, remset, &infoc);
     }
 
 #if ASSERT
@@ -1178,16 +1178,16 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
   objptr op = remElem->object;
 
-#if ASSERT
-  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
-  assert(HM_HH_getDepth(fromHH) <= args->toDepth);
-#endif
+// #if ASSERT
+//   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+//   HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+//   assert(HM_HH_getDepth(fromHH) <= args->toDepth);
+// #endif
 
   if (!isPinned(op))
   {
     // If previously unpinned, then no need to remember this object.
-    assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
+    // assert(HM_getLevelHead(fromChunk) == args->fromSpace[args->toDepth]);
 
     LOG(LM_HH_PROMOTION, LL_INFO,
         "forgetting remset entry from " FMTOBJPTR " to " FMTOBJPTR,
@@ -1238,67 +1238,58 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
+  bool unpin = tryUnpinWithDepth(op, opDepth);
+
+  if (unpin) {
+    return;
+  }
+
   uint32_t unpinDepth = unpinDepthOf(op);
-  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
 
-  assert(fromDepth <= opDepth);
-
-  if (opDepth <= unpinDepth)
+  if (remElem->from != BOGUS_OBJPTR)
   {
-    unpinObject(op);
-    assert(fromDepth == opDepth);
+    uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+    assert(fromDepth <= opDepth);
+    if (fromDepth > unpinDepth) {
+      /** If this particular remembered entry came from deeper than some other
+        * down-pointer, then we don't need to keep it around. There will be some
+        * other remembered entry coming from the unpinDepth level.
+        *
+        * But note that it is very important that the condition is a strict
+        * inequality: we need to keep all remembered entries that came from the
+        * same shallowest level. (CC-chaining depends on this.)
+        */
 
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "forgetting remset entry from " FMTOBJPTR " to " FMTOBJPTR,
-        remElem->from, op);
+      LOG(LM_HH_PROMOTION, LL_INFO,
+          "forgetting remset entry from " FMTOBJPTR " to " FMTOBJPTR,
+          remElem->from, op);
 
-    return;
+      return;
+    }
   }
-
-  if (fromDepth > unpinDepth)
-  {
-    /** If this particular remembered entry came from deeper than some other
-      * down-pointer, then we don't need to keep it around. There will be some
-      * other remembered entry coming from the unpinDepth level.
-      *
-      * But note that it is very important that the condition is a strict
-      * inequality: we need to keep all remembered entries that came from the
-      * same shallowest level. (CC-chaining depends on this.)
-      */
-
-    LOG(LM_HH_PROMOTION, LL_INFO,
-        "forgetting remset entry from " FMTOBJPTR " to " FMTOBJPTR,
-        remElem->from, op);
-
-    return;
-  }
-
-  assert(fromDepth == unpinDepth);
 
   /* otherwise, object stays pinned, and we have to scavenge this remembered
    * entry into the toSpace. */
 
-  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
-  if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
-    HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-    uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
-    /* if this is a down-ptr completely inside the scope,
-     * no need to in-place things reachable from it
-     */
-    printf("this is happening\n");
-    if (!chunk->pinnedDuringCollection)
-    {
-      chunk->pinnedDuringCollection = TRUE;
-      HM_unlinkChunkPreserveLevelHead(
-          HM_HH_getChunkList(args->fromSpace[opDepth]),
-          chunk);
-      HM_appendChunk(&(args->pinned[opDepth]), chunk);
-    }
-  }
-  else {
-    // printf("fromDepth =%d, max = %d, min = %d", fromDepth, args->maxDepth, args->minDepth);
-    LGC_markAndScan(s, &op, rawArgs);
-  }
+  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
+  // if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
+  //   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+  //   uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
+  //   /* if this is a down-ptr completely inside the scope,
+  //    * no need to in-place things reachable from it
+  //    */
+  //   if (!chunk->pinnedDuringCollection)
+  //   {
+  //     chunk->pinnedDuringCollection = TRUE;
+  //     HM_unlinkChunkPreserveLevelHead(
+  //         HM_HH_getChunkList(args->fromSpace[opDepth]),
+  //         chunk);
+  //     HM_appendChunk(&(args->pinned[opDepth]), chunk);
+  //   }
+  // }
+  // else {
+  LGC_markAndScan(s, &op, rawArgs);
+  // }
 
   // LGC_markAndScan(s, &(remElem->from), rawArgs);
 
@@ -1456,8 +1447,9 @@ void forwardHHObjptr(GC_state s,
   }
   else
   {
+    disentangleObject(s, op);
     // This object should have been previously unpinned
-    unpinObject(op);
+    // unpinObject(op);
   }
 
   /* ========================================================================

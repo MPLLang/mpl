@@ -590,18 +590,17 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
 /* ========================================================================= */
 
 struct CC_tryUnpinOrKeepPinnedArgs {
-  HM_chunkList newRemSet;
+  HM_remSet newRemSet;
   HM_HierarchicalHeap tgtHeap;
 
   void* fromSpaceMarker;
   void* toSpaceMarker;
 };
 
-
 void CC_tryUnpinOrKeepPinned(
-  __attribute__((unused)) GC_state s,
-  HM_remembered remElem,
-  void* rawArgs)
+    __attribute__((unused)) GC_state s,
+    HM_remembered remElem,
+    void *rawArgs)
 {
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
@@ -628,7 +627,36 @@ void CC_tryUnpinOrKeepPinned(
   assert(chunk->tmpHeap == args->fromSpaceMarker);
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
-  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+  // pointer p = objptrToPointer(remElem->object, NULL);
+  // GC_header header = getHeader(p);
+  // enum PinType pt = pinType(header);
+  // uint32_t unpinDepth = unpinDepthOf(remElem->object);
+
+  // assert (pt != PIN_NONE);
+
+  if (remElem->from != BOGUS_OBJPTR)
+  {
+
+    // uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
+    // if (unpinDepth > opDepth && pt == PIN_ANY) {
+      // tryPinDec(remElem->object, opDepth);
+    // }
+
+    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+    assert(fromChunk->tmpHeap != args->toSpaceMarker);
+
+    if (fromChunk->tmpHeap == args->fromSpaceMarker) {
+      assert(isChunkInList(fromChunk, HM_HH_getChunkList(args->tgtHeap)));
+      return;
+    }
+
+    /* otherwise, object stays pinned, and we have to keep this remembered
+    * entry into the toSpace. */
+  }
+
+  /* grossly overapproximate for entangled objects */
+  HM_remember(args->newRemSet, remElem, false);
+
 
   /** SAM_NOTE: The goal of the following was to filter remset entries
     * to only keep the "shallowest" entries. But this is really tricky,
@@ -641,7 +669,6 @@ void CC_tryUnpinOrKeepPinned(
     */
 #if 0
   uint32_t unpinDepth = unpinDepthOf(op);
-  uint32_t opDepth = HM_HH_getDepth(args->tgtHeap);
   uint32_t fromDepth = HM_HH_getDepth(HM_getLevelHead(fromChunk));
   if (fromDepth > unpinDepth) {
     /** Can forget any down-pointer that came from shallower than the
@@ -651,20 +678,6 @@ void CC_tryUnpinOrKeepPinned(
   }
   assert(opDepth < unpinDepth || fromDepth == unpinDepth);
 #endif
-
-  assert(fromChunk->tmpHeap != args->toSpaceMarker);
-
-  if (fromChunk->tmpHeap == args->fromSpaceMarker)
-  {
-    // fromChunk is in-scope of CC. Don't need to keep this remembered entry.
-    assert(isChunkInList(fromChunk, HM_HH_getChunkList(args->tgtHeap)));
-    return;
-  }
-
-  /* otherwise, object stays pinned, and we have to keep this remembered
-   * entry into the toSpace. */
-
-  HM_remember(args->newRemSet, remElem);
 
   assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
@@ -678,9 +691,9 @@ void CC_filterPinned(
   void* fromSpaceMarker,
   void* toSpaceMarker)
 {
-  HM_chunkList oldRemSet = HM_HH_getRemSet(hh);
-  struct HM_chunkList newRemSet;
-  HM_initChunkList(&newRemSet);
+  HM_remSet oldRemSet = HM_HH_getRemSet(hh);
+  struct HM_remSet newRemSet;
+  HM_initRemSet(&newRemSet);
 
   LOG(LM_CC_COLLECTION, LL_INFO,
     "num pinned initially: %zu",
@@ -711,13 +724,13 @@ void CC_filterPinned(
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = CC_writeFreeChunkInfo, .env = &info};
 
-  HM_freeChunksInListWithInfo(s, oldRemSet, &infoc);
+  HM_freeRemSetWithInfo(s, oldRemSet, &infoc);
   *oldRemSet = newRemSet;  // this moves all data into remset of hh
 
-  assert(HM_HH_getRemSet(hh)->firstChunk == newRemSet.firstChunk);
-  assert(HM_HH_getRemSet(hh)->lastChunk == newRemSet.lastChunk);
-  assert(HM_HH_getRemSet(hh)->size == newRemSet.size);
-  assert(HM_HH_getRemSet(hh)->usedSize == newRemSet.usedSize);
+  // assert(HM_HH_getRemSet(hh)->firstChunk == newRemSet.firstChunk);
+  // assert(HM_HH_getRemSet(hh)->lastChunk == newRemSet.lastChunk);
+  // assert(HM_HH_getRemSet(hh)->size == newRemSet.size);
+  // assert(HM_HH_getRemSet(hh)->usedSize == newRemSet.usedSize);
 
   LOG(LM_CC_COLLECTION, LL_INFO,
     "num pinned after filter: %zu",
