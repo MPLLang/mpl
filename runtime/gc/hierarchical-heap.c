@@ -231,8 +231,8 @@ HM_HierarchicalHeap HM_HH_zip(
     if (depth1 == depth2)
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
-      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
       ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
+      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
       linkCCChains(s, hh1, hh2);
 
       // This has to happen before linkInto (which frees hh2)
@@ -379,8 +379,8 @@ void HM_HH_promoteChunks(
     if (NULL == hh->subHeapForCC) {
       assert(NULL == hh->subHeapCompletedCC);
       HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
-      HM_appendRemSet(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
       ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
+      HM_appendRemSet(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
       linkCCChains(s, parent, hh);
       /* shortcut.  */
       thread->hierarchicalHeap = parent;
@@ -1280,7 +1280,7 @@ void HM_HH_freeAllDependants(
 /*******************************/
 
 static inline void linkInto(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   HM_HierarchicalHeap left,
   HM_HierarchicalHeap right)
 {
@@ -1302,6 +1302,7 @@ static inline void linkInto(
 
   // HM_HH_getUFNode(right)->payload = NULL;
   // freeFixedSize(getHHAllocator(s), right);
+  // HH_EBR_retire(s, HM_HH_getUFNode(right));
 
   assert(HM_HH_isLevelHead(left));
 }
