@@ -571,51 +571,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     }
   }
 
-<<<<<<< HEAD
-  /* after everything has been scavenged, we have to move the pinned chunks and unmark
-   * objects moved by mark and scan */
-  depth = thread->currentDepth + 1;
-  while (depth > forwardHHObjptrArgs.minDepth)
-  {
-    depth--;
-    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
-    if (NULL == toSpaceLevel)
-    {
-      /* check that there are also no pinned chunks at this level
-       * (if there was pinned chunk, then we would have also created a
-       * toSpace HH at this depth, because we would have scavenged the
-       * remembered entry) */
-      assert(pinned[depth].firstChunk == NULL);
-      continue;
-    }
-
-#if ASSERT
-    // SAM_NOTE: safe to check here, because pinned chunks are separate.
-    traverseEachObjInChunkList(s, HM_HH_getChunkList(toSpaceLevel));
-#endif
-    // struct HM_foreachObjClosure unmarkClosure =
-    struct HM_foreachDownptrClosure closure =
-        {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
-    HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
-    //   {.fun = unmark, .env = (void *)&forwardHHObjptrArgs};
-
-    // HM_foreachObjInChunkList(s, &(pinned[depth]), &unmarkClosure);
-    /* unset the flags on pinned chunks and update their HH pointer */
-    for (HM_chunk chunkCursor = pinned[depth].firstChunk;
-         chunkCursor != NULL;
-         chunkCursor = chunkCursor->nextChunk)
-    {
-      assert(chunkCursor->pinnedDuringCollection);
-      chunkCursor->pinnedDuringCollection = FALSE;
-      chunkCursor->levelHead = HM_HH_getUFNode(toSpaceLevel);
-    }
-
-    /* put the pinned chunks into the toSpace */
-    HM_appendChunkList(HM_HH_getChunkList(toSpaceLevel), &(pinned[depth]));
-  }
-
-=======
->>>>>>> 6442206faacf4372f2be52ed81ae961edc36fafd
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects in copy-collection",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
