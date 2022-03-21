@@ -73,9 +73,14 @@ void pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
   while (true) {
     GC_header header = getHeader(p);
 
-    uint32_t previousUnpinDepth =
-      (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
-    uint32_t newUnpinDepth = min(previousUnpinDepth, unpinDepth);
+    uint32_t newUnpinDepth;
+    if(isPinned(op)) {
+      uint32_t previousUnpinDepth =
+        (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+      newUnpinDepth = min(previousUnpinDepth, unpinDepth);
+    } else {
+      newUnpinDepth = unpinDepth;
+    }
     enum PinType nt = maxPT(pt, pinType(header));
 
     GC_header newHeader =
