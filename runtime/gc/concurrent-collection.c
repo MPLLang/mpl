@@ -770,6 +770,7 @@ size_t CC_collectWithRoots(
   HM_HierarchicalHeap targetHH,
   __attribute__((unused)) GC_thread thread)
 {
+  return 0;
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);

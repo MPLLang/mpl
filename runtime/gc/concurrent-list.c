@@ -149,17 +149,30 @@ void CC_popAsChunkList(CC_concList concList, HM_chunkList chunkList) {
 }
 
 void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
+
+  HM_chunk firstChunk, lastChunk;
+  pthread_mutex_lock(&concList2->mutex);
+  firstChunk = concList2->firstChunk;
+  lastChunk = concList2->lastChunk;
+  concList2->firstChunk = NULL;
+  concList2->lastChunk = NULL;
+  pthread_mutex_unlock(&concList2->mutex);
+
+  if (firstChunk == NULL || lastChunk == NULL) {
+    return;
+  }
+
   pthread_mutex_lock(&concList1->mutex);
   if (concList1->lastChunk == NULL) {
-    concList1->firstChunk = concList2->firstChunk;
-    concList1->lastChunk = concList2->lastChunk;
+    concList1->firstChunk = firstChunk;
+    concList1->lastChunk = lastChunk;
   }
   else {
-    concList1->lastChunk->nextChunk = concList2->firstChunk;
-    concList2->firstChunk->prevChunk = concList1->lastChunk;
-    concList1->lastChunk = concList2->lastChunk;
+    concList1->lastChunk->nextChunk = firstChunk;
+    firstChunk->prevChunk = concList1->lastChunk;
+    concList1->lastChunk = lastChunk;
   }
-  pthread_mutex_unlock(&concList2->mutex);
+  pthread_mutex_unlock(&concList1->mutex);
 }
 
 void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info) {
