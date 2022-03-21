@@ -62,6 +62,7 @@ static void rotateAndReclaim(GC_state s) {
          p += sizeof(HM_UnionFindNode *))
     {
       HM_UnionFindNode hufp = * (HM_UnionFindNode *) p;
+      assert (hufp->payload != NULL);
       freeFixedSize(getHHAllocator(s), hufp->payload);
       freeFixedSize(getUFAllocator(s), hufp);
     }
