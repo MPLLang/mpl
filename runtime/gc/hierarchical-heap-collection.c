@@ -206,7 +206,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
-  assert(thread->currentDepth == originalLocalScope);
+  // assert(thread->currentDepth == originalLocalScope);
 
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.
@@ -635,7 +635,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 #endif
       info.depth = HM_HH_getDepth(hhTail);
       info.freedType = LGC_FREED_REMSET_CHUNK;
-      HM_freeRemSetWithInfo(s, remset, &infoc);
+      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc);
     }
 
 #if ASSERT
@@ -672,9 +672,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       continue;
     }
 
-    struct HM_foreachDownptrClosure closure =
-        {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
-    HM_foreachRemembered(s, HM_HH_getRemSet(fromSpaceLevel), &closure);
+    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
+    if (toSpaceLevel != NULL) {
+      struct HM_foreachDownptrClosure closure =
+          {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
+      HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
+    }
 
     /* unset the flags on pinned chunks and update their HH pointer */
     for (HM_chunk chunkCursor = pinned[depth].firstChunk;
