@@ -717,6 +717,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       continue;
     }
 
+    struct HM_foreachDownptrClosure closure =
+        {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
+    HM_foreachRemembered(s, HM_HH_getRemSet(fromSpaceLevel), &closure);
+
     /* unset the flags on pinned chunks and update their HH pointer */
     for (HM_chunk chunkCursor = pinned[depth].firstChunk;
          chunkCursor != NULL;
@@ -744,26 +748,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   }
 
   /* merge in toSpace */
-<<<<<<< HEAD
-  if (NULL == hhTail && NULL == hhToSpace)
-  {
-=======
   if (NULL == hh && NULL == hhToSpace) {
->>>>>>> 6442206faacf4372f2be52ed81ae961edc36fafd
     /** SAM_NOTE: If we collected everything, I suppose this is possible.
       * But shouldn't the stack and thread at least be in the root-to-leaf
       * path? Should look into this...
       */
     hh = HM_HH_new(s, thread->currentDepth);
   }
-<<<<<<< HEAD
-  else
-  {
-    hh = HM_HH_zip(s, hhTail, hhToSpace);
-=======
   else {
     hh = HM_HH_zip(s, hh, hhToSpace);
->>>>>>> 6442206faacf4372f2be52ed81ae961edc36fafd
   }
 
   thread->hierarchicalHeap = hh;
@@ -1183,6 +1176,16 @@ void LGC_markAndScan(GC_state s, objptr *opp, void *rawArgs)
     if (!chunk->pinnedDuringCollection)
     {
       chunk->pinnedDuringCollection = TRUE;
+
+      if (chunk->levelHead != HM_HH_getUFNode(args->fromSpace[opDepth])) {
+        chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
+      }
+
+      // HM_unlinkChunkPreserveLevelHead(
+      //     HM_HH_getChunkList(args->fromSpace[opDepth]),
+      //     chunk);
+      // HM_appendChunk(&(args->pinned[opDepth]), chunk);
+
       HM_unlinkChunkPreserveLevelHead(
           HM_HH_getChunkList(args->fromSpace[opDepth]),
           chunk);
@@ -1349,10 +1352,9 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   //   return;
   // }
 
-<<<<<<< HEAD
-  // chunk->pinnedDuringCollection = TRUE;
-  // assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
-  // assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
+  // if (chunk->levelHead != HM_HH_getUFNode(args->fromSpace[opDepth])) {
+  //   chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
+  // }
 
   // HM_unlinkChunkPreserveLevelHead(
   //   HM_HH_getChunkList(args->fromSpace[opDepth]),
@@ -1360,22 +1362,10 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   // HM_appendChunk(&(args->pinned[opDepth]), chunk);
 
   // assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
-=======
-  if (chunk->levelHead != HM_HH_getUFNode(args->fromSpace[opDepth])) {
-    chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
-  }
-
-  HM_unlinkChunkPreserveLevelHead(
-    HM_HH_getChunkList(args->fromSpace[opDepth]),
-    chunk);
-  HM_appendChunk(&(args->pinned[opDepth]), chunk);
-
-  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
-  /** stronger version of previous assertion, needed for safe freeing of
-    * hh dependants after LGC completes
-    */
-  assert(chunk->levelHead == HM_HH_getUFNode(args->fromSpace[opDepth]));
->>>>>>> 6442206faacf4372f2be52ed81ae961edc36fafd
+  // /** stronger version of previous assertion, needed for safe freeing of
+  //   * hh dependants after LGC completes
+  //   */
+  // assert(chunk->levelHead == HM_HH_getUFNode(args->fromSpace[opDepth]));
 }
 
 /* ========================================================================= */
