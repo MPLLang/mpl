@@ -61,7 +61,9 @@ static void rotateAndReclaim(GC_state s) {
          p < HM_getChunkFrontier(chunk);
          p += sizeof(HM_UnionFindNode *))
     {
-      freeFixedSize(getUFAllocator(s), *(HM_UnionFindNode*)p);
+      HM_UnionFindNode hufp = * (HM_UnionFindNode *) p;
+      freeFixedSize(getHHAllocator(s), hufp->payload);
+      freeFixedSize(getUFAllocator(s), hufp);
     }
   }
 
