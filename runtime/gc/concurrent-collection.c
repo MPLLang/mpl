@@ -325,7 +325,9 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
   forwardPtrChunk(s, &src, rawArgs);
-  forwardPtrChunk(s, &(remElem->from), rawArgs);
+  if (remElem->from != BOGUS_OBJPTR) {
+    forwardPtrChunk(s, &(remElem->from), rawArgs);
+  }
 
 #if 0
 #if ASSERT
@@ -389,7 +391,9 @@ void unmarkPinned(
   objptr src = remElem->object;
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
   unmarkPtrChunk(s, &src, rawArgs);
-  unmarkPtrChunk(s, &(remElem->from), rawArgs);
+  if (remElem->from != BOGUS_OBJPTR) {
+    unmarkPtrChunk(s, &(remElem->from), rawArgs);
+  }
 
 #if 0
 #if ASSERT
@@ -770,7 +774,6 @@ size_t CC_collectWithRoots(
   HM_HierarchicalHeap targetHH,
   __attribute__((unused)) GC_thread thread)
 {
-  return 0;
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
