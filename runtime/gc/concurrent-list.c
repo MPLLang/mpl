@@ -8,14 +8,14 @@ void allocateChunkInConcList(
   CC_concList concList,
   size_t objSize,
   HM_chunk lastChunk) {
-  pthread_mutex_lock(&concList->mutex);
+  GC_state s = pthread_getspecific(gcstate_key);
 
+  pthread_mutex_lock(&concList->mutex);
   if(concList->lastChunk != lastChunk) {
     pthread_mutex_unlock(&concList->mutex);
     return;
   }
 
-  GC_state s = pthread_getspecific(gcstate_key);
   HM_chunk chunk = HM_getFreeChunk(s, objSize);
 
   if (NULL == chunk)
@@ -34,6 +34,7 @@ void allocateChunkInConcList(
   {
     lastChunk->nextChunk = chunk;
   }
+  concList->lastChunk = chunk;
   if (concList->firstChunk == NULL)
   {
     concList->firstChunk = chunk;
