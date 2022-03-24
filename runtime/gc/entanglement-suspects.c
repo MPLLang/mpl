@@ -155,5 +155,5 @@ void ES_clear(GC_state s, HM_HierarchicalHeap hh)
   int numSuspects = ES_foreachSuspect(s, &oldList, &fObjptrClosure);
   s->cumulativeStatistics->numSuspectsCleared+=numSuspects;
 
-  HM_freeChunksInList(s, es);
+  HM_freeChunksInList(s, &(oldList));
 }
