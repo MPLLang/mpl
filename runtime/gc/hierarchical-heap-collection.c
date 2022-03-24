@@ -1130,6 +1130,7 @@ void LGC_markAndScan(GC_state s, objptr *opp, void *rawArgs)
   }
   else if (!CC_isPointerMarked(p))
   {
+    assert(args->fromSpace[opDepth] == HM_getLevelHead(chunk));
     markObj(p);
     if (!chunk->pinnedDuringCollection)
     {
@@ -1155,6 +1156,7 @@ void LGC_markAndScan(GC_state s, objptr *opp, void *rawArgs)
   }
   else
   {
+    assert(args->fromSpace[opDepth] == HM_getLevelHead(chunk));
     assert(chunk->pinnedDuringCollection);
   }
 }
@@ -1345,8 +1347,9 @@ void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void *rawArgs
       &trueObjptrPredicateClosure,
       &closure,
       FALSE);
-
-  forwardHHObjptr(s, &(remElem->from), rawArgs);
+  if (remElem->from != BOGUS_OBJPTR) {
+    forwardHHObjptr(s, &(remElem->from), rawArgs);
+  }
 }
 
 /* ========================================================================= */
@@ -1714,11 +1717,13 @@ void checkRememberedEntry(
   assert(HM_getLevelHead(theChunk) == hh);
 
   assert(!hasFwdPtr(objptrToPointer(object, NULL)));
-  assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
+  if (remElem->from != BOGUS_OBJPTR) {
+      assert(!hasFwdPtr(objptrToPointer(remElem->from, NULL)));
 
-  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-  HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
-  assert(HM_HH_getDepth(fromHH) <= HM_HH_getDepth(hh));
+    HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
+    HM_HierarchicalHeap fromHH = HM_getLevelHead(fromChunk);
+    assert(HM_HH_getDepth(fromHH) <= HM_HH_getDepth(hh));
+  }
 }
 
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk)
