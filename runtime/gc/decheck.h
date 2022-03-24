@@ -38,11 +38,11 @@ PRIVATE void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uin
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void decheckInit(GC_state s);
-void decheckRead(GC_state s, objptr dst, objptr src);
+bool decheck(GC_state s, objptr ptr);
 bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1);
 int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2);
 void disentangleObject(GC_state s, objptr ptr);
-
+void manage_entangled(GC_state s, objptr ptr);
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #endif /* _DECHECK_H_ */

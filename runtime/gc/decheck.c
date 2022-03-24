@@ -237,51 +237,62 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1)
   return p1 == lca_path || dag_depth(t1) <= decheckGetSyncDepth(thread, llen);
 }
 
-void decheckRead(GC_state s, objptr dst, objptr src) {
+void manage_entangled(GC_state s, objptr ptr) {
+
+  GC_thread thread = getThreadCurrent(s);
+  decheck_tid_t tid = thread->decheckState;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+  decheck_tid_t allocator = chunk->decheckState;
+
+  if (!s->controls->manageEntanglement && false)
+  {
+    printf("Entanglement detected: object at %p\n", (void *)ptr);
+    printf("Allocator tree depth: %d\n", tree_depth(allocator));
+    printf("Allocator path: 0x%x\n", allocator.internal.path);
+    printf("Allocator dag depth: %d\n", dag_depth(allocator));
+    printf("Reader tree depth: %d\n", tree_depth(tid));
+    printf("Reader path: 0x%x\n", tid.internal.path);
+    printf("Reader dag depth: %d\n", dag_depth(tid));
+    exit(-1);
+  }
+
+
+  uint32_t unpinDepth = lcaHeapDepth(tid, allocator);
+  bool headerChange, pinChange;
+  pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+  if (pinChange)
+  {
+    struct HM_remembered remElem_ = {.object = ptr, .from = BOGUS_OBJPTR};
+    HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+  }
+  if (isMutable(s, objptrToPointer(ptr, NULL)) && !ES_contains(NULL, ptr))
+  {
+    HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
+    ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
+  }
+}
+
+bool decheck(GC_state s, objptr ptr) {
+    if (!s->controls->manageEntanglement)
+      return true;
     GC_thread thread = getThreadCurrent(s);
     if (thread == NULL)
-        return;
+        return true;
     decheck_tid_t tid = thread->decheckState;
     if (tid.bits == DECHECK_BOGUS_BITS)
-        return;
-    if (!isObjptr(src))
-        return;
-    HM_chunk chunk = HM_getChunkOf(objptrToPointer(src, NULL));
+        return true;
+    if (!isObjptr(ptr))
+        return true;
+    HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
     if (chunk == NULL)
-        return;
+        return true;
     decheck_tid_t allocator = chunk->decheckState;
     if (allocator.bits == DECHECK_BOGUS_BITS)
-        return;
+        return true;
     if (decheckIsOrdered(thread, allocator))
-        return;
+        return true;
 
-    /** If we get here, there is entanglement. Next is how to handle it. */
-
-    assert(!s->controls->manageEntanglement || true);
-    if (!s->controls->manageEntanglement && false) {
-        printf("Entanglement detected: object at %p\n", (void *) src);
-        printf("Allocator tree depth: %d\n", tree_depth(allocator));
-        printf("Allocator path: 0x%x\n", allocator.internal.path);
-        printf("Allocator dag depth: %d\n", dag_depth(allocator));
-        printf("Reader tree depth: %d\n", tree_depth(tid));
-        printf("Reader path: 0x%x\n", tid.internal.path);
-        printf("Reader dag depth: %d\n", dag_depth(tid));
-        exit(-1);
-    }
-    else {
-      uint32_t unpinDepth = lcaHeapDepth(tid, allocator);
-      bool headerChange, pinChange;
-      pinObjectInfo(src, unpinDepth, PIN_ANY, &headerChange, &pinChange);
-      if (pinChange) {
-        struct HM_remembered remElem_ = {.object = src, .from = BOGUS_OBJPTR};
-        HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
-      }
-      if (isMutable(s, objptrToPointer(src, NULL)) && !ES_contains(NULL, src)) {
-        HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
-        ES_add(s, HM_HH_getSuspects(lcaHeap), src);
-      }
-    }
-
+    return false;
 #if 0
     s->cumulativeStatistics->numEntanglementsDetected++;
 
