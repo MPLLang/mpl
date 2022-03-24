@@ -10,7 +10,10 @@ void Assignable_decheckObjptr(objptr dst, objptr src)
 {
   GC_state s = pthread_getspecific(gcstate_key);
   s->cumulativeStatistics->numDisentanglementChecks++;
-  decheckRead(s, dst, src);
+  if (!decheck(s, src))
+  {
+    manage_entangled(s, src);
+  }
 }
 
 objptr Assignable_readBarrier(
@@ -54,7 +57,10 @@ objptr Assignable_readBarrier(
   assert(ES_contains(NULL, obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
-  decheckRead(s, ptr, obj);
+  if (!decheck(s, obj))
+  {
+    manage_entangled(s, obj);
+  }
 
   return ptr;
 }
@@ -99,7 +105,7 @@ void Assignable_writeBarrier(
     (size_t)(objend - dstp));
 #endif
 
-  HM_HierarchicalHeap dstHH = HM_getLevelHeadPathCompress(HM_getChunkOf(dstp));
+  HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dstp));
 
   objptr readVal = *field;
   if (dstHH->depth >= 1 && isObjptr(readVal) && s->wsQueueTop!=BOGUS_OBJPTR) {
@@ -127,6 +133,54 @@ void Assignable_writeBarrier(
   HM_remembered remElem = &remElem_;
 
   pointer srcp = objptrToPointer(src, NULL);
+  bool src_de = decheck(s, src);
+
+  if (src_de) {
+    HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
+    if (srcHH == dstHH) {
+      /* internal pointers are always traced */
+      return;
+    }
+
+    bool dst_de = decheck(s, dst);
+    uint32_t dd = dstHH->depth, sd = srcHH->depth;
+    /* depth comparisons make sense only when src && dst are on the same root-to-leaf path,
+      i.e., when dst_de && src_de */
+    bool snapshotted = dst_de &&
+                        ((dd > sd) || /* up pointer (snapshotted by the closure) */
+                         ((HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG)
+                         && dd == sd) /* internal (within a chain) pointer to a snapshotted heap */
+                        );
+
+    if (snapshotted) {
+      return;
+    }
+
+    /* otherwise pin*/
+    bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
+    enum PinType pt = primary_down_ptr ? PIN_DOWN : PIN_ANY;
+    uint32_t unpinDepth = dst_de ? dd
+      : (uint32_t) lcaHeapDepth(HM_getChunkOf(srcp)->decheckState, HM_getChunkOf(dstp)->decheckState);
+    bool success = pinObject(src, unpinDepth, pt);
+    if (success) {
+      HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), sd);
+      assert(NULL != shh);
+      assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+      HM_HH_rememberAtLevel(shh, remElem, false);
+
+      LOG(LM_HH_PROMOTION, LL_INFO,
+        "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+        dstHH->depth, srcHH->depth,
+        dst, src);
+    }
+
+    /*add dst to the suspect set*/
+    if (dd > 0 && !ES_contains(NULL, dst)) {
+      HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
+      ES_add(s, HM_HH_getSuspects(dhh), dst);
+    }
+  }
+
 
 #if 0
   /** This is disabled for now. In the future we will come back to
@@ -164,29 +218,28 @@ void Assignable_writeBarrier(
   }
 #endif
 
-  HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
 
   /* Up-pointer. */
-  if (dstHH->depth > srcHH->depth)
-    return;
+  // if (dstHH->depth > srcHH->depth)
+  //   return;
 
   /* Internal pointer. It's safe to ignore an internal pointer if:
    *   1. it's contained entirely within one subheap, or
    *   2. the pointed-to object (src) lives in an already snapshotted subregion
    */
-  if ( (dstHH == srcHH) ||
-       (dstHH->depth == srcHH->depth &&
-         HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG) ) {
-    // assert(...);
-    // if (dstHH != srcHH) {
-    //   printf(
-    //     "ignore internal pointer "FMTPTR" --> "FMTPTR". dstHH == srcHH? %d\n",
-    //     (uintptr_t)dstp,
-    //     (uintptr_t)srcp,
-    //     srcHH == dstHH);
-    // }
-    return;
-  }
+  // if ( (dstHH == srcHH) ||
+  //      (dstHH->depth == srcHH->depth &&
+  //        HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG) ) {
+  //   // assert(...);
+  //   // if (dstHH != srcHH) {
+  //   //   printf(
+  //   //     "ignore internal pointer "FMTPTR" --> "FMTPTR". dstHH == srcHH? %d\n",
+  //   //     (uintptr_t)dstp,
+  //   //     (uintptr_t)srcp,
+  //   //     srcHH == dstHH);
+  //   // }
+  //   return;
+  // }
   /** Otherwise, its a down-pointer, so
     *  (i) make dst a suspect for entanglement, i.e., mark the suspect bit of dst's header
     *      (see pin.h for header-layout).
@@ -197,42 +250,46 @@ void Assignable_writeBarrier(
     */
 
   /* make dst a suspect for entanglement */
-  uint32_t dd = dstHH->depth;
-  GC_thread thread = getThreadCurrent(s);
-  if (dd > 0 && !ES_contains(NULL, dst)) {
-    HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, thread, dd);
-    ES_add(s, HM_HH_getSuspects(dhh), dst);
-  }
+  // uint32_t dd = dstHH->depth;
+  // if (dd > 0 && !ES_contains(NULL, dst)) {
+  //   HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, thread, dd);
+  //   ES_add(s, HM_HH_getSuspects(dhh), dst);
+  // }
 
-  bool success = pinObject(src, dd, PIN_DOWN);
+  // if (decheck(s, src)) {
+  //   uint32_t sd = srcHH->depth;
+  //   bool dst_de = decheck(s, dst);
+  //   assert (dd <= sd);
+  //   bool true_down_ptr = dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG) && dst_de;
+  //   // bool unpinDepth = dst_de ? dd : lcaDepth(srcHH->tid, dstHH->tid);
+  //   /* treat a pointer from a chained heap as a cross pointer */
+  //   bool success = pinObject(src, dd, true_down_ptr ? PIN_DOWN : PIN_ANY);
+  //   if (success)
+  //   {
+  //     HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, thread, sd);
+  //     assert(NULL != shh);
+  //     assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+  //     HM_HH_rememberAtLevel(shh, remElem, false);
 
-  // any concurrent pin can only decrease unpinDepth
-  uint32_t unpinDepth = unpinDepthOf(src);
-  assert(unpinDepth <= dd);
+  //     LOG(LM_HH_PROMOTION, LL_INFO,
+  //       "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+  //       dstHH->depth, srcHH->depth,
+  //       dst, src);
+  //   }
+  //   if (!dst_de)
+  //   {
+  //     DIE("HAVE TO HANDLE ENTANGLED WRITES SEPARATELY");
+  //     // HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
+  //     // ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
+  //   }
+  // }
 
-  if (success || dd == unpinDepth)
-  {
-    uint32_t sd = srcHH->depth;
-#if 0
-    /** Fix a silly issue where, when we are dealing with entanglement, the
-      * lower object is actually deeper than the current thread (which is
-      * possible because of entanglement! the thread is peeking inside of
-      * some other thread's heaps, and the other thread might be deeper).
-      */
-    if (d > thread->currentDepth && s->controls->manageEntanglement)
-      d = thread->currentDepth;
-#endif
 
-    HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, thread, sd);
-    assert(NULL != shh);
-    assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
-    HM_HH_rememberAtLevel(shh, remElem, false);
+  // // any concurrent pin can only decrease unpinDepth
+  // assert(unpinDepth <= dd);
 
-    LOG(LM_HH_PROMOTION, LL_INFO,
-      "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
-      dstHH->depth, srcHH->depth,
-      dst, src);
-  }
+  // bool maybe_across_chain = write_de && (dd == unpinDepth) && (dd == sd);
+
 
   /* SAM_NOTE: TODO: track bytes allocated here in
    * thread->bytesAllocatedSinceLast...? */
