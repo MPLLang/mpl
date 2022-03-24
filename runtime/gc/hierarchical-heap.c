@@ -230,15 +230,16 @@ HM_HierarchicalHeap HM_HH_zip(
 
     if (depth1 == depth2)
     {
-      HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
-      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
-      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
-      linkCCChains(s, hh1, hh2);
-
       // This has to happen before linkInto (which frees hh2)
       HM_HierarchicalHeap hh2anc = hh2->nextAncestor;
       CC_freeStack(s, HM_HH_getConcurrentPack(hh2));
+      linkCCChains(s, hh1, hh2);
       linkInto(s, hh1, hh2);
+
+      HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
+      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
+      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
+
 
       *cursor = hh1;
       cursor = &(hh1->nextAncestor);
@@ -378,15 +379,16 @@ void HM_HH_promoteChunks(
 
     if (NULL == hh->subHeapForCC) {
       assert(NULL == hh->subHeapCompletedCC);
+      /* don't need the snapshot for this heap now. */
+      CC_freeStack(s, HM_HH_getConcurrentPack(hh));
+      linkCCChains(s, parent, hh);
+      linkInto(s, parent, hh);
+
       HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
       ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
       HM_appendRemSet(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
-      linkCCChains(s, parent, hh);
       /* shortcut.  */
       thread->hierarchicalHeap = parent;
-      /* don't need the snapshot for this heap now. */
-      CC_freeStack(s, HM_HH_getConcurrentPack(hh));
-      linkInto(s, parent, hh);
       hh = parent;
     }
     else {
@@ -757,10 +759,10 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
       HM_HierarchicalHeap next = completed->subHeapCompletedCC;
       HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
-      HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
-      HM_appendRemSet(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
       CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
+      HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
+      HM_appendRemSet(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
       completed = next;
     }
 
