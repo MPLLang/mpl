@@ -14,6 +14,7 @@ void beginAtomic (GC_state s) {
 }
 
 void endAtomic (GC_state s) {
+  assert(s->atomicState >= 1);
   s->atomicState--;
   if (0 == s->atomicState
       and s->signalsInfo.signalIsPending)

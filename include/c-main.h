@@ -47,6 +47,7 @@ PRIVATE uintptr_t Thread_returnToC() { return -1; }                     \
 static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
   uintptr_t nextBlock;                                                  \
   GC_state s = MLton_gcState();                                         \
+  printf("[%d] MLton_callFromC\n", s->procNumber);                      \
   if (DEBUG_CCODEGEN)                                                   \
     fprintf (stderr, "MLton_callFromC() starting\n");                   \
   s->callFromCOpArgsResPtr = localOpArgsResPtr;                         \

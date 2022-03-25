@@ -178,6 +178,16 @@ struct
     end
 
 
+  val _ = (_export "CheckActivationStack": (unit -> Int64.int) -> unit;)
+    (fn () =>
+      let
+        val AStack {stack, ...} = astackGetCurrent ()
+      in
+        Int64.fromInt (Stack.currentSize stack)
+      end)
+
+
+
   structure Activator :>
   sig
     type 'a t

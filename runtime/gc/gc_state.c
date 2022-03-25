@@ -224,6 +224,11 @@ size_t GC_getLastMajorStatisticsBytesLive (GC_state s) {
 
 pointer GC_getCallFromCHandlerThread (GC_state s) {
   pointer p = objptrToPointer (s->callFromCHandlerThread, NULL);
+
+  printf("[%d] getCallFromCHandlerThread("FMTPTR")\n",
+    s->procNumber,
+    (uintptr_t)p);
+
   return p;
 }
 
@@ -249,6 +254,11 @@ pointer GC_getSavedThread (GC_state s) {
   assert(s->savedThread != BOGUS_OBJPTR);
   p = objptrToPointer (s->savedThread, NULL);
   s->savedThread = BOGUS_OBJPTR;
+
+  printf("[%d] getSavedThread("FMTPTR")\n",
+    s->procNumber,
+    (uintptr_t)p);
+
   return p;
 }
 
@@ -256,6 +266,9 @@ void GC_setSavedThread (GC_state s, pointer p) {
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
+  printf("[%d] setSavedThread("FMTPTR")\n",
+    s->procNumber,
+    (uintptr_t)p);
   op = pointerToObjptr (p, NULL);
   s->savedThread = op;
 }

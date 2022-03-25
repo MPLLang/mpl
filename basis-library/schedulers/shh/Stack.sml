@@ -7,6 +7,8 @@ sig
   val pop: 'a t -> unit
 
   val popOldest: 'a t -> 'a option
+
+  val currentSize: 'a t -> int
 end =
 struct
 
@@ -51,5 +53,8 @@ struct
         x
       end
     end
+
+  fun currentSize (T {start, stop, ...}) =
+    !stop - !start
 
 end

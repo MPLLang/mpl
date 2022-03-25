@@ -24,7 +24,11 @@ local
   queue/DequeABP.sml
   Stack.sml
   Result.sml
-  Scheduler.sml
+  ann
+    "allowFFI true"
+  in
+    Scheduler.sml
+  end
 in
   structure ForkJoin
 end
