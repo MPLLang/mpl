@@ -102,6 +102,7 @@ void MLton_threadFunc (void* arg) {                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \
     Trace0(EVENT_LAUNCH);                                               \
+    printf("[%d] calling Parallel_run\n", s->procNumber);               \
     Parallel_run ();                                                    \
   }                                                                     \
   return 1;                                                             \

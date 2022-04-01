@@ -148,11 +148,15 @@ struct
   val astacks: activation_stack array =
     Array.tabulate (P, fn _ => astackNew ())
 
+
+  (** SAM_NOTE: TODO: these functions are problematic for the write barrier.
+    * The astack needs to be integrated with GC. Perhaps installed as a
+    * special field of a thread? That would be nasty. *)
   fun astackSetCurrent astack =
     Array.update (astacks, myWorkerId (), astack)
-
   fun astackSetCurrentNew () =
     Array.update (astacks, myWorkerId (), astackNew ())
+
 
   fun astackGetCurrent () =
     Array.sub (astacks, myWorkerId ())

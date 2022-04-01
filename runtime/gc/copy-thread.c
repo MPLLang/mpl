@@ -83,6 +83,7 @@ void GC_copyCurrentThread (GC_state s) {
   /* SPOONHOWER_NOTE: used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, NULL)
                            + offsetofThread (s));

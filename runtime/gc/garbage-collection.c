@@ -134,16 +134,5 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   endAtomic(s);
 
-  if (Proc_isInitialized(s) && !s->signalsInfo.amInSignalHandler) {
-    s->signalsInfo.amInSignalHandler = TRUE;
-    int64_t astackSize = CheckActivationStack();
-    if (astackSize > 0) {
-      LOG(LM_THREAD, LL_INFO,
-        "current activation stack size: %"PRId64,
-        astackSize);
-    }
-    s->signalsInfo.amInSignalHandler = FALSE;
-  }
-
   Trace0(EVENT_RUNTIME_LEAVE);
 }

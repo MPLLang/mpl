@@ -47,6 +47,11 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     (void*)p,
     ensureBytesFree);
 
+  printf("[%d] GC_switchToThread\n  from "FMTPTR"\n  to   "FMTPTR"\n",
+    s->procNumber,
+    (uintptr_t)(void*)objptrToPointer(currop, NULL),
+    (uintptr_t)(void*)p);
+
   GC_thread oldCurrentThread = getThreadCurrent(s);
 
   assert(HM_HH_getDepth(oldCurrentThread->hierarchicalHeap) <= oldCurrentThread->currentDepth);

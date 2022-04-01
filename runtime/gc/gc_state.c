@@ -236,6 +236,10 @@ void GC_setCallFromCHandlerThreads (GC_state s, pointer p) {
   assert(getSequenceLength (p) == s->numberOfProcs);
   for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
+    printf("[%d] setCallFromCHandlerThread %u: "FMTPTR"\n",
+      s->procNumber,
+      proc,
+      (uintptr_t)(((objptr*)p)[proc]));
   }
 }
 

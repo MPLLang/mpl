@@ -9,6 +9,9 @@
 structure MLtonThread:> MLTON_THREAD_EXTRA =
 struct
 
+val arrayUpdateNoBarrier = Primitive.MLton.HM.arrayUpdateNoBarrier
+val refAssignNoBarrier = Primitive.MLton.HM.refAssignNoBarrier
+
 structure Prim = Primitive.MLton.Thread
 
 fun die (s: string): 'a =
@@ -452,7 +455,7 @@ in
                    | SOME worker =>
                         (Array.update (workerCache, proc, NONE)
                          ; worker)
-               val _ = savedRef := SOME saved
+               val _ = refAssignNoBarrier (savedRef, SOME saved)
                val _ = Array.update (workerArgs, proc, SOME worker)
                val _ = Prim.switchTo (workerThread) (* implicit atomicEnd() *)
             in
