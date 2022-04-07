@@ -12,12 +12,16 @@ void switchToThread(GC_state s, objptr op) {
   assert(thread->hierarchicalHeap != NULL);
 
   size_t terminateCheckCounter = 0;
-  while (atomicLoadS32(&(thread->currentProcNum)) >= 0) {
+  int otherProcNum = atomicLoadS32(&(thread->currentProcNum));
+  while (otherProcNum >= 0) {
     /* Spin while someone else is currently executing this thread. The
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
     if (terminateCheckCounter == 0) pthread_yield();
+    // Sanity check: don't get deadlocked by self
+    assert(otherProcNum != s->procNumber);
+    otherProcNum = atomicLoadS32(&(thread->currentProcNum));
   }
   thread->currentProcNum = s->procNumber;
 
@@ -47,10 +51,10 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
     (void*)p,
     ensureBytesFree);
 
-  printf("[%d] GC_switchToThread\n  from "FMTPTR"\n  to   "FMTPTR"\n",
-    s->procNumber,
-    (uintptr_t)(void*)objptrToPointer(currop, NULL),
-    (uintptr_t)(void*)p);
+  // printf("[%d] GC_switchToThread\n  from "FMTPTR"\n  to   "FMTPTR"\n",
+  //   s->procNumber,
+  //   (uintptr_t)(void*)objptrToPointer(currop, NULL),
+  //   (uintptr_t)(void*)p);
 
   GC_thread oldCurrentThread = getThreadCurrent(s);
 

@@ -48,7 +48,13 @@ void GC_finishSignalHandler (GC_state s) {
 void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
   if (s->atomicState == 1
       and s->signalsInfo.signalIsPending) {
+    // printf("switchToSignalHandlerThread triggered...\n");
     GC_startSignalHandler (s);
+
+    // SAM_NOTE: synchronizes with loop in switchToThread...
+    atomicStoreS32(&(getThreadCurrent(s)->currentProcNum), -1);
+    s->currentThread = BOGUS_OBJPTR;
+
     switchToThread (s, s->signalHandlerThread);
   }
 }
@@ -71,6 +77,6 @@ void GC_handler (int signum) {
   s->signalsInfo.signalIsPending = TRUE;
   sigaddset (&s->signalsInfo.signalsPending, signum);
   if (DEBUG_SIGNALS)
-    fprintf (stderr, "GC_handler done [%d]\n", 
+    fprintf (stderr, "GC_handler done [%d]\n",
              Proc_processorNumber (s));
 }

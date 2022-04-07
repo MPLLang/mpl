@@ -88,7 +88,8 @@ structure Handler =
    struct
       datatype t =
          Default
-       | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t
+       (* | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t *)
+       | Handler of unit -> unit
        | Ignore
        | InvalidSignal
    end
@@ -167,7 +168,7 @@ structure Handler =
                          end)
 
             val () =
-               MLtonThread.setSignalHandler
+               MLtonThread.setSimpleSignalHandler
                (fn t =>
                 let
                    val mask = Mask.getBlocked ()
@@ -190,7 +191,8 @@ structure Handler =
                    val () = Prim.resetPending (GCState.gcState ())
                    val () = Mask.setBlocked mask
                 in
-                   List.foldl (fn (f, t) => f t) t fs
+                   (* List.foldl (fn (f, t) => f t) t fs *)
+                   List.app (fn f => f ()) fs
                 end)
          in
             Handler

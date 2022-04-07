@@ -138,6 +138,7 @@ signature MLTON_THREAD_EXTRA =
       val amInSignalHandler: unit -> bool
       val register: int * (MLtonPointer.t -> unit) -> unit
       val setSignalHandler: (Runnable.t -> Runnable.t) -> unit
+      val setSimpleSignalHandler: (unit -> unit) -> unit
       val switchToSignalHandler: unit -> unit
 
       val initPrimitive: unit t -> Runnable.t

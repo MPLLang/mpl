@@ -311,38 +311,38 @@ local
 in
    fun amInSignalHandler () = InHandler = Array.sub (state, procNum ())
 
-   (*
-   fun setSignalHandler (f: Runnable.t -> Runnable.t): unit =
+   fun setSimpleSignalHandler (f: unit -> unit): unit =
       let
          val _ = Primitive.MLton.installSignalHandler ()
          fun loop (): unit =
             let
                (* Atomic 1 *)
                val proc = procNum ()
+               val t = Prim.saved (gcState ())
                val _ = Array.update (state, proc, InHandler)
-               val t = f (fromPrimitive (Prim.saved (gcState ())))
+               val _ = f ()
                val _ = Array.update (state, proc, Normal)
                val _ = Prim.finishSignalHandler (gcState ())
-               val _ =
-                  atomicSwitch
-                  (fn (T r) =>
-                   let
-                      val _ =
-                         case !r of
-                            Paused (f, _) => f (fn () => ())
-                          | _ => raise die "Thread.setSignalHandler saw strange thread"
-                   in
-                      t
-                   end) (* implicit atomicEnd () *)
+               val _ = Prim.switchTo t (* implicit atomicEnd () *)
             in
                loop ()
             end
+
+         val amOriginal = ref true
+         val _ = Basic.copyCurrent ()
+         val signalHandlerPrototype : Basic.p =
+            if !amOriginal then
+               (amOriginal := false; Basic.savedPre ())
+            else
+               ( loop () handle e => MLtonExn.topLevelHandler e
+               ; die "MLton.Thread: bug: signal handler loop exited unexpectedly\n"
+               )
+
          val handlerThreads =
             Array.tabulate
             (numProcs, fn i =>
              let
-                val p =
-                   toPrimitive (new (fn () => loop () handle e => MLtonExn.topLevelHandler e))
+                val p = Basic.copy signalHandlerPrototype
                 val _ = Array.update (signalHandlers, i, SOME p)
              in
                 p
@@ -350,7 +350,6 @@ in
       in
          Prim.setSignalHandlers (gcState (), handlerThreads)
       end
-   *)
 
    fun setSignalHandler _ = die "MLton.Thread.setSignalHandler unsupported\n"
 
@@ -392,7 +391,7 @@ in
                val _ = atomicEnd ()
                (* Atomic 0 *)
                val i = MLtonPointer.getInt32 (MLtonPointer.getPointer (p, 0), 0)
-               val _ = print ("[" ^ Int.toString (procNum()) ^ "] running export " ^ Int32.toString i ^ "\n")
+               (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] running export " ^ Int32.toString i ^ "\n") *)
                val _ =
                   (Array.sub (exports, Int32.toInt i) p)
                   handle e =>
@@ -412,7 +411,7 @@ in
             end
 
 
-         val _ = print ("[" ^ Int.toString (procNum()) ^ "] before make worker prototype\n")
+         (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] before make worker prototype\n") *)
 
          val amOriginal = ref true
          val _ = Basic.copyCurrent ()
@@ -429,14 +428,14 @@ in
                | NONE =>
                     die "MLton.Thread: bug: C handler worker loop missing arg\n"
 
-         val _ = print ("[" ^ Int.toString (procNum()) ^ "] after make worker prototype\n")
+         (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] after make worker prototype\n") *)
 
 
          fun mkWorker (): worker =
             let
-               val _ = print ("[" ^ Int.toString (procNum()) ^ "] before copy prototype for worker\n")
+               (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] before copy prototype for worker\n") *)
                val workerThread = Basic.copy workerLoopPrototypeThread
-               val _ = print ("[" ^ Int.toString (procNum()) ^ "] after copy prototype for worker\n")
+               (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] after copy prototype for worker\n") *)
                val savedRef : Prim.thread option ref = ref NONE
             in
                (workerThread, savedRef)
@@ -447,7 +446,7 @@ in
             let
                (* Atomic 2 *)
                val proc = procNum ()
-               val _ = print ("[" ^ Int.toString proc ^ "] handlerLoop\n")
+               (* val _ = print ("[" ^ Int.toString proc ^ "] handlerLoop\n") *)
                val saved = Prim.saved (gcState ())
                val worker as (workerThread, savedRef) =
                   case Array.sub (workerCache, proc) of
@@ -462,7 +461,7 @@ in
                handlerLoop ()
             end
 
-         val _ = print ("[" ^ Int.toString (procNum()) ^ "] making handler thread: before copy current\n")
+         (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] making handler thread: before copy current\n") *)
          val amOriginal = ref true
          val _ = Basic.copyCurrent ()
          val prototypeThread : Basic.p =
@@ -473,15 +472,15 @@ in
                ( handlerLoop ()
                ; die "MLton.Thread: bug: C handler loop exited unexpectedly\n"
                )
-         val _ = print ("[" ^ Int.toString (procNum()) ^ "] making handler thread: after copy current\n")
+         (* val _ = print ("[" ^ Int.toString (procNum()) ^ "] making handler thread: after copy current\n") *)
 
          val handlerThreads =
            Array.tabulate (numProcs, fn _ => Basic.copy prototypeThread)
          val _ = Prim.setCallFromCHandlers (gcState (), handlerThreads)
       in
          fn (i, f) =>
-           ( print ("register " ^ Int.toString i ^ "\n")
-           ; Array.update (exports, i, f)
+           ( (*print ("register " ^ Int.toString i ^ "\n")
+           ;*) Array.update (exports, i, f)
            )
       end
 end

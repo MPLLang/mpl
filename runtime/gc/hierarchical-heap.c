@@ -607,6 +607,19 @@ void HM_HH_forceLeftHeap(
 
   HM_HH_updateValues(thread, s->frontier);
 
+#if 0
+  if (Proc_isInitialized(s) /*&& !s->signalsInfo.amInSignalHandler*/) {
+    // s->signalsInfo.amInSignalHandler = TRUE;
+    int64_t astackSize = CheckActivationStack();
+    if (astackSize > 0) {
+      LOG(LM_THREAD, LL_INFO,
+        "current activation stack size: %"PRId64,
+        astackSize);
+    }
+    // s->signalsInfo.amInSignalHandler = FALSE;
+  }
+#endif
+
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
         ((void*)(s->limit)),

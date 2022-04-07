@@ -46,6 +46,7 @@ struct
   structure Queue = DequeABP (*ArrayQueue*)
 
   structure Thread = MLton.Thread.Basic
+  (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
   fun threadSwitch t =
     ( Thread.atomicBegin ()
     ; Thread.switchTo t
@@ -182,14 +183,26 @@ struct
     end
 
 
-  val _ = (_export "CheckActivationStack": (unit -> Int64.int) -> unit;)
+  (* val _ = (_export "CheckActivationStack": (unit -> Int64.int) -> unit;)
     (fn () =>
       let
         val AStack {stack, ...} = astackGetCurrent ()
       in
         Int64.fromInt (Stack.currentSize stack)
-      end)
+      end) *)
 
+
+  val _ =
+    MLton.Signal.setHandler (MLton.Itimer.signal MLton.Itimer.Real,
+      MLton.Signal.Handler.simple (fn () =>
+        let
+          val AStack {stack, ...} = astackGetCurrent ()
+        in
+          print ("[" ^ Int.toString (myWorkerId ())
+                 ^ "] SIGNAL! astack size:"
+                 ^ Int.toString (Stack.currentSize stack) ^ "\n")
+          (* maybeActivateOne stack *)
+        end))
 
 
   structure Activator :>
@@ -794,6 +807,13 @@ struct
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end
+
+
+  val _ =
+    MLton.Itimer.set (MLton.Itimer.Real,
+      { interval = Time.fromMilliseconds 10
+      , value = Time.fromMilliseconds 10
+      })
 
 end
 

@@ -47,7 +47,7 @@ PRIVATE uintptr_t Thread_returnToC() { return -1; }                     \
 static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
   uintptr_t nextBlock;                                                  \
   GC_state s = MLton_gcState();                                         \
-  printf("[%d] MLton_callFromC\n", s->procNumber);                      \
+  /*printf("[%d] MLton_callFromC\n", s->procNumber);*/                      \
   if (DEBUG_CCODEGEN)                                                   \
     fprintf (stderr, "MLton_callFromC() starting\n");                   \
   s->callFromCOpArgsResPtr = localOpArgsResPtr;                         \
@@ -102,7 +102,7 @@ void MLton_threadFunc (void* arg) {                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \
     Trace0(EVENT_LAUNCH);                                               \
-    printf("[%d] calling Parallel_run\n", s->procNumber);               \
+    /*printf("[%d] calling Parallel_run\n", s->procNumber);*/               \
     Parallel_run ();                                                    \
   }                                                                     \
   return 1;                                                             \

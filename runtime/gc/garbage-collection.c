@@ -10,7 +10,7 @@
 
 #include "hierarchical-heap.h"
 
-extern int64_t CheckActivationStack(void);
+// extern int64_t CheckActivationStack(void);
 
 void growStackCurrent(GC_state s) {
   size_t reserved;
@@ -125,12 +125,18 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   /* SAM_NOTE: shouldn't this be
    *   getThreadCurrent(s)->bytesNeeded
    * instead of bytesRequested? */
-  HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
-  // CC_collectWithRoots(s, )
+  HM_ensureHierarchicalHeapAssurances(
+    s,
+    force,
+    getThreadCurrent(s)->bytesNeeded,
+    FALSE);
 
   endAtomic(s);
 
