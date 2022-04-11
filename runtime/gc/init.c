@@ -444,7 +444,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->emptinessFraction = 0.25;
   s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
   s->controls->megablockThreshold = 18;
-  s->controls->manageEntanglement = FALSE;
+  s->controls->manageEntanglement = TRUE;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
