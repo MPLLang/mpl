@@ -144,8 +144,11 @@ void Assignable_writeBarrier(
 
     bool dst_de = decheck(s, dst);
     uint32_t dd = dstHH->depth, sd = srcHH->depth;
-    /* depth comparisons make sense only when src && dst are on the same root-to-leaf path,
-      i.e., when dst_de && src_de */
+    /* Depth comparisons make sense only when src && dst are on the same root-to-leaf path,
+     * checking this maybe expensive, so we approximate here.
+     * If both dst_de && src_de hold, they are on the same path
+     * Otherwise, we assume they are on different paths.
+     */
     bool snapshotted = dst_de &&
                         ((dd > sd) || /* up pointer (snapshotted by the closure) */
                          ((HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG)
