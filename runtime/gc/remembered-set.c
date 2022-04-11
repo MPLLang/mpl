@@ -53,6 +53,7 @@ void HM_foreachRemembered(
     }
     else {
       HM_foreachPrivate(s, chunkList, f);
+      HM_appendChunkList(&(remSet->private), chunkList);
     }
   }
 }

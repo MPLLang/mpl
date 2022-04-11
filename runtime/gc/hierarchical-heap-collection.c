@@ -1128,6 +1128,9 @@ void LGC_markAndScan(GC_state s, objptr *opp, void *rawArgs)
     // DOUBLE CHECK
     return;
   }
+  else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk)) {
+    return;
+  }
   else if (!CC_isPointerMarked(p))
   {
     assert(args->fromSpace[opDepth] == HM_getLevelHead(chunk));
@@ -1393,13 +1396,13 @@ void forwardHHObjptr(GC_state s,
 
   uint32_t opDepth = HM_getObjptrDepthPathCompress(op);
 
-  if (opDepth > args->maxDepth)
-  {
-    DIE("entanglement detected during collection: %p is at depth %u, below %u",
-        (void *)p,
-        opDepth,
-        args->maxDepth);
-  }
+  // if (opDepth > args->maxDepth)
+  // {
+  //   DIE("entanglement detected during collection: %p is at depth %u, below %u",
+  //       (void *)p,
+  //       opDepth,
+  //       args->maxDepth);
+  // }
 
   /* RAM_NOTE: This is more nuanced with non-local collection */
   if ((opDepth > args->maxDepth) ||
@@ -1427,12 +1430,13 @@ void forwardHHObjptr(GC_state s,
     assert(!CC_isPointerMarked(objptrToPointer(op, NULL)));
     return;
   }
+  else if (HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL))) !=
+         args->fromSpace[HM_getObjptrDepth(op)])
+  {
+    assert (!decheck(s, op));
+    return;
+  }
 
-  /* Assert is in from space. This holds for pinned objects, too, because
-   * their levelHead is still set to the fromSpace HH. (Pinned objects are
-   * stored in a different chunklist during collection through.) */
-  assert(HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL))) ==
-         args->fromSpace[HM_getObjptrDepth(op)]);
   if (hasFwdPtr(p))
   {
     objptr fop = getFwdPtr(p);

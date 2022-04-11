@@ -273,8 +273,9 @@ void manage_entangled(GC_state s, objptr ptr) {
 }
 
 bool decheck(GC_state s, objptr ptr) {
-    if (!s->controls->manageEntanglement)
+    if (!s->controls->manageEntanglement) {
       return true;
+    }
     GC_thread thread = getThreadCurrent(s);
     if (thread == NULL)
         return true;
