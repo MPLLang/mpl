@@ -591,7 +591,12 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
+#ifdef DETECT_ENTANGLEMENT
   chunk->decheckState = thread->decheckState;
+#else
+  chunk->decheckState = DECHECK_BOGUS_TID;
+#endif
+
   chunk->levelHead = HM_HH_getUFNode(hh);
   // hh->chunkList <--> og
   // toList --> hh
@@ -685,7 +690,13 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_chunk chunk =
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = HM_HH_getUFNode(newHH);
+
+#ifdef DETECT_ENTANGLEMENT
   chunk->decheckState = thread->decheckState;
+#else
+  chunk->decheckState = DECHECK_BOGUS_TID;
+#endif
+
   thread->currentChunk = chunk;
   newHH->subHeapForCC = hh;
   newHH->subHeapCompletedCC = completed;
@@ -867,7 +878,12 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
   newChunk->levelHead = HM_HH_getUFNode(hh);
+
+#ifdef DETECT_ENTANGLEMENT
   newChunk->decheckState = thread->decheckState;
+#else
+  newChunk->decheckState = DECHECK_BOGUS_TID;
+#endif
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));
@@ -1001,7 +1017,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
     size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
     size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
-    LOG(LM_CC_COLLECTION, LL_INFO,
+    LOG(LM_CC_COLLECTION, LL_DEBUG,
       "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
       depth,
       lastSurvived,

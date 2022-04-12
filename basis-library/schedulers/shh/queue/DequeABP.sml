@@ -97,7 +97,7 @@ struct
   exception Full
 
   fun for (i, j) f = if i = j then () else (f i; for (i+1, j) f)
-  fun arrayUpdate (a, i, x) = MLton.HM.arrayUpdateNoBarrier (a, Int64.fromInt i, x)
+  fun arrayUpdate (a, i, x) = MLton.HM.arrayUpdateNoBarrier (a, i, x)
   fun cas r (x, y) = MLton.Parallel.compareAndSwap r (x, y)
 
   fun cas32 b (x, y) = cas b (Word32.fromInt x, Word32.fromInt y)

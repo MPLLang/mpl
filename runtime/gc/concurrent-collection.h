@@ -14,6 +14,7 @@
 #include "hierarchical-heap.h"
 #include "objptr.h"
 #include "deferred-promote.h"
+#include "cc-work-list.h"
 // #include "logger.h"
 
 
@@ -21,6 +22,7 @@
 
 // Struct to pass around args. repList is the new chunklist.
 typedef struct ConcurrentCollectArgs {
+  struct CC_workList worklist;
 	HM_chunkList origList;
 	HM_chunkList repList;
 	void* toHead;

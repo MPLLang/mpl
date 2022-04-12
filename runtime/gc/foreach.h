@@ -11,7 +11,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-typedef void (*GC_foreachObjptrFun) (GC_state s, objptr *opp, void *env);
+typedef void (*GC_foreachObjptrFun) (GC_state s, objptr *opp, objptr op, void *env);
 
 typedef struct GC_foreachObjptrClosure {
   GC_foreachObjptrFun fun;
@@ -35,7 +35,7 @@ void printObjectsInRange(GC_state s, pointer front, pointer back);
  */
 static inline void foreachGlobalObjptr (GC_state s, GC_foreachObjptrClosure f);
 /* foreachObjptrInObject (s, p, skipWeaks, f)
- * 
+ *
  * Applies f to each object pointer in the object pointed to by p.
  * Returns pointer to the end of object, i.e. just past object.
  *

@@ -10,8 +10,8 @@ sig
   val registerQueue: Word32.word * 'a array -> unit
   val registerQueueTop: Word32.word * Word64.word ref -> unit
   val registerQueueBot: Word32.word * Word32.word ref -> unit
-  val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit
+  val arrayUpdateNoBarrier : 'a array * int * 'a -> unit
   val refAssignNoBarrier : 'a ref * 'a -> unit
-  val arraySubNoBarrier : 'a array * SeqIndex.int -> 'a
+  val arraySubNoBarrier : 'a array * int -> 'a
   val refDerefNoBarrier : 'a ref -> 'a
 end

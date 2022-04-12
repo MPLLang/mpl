@@ -456,6 +456,11 @@ structure Thread =
       val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
         runtime private: GCState.t * thread * Word32.word -> unit;
 
+      (** If returns true, then writes result to the input ref. Otherwise, the
+        * runtime is not detecting entanglement, and the ref is not modified.
+        *)
+      val decheckMaxDepth = _import "GC_HH_decheckMaxDepth" runtime private: Word32.word ref -> bool;
+
       val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word32.word -> unit;
       val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
    end

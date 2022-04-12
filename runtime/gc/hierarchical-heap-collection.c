@@ -206,7 +206,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
-  // assert(thread->currentDepth == originalLocalScope);
+  if (thread->currentDepth != originalLocalScope) {
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Skipping collection:\n"
+      "  currentDepth %u\n"
+      "  originalLocalScope %u\n"
+      "  potentialLocalScope %u\n",
+      thread->currentDepth,
+      originalLocalScope,
+      potentialLocalScope);
+    return;
+  }
 
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.
@@ -494,7 +504,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       "Trying to forward current thread %p",
       (void *)s->currentThread);
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  forwardHHObjptr(s, &(s->currentThread), s->currentThread, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ? "Copied thread from GC_state" : "Did not copy thread from GC_state");
   Trace3(EVENT_COPY,
@@ -1351,19 +1361,20 @@ void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void *rawArgs
       &closure,
       FALSE);
   if (remElem->from != BOGUS_OBJPTR) {
-    forwardHHObjptr(s, &(remElem->from), rawArgs);
+    forwardHHObjptr(s, &(remElem->from), remElem->from, rawArgs);
   }
 }
 
 /* ========================================================================= */
 
-void forwardHHObjptr(GC_state s,
-                     objptr *opp,
-                     void *rawArgs)
+void forwardHHObjptr(
+  GC_state s,
+  objptr* opp,
+  objptr op,
+  void* rawArgs)
 {
-  struct ForwardHHObjptrArgs *args = ((struct ForwardHHObjptrArgs *)(rawArgs));
-  objptr op = *opp;
-  pointer p = objptrToPointer(op, NULL);
+  struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
+  pointer p = objptrToPointer (op, NULL);
 
   assert(args->toDepth == HM_HH_INVALID_DEPTH);
 

@@ -29,8 +29,19 @@ struct
   | GCTask of gctask_data
 
   structure DE = MLton.Thread.Disentanglement
-  (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
-  val maxDisetanglementCheckDepth = 31
+
+  local
+    (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
+    val maxDisetanglementCheckDepth = DE.decheckMaxDepth ()
+  in
+  fun depthOkayForDECheck depth =
+    case maxDisetanglementCheckDepth of
+      (* in this case, there is no entanglement detection, so no problem *)
+      NONE => true
+
+      (* entanglement checks are active, and the max depth is m *)
+    | SOME m => depth < m
+  end
 
   val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
@@ -145,8 +156,8 @@ struct
   local
     val amOriginal = ref true
     val taskBoxes = Array.array (P, NONE)
-    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
-    fun sub i = HM.arraySubNoBarrier (taskBoxes, Int64.fromInt i)
+    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, i, x)
+    fun sub i = HM.arraySubNoBarrier (taskBoxes, i)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
@@ -417,8 +428,7 @@ struct
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
         if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
           forkGC thread depth (f, g)
-        else if depth < Queue.capacity andalso
-                depth < maxDisetanglementCheckDepth then
+        else if depth < Queue.capacity andalso depthOkayForDECheck depth then
           parfork thread depth (f, g)
         else
           (* don't let us hit an error, just sequentialize instead *)
@@ -484,7 +494,7 @@ struct
       fun afterReturnToSched () =
         case getGCTask myId of
           NONE => (*dbgmsg' (fn _ => "back in sched; no GC task")*) ()
-        | SOME (thread, hh) => 
+        | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
             ;*) setGCTask myId NONE
             ; HH.collectThreadRoot (thread, !hh)

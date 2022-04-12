@@ -13,9 +13,13 @@ struct
   val registerQueueTop: Word32.word * Word64.word ref -> unit = PrimHM.registerQueueTop
   val registerQueueBot: Word32.word * Word32.word ref -> unit = PrimHM.registerQueueBot
 
-  val arrayUpdateNoBarrier = PrimHM.arrayUpdateNoBarrier
+  fun arrayUpdateNoBarrier (a, i, x) =
+    PrimHM.arrayUpdateNoBarrier (a, SeqIndex.fromInt i, x)
+
   val refAssignNoBarrier = PrimHM.refAssignNoBarrier
 
-  val arraySubNoBarrier = PrimHM.arraySubNoBarrier
+  fun arraySubNoBarrier (a, i) =
+    PrimHM.arraySubNoBarrier (a, SeqIndex.fromInt i)
+
   val refDerefNoBarrier = PrimHM.refDerefNoBarrier
 end
