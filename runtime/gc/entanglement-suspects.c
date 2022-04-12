@@ -47,9 +47,9 @@ static inline bool is_suspect(objptr op)
 void clear_suspect(
     GC_state s,
     objptr *opp,
+    objptr op,
     void *rawArgs)
 {
-  objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
   ES_clearArgs eargs = (ES_clearArgs) rawArgs;
 
@@ -84,7 +84,7 @@ bool ES_mark(__attribute__((unused)) GC_state s, objptr op) {
 }
 
 void ES_unmark(GC_state s, objptr op) {
-  clear_suspect(s, &op, NULL);
+  clear_suspect(s, &op, op, NULL);
 }
 
 void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)

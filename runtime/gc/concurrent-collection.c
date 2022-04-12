@@ -754,7 +754,7 @@ void CC_tryUnpinOrKeepPinned(
       * entry. It will be merged and handled properly later.
       */
 
-    HM_remember(args->newRemSet, remElem);
+    HM_remember(args->newRemSet, remElem, false);
     return;
   }
 

@@ -19,6 +19,7 @@
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
 #include "chunk.h"
+#include "cc-work-list.h"
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 struct ForwardHHObjptrArgs {
@@ -43,6 +44,9 @@ struct ForwardHHObjptrArgs {
   /* large objects are "moved" (rather than copied). */
   size_t bytesMoved;
   uint64_t objectsMoved;
+
+  /*worklist for mark and scan*/
+  struct CC_workList worklist;
 };
 
 struct checkDEDepthsArgs {
