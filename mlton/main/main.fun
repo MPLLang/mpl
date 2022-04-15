@@ -1125,6 +1125,9 @@ fun commandLine (args: string list): unit =
 
       local
          fun addMD s =
+            if !debugRuntime andalso !detectEntanglementRuntime then
+              s ^ "-dbgdetect"
+            else
             if !debugRuntime then s ^ "-dbg" else
             if !traceRuntime then s ^ "-trace" else
             if !detectEntanglementRuntime then s ^ "-detect" else
