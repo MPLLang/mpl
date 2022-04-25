@@ -57,9 +57,9 @@ objptr Assignable_readBarrier(
   assert(ES_contains(NULL, obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
-  if (!decheck(s, obj))
+  if (!decheck(s, ptr))
   {
-    manage_entangled(s, obj);
+    manage_entangled(s, ptr);
   }
 
   return ptr;
@@ -129,9 +129,6 @@ void Assignable_writeBarrier(
   if (dst == s->wsQueue)
     return;
 
-  struct HM_remembered remElem_ = {.object = src, .from = dst};
-  HM_remembered remElem = &remElem_;
-
   pointer srcp = objptrToPointer(src, NULL);
   bool src_de = decheck(s, src);
 
@@ -162,15 +159,21 @@ void Assignable_writeBarrier(
     /* otherwise pin*/
     bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
     enum PinType pt = primary_down_ptr ? PIN_DOWN : PIN_ANY;
-    uint32_t unpinDepth = dst_de ? dd
-      : (uint32_t) lcaHeapDepth(HM_getChunkOf(srcp)->decheckState, HM_getChunkOf(dstp)->decheckState);
+    uint32_t unpinDepth = dst_de ? dd :
+      (uint32_t)lcaHeapDepth(HM_getChunkOf(srcp)->decheckState,
+        HM_getChunkOf(dstp)->decheckState);
+
     bool success = pinObject(src, unpinDepth, pt);
     if (success) {
+      objptr fromObj = pt == PIN_ANY ? BOGUS_OBJPTR : dst;
+      struct HM_remembered remElem_ = {.object = src, .from = fromObj};
+      HM_remembered remElem = &remElem_;
+
       HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), sd);
       assert(NULL != shh);
       assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
-      HM_HH_rememberAtLevel(shh, remElem, false);
 
+      HM_HH_rememberAtLevel(shh, remElem, false);
       LOG(LM_HH_PROMOTION, LL_INFO,
         "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
         dstHH->depth, srcHH->depth,
@@ -179,6 +182,8 @@ void Assignable_writeBarrier(
 
     /*add dst to the suspect set*/
     if (dd > 0 && !ES_contains(NULL, dst)) {
+      /*if dst is not a suspect, it must be disentangled*/
+      assert (dst_de);
       HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
       ES_add(s, HM_HH_getSuspects(dhh), dst);
     }
