@@ -624,8 +624,8 @@ void HM_assertChunkListInvariants(HM_chunkList chunkList) {
     chunk = chunk->nextChunk;
   }
   assert(chunkList->lastChunk == chunk);
-  assert(chunkList->size == size);
-  assert(chunkList->usedSize == usedSize);
+  // assert(chunkList->size == size);
+  // assert(chunkList->usedSize == usedSize);
 }
 #else
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
