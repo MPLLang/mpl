@@ -127,6 +127,14 @@ void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
 
 
 #ifdef DETECT_ENTANGLEMENT
+
+void setStateIfBogus(HM_chunk chunk, decheck_tid_t tid) {
+  if ((chunk->decheckState).bits == DECHECK_BOGUS_BITS)
+  {
+    chunk->decheckState = tid;
+  }
+}
+
 void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
   decheck_tid_t tid;
   tid.bits = bits;
@@ -134,9 +142,9 @@ void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
   GC_thread thread = getThreadCurrent(s);
   thread->decheckState = tid;
 
-// #if ASSERT
-//     synch_depths[norm_path(tid)] = dag_depth(tid);
-// #endif
+  setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
+  setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
+
   decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
 
   assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
@@ -308,6 +316,16 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 #endif
 
 #ifdef DETECT_ENTANGLEMENT
+void manage_entangled(GC_state s, objptr ptr) ;
+
+void manage_immutable(
+    GC_state s,
+    __attribute__((unused)) objptr *opp,
+    objptr op,
+    void *rawArgs)
+{
+  manage_entangled (s, op);
+}
 
 void manage_entangled(GC_state s, objptr ptr) {
 
@@ -342,6 +360,11 @@ void manage_entangled(GC_state s, objptr ptr) {
     HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
     ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
   }
+  else if (!isMutable(s, objptrToPointer(ptr, NULL))) {
+    struct GC_foreachObjptrClosure emanageClosure =
+        {.fun = manage_immutable, .env = NULL};
+    foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+  }
 }
 
 #else
@@ -370,8 +393,10 @@ bool decheck(GC_state s, objptr ptr) {
   if (chunk == NULL)
       return true;
   decheck_tid_t allocator = chunk->decheckState;
-  if (allocator.bits == DECHECK_BOGUS_BITS)
-      return true;
+  if (allocator.bits == DECHECK_BOGUS_BITS) {
+      // assert (false);
+    return true;
+  }
   if (decheckIsOrdered(thread, allocator))
       return true;
 
