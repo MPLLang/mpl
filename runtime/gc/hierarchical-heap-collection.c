@@ -680,6 +680,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
        * fromSpace HH at this depth which originally stored the chunk)
        */
       assert(pinned[depth].firstChunk == NULL);
+      assert(NULL == toSpace[depth] || (HM_HH_getRemSet(toSpace[depth])->private).firstChunk == NULL);
       continue;
     }
 
@@ -688,6 +689,9 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       struct HM_foreachDownptrClosure closure =
           {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
       HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
+      /*go through the public of fromSpaceLevel, they will be joined later anyway*/
+      assert((HM_HH_getRemSet(fromSpaceLevel)->private).firstChunk == NULL);
+      HM_foreachRemembered(s, HM_HH_getRemSet(fromSpaceLevel), &closure);
     }
 
     /* unset the flags on pinned chunks and update their HH pointer */
@@ -1143,7 +1147,6 @@ void markAndAdd (
   uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
   if ((opDepth > args->maxDepth) || (opDepth < args->minDepth))
   {
-    // DOUBLE CHECK
     return;
   }
   else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk)) {
@@ -1193,6 +1196,7 @@ void unmarkAndAdd (
   }
   else if (CC_isPointerMarked(p)) {
     markObj(p);
+    assert (chunk->pinnedDuringCollection);
     CC_workList_push(s, &(args->worklist), op);
   }
 }
@@ -1204,7 +1208,7 @@ void unmark(
     void *rawArgs)
 {
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
-  pointer p = objptrToPointer(*opp, NULL);
+  pointer p = objptrToPointer(op, NULL);
   HM_chunk chunk = HM_getChunkOf(p);
   uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
   assert(!hasFwdPtr(p));
@@ -1212,7 +1216,11 @@ void unmark(
   {
     return;
   }
-  if (CC_isPointerMarked(p))
+  else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk))
+  {
+    return;
+  }
+  else if (CC_isPointerMarked(p))
   {
     markObj(p);
     struct GC_foreachObjptrClosure unmarkClosure = {.fun = unmark, .env = rawArgs};
@@ -1242,7 +1250,8 @@ void LGC_markAndScan(
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
   struct GC_foreachObjptrClosure markClosure =
       {.fun = markAndAdd, .env = (void*) args};
-  CC_workList_push(s, &(args->worklist), op);
+  markAndAdd (s, opp, op, rawArgs);
+  // CC_workList_push(s, &(args->worklist), op);
   phaseLoop(s, rawArgs, &markClosure);
 }
 // void LGC_markAndScan(
@@ -1324,6 +1333,8 @@ void unmarkWrapper(GC_state s, HM_remembered remElem, void *rawArgs)
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
   struct GC_foreachObjptrClosure unmarkClosure =
     {.fun = unmarkAndAdd, .env = args};
+
+  unmarkAndAdd(s, &(remElem->object), remElem->object, rawArgs);
   CC_workList_push(s, &(args->worklist), remElem->object);
   phaseLoop(s, rawArgs, &unmarkClosure);
   // unmark(s, &(remElem->object), remElem->object, rawArgs);
