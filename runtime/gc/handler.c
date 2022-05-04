@@ -80,3 +80,95 @@ void GC_handler (int signum) {
     fprintf (stderr, "GC_handler done [%d]\n",
              Proc_processorNumber (s));
 }
+
+pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HH_EBR_leaveQuiescentState(s);
+
+  GC_thread target = threadObjptrToStruct(s, threadp);
+  assert(getThreadCurrent(s)->currentDepth == 0);
+  assert(target->currentProcNum == -1);
+
+  HM_HierarchicalHeap abandonedHH = getThreadCurrent(s)->hierarchicalHeap;
+  getThreadCurrent(s)->currentDepth = target->currentDepth;
+  getThreadCurrent(s)->currentChunk = target->currentChunk;
+  getThreadCurrent(s)->hierarchicalHeap = target->hierarchicalHeap;
+  getThreadCurrent(s)->bytesAllocatedSinceLastCollection =
+    target->bytesAllocatedSinceLastCollection;
+  getThreadCurrent(s)->bytesSurvivedLastCollection =
+    target->bytesSurvivedLastCollection;
+
+  // clear out some stuff for my sanity
+  target->currentChunk = NULL;
+  target->hierarchicalHeap = NULL;
+  target->bytesAllocatedSinceLastCollection = 0;
+  target->bytesSurvivedLastCollection = 0;
+
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  HM_ensureHierarchicalHeapAssurances(
+    s,
+    FALSE,
+    getThreadCurrent(s)->bytesNeeded,
+    FALSE);
+
+  return (void*)abandonedHH;
+}
+
+void GC_handlerLeaveHeapOfThread(
+  GC_state s,
+  objptr threadp,
+  pointer abandonedHH)
+{
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HH_EBR_leaveQuiescentState(s);
+
+  GC_thread target = threadObjptrToStruct(s, threadp);
+  assert(target->currentProcNum == -1);
+
+  target->currentDepth = getThreadCurrent(s)->currentDepth;
+  target->currentChunk = getThreadCurrent(s)->currentChunk;
+  target->hierarchicalHeap = getThreadCurrent(s)->hierarchicalHeap;
+  target->bytesAllocatedSinceLastCollection =
+    getThreadCurrent(s)->bytesAllocatedSinceLastCollection;
+  target->bytesSurvivedLastCollection =
+    getThreadCurrent(s)->bytesSurvivedLastCollection;
+
+  HM_HierarchicalHeap originalHH = (HM_HierarchicalHeap)abandonedHH;
+  assert(HM_HH_getDepth(originalHH) == 0);
+
+  getThreadCurrent(s)->currentDepth = 0;
+  getThreadCurrent(s)->hierarchicalHeap = originalHH;
+  getThreadCurrent(s)->bytesAllocatedSinceLastCollection = 0;
+  getThreadCurrent(s)->bytesSurvivedLastCollection = 0;
+
+  // Find a chunk to get back to
+  HM_chunk chunk = HM_getChunkListLastChunk(HM_HH_getChunkList(originalHH));
+  assert(NULL != chunk);
+  getThreadCurrent(s)->currentChunk = chunk;
+
+  if (!chunk->mightContainMultipleObjects) {
+    if (!HM_HH_extend(s, getThreadCurrent(s), GC_HEAP_LIMIT_SLOP)) {
+      DIE("Ran out of space for Hierarchical Heap!");
+    }
+  }
+
+  assert(NULL != getThreadCurrent(s)->currentChunk);
+  assert(getThreadCurrent(s)->currentChunk->mightContainMultipleObjects);
+
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  HM_ensureHierarchicalHeapAssurances(
+    s,
+    FALSE,
+    getThreadCurrent(s)->bytesNeeded,
+    FALSE);
+}

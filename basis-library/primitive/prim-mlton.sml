@@ -422,6 +422,9 @@ structure Thread =
       val startSignalHandler = _import "GC_startSignalHandler" runtime private: GCState.t -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
 
+      val handlerEnterHeapOfThread = _import "GC_handlerEnterHeapOfThread" runtime private: GCState.t * thread -> Word64.word;
+      val handlerLeaveHeapOfThread = _import "GC_handlerLeaveHeapOfThread" runtime private: GCState.t * thread * Word64.word -> unit;
+
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
       val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
       val registerCont =
