@@ -21,6 +21,7 @@ signature MLTON_SIGNAL =
             val isDefault: t -> bool
             val isIgnore: t -> bool
             val simple: (unit -> unit) -> t
+            val inspectInterrupted: (MLtonThread.Basic.t -> unit) -> t
          end
 
       structure Mask:

@@ -813,6 +813,7 @@ signature BASIS_EXTRA =
    where type MLton.Pointer.t = MLton.Pointer.t
    where type 'a MLton.Thread.t = 'a MLton.Thread.t
    where type MLton.Thread.Runnable.t = MLton.Thread.Runnable.t
+   where type MLton.Thread.Basic.t = MLton.Thread.Basic.t
 
    (* Types that must be exposed because constants denote them. *)
    where type FixedInt.int = FixedInt.int

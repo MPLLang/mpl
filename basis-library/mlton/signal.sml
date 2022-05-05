@@ -89,7 +89,8 @@ structure Handler =
       datatype t =
          Default
        (* | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t *)
-       | Handler of unit -> unit
+       (* | Handler of unit -> unit *)
+       | Handler of MLtonThread.Basic.t -> unit
        | Ignore
        | InvalidSignal
    end
@@ -192,13 +193,15 @@ structure Handler =
                    val () = Mask.setBlocked mask
                 in
                    (* List.foldl (fn (f, t) => f t) t fs *)
-                   List.app (fn f => f ()) fs
+                   List.app (fn f => f t) fs
                 end)
          in
             Handler
          end
 
-      fun simple (f: unit -> unit) = handler (fn t => (f (); t))
+      fun simple (f: unit -> unit) = handler (fn t => f ())
+
+      fun inspectInterrupted f = handler f
    end
 
 val setHandler = fn (s, h) =>

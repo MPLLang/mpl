@@ -136,11 +136,11 @@ struct
    *)
 
   datatype activation_stack =
-    AStack of {stack: (unit -> unit) Stack.t, pushCounter: int ref}
+    AStack of {stack: (Thread.t -> unit) Stack.t, pushCounter: int ref}
 
-  fun maybeActivateOne s =
+  fun maybeActivateOne s (t: Thread.t) =
     case Stack.popOldest s of
-      SOME a => a ()
+      SOME a => a t
     | NONE => ()
 
   fun astackNew () =
@@ -194,14 +194,14 @@ struct
 
   val _ =
     MLton.Signal.setHandler (MLton.Itimer.signal MLton.Itimer.Real,
-      MLton.Signal.Handler.simple (fn () =>
+      MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
         let
           val AStack {stack, ...} = astackGetCurrent ()
         in
           print ("[" ^ Int.toString (myWorkerId ())
                  ^ "] SIGNAL! astack size:"
                  ^ Int.toString (Stack.currentSize stack) ^ "\n")
-          (* maybeActivateOne stack *)
+          (* ; maybeActivateOne stack thread *)
         end))
 
 
@@ -209,7 +209,7 @@ struct
   sig
     type 'a t
     datatype 'a status = Pending | Activated of 'a joinpoint
-    val make: (unit -> 'a joinpoint) -> 'a t
+    val make: (Thread.t -> 'a joinpoint) -> 'a t
     val cancel: 'a t -> 'a status
   end =
   struct
@@ -220,9 +220,9 @@ struct
       let
         val status = ref Pending
 
-        fun activate () =
+        fun activate t =
           case !status of
-            Pending => status := Activated (doSpawn ())
+            Pending => status := Activated (doSpawn t)
           | _ => die (fn _ => "multiple activate")
       in
         astackPush activate;
@@ -469,7 +469,7 @@ struct
       end
 
 
-    fun spawn (g: unit -> 'b) : 'b joinpoint =
+    fun spawn (g: unit -> 'b) (interruptedLeftThread: Thread.t) : 'b joinpoint =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -494,7 +494,14 @@ struct
           fun g' () =
             let
               val () = astackSetCurrentNew ()
-              val () = DE.copySyncDepthsFromThread (thread, depth+1)
+
+              (** SAM_NOTE: TODO: this copySyncDepthsFromThread call is racy, because
+                * the g' might be stolen before we finish the signal handler.
+                *
+                * HOW TO FIX???
+                *)
+              val () = DE.copySyncDepthsFromThread (interruptedLeftThread, depth+1)
+
               val () = DE.decheckSetTid tidRight
               val gr = Result.result g
               val t = Thread.current ()
@@ -504,7 +511,7 @@ struct
               if decrementHitsZero incounter then
                 ( setQueueDepth (myWorkerId ()) (depth+1)
                 ; astackSetCurrent astack
-                ; threadSwitch thread
+                ; threadSwitch interruptedLeftThread
                 )
               else
                 returnToSched ()
@@ -581,6 +588,7 @@ struct
           end
 
 
+(*
     fun simplefork (f, g) =
       let
         (** This code is a bit deceiving in the sense that spawn and sync, as
@@ -621,11 +629,11 @@ struct
       in
         (!cont) fr
       end
-
+*)
 
     fun activatorBasedFork (f: unit -> 'a, g: unit -> 'b) =
       let
-        val x = Activator.make (fn _ => spawn g)
+        val x = Activator.make (fn t => spawn g t)
         val fr = Result.result f
       in
         case Activator.cancel x of

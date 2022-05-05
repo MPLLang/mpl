@@ -311,8 +311,7 @@ local
 in
    fun amInSignalHandler () = InHandler = Array.sub (state, procNum ())
 
-   (* TODO: input arg to f should be thread *)
-   fun setSimpleSignalHandler (f: unit -> unit): unit =
+   fun setSimpleSignalHandler (f: Basic.t -> unit): unit =
       let
          val _ = Primitive.MLton.installSignalHandler ()
          fun loop (): unit =
@@ -322,7 +321,7 @@ in
                val t = Prim.saved (gcState ())
                val _ = Array.update (state, proc, InHandler)
                val oldHH = Prim.handlerEnterHeapOfThread (gcState (), t)
-               val _ = f ()
+               val _ = f t
                val _ = Prim.handlerLeaveHeapOfThread (gcState (), t, oldHH)
                val _ = Array.update (state, proc, Normal)
                val _ = Prim.finishSignalHandler (gcState ())
