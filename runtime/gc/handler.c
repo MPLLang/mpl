@@ -92,6 +92,8 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
   assert(target->currentProcNum == -1);
 
   HM_HierarchicalHeap abandonedHH = getThreadCurrent(s)->hierarchicalHeap;
+
+  // copy thread details to current thread
   getThreadCurrent(s)->currentDepth = target->currentDepth;
   getThreadCurrent(s)->currentChunk = target->currentChunk;
   getThreadCurrent(s)->hierarchicalHeap = target->hierarchicalHeap;
@@ -99,12 +101,19 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
     target->bytesAllocatedSinceLastCollection;
   getThreadCurrent(s)->bytesSurvivedLastCollection =
     target->bytesSurvivedLastCollection;
+  getThreadCurrent(s)->minLocalCollectionDepth = target->minLocalCollectionDepth;
+  getThreadCurrent(s)->decheckState = target->decheckState;
+
+  uint32_t* fromSyncDepths = &(target->decheckSyncDepths[0]);
+  uint32_t* toSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
+  memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
 
   // clear out some stuff for my sanity
   target->currentChunk = NULL;
   target->hierarchicalHeap = NULL;
   target->bytesAllocatedSinceLastCollection = 0;
   target->bytesSurvivedLastCollection = 0;
+  target->decheckState = DECHECK_BOGUS_TID;
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
@@ -118,6 +127,7 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
 
   return (void*)abandonedHH;
 }
+
 
 void GC_handlerLeaveHeapOfThread(
   GC_state s,
@@ -139,6 +149,12 @@ void GC_handlerLeaveHeapOfThread(
     getThreadCurrent(s)->bytesAllocatedSinceLastCollection;
   target->bytesSurvivedLastCollection =
     getThreadCurrent(s)->bytesSurvivedLastCollection;
+  target->minLocalCollectionDepth = getThreadCurrent(s)->minLocalCollectionDepth;
+  target->decheckState = getThreadCurrent(s)->decheckState;
+
+  uint32_t* fromSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
+  uint32_t* toSyncDepths = &(target->decheckSyncDepths[0]);
+  memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
 
   HM_HierarchicalHeap originalHH = (HM_HierarchicalHeap)abandonedHH;
   assert(HM_HH_getDepth(originalHH) == 0);
@@ -147,6 +163,7 @@ void GC_handlerLeaveHeapOfThread(
   getThreadCurrent(s)->hierarchicalHeap = originalHH;
   getThreadCurrent(s)->bytesAllocatedSinceLastCollection = 0;
   getThreadCurrent(s)->bytesSurvivedLastCollection = 0;
+  getThreadCurrent(s)->decheckState = DECHECK_BOGUS_TID;
 
   // Find a chunk to get back to
   HM_chunk chunk = HM_getChunkListLastChunk(HM_HH_getChunkList(originalHH));
