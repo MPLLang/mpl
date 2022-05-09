@@ -181,9 +181,13 @@ void Assignable_writeBarrier(
     }
 
     /*add dst to the suspect set*/
-    if (dd > 0 && !ES_contains(NULL, dst)) {
+    if (dd > 0 && dst_de && !ES_contains(NULL, dst)) {
       /*if dst is not a suspect, it must be disentangled*/
-      assert (dst_de);
+      // if (!dst_de) {
+      //   printf("problematix: %p \n", dst);
+      //   DIE("done");
+      // }
+      // assert (dst_de);
       HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
       ES_add(s, HM_HH_getSuspects(dhh), dst);
     }

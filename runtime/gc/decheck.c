@@ -318,13 +318,24 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 #ifdef DETECT_ENTANGLEMENT
 void manage_entangled(GC_state s, objptr ptr) ;
 
-void manage_immutable(
+void mark_mutable_frontier(
     GC_state s,
     __attribute__((unused)) objptr *opp,
     objptr op,
-    void *rawArgs)
+    __attribute__((unused))  void *rawArgs)
 {
-  manage_entangled (s, op);
+  if (isMutable(s, op)) {
+    manage_entangled (s, op);
+  }
+  // else if (ES_contains(NULL, op)) {
+  //   return;
+  // }
+  else {
+    struct GC_foreachObjptrClosure emanageClosure =
+        {.fun = mark_mutable_frontier, .env = NULL};
+    foreachObjptrInObject(s, op, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+    // ES_mark (NULL, op);
+  }
 }
 
 void manage_entangled(GC_state s, objptr ptr) {
@@ -360,10 +371,8 @@ void manage_entangled(GC_state s, objptr ptr) {
     HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
     ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
   }
-  else if (!isMutable(s, objptrToPointer(ptr, NULL))) {
-    struct GC_foreachObjptrClosure emanageClosure =
-        {.fun = manage_immutable, .env = NULL};
-    foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+  else if (!isMutable(s, objptrToPointer(ptr, NULL)) && headerChange) {
+    mark_mutable_frontier (s, &ptr, ptr, NULL);
   }
 }
 
