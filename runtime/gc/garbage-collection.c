@@ -125,8 +125,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
-  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
-  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
+
+  /* SAM_NOTE: don't use HM_HH_getFrontier here, because invariant is possibly
+   * violated (might have frontier == limitPlusSlop)
+   */
+  s->frontier = HM_getChunkFrontier(getThreadCurrent(s)->currentChunk);
+  s->limitPlusSlop = HM_getChunkLimit(getThreadCurrent(s)->currentChunk);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
   /* SAM_NOTE: shouldn't this be

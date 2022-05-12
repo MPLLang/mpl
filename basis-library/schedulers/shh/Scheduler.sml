@@ -167,12 +167,14 @@ struct
       val AStack {stack, pushCounter} = astackGetCurrent ()
       val c = !pushCounter
     in
-      Stack.push (x, stack);
+      Stack.push (x, stack)(*;
 
       if c < heartbeatInterval then
         pushCounter := c + 1
       else
-        (maybeActivateOne stack; pushCounter := 0)
+        ( maybeActivateOne stack (Thread.current ())
+        ; pushCounter := 0
+        )*)
     end
 
   fun astackPop () =
@@ -199,9 +201,9 @@ struct
           val AStack {stack, ...} = astackGetCurrent ()
         in
           print ("[" ^ Int.toString (myWorkerId ())
-                 ^ "] SIGNAL! astack size:"
+                 ^ "] SIGNAL! astack size: "
                  ^ Int.toString (Stack.currentSize stack) ^ "\n")
-          (* ; maybeActivateOne stack thread *)
+          ; maybeActivateOne stack thread
         end))
 
 
