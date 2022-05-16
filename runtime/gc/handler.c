@@ -125,6 +125,9 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
     getThreadCurrent(s)->bytesNeeded,
     FALSE);
 
+  assert(invariantForMutatorFrontier(s));
+  assert(invariantForMutatorStack(s));
+
   return (void*)abandonedHH;
 }
 
@@ -188,4 +191,7 @@ void GC_handlerLeaveHeapOfThread(
     FALSE,
     getThreadCurrent(s)->bytesNeeded,
     FALSE);
+
+  assert(invariantForMutatorFrontier(s));
+  assert(invariantForMutatorStack(s));
 }
