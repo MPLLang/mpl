@@ -307,7 +307,7 @@ struct
          before Array.app onPixel pixels
       end
 
-  fun render objs width height cam : image =
+  fun render grain objs width height cam : image =
       let val pixels = ForkJoin.alloc (height*width)
           fun pixel l =
               let val i = l mod width
@@ -315,7 +315,7 @@ struct
               in Array.update (pixels,
                                l,
                                colour_to_pixel (trace_ray objs width height cam j i)) end
-          val _ = ForkJoin.parfor 256 (0,height*width) pixel
+          val _ = ForkJoin.parfor grain (0,height*width) pixel
       in {width = width,
           height = height,
           pixels = pixels
