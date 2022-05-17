@@ -51,6 +51,11 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
     // printf("switchToSignalHandlerThread triggered...\n");
     GC_startSignalHandler (s);
 
+    // printf("[%d] switchToThread\n  from %p\n    to %p (signal handler thread)\n",
+    //   s->procNumber,
+    //   (void*)getThreadCurrent(s),
+    //   (void*)threadObjptrToStruct(s, s->signalHandlerThread));
+
     // SAM_NOTE: synchronizes with loop in switchToThread...
     atomicStoreS32(&(getThreadCurrent(s)->currentProcNum), -1);
     s->currentThread = BOGUS_OBJPTR;

@@ -145,7 +145,7 @@ structure Handler =
       val isDefault = fn Default => true | _ => false
       val isIgnore = fn Ignore => true | _ => false
 
-      val handler =
+      val handler_ =
          (* This let is used so that Thread.setHandler is only used if
           * Handler.handler is used.  This prevents threads from being part
           * of every program.
@@ -199,9 +199,11 @@ structure Handler =
             Handler
          end
 
-      fun simple (f: unit -> unit) = handler (fn t => f ())
+      fun handler _ = raise Fail "Signal.Handler.handler not supported"
 
-      fun inspectInterrupted f = handler f
+      fun simple (f: unit -> unit) = handler_ (fn t => f ())
+
+      fun inspectInterrupted f = handler_ f
    end
 
 val setHandler = fn (s, h) =>

@@ -79,6 +79,11 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   /* SAM_NOTE: This write synchronizes with the spinloop in switchToThread (above) */
   atomicStoreS32(&(oldCurrentThread->currentProcNum), -1);
 
+  // printf("[%d] switchToThread\n  from %p\n    to %p\n",
+  //   s->procNumber,
+  //   (void*)oldCurrentThread,
+  //   (void*)p);
+
   switchToThread(s, pointerToObjptr(p, NULL));
   /* SAM_NOTE: TODO: do signal handlers work properly? */
   s->atomicState--;

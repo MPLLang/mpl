@@ -414,7 +414,7 @@ struct
 
     val maxPermittedCCDepth = 3
 
-    fun spawnGC () : gc_joinpoint option =
+    fun spawnGC interruptedThread : gc_joinpoint option =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
@@ -424,7 +424,7 @@ struct
         else
           let
             val heapId = ref (HH.getRoot thread)
-            val gcTaskTuple = (thread, heapId)
+            val gcTaskTuple = (interruptedThread, heapId)
             val gcTaskData = SOME gcTaskTuple
             val gcTask = GCTask gcTaskTuple
             val cont_arr1 = ref NONE
@@ -457,7 +457,9 @@ struct
         val newDepth = depth-1
       in
         if popDiscard() then
-          ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+          ( ()
+          (* ; print ("switching to do some GC stuff\n") *)
+          ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
           ; push (Continuation (thread, astackGetCurrent (), newDepth))
           ; returnToSched ()
           )
@@ -481,7 +483,7 @@ struct
         else
 
         let
-          val gcj = spawnGC ()
+          val gcj = spawnGC interruptedLeftThread
 
           val thread = Thread.current ()
           val astack = astackGetCurrent ()
@@ -514,6 +516,17 @@ struct
                 ( setQueueDepth (myWorkerId ()) (depth+1)
                 ; astackSetCurrent astack
                 ; threadSwitch interruptedLeftThread
+                    (** Can this possibly race with signal handler on other
+                      * processor??
+                      *   1. Other processor decrements incounter
+                      *   2. Other processor switches to signal handler
+                      *      (marking `iterruptedLeftThread` as not currently
+                      *      active for any processor)
+                      *   3. Now current processor successfully switches
+                      *      to interruptedLeftThread here
+                      *   4. Other processor finishes signal handler and tries
+                      *      to switch back, but can't.
+                      *)
                 )
               else
                 returnToSched ()
@@ -714,10 +727,14 @@ struct
         | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
             ;*) setGCTask myId NONE
+            (* ; print ("afterReturnToSched: found GC task\n") *)
             ; HH.collectThreadRoot (thread, !hh)
+            (* ; print ("afterReturnToSched: done with GC\n") *)
             ; if popDiscard () then
-                ( (*dbgmsg' (fn _ => "resume task thread")
-                ;*) threadSwitch thread
+                ( ()
+                (*; dbgmsg' (fn _ => "resume task thread") *)
+                (* ; print ("afterReturnToSched: resume task thread\n") *)
+                ; threadSwitch thread
                 ; afterReturnToSched ()
                 )
               else

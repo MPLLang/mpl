@@ -388,6 +388,9 @@ structure Thread =
       type preThread = PreThread.t
       type thread = Thread.t
 
+      val assertAtomicState = _import "GC_assertAtomicState":
+        GCState.t * Word32.word -> unit;
+
       val atomicState = _prim "Thread_atomicState": unit -> Word32.word;
       val atomicBegin = _prim "Thread_atomicBegin": unit -> unit;
       fun atomicEnd () =

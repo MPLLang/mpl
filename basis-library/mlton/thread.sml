@@ -39,6 +39,9 @@ in
        | w => AtomicState.Atomic (Word32.toInt w)
 end
 
+fun assertAtomicState x =
+  Prim.assertAtomicState (gcState (), Word32.fromInt x)
+
 fun atomically f =
    (atomicBegin (); DynamicWind.wind (f, atomicEnd))
 
@@ -317,14 +320,19 @@ in
          fun loop (): unit =
             let
                (* Atomic 1 *)
+               val _ = assertAtomicState 1
                val proc = procNum ()
+               (* val _ = print ("Start Prim.saved\n") *)
                val t = Prim.saved (gcState ())
+               (* val _ = print ("Finish Prim.saved\n") *)
                val _ = Array.update (state, proc, InHandler)
                val oldHH = Prim.handlerEnterHeapOfThread (gcState (), t)
                val _ = f t
                val _ = Prim.handlerLeaveHeapOfThread (gcState (), t, oldHH)
                val _ = Array.update (state, proc, Normal)
                val _ = Prim.finishSignalHandler (gcState ())
+               (* val _ = print ("switch away from signal handler\n") *)
+               val _ = assertAtomicState 1
                val _ = Prim.switchTo t (* implicit atomicEnd () *)
             in
                loop ()
