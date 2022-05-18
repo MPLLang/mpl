@@ -116,7 +116,7 @@ struct
       )
     end
 
-  (* fun dbgmsg' m =
+  fun dbgmsg' m =
     let
       val p = myWorkerId ()
       val _ = MLton.Parallel.Deprecated.takeLock printLock
@@ -126,9 +126,9 @@ struct
       ; TextIO.flushOut TextIO.stdErr
       ; MLton.Parallel.Deprecated.releaseLock printLock
       )
-    end *)
+    end
 
-  fun dbgmsg' _ = ()
+  (* fun dbgmsg' _ = () *)
 
 
   (* ========================================================================
@@ -146,26 +146,42 @@ struct
   fun astackNew () =
     AStack {stack = Stack.new (), pushCounter = ref 0}
 
-  val astacks: activation_stack array =
-    Array.tabulate (P, fn _ => astackNew ())
+  val astacks: activation_stack option array =
+    Array.tabulate (P, fn _ => NONE)
 
 
   (** SAM_NOTE: TODO: these functions are problematic for the write barrier.
     * The astack needs to be integrated with GC. Perhaps installed as a
     * special field of a thread? That would be nasty. *)
   fun astackSetCurrent astack =
-    Array.update (astacks, myWorkerId (), astack)
+    ( dbgmsg' (fn _ => "set astack")
+    ; Array.update (astacks, myWorkerId (), SOME astack)
+    )
   fun astackSetCurrentNew () =
-    Array.update (astacks, myWorkerId (), astackNew ())
+    ( dbgmsg' (fn _ => "set fresh astack")
+    ; Array.update (astacks, myWorkerId (), SOME (astackNew ()))
+    )
 
+  fun astackMaybeGetCurrent () =
+    Array.sub (astacks, myWorkerId ())
 
   fun astackGetCurrent () =
-    Array.sub (astacks, myWorkerId ())
+    case Array.sub (astacks, myWorkerId ()) of
+      SOME a => a
+    | NONE => die (fn _ => "bug: Scheduler.astackGetCurrent: expected astack; found none")
+
+  fun astackTakeCurrent () =
+    let
+      val a = astackGetCurrent ()
+    in
+      Array.update (astacks, myWorkerId (), NONE);
+      a
+    end
 
   fun astackPush x =
     let
       val AStack {stack, pushCounter} = astackGetCurrent ()
-      val c = !pushCounter
+      (* val c = !pushCounter *)
     in
       Stack.push (x, stack)(*;
 
@@ -197,15 +213,15 @@ struct
   val _ =
     MLton.Signal.setHandler (MLton.Itimer.signal MLton.Itimer.Real,
       MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        let
-          val AStack {stack, ...} = astackGetCurrent ()
-        in
-          print ("[" ^ Int.toString (myWorkerId ())
-                 ^ "] SIGNAL! astack size: "
-                 ^ Int.toString (Stack.currentSize stack) ^ "\n")
-          ; maybeActivateOne stack thread
-        end))
-
+        case astackMaybeGetCurrent () of
+          NONE => ()
+            (* dbgmsg' (fn _ => "SIGNAL! no current astack.") *)
+        | SOME (AStack {stack, ...}) =>
+            ( dbgmsg' (fn _ =>
+                "SIGNAL! current astack size: "
+                ^ Int.toString (Stack.currentSize stack))
+            ; maybeActivateOne stack thread
+            )))
 
   structure Activator :>
   sig
@@ -384,15 +400,18 @@ struct
       Queue.clear queue
     end
 
-  fun popDiscard () =
+  fun pop () =
     let
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      case Queue.popBot queue of
-          NONE => false
-        | SOME _ => true
+      Queue.popBot queue
     end
+
+  fun popDiscard () =
+    case pop () of
+      NONE => false
+    | SOME _ => true
 
   fun returnToSched () =
     let
@@ -458,10 +477,11 @@ struct
       in
         if popDiscard() then
           ( ()
-          (* ; print ("switching to do some GC stuff\n") *)
+          ; dbgmsg' (fn _ => "switching to do some GC stuff")
           ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, astackGetCurrent (), newDepth))
+          ; push (Continuation (thread, astackTakeCurrent (), newDepth))
           ; returnToSched ()
+          ; dbgmsg' (fn _ => "back from GC stuff")
           )
         else
           ( clear()
@@ -529,7 +549,9 @@ struct
                       *)
                 )
               else
-                returnToSched ()
+                ( astackTakeCurrent ()
+                ; returnToSched ()
+                )
             end
           val _ = push (NormalTask g')
           val _ = HH.setDepth (thread, depth + 1)
@@ -577,7 +599,20 @@ struct
                 )
               else
                 ( clear () (* this should be safe after popDiscard fails? *)
-                ; if decrementHitsZero incounter then () else returnToSched ()
+
+                ; let
+                    (** conservatively dispose of current activation stack,
+                      * in anticipation of other thread taking over (in the
+                      * case that we return to sched)
+                      *)
+                    val a = astackTakeCurrent ()
+                  in
+                    if decrementHitsZero incounter then
+                      astackSetCurrent a
+                    else
+                      returnToSched ()
+                  end
+
                 ; case HM.refDerefNoBarrier rightSideThread of
                     NONE => die (fn _ => "scheduler bug: join failed")
                   | SOME t =>
@@ -723,24 +758,26 @@ struct
 
       fun afterReturnToSched () =
         case getGCTask myId of
-          NONE => (*dbgmsg' (fn _ => "back in sched; no GC task")*) ()
+          NONE => ( dbgmsg' (fn _ => "back in sched; no GC task"); () )
         | SOME (thread, hh) =>
-            ( (*dbgmsg' (fn _ => "back in sched; found GC task")
-            ;*) setGCTask myId NONE
+            ( dbgmsg' (fn _ => "back in sched; found GC task")
+            ; setGCTask myId NONE
             (* ; print ("afterReturnToSched: found GC task\n") *)
             ; HH.collectThreadRoot (thread, !hh)
             (* ; print ("afterReturnToSched: done with GC\n") *)
-            ; if popDiscard () then
-                ( ()
-                (*; dbgmsg' (fn _ => "resume task thread") *)
-                (* ; print ("afterReturnToSched: resume task thread\n") *)
-                ; threadSwitch thread
-                ; afterReturnToSched ()
-                )
-              else
-                ()
+            ; case pop () of
+                NONE => ()
+              | SOME (Continuation (thread, astack, _)) =>
+                  ( ()
+                  ; dbgmsg' (fn _ => "resume task thread")
+                  ; Thread.atomicBegin ()
+                  ; astackSetCurrent astack
+                  ; Thread.switchTo thread
+                  ; afterReturnToSched ()
+                  )
+              | SOME _ =>
+                  die (fn _ => "bug: Scheduler.afterReturnToSched: impossible")
             )
-
 
       fun acquireWork () : unit =
         let
@@ -754,9 +791,10 @@ struct
               ; acquireWork ()
               )
           | Continuation (thread, astack, depth) =>
-              ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
-              ; dbgmsg' (fn _ => "resume task thread")
-              ;*) Queue.setDepth myQueue depth
+              ( ()
+              ; dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
+              (* ; dbgmsg' (fn _ => "resume task thread") *)
+              ; Queue.setDepth myQueue depth
               ; astackSetCurrent astack
               ; threadSwitch thread
               ; afterReturnToSched ()
@@ -773,7 +811,7 @@ struct
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId t;
-                (* dbgmsg' (fn _ => "switch to new task thread"); *)
+                dbgmsg' (fn _ => "switch to new task thread");
                 threadSwitch taskThread;
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
@@ -835,6 +873,7 @@ struct
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end
 
+  val _ = astackSetCurrentNew ()
 
   val _ =
     MLton.Itimer.set (MLton.Itimer.Real,
