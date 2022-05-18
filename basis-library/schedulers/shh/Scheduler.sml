@@ -40,15 +40,22 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  val activatePar = parseFlag "activate-par"
-  val heartbeatInterval = parseInt "heartbeat-interval" 10
+  (* val activatePar = parseFlag "activate-par" *)
+  val heartbeatMicroseconds =
+    LargeInt.fromInt (parseInt "heartbeat-us" 1000)
 
   structure Queue = DequeABP (*ArrayQueue*)
 
   structure Thread = MLton.Thread.Basic
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
-  fun threadSwitch t =
+  (* fun threadSwitch t =
     ( Thread.atomicBegin ()
+    ; Thread.switchTo t
+    ) *)
+
+  fun threadSwitchEndAtomic t =
+    ( if Thread.atomicState () <> 0w0 then ()
+      else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
     ; Thread.switchTo t
     )
 
@@ -180,7 +187,7 @@ struct
 
   fun astackPush x =
     let
-      val AStack {stack, pushCounter} = astackGetCurrent ()
+      val AStack {stack, ...} = astackGetCurrent ()
       (* val c = !pushCounter *)
     in
       Stack.push (x, stack)(*;
@@ -213,8 +220,8 @@ struct
   fun handler msg =
     MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
       case astackMaybeGetCurrent () of
-        NONE => ()
-          (* dbgmsg' (fn _ => "SIGNAL! no current astack.") *)
+        NONE =>
+          dbgmsg' (fn _ => msg ^ ": no current astack")
       | SOME (AStack {stack, ...}) =>
           ( dbgmsg' (fn _ =>
               msg
@@ -425,12 +432,12 @@ struct
       NONE => false
     | SOME _ => true
 
-  fun returnToSched () =
+  fun returnToSchedEndAtomic () =
     let
       val myId = myWorkerId ()
       val {schedThread, ...} = vectorSub (workerLocalData, myId)
     in
-      threadSwitch (Option.valOf (HM.refDerefNoBarrier schedThread))
+      threadSwitchEndAtomic (Option.valOf (HM.refDerefNoBarrier schedThread))
     end
 
   (* ========================================================================
@@ -487,6 +494,8 @@ struct
         val depth = HH.getDepth thread
         val newDepth = depth-1
       in
+        Thread.atomicBegin ();
+
         if popDiscard() then
           ( ()
           ; dbgmsg' (fn _ => "switching to do some GC stuff")
@@ -495,7 +504,8 @@ struct
               val a = astackTakeCurrent ()
             in
               push (Continuation (thread, newDepth))
-              ; returnToSched ()
+              ; returnToSchedEndAtomic ()
+              ; Thread.atomicBegin ()
               ; astackSetCurrent a
             end
           ; dbgmsg' (fn _ => "back from GC stuff")
@@ -506,7 +516,8 @@ struct
           );
 
         HH.promoteChunks thread;
-        HH.setDepth (thread, newDepth)
+        HH.setDepth (thread, newDepth);
+        Thread.atomicEnd ()
       end
 
 
@@ -545,6 +556,7 @@ struct
 
               val () = DE.decheckSetTid tidRight
               val gr = Result.result g
+
               val t = Thread.current ()
 
               (** Remove it, don't need it. If we return to the scheduler, we
@@ -556,9 +568,11 @@ struct
             in
               rightSideThread := SOME t;
               rightSideResult := SOME gr;
+
+              Thread.atomicBegin ();
               if decrementHitsZero incounter then
                 ( setQueueDepth (myWorkerId ()) (depth+1)
-                ; threadSwitch interruptedLeftThread
+                ; threadSwitchEndAtomic interruptedLeftThread
                     (** Can this possibly race with signal handler on other
                       * processor??
                       *   1. Other processor decrements incounter
@@ -572,7 +586,7 @@ struct
                       *)
                 )
               else
-                returnToSched ()
+                returnToSchedEndAtomic ()
             end
           val _ = push (NormalTask g')
           val _ = HH.setDepth (thread, depth + 1)
@@ -605,6 +619,8 @@ struct
             val newDepth = depth-1
             val tidLeft = DE.decheckGetTid thread
 
+            val _ = Thread.atomicBegin ()
+
             val result =
               if popDiscard () then
                 ( HH.promoteChunks thread
@@ -631,7 +647,9 @@ struct
                     if decrementHitsZero incounter then
                       ()
                     else
-                      returnToSched ();
+                      ( returnToSchedEndAtomic ()
+                      ; Thread.atomicBegin ()
+                      );
 
                     astackSetCurrent a
                   end
@@ -793,7 +811,8 @@ struct
               | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg' (fn _ => "resume task thread")
-                  ; threadSwitch thread
+                  ; Thread.atomicBegin ()
+                  ; threadSwitchEndAtomic thread
                   ; afterReturnToSched ()
                   )
               | SOME _ =>
@@ -816,7 +835,8 @@ struct
               ; dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
-              ; threadSwitch thread
+              ; Thread.atomicBegin ()
+              ; threadSwitchEndAtomic thread
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
@@ -832,7 +852,8 @@ struct
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId t;
                 dbgmsg' (fn _ => "switch to new task thread");
-                threadSwitch taskThread;
+                Thread.atomicBegin ();
+                threadSwitchEndAtomic taskThread;
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -880,13 +901,15 @@ struct
       in
         amOriginal := false;
         setQueueDepth (myWorkerId ()) 1;
-        threadSwitch schedThread
+        Thread.atomicBegin ();
+        threadSwitchEndAtomic schedThread
       end
     else
       let
         val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
-        threadSwitch originalThread;
+        Thread.atomicBegin ();
+        threadSwitchEndAtomic originalThread;
         afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
@@ -897,8 +920,8 @@ struct
 
   val _ =
     MLton.Itimer.set (MLton.Itimer.Real,
-      { interval = Time.fromMilliseconds 10
-      , value = Time.fromMilliseconds 10
+      { interval = Time.fromMicroseconds heartbeatMicroseconds
+      , value = Time.fromMicroseconds heartbeatMicroseconds
       })
 
 end
