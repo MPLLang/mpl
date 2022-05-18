@@ -51,6 +51,19 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
     // printf("switchToSignalHandlerThread triggered...\n");
     GC_startSignalHandler (s);
 
+    // How to ensure these are the right numbers???
+    int sigusr1 = 10;
+    int sigalrm = 14;
+
+    int isAlarm = sigismember(&(s->signalsInfo.signalsPending), sigalrm);
+    if (1 == isAlarm) {
+      for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+        int id = (int)i;
+        if (id == s->procNumber) continue;
+        pthread_kill(s->procStates[id].self, sigusr1);
+      }
+    }
+
     // printf("[%d] switchToThread\n  from %p\n    to %p (signal handler thread)\n",
     //   s->procNumber,
     //   (void*)getThreadCurrent(s),

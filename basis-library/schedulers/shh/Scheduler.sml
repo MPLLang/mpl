@@ -119,12 +119,12 @@ struct
   fun dbgmsg' m =
     let
       val p = myWorkerId ()
-      val _ = MLton.Parallel.Deprecated.takeLock printLock
+      (* val _ = MLton.Parallel.Deprecated.takeLock printLock *)
       val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
     in
       ( TextIO.output (TextIO.stdErr, msg)
       ; TextIO.flushOut TextIO.stdErr
-      ; MLton.Parallel.Deprecated.releaseLock printLock
+      (* ; MLton.Parallel.Deprecated.releaseLock printLock *)
       )
     end
 
@@ -210,18 +210,30 @@ struct
       end) *)
 
 
-  val _ =
-    MLton.Signal.setHandler (MLton.Itimer.signal MLton.Itimer.Real,
-      MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        case astackMaybeGetCurrent () of
-          NONE => ()
-            (* dbgmsg' (fn _ => "SIGNAL! no current astack.") *)
-        | SOME (AStack {stack, ...}) =>
-            ( dbgmsg' (fn _ =>
-                "SIGNAL! current astack size: "
-                ^ Int.toString (Stack.currentSize stack))
-            ; maybeActivateOne stack thread
-            )))
+  fun handler msg =
+    MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
+      case astackMaybeGetCurrent () of
+        NONE => ()
+          (* dbgmsg' (fn _ => "SIGNAL! no current astack.") *)
+      | SOME (AStack {stack, ...}) =>
+          ( dbgmsg' (fn _ =>
+              msg
+              ^ ": current astack size: "
+              ^ Int.toString (Stack.currentSize stack))
+          ; maybeActivateOne stack thread
+          ))
+
+  (** itimer is used to deliver signals regularly. sigusr1 is used to relay
+    * these to all processes
+    *)
+  val _ = MLton.Signal.setHandler
+    ( MLton.Itimer.signal MLton.Itimer.Real
+    , handler "SIGALRM"
+    )
+  val _ = MLton.Signal.setHandler
+    ( Posix.Signal.usr1
+    , handler "SIGUSR1"
+    )
 
   structure Activator :>
   sig
@@ -260,7 +272,7 @@ struct
 
   datatype task =
     NormalTask of unit -> unit
-  | Continuation of Thread.t * activation_stack * int
+  | Continuation of Thread.t * int
   | GCTask of gctask_data
 
   (* ========================================================================
@@ -479,8 +491,13 @@ struct
           ( ()
           ; dbgmsg' (fn _ => "switching to do some GC stuff")
           ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, astackTakeCurrent (), newDepth))
-          ; returnToSched ()
+          ; let
+              val a = astackTakeCurrent ()
+            in
+              push (Continuation (thread, newDepth))
+              ; returnToSched ()
+              ; astackSetCurrent a
+            end
           ; dbgmsg' (fn _ => "back from GC stuff")
           )
         else
@@ -506,7 +523,7 @@ struct
           val gcj = spawnGC interruptedLeftThread
 
           val thread = Thread.current ()
-          val astack = astackGetCurrent ()
+          (* val astack = astackGetCurrent () *)
           val depth = HH.getDepth thread
 
           val rightSideThread = ref (NONE: Thread.t option)
@@ -529,12 +546,18 @@ struct
               val () = DE.decheckSetTid tidRight
               val gr = Result.result g
               val t = Thread.current ()
+
+              (** Remove it, don't need it. If we return to the scheduler, we
+                * should guarantee we don't have an activation stack. If we
+                * end up switching to some other thread, then that thread will
+                * reassign its own astack.
+                *)
+              val _ = astackTakeCurrent ()
             in
               rightSideThread := SOME t;
               rightSideResult := SOME gr;
               if decrementHitsZero incounter then
                 ( setQueueDepth (myWorkerId ()) (depth+1)
-                ; astackSetCurrent astack
                 ; threadSwitch interruptedLeftThread
                     (** Can this possibly race with signal handler on other
                       * processor??
@@ -549,9 +572,7 @@ struct
                       *)
                 )
               else
-                ( astackTakeCurrent ()
-                ; returnToSched ()
-                )
+                returnToSched ()
             end
           val _ = push (NormalTask g')
           val _ = HH.setDepth (thread, depth + 1)
@@ -602,15 +623,17 @@ struct
 
                 ; let
                     (** conservatively dispose of current activation stack,
-                      * in anticipation of other thread taking over (in the
+                      * in anticipation of other processor taking over (in the
                       * case that we return to sched)
                       *)
                     val a = astackTakeCurrent ()
                   in
                     if decrementHitsZero incounter then
-                      astackSetCurrent a
+                      ()
                     else
-                      returnToSched ()
+                      returnToSched ();
+
+                    astackSetCurrent a
                   end
 
                 ; case HM.refDerefNoBarrier rightSideThread of
@@ -767,12 +790,10 @@ struct
             (* ; print ("afterReturnToSched: done with GC\n") *)
             ; case pop () of
                 NONE => ()
-              | SOME (Continuation (thread, astack, _)) =>
+              | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg' (fn _ => "resume task thread")
-                  ; Thread.atomicBegin ()
-                  ; astackSetCurrent astack
-                  ; Thread.switchTo thread
+                  ; threadSwitch thread
                   ; afterReturnToSched ()
                   )
               | SOME _ =>
@@ -790,12 +811,11 @@ struct
               ( HH.collectThreadRoot (thread, !hh)
               ; acquireWork ()
               )
-          | Continuation (thread, astack, depth) =>
+          | Continuation (thread, depth) =>
               ( ()
               ; dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
-              ; astackSetCurrent astack
               ; threadSwitch thread
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
