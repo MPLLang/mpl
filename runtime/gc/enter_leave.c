@@ -15,17 +15,23 @@
  * TODO: check that these work with the new runtime setup. */
 void enter (GC_state s) {
 
+  Trace0(EVENT_RUNTIME_ENTER);
+  GC_MayTerminateThread(s);
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  beginAtomic (s);
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HH_EBR_leaveQuiescentState(s);
+  beginAtomic(s);
 
-  if (DEBUG) {
-    /* RAM_NOTE: Switch to using LOG */
-    displayGCState (s, stderr);
-  }
+  assert(threadAndHeapOkay(s));
 
-  assert (invariantForGC (s));
+  // if (DEBUG) {
+  //   /* RAM_NOTE: Switch to using LOG */
+  //   displayGCState (s, stderr);
+  // }
+
+  // assert (invariantForGC (s));
 }
 
 void leave (GC_state s) {
@@ -35,4 +41,5 @@ void leave (GC_state s) {
   assert(invariantForMutator(s, FALSE, TRUE));
 
   endAtomic (s);
+  Trace0(EVENT_RUNTIME_LEAVE);
 }

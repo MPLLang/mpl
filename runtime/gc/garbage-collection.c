@@ -85,19 +85,7 @@ void growStackCurrent(GC_state s) {
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
-  Trace0(EVENT_RUNTIME_ENTER);
-
-  /* Exit as soon as termination is requested. */
-  GC_MayTerminateThread(s);
-
-  /* SPOONHOWER_NOTE: Used to be enter() here */
-  /* XXX copied from enter() */
-  /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  beginAtomic(s);
-  HH_EBR_leaveQuiescentState(s);
+  enter(s);
 
   // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
   // while (h->nextAncestor != NULL) h = h->nextAncestor;
@@ -110,9 +98,6 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   //     gusize,
   //     100.0 * ((double)gusize / (double)gsize));
   // }
-
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
 
   /* adjust bytesRequested */
   /*
@@ -142,7 +127,5 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
     getThreadCurrent(s)->bytesNeeded,
     FALSE);
 
-  endAtomic(s);
-
-  Trace0(EVENT_RUNTIME_LEAVE);
+  leave(s);
 }

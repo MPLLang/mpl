@@ -76,14 +76,7 @@ void GC_copyCurrentThread (GC_state s) {
   LOG(LM_THREAD, LL_DEBUG,
       "called");
 
-  /* SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
-     synchronize unless we don't have enough room to allocate a new thread and stack. */
-
-  /* SPOONHOWER_NOTE: copied from enter() */
-  /* SPOONHOWER_NOTE: used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  enter(s);
 
   fromThread = (GC_thread)(objptrToPointer(s->currentThread, NULL)
                            + offsetofThread (s));
@@ -94,7 +87,7 @@ void GC_copyCurrentThread (GC_state s) {
   toStack = (GC_stack)(objptrToPointer(toThread->stack, NULL));
   assert (toStack->reserved == alignStackReserved (s, toStack->used));
 
-  /* SPOONHOWER_NOTE: Formerly: LEAVE1 (s, "toThread"); */
+  leave(s);
 
   LOG(LM_THREAD, LL_DEBUG,
       "result is "FMTPTR,
@@ -113,17 +106,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
       "called on "FMTPTR,
       (uintptr_t)p);
 
-  /*
-   * SPOONHOWER_NOTE: Used to be an ENTER here, but we don't really need to
-   * synchronize unless we don't have enough room to allocate a new thread and
-   * stack.
-   */
-
-  /* SPOONHOWER_NOTE: copied from enter() */
-  /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  enter(s);
 
   fromThread = (GC_thread)(p + offsetofThread (s));
   fromStack = (GC_stack)(objptrToPointer(fromThread->stack, NULL));
@@ -132,7 +115,7 @@ pointer GC_copyThread (GC_state s, pointer p) {
   toStack = (GC_stack)(objptrToPointer(toThread->stack, NULL));
   assert (toStack->reserved == alignStackReserved (s, toStack->used));
 
-  /* SPOONHOWER_NOTE: Formerly: LEAVE2 (s, "toThread", "fromThread"); */
+  leave(s);
 
   LOG(LM_THREAD, LL_DEBUG,
       "result is "FMTPTR" from "FMTPTR,

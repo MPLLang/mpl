@@ -595,13 +595,7 @@ void HM_HH_forceLeftHeap(
 {
   GC_state s = pthread_getspecific (gcstate_key);
   assert(processor < s->numberOfProcs);
-  GC_MayTerminateThread(s);
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
@@ -620,7 +614,7 @@ void HM_HH_forceLeftHeap(
 
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
-        ((void*)(s->limit)),
+        ((void*)(s->limitPlusSlop)),
         ((void*)(s->frontier)));
   }
 
@@ -635,14 +629,11 @@ void HM_HH_forceLeftHeap(
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
+  leave(s);
 }
 
 void HM_HH_forceNewChunk(GC_state s) {
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   if (!HM_HH_extend(s, getThreadCurrent(s), GC_HEAP_LIMIT_SLOP)) {
     DIE("Ran out of space for new chunk");
@@ -653,6 +644,7 @@ void HM_HH_forceNewChunk(GC_state s) {
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   assert(invariantForMutatorFrontier(s));
   assert(invariantForMutatorStack(s));
+  leave(s);
 }
 
 void splitHeapForCC(GC_state s, GC_thread thread) {
@@ -875,6 +867,7 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
 
 pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
+  enter(s);
 
   /** Superfluous argument to function... */
 #if ASSERT
@@ -882,15 +875,13 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   assert(getThreadCurrent(s) == thread);
 #endif
 
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
+  leave(s);
   return (void*)(getThreadCurrent(s)->hierarchicalHeap);
 }
 
@@ -963,14 +954,12 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
 Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
+  enter(s);
+
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   // So, we should really get rid of the extra argument.
   assert(thread == getThreadCurrent(s));
-
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   CC_initStack(s, HM_HH_getConcurrentPack(hh));
@@ -995,6 +984,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
       lastSurvived,
       freshAlloc,
       size);
+
+    leave(s);
     return FALSE;
   }
 
@@ -1039,6 +1030,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     (void*)hh,
     HM_HH_getDepth(hh));
 
+  leave(s);
   return TRUE;
 }
 

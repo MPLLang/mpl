@@ -83,10 +83,7 @@ void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
 
 void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
-
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   objptr threadop = pointerToObjptr(threadp, NULL);
   objptr childop = pointerToObjptr(childp, NULL);
@@ -140,28 +137,25 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
    * because the stack may contain a pointer into the child's heap (we merge
    * right after reading from the "right branch" result ref).
    */
-  beginAtomic(s);
   HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, TRUE);
-  endAtomic(s);
 
   /* This should be true, otherwise our call to
    * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
    */
   assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+  leave(s);
 }
 
-#pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"
 void GC_HH_promoteChunks(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
   HM_HH_promoteChunks(s, thread);
+  leave(s);
 }
 
 void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {

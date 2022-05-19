@@ -53,6 +53,10 @@ struct
     ; Thread.switchTo t
     ) *)
 
+  fun assertAtomic x =
+    if Thread.atomicState () = Word32.fromInt x then ()
+    else die (fn _ => "scheduler bug: expected atomic " ^ Int.toString x)
+
   fun threadSwitchEndAtomic t =
     ( if Thread.atomicState () <> 0w0 then ()
       else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
@@ -135,7 +139,7 @@ struct
       )
     end
 
-  (* fun dbgmsg' _ = () *)
+  fun dbgmsg' _ = ()
 
 
   (* ========================================================================
@@ -179,32 +183,32 @@ struct
 
   fun astackTakeCurrent () =
     let
+      val _ = Thread.atomicBegin ()
       val a = astackGetCurrent ()
     in
       Array.update (astacks, myWorkerId (), NONE);
+      Thread.atomicEnd ();
       a
     end
 
   fun astackPush x =
     let
+      val _ = Thread.atomicBegin ()
       val AStack {stack, ...} = astackGetCurrent ()
       (* val c = !pushCounter *)
     in
-      Stack.push (x, stack)(*;
-
-      if c < heartbeatInterval then
-        pushCounter := c + 1
-      else
-        ( maybeActivateOne stack (Thread.current ())
-        ; pushCounter := 0
-        )*)
+      Stack.push (x, stack);
+      Thread.atomicEnd ()
     end
 
   fun astackPop () =
     let
+      val _ = Thread.atomicBegin ()
       val AStack {stack, ...} = astackGetCurrent ()
+      val result = Stack.pop stack
     in
-      Stack.pop stack
+      Thread.atomicEnd ();
+      result
     end
 
 
@@ -223,7 +227,8 @@ struct
         NONE =>
           dbgmsg' (fn _ => msg ^ ": no current astack")
       | SOME (AStack {stack, ...}) =>
-          ( dbgmsg' (fn _ =>
+          ( ()
+          ; dbgmsg' (fn _ =>
               msg
               ^ ": current astack size: "
               ^ Int.toString (Stack.currentSize stack))
@@ -267,7 +272,8 @@ struct
       end
 
     fun cancel (T status) =
-      ( astackPop ()
+      ( ()
+      ; astackPop ()
       ; !status
       )
   end
@@ -461,6 +467,10 @@ struct
           NONE
         else
           let
+            (** SAM_NOTE: atomic begin/end not needed here, becuase this is
+              * already run in signal handler.
+              *)
+
             val heapId = ref (HH.getRoot thread)
             val gcTaskTuple = (interruptedThread, heapId)
             val gcTaskData = SOME gcTaskTuple
@@ -490,12 +500,11 @@ struct
 
     fun syncGC (GCJ {gcTaskData}) =
       let
+        val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
         val depth = HH.getDepth thread
         val newDepth = depth-1
       in
-        Thread.atomicBegin ();
-
         if popDiscard() then
           ( ()
           ; dbgmsg' (fn _ => "switching to do some GC stuff")
@@ -504,8 +513,9 @@ struct
               val a = astackTakeCurrent ()
             in
               push (Continuation (thread, newDepth))
+              ; assertAtomic 1
               ; returnToSchedEndAtomic ()
-              ; Thread.atomicBegin ()
+              ; assertAtomic 1
               ; astackSetCurrent a
             end
           ; dbgmsg' (fn _ => "back from GC stuff")
@@ -517,6 +527,7 @@ struct
 
         HH.promoteChunks thread;
         HH.setDepth (thread, newDepth);
+        assertAtomic 1;
         Thread.atomicEnd ()
       end
 
@@ -557,6 +568,8 @@ struct
               val () = DE.decheckSetTid tidRight
               val gr = Result.result g
 
+              val _ = Thread.atomicBegin ()
+
               val t = Thread.current ()
 
               (** Remove it, don't need it. If we return to the scheduler, we
@@ -569,10 +582,21 @@ struct
               rightSideThread := SOME t;
               rightSideResult := SOME gr;
 
-              Thread.atomicBegin ();
               if decrementHitsZero incounter then
-                ( setQueueDepth (myWorkerId ()) (depth+1)
+                ( ()
+                ; setQueueDepth (myWorkerId ()) (depth+1)
+                  (** Atomic 1 *)
+                ; Thread.atomicBegin ()
+
+                  (** Atomic 2 *)
+
+                  (** (When sibling is resumed, it needs to be atomic 1.
+                    * Switching threads is implicit atomicEnd(), so we need
+                    * to be at atomic2
+                    *)
+                ; assertAtomic 2
                 ; threadSwitchEndAtomic interruptedLeftThread
+
                     (** Can this possibly race with signal handler on other
                       * processor??
                       *   1. Other processor decrements incounter
@@ -614,19 +638,19 @@ struct
         NONE => Result.result g
       | SOME (JD {rightSideThread, rightSideResult, incounter, tidRight, gcj}) =>
           let
+            val _ = Thread.atomicBegin ()
+
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val newDepth = depth-1
             val tidLeft = DE.decheckGetTid thread
-
-            val _ = Thread.atomicBegin ()
 
             val result =
               if popDiscard () then
                 ( HH.promoteChunks thread
                 ; HH.setDepth (thread, newDepth)
                 ; DE.decheckJoin (tidLeft, tidRight)
-                (* ; HH.forceNewChunk () *)
+                ; Thread.atomicEnd ()
                 ; let
                     val gr = Result.result g
                   in
@@ -647,8 +671,11 @@ struct
                     if decrementHitsZero incounter then
                       ()
                     else
-                      ( returnToSchedEndAtomic ()
-                      ; Thread.atomicBegin ()
+                      ( ()
+                        (** Atomic 1 *)
+                      ; assertAtomic 1
+                      ; returnToSchedEndAtomic ()
+                      ; assertAtomic 1
                       );
 
                     astackSetCurrent a
@@ -667,7 +694,12 @@ struct
                         setQueueDepth (myWorkerId ()) newDepth;
                         case HM.refDerefNoBarrier rightSideResult of
                           NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                        | SOME gr => gr
+                        | SOME gr =>
+                            ( ()
+                            ; assertAtomic 1
+                            ; Thread.atomicEnd ()
+                            ; gr
+                            )
                       end
                 )
           in
@@ -812,6 +844,8 @@ struct
                   ( ()
                   ; dbgmsg' (fn _ => "resume task thread")
                   ; Thread.atomicBegin ()
+                  ; Thread.atomicBegin ()
+                  ; assertAtomic 2
                   ; threadSwitchEndAtomic thread
                   ; afterReturnToSched ()
                   )
@@ -836,6 +870,8 @@ struct
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
               ; Thread.atomicBegin ()
+              ; Thread.atomicBegin ()
+              ; assertAtomic 2
               ; threadSwitchEndAtomic thread
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1

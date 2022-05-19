@@ -83,7 +83,7 @@ void GC_handler (int signum) {
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
   if (signum == SIGALRM) {
-    // printf("[%d] relaying\n", Proc_processorNumber(s));
+    // printf("[%d] relaying alarm\n", Proc_processorNumber(s));
     for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       int id = (int)i;
       if (id == Proc_processorNumber(s)) continue;
@@ -91,16 +91,17 @@ void GC_handler (int signum) {
     }
   }
 
+  // if (signum == SIGUSR1) {
+  //   printf("[%d] received relay\n", Proc_processorNumber(s));
+  // }
+
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_handler done [%d]\n",
              Proc_processorNumber (s));
 }
 
 pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  HH_EBR_leaveQuiescentState(s);
+  enter(s);
 
   GC_thread target = threadObjptrToStruct(s, threadp);
   assert(getThreadCurrent(s)->currentDepth == 0);
@@ -142,7 +143,7 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
 
   assert(invariantForMutatorFrontier(s));
   assert(invariantForMutatorStack(s));
-
+  leave(s);
   return (void*)abandonedHH;
 }
 
@@ -152,10 +153,7 @@ void GC_handlerLeaveHeapOfThread(
   objptr threadp,
   pointer abandonedHH)
 {
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  HH_EBR_leaveQuiescentState(s);
+  enter(s);
 
   GC_thread target = threadObjptrToStruct(s, threadp);
   assert(target->currentProcNum == -1);
@@ -209,4 +207,5 @@ void GC_handlerLeaveHeapOfThread(
 
   assert(invariantForMutatorFrontier(s));
   assert(invariantForMutatorStack(s));
+  leave(s);
 }
