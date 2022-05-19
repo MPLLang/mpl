@@ -82,7 +82,7 @@ void GC_handler (int signum) {
   s->signalsInfo.signalIsPending = TRUE;
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
-  if (signum == SIGALRM) {
+  if (signum == SIGALRM && !GC_CheckForTerminationRequest(s)) {
     // printf("[%d] relaying alarm\n", Proc_processorNumber(s));
     for (uint32_t i = 0; i < s->numberOfProcs; i++) {
       int id = (int)i;
