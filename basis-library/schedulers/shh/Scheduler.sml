@@ -633,12 +633,13 @@ struct
       end
 
 
-    fun sync (J {data, func=g}) =
+    (** Must be called in an atomic section. Implicit atomicEnd() *)
+    fun syncEndAtomic (J {data, func=g}) =
       case data of
         NONE => Result.result g
       | SOME (JD {rightSideThread, rightSideResult, incounter, tidRight, gcj}) =>
           let
-            val _ = Thread.atomicBegin ()
+            val _ = assertAtomic 1
 
             val thread = Thread.current ()
             val depth = HH.getDepth thread
@@ -758,13 +759,17 @@ struct
       let
         val x = Activator.make (fn t => spawn g t)
         val fr = Result.result f
+        val _ = Thread.atomicBegin ()
       in
         case Activator.cancel x of
           Activator.Pending =>
-            (Result.extractResult fr, g ())
+            ( ()
+            ; Thread.atomicEnd ()
+            ; (Result.extractResult fr, g ())
+            )
 
         | Activator.Activated j =>
-            let val gr = sync j
+            let val gr = syncEndAtomic j
             in (Result.extractResult fr, Result.extractResult gr)
             end
       end
