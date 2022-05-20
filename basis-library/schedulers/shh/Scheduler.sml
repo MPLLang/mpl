@@ -636,7 +636,7 @@ struct
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic (J {data, func=g}) =
       case data of
-        NONE => Result.result g
+        NONE => (Thread.atomicEnd (); Result.result g)
       | SOME (JD {rightSideThread, rightSideResult, incounter, tidRight, gcj}) =>
           let
             val _ = assertAtomic 1
@@ -758,6 +758,7 @@ struct
     fun activatorBasedFork (f: unit -> 'a, g: unit -> 'b) =
       let
         val x = Activator.make (fn t => spawn g t)
+        val _ = assertAtomic 0
         val fr = Result.result f
         val _ = Thread.atomicBegin ()
       in
@@ -765,12 +766,16 @@ struct
           Activator.Pending =>
             ( ()
             ; Thread.atomicEnd ()
+            ; assertAtomic 0
             ; (Result.extractResult fr, g ())
             )
 
         | Activator.Activated j =>
-            let val gr = syncEndAtomic j
-            in (Result.extractResult fr, Result.extractResult gr)
+            let
+              val gr = syncEndAtomic j
+            in
+              assertAtomic 0;
+              (Result.extractResult fr, Result.extractResult gr)
             end
       end
 
