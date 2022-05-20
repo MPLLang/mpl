@@ -1,4 +1,4 @@
-(* Copyright (C) 2011,2014-2015,2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2011,2014-2015,2017,2019-2021 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -376,7 +376,7 @@ fun mkCompile {outputC, outputLL, outputS} =
           srcToFile = SOME CoreML.Program.toFile,
           tgtStats = SOME Xml.Program.layoutStats,
           tgtToFile = SOME Xml.Program.toFile,
-          tgtTypeCheck = SOME Xml.typeCheck}
+          tgtTypeCheck = SOME (Xml.typeCheck, NONE)}
       fun frontend input =
          Control.translatePass
          {arg = input,
@@ -386,7 +386,7 @@ fun mkCompile {outputC, outputLL, outputS} =
           srcToFile = NONE,
           tgtStats = SOME Xml.Program.layoutStats,
           tgtToFile = SOME Xml.Program.toFile,
-          tgtTypeCheck = SOME Xml.typeCheck}
+          tgtTypeCheck = SOME (Xml.typeCheck, SOME true)}
       val mlbFrontend = frontend o MLBString.fromMLBFile
       val smlFrontend = frontend o MLBString.fromSMLFile
 
@@ -401,29 +401,27 @@ fun mkCompile {outputC, outputLL, outputS} =
       fun mkFrontend {parse, stats, toFile, typeCheck} =
          let
             val name = #suffix toFile
-   in
+         in
             fn input =>
-            Ref.fluidLet
-            (Control.typeCheck, true, fn () =>
-             Control.translatePass
-             {arg = input,
-              doit = (fn input =>
-                      case Parse.parseFile (parse (), input) of
-                         Parse.Yes program => program
-                       | Parse.No (msg, location) =>
-                            (Control.error
-                             (regionFromLocation (input, location),
-                              Layout.str (concat [name, "Parse failed"]),
-                              msg)
-                             ; Control.checkForErrors ()
-                             ; Error.bug "unreachable")),
-              keepIL = false,
-              name = concat [name, "Parse"],
-              srcToFile = NONE,
-              tgtStats = SOME stats,
-              tgtToFile = SOME toFile,
-              tgtTypeCheck = SOME typeCheck})
-   end
+            Control.translatePass
+            {arg = input,
+             doit = (fn input =>
+                     case Parse.parseFile (parse (), input) of
+                        Parse.Yes program => program
+                      | Parse.No (msg, location) =>
+                           (Control.error
+                            (regionFromLocation (input, location),
+                             Layout.str (concat [name, "Parse failed"]),
+                             msg)
+                            ; Control.checkForErrors ()
+                            ; Error.bug "unreachable")),
+             keepIL = false,
+             name = concat [name, "Parse"],
+             srcToFile = NONE,
+             tgtStats = SOME stats,
+             tgtToFile = SOME toFile,
+             tgtTypeCheck = SOME (typeCheck, SOME true)}
+         end
       val xmlFrontend =
          mkFrontend
          {parse = Xml.Program.parse,
@@ -456,89 +454,93 @@ fun mkCompile {outputC, outputLL, outputS} =
                {arg = xml,
                 doit = Xml.simplify,
                 execute = true,
+                forceTypeCheck = SOME true,
                 keepIL = !Control.keepXML,
-       name = "xmlSimplify",
-       stats = Xml.Program.layoutStats,
+                name = "xmlSimplify",
+                stats = Xml.Program.layoutStats,
                 toFile = Xml.Program.toFile,
-       typeCheck = Xml.typeCheck}
-   in
-      xml
-   end
+                typeCheck = Xml.typeCheck}
+         in
+            xml
+         end
       fun toSxml xml =
          Control.translatePass
          {arg = xml,
           doit = Monomorphise.monomorphise,
           keepIL = false,
-    name = "monomorphise",
+          name = "monomorphise",
           srcToFile = SOME Xml.Program.toFile,
           tgtStats = SOME Sxml.Program.layoutStats,
           tgtToFile = SOME Sxml.Program.toFile,
-          tgtTypeCheck = SOME Sxml.typeCheck}
+          tgtTypeCheck = SOME (Sxml.typeCheck, SOME true)}
       fun sxmlSimplify sxml =
-   let
-      val sxml =
+         let
+            val sxml =
                Control.simplifyPass
                {arg = sxml,
                 doit = Sxml.simplify,
+                forceTypeCheck = SOME true,
                 execute = true,
                 keepIL = !Control.keepSXML,
-          name = "sxmlSimplify",
-          stats = Sxml.Program.layoutStats,
+                name = "sxmlSimplify",
+                stats = Sxml.Program.layoutStats,
                 toFile = Sxml.Program.toFile,
-          typeCheck = Sxml.typeCheck}
-   in
-      sxml
-   end
+                typeCheck = Sxml.typeCheck}
+         in
+            sxml
+         end
       fun toSsa sxml =
          Control.translatePass
          {arg = sxml,
           doit = ClosureConvert.closureConvert,
           keepIL = false,
-    name = "closureConvert",
+          name = "closureConvert",
           srcToFile = SOME Sxml.Program.toFile,
           tgtStats = SOME Ssa.Program.layoutStats,
           tgtToFile = SOME Ssa.Program.toFile,
-          tgtTypeCheck = SOME Ssa.typeCheck}
+          tgtTypeCheck = SOME (Ssa.typeCheck, SOME true)}
       fun ssaSimplify ssa =
-   let
-      val ssa =
+         let
+            val ssa =
                Control.simplifyPass
                {arg = ssa,
                 doit = Ssa.simplify,
                 execute = true,
+                forceTypeCheck = SOME true,
                 keepIL = !Control.keepSSA,
-          name = "ssaSimplify",
-          stats = Ssa.Program.layoutStats,
+                name = "ssaSimplify",
+                stats = Ssa.Program.layoutStats,
                 toFile = Ssa.Program.toFile,
-          typeCheck = Ssa.typeCheck}
-   in
-      ssa
-   end
+                typeCheck = Ssa.typeCheck}
+         in
+            ssa
+         end
       fun toSsa2 ssa =
          Control.translatePass
          {arg = ssa,
           doit = SsaToSsa2.convert,
           keepIL = false,
-    name = "toSsa2",
+          name = "toSsa2",
           srcToFile = SOME Ssa.Program.toFile,
           tgtStats = SOME Ssa2.Program.layoutStats,
           tgtToFile = SOME Ssa2.Program.toFile,
-          tgtTypeCheck = SOME Ssa2.typeCheck}
+          tgtTypeCheck = SOME (Ssa2.typeCheck, SOME true)}
       fun ssa2Simplify ssa2 =
-   let
-      val ssa2 =
+         let
+            val ssa2 =
                Control.simplifyPass
                {arg = ssa2,
                 doit = Ssa2.simplify,
+                forceTypeCheck = SOME true,
                 execute = true,
                 keepIL = !Control.keepSSA2,
-          name = "ssa2Simplify",
-          stats = Ssa2.Program.layoutStats,
+                name = "ssa2Simplify",
+                stats = Ssa2.Program.layoutStats,
                 toFile = Ssa2.Program.toFile,
-          typeCheck = Ssa2.typeCheck}
-   in
-      ssa2
-   end
+                typeCheck = Ssa2.typeCheck}
+         in
+            ssa2
+         end
       fun toRssa ssa2 =
          let
             val codegenImplementsPrim =
@@ -562,15 +564,18 @@ fun mkCompile {outputC, outputLL, outputS} =
                 srcToFile = SOME Ssa2.Program.toFile,
                 tgtStats = SOME Rssa.Program.layoutStats,
                 tgtToFile = SOME Rssa.Program.toFile,
-                tgtTypeCheck = SOME Rssa.typeCheck}
+                (* RSSA type check is too slow to run by default. *)
+                tgtTypeCheck = SOME (Rssa.typeCheck, SOME false)}
          in
             rssa
-   end
+         end
       fun rssaSimplify rssa =
          Control.simplifyPass
          {arg = rssa,
           doit = Rssa.simplify,
           execute = true,
+          (* RSSA type check is too slow to run by default. *)
+          forceTypeCheck = SOME false,
           keepIL = !Control.keepRSSA,
           name = "rssaSimplify",
           stats = Rssa.Program.layoutStats,
@@ -587,45 +592,49 @@ fun mkCompile {outputC, outputLL, outputS} =
                 srcToFile = SOME Rssa.Program.toFile,
                 tgtStats = SOME Machine.Program.layoutStats,
                 tgtToFile = SOME Machine.Program.toFile,
-                tgtTypeCheck = SOME Machine.Program.typeCheck}
-   in
+                (* Machine type check is too slow to run by default. *)
+                tgtTypeCheck = SOME (Machine.Program.typeCheck, SOME false)}
+         in
             machine
-   end
+         end
       fun machineSimplify machine =
          Control.simplifyPass
          {arg = machine,
           doit = Machine.simplify,
           execute = true,
+          (* Machine type check is too slow to run by default. *)
+          forceTypeCheck = SOME false,
           keepIL = !Control.keepMachine,
           name = "machineSimplify",
           stats = Machine.Program.layoutStats,
           toFile = Machine.Program.toFile,
           typeCheck = Machine.Program.typeCheck}
       fun codegen machine =
-   let
+         let
             val _ = Machine.Program.clearLabelNames machine
             val _ = Machine.Label.printNameAlphaNumeric := true
             fun codegen machine =
-         case !Control.codegen of
-            Control.CCodegen =>
-                   CCodegen.output {program = machine,
+               case !Control.codegen of
+                  Control.CCodegen =>
+                     CCodegen.output {program = machine,
                                       outputC = outputC}
 (* SAM_NOTE: removing unsupported codegens *)
 (*
-            Control.AMD64Codegen =>
-                   amd64Codegen.output {program = machine,
-                                        outputC = outputC,
-                                          outputS = outputS}
-          | Control.LLVMCodegen =>
-                   LLVMCodegen.output {program = machine,
-                                       outputC = outputC,
-                                         outputLL = outputLL}
-          | Control.X86Codegen =>
-                   x86Codegen.output {program = machine,
-                                      outputC = outputC,
-            outputS = outputS}
+                     Control.AMD64Codegen =>
+                            amd64Codegen.output {program = machine,
+                                                 outputC = outputC,
+                                                 outputS = outputS}
+                   | Control.LLVMCodegen =>
+                            LLVMCodegen.output {program = machine,
+                                                outputC = outputC,
+                                                outputLL = outputLL}
+                   | Control.X86Codegen =>
+                            x86Codegen.output {program = machine,
+                                               outputC = outputC,
+                                               outputS = outputS}
+
 *)
-      in
+         in
             Control.translatePass
             {arg = machine,
              doit = codegen,
@@ -635,7 +644,7 @@ fun mkCompile {outputC, outputLL, outputS} =
              tgtStats = NONE,
              tgtToFile = NONE,
              tgtTypeCheck = NONE}
-      end
+         end
 
       val goCodegen = codegen
       val goMachineSimplify = goCodegen o machineSimplify

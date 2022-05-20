@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2017,2019-2021 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -219,7 +219,7 @@ val chunkMustRToSingOpt = control {name = "chunkMustRToSingOpt",
                                    default = true,
                                    toString = Bool.toString}
 val chunkTailCall = control {name = "chunkTailCall",
-                             default = true,
+                             default = false,
                              toString = Bool.toString}
 
 val closureConvertGlobalize = control {name = "closureConvertGlobalize",
@@ -265,6 +265,10 @@ val codegenComments = control {name = "codegen comments",
 val codegenFuseOpAndChk = control {name = "fuse `op` and `opCheckP` primitives in codegen",
                                    default = false,
                                    toString = Bool.toString}
+
+val constPropAbsValLayoutDepth = control {name = "cut-off depth for printing of abstract values in`ConstantPropagation`",
+                                          default = 2,
+                                          toString = Int.toString}
 
 val contifyIntoMain = control {name = "contifyIntoMain",
                                default = false,
@@ -944,6 +948,10 @@ val exnHistory = control {name = "exn history",
                           default = false,
                           toString = Bool.toString}
 
+val forceHandlesSignals = control {name = "force handles signals",
+                                   default = false,
+                                   toString = Bool.toString}
+
 structure Format =
    struct
       datatype t =
@@ -990,10 +998,6 @@ datatype gcCheck = datatype GcCheck.t
 val gcCheck = control {name = "gc check",
                        default = Limit,
                        toString = GcCheck.toString}
-
-val gcExpect = control {name = "gc check expect",
-                        default = NONE,
-                        toString = Option.toString Bool.toString}
 
 val globalizeArrays = control {name = "globalize arrays",
                                default = false,
@@ -1116,6 +1120,11 @@ val libTargetDir = control {name = "lib target dir",
                             toString = fn s => s}
 
 val libname = ref ""
+
+
+val limitCheckExpect = control {name = "limit check expect",
+                                default = NONE,
+                                toString = Option.toString Bool.toString}
 
 structure LLVMAliasAnalysisMetaData =
    struct
@@ -1411,7 +1420,7 @@ structure PositionIndependentStyle =
             NONE => []
           | SOME NPI => ["-fno-pic", "-fno-pie", "-no-pie"]
           | SOME PIC => ["-fno-pie", "-no-pie"]
-          | SOME PIE => ["-fPIE -pie"]
+          | SOME PIE => ["-fPIE", "-pie"]
    end
 
 val positionIndependentStyle = control {name = "position independent style",
@@ -1438,9 +1447,7 @@ structure Profile =
        | ProfileCallStack
        | ProfileCount
        | ProfileDrop
-       | ProfileLabel
-       | ProfileTimeField
-       | ProfileTimeLabel
+       | ProfileTime
 
       val toString =
          fn ProfileNone => "None"
@@ -1448,9 +1455,7 @@ structure Profile =
           | ProfileCallStack => "CallStack"
           | ProfileCount => "Count"
           | ProfileDrop => "Drop"
-          | ProfileLabel => "Label"
-          | ProfileTimeField => "TimeField"
-          | ProfileTimeLabel => "TimeLabel"
+          | ProfileTime => "Time"
    end
 
 datatype profile = datatype Profile.t
@@ -1531,6 +1536,25 @@ val showTypes = control {name = "show types",
                          default = true,
                          toString = Bool.toString}
 
+structure SignalCheck =
+   struct
+      datatype t =
+         Always
+       | IfHandlesSignals
+      val toString =
+         fn Always => "always"
+          | IfHandlesSignals => "if-handles-signals"
+   end
+val signalCheck = control {name = "signal check",
+                           default = SignalCheck.IfHandlesSignals,
+                           toString = SignalCheck.toString}
+val signalCheckAtLimitCheck = control {name = "signal check at limit check",
+                                       default = true,
+                                       toString = Bool.toString}
+val signalCheckExpect = control {name = "signal check expect",
+                                 default = NONE,
+                                 toString = Option.toString Bool.toString}
+
 structure SplitTypesBool =
    struct
       datatype t =
@@ -1548,6 +1572,10 @@ datatype splitTypesBool = datatype SplitTypesBool.t
 val splitTypesBool = control {name = "bool type splitting method",
                               default = Smart,
                               toString = SplitTypesBool.toString}
+
+val stackCheckExpect = control {name = "stack check expect",
+                                default = NONE,
+                                toString = Option.toString Bool.toString}
 
 val stopPasses = control {name = "stop passes",
                           default = [],
@@ -1653,10 +1681,6 @@ fun mlbPathMap () =
              path = !defaultWord}],
            !mlbPathVars])
 
-val typeCheck = control {name = "type check",
-                         default = false,
-                         toString = Bool.toString}
-
 structure Verbosity =
    struct
       datatype t =
@@ -1761,7 +1785,6 @@ val buildConsts =
                                            ProfileNone => false
                                          | ProfileCallStack => false
                                          | ProfileDrop => false
-                                         | ProfileLabel => false
                                          | _ => true))]
        val table = StrMap.new ()
        val () = List.foreach (buildConsts, fn (name, value) =>

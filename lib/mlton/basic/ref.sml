@@ -1,4 +1,5 @@
-(* Copyright (C) 1999-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
+(* Copyright (C) 2021,2022 Matthew Fluet.
+ * Copyright (C) 1999-2006, 2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a HPND-style license.
@@ -9,6 +10,8 @@ structure Ref: REF =
 struct
 
 type 'a t = 'a ref
+
+val new = ref
 
 val (op !) = (op !)
 
@@ -39,14 +42,10 @@ fun getSet layout =
       fun set v = r := SOME v
       fun clear () = r := NONE
       val layout = fn () => layout (get ())
-      fun output out = Layout.output (layout (), out)
-      fun print () = output Out.standard
    in {get = get,
        set = set,
        clear = clear,
-       layout = layout,
-       output = output,
-       print = print}
+       layout = layout}
    end
 
 fun layout layoutX r = layoutX (!r)

@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2014-2017,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -754,9 +754,7 @@ fun outputDeclarations
                 | Control.ProfileCallStack => "PROFILE_NONE"
                 | Control.ProfileCount => "PROFILE_COUNT"
                 | Control.ProfileDrop => "PROFILE_NONE"
-                | Control.ProfileLabel => "PROFILE_NONE"
-                | Control.ProfileTimeField => "PROFILE_TIME_FIELD"
-                | Control.ProfileTimeLabel => "PROFILE_TIME_LABEL"
+                | Control.ProfileTime => "PROFILE_TIME"
          in
             print (C.callNoSemi (case !Control.format of
                                     Control.Archive => "MLtonLibrary"
@@ -778,19 +776,10 @@ fun outputDeclarations
          else ()
       fun declareSourceMaps () =
          let
-            fun declareProfileLabel (l, print) =
-               print (C.call ("DeclareProfileLabel", [ProfileLabel.toString l]))
-            fun doit (SourceMaps.T {profileLabelInfos, sourceNames, sourceSeqs, sources}) =
-               (Vector.foreach (profileLabelInfos, fn {profileLabel, ...} =>
-                                declareProfileLabel (profileLabel, print))
-                ; declareArray ("struct GC_profileLabelInfo", "profileLabelInfos",
-                                {firstElemLen = false, oneline = false},
-                                profileLabelInfos, fn (_, {profileLabel, sourceSeqIndex}) =>
-                                concat ["{(pointer)&", ProfileLabel.toString profileLabel, ", ",
-                                        C.int sourceSeqIndex, "}"])
-                ; declareArray ("const char * const", "sourceNames",
-                                {firstElemLen = false, oneline = false},
-                                sourceNames, fn (_, s) => C.string s)
+            fun doit (SourceMaps.T {sourceNames, sourceSeqs, sources}) =
+               (declareArray ("const char * const", "sourceNames",
+                              {firstElemLen = false, oneline = false},
+                              sourceNames, fn (_, s) => C.string s)
                 ; Vector.foreachi (sourceSeqs, fn (i, ss) =>
                                    declareArray ("const GC_sourceIndex", concat ["sourceSeq", C.int i],
                                                  {firstElemLen = true, oneline = true},
@@ -826,8 +815,10 @@ structure StackOffset =
    struct
       open StackOffset
 
-      fun toString (T {offset, ty}): string =
-         concat ["S", C.args [Type.toC ty, C.bytes offset]]
+      fun toString (T {offset, ty, volatile}): string =
+         concat ["S", C.args [concat [if volatile then "volatile " else "",
+                                         Type.toC ty],
+                              C.bytes offset]]
    end
 
 fun declareFFI (chunks, print) =
@@ -952,8 +943,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
          end
 
       val amTimeProfiling =
-         !Control.profile = Control.ProfileTimeField
-         orelse !Control.profile = Control.ProfileTimeLabel
+         !Control.profile = Control.ProfileTime
 
       fun declareChunk (chunkLabel, print: string -> unit) =
          (print "PRIVATE extern ChunkFn_t "
@@ -1042,12 +1032,14 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                   concat ["G", C.args [Type.toC (Global.ty g),
                                        Int.toString (Global.index g)]]
              | Label l => labelIndexAsString (l, {pretty = true})
-             | Offset {base, offset, ty} =>
-                  concat ["O", C.args [Type.toC ty,
+             | Offset {base, offset, ty, volatile} =>
+                  concat ["O", C.args [concat [if volatile then "volatile " else "",
+                                               Type.toC ty],
                                        toString base,
                                        C.bytes offset]]
-             | SequenceOffset {base, index, offset, scale, ty} =>
-                  concat ["X", C.args [Type.toC ty,
+             | SequenceOffset {base, index, offset, scale, ty, volatile} =>
+                  concat ["X", C.args [concat [if volatile then "volatile " else "",
+                                               Type.toC ty],
                                        toString base,
                                        toString index,
                                        Scale.toString scale,
@@ -1117,7 +1109,6 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                               srcIsMem = false,
                                               ty = Operand.ty dst})
                         end
-                   | ProfileLabel _ => Error.bug "CCodegen.outputStatement: ProfileLabel"
                end
             local
                fun mk (dst, src) () =
@@ -1152,7 +1143,8 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                (outputStatement (Statement.Move
                                  {dst = Operand.stackOffset
                                         {offset = Bytes.- (size, Runtime.labelSize ()),
-                                         ty = Type.label return},
+                                         ty = Type.label return,
+                                         volatile = amTimeProfiling},
                                   src = Operand.Label return})
                 ; adjStackTop size)
             fun copyArgs (args: Operand.t vector): string list * (unit -> unit) =
@@ -1236,7 +1228,8 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                   val _ = print (operandToString
                                  (Operand.stackOffset
                                   {offset = Bytes.~ (Runtime.labelSize ()),
-                                   ty = Type.label (Label.newNoname ())}))
+                                   ty = Type.label (Label.newNoname ()),
+                                   volatile = false}))
                   val _ = print ";\n"
                in
                   if mustReturnToSelf
@@ -1328,7 +1321,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                             return = SOME {return, size = SOME size}, ...} =>
                         (push (return, size);
                          flushFrontier ();
-                         flushStackTop ();
+                         if not amTimeProfiling then flushStackTop () else ();
                          print "\treturn ";
                          print (C.call ("Thread_returnToC", [])))
                    | CCall {args, func, return} =>
@@ -1350,7 +1343,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                        res
                                     end
                            val _ = if CFunction.modifiesFrontier func then flushFrontier () else ()
-                           val _ = if CFunction.readsStackTop func then flushStackTop () else ()
+                           val _ = if CFunction.readsStackTop func andalso not amTimeProfiling then flushStackTop () else ()
                            val _ = print "\t"
                            val _ =
                               if Type.isUnit returnTy

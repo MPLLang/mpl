@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2013-2014,2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2013-2014,2017,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -598,7 +598,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                      then bogusOp ty
                      else M.Operand.Offset {base = base,
                                             offset = offset,
-                                            ty = ty}
+                                            ty = ty,
+                                            volatile = false}
                   end
              | ObjptrTycon opt =>
                   M.Operand.word (ObjptrTycon.toHeader opt)
@@ -614,7 +615,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                                index = translateOperand index,
                                offset = offset,
                                scale = scale,
-                               ty = ty}
+                               ty = ty,
+                               volatile = false}
                   end
              | Var {var, ...} => varOperand var
              | Address z => M.Operand.Address (translateOperand z)
@@ -660,7 +662,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                      fun mkDst {offset, ty} =
                         M.Operand.Offset {base = dst,
                                           offset = offset,
-                                          ty = ty}
+                                          ty = ty,
+                                          volatile = false}
                   in
                      Vector.concat
                      (M.Statement.object {dst = dst,
@@ -701,7 +704,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                                  index = mkIndex index,
                                  offset = offset,
                                  scale = scale,
-                                 ty = ty}
+                                 ty = ty,
+                                 volatile = false}
                           in
                              mkInit (init, mkDst)
                           end))
@@ -715,7 +719,6 @@ fun toMachine (rssa: Rssa.Program.t) =
                           {args = translateOperands args,
                            dst = Option.map (dst, varOperand o #1),
                            prim = prim}))
-             | ProfileLabel s => Vector.new1 (M.Statement.ProfileLabel s)
              | SetExnStackLocal =>
                   (* ExnStack = stackTop + (handlerOffset + LABEL_SIZE) - StackBottom; *)
                   let
@@ -743,18 +746,21 @@ fun toMachine (rssa: Rssa.Program.t) =
                   move
                   {dst = exnStackOp,
                    src = M.Operand.stackOffset {offset = linkOffset (),
-                                                ty = Type.exnStack ()}}
+                                                ty = Type.exnStack (),
+                                                volatile = false}}
              | SetHandler h =>
                   (* *(uintptr_t)(stackTop + handlerOffset) = h; *)
                   move
                   {dst = M.Operand.stackOffset {offset = handlerOffset (),
-                                                ty = Type.label h},
+                                                ty = Type.label h,
+                                                volatile = false},
                    src = M.Operand.Label h}
              | SetSlotExnStack =>
                   (* *(ptrdiff_t* )(stackTop + linkOffset) = ExnStack; *)
                   move
                   {dst = M.Operand.stackOffset {offset = linkOffset (),
-                                                ty = Type.exnStack ()},
+                                                ty = Type.exnStack (),
+                                                volatile = false},
                    src = exnStackOp}
              | _ => Error.bug (concat
                                ["Backend.genStatement: strange statement: ",
@@ -781,7 +787,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                        Label.layout, Layout.ignore, Unit.layout)
          setLabelInfo
       fun paramOffsets (xs: 'a vector, ty: 'a -> Type.t,
-                        mk: {offset: Bytes.t, ty: Type.t} -> 'b): 'b vector =
+                        mk: {offset: Bytes.t, ty: Type.t, volatile: bool} -> 'b): 'b vector =
          #1 (Vector.mapAndFold
              (xs, Bytes.zero,
               fn (x, offset) =>
@@ -789,14 +795,15 @@ fun toMachine (rssa: Rssa.Program.t) =
                  val ty = ty x
                  val offset = Type.align (ty, offset)
               in
-                 (mk {offset = offset, ty = ty},
+                 (mk {offset = offset, ty = ty, volatile = false},
                   Bytes.+ (offset, Type.bytes ty))
               end))
       fun paramStackOffsets (xs: 'a vector, ty: 'a -> Type.t,
                              shift: Bytes.t): StackOffset.t vector =
-         paramOffsets (xs, ty, fn {offset, ty} =>
+         paramOffsets (xs, ty, fn {offset, ty, volatile} =>
                        StackOffset.T {offset = Bytes.+ (offset, shift),
-                                      ty = ty})
+                                      ty = ty,
+                                      volatile = volatile})
       val operandLive: M.Operand.t -> M.Live.t =
          valOf o M.Live.fromOperand
       val operandsLive: M.Operand.t vector -> M.Live.t vector =
@@ -952,7 +959,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                   Vector.fold
                                   (liveNoFormals, [], fn (oper, ac) =>
                                    case oper of
-                                      M.Operand.StackOffset (StackOffset.T {offset, ty}) =>
+                                      M.Operand.StackOffset (StackOffset.T {offset, ty, ...}) =>
                                          if Type.isObjptr ty
                                             then offset :: ac
                                          else ac
@@ -1070,10 +1077,11 @@ fun toMachine (rssa: Rssa.Program.t) =
                               (Temporary.new (Type.cpointer (), NONE))
                            val dsts =
                               paramOffsets
-                              (srcs, R.Operand.ty, fn {offset, ty} =>
+                              (srcs, R.Operand.ty, fn {offset, ty, volatile} =>
                                M.Operand.Offset {base = handlerStackTop,
                                                  offset = offset,
-                                                 ty = ty})
+                                                 ty = ty,
+                                                 volatile = volatile})
                         in
                            if Vector.isEmpty srcs
                               then (Vector.new0 (), M.Transfer.Raise {raisesTo = raisesTo})
@@ -1164,26 +1172,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                  val (first, statements) =
-                     if !Control.profile = Control.ProfileTimeLabel
-                        then
-                           case (if Vector.isEmpty statements
-                                    then NONE
-                                 else (case Vector.first statements of
-                                          s as M.Statement.ProfileLabel _ =>
-                                             SOME s
-                                        | _ => NONE)) of
-                              NONE =>
-                                 Error.bug
-                                 (concat ["Backend.genBlock: ",
-                                          "missing ProfileLabel in ",
-                                          Label.toString label])
-                            | SOME s =>
-                                 (Vector.new1 s,
-                                  Vector.dropPrefix (statements, 1))
-                     else (Vector.new0 (), statements)
                   val statements =
-                     Vector.concat [first, pre, statements, preTransfer]
+                     Vector.concat [pre, statements, preTransfer]
                in
                   Chunk.newBlock (labelChunk label,
                                   {kind = kind,
@@ -1305,7 +1295,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                           doOperand (base, doOperand (index, max))
                      | Cast (z, _) => doOperand (z, max)
                      | Offset {base, ...} => doOperand (base, max)
-                     | StackOffset (StackOffset.T {offset, ty}) =>
+                     | StackOffset (StackOffset.T {offset, ty, ...}) =>
                           Bytes.max (Bytes.+ (offset, Type.bytes ty), max)
                      | _ => max
                  end
