@@ -1,12 +1,11 @@
-(* Copyright (C) 2019 Sam Westrick
+(* Copyright (C) 2022 Matthew Fluet.
+ * Copyright (C) 2019 Sam Westrick
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  *)
-
-type int = Int.int
 
 signature MLTON_THREAD =
    sig

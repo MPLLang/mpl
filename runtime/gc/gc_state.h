@@ -1,4 +1,4 @@
-/* Copyright (C) 2012,2014,2019-2020 Matthew Fluet.
+/* Copyright (C) 2012,2014,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -18,18 +18,18 @@ struct GC_state {
    * size and improve cache performance.
    */
   pointer frontier;
-  pointer limit;
-  pointer stackTop; /* Top of stack in current thread. */
+  volatile pointer limit;
+  volatile pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */
   ptrdiff_t exnStack;
   /* Alphabetized fields follow. */
   size_t alignment; /* */
-  bool amInGC;
+  volatile bool amInGC;
   struct HM_HierarchicalHeap *currentCCTargetHH;
   bool amOriginal;
   char **atMLtons; /* Initial @MLton args, processed before command line. */
   int atMLtonsLength;
-  uint32_t atomicState;
+  volatile uint32_t atomicState;
   struct BlockAllocator *blockAllocatorGlobal;
   struct BlockAllocator *blockAllocatorLocal;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
@@ -80,7 +80,7 @@ struct GC_state {
   objptr signalHandlerThread; /* Handler for signals (in heap). */
   struct GC_signalsInfo signalsInfo;
   struct GC_sourceMaps sourceMaps;
-  pointer stackBottom; /* Bottom of stack in current thread. */
+  volatile pointer stackBottom; /* Bottom of stack in current thread. */
   pthread_t self; /* thread owning the GC_state */
   struct GC_staticHeaps staticHeaps;
   struct GC_sysvals sysvals;
@@ -107,11 +107,11 @@ static inline struct FixedSizeAllocator* getHHAllocator(GC_state s);
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE bool GC_getAmOriginal (GC_state s);
-PRIVATE void GC_setAmOriginal (GC_state s, bool b);
-PRIVATE void GC_setControlsMessages (GC_state s, bool b);
-PRIVATE void GC_setControlsSummary (GC_state s, bool b);
-PRIVATE void GC_setControlsRusageMeasureGC (GC_state s, bool b);
+PRIVATE Bool_t GC_getAmOriginal (GC_state s);
+PRIVATE void GC_setAmOriginal (GC_state s, Bool_t b);
+PRIVATE void GC_setControlsMessages (GC_state s, Bool_t b);
+PRIVATE void GC_setControlsSummary (GC_state s, Bool_t b);
+PRIVATE void GC_setControlsRusageMeasureGC (GC_state s, Bool_t b);
 // SAM_NOTE: TODO: remove this and replace with blocks statistics
 PRIVATE size_t GC_getMaxChunkPoolOccupancy (void);
 PRIVATE size_t GC_getGlobalCumulativeStatisticsMaxHeapOccupancy (GC_state s);
@@ -121,7 +121,7 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumCopyingGCs (GC_state s);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMarkCompactGCs (GC_state s);
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumMinorGCs (GC_state s);
 PRIVATE size_t GC_getCumulativeStatisticsMaxBytesLive (GC_state s);
-PRIVATE void GC_setHashConsDuringGC (GC_state s, bool b);
+PRIVATE void GC_setHashConsDuringGC (GC_state s, Bool_t b);
 PRIVATE size_t GC_getLastMajorStatisticsBytesLive (GC_state s);
 
 PRIVATE uintmax_t GC_getCumulativeStatisticsBytesAllocatedOfProc(GC_state s, uint32_t proc);
@@ -160,9 +160,9 @@ PRIVATE void GC_getGCRusageOfProc (GC_state s, int32_t p, struct rusage* rusage)
 
 PRIVATE sigset_t* GC_getSignalsHandledAddr (GC_state s);
 PRIVATE sigset_t* GC_getSignalsPendingAddr (GC_state s);
-PRIVATE void GC_setGCSignalHandled (GC_state s, bool b);
-PRIVATE bool GC_getGCSignalPending (GC_state s);
-PRIVATE void GC_setGCSignalPending (GC_state s, bool b);
+PRIVATE void GC_setGCSignalHandled (GC_state s, Bool_t b);
+PRIVATE Bool_t GC_getGCSignalPending (GC_state s);
+PRIVATE void GC_setGCSignalPending (GC_state s, Bool_t b);
 
 PRIVATE GC_state MLton_gcState ();
 

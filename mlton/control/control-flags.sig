@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2014-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009-2012,2014-2017,2019-2021 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -96,6 +96,8 @@ signature CONTROL_FLAGS =
 
       val commandLineConsts: StrMap.t
       val setCommandLineConst: {name: string, value: string} -> unit
+
+      val constPropAbsValLayoutDepth: int ref
 
       val contifyIntoMain: bool ref
 
@@ -218,6 +220,8 @@ signature CONTROL_FLAGS =
 
       val exnHistory: bool ref
 
+      val forceHandlesSignals: bool ref
+
       structure Format:
          sig
             datatype t =
@@ -239,8 +243,6 @@ signature CONTROL_FLAGS =
        | First
        | Every
       val gcCheck: gcCheck ref
-
-      val gcExpect: bool option ref
 
       val globalizeArrays: bool ref
 
@@ -302,6 +304,8 @@ signature CONTROL_FLAGS =
 
       (* name of the output library *)
       val libname : string ref
+
+      val limitCheckExpect: bool option ref
 
       structure LLVMAliasAnalysisMetaData:
          sig
@@ -428,9 +432,7 @@ signature CONTROL_FLAGS =
        | ProfileCallStack
        | ProfileCount
        | ProfileDrop
-       | ProfileLabel
-       | ProfileTimeField
-       | ProfileTimeLabel
+       | ProfileTime
       val profile: profile ref
 
       val profileBlock: bool ref
@@ -463,11 +465,23 @@ signature CONTROL_FLAGS =
       (* Should types be printed in ILs. *)
       val showTypes: bool ref
 
+      structure SignalCheck:
+         sig
+            datatype t =
+               Always
+             | IfHandlesSignals
+         end
+      val signalCheck: SignalCheck.t ref
+      val signalCheckAtLimitCheck: bool ref
+      val signalCheckExpect: bool option ref
+
       datatype splitTypesBool =
          Never
        | Smart (* split only when smaller than two, default *)
        | Always
       val splitTypesBool: splitTypesBool ref
+
+      val stackCheckExpect: bool option ref
 
       (* List of pass names to stop at. *)
       val stopPasses: Regexp.Compiled.t list ref
@@ -503,9 +517,6 @@ signature CONTROL_FLAGS =
                   val sequenceMetaData: unit -> Bits.t
                end
          end
-
-      (* Type check ILs. *)
-      val typeCheck: bool ref
 
       structure Verbosity:
          sig
