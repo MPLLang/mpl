@@ -64,6 +64,7 @@ typedef struct HM_HierarchicalHeap {
 
   struct HM_chunkList rememberedSet;
   struct ConcurrentPackage concurrentPack;
+  struct HM_chunkList entanglementSuspects;
 
   /* The next non-empty ancestor heap. This may skip over "unused" levels.
    * Also, all threads have their own leaf-to-root path (essentially, path
@@ -106,6 +107,11 @@ static inline HM_chunkList HM_HH_getChunkList(HM_HierarchicalHeap hh)
 static inline HM_chunkList HM_HH_getRemSet(HM_HierarchicalHeap hh)
 {
   return &(hh->rememberedSet);
+}
+
+static inline HM_chunkList HM_HH_getSuspects(HM_HierarchicalHeap hh)
+{
+  return &(hh->entanglementSuspects);
 }
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth);

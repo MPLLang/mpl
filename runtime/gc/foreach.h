@@ -6,6 +6,8 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
+#ifndef FOREACH_H
+#define FOREACH_H
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
@@ -84,3 +86,4 @@ bool trueObjptrPredicate(GC_state s, pointer p, void* args);
 struct GC_objptrPredicateClosure trueObjptrPredicateClosure;
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
+#endif
