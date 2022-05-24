@@ -157,15 +157,15 @@ void Assignable_writeBarrier(
     }
 
     /* otherwise pin*/
-    bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
-    enum PinType pt = primary_down_ptr ? PIN_DOWN : PIN_ANY;
+    // bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
     uint32_t unpinDepth = dst_de ? dd :
       (uint32_t)lcaHeapDepth(HM_getChunkOf(srcp)->decheckState,
         HM_getChunkOf(dstp)->decheckState);
+    enum PinType pt = dst_de ? PIN_DOWN : PIN_ANY;
 
     bool success = pinObject(src, unpinDepth, pt);
-    if (success) {
-      objptr fromObj = pt == PIN_ANY ? BOGUS_OBJPTR : dst;
+    if (success || (dst_de && dd == unpinDepthOf (src))) {
+      objptr fromObj = pt == PIN_DOWN ? dst : BOGUS_OBJPTR;
       struct HM_remembered remElem_ = {.object = src, .from = fromObj};
       HM_remembered remElem = &remElem_;
 
