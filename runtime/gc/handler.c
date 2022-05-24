@@ -118,18 +118,22 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
   getThreadCurrent(s)->bytesSurvivedLastCollection =
     target->bytesSurvivedLastCollection;
   getThreadCurrent(s)->minLocalCollectionDepth = target->minLocalCollectionDepth;
-  getThreadCurrent(s)->decheckState = target->decheckState;
 
+#ifdef DETECT_ENTANGLEMENT
+  getThreadCurrent(s)->decheckState = target->decheckState;
   uint32_t* fromSyncDepths = &(target->decheckSyncDepths[0]);
   uint32_t* toSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
   memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
+#endif
 
   // clear out some stuff for my sanity
   target->currentChunk = NULL;
   target->hierarchicalHeap = NULL;
   target->bytesAllocatedSinceLastCollection = 0;
   target->bytesSurvivedLastCollection = 0;
+#ifdef DETECT_ENTANGLEMENT
   target->decheckState = DECHECK_BOGUS_TID;
+#endif
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
@@ -166,11 +170,13 @@ void GC_handlerLeaveHeapOfThread(
   target->bytesSurvivedLastCollection =
     getThreadCurrent(s)->bytesSurvivedLastCollection;
   target->minLocalCollectionDepth = getThreadCurrent(s)->minLocalCollectionDepth;
-  target->decheckState = getThreadCurrent(s)->decheckState;
 
+#ifdef DETECT_ENTANGLEMENT
+  target->decheckState = getThreadCurrent(s)->decheckState;
   uint32_t* fromSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
   uint32_t* toSyncDepths = &(target->decheckSyncDepths[0]);
   memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
+#endif
 
   HM_HierarchicalHeap originalHH = (HM_HierarchicalHeap)abandonedHH;
   assert(HM_HH_getDepth(originalHH) == 0);
@@ -179,7 +185,9 @@ void GC_handlerLeaveHeapOfThread(
   getThreadCurrent(s)->hierarchicalHeap = originalHH;
   getThreadCurrent(s)->bytesAllocatedSinceLastCollection = 0;
   getThreadCurrent(s)->bytesSurvivedLastCollection = 0;
+#ifdef DETECT_ENTANGLEMENT
   getThreadCurrent(s)->decheckState = DECHECK_BOGUS_TID;
+#endif
 
   // Find a chunk to get back to
   HM_chunk chunk = HM_getChunkListLastChunk(HM_HH_getChunkList(originalHH));

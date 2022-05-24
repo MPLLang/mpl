@@ -232,6 +232,7 @@ HM_HierarchicalHeap HM_HH_zip(
     {
       HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
       HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
+      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
       linkCCChains(s, hh1, hh2);
 
       // This has to happen before linkInto (which frees hh2)
@@ -348,6 +349,7 @@ void HM_HH_promoteChunks(
   {
     /* no need to do anything; this function only guarantees that the
      * current depth has been completely evacuated. */
+    ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
     return;
   }
 
@@ -378,6 +380,7 @@ void HM_HH_promoteChunks(
       assert(NULL == hh->subHeapCompletedCC);
       HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
       HM_appendChunkList(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
+      ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
       linkCCChains(s, parent, hh);
       /* shortcut.  */
       thread->hierarchicalHeap = parent;
@@ -422,6 +425,9 @@ void HM_HH_promoteChunks(
       parent->subHeapForCC = NULL;
 
       hh->depth--;
+      /* in this case, hh becomes the primary, so we store suspects in hh instead.
+      */
+      ES_move(HM_HH_getSuspects(hh), HM_HH_getSuspects(parent));
 
 #if 0
       linkCCChains(s, hh, parent);
@@ -447,6 +453,8 @@ void HM_HH_promoteChunks(
 
     assert(HM_HH_getDepth(hh) == currentDepth-1);
   }
+
+  ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
 
 #if ASSERT
   assert(hh == thread->hierarchicalHeap);
@@ -496,6 +504,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initChunkList(HM_HH_getRemSet(hh));
+  HM_initChunkList(HM_HH_getSuspects(hh));
 
   return hh;
 }
@@ -580,7 +589,12 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     return FALSE;
   }
 
+#ifdef DETECT_ENTANGLEMENT
   chunk->decheckState = thread->decheckState;
+#else
+  chunk->decheckState = DECHECK_BOGUS_TID;
+#endif
+
   chunk->levelHead = HM_HH_getUFNode(hh);
 
   thread->currentChunk = chunk;
@@ -665,13 +679,19 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_chunk chunk =
     HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
   chunk->levelHead = HM_HH_getUFNode(newHH);
+
+#ifdef DETECT_ENTANGLEMENT
   chunk->decheckState = thread->decheckState;
+#else
+  chunk->decheckState = DECHECK_BOGUS_TID;
+#endif
+
   thread->currentChunk = chunk;
   newHH->subHeapForCC = hh;
   newHH->subHeapCompletedCC = completed;
   newHH->nextAncestor = hh->nextAncestor;
   hh->nextAncestor = NULL;
-
+  ES_move(HM_HH_getSuspects(newHH), HM_HH_getSuspects(hh));
   assertCCChainInvariants(newHH);
 }
 
@@ -847,7 +867,12 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   assert(stackSize < HM_getChunkSizePastFrontier(newChunk));
   newChunk->mightContainMultipleObjects = FALSE;
   newChunk->levelHead = HM_HH_getUFNode(hh);
+
+#ifdef DETECT_ENTANGLEMENT
   newChunk->decheckState = thread->decheckState;
+#else
+  newChunk->decheckState = DECHECK_BOGUS_TID;
+#endif
 
   pointer frontier = HM_getChunkFrontier(newChunk);
   assert(frontier == HM_getChunkStart(newChunk));
@@ -978,7 +1003,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
     size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
     size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
-    LOG(LM_CC_COLLECTION, LL_INFO,
+    LOG(LM_CC_COLLECTION, LL_DEBUG,
       "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
       depth,
       lastSurvived,

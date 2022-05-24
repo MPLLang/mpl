@@ -8,12 +8,13 @@
  */
 
 void callIfIsObjptr (GC_state s, GC_foreachObjptrClosure f, objptr *opp) {
-  if (isObjptr (*opp)) {
+  objptr op = *opp;
+  if (isObjptr(op)) {
     LOG(LM_FOREACH, LL_DEBUG,
         "Calling for opp "FMTPTR" op "FMTOBJPTR,
         ((uintptr_t)(opp)),
         *opp);
-    f->fun (s, opp, f->env);
+    f->fun(s, opp, op, f->env);
   }
 }
 
@@ -279,7 +280,7 @@ pointer foreachObjptrInRange (GC_state s, pointer front, pointer *back,
 
   assert (isFrontierAligned (s, front));
   if (DEBUG_DETAILED)
-    fprintf (stderr, 
+    fprintf (stderr,
              "foreachObjptrInRange  front = "FMTPTR"  *back = "FMTPTR"\n",
              (uintptr_t)front, (uintptr_t)(*back));
   b = *back;
@@ -288,7 +289,7 @@ pointer foreachObjptrInRange (GC_state s, pointer front, pointer *back,
     while (front < b) {
       assert (isAligned ((size_t)front, GC_MODEL_MINALIGN));
       if (DEBUG_DETAILED)
-        fprintf (stderr, 
+        fprintf (stderr,
                  "  front = "FMTPTR"  *back = "FMTPTR"\n",
                  (uintptr_t)front, (uintptr_t)(*back));
       pointer p = advanceToObjectData (s, front);

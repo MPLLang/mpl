@@ -70,6 +70,9 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numRootCCs = 0;
   cumulativeStatistics->numInternalCCs = 0;
   cumulativeStatistics->numDisentanglementChecks = 0;
+  cumulativeStatistics->numChecksSkipped = 0;
+  cumulativeStatistics->numSuspectsMarked = 0;
+  cumulativeStatistics->numSuspectsCleared = 0;
   cumulativeStatistics->numEntanglementsDetected = 0;
 
   cumulativeStatistics->timeLocalGC.tv_sec = 0;

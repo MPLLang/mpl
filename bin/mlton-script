@@ -52,12 +52,11 @@ doitMLton () {
     fi
 }
 doitSMLNJ () {
-    smlnj='sml'
-    if $smlnj -h >/dev/null 2>&1; then
-        smlnj_heap_suffix=`echo 'TextIO.output (TextIO.stdErr, SMLofNJ.SysInfo.getHeapSuffix ());' | $smlnj 2>&1 1> /dev/null`
-        mlton_smlnj_heap="$lib/mlton-compile-smlnj.$smlnj_heap_suffix"
+    SMLNJ="sml"
+    if [ -x "$(command -v "$SMLNJ")" ]; then
+        mlton_smlnj_heap="$lib/mlton-compile-smlnj.$("$SMLNJ" @SMLsuffix)"
         if [ -s "$mlton_smlnj_heap" ]; then
-            exec "$smlnj" @SMLload="$mlton_smlnj_heap" "$@"
+            exec "$SMLNJ" @SMLload="$mlton_smlnj_heap" "$@"
         fi
     fi
 }
@@ -67,11 +66,18 @@ doitPolyML () {
         exec "$mlton_polyml" "$@"
     fi
 }
+doitMLKit () {
+    mlton_mlkit="$lib/mlton-compile-mlkit$EXE"
+    if [ -x "$mlton_mlkit" ]; then
+        exec "$mlton_mlkit" "$@"
+    fi
+}
 
 doit () {
     doitMLton "$@"
     doitSMLNJ "$@"
     doitPolyML "$@"
+    doitMLKit "$@"
     echo 'Unable to run MLton.  Check that lib is set properly.' >&2
     exit 1
 }
@@ -97,18 +103,22 @@ doit "$lib" \
         -mlb-path-var 'SML_LIB $(LIB_MLTON_DIR)/sml'             \
         -target-as-opt amd64 '-m64'                              \
         -target-as-opt x86 '-m32'                                \
+        -target-cc-opt aix '-maix64'                             \
         -target-cc-opt alpha                                     \
                 '-mieee -mbwx -mtune=ev6 -mfp-rounding-mode=d'   \
         -target-cc-opt amd64 '-m64'                              \
-        -target-cc-opt aix '-maix64'                             \
+        -target-cc-opt amd64-darwin '-arch x86_64'               \
+        -target-cc-opt arm64-darwin '-arch arm64'                \
         -target-cc-opt ia64-hpux "-mlp64"                        \
         -target-cc-opt ia64 "-mtune=itanium2"                    \
         -target-cc-opt sparc '-m32 -mcpu=v8 -Wa,-xarch=v8plusa'  \
         -target-cc-opt x86 '-m32'                                \
-        -target-link-opt amd64 '-m64'                            \
+        -target-link-opt aix '-maix64'                           \
         -target-link-opt alpha                                   \
                 '-mieee -mbwx -mtune=ev6 -mfp-rounding-mode=d'   \
-        -target-link-opt aix '-maix64'                           \
+        -target-link-opt amd64 '-m64'                            \
+        -target-link-opt amd64-darwin '-arch x86_64'             \
+        -target-link-opt arm64-darwin '-arch arm64'              \
         -target-link-opt ia64-hpux "-mlp64"                      \
         -target-link-opt linux '-Wl,-znoexecstack'               \
         -target-link-opt linux '-pthread -lrt'                   \

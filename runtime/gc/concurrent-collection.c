@@ -34,8 +34,9 @@ void GC_updateObjectHeader(
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 #define casCC(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
 
-void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
+// void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
 void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
+
 #define ASSERT2 0
 
 
@@ -239,6 +240,7 @@ bool saveNoForward(
   return result;
 }
 
+#if 0
 void markAndScan(GC_state s, pointer p, void* rawArgs) {
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
@@ -254,6 +256,7 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
             &forwardPtrClosure, FALSE);
   }
 }
+#endif
 
 // some debugging functions
 void printObjPtrInScopeFunction(
@@ -304,6 +307,93 @@ bool isChunkInList(HM_chunk chunk, HM_chunkList list) {
   return FALSE;
 }
 
+void tryMarkAndAddToWorkList(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  void* rawArgs)
+{
+  ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
+  assert(isObjptr(op));
+  pointer p = objptrToPointer (op, NULL);
+
+  bool isInScope = saveNoForward(s, p, rawArgs);
+
+  if (!isInScope)
+    return;
+
+  if (!CC_isPointerMarked(p)) {
+    markObj(p);
+    args->bytesSaved += sizeofObject(s, p);
+    assert(CC_isPointerMarked(p));
+    CC_workList_push(s, &(args->worklist), op);
+  }
+}
+
+void tryUnmarkAndAddToWorkList(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  void* rawArgs)
+{
+  ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
+  assert(isObjptr(op));
+  pointer p = objptrToPointer (op, NULL);
+  HM_chunk chunk = HM_getChunkOf(p);
+
+  if (!isChunkInToSpace(chunk, rawArgs)) {
+    return;
+  }
+
+  if (CC_isPointerMarked(p)) {
+    assert(isChunkInToSpace(chunk, args));
+    markObj(p);
+    assert(!CC_isPointerMarked(p));
+    CC_workList_push(s, &(args->worklist), op);
+  }
+}
+
+void markLoop(GC_state s, ConcurrentCollectArgs* args) {
+  struct GC_foreachObjptrClosure markAddClosure =
+    {.fun = tryMarkAndAddToWorkList, .env = (void*)args};
+
+  CC_workList worklist = &(args->worklist);
+
+  objptr* current = CC_workList_pop(s, worklist);
+  while (NULL != current) {
+    callIfIsObjptr(s, &markAddClosure, current);
+    current = CC_workList_pop(s, worklist);
+  }
+
+  assert(CC_workList_isEmpty(s, worklist));
+}
+
+void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
+  struct GC_foreachObjptrClosure unmarkAddClosure =
+    {.fun = tryUnmarkAndAddToWorkList, .env = (void*)args};
+
+  CC_workList worklist = &(args->worklist);
+
+  objptr* current = CC_workList_pop(s, worklist);
+  while (NULL != current) {
+    callIfIsObjptr(s, &unmarkAddClosure, current);
+    current = CC_workList_pop(s, worklist);
+  }
+
+  assert(CC_workList_isEmpty(s, worklist));
+}
+
+void tryMarkAndMarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
+  tryMarkAndAddToWorkList(s, opp, op, rawArgs);
+  markLoop(s, rawArgs);
+}
+
+void tryUnmarkAndUnmarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
+  tryUnmarkAndAddToWorkList(s, opp, op, rawArgs);
+  unmarkLoop(s, rawArgs);
+}
+
+#if 0
 void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   assert(isObjptr(op));
@@ -321,11 +411,12 @@ void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs) {
     markAndScan(s, p, rawArgs);
   }
 }
+#endif
 
 void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   objptr src = remElem->object;
-  forwardPtrChunk(s, &src, rawArgs);
-  forwardPtrChunk(s, &(remElem->from), rawArgs);
+  tryMarkAndMarkLoop(s, &src, src, rawArgs);
+  tryMarkAndMarkLoop(s, &(remElem->from), remElem->from, rawArgs);
 
 #if 0
 #if ASSERT
@@ -346,6 +437,7 @@ void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   // forwardPtrChunk(s, &dst, rawArgs);
 }
 
+#if 0
 void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
 
 #if ASSERT
@@ -380,6 +472,22 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
             &unmarkPtrClosure, FALSE);
   }
 }
+#endif
+
+// void checkRemEntry(
+//   __attribute__((unused)) GC_state s,
+//   ARG_USED_FOR_ASSERT HM_remembered remElem,
+//   ARG_USED_FOR_ASSERT void* rawArgs)
+// {
+// #if ASSERT
+//   ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
+//   assert(
+//     isChunkInList(
+//       HM_getChunkOf(objptrToPointer(remElem->object, NULL)),
+//       args->origList)
+//   );
+// #endif
+// }
 
 void unmarkPinned(
   GC_state s,
@@ -388,8 +496,10 @@ void unmarkPinned(
 {
   objptr src = remElem->object;
   assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
-  unmarkPtrChunk(s, &src, rawArgs);
-  unmarkPtrChunk(s, &(remElem->from), rawArgs);
+  // unmarkPtrChunk(s, &src, rawArgs);
+  // unmarkPtrChunk(s, &(remElem->from), rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &src, src, rawArgs);
+  tryUnmarkAndUnmarkLoop(s, &(remElem->from), remElem->from, rawArgs);
 
 #if 0
 #if ASSERT
@@ -414,7 +524,10 @@ void unmarkPinned(
 // Recursively however it only calls forwardPtrChunk and not itself
 void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
-  pointer p = objptrToPointer(*opp, NULL);
+  objptr op = *opp;
+  pointer p = objptrToPointer(op, NULL);
+
+  assert(isObjptr(op));
 
   bool saved = saveNoForward(s, p, rawArgs);
 
@@ -425,23 +538,25 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
     args->bytesSaved += sizeofObject(s, p);
   }
 
-  struct GC_foreachObjptrClosure forwardPtrClosure =
-  {.fun = forwardPtrChunk, .env = rawArgs};
-  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-          &forwardPtrClosure, FALSE);
+  CC_workList_push(s, &(args->worklist), op);
+  markLoop(s, rawArgs);
 }
 
 void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
-  pointer p = objptrToPointer(*opp, NULL);
+  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
+  objptr op = *opp;
+  pointer p = objptrToPointer(op, NULL);
+
+  assert(isObjptr(op));
+
   if(CC_isPointerMarked(p)){
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
     assert(!CC_isPointerMarked(p));
   }
-  struct GC_foreachObjptrClosure unmarkPtrClosure =
-  {.fun = unmarkPtrChunk, .env = rawArgs};
-  foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-          &unmarkPtrClosure, FALSE);
+
+  CC_workList_push(s, &(args->worklist), op);
+  unmarkLoop(s, rawArgs);
 }
 
 void ensureCallSanity(
@@ -605,10 +720,10 @@ void CC_tryUnpinOrKeepPinned(
 {
   struct CC_tryUnpinOrKeepPinnedArgs* args =
     (struct CC_tryUnpinOrKeepPinnedArgs *)rawArgs;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
 
 #if ASSERT
   assert(isPinned(remElem->object));
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
   assert(chunk->tmpHeap != args->toSpaceMarker);
 #endif
 
@@ -623,6 +738,22 @@ void CC_tryUnpinOrKeepPinned(
     return;
   }
 #endif
+
+  if (chunk->tmpHeap != args->fromSpaceMarker) {
+    /** It's possible to have a remset entry for an object elsewhere in the
+      * chain. (When adding an remset entry for object at ancestor, this
+      * object might live in the chain rather than the primary heap. Recall,
+      * all remset entries are redirected to the primary heap. When CC is later
+      * spawned for the primary heap, it's not guaranteed that all chain CCs
+      * will have completed and been merged in the meantime.)
+      *
+      * The correct thing to do here is therefore to just keep the remset
+      * entry. It will be merged and handled properly later.
+      */
+
+    HM_remember(args->newRemSet, remElem);
+    return;
+  }
 
   assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
   assert(chunk->tmpHeap == args->fromSpaceMarker);
@@ -798,6 +929,7 @@ size_t CC_collectWithRoots(
     .fromHead = (void*) &(origList),
     .bytesSaved = 0
   };
+  CC_workList_init(s, &(lists.worklist));
 
   HH_EBR_enterQuiescentState(s);
 
@@ -839,8 +971,10 @@ size_t CC_collectWithRoots(
   forceForward(s, &(cp->snapLeft), &lists);
   forceForward(s, &(cp->snapRight), &lists);
   forceForward(s, &(cp->snapTemp), &lists);
-  forceForward(s, &(s->wsQueue), &lists);
+  // forceForward(s, &(s->wsQueue), &lists);
   forceForward(s, &(cp->stack), &lists);
+
+  markLoop(s, &lists);
 
   // JATIN_NOTE: This is important because the stack object of the thread we are collecting
   // often changes the level it is at. So it might in fact be at depth = 1.
@@ -857,10 +991,19 @@ size_t CC_collectWithRoots(
   HM_initChunkList(tempRemovedFromCCBag);
 
   while (!CC_closeStack(cp, tempRemovedFromCCBag)) {
-    forEachObjptrInCCStackBag(s, tempRemovedFromCCBag, forwardPtrChunk, &lists);
+    forEachObjptrInCCStackBag(
+      s,
+      tempRemovedFromCCBag,
+      tryMarkAndMarkLoop,
+      &lists);
     HM_appendChunkList(removedFromCCBag, tempRemovedFromCCBag);
     HM_initChunkList(tempRemovedFromCCBag);
+
+    markLoop(s, &lists);
   }
+
+  assert(CC_workList_isEmpty(s, &(lists.worklist)));
+  assert(NULL == tempRemovedFromCCBag->firstChunk);
 
   // saveNoForward(s, (void*)(thread->stack), &lists);
   // saveNoForward(s, (void*)thread, &lists);
@@ -887,13 +1030,18 @@ size_t CC_collectWithRoots(
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);
   forceUnmark(s, &(cp->snapTemp), &lists);
-  forceUnmark(s, &(s->wsQueue), &lists);
+  // forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
 
+  unmarkLoop(s, &lists);
+
   // forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
-  forEachObjptrInCCStackBag(s, removedFromCCBag, unmarkPtrChunk, &lists);
+  forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndUnmarkLoop, &lists);
+  unmarkLoop(s, &lists);
+
   HM_freeChunksInList(s, removedFromCCBag);
 
+  assert(CC_workList_isEmpty(s, &(lists.worklist)));
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
@@ -997,6 +1145,12 @@ size_t CC_collectWithRoots(
   HM_freeChunkWithInfo(s, stackChunk, &infoc);
   info.freedType = CC_FREED_NORMAL_CHUNK;
   cp->stack = BOGUS_OBJPTR;
+
+// #if ASSERT
+//   struct HM_foreachDownptrClosure checkRemEntryClosure =
+//     {.fun = checkRemEntry, .env = &lists};
+//   HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &checkRemEntryClosure);
+// #endif
 
   HH_EBR_leaveQuiescentState(s);
 

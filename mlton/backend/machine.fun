@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014,2016-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2014,2016-2017,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -59,7 +59,8 @@ structure Global =
 structure StackOffset =
    struct
       datatype t = T of {offset: Bytes.t,
-                         ty: Type.t}
+                         ty: Type.t,
+                         volatile: bool}
 
       local
          fun make f (T r) = f r
@@ -67,25 +68,25 @@ structure StackOffset =
          val ty = make #ty
       end
 
-      fun layout (T {offset, ty}): Layout.t =
+      fun layout (T {offset, ty, volatile}): Layout.t =
          let
             open Layout
          in
-            seq [str (concat ["S", Type.name ty]),
+            seq [str (concat ["S", if volatile then "V" else "", Type.name ty]),
                  paren (Bytes.layout offset),
                  str ": ", Type.layout ty]
          end
 
       val equals: t * t -> bool =
-         fn (T {offset = b, ty}, T {offset = b', ty = ty'}) =>
+         fn (T {offset = b, ty, ...}, T {offset = b', ty = ty', ...}) =>
          Bytes.equals (b, b') andalso Type.equals (ty, ty')
 
       val isSubtype: t * t -> bool =
-         fn (T {offset = b, ty = t}, T {offset = b', ty = t'}) =>
+         fn (T {offset = b, ty = t, ...}, T {offset = b', ty = t', ...}) =>
          Bytes.equals (b, b') andalso Type.isSubtype (t, t')
 
       val interfere: t * t -> bool =
-         fn (T {offset = b, ty = ty}, T {offset = b', ty = ty'}) =>
+         fn (T {offset = b, ty = ty, ...}, T {offset = b', ty = ty', ...}) =>
          let
             val max = Bytes.+ (b, Type.bytes ty)
             val max' = Bytes.+ (b', Type.bytes ty')
@@ -93,9 +94,10 @@ structure StackOffset =
             Bytes.> (max, b') andalso Bytes.> (max', b)
          end
 
-      fun shift (T {offset, ty}, size): t =
+      fun shift (T {offset, ty, volatile}, size): t =
          T {offset = Bytes.- (offset, size),
-            ty = ty}
+            ty = ty,
+            volatile = volatile}
    end
 
 structure StaticHeap =
@@ -286,12 +288,14 @@ structure Operand =
        | Label of Label.t
        | Offset of {base: t,
                     offset: Bytes.t,
-                    ty: Type.t}
+                    ty: Type.t,
+                    volatile: bool}
        | SequenceOffset of {base: t,
                             index: t,
                             offset: Bytes.t,
                             scale: Scale.t,
-                            ty: Type.t}
+                            ty: Type.t,
+                            volatile: bool}
        | StackOffset of StackOffset.t
        | StackTop
        | StaticHeapRef of StaticHeap.Ref.t
@@ -333,12 +337,12 @@ structure Operand =
              | GCState => str "<GCState>"
              | Global g => Global.layout g
              | Label l => Label.layout l
-             | Offset {base, offset, ty} =>
-                  seq [str (concat ["O", Type.name ty, " "]),
+             | Offset {base, offset, ty, volatile} =>
+                  seq [str (concat ["O", if volatile then "V" else "", Type.name ty, " "]),
                        tuple [layout base, Bytes.layout offset],
                        constrain ty]
-             | SequenceOffset {base, index, offset, scale, ty} =>
-                  seq [str (concat ["X", Type.name ty, " "]),
+             | SequenceOffset {base, index, offset, scale, ty, volatile} =>
+                  seq [str (concat ["X", if volatile then "V" else "", Type.name ty, " "]),
                        tuple [layout base, layout index, Scale.layout scale,
                               Bytes.layout offset],
                        constrain ty]
@@ -374,7 +378,8 @@ structure Operand =
       fun gcField field =
          Offset {base = GCState,
                  offset = Runtime.GCField.offset field,
-                 ty = Type.ofGCField field}
+                 ty = Type.ofGCField field,
+                 volatile = Runtime.GCField.volatile field}
 
       val stackOffset = StackOffset o StackOffset.T
 
@@ -419,7 +424,6 @@ structure Statement =
        | PrimApp of {args: Operand.t vector,
                      dst: Operand.t option,
                      prim: Type.t Prim.t}
-       | ProfileLabel of ProfileLabel.t
 
       val layout =
          let
@@ -442,8 +446,6 @@ structure Statement =
                            [seq [Operand.layout z, str " ="],
                             indent (rest, 2)]
                   end
-             | ProfileLabel l =>
-                  seq [str "ProfileLabel ", ProfileLabel.layout l]
          end
 
       fun move (arg as {dst, src}) =
@@ -480,7 +482,8 @@ structure Statement =
              (* OW(dst, -GC_HEADER_SIZE) = header; *)
              Move {dst = Offset {base = dst,
                                  offset = headerOffset,
-                                 ty = Type.objptrHeader ()},
+                                 ty = Type.objptrHeader (),
+                                 volatile = false},
                    src = header},
              (* Frontier += size; *)
              PrimApp {args = Vector.new2 (Frontier, bytes size),
@@ -514,17 +517,20 @@ structure Statement =
              (* OW(dst, -(GC_HEADER_SIZE + GC_SEQUENCE_LENGTH_SIZE + GC_SEQUENCE_COUNTER_SIZE)) = 0x0; *)
              Move {dst = Offset {base = dst,
                                  offset = counterOffset,
-                                 ty = Type.seqIndex ()},
+                                 ty = Type.seqIndex (),
+                                 volatile = false},
                    src = counter},
              (* OW(dst, -(GC_HEADER_SIZE + GC_SEQUENCE_LENGTH_SIZE)) = length; *)
              Move {dst = Offset {base = dst,
                                  offset = lengthOffset,
-                                 ty = Type.seqIndex ()},
+                                 ty = Type.seqIndex (),
+                                 volatile = false},
                    src = length},
              (* OW(dst, -GC_HEADER_SIZE) = header; *)
              Move {dst = Offset {base = dst,
                                  offset = headerOffset,
-                                 ty = Type.objptrHeader ()},
+                                 ty = Type.objptrHeader (),
+                                 volatile = false},
                    src = header},
              (* Frontier += size; *)
              PrimApp {args = Vector.new2 (Frontier, bytes size),
@@ -537,7 +543,6 @@ structure Statement =
             Move {dst, src} => f (dst, f (src, ac))
           | PrimApp {args, dst, ...} =>
                Vector.fold (args, Option.fold (dst, ac, f), f)
-          | _ => ac
 
       fun foldDefs (s, a, f) =
          case s of
@@ -545,7 +550,6 @@ structure Statement =
           | PrimApp {dst, ...} => (case dst of
                                       NONE => a
                                     | SOME z => f (z, a))
-          | _ => a
    end
 
 structure Live =
@@ -923,9 +927,8 @@ structure Program =
                          sourceMaps: SourceMaps.t option,
                          staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 
-      fun clear (T {chunks, sourceMaps, ...}) =
-         (List.foreach (chunks, Chunk.clear)
-          ; Option.app (sourceMaps, SourceMaps.clear))
+      fun clear (T {chunks, ...}) =
+         List.foreach (chunks, Chunk.clear)
 
       fun layouts (T {chunks, frameInfos, frameOffsets, handlesSignals,
                       main = {label, ...},
@@ -1054,47 +1057,17 @@ structure Program =
                      T {chunks, frameInfos, frameOffsets, globals = {objptrs, reals, ...},
                         maxFrameSize, objectTypes, sourceMaps, staticHeaps, ...}) =
          let
-            val (checkProfileLabel, finishCheckProfileLabel) =
-               Err.check'
+            val _ =
+               Err.check
                ("sourceMaps",
                 fn () =>
                 (case (!Control.profile, sourceMaps) of
-                    (Control.ProfileNone, NONE) => SOME (fn _ => false, fn () => ())
-                  | (_, NONE) => NONE
-                  | (Control.ProfileNone, SOME _) => NONE
-                  | (_, SOME sourceMaps) =>
-                       let
-                          val (checkProfileLabel, finishCheckProfileLabel) =
-                             SourceMaps.checkProfileLabel sourceMaps
-                       in
-                          if SourceMaps.check sourceMaps
-                             then SOME (checkProfileLabel,
-                                        fn () => Err.check
-                                                 ("sourceMaps (finishCheckProfileLabel)",
-                                                  finishCheckProfileLabel,
-                                                  fn () => SourceMaps.layout sourceMaps))
-                             else NONE
-                       end),
+                    (Control.ProfileNone, NONE) => true
+                  | (_, NONE) => false
+                  | (Control.ProfileNone, SOME _) => false
+                  | (_, SOME sourceMaps) => SourceMaps.check sourceMaps),
                 fn () => Option.layout SourceMaps.layout sourceMaps)
             val _ =
-               if !Control.profile = Control.ProfileTimeLabel
-                  then
-                     List.foreach
-                     (chunks, fn Chunk.T {blocks, ...} =>
-                      Vector.foreach
-                      (blocks, fn Block.T {kind, label, statements, ...} =>
-                       if (case kind of
-                              Kind.Func _ => true
-                            | _ => false)
-                          orelse (0 < Vector.length statements
-                                  andalso (case Vector.first statements of
-                                              Statement.ProfileLabel _ => true
-                                            | _ => false))
-                          then ()
-                       else print (concat ["missing profile info: ",
-                                           Label.toString label, "\n"])))
-               else ()
-                           val _ =
                Vector.foreachi
                (frameOffsets, fn (i, fo) =>
                                let
@@ -1249,7 +1222,7 @@ structure Program =
                            (let val _ = labelBlock l
                             in true
                             end handle _ => false)
-                      | Offset {base, offset, ty} =>
+                      | Offset {base, offset, ty, volatile = _} =>
                            (checkOperand (base, alloc)
                             ; (Type.offsetIsOk
                                {base = Operand.ty base,
@@ -1263,7 +1236,7 @@ structure Program =
                                 offset = offset,
                                 tyconTy = tyconTy,
                                 result = ty}))
-                      | StackOffset (so as StackOffset.T {offset, ty, ...}) =>
+                      | StackOffset (so as StackOffset.T {offset, ty, volatile = _}) =>
                            Bytes.<= (Bytes.+ (offset, Type.bytes ty), maxFrameSize)
                            andalso Alloc.doesDefine (alloc, Live.StackOffset so)
                            andalso (case Type.deLabel ty of
@@ -1295,7 +1268,7 @@ structure Program =
                                                    doit frameInfo
                                               | Kind.Jump => true
                                           end)
-                      | SequenceOffset {base, index, offset, scale, ty} =>
+                      | SequenceOffset {base, index, offset, scale, ty, volatile = _} =>
                            (checkOperand (base, alloc)
                             ; checkOperand (index, alloc)
                             ; (Type.sequenceOffsetIsOk
@@ -1339,18 +1312,18 @@ structure Program =
                      checkFrameInfo frameInfo
                      andalso
                      FrameInfo.Kind.equals (kind, FrameInfo.kind frameInfo)
-                        andalso
-                        (not useSlots
-                         orelse
-                         let
-                            val Alloc.T zs = alloc
-                            val liveOffsets =
-                               List.fold
-                               (zs, [], fn (z, liveOffsets) =>
-                                case z of
-                                   Live.StackOffset (StackOffset.T {offset, ty}) =>
-                                      if Type.isObjptr ty
-                                         then offset :: liveOffsets
+                     andalso
+                     (not useSlots
+                      orelse
+                      let
+                         val Alloc.T zs = alloc
+                         val liveOffsets =
+                            List.fold
+                            (zs, [], fn (z, liveOffsets) =>
+                             case z of
+                                Live.StackOffset (StackOffset.T {offset, ty, ...}) =>
+                                   if Type.isObjptr ty
+                                      then offset :: liveOffsets
                                       else liveOffsets
                                  | _ => raise No)
                             val liveOffsets = Array.fromList liveOffsets
@@ -1368,7 +1341,7 @@ structure Program =
                         Alloc.forall
                         (alloc, fn z =>
                          case z of
-                            Operand.StackOffset (StackOffset.T {offset, ty}) =>
+                            Operand.StackOffset (StackOffset.T {offset, ty, ...}) =>
                                Bytes.<= (Bytes.+ (offset, Type.bytes ty), size)
                           | _ => false)
                      end
@@ -1460,10 +1433,6 @@ structure Program =
                               then alloc
                               else NONE
                         end
-                   | ProfileLabel pl =>
-                        if checkProfileLabel pl
-                           then SOME alloc
-                        else NONE
                end
             fun liveIsOk (live: Live.t vector,
                           a: Alloc.t): bool =
@@ -1587,13 +1556,14 @@ structure Program =
                      (Vector.fold
                       (live, [], fn (z, ac) =>
                        case z of
-                          Live.StackOffset (StackOffset.T {offset, ty}) =>
+                          Live.StackOffset (StackOffset.T {offset, ty, volatile}) =>
                              if Bytes.< (offset, size)
                                 then ac
                              else (Live.StackOffset
                                    (StackOffset.T
                                     {offset = Bytes.- (offset, size),
-                                     ty = ty})) :: ac
+                                     ty = ty,
+                                     volatile = volatile})) :: ac
                         | _ => ac))
                in
                   goto (b, raises, returns, alloc)
@@ -1759,7 +1729,6 @@ structure Program =
                    (blocks, fn b =>
                     check' (b, "block", blockOk, Block.layout))
                 end)
-            val _ = finishCheckProfileLabel ()
             val _ = clear program
          in
             ()
@@ -1779,8 +1748,6 @@ fun simplify p =
       val machinePasses =
          {name = "machineShuffle", doit = Program.shuffle, execute = false} ::
          nil
-      (* Machine type check is too slow to run by default. *)
-      (* val () = Control.trace (Control.Pass, "machineTypeCheck") Program.typeCheck p *)
       val p =
          Control.simplifyPasses
          {arg = p,
@@ -1788,7 +1755,6 @@ fun simplify p =
           stats = Program.layoutStats,
           toFile = Program.toFile,
           typeCheck = Program.typeCheck}
-      (* val () = Control.trace (Control.Pass, "machineTypeCheck") Program.typeCheck p *)
    in
       p
    end

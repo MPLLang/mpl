@@ -73,7 +73,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope);
  * @param opp The objptr to forward
  * @param args The struct ForwardHHObjptrArgs* for this call, cast as a void*
  */
-void forwardHHObjptr (GC_state s, objptr* opp, void* rawArgs);
+void forwardHHObjptr(GC_state s, objptr* opp, objptr op, void* rawArgs);
 
 /* check if `op` is in args->toSpace[depth(op)] */
 bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args);

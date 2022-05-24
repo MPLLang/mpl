@@ -44,6 +44,8 @@ void tryUnpinOrKeepPinned(
   HM_remembered remElem,
   void* rawArgs);
 
+void copySuspect(GC_state s, objptr *opp, void *rawArghh);
+
 void forwardObjptrsOfRemembered(
   GC_state s,
   HM_remembered remElem,
@@ -104,13 +106,15 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 enum LGC_freedChunkType {
   LGC_FREED_REMSET_CHUNK,
   LGC_FREED_STACK_CHUNK,
-  LGC_FREED_NORMAL_CHUNK
+  LGC_FREED_NORMAL_CHUNK,
+  LGC_FREED_SUSPECT_CHUNK
 };
 
 static const char* LGC_freedChunkTypeToString[] = {
   "LGC_FREED_REMSET_CHUNK",
   "LGC_FREED_STACK_CHUNK",
-  "LGC_FREED_NORMAL_CHUNK"
+  "LGC_FREED_NORMAL_CHUNK",
+  "LGC_FREED_SUSPECT_CHUNK"
 };
 
 struct LGC_chunkInfo {
@@ -193,7 +197,17 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
-  assert(thread->currentDepth == originalLocalScope);
+  if (thread->currentDepth != originalLocalScope) {
+    LOG(LM_HH_COLLECTION, LL_DEBUG,
+      "Skipping collection:\n"
+      "  currentDepth %u\n"
+      "  originalLocalScope %u\n"
+      "  potentialLocalScope %u\n",
+      thread->currentDepth,
+      originalLocalScope,
+      potentialLocalScope);
+    return;
+  }
 
   /** Compute the min depth for local collection. We claim as many levels
     * as we can without interfering with CC, but only so far as desired.
@@ -475,7 +489,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     "Trying to forward current thread %p",
     (void*)s->currentThread);
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  forwardHHObjptr(s, &(s->currentThread), &forwardHHObjptrArgs);
+  forwardHHObjptr(s, &(s->currentThread), s->currentThread, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ?
       "Copied thread from GC_state" : "Did not copy thread from GC_state");
@@ -603,6 +617,22 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
      .freedType = LGC_FREED_NORMAL_CHUNK};
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = LGC_writeFreeChunkInfo, .env = &info};
+
+  for (HM_HierarchicalHeap cursor = hh;
+       NULL != cursor && HM_HH_getDepth(cursor) >= minDepth;
+       cursor = cursor->nextAncestor) {
+    HM_chunkList suspects = HM_HH_getSuspects(cursor);
+    if (suspects->size != 0) {
+      uint32_t depth = HM_HH_getDepth(cursor);
+      forwardHHObjptrArgs.toDepth = depth;
+      struct GC_foreachObjptrClosure fObjptrClosure =
+        {.fun = copySuspect, .env = &forwardHHObjptrArgs};
+      ES_foreachSuspect(s, suspects, &fObjptrClosure);
+      info.depth = depth;
+      info.freedType = LGC_FREED_SUSPECT_CHUNK;
+      HM_freeChunksInListWithInfo(s, suspects, &infoc);
+    }
+  }
 
   /* Free old chunks and find the tail (upper segment) of the original hh
    * that will be merged with the toSpace */
@@ -1025,6 +1055,28 @@ void unfreezeDisentangledDepthAfter(
 #endif
 
 /* ========================================================================= */
+void copySuspect(GC_state s, objptr *opp, void *rawArghh)  {
+  struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArghh;
+  objptr op = *opp;
+  assert(isObjptr(op));
+  pointer p = objptrToPointer(op, NULL);
+  objptr new_ptr = op;
+  if (hasFwdPtr(p)) {
+    new_ptr = getFwdPtr(p);
+  }
+  else if (!isPinned(op)) {
+    /* the suspect does not have a fwd-ptr and is not pinned
+     * ==> its garbage, so skip it
+     */
+    return;
+  }
+  uint32_t opDepth = args->toDepth;
+  if (NULL == args->toSpace[opDepth])
+  {
+    args->toSpace[opDepth] = HM_HH_new(s, opDepth);
+  }
+  HM_storeInchunkList(HM_HH_getSuspects(args->toSpace[opDepth]), &new_ptr, sizeof(objptr));
+}
 
 void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   struct ForwardHHObjptrArgs* args = (struct ForwardHHObjptrArgs*)rawArgs;
@@ -1162,16 +1214,18 @@ void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void* rawArgs
     FALSE
   );
 
-  forwardHHObjptr(s, &(remElem->from), rawArgs);
+  forwardHHObjptr(s, &(remElem->from), remElem->from, rawArgs);
 }
 
 /* ========================================================================= */
 
-void forwardHHObjptr (GC_state s,
-                      objptr* opp,
-                      void* rawArgs) {
+void forwardHHObjptr(
+  GC_state s,
+  objptr* opp,
+  objptr op,
+  void* rawArgs)
+{
   struct ForwardHHObjptrArgs* args = ((struct ForwardHHObjptrArgs*)(rawArgs));
-  objptr op = *opp;
   pointer p = objptrToPointer (op, NULL);
 
   assert(args->toDepth == HM_HH_INVALID_DEPTH);

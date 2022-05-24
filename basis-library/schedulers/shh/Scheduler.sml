@@ -69,8 +69,19 @@ struct
   type gctask_data = Thread.t * (hh_address ref)
 
   structure DE = MLton.Thread.Disentanglement
-  (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
-  val maxDisetanglementCheckDepth = 31
+
+  local
+    (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
+    val maxDisetanglementCheckDepth = DE.decheckMaxDepth ()
+  in
+  fun depthOkayForDECheck depth =
+    case maxDisetanglementCheckDepth of
+      (* in this case, there is no entanglement detection, so no problem *)
+      NONE => true
+
+      (* entanglement checks are active, and the max depth is m *)
+    | SOME m => depth < m
+  end
 
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
@@ -347,8 +358,8 @@ struct
   local
     val amOriginal = ref true
     val taskBoxes = Array.array (P, NONE)
-    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, Int64.fromInt i, x)
-    fun sub i = HM.arraySubNoBarrier (taskBoxes, Int64.fromInt i)
+    fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, i, x)
+    fun sub i = HM.arraySubNoBarrier (taskBoxes, i)
   in
   val _ = Thread.copyCurrent ()
   val prototypeThread : Thread.p =
@@ -536,7 +547,7 @@ struct
       let
         val depth = HH.getDepth (Thread.current ())
       in
-        if depth >= Queue.capacity orelse depth >= maxDisetanglementCheckDepth
+        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth)
         then
           J {data = NONE, func = g}
         else

@@ -52,8 +52,10 @@ typedef struct GC_thread {
     */
   int32_t disentangledDepth;
 
+#ifdef DETECT_ENTANGLEMENT
   decheck_tid_t decheckState;
   uint32_t decheckSyncDepths[DECHECK_DEPTHS_LEN];
+#endif
 
   uint32_t minLocalCollectionDepth;
 
@@ -67,6 +69,8 @@ typedef struct GC_thread {
 
   objptr stack;
 } __attribute__ ((packed)) *GC_thread;
+
+#ifdef DETECT_ENTANGLEMENT
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
@@ -83,6 +87,24 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(void*) +   // currentCheck
                     sizeof(objptr));  // stack
+
+#else
+
+COMPILE_TIME_ASSERT(GC_thread__packed,
+                    sizeof(struct GC_thread) ==
+                    sizeof(int32_t) +  // currentProcNum
+                    sizeof(size_t) +  // bytesNeeded
+                    sizeof(ptrdiff_t) +  // exnStack
+                    sizeof(uint32_t) + // currentDepth
+                    sizeof(uint32_t) + // disentangledDepth
+                    sizeof(uint32_t) + // minLocalCollectionDepth
+                    sizeof(size_t) +  // bytesAllocatedSinceLastCollection
+                    sizeof(size_t) +  // bytesSurvivedLastCollection
+                    sizeof(void*) +   // hierarchicalHeap
+                    sizeof(void*) +   // currentCheck
+                    sizeof(objptr));  // stack
+
+#endif // DETECT_ENTANGLEMENT
 
 #define BOGUS_EXN_STACK ((ptrdiff_t)(-1))
 

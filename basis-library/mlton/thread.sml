@@ -102,6 +102,16 @@ structure Disentanglement =
 struct
   type thread = Basic.t
 
+  fun decheckMaxDepth () =
+    let
+      val r = ref 0w0
+    in
+      if Prim.decheckMaxDepth r then
+        SOME (Word32.toIntX (!r))
+      else
+        NONE
+    end
+
   fun decheckFork () =
     let
       val left = ref (0w0: Word64.word)

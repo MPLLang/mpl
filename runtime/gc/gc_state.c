@@ -1,5 +1,5 @@
 /* Copyright (C) 2018-2021 Sam Westrick.
- * Copyright (C) 2009,2012,2019 Matthew Fluet.
+ * Copyright (C) 2009,2012,2019,2021 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -58,23 +58,23 @@ struct FixedSizeAllocator* getUFAllocator(GC_state s) {
   return &(s->hhUnionFindAllocator);
 }
 
-bool GC_getAmOriginal (GC_state s) {
-  return s->amOriginal;
+Bool_t GC_getAmOriginal (GC_state s) {
+  return (Bool_t)(s->amOriginal);
 }
-void GC_setAmOriginal (GC_state s, bool b) {
-  s->amOriginal = b;
-}
-
-void GC_setControlsMessages (GC_state s, bool b) {
-  s->controls->messages = b;
+void GC_setAmOriginal (GC_state s, Bool_t b) {
+  s->amOriginal = (bool)b;
 }
 
-void GC_setControlsSummary (GC_state s, bool b) {
-  s->controls->summary = b;
+void GC_setControlsMessages (GC_state s, Bool_t b) {
+  s->controls->messages = (bool)b;
 }
 
-void GC_setControlsRusageMeasureGC (GC_state s, bool b) {
-  s->controls->rusageMeasureGC = b;
+void GC_setControlsSummary (GC_state s, Bool_t b) {
+  s->controls->summary = (bool)b;
+}
+
+void GC_setControlsRusageMeasureGC (GC_state s, Bool_t b) {
+  s->controls->rusageMeasureGC = (bool)b;
 }
 
 // SAM_NOTE: TODO: remove this and replace with blocks statistics
@@ -205,6 +205,36 @@ uintmax_t GC_numDisentanglementChecks(GC_state s) {
   return count;
 }
 
+uintmax_t GC_numChecksSkipped(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numChecksSkipped;
+  }
+  return count;
+}
+
+uintmax_t GC_numSuspectsMarked(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numSuspectsMarked;
+  }
+  return count;
+}
+
+uintmax_t GC_numSuspectsCleared(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->numSuspectsCleared;
+  }
+  return count;
+}
+
 uintmax_t GC_numEntanglementsDetected(GC_state s) {
   uintmax_t count = 0;
   for (uint32_t p = 0; p < s->numberOfProcs; p++) {
@@ -214,7 +244,7 @@ uintmax_t GC_numEntanglementsDetected(GC_state s) {
 }
 
 __attribute__((noreturn))
-void GC_setHashConsDuringGC(__attribute__((unused)) GC_state s, __attribute__((unused)) bool b) {
+void GC_setHashConsDuringGC(__attribute__((unused)) GC_state s, __attribute__((unused)) Bool_t b) {
   DIE("GC_setHashConsDuringGC unsupported");
 }
 
@@ -357,16 +387,16 @@ sigset_t* GC_getSignalsPendingAddr (GC_state s) {
 }
 
 // Signal disposition is per-process; use primary to maintain handled set.
-void GC_setGCSignalHandled (GC_state s, bool b) {
-  s->procStates[0].signalsInfo.gcSignalHandled = b;
+void GC_setGCSignalHandled (GC_state s, Bool_t b) {
+  s->procStates[0].signalsInfo.gcSignalHandled = (bool)b;
 }
 
-bool GC_getGCSignalPending (GC_state s) {
-  return (s->signalsInfo.gcSignalPending);
+Bool_t GC_getGCSignalPending (GC_state s) {
+  return (bool)(s->signalsInfo.gcSignalPending);
 }
 
-void GC_setGCSignalPending (GC_state s, bool b) {
-  s->signalsInfo.gcSignalPending = b;
+void GC_setGCSignalPending (GC_state s, Bool_t b) {
+  s->signalsInfo.gcSignalPending = (bool)b;
 }
 
 void GC_registerQueue(uint32_t processor, pointer queuePointer) {

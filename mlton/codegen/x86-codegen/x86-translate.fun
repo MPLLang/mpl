@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -90,7 +90,7 @@ struct
                 size = size}, size), offset + x86.Size.toBytes size))
       in
       val rec toX86Operand : t -> (x86.Operand.t * x86.Size.t) vector =
-         fn SequenceOffset {base, index, offset, scale, ty}
+         fn SequenceOffset {base, index, offset, scale, ty, volatile = _}
             => let
                   val base = toX86Operand base
                   val _ = Assert.assert("x86Translate.Operand.toX86Operand: SequenceOffset/base",
@@ -293,7 +293,7 @@ struct
           | Global g => Global.toX86Operand g
           | Label l => 
                Vector.new1 (x86.Operand.immediate_label l, x86MLton.pointerSize)
-          | Offset {base = GCState, offset, ty} =>
+          | Offset {base = GCState, offset, ty, volatile = _} =>
                let
                   val offset = Bytes.toInt offset
                   val ty = Type.toCType ty
@@ -301,7 +301,7 @@ struct
                in
                   Vector.new1 (offset, valOf (x86.Operand.size offset))
                end
-          | Offset {base, offset, ty} =>
+          | Offset {base, offset, ty, volatile = _} =>
                let
                  val offset = Bytes.toInt offset
                  val ty = Type.toCType ty
@@ -333,7 +333,7 @@ struct
                in
                   fromSizes (sizes, origin)
                end
-          | StackOffset (StackOffset.T {offset, ty}) =>
+          | StackOffset (StackOffset.T {offset, ty, volatile = _}) =>
                let
                   val offset = Bytes.toInt offset
                   val ty = Type.toCType ty
@@ -582,11 +582,7 @@ struct
                                     dsts = dsts,
                                     transInfo = transInfo}),
                     comment_end]
-                 end
-              | ProfileLabel l =>
-                   AppendList.single
-                   (x86.Block.mkProfileBlock'
-                    {profileLabel = l}))
+                 end)
     end
 
   structure Transfer =
