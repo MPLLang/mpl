@@ -1375,8 +1375,8 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
   }
 
-#if ASSERT
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+#if ASSERT
   assert(opDepth <= args->maxDepth);
   HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
   assert(args->fromSpace[opDepth] == hh);
@@ -1439,31 +1439,31 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
    * entry into the toSpace. */
 
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
-  // if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
-  //   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-  //   uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
-  //   /* if this is a down-ptr completely inside the scope,
-  //    * no need to in-place things reachable from it
-  //    */
-  //   if (!chunk->pinnedDuringCollection)
-  //   {
-  //     chunk->pinnedDuringCollection = TRUE;
-  //     HM_unlinkChunkPreserveLevelHead(
-  //         HM_HH_getChunkList(args->fromSpace[opDepth]),
-  //         chunk);
-  //     HM_appendChunk(&(args->pinned[opDepth]), chunk);
-  //   }
-  // }
-  // else {
+  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+  if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
+    HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+    uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
+    /* if this is a down-ptr completely inside the scope,
+     * no need to in-place things reachable from it
+     */
+    if (!chunk->pinnedDuringCollection)
+    {
+      chunk->pinnedDuringCollection = TRUE;
+      HM_unlinkChunkPreserveLevelHead(
+          HM_HH_getChunkList(args->fromSpace[opDepth]),
+          chunk);
+      HM_appendChunk(&(args->pinned[opDepth]), chunk);
+    }
+  }
+  else {
   LGC_markAndScan(s, &op, op, rawArgs);
-  // }
+  }
 
   // LGC_markAndScan(s, &(remElem->from), rawArgs);
 
   // if (chunk->pinnedDuringCollection) {
   //   return;
   // }
-
   // if (chunk->levelHead != HM_HH_getUFNode(args->fromSpace[opDepth])) {
   //   chunk->levelHead = HM_HH_getUFNode(args->fromSpace[opDepth]);
   // }
@@ -1472,7 +1472,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   //   HM_HH_getChunkList(args->fromSpace[opDepth]),
   //   chunk);
   // HM_appendChunk(&(args->pinned[opDepth]), chunk);
-
+  // chunk->pinnedDuringCollection = TRUE;
   // assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
   // /** stronger version of previous assertion, needed for safe freeing of
   //   * hh dependants after LGC completes

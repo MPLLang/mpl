@@ -128,19 +128,17 @@ void Assignable_writeBarrier(
   /* deque down-pointers are handled separately during collection. */
   if (dst == s->wsQueue)
     return;
-
+  uint32_t dd = dstHH->depth;
   pointer srcp = objptrToPointer(src, NULL);
-  bool src_de = decheck(s, src);
-
+  bool src_de = (HM_getLevelHead(HM_getChunkOf(srcp)) == getThreadCurrent(s)->hierarchicalHeap) || decheck(s, src);
   if (src_de) {
+    bool dst_de = (dd == 1) || decheck(s, dst);
     HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
     if (srcHH == dstHH) {
       /* internal pointers are always traced */
       return;
     }
-
-    bool dst_de = decheck(s, dst);
-    uint32_t dd = dstHH->depth, sd = srcHH->depth;
+    uint32_t sd = srcHH->depth;
     /* Depth comparisons make sense only when src && dst are on the same root-to-leaf path,
      * checking this maybe expensive, so we approximate here.
      * If both dst_de && src_de hold, they are on the same path
