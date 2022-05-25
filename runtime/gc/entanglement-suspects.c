@@ -22,13 +22,12 @@ static inline bool is_suspect(objptr op)
 
 void clear_suspect(
     __attribute__((unused)) GC_state s,
-    objptr *opp,
+    __attribute__((unused)) objptr *opp,
+    objptr op,
     __attribute__((unused)) void *rawArgs)
 {
-
-  objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
-  assert(isObjptr(op) && is_suspect(p));
+  assert(isObjptr(op) && is_suspect(op));
   __sync_fetch_and_and(getHeaderp(p), ~(SUSPECT_MASK));
 }
 
