@@ -44,7 +44,7 @@ void tryUnpinOrKeepPinned(
   HM_remembered remElem,
   void* rawArgs);
 
-void copySuspect(GC_state s, objptr *opp, void *rawArghh);
+void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
 
 void forwardObjptrsOfRemembered(
   GC_state s,
@@ -1055,9 +1055,13 @@ void unfreezeDisentangledDepthAfter(
 #endif
 
 /* ========================================================================= */
-void copySuspect(GC_state s, objptr *opp, void *rawArghh)  {
+void copySuspect(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  void *rawArghh)
+{
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArghh;
-  objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer(op, NULL);
   objptr new_ptr = op;
