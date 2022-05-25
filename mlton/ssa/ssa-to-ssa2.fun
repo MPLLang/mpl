@@ -256,6 +256,8 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                  default = default,
                                  test = test}
           | S.Transfer.Goto r => S2.Transfer.Goto r
+          | S.Transfer.PCall _ =>
+               Error.bug "SsaToSsa2.convertTransfer: PCall"
           | S.Transfer.Raise v => S2.Transfer.Raise v
           | S.Transfer.Return v => S2.Transfer.Return v
           | S.Transfer.Runtime {args, prim, return} =>
