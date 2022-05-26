@@ -487,6 +487,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
+  HM_HH_getConcurrentPack(hh)->additionalStack = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
@@ -853,10 +854,11 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
 }
 */
 
-objptr copyCurrentStack(GC_state s, GC_thread thread) {
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+objptr copyStackOfThread(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = getThreadCurrent(s)->hierarchicalHeap;
+  GC_stack stackFrom = (GC_stack)objptrToPointer(thread->stack, NULL);
 
-  size_t reserved = getStackCurrent(s)->reserved;
+  size_t reserved = stackFrom->reserved;
   assert(isStackReservedAligned(s, reserved));
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
 
@@ -869,7 +871,7 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   newChunk->levelHead = HM_HH_getUFNode(hh);
 
 #ifdef DETECT_ENTANGLEMENT
-  newChunk->decheckState = thread->decheckState;
+  newChunk->decheckState = getThreadCurrent(s)->decheckState;
 #else
   newChunk->decheckState = DECHECK_BOGUS_TID;
 #endif
@@ -885,7 +887,7 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
     HM_HH_getChunkList(hh),
     newChunk,
     frontier + stackSize);
-  copyStack(s, getStackCurrent(s), stack);
+  copyStack(s, stackFrom, stack);
 
   return pointerToObjptr((pointer)stack, NULL);
 }
@@ -1022,13 +1024,24 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapLeft = pointerToObjptr(kl, NULL);
   HM_HH_getConcurrentPack(hh)->snapRight = pointerToObjptr(kr, NULL);
   HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
-  objptr snapstack = copyCurrentStack(s, thread);
+  objptr snapstack = copyStackOfThread(s, thread);
   HM_HH_getConcurrentPack(hh)->stack = snapstack;
+
+  objptr additionalStack = BOGUS_OBJPTR;
+  if (s->savedThreadDuringSignalHandler != BOGUS_OBJPTR) {
+    additionalStack = copyStackOfThread(s,
+      threadObjptrToStruct(s, s->savedThreadDuringSignalHandler));
+    HM_HH_getConcurrentPack(hh)->additionalStack = additionalStack;
+  }
 
 #if ASSERT
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
   pointer snapstackp = objptrToPointer(snapstack, NULL);
   assert(listContainsChunk(HM_HH_getChunkList(hh), HM_getChunkOf(snapstackp)));
+  if (additionalStack != BOGUS_OBJPTR) {
+    assert(listContainsChunk(HM_HH_getChunkList(hh),
+      HM_getChunkOf(objptrToPointer(additionalStack, NULL))));
+  }
 #endif
 
   CC_clearStack(s, HM_HH_getConcurrentPack(hh));
