@@ -157,12 +157,30 @@ struct
    * Activators and activator stacks
    *)
 
+  type activator_id = Word64.word (* for debugging *)
+
+  val activatorIds: activator_id array =
+    Array.tabulate (P, Word64.fromInt)
+
+  fun nextActivatorId p =
+    let
+      val old = Array.sub (activatorIds, p)
+      val oldCount = Word64.div (old, Word64.fromInt P)
+      val new = Word64.fromInt P * (oldCount + 0w1) + Word64.fromInt p
+    in
+      Array.update (activatorIds, p, new);
+      old
+    end
+
   datatype activation_stack =
-    AStack of {stack: (Thread.t -> unit) Stack.t, pushCounter: int ref}
+    AStack of
+      { stack: (activator_id * (Thread.t -> unit)) Stack.t
+      , pushCounter: int ref
+      }
 
   fun maybeActivateOne s (t: Thread.t) =
     case Stack.popOldest s of
-      SOME a => a t
+      SOME (_, a) => a t
     | NONE => ()
 
   fun astackNew () =
@@ -267,7 +285,7 @@ struct
   end =
   struct
     datatype 'a status = Pending | Activated of 'a joinpoint
-    datatype 'a t = T of 'a status ref
+    datatype 'a t = T of activator_id * ('a status ref)
 
     fun make doSpawn =
       let
@@ -277,14 +295,22 @@ struct
           case !status of
             Pending => status := Activated (doSpawn t)
           | _ => die (fn _ => "multiple activate")
+
+        val aid = nextActivatorId (myWorkerId ())
       in
-        astackPush activate;
-        T status
+        astackPush (aid, activate);
+        T (aid, status)
       end
 
-    fun cancel (T status) =
+    fun cancel (T (aid, status)) =
       ( ()
-      ; astackPop ()
+
+      ; case astackPop () of
+          NONE => ()
+        | SOME (aid', _) =>
+            if aid = aid' then ()
+            else die (fn _ => "scheduler bug: activator pop mismatch")
+
       ; !status
       )
   end
@@ -555,6 +581,8 @@ struct
         let
           val gcj = spawnGC interruptedLeftThread
 
+          val _ = assertAtomic 1
+
           val thread = Thread.current ()
           (* val astack = astackGetCurrent () *)
           val depth = HH.getDepth thread
@@ -621,7 +649,9 @@ struct
                       *)
                 )
               else
-                returnToSchedEndAtomic ()
+                ( assertAtomic 1
+                ; returnToSchedEndAtomic ()
+                )
             end
           val _ = push (NormalTask g')
           val _ = HH.setDepth (thread, depth + 1)
@@ -630,6 +660,8 @@ struct
           val _ = recordForkDepth depth
 
           val _ = DE.decheckSetTid tidLeft
+
+          val _ = assertAtomic 1
         in
           J { func = g
             , data = SOME (JD

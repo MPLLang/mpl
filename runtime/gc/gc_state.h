@@ -75,6 +75,10 @@ struct GC_state {
   objptr savedThread; /* Result of GC_copyCurrentThread.
                        * Thread interrupted by arrival of signal.
                        */
+  objptr savedThreadDuringSignalHandler; /* additional root for GC during
+                                          * signal handler (the thread that
+                                          * was interrupted)
+                                          */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
   objptr signalHandlerThread; /* Handler for signals (in heap). */

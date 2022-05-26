@@ -473,6 +473,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->roots = NULL;
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
+  s->savedThreadDuringSignalHandler = BOGUS_OBJPTR;
 
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
@@ -615,6 +616,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;
+  d->savedThreadDuringSignalHandler = BOGUS_OBJPTR;
   d->signalHandlerThread = BOGUS_OBJPTR;
   d->signalsInfo.amInSignalHandler = FALSE;
   d->signalsInfo.gcSignalHandled = FALSE;

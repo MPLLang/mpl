@@ -4,7 +4,7 @@ sig
 
   val new: unit -> 'a t
   val push: 'a * 'a t -> unit
-  val pop: 'a t -> unit
+  val pop: 'a t -> 'a option
 
   val popOldest: 'a t -> 'a option
 
@@ -33,10 +33,12 @@ struct
     let
       val i = !start
       val j = !stop
+      val result = Array.sub (data, j-1)
     in
       Array.update (data, j-1, NONE);
       stop := j-1;
-      if i <> j then () else start := j-1
+      if i <> j then () else start := j-1;
+      result
     end
 
   fun popOldest (T {start, stop, data}) =

@@ -498,6 +498,42 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
    forwardHHObjptrArgs.objectsCopied,
    forwardHHObjptrArgs.stacksCopied);
 
+  /* =================================================================
+   * forward contents of additional root during signal handler, if any
+   */
+  if (s->savedThreadDuringSignalHandler != BOGUS_OBJPTR) {
+    /* forward contents of stack */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        threadObjptrToStruct(s, s->savedThreadDuringSignalHandler)->stack,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    /* forward contents of thread (hence including stack) */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        s->savedThreadDuringSignalHandler,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    forwardHHObjptr(
+      s,
+      &(s->savedThreadDuringSignalHandler),
+      s->savedThreadDuringSignalHandler,
+      &forwardHHObjptrArgs
+    );
+  }
+
   /* forward contents of deque */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,

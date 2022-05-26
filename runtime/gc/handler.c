@@ -139,6 +139,8 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
+  s->savedThreadDuringSignalHandler = threadp;
+
   HM_ensureHierarchicalHeapAssurances(
     s,
     FALSE,
@@ -161,6 +163,7 @@ void GC_handlerLeaveHeapOfThread(
 
   GC_thread target = threadObjptrToStruct(s, threadp);
   assert(target->currentProcNum == -1);
+  assert(s->savedThreadDuringSignalHandler == threadp);
 
   target->currentDepth = getThreadCurrent(s)->currentDepth;
   target->currentChunk = getThreadCurrent(s)->currentChunk;
@@ -206,6 +209,8 @@ void GC_handlerLeaveHeapOfThread(
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
+  s->savedThreadDuringSignalHandler = BOGUS_OBJPTR;
 
   HM_ensureHierarchicalHeapAssurances(
     s,
