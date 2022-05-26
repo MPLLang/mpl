@@ -89,6 +89,11 @@ struct GC_state {
   struct GC_staticHeaps staticHeaps;
   struct GC_sysvals sysvals;
   uint32_t terminationLeader;
+  uint32_t terminationStatus; /** >=2: not allowed to terminate; someone might
+                                *      be sending me a signal.
+                                * 1: okay to terminate
+                                * 0: ready to terminate
+                                */
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
   struct TracingContext *trace;

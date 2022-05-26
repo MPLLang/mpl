@@ -72,22 +72,56 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
  */
 void GC_handler (int signum) {
   GC_state s = MLton_gcState ();
+  if (NULL == s) {
+    // possible because of race between handler and teardown??
+    return;
+  }
+
   if (DEBUG_SIGNALS)
     fprintf (stderr, "GC_handler signum = %d [%d]\n", signum,
              Proc_processorNumber (s));
+
+#if ASSERT
   // Signal disposition is per-process; use primary to maintain handled set.
-  assert (sigismember (&s->procStates[0].signalsInfo.signalsHandled, signum));
+
+  // This isn't safe in general because of termination protocol, so we can
+  // only safely check it if we are proc 0...
+  if (Proc_processorNumber(s) == 0) {
+    assert (sigismember (&s->procStates[0].signalsInfo.signalsHandled, signum));
+  }
+#endif
+
   if (s->atomicState == 0)
     s->limit = 0;
   s->signalsInfo.signalIsPending = TRUE;
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
-  if (signum == SIGALRM && !GC_CheckForTerminationRequest(s)) {
+  if (signum == SIGALRM) {
     // printf("[%d] relaying alarm\n", Proc_processorNumber(s));
-    for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    for (uint32_t i = 0;
+         i < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
+         i++)
+    {
       int id = (int)i;
       if (id == Proc_processorNumber(s)) continue;
-      pthread_kill(s->procStates[id].self, SIGUSR1);
+
+      // first, try to prevent them from terminating
+      uint32_t *statusp = &(s->procStates[id].terminationStatus);
+      uint32_t status = atomicLoadU32(statusp);
+      bool success = FALSE;
+      while (status > 0 && !GC_CheckForTerminationRequest(s)) {
+        success = __sync_bool_compare_and_swap(statusp, status, status+1);
+        if (success)
+          break;
+        status = atomicLoadU32(statusp);
+      }
+
+      if (success) {
+        assert(atomicLoadU32(statusp) >= 2);
+        pthread_kill(s->procStates[id].self, SIGUSR1);
+        assert(atomicLoadU32(statusp) >= 2);
+        __sync_fetch_and_sub(statusp, 1);
+      }
     }
   }
 

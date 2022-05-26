@@ -488,6 +488,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   sigemptyset (&s->signalsInfo.signalsPending);
   s->self = pthread_self();
   s->terminationLeader = INVALID_PROCESSOR_NUMBER;
+  s->terminationStatus = 1;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
@@ -626,6 +627,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   sigemptyset (&d->signalsInfo.signalsPending);
   d->self = s->self;
   d->terminationLeader = INVALID_PROCESSOR_NUMBER;
+  d->terminationStatus = 1;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;
