@@ -978,6 +978,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           | S.Transfer.Case r => translateCase r
           | S.Transfer.Goto {dst, args} =>
                ([], Transfer.Goto {dst = dst, args = vos args})
+          | S.Transfer.PCall _ =>
+               Error.bug "SsaToRssa.convert.translateTransfer: PCall"
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
           | S.Transfer.Runtime {args, prim, return} =>
