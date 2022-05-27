@@ -57,6 +57,14 @@ signature DIRECT_EXP =
            val linearizeGoto:
               t * Return.Handler.t * Label.t -> Label.t * Block.t list
            val name: t * (Var.t -> t) -> t
+           val pcall: {func: Func.t,
+                       args: t vector,
+                       carg: Var.t * Type.t,
+                       cont: t,
+                       larg: Var.t * Type.t,
+                       parl: t,
+                       parr: t,
+                       ty: Type.t} -> t
            val primApp: {args: t vector,
                          prim: Type.t Prim.t,
                          targs: Type.t vector, 
