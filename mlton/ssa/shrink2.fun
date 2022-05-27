@@ -484,6 +484,15 @@ fun shrinkFunction {globals: Statement.t vector} =
                                  end
                            end
                      end
+                | PCall {args, cont, parl, parr, ...} =>
+                     let
+                        val _ = incVars args
+                        val _ = incLabel cont
+                        val _ = incLabel parl
+                        val _ = incLabel parr
+                     in
+                        normal ()
+                     end
                 | Raise xs => rr (xs, LabelMeaning.Raise)
                 | Return xs => rr (xs, LabelMeaning.Return)
                 | Runtime {args, return, ...} =>
@@ -875,6 +884,13 @@ fun shrinkFunction {globals: Statement.t vector} =
                        test = test}
                    end
               | Goto {dst, args} => goto (dst, varInfos args)
+              | PCall {func, args, cont, parl, parr} =>
+                   ([],
+                    PCall {func = func,
+                           args = simplifyVars args,
+                           cont = simplifyLabel cont,
+                           parl = simplifyLabel parl,
+                           parr = simplifyLabel parr})
               | Raise xs => ([], Raise (simplifyVars xs))
               | Return xs => ([], Return (simplifyVars xs))
               | Runtime {prim, args, return} =>
