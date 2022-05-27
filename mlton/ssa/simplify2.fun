@@ -13,6 +13,7 @@ struct
 open S
 
 structure DeepFlatten = DeepFlatten (S)
+structure DropPCall2 = DropPCall2 (S)
 structure Profile2 = Profile2 (S)
 structure RefFlatten = RefFlatten (S)
 structure RemoveUnused2 = RemoveUnused2 (S)
@@ -50,6 +51,7 @@ local
 
    val passGens = 
       List.map([("deepFlatten", DeepFlatten.transform2),
+                ("dropPCall", DropPCall2.transform2),
                 ("refFlatten", RefFlatten.transform2),
                 ("removeUnused", RemoveUnused2.transform2),
                 ("zone", Zone.transform2),

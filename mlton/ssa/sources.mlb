@@ -53,6 +53,7 @@ local
    contify.fun
    deep-flatten.fun
    drop-pcall.fun
+   drop-pcall2.fun
    duplicate-globals.fun
    flatten.fun
    inline.sig
