@@ -26,9 +26,7 @@ signature DIRECT_EXP =
                       body: t} vector
             | Word of WordSize.t * (WordX.t * t) vector
 
-           (* For now, call always uses Handler.None.  This means it should only
-            * be used for functions that cannot raise.
-            *)
+           val bug: string -> t
            val call: {func: Func.t, args: t vector, ty: Type.t} -> t
            val casee: {test: t, 
                        cases: cases,

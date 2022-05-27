@@ -64,6 +64,17 @@ and cases =
            body: t} vector
  | Word of WordSize.t * (WordX.t * t) vector
 
+fun bug msg =
+   let
+      val msg = Const (Const.string msg)
+   in
+      Seq (PrimApp {args = Vector.new1 msg,
+                    prim = Prim.MLton_bug,
+                    targs = Vector.new0 (),
+                    ty = Type.unit},
+           Bug)
+   end
+
 val call = Call
 val casee = Case
 val conApp = ConApp
