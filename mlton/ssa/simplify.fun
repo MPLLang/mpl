@@ -18,6 +18,7 @@ structure CommonSubexp = CommonSubexp (S)
 structure CombineConversions = CombineConversions (S)
 structure ConstantPropagation = ConstantPropagation (S)
 structure Contify = Contify (S)
+structure DropPCall = DropPCall (S)
 structure DuplicateGlobals = DuplicateGlobals (S)
 structure Flatten = Flatten (S)
 structure Inline = Inline (S)
@@ -226,6 +227,7 @@ local
                  ("commonSubexp", CommonSubexp.transform),
                  ("constantPropagation", ConstantPropagation.transform),
                  ("contify", Contify.transform),
+                 ("dropPCall", DropPCall.transform),
                  ("duplicateGlobals", DuplicateGlobals.transform),
                  ("flatten", Flatten.transform),
                  ("introduceLoops", IntroduceLoops.transform),
