@@ -161,6 +161,28 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
+          | PCall {func, args, cont, parl, parr} =>
+               let
+                  val {args = formals, raises, returns} = funcInfo func
+                  val _ = coerces ("pcall args/formals", values args, formals)
+                  val _ =
+                     Option.app
+                     (raises, fn _ =>
+                      Error.bug "Analyze.loopTransfer (pcall raise mismatch)")
+                  val _ =
+                     Option.app
+                     (returns, fn vs =>
+                      (coerces ("pcall cont/returns", vs, labelValues cont)
+                       ; coerces ("pcall parl/returns", vs, labelValues parl)))
+                  val _ =
+                     if Vector.isEmpty (labelValues parr)
+                        then ()
+                     else Error.bug (concat ["Analyze.loopTransfer (pcall parr ",
+                                             Label.toString parr,
+                                             " must be nullary)"])
+               in
+                  ()
+               end
           | Raise xs =>
                (case shouldRaises of
                    NONE => Error.bug "Analyze2.loopTransfer (raise mismatch at Raise)"
