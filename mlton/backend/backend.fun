@@ -973,6 +973,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                                          M.FrameInfo.Kind.C_FRAME)
                              | R.Kind.Handler => (true, M.FrameInfo.Kind.ML_FRAME)
                              | R.Kind.Jump => (false, M.FrameInfo.Kind.ML_FRAME)
+                             | R.Kind.PCallReturn _ => Error.bug "Backend.genFunc: PCallReturn"
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
@@ -1070,6 +1071,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
+                   | R.Transfer.PCall _ =>
+                        Error.bug "Backend.genTransfer: PCall"
                    | R.Transfer.Raise srcs =>
                         let
                            val handlerStackTop =
@@ -1172,6 +1175,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
+                      | R.Kind.PCallReturn _ => Error.bug "Backend.genBlock: PCallReturn"
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in
