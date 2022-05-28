@@ -69,7 +69,7 @@ struct HM_chunk {
   /** set during entanglement when in "safe" mode, to help temporarily disable
     * local GCs while the entanglement persists.
     */
-  int32_t disentangledDepth;
+  bool retireChunk;
 
   bool mightContainMultipleObjects;
   void* tmpHeap;

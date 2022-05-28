@@ -107,7 +107,7 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
   chunk->mightContainMultipleObjects = TRUE;
   chunk->tmpHeap = NULL;
   chunk->decheckState = DECHECK_BOGUS_TID;
-  chunk->disentangledDepth = INT32_MAX;
+  chunk->retireChunk = FALSE;
   chunk->magic = CHUNK_MAGIC;
 
 #if ASSERT

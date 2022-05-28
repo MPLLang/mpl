@@ -10,34 +10,6 @@
 #ifndef HIERARCHICAL_HEAP_EBR_H_
 #define HIERARCHICAL_HEAP_EBR_H_
 
-#if (defined (MLTON_GC_INTERNAL_TYPES))
-
-struct HH_EBR_local {
-  struct HM_chunkList limboBags[3];
-  int limboIdx;
-  uint32_t checkNext;
-} __attribute__((aligned(128)));
-
-// There is exactly one of these! Everyone shares a reference to it.
-typedef struct HH_EBR_shared {
-  size_t epoch;
-
-  // announcement array, length = num procs
-  // each announcement is packed: 63 bits for epoch, 1 bit for quiescent bit
-  size_t *announce;
-
-  // processor-local data, length = num procs
-  struct HH_EBR_local *local;
-} * HH_EBR_shared;
-
-#else
-
-struct HH_EBR_local;
-struct HH_EBR_shared;
-typedef struct HH_EBR_shared * HH_EBR_shared;
-
-#endif // MLTON_GC_INTERNAL_TYPES
-
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void HH_EBR_init(GC_state s);

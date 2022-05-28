@@ -570,6 +570,7 @@ void GC_lateInit(GC_state s) {
   HM_configChunks(s);
 
   HH_EBR_init(s);
+  HM_EBR_init(s);
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 
@@ -608,6 +609,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
   d->hhEBR = s->hhEBR;
+  d->hmEBR = s->hmEBR;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;

@@ -1348,7 +1348,6 @@ void assertInvariants(GC_thread thread)
          chunk = chunk->nextChunk)
     {
       assert(HM_getLevelHead(chunk) == cursor);
-      assert(chunk->disentangledDepth >= 1);
     }
   }
 

@@ -447,6 +447,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
   }
   forwardHHObjptrArgs.concurrent = false;
+  CC_workList_free(s, &(forwardHHObjptrArgs.worklist));
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
 
   for (uint32_t i = 0; i <= maxDepth; i++)
@@ -690,13 +691,30 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 
     info.depth = HM_HH_getDepth(hhTail);
     info.freedType = LGC_FREED_NORMAL_CHUNK;
-    HM_freeChunksInListWithInfo(s, level, &infoc);
+    // HM_freeChunksInListWithInfo(s, level, &infoc);
+    HM_chunk chunk = level->firstChunk;
+    while (chunk != NULL) {
+      HM_chunk next = chunk->nextChunk;
+      if (chunk->retireChunk) {
+        HM_EBR_retire(s, chunk);
+        chunk->retireChunk = false;
+      }
+      else
+      {
+        HM_freeChunk(s, chunk);
+      }
+      chunk = next;
+    }
+    HM_initChunkList(level);
     HM_HH_freeAllDependants(s, hhTail, TRUE);
     // freeFixedSize(getUFAllocator(s), HM_HH_getUFNode(hhTail));
     // freeFixedSize(getHHAllocator(s), hhTail);
 
     hhTail = nextAncestor;
   }
+
+  HM_EBR_leaveQuiescentState(s);
+  HM_EBR_enterQuiescentState(s);
 
   /* after everything has been scavenged, we have to move the pinned chunks */
   depth = thread->currentDepth + 1;
@@ -1241,6 +1259,7 @@ void markAndAdd(
     objptr op_new = relocateObject(s, op, tgtHeap, args, &relocateSuccess);
     if (relocateSuccess)
     {
+      chunk->retireChunk = true;
       *opp = op_new;
       // markObj(objptrToPointer(op_new, NULL));
       CC_workList_push(s, &(args->worklist), op_new);

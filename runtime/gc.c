@@ -73,6 +73,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/heap.c"
 #include "gc/hierarchical-heap.c"
 #include "gc/hierarchical-heap-collection.c"
+#include "gc/ebr.c"
+#include "gc/entangled-ebr.c"
 #include "gc/hierarchical-heap-ebr.c"
 #include "gc/init-world.c"
 #include "gc/init.c"

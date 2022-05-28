@@ -51,7 +51,8 @@ struct GC_state {
   uint32_t globalsLength;
   struct FixedSizeAllocator hhAllocator;
   struct FixedSizeAllocator hhUnionFindAllocator;
-  struct HH_EBR_shared * hhEBR;
+  struct EBR_shared * hhEBR;
+  struct EBR_shared * hmEBR;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */

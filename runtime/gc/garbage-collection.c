@@ -95,7 +95,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->exnStack = s->exnStack;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   beginAtomic(s);
+  // ebr for hh nodes
   HH_EBR_leaveQuiescentState(s);
+
+  // ebr for chunks
+  HM_EBR_leaveQuiescentState(s);
+  HM_EBR_enterQuiescentState(s);
 
   // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
   // while (h->nextAncestor != NULL) h = h->nextAncestor;
