@@ -354,6 +354,11 @@ structure Transfer =
                   return: Return.t}
        | Goto of {args: Operand.t vector,
                   dst: Label.t}
+       | PCall of {args: Operand.t vector,
+                   func: Func.t,
+                   cont: Label.t,
+                   parl: Label.t,
+                   parr: Label.t}
        | Raise of Operand.t vector
        | Return of Operand.t vector
        | Switch of Switch.t
@@ -375,6 +380,12 @@ structure Transfer =
              | Goto {dst, args} =>
                   seq [Label.layout dst, str " ",
                        Vector.layout Operand.layout args]
+             | PCall {args, func, cont, parl, parr} =>
+                  seq [str "PCall ", Func.layout func, str " ",
+                       Vector.layout Operand.layout args, str " ",
+                       record [("cont", Label.layout cont),
+                               ("parl", Label.layout parl),
+                               ("parr", Label.layout parr)]]
              | Raise xs => seq [str "raise ", Vector.layout Operand.layout xs]
              | Return xs => seq [str "return ", Vector.layout Operand.layout xs]
              | Switch s => Switch.layout s
@@ -390,6 +401,7 @@ structure Transfer =
       fun foreachFunc (t, f : Func.t -> unit) : unit =
          case t of
             Call {func, ...} => f func
+          | PCall {func, ...} => f func
           | _ => ()
 
       fun 'a foldLabelUse (t, a: 'a,
@@ -409,6 +421,8 @@ structure Transfer =
              | Call {args, return, ...} =>
                   useOperands (args, Return.foldLabel (return, a, label))
              | Goto {args, dst, ...} => label (dst, useOperands (args, a))
+             | PCall {args, cont, parl, parr, ...} =>
+                  useOperands (args, label (cont, label (parl, label (parr, a))))
              | Raise zs => useOperands (zs, a)
              | Return zs => useOperands (zs, a)
              | Switch s => Switch.foldLabelUse (s, a, {label = label,
@@ -484,6 +498,12 @@ structure Transfer =
              | Goto {args, dst} =>
                   Goto {args = opers args,
                         dst = label dst}
+             | PCall {args, func, cont, parl, parr} =>
+                  PCall {args = opers args,
+                         func = func,
+                         cont = label cont,
+                         parl = label parl,
+                         parr = label parr}
              | Raise zs => Raise (opers zs)
              | Return zs => Return (opers zs)
              | Switch s => Switch (Switch.replace' (s, fs))
@@ -501,6 +521,7 @@ structure Kind =
        | CReturn of {func: Type.t CFunction.t}
        | Handler
        | Jump
+       | PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t}
 
       fun isJump k =
          case k of
@@ -520,6 +541,11 @@ structure Kind =
                        record [("func", CFunction.layout (func, Type.layout))]]
              | Handler => str "Handler"
              | Jump => str "Jump"
+             | PCallReturn {cont, parl, parr} =>
+                  seq [str "PCallReturn ",
+                       record [("cont", Label.layout cont),
+                               ("parl", Label.layout parl),
+                               ("parr", Label.layout parr)]]
          end
 
       datatype frameStyle = None | OffsetsAndSize | SizeOnly
@@ -532,6 +558,7 @@ structure Kind =
                else if !Control.profile = Control.ProfileNone
                        then None
                     else SizeOnly
+          | PCallReturn _ => OffsetsAndSize
           | Handler => SizeOnly
           | Jump => None
    end
@@ -935,6 +962,12 @@ structure Program =
                           in
                              Labels.<= (returns, returnsTo func)
                              ; Labels.<= (raises, raisesTo func)
+                          end
+                     | Transfer.PCall {func, cont, parl, ...} =>
+                          let
+                             val returns = Labels.fromList [cont, parl]
+                          in
+                             Labels.<= (returns, returnsTo func)
                           end
                      | _ => ())
                 end)
