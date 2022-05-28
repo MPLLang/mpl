@@ -1059,6 +1059,7 @@ size_t CC_collectWithRoots(
   HM_freeChunksInList(s, removedFromCCBag);
 
   assert(CC_workList_isEmpty(s, &(lists.worklist)));
+  CC_workList_free(s, &(lists.worklist));
 
 #if ASSERT2 // just contains code that is sometimes useful for debugging.
   HM_assertChunkListInvariants(origList);
