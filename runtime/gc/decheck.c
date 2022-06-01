@@ -316,32 +316,105 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 #endif
 
 #ifdef DETECT_ENTANGLEMENT
-void manage_entangled(GC_state s, objptr ptr) ;
 
-void mark_mutable_frontier(
+#ifdef ASSERT
+void traverseAndCheck(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  __attribute__((unused)) void *rawArgs)
+{
+  GC_header header = getHeader(objptrToPointer(op, NULL));
+  assert (pinType(header) == PIN_ANY);
+  assert (!isFwdHeader(header));
+  if (isMutableH(s, header)) {
+    assert (ES_contains(NULL, op));
+  }
+  else {
+    struct GC_foreachObjptrClosure echeckClosure =
+        {.fun = traverseAndCheck, .env = NULL};
+    foreachObjptrInObject(s, op, &trueObjptrPredicateClosure, &echeckClosure, FALSE);
+  }
+}
+#else
+void traverseAndCheck(
     GC_state s,
     __attribute__((unused)) objptr *opp,
     objptr op,
-    __attribute__((unused))  void *rawArgs)
+    __attribute__((unused)) void *rawArgs)
 {
-  if (isMutable(s, op)) {
-    manage_entangled (s, op);
-  }
-  // else if (ES_contains(NULL, op)) {
+  (void)s;
+  (void)op;
+  return;
+}
+#endif
+
+void make_entangled(
+  GC_state s,
+  objptr *opp,
+  objptr ptr,
+  void *rawArgs)
+{
+
+  struct ManageEntangledArgs* mea = (struct ManageEntangledArgs*) rawArgs;
+
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+  decheck_tid_t allocator = chunk->decheckState;
+
+  // if (!decheckIsOrdered(mea->root, allocator)) {
+  //   // while managing entanglement, we stay ordered wrt the root of the entanglement
   //   return;
   // }
-  else {
-    struct GC_foreachObjptrClosure emanageClosure =
-        {.fun = mark_mutable_frontier, .env = NULL};
-    foreachObjptrInObject(s, op, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
-    // ES_mark (NULL, op);
+
+  GC_header header = getRacyHeader(objptrToPointer(ptr, NULL));
+  bool mutable = isMutableH(s, header);
+  bool headerChange = false, pinChange = false;
+  objptr new_ptr = ptr;
+  uint32_t unpinDepth = lcaHeapDepth(mea->reader, allocator);
+
+  if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
+  {
+    if (mutable) {
+      new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+    }
+    else
+    {
+      struct GC_foreachObjptrClosure emanageClosure =
+          {.fun = make_entangled, .env = rawArgs};
+      foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+      new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+    }
+    if (pinChange)
+    {
+      struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
+      HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+    }
   }
+  assert (!hasFwdPtr(new_ptr));
+
+  if (ptr != new_ptr) {
+    // Help LGC move along
+    assert(hasFwdPtr(ptr));
+    *opp = new_ptr;
+  }
+
+  if (mutable && !ES_contains(NULL, new_ptr)) {
+    HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), unpinDepth);
+    ES_add(s, HM_HH_getSuspects(lcaHeap), new_ptr);
+    assert(ES_contains(NULL, new_ptr));
+  }
+
+  assert (!mutable || ES_contains(NULL, new_ptr));
 }
 
-void manage_entangled(GC_state s, objptr ptr) {
+objptr manage_entangled(
+  GC_state s,
+  objptr ptr,
+  decheck_tid_t reader)
+{
 
-  GC_thread thread = getThreadCurrent(s);
-  decheck_tid_t tid = thread->decheckState;
+  // GC_thread thread = getThreadCurrent(s);
+  // decheck_tid_t tid = thread->decheckState;
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
   decheck_tid_t allocator = chunk->decheckState;
 
@@ -351,36 +424,83 @@ void manage_entangled(GC_state s, objptr ptr) {
     printf("Allocator tree depth: %d\n", tree_depth(allocator));
     printf("Allocator path: 0x%x\n", allocator.internal.path);
     printf("Allocator dag depth: %d\n", dag_depth(allocator));
-    printf("Reader tree depth: %d\n", tree_depth(tid));
-    printf("Reader path: 0x%x\n", tid.internal.path);
-    printf("Reader dag depth: %d\n", dag_depth(tid));
+    printf("Reader tree depth: %d\n", tree_depth(allocator));
+    printf("Reader path: 0x%x\n", allocator.internal.path);
+    printf("Reader dag depth: %d\n", dag_depth(allocator));
     exit(-1);
   }
 
+  uint32_t unpinDepth = lcaHeapDepth(reader, allocator);
+  GC_header header = getHeader(objptrToPointer (ptr, NULL));
 
-  uint32_t unpinDepth = lcaHeapDepth(tid, allocator);
-  bool headerChange, pinChange;
-  pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
-  if (pinChange)
-  {
-    struct HM_remembered remElem_ = {.object = ptr, .from = BOGUS_OBJPTR};
-    HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+  bool manage = isFwdHeader(header) ||
+    pinType (header) != PIN_ANY ||
+    unpinDepthOfH(header) > unpinDepth;
+
+  if (manage) {
+    struct ManageEntangledArgs mea = {
+      .reader = reader,
+      .root = allocator
+    };
+    make_entangled(s, &ptr, ptr, (void*) &mea);
   }
-  if (isMutable(s, objptrToPointer(ptr, NULL)) && !ES_contains(NULL, ptr))
-  {
-    HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
-    ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
+  else {
+    if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {
+      HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), unpinDepth);
+      ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
+      assert(ES_contains(NULL, ptr));
+    }
+    traverseAndCheck(s, &ptr, ptr, NULL);
   }
-  else if (!isMutable(s, objptrToPointer(ptr, NULL)) && headerChange) {
-    mark_mutable_frontier (s, &ptr, ptr, NULL);
-  }
+
+
+  traverseAndCheck(s, &ptr, ptr, NULL);
+  return ptr;
+  // GC_header header = getRacyHeader(objptrToPointer(ptr, NULL));
+  // bool mutable = isMutableH(s, header);
+  // bool headerChange = false, pinChange = false;
+  // objptr new_ptr = ptr;
+  // if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
+  // {
+  //   if (mutable)
+  //   {
+  //     new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+  //     if (!ES_contains(NULL, new_ptr)) {
+  //       HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
+  //       ES_add(s, HM_HH_getSuspects(lcaHeap), new_ptr);
+  //     }
+  //   }
+  //   else
+  //   {
+  //     struct GC_foreachObjptrClosure emanageClosure =
+  //         {.fun = manage_entangled, .env = NULL};
+  //     foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+  //     new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+  //   }
+  //   if (pinChange)
+  //   {
+  //     struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
+  //     HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+  //   }
+  // }
+  // else
+  // {
+  //   if (!mutable)
+  //   {
+  //     traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+  //   }
+  // }
+
+  // traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+  // return new_ptr;
 }
 
 #else
-void manage_entangled(GC_state s, objptr ptr) {
+objptr manage_entangled(GC_state s, objptr ptr, decheck_tid_t reader) {
   (void)s;
   (void)ptr;
-  return;
+  (void)reader;
+  return ptr;
 }
 #endif
 
