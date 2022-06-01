@@ -15,5 +15,6 @@
 static inline objptr* getFwdPtrp (pointer p);
 static inline objptr getFwdPtr (pointer p);
 static inline bool hasFwdPtr (pointer p);
+static inline bool isFwdHeader (GC_header h);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
