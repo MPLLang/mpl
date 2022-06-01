@@ -22,7 +22,7 @@ PRIVATE objptr Assignable_readBarrier(
   GC_state s, objptr dst, objptr* field
   );
 
-PRIVATE void Assignable_decheckObjptr(objptr dst, objptr src);
+PRIVATE objptr Assignable_decheckObjptr(objptr dst, objptr src);
 
 #endif  /* MLTON_GC_INTERNAL_BASIS */
 

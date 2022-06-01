@@ -6,14 +6,38 @@
  * MLton is released under a HPND-style license.
  * See the file MLton-LICENSE for details.
  */
-void Assignable_decheckObjptr(objptr dst, objptr src)
+#ifdef DETECT_ENTANGLEMENT
+
+objptr Assignable_decheckObjptr(objptr dst, objptr src)
 {
   GC_state s = pthread_getspecific(gcstate_key);
   s->cumulativeStatistics->numDisentanglementChecks++;
+  objptr new_src = src;
+  HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dst));
+  if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0 || !ES_contains(NULL, dst))
+  {
+    return src;
+  }
+
+  HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, src))
   {
-    manage_entangled(s, src);
+    assert (isMutable(s, dst));
+    // if (!ES_contains(NULL, dst)) {
+    //   if (!decheck(s, dst))
+    //   {
+    //     assert(false);
+    //   }
+    //   assert (isPinned(src));
+    //   assert (!hasFwdPtr(src));
+    //   assert (pinType(getHeader(src)) == PIN_ANY);
+    // }
+    objptr new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
+    assert (isPinned(new_src));
   }
+  HM_EBR_enterQuiescentState(s);
+  assert (!hasFwdPtr(new_src));
+  return new_src;
 }
 
 objptr Assignable_readBarrier(
@@ -21,49 +45,45 @@ objptr Assignable_readBarrier(
   objptr obj,
   objptr *field)
 {
+// can't rely on obj header becaues it may be forwarded.
 
-#if ASSERT
-  assert(isObjptr(obj));
-  // check that field is actually inside this object
-  pointer objp = objptrToPointer(obj, NULL);
-  GC_header header = getHeader(objp);
-  GC_objectTypeTag tag;
-  uint16_t bytesNonObjptrs;
-  uint16_t numObjptrs;
-  bool hasIdentity;
-  splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
-  pointer objend = objp;
-  if (!hasIdentity) {
-    DIE("read barrier: attempting to read immutable object "FMTOBJPTR, obj);
-  }
-  if (NORMAL_TAG == tag) {
-    objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-  }
-  else if (SEQUENCE_TAG == tag) {
-    size_t dataBytes = getSequenceLength(objp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
-    objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
-  }
-  else {
-    DIE("read barrier: cannot handle tag %u", tag);
-  }
-  pointer fieldp = (pointer)field;
-  ASSERTPRINT(
-    objp <= fieldp && fieldp + OBJPTR_SIZE <= objend,
-    "read barrier: objptr field %p outside object "FMTOBJPTR" of size %zu",
-    (void*)field,
-    obj,
-    (size_t)(objend - objp));
-#endif
-  assert(ES_contains(NULL, obj));
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
+  HM_HierarchicalHeap objHH = HM_getLevelHead(HM_getChunkOf(obj));
+  if (!isObjptr(ptr) || HM_HH_getDepth(objHH) == 0 || !ES_contains(NULL, obj))
+  {
+    return ptr;
+  }
+  HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, ptr))
   {
-    manage_entangled(s, ptr);
+    // assert (isMutable(s, obj));
+    // if (!ES_contains(NULL, obj))
+    // {
+    //   if (!decheck(s, obj)) {
+    //     assert (false);
+    //   }
+    //   assert(isPinned(ptr));
+    //   assert(!hasFwdPtr(ptr));
+    //   assert(pinType(getHeader(ptr)) == PIN_ANY);
+    // }
+    ptr = manage_entangled(s, ptr, getThreadCurrent(s)->decheckState);
+    // assert (isPinned(ptr));
   }
+  HM_EBR_enterQuiescentState(s);
+  assert (!hasFwdPtr(ptr));
 
   return ptr;
 }
+
+#else
+objptr Assignable_decheckObjptr(objptr dst, objptr src) {return src;}
+objptr Assignable_readBarrier(
+    GC_state s,
+    objptr obj,
+    objptr *field)
+    {return *field;}
+#endif
 
 void Assignable_writeBarrier(
   GC_state s,
@@ -74,36 +94,39 @@ void Assignable_writeBarrier(
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
 
-#if ASSERT
-  // check that field is actually inside this object
-  GC_header header = getHeader(dstp);
-  GC_objectTypeTag tag;
-  uint16_t bytesNonObjptrs;
-  uint16_t numObjptrs;
-  bool hasIdentity;
-  splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
-  pointer objend = dstp;
-  if (!hasIdentity) {
-    DIE("write barrier: attempting to modify immutable object "FMTOBJPTR, dst);
-  }
-  if (NORMAL_TAG == tag) {
-    objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-  }
-  else if (SEQUENCE_TAG == tag) {
-    size_t dataBytes = getSequenceLength(dstp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
-    objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
-  }
-  else {
-    DIE("write barrier: cannot handle tag %u", tag);
-  }
-  pointer fieldp = (pointer)field;
-  ASSERTPRINT(
-    dstp <= fieldp && fieldp + OBJPTR_SIZE <= objend,
-    "write barrier: objptr field %p outside object "FMTOBJPTR" of size %zu",
-    (void*)field,
-    dst,
-    (size_t)(objend - dstp));
-#endif
+  assert (!hasFwdPtr(dst));
+  assert (!isObjptr(src) || !hasFwdPtr(src));
+
+// #if ASSERT
+//   // check that field is actually inside this object
+//   GC_header header = getHeader(dstp);
+//   GC_objectTypeTag tag;
+//   uint16_t bytesNonObjptrs;
+//   uint16_t numObjptrs;
+//   bool hasIdentity;
+//   splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
+//   pointer objend = dstp;
+//   if (!hasIdentity) {
+//     DIE("write barrier: attempting to modify immutable object "FMTOBJPTR, dst);
+//   }
+//   if (NORMAL_TAG == tag) {
+//     objend += bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+//   }
+//   else if (SEQUENCE_TAG == tag) {
+//     size_t dataBytes = getSequenceLength(dstp) * (bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE));
+//     objend += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
+//   }
+//   else {
+//     DIE("write barrier: cannot handle tag %u", tag);
+//   }
+//   pointer fieldp = (pointer)field;
+//   ASSERTPRINT(
+//     dstp <= fieldp && fieldp + OBJPTR_SIZE <= objend,
+//     "write barrier: objptr field %p outside object "FMTOBJPTR" of size %zu",
+//     (void*)field,
+//     dst,
+//     (size_t)(objend - dstp));
+// #endif
 
   HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dstp));
 
@@ -126,69 +149,127 @@ void Assignable_writeBarrier(
   }
 
   /* deque down-pointers are handled separately during collection. */
-  if (dst == s->wsQueue)
+  if (dst == s->wsQueue) {
     return;
+  }
+
   uint32_t dd = dstHH->depth;
   pointer srcp = objptrToPointer(src, NULL);
   bool src_de = (HM_getLevelHead(HM_getChunkOf(srcp)) == getThreadCurrent(s)->hierarchicalHeap) || decheck(s, src);
   if (src_de) {
     bool dst_de = (dd == 1) || decheck(s, dst);
-    HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
-    if (srcHH == dstHH) {
-      /* internal pointers are always traced */
-      return;
+    if (dst_de) {
+      HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
+      if (srcHH == dstHH) {
+        /* internal pointers are always traced */
+        return;
+      }
+      uint32_t sd = srcHH->depth;
+
+      /* up pointer (snapshotted by the closure)
+       * or internal (within a chain) pointer to a snapshotted heap
+       */
+      if(dd > sd ||
+        ((HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG) &&
+        dd == sd))
+      {
+        return;
+      }
+
+      uint32_t unpinDepth = dd;
+      bool success = pinObject(src, unpinDepth, PIN_DOWN);
+
+      if (success || dd == unpinDepthOf(src))
+      {
+        struct HM_remembered remElem_ = {.object = src, .from = dst};
+        HM_remembered remElem = &remElem_;
+
+        HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), sd);
+        assert(NULL != shh);
+        assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+
+        HM_HH_rememberAtLevel(shh, remElem, false);
+        LOG(LM_HH_PROMOTION, LL_INFO,
+            "remembered downptr %" PRIu32 "->%" PRIu32 " from " FMTOBJPTR " to " FMTOBJPTR,
+            dstHH->depth, srcHH->depth,
+            dst, src);
+      }
+
+      if (dd > 0 && !ES_contains(NULL, dst)) {
+        /*if dst is not a suspect, it must be disentangled*/
+        // if (!dst_de) {
+        //   printf("problematix: %p \n", dst);
+        //   DIE("done");
+        // }
+        // assert (dst_de);
+        HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
+        ES_add(s, HM_HH_getSuspects(dhh), dst);
+      }
     }
-    uint32_t sd = srcHH->depth;
+    else {
+      if (!isPinned(dst)) {
+        #ifdef DETECT_ENTANGLEMENT
+          manage_entangled(s, dst, getThreadCurrent(s)->decheckState);
+        #endif
+      }
+      // assert (isPinned(dst));
+      // assert (ES_contains(NULL, dst));
+      manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
+    }
+
+
+    // if (!dst_de) {
+    //   assert (ES_contains(NULL, dst));
+    // }
+
     /* Depth comparisons make sense only when src && dst are on the same root-to-leaf path,
      * checking this maybe expensive, so we approximate here.
      * If both dst_de && src_de hold, they are on the same path
      * Otherwise, we assume they are on different paths.
      */
-    bool snapshotted = dst_de &&
-                        ((dd > sd) || /* up pointer (snapshotted by the closure) */
-                         ((HM_HH_getConcurrentPack(srcHH)->ccstate != CC_UNREG)
-                         && dd == sd) /* internal (within a chain) pointer to a snapshotted heap */
-                        );
 
-    if (snapshotted) {
-      return;
-    }
 
-    /* otherwise pin*/
-    // bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
-    uint32_t unpinDepth = dst_de ? dd :
-      (uint32_t)lcaHeapDepth(HM_getChunkOf(srcp)->decheckState,
-        HM_getChunkOf(dstp)->decheckState);
-    enum PinType pt = dst_de ? PIN_DOWN : PIN_ANY;
 
-    bool success = pinObject(src, unpinDepth, pt);
-    if (success || (dst_de && dd == unpinDepthOf (src))) {
-      objptr fromObj = pt == PIN_DOWN ? dst : BOGUS_OBJPTR;
-      struct HM_remembered remElem_ = {.object = src, .from = fromObj};
-      HM_remembered remElem = &remElem_;
 
-      HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), sd);
-      assert(NULL != shh);
-      assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+    // /* otherwise pin*/
+    // // bool primary_down_ptr = dst_de && dd < sd && (HM_HH_getConcurrentPack(dstHH)->ccstate == CC_UNREG);
+    //  = dst_de ? dd :
+    //   (uint32_t)lcaHeapDepth(HM_getChunkOf(srcp)->decheckState,
+    //     HM_getChunkOf(dstp)->decheckState);
+    // enum PinType pt = dst_de ? PIN_DOWN : PIN_ANY;
 
-      HM_HH_rememberAtLevel(shh, remElem, false);
-      LOG(LM_HH_PROMOTION, LL_INFO,
-        "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
-        dstHH->depth, srcHH->depth,
-        dst, src);
-    }
+    // bool success = pinTemp(s, src, unpinDepth, pt);
+    // if (success || (dst_de && dd == unpinDepthOf (src))) {
+    //   objptr fromObj = pt == PIN_DOWN ? dst : BOGUS_OBJPTR;
+    //   struct HM_remembered remElem_ = {.object = src, .from = fromObj};
+    //   HM_remembered remElem = &remElem_;
 
-    /*add dst to the suspect set*/
-    if (dd > 0 && dst_de && !ES_contains(NULL, dst)) {
-      /*if dst is not a suspect, it must be disentangled*/
-      // if (!dst_de) {
-      //   printf("problematix: %p \n", dst);
-      //   DIE("done");
-      // }
-      // assert (dst_de);
-      HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
-      ES_add(s, HM_HH_getSuspects(dhh), dst);
-    }
+    //   HM_HierarchicalHeap shh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), sd);
+    //   assert(NULL != shh);
+    //   assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
+
+    //   HM_HH_rememberAtLevel(shh, remElem, false);
+    //   LOG(LM_HH_PROMOTION, LL_INFO,
+    //     "remembered downptr %"PRIu32"->%"PRIu32" from "FMTOBJPTR" to "FMTOBJPTR,
+    //     dstHH->depth, srcHH->depth,
+    //     dst, src);
+    // }
+
+    // /*add dst to the suspect set*/
+    // if (dd > 0 && dst_de && !ES_contains(NULL, dst)) {
+    //   /*if dst is not a suspect, it must be disentangled*/
+    //   // if (!dst_de) {
+    //   //   printf("problematix: %p \n", dst);
+    //   //   DIE("done");
+    //   // }
+    //   // assert (dst_de);
+    //   HM_HierarchicalHeap dhh = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), dd);
+    //   ES_add(s, HM_HH_getSuspects(dhh), dst);
+    // }
+  } else {
+    assert (isPinned(src));
+    assert (!hasFwdPtr(src));
+    assert (pinType(getHeader(src)) == PIN_ANY);
   }
 
 
