@@ -28,6 +28,12 @@ typedef struct ConcurrentCollectArgs {
 	void* toHead;
 	void* fromHead;
   size_t bytesSaved;
+
+#if ASSERT
+  struct ChunkSet fromSpaceChunks;
+  struct ChunkSet toSpaceChunks;
+#endif
+
 } ConcurrentCollectArgs;
 
 

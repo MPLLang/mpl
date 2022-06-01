@@ -35,7 +35,7 @@ void GC_updateObjectHeader(
 #define casCC(F, O, N) ((__sync_val_compare_and_swap(F, O, N)))
 
 // void forwardPtrChunk (GC_state s, objptr *opp, void* rawArgs);
-void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args);
+void saveChunk(GC_state s, HM_chunk chunk, ConcurrentCollectArgs* args);
 
 #define ASSERT2 0
 
@@ -131,12 +131,28 @@ bool chunkIsInList(HM_chunk chunk, HM_chunkList list) {
   return FALSE;
 }
 
-bool isChunkInFromSpace(HM_chunk chunk, ConcurrentCollectArgs* args) {
-  return chunk->tmpHeap == args->fromHead;
+bool isChunkInFromSpace(
+  ARG_USED_FOR_ASSERT GC_state s,
+  HM_chunk chunk,
+  ConcurrentCollectArgs* args)
+{
+  bool result = (chunk->tmpHeap == args->fromHead);
+#if ASSERT
+  assert(result == ChunkSet_contains(s, &(args->fromSpaceChunks), chunk));
+#endif
+  return result;
 }
 
-bool isChunkInToSpace(HM_chunk chunk, ConcurrentCollectArgs* args) {
-  return chunk->tmpHeap == args->toHead;
+bool isChunkInToSpace(
+  ARG_USED_FOR_ASSERT GC_state s,
+  HM_chunk chunk,
+  ConcurrentCollectArgs* args)
+{
+  bool result = (chunk->tmpHeap == args->toHead);
+#if ASSERT
+  assert(result == ChunkSet_contains(s, &(args->toSpaceChunks), chunk));
+#endif
+  return result;
 }
 
 // JATIN_NOTE: this function should be called only for in scope objects.
@@ -146,11 +162,11 @@ bool isChunkInToSpace(HM_chunk chunk, ConcurrentCollectArgs* args) {
 // we can call getTransitivePtr on it.
 // Only after the transitive pointer is reached can we begin to inspect
 // (*p). Otherwise, all bets are off because of races
-pointer getTransitivePtr(pointer p, ConcurrentCollectArgs* args) {
+pointer getTransitivePtr(GC_state s, pointer p, ConcurrentCollectArgs* args) {
   objptr op;
 
-  assert(isChunkInFromSpace(HM_getChunkOf(p), args) ||
-          isChunkInToSpace(HM_getChunkOf(p), args));
+  assert(isChunkInFromSpace(s, HM_getChunkOf(p), args) ||
+          isChunkInToSpace(s, HM_getChunkOf(p), args));
 
   assert(!hasFwdPtr(p));
 
@@ -161,7 +177,7 @@ pointer getTransitivePtr(pointer p, ConcurrentCollectArgs* args) {
 
     HM_chunk chunk = HM_getChunkOf(p);
     if(chunk->tmpHeap == args->fromHead){
-      saveChunk(chunk, args);
+      saveChunk(s, chunk, args);
     }
     op = getFwdPtr(p);
     p = objptrToPointer(op, NULL);
@@ -206,37 +222,47 @@ void CC_HM_unlinkChunk(HM_chunkList list, HM_chunk chunk) {
   chunk->nextChunk = NULL;
 }
 
-void saveChunk(HM_chunk chunk, ConcurrentCollectArgs* args) {
+void saveChunk(
+  ARG_USED_FOR_ASSERT GC_state s,
+  HM_chunk chunk,
+  ConcurrentCollectArgs* args)
+{
   CC_HM_unlinkChunk(args->origList, chunk);
   HM_appendChunk(args->repList, chunk);
 
   assert(chunk->tmpHeap == args->fromHead);
   chunk->tmpHeap = args->toHead;
 
-  HM_assertChunkListInvariants(args->origList);
-  HM_assertChunkListInvariants(args->repList);
+#if ASSERT
+  assert(ChunkSet_contains(s, &(args->fromSpaceChunks), chunk));
+  ChunkSet_remove(s, &(args->fromSpaceChunks), chunk);
+  ChunkSet_insert(s, &(args->toSpaceChunks), chunk);
+#endif
+
+  // HM_assertChunkListInvariants(args->origList);
+  // HM_assertChunkListInvariants(args->repList);
 }
 
 bool saveNoForward(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   pointer p,
   void* rawArgs)
 {
   ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
 
   HM_chunk cand_chunk = HM_getChunkOf(p);
-  bool chunkSaved = isChunkInToSpace(cand_chunk, args);
-  bool chunkOrig  = (chunkSaved)?TRUE:isChunkInFromSpace(cand_chunk, args);
+  bool chunkSaved = isChunkInToSpace(s, cand_chunk, args);
+  bool chunkOrig  = (chunkSaved)?TRUE:isChunkInFromSpace(s, cand_chunk, args);
 
   if(chunkOrig && !chunkSaved) {
-    assert(isChunkInFromSpace(cand_chunk, args));
-    assert(getTransitivePtr(p, rawArgs) == p);
-    saveChunk(cand_chunk, args);
+    assert(isChunkInFromSpace(s, cand_chunk, args));
+    assert(getTransitivePtr(s, p, rawArgs) == p);
+    saveChunk(s, cand_chunk, args);
   }
 
   bool result = (chunkSaved || chunkOrig);
 
-  assert((!result) || isChunkInToSpace(cand_chunk, args));
+  assert((!result) || isChunkInToSpace(s, cand_chunk, args));
   return result;
 }
 
@@ -260,15 +286,15 @@ void markAndScan(GC_state s, pointer p, void* rawArgs) {
 
 // some debugging functions
 void printObjPtrInScopeFunction(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   objptr* opp,
   void* rawArgs)
 {
   objptr op = *opp;
   assert(isObjptr(op));
   pointer p = objptrToPointer (op, NULL);
-  if (isChunkInFromSpace(HM_getChunkOf(p), rawArgs)
-     && !isChunkInToSpace(HM_getChunkOf(p), rawArgs)) {
+  if (isChunkInFromSpace(s, HM_getChunkOf(p), rawArgs)
+     && !isChunkInToSpace(s, HM_getChunkOf(p), rawArgs)) {
     printf("%p \n", (void *) *opp);
   }
 }
@@ -341,12 +367,12 @@ void tryUnmarkAndAddToWorkList(
   pointer p = objptrToPointer (op, NULL);
   HM_chunk chunk = HM_getChunkOf(p);
 
-  if (!isChunkInToSpace(chunk, rawArgs)) {
+  if (!isChunkInToSpace(s, chunk, rawArgs)) {
     return;
   }
 
   if (CC_isPointerMarked(p)) {
-    assert(isChunkInToSpace(chunk, args));
+    assert(isChunkInToSpace(s, chunk, args));
     markObj(p);
     assert(!CC_isPointerMarked(p));
     CC_workList_push(s, &(args->worklist), op);
@@ -532,7 +558,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   bool saved = saveNoForward(s, p, rawArgs);
 
   if(saved && !CC_isPointerMarked(p)) {
-    assert(getTransitivePtr(p, rawArgs) == p);
+    assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
     assert(CC_isPointerMarked(p));
     args->bytesSaved += sizeofObject(s, p);
@@ -550,7 +576,7 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
   assert(isObjptr(op));
 
   if(CC_isPointerMarked(p)){
-    assert(getTransitivePtr(p, rawArgs) == p);
+    assert(getTransitivePtr(s, p, rawArgs) == p);
     markObj(p);
     assert(!CC_isPointerMarked(p));
   }
@@ -710,11 +736,16 @@ struct CC_tryUnpinOrKeepPinnedArgs {
 
   void* fromSpaceMarker;
   void* toSpaceMarker;
+
+#if ASSERT
+  ChunkSet fromSpaceChunks;
+  ChunkSet toSpaceChunks;
+#endif
 };
 
 
 void CC_tryUnpinOrKeepPinned(
-  __attribute__((unused)) GC_state s,
+  ARG_USED_FOR_ASSERT GC_state s,
   HM_remembered remElem,
   void* rawArgs)
 {
@@ -725,6 +756,7 @@ void CC_tryUnpinOrKeepPinned(
 #if ASSERT
   assert(isPinned(remElem->object));
   assert(chunk->tmpHeap != args->toSpaceMarker);
+  assert(!ChunkSet_contains(s, args->toSpaceChunks, chunk));
 #endif
 
 #if 0
@@ -740,6 +772,7 @@ void CC_tryUnpinOrKeepPinned(
 #endif
 
   if (chunk->tmpHeap != args->fromSpaceMarker) {
+    assert(!ChunkSet_contains(s, args->fromSpaceChunks, chunk));
     /** It's possible to have a remset entry for an object elsewhere in the
       * chain. (When adding an remset entry for object at ancestor, this
       * object might live in the chain rather than the primary heap. Recall,
@@ -757,6 +790,7 @@ void CC_tryUnpinOrKeepPinned(
 
   assert(isChunkInList(chunk, HM_HH_getChunkList(args->tgtHeap)));
   assert(chunk->tmpHeap == args->fromSpaceMarker);
+  assert(ChunkSet_contains(s, args->fromSpaceChunks, chunk));
   assert(HM_getLevelHead(chunk) == args->tgtHeap);
 
   HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
@@ -784,11 +818,13 @@ void CC_tryUnpinOrKeepPinned(
 #endif
 
   assert(fromChunk->tmpHeap != args->toSpaceMarker);
+  assert(!ChunkSet_contains(s, args->toSpaceChunks, fromChunk));
 
   if (fromChunk->tmpHeap == args->fromSpaceMarker)
   {
     // fromChunk is in-scope of CC. Don't need to keep this remembered entry.
     assert(isChunkInList(fromChunk, HM_HH_getChunkList(args->tgtHeap)));
+    assert(ChunkSet_contains(s, args->fromSpaceChunks, fromChunk));
     return;
   }
 
@@ -806,8 +842,7 @@ void CC_filterPinned(
   GC_state s,
   uint32_t initialDepth,
   HM_HierarchicalHeap hh,
-  void* fromSpaceMarker,
-  void* toSpaceMarker)
+  ConcurrentCollectArgs* ccArgs)
 {
   HM_chunkList oldRemSet = HM_HH_getRemSet(hh);
   struct HM_chunkList newRemSet;
@@ -817,11 +852,18 @@ void CC_filterPinned(
     "num pinned initially: %zu",
     HM_numRemembered(HM_HH_getRemSet(hh)));
 
+  void* fromSpaceMarker = ccArgs->fromHead;
+  void* toSpaceMarker = ccArgs->toHead;
+
   struct CC_tryUnpinOrKeepPinnedArgs args =
     { .newRemSet = &newRemSet
     , .tgtHeap = hh
     , .fromSpaceMarker = fromSpaceMarker
     , .toSpaceMarker = toSpaceMarker
+#if ASSERT
+    , .fromSpaceChunks = &(ccArgs->fromSpaceChunks)
+    , .toSpaceChunks = &(ccArgs->toSpaceChunks)
+#endif
     };
 
   struct HM_foreachDownptrClosure closure =
@@ -931,6 +973,11 @@ size_t CC_collectWithRoots(
   };
   CC_workList_init(s, &(lists.worklist));
 
+#if ASSERT
+  ChunkSet_init(s, &(lists.fromSpaceChunks), 1);
+  ChunkSet_init(s, &(lists.toSpaceChunks), 1);
+#endif
+
   HH_EBR_enterQuiescentState(s);
 
   // JATIN_NOTE: Some HM_hierarchical objects in origList
@@ -950,6 +997,9 @@ size_t CC_collectWithRoots(
     assert(T->tmpHeap == NULL);
     T->tmpHeap = lists.fromHead;
     T->levelHead = HM_HH_getUFNode(targetHH);
+#if ASSERT
+    ChunkSet_insert(s, &(lists.fromSpaceChunks), T);
+#endif
     assert(T->levelHead->representative == NULL);
     assert(T->levelHead->payload == targetHH);
   }
@@ -961,7 +1011,7 @@ size_t CC_collectWithRoots(
 
   // struct HM_chunkList pinnedChunks;
   // HM_initChunkList(&pinnedChunks);
-  CC_filterPinned(s, initialDepth, targetHH, lists.fromHead, lists.toHead);
+  CC_filterPinned(s, initialDepth, targetHH, &lists);
 
   struct HM_foreachDownptrClosure forwardPinnedClosure =
     {.fun = forwardPinned, .env = (void*)&lists};
@@ -1081,7 +1131,7 @@ size_t CC_collectWithRoots(
     HM_chunk tChunk = chunk->nextChunk;
     assert(chunk->tmpHeap == lists.fromHead);
     if(chunk->startGap != 0) {
-      saveChunk(chunk, &lists);
+      saveChunk(s, chunk, &lists);
       countStopGapChunks++;
       stopGapMem+=(HM_getChunkSize(chunk));
     }
@@ -1130,6 +1180,7 @@ size_t CC_collectWithRoots(
 
   for(HM_chunk chunk = repList->firstChunk;
     chunk!=NULL; chunk = chunk->nextChunk) {
+    assert(ChunkSet_contains(s, &(lists.toSpaceChunks), chunk));
     chunk->tmpHeap = NULL;
   }
 
@@ -1145,6 +1196,11 @@ size_t CC_collectWithRoots(
   HM_freeChunkWithInfo(s, stackChunk, &infoc);
   info.freedType = CC_FREED_NORMAL_CHUNK;
   cp->stack = BOGUS_OBJPTR;
+
+#if ASSERT
+  ChunkSet_free(s, &(lists.fromSpaceChunks));
+  ChunkSet_free(s, &(lists.toSpaceChunks));
+#endif
 
 // #if ASSERT
 //   struct HM_foreachDownptrClosure checkRemEntryClosure =

@@ -49,6 +49,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/block-allocator.c"
 #include "gc/call-stack.c"
 #include "gc/chunk.c"
+#include "gc/chunk-set.c"
 #include "gc/cc-work-list.c"
 #include "gc/concurrent-collection.c"
 #include "gc/concurrent-stack.c"
