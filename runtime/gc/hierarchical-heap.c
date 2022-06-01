@@ -455,8 +455,10 @@ void HM_HH_promoteChunks(
 
     assert(HM_HH_getDepth(hh) == currentDepth-1);
   }
+  assert(hh == thread->hierarchicalHeap);
 
   ES_clear(s, thread->hierarchicalHeap);
+  assert(hh == thread->hierarchicalHeap);
 
 #if ASSERT
   assert(hh == thread->hierarchicalHeap);
@@ -1347,8 +1349,7 @@ void assertInvariants(GC_thread thread)
          NULL != chunk;
          chunk = chunk->nextChunk)
     {
-      assert(HM_getLevelHead(chunk) == cursor);
-    }
+      assert(HM_getLevelHead(chunk) == cursor);    }
   }
 
   /* check sorted by depth */
