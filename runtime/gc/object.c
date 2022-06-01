@@ -39,6 +39,15 @@ GC_header getHeader (pointer p) {
   return *(getHeaderp(p));
 }
 
+GC_header getRacyHeader (pointer ptr) {
+  GC_header header = getHeader(ptr);
+  while (isFwdHeader(header)) {
+    ptr = (pointer) header;
+    header = getHeader(ptr);
+  }
+  return header;
+}
+
 /*
  * Build the header for an object, given the index to its type info.
  */
@@ -90,14 +99,18 @@ void splitHeader(GC_state s, GC_header header,
     *numObjptrsRet = numObjptrs;
 }
 
-static inline bool isMutable(GC_state s, pointer p) {
-  GC_header header = getHeader(p);
+static inline bool isMutableH(GC_state s, GC_header header) {
   GC_objectTypeTag tag;
   uint16_t bytesNonObjptrs;
   uint16_t numObjptrs;
   bool hasIdentity;
   splitHeader(s, header, &tag, &hasIdentity, &bytesNonObjptrs, &numObjptrs);
   return hasIdentity;
+}
+
+static inline bool isMutable(GC_state s, pointer p) {
+  GC_header header = getHeader(p);
+  return isMutableH(s, header);
 }
 
 /* advanceToObjectData (s, p)
