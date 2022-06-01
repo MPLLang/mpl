@@ -85,6 +85,8 @@ pointer copyObject(pointer p,
                    size_t copySize,
                    HM_HierarchicalHeap tgtHeap);
 
+void delLastObj(objptr op, size_t objectSize, HM_HierarchicalHeap tgtHeap);
+
 /**
  * ObjptrPredicateFunction for skipping stacks and threads in the hierarchical
  * heap.
@@ -459,7 +461,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       {
         toSpaceStart[i] = HM_getChunkFrontier(toSpaceList->lastChunk);
         toSpaceStartChunk[i] = toSpaceList->lastChunk;
-        assert(HM_getChunkOf(toSpaceStart[i]) == toSpaceList->lastChunk);
+        // assert(HM_getChunkOf(toSpaceStart[i]) == toSpaceList->lastChunk);
       }
     }
   }
@@ -1059,11 +1061,13 @@ objptr relocateObject(
   {
     if (!__sync_bool_compare_and_swap(getFwdPtrp(p), header, newPointer))
     {
+      delLastObj(newPointer, objectBytes, tgtHeap);
       assert(isPinned(op));
       *relocSuccess = false;
       return op;
     }
   }
+
   assert(hasFwdPtr(p));
 
   args->bytesCopied += copyBytes;
@@ -1237,10 +1241,13 @@ void markAndAdd(
   if (hasFwdPtr(p))
   {
     *opp = getFwdPtr(p);
-    assert(CC_isPointerMarked(objptrToPointer(getFwdPtr(p), NULL)));
   }
-  else if (isPinned(op))
+  else if (pinType(getHeader(p)) == PIN_DOWN)
   {
+    // it is okay to not trace PIN_DOWN header objects because the remembered set will have them
+    // and we will trace it from there.
+    // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
+    // concurrently to LGC and LGC may miss them.
     return;
   }
   else
@@ -1599,27 +1606,28 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
 
   /* otherwise, object stays pinned, and we have to scavenge this remembered
    * entry into the toSpace. */
-
   HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
-  uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
-  if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
-    HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
-    uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
-    /* if this is a down-ptr completely inside the scope,
-     * no need to in-place things reachable from it
-     */
-    if (!chunk->pinnedDuringCollection)
-    {
-      chunk->pinnedDuringCollection = TRUE;
-      HM_unlinkChunkPreserveLevelHead(
-          HM_HH_getChunkList(args->fromSpace[opDepth]),
-          chunk);
-      HM_appendChunk(&(args->pinned[opDepth]), chunk);
+  if (remElem->from != BOGUS_OBJPTR) {
+    uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
+    if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
+      HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
+      uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
+      /* if this is a down-ptr completely inside the scope,
+      * no need to in-place things reachable from it
+      */
+      if (!chunk->pinnedDuringCollection)
+      {
+        chunk->pinnedDuringCollection = TRUE;
+        HM_unlinkChunkPreserveLevelHead(
+            HM_HH_getChunkList(args->fromSpace[opDepth]),
+            chunk);
+        HM_appendChunk(&(args->pinned[opDepth]), chunk);
+      }
+      return;
     }
   }
-  else {
-    LGC_markAndScan(s, &op, op, rawArgs);
-  }
+
+  LGC_markAndScan(s, &op, op, rawArgs);
 
   // LGC_markAndScan(s, &(remElem->from), rawArgs);
 
@@ -1741,7 +1749,8 @@ void forwardHHObjptr(
   if (isObjptrInToSpace(op, args))
   {
     assert(!hasFwdPtr(objptrToPointer(op, NULL)));
-    assert(!isPinned(op));
+    // to space objects may be pinned now.
+    // assert(!isPinned(op));
     return;
   }
   else if (HM_getLevelHead(HM_getChunkOf(objptrToPointer(op, NULL))) !=
@@ -1757,7 +1766,7 @@ void forwardHHObjptr(
     assert(!hasFwdPtr(objptrToPointer(fop, NULL)));
     assert(isObjptrInToSpace(fop, args));
     assert(HM_getObjptrDepth(fop) == opDepth);
-    assert(!isPinned(fop));
+    // assert(!isPinned(fop));
     // assert(!CC_isPointerMarked(fop));
     *opp = fop;
     return;
@@ -1913,6 +1922,15 @@ pointer copyObject(pointer p,
 
   return frontier;
 }
+
+void delLastObj(objptr op, size_t objectSize, HM_HierarchicalHeap tgtHeap)
+{
+  HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
+  HM_chunk chunk = HM_getChunkOf(op);
+  assert(listContainsChunk(tgtChunkList, chunk));
+  HM_updateChunkFrontierInList(tgtChunkList, chunk, HM_getChunkFrontier(chunk) - objectSize);
+}
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 GC_objectTypeTag computeObjectCopyParameters(GC_state s, pointer p,
