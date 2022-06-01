@@ -40,7 +40,7 @@ enum PinType
  */
 bool pinObject(objptr op, uint32_t unpinDepth, enum PinType pt);
 
-void pinObjectInfo(objptr op,
+objptr pinObjectInfo(objptr op,
   uint32_t unpinDepth,
   enum PinType pt,
   bool* headerChange,
@@ -60,6 +60,8 @@ void unpinObject(objptr op);
 
 /* read the current unpin-depth of an object */
 uint32_t unpinDepthOf(objptr op);
+uint32_t unpinDepthOfH(GC_header header);
+
 
 /* unpin an object if its depth allows. Because the unpinDepth can change
  * concurrently, we want to make sure we use the logic in this function.

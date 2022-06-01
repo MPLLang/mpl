@@ -42,41 +42,51 @@ static inline GC_header getRep(enum PinType pt)
   return h;
 }
 
-bool pinObject(objptr op, uint32_t unpinDepth, enum PinType pt) {
+uint32_t unpinDepthOfH(GC_header h)
+{
+  return (h & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+}
+
+bool pinObject(objptr op, uint32_t unpinDepth, enum PinType pt)
+{
   bool a, b;
   pinObjectInfo(op, unpinDepth, pt, &a, &b);
   return a;
 }
 
-void pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
-                    bool* headerChange, bool* pinChange)
+objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
+                      bool *headerChange, bool *pinChange)
 {
   pointer p = objptrToPointer(op, NULL);
-  assert (pt != PIN_NONE);
+  assert(pt != PIN_NONE);
 
   /*initialize with false*/
   *headerChange = false;
   *pinChange = false;
 
   uint32_t maxUnpinDepth = TWOPOWER(UNPIN_DEPTH_BITS) - 1;
-  if (unpinDepth > maxUnpinDepth) {
-    DIE("unpinDepth %"PRIu32" exceeds max possible value %"PRIu32,
+  if (unpinDepth > maxUnpinDepth)
+  {
+    DIE("unpinDepth %" PRIu32 " exceeds max possible value %" PRIu32,
         unpinDepth,
         maxUnpinDepth);
-    return;
+    return op;
   }
   assert(
-    ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT
-    == (UNPIN_DEPTH_MASK & ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT)
-  );
+      ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT == (UNPIN_DEPTH_MASK & ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT));
 
-  while (true) {
+  while (true)
+  {
     GC_header header = getHeader(p);
-
     uint32_t newUnpinDepth;
-    if(isPinned(op)) {
-      uint32_t previousUnpinDepth =
-        (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+    if (isFwdHeader(header))
+    {
+      assert(pt != PIN_DOWN);
+      return pinObjectInfo((objptr)header, unpinDepth, pt, headerChange, pinChange);
+    }
+    else if (isPinned(op))
+    {
+      uint32_t previousUnpinDepth = unpinDepthOfH(header);
       newUnpinDepth = min(previousUnpinDepth, unpinDepth);
     } else {
       newUnpinDepth = unpinDepth;
@@ -89,18 +99,18 @@ void pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
         | getRep(nt);                                     // setup the pin type
 
     if(newHeader == header) {
-      return;
+      return op;
     }
     else {
       if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
         *headerChange = true;
         *pinChange = (nt != pinType(header));
-        return;
+        return op;
       }
     }
   }
   DIE("should be impossible to reach here");
-  return;
+  return op;
 }
 
 void unpinObject(objptr op) {
@@ -128,14 +138,14 @@ bool isPinned(objptr op) {
 
 uint32_t unpinDepthOf(objptr op) {
   pointer p = objptrToPointer(op, NULL);
-  uint32_t d = (getHeader(p) & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+  uint32_t d = unpinDepthOfH(getHeader(p));
   return d;
 }
 
 bool tryUnpinWithDepth(objptr op, uint32_t opDepth) {
   pointer p = objptrToPointer(op, NULL);
   GC_header header = getHeader(p);
-  uint32_t d = (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+  uint32_t d = unpinDepthOfH(header);
 
   if (d >= opDepth) {
     GC_header newHeader =
