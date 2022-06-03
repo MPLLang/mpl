@@ -973,11 +973,11 @@ fun toMachine (rssa: Rssa.Program.t) =
                                                          M.FrameInfo.Kind.C_FRAME)
                              | R.Kind.Handler => (true, M.FrameInfo.Kind.ML_FRAME)
                              | R.Kind.Jump => (false, M.FrameInfo.Kind.ML_FRAME)
-                             | R.Kind.PCallReturn _ => Error.bug "Backend.genFunc: PCallReturn"
+                             | R.Kind.PCallReturn _ => (true, M.FrameInfo.Kind.ML_FRAME)
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
-                                                  offsets = offsets,
+                                          offsets = offsets,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1071,8 +1071,31 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
-                   | R.Transfer.PCall _ =>
-                        Error.bug "Backend.genTransfer: PCall"
+                   | R.Transfer.PCall {func, args, cont, parl, parr} =>
+                        let
+                           val {liveNoFormals = contLive, size = frameSize, ...} =
+                              labelRegInfo cont
+                           val dsts =
+                              paramStackOffsets
+                              (args, R.Operand.ty, frameSize)
+                           val setupArgs =
+                              parallelMove
+                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
+                               srcs = translateOperands args}
+                           val live =
+                              Vector.concat [operandsLive contLive,
+                                             Vector.map (dsts, Live.StackOffset)]
+                           val transfer =
+                              M.Transfer.PCall
+                              {label = funcToLabel func,
+                               live = live,
+                               cont = cont,
+                               parl = parl,
+                               parr = parr,
+                               size = frameSize}
+                        in
+                           (setupArgs, transfer)
+                        end
                    | R.Transfer.Raise srcs =>
                         let
                            val handlerStackTop =
@@ -1175,7 +1198,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                      | R.Kind.PCallReturn _ => Error.bug "Backend.genBlock: PCallReturn"
+                      | R.Kind.PCallReturn _ => doContHandler M.Kind.PCallReturn
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in
