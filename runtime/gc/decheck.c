@@ -270,13 +270,15 @@ int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2)
   uint32_t p1mask = (1 << tree_depth(t1)) - 1;
   uint32_t p2 = norm_path(t2);
   uint32_t p2mask = (1 << tree_depth(t2)) - 1;
-  assert(p1 != p2);
   uint32_t shared_mask = p1mask & p2mask;
   uint32_t shared_upper_bit = shared_mask+1;
   uint32_t x = ((p1 ^ p2) & shared_mask) | shared_upper_bit;
   uint32_t lca_bit = x & -x;
   // uint32_t lca_mask = lca_bit-1;
   int llen = bitIndex(lca_bit);
+  if (p1 == p2) {
+    return tree_depth(t1) + 1;
+  }
   assert(llen == lcaLen(p1, p2));
   return llen+1;
 }
@@ -325,6 +327,7 @@ void traverseAndCheck(
   __attribute__((unused)) void *rawArgs)
 {
   GC_header header = getHeader(objptrToPointer(op, NULL));
+  pointer p = objptrToPointer (op, NULL);
   assert (pinType(header) == PIN_ANY);
   assert (!isFwdHeader(header));
   if (isMutableH(s, header)) {
@@ -333,7 +336,7 @@ void traverseAndCheck(
   else {
     struct GC_foreachObjptrClosure echeckClosure =
         {.fun = traverseAndCheck, .env = NULL};
-    foreachObjptrInObject(s, op, &trueObjptrPredicateClosure, &echeckClosure, FALSE);
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &echeckClosure, FALSE);
   }
 }
 #else
@@ -365,12 +368,14 @@ void make_entangled(
   //   // while managing entanglement, we stay ordered wrt the root of the entanglement
   //   return;
   // }
-
-  GC_header header = getRacyHeader(objptrToPointer(ptr, NULL));
+  pointer p_ptr = objptrToPointer(ptr, NULL);
+  GC_header header = getRacyHeader(p_ptr);
+  assert(!isFwdHeader(header));
   bool mutable = isMutableH(s, header);
   bool headerChange = false, pinChange = false;
   objptr new_ptr = ptr;
-  uint32_t unpinDepth = lcaHeapDepth(mea->reader, allocator);
+  // unpin depth according to the caller
+  uint32_t unpinDepth = mea->unpinDepth;
 
   if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
   {
@@ -381,8 +386,11 @@ void make_entangled(
     {
       struct GC_foreachObjptrClosure emanageClosure =
           {.fun = make_entangled, .env = rawArgs};
-      foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+      // the unpinDepth of reachable reachab maybe smaller.
+      mea->unpinDepth = min(unpinDepth, unpinDepthOfH(header));
+      foreachObjptrInObject(s, p_ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
       new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+      assert(pinType(getHeader(new_ptr)) == PIN_ANY);
     }
     if (pinChange)
     {
@@ -390,11 +398,16 @@ void make_entangled(
       HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
     }
   }
+  mea->unpinDepth = unpinDepth;
+
   assert (!hasFwdPtr(new_ptr));
 
   if (ptr != new_ptr) {
-    // Help LGC move along
+    // Help LGC move along--because this reader might traverse this pointer
+    // and it shouldn't see the forwarded one
     assert(hasFwdPtr(ptr));
+    assert(!hasFwdPtr(new_ptr));
+    assert(isPinned(new_ptr));
     *opp = new_ptr;
   }
 
@@ -403,6 +416,8 @@ void make_entangled(
     ES_add(s, HM_HH_getSuspects(lcaHeap), new_ptr);
     assert(ES_contains(NULL, new_ptr));
   }
+
+  traverseAndCheck(s, &new_ptr, new_ptr, NULL);
 
   assert (!mutable || ES_contains(NULL, new_ptr));
 }
@@ -440,7 +455,8 @@ objptr manage_entangled(
   if (manage) {
     struct ManageEntangledArgs mea = {
       .reader = reader,
-      .root = allocator
+      .root = allocator,
+      .unpinDepth = min(unpinDepthOfH(header), unpinDepth)
     };
     make_entangled(s, &ptr, ptr, (void*) &mea);
   }

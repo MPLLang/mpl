@@ -391,7 +391,8 @@ void HM_HH_promoteChunks(
       thread->hierarchicalHeap = parent;
       hh = parent;
     }
-    else {
+    else
+    {
       assert(HM_getLevelHead(thread->currentChunk) == hh);
 
 #if ASSERT

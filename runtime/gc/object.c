@@ -36,7 +36,8 @@ GC_header* getHeaderp (pointer p) {
  * Returns the header for the object pointed to by p.
  */
 GC_header getHeader (pointer p) {
-  return *(getHeaderp(p));
+  GC_header h = *(getHeaderp(p));
+  return h;
 }
 
 GC_header getRacyHeader (pointer ptr) {

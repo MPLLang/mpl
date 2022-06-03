@@ -74,7 +74,6 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
   }
   assert(
       ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT == (UNPIN_DEPTH_MASK & ((GC_header)unpinDepth) << UNPIN_DEPTH_SHIFT));
-
   while (true)
   {
     GC_header header = getHeader(p);
@@ -82,9 +81,11 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
     if (isFwdHeader(header))
     {
       assert(pt != PIN_DOWN);
-      return pinObjectInfo((objptr)header, unpinDepth, pt, headerChange, pinChange);
+      op = getFwdPtr(p);
+      p = objptrToPointer(op, NULL);
+      continue;
     }
-    else if (isPinned(op))
+    else if (pinType(header) != PIN_NONE)
     {
       uint32_t previousUnpinDepth = unpinDepthOfH(header);
       newUnpinDepth = min(previousUnpinDepth, unpinDepth);
@@ -99,12 +100,15 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
         | getRep(nt);                                     // setup the pin type
 
     if(newHeader == header) {
+      assert (!hasFwdPtr(p));
       return op;
     }
     else {
       if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
         *headerChange = true;
         *pinChange = (nt != pinType(header));
+        assert (!hasFwdPtr(p));
+        assert(pinType(newHeader) == nt);
         return op;
       }
     }
@@ -132,8 +136,10 @@ bool isPinned(objptr op) {
    * (otherwise, there could be a forward pointer in this spot)
    * ...and then check the mark
    */
-  return (1 == (h & GC_VALID_HEADER_MASK)) &&
+  bool result = (1 == (h & GC_VALID_HEADER_MASK)) &&
          (((h & PIN_MASK) >> PIN_SHIFT) > 0);
+  assert (result == (pinType(h) != PIN_NONE));
+  return result;
 }
 
 uint32_t unpinDepthOf(objptr op) {

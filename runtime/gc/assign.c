@@ -93,9 +93,10 @@ void Assignable_writeBarrier(
 {
   assert(isObjptr(dst));
   pointer dstp = objptrToPointer(dst, NULL);
+  pointer srcp = objptrToPointer(src, NULL);
 
-  assert (!hasFwdPtr(dst));
-  assert (!isObjptr(src) || !hasFwdPtr(src));
+  assert (!hasFwdPtr(dstp));
+  assert (!isObjptr(src) || !hasFwdPtr(srcp));
 
 // #if ASSERT
 //   // check that field is actually inside this object
@@ -154,7 +155,6 @@ void Assignable_writeBarrier(
   }
 
   uint32_t dd = dstHH->depth;
-  pointer srcp = objptrToPointer(src, NULL);
   bool src_de = (HM_getLevelHead(HM_getChunkOf(srcp)) == getThreadCurrent(s)->hierarchicalHeap) || decheck(s, src);
   if (src_de) {
     bool dst_de = (dd == 1) || decheck(s, dst);
@@ -268,8 +268,8 @@ void Assignable_writeBarrier(
     // }
   } else {
     assert (isPinned(src));
-    assert (!hasFwdPtr(src));
-    assert (pinType(getHeader(src)) == PIN_ANY);
+    assert (!hasFwdPtr(srcp));
+    assert (pinType(getHeader(srcp)) == PIN_ANY);
   }
 
 

@@ -787,9 +787,14 @@ void CC_tryUnpinOrKeepPinned(
 
     /* otherwise, object stays pinned, and we have to keep this remembered
     * entry into the toSpace. */
+  } else {
+    GC_header header = getHeader(objptrToPointer(remElem->object, NULL));
+    if (pinType(header) == PIN_ANY &&
+      unpinDepthOfH(header) > HM_HH_getDepth(args->tgtHeap)) {
+      return;
+    }
   }
 
-  /* grossly overapproximate for entangled objects */
   HM_remember(args->newRemSet, remElem, false);
 
 

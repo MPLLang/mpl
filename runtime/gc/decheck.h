@@ -24,6 +24,7 @@ struct ManageEntangledArgs
 {
   decheck_tid_t reader;
   decheck_tid_t root;
+  uint32_t unpinDepth;
 };
 
 #define DECHECK_BOGUS_BITS ((uint64_t)0)
