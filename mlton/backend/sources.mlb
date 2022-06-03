@@ -45,6 +45,7 @@ local
    rssa-transform.sig
    bounce-vars.fun
    collect-statics.fun
+   drop-pcall.fun
    implement-handlers.fun
    implement-profiling.fun
    insert-checks.fun
