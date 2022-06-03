@@ -111,6 +111,9 @@ fun coalesce (program as Program.T {functions, main, ...}, limit) =
                     Call {func, ...} =>
                        Graph.addEdge (graph, labelClass label,
                                       funcClass func)
+                  | PCall {func, ...} =>
+                       Graph.addEdge (graph, labelClass label,
+                                      funcClass func)
                   | Return _ =>
                        let
                           val from = labelClass label
@@ -200,6 +203,7 @@ fun simple (program as Program.T {functions, main, ...},
                     (blocks, [name], fn (Block.T {transfer, ...}, mainFns) =>
                      case transfer of
                         Call {func, ...} => func::mainFns
+                      | PCall {func, ...} => func::mainFns
                       | _ => mainFns)
                  end
             else []
@@ -282,6 +286,10 @@ fun simple (program as Program.T {functions, main, ...},
                     (List.push (funcCallSites func, label)
                      ; ignore (Graph.addEdge
                                (cgraph, {from = node, to = funcNode func})))
+               | PCall {func, ...} =>
+                    (List.push (funcCallSites func, label)
+                     ; ignore (Graph.addEdge
+                               (cgraph, {from = node, to = funcNode func})))
                | _ => ())
           end)
       (* Compute rflow. *)
@@ -320,6 +328,10 @@ fun simple (program as Program.T {functions, main, ...},
                  (blocks, fn Block.T {label, transfer, ...} =>
                   case transfer of
                      Call {func, ...} =>
+                        if sccC andalso funcInSCC func
+                           then Class.== (labelClass label, funcClass func)
+                           else ()
+                   | PCall {func, ...} =>
                         if sccC andalso funcInSCC func
                            then Class.== (labelClass label, funcClass func)
                            else ()
