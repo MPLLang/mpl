@@ -215,7 +215,14 @@ signature MACHINE =
          sig
             structure Kind:
                sig
-                  datatype t = C_FRAME | ML_FRAME
+                  datatype t =
+                     CONT_FRAME
+                   | CRETURN_FRAME
+                   | FUNC_FRAME
+                   | HANDLER_FRAME
+                   | PCALL_CONT_FRAME
+                   | PCALL_PARL_FRAME
+                   | PCALL_PARR_FRAME
                   val equals: t * t -> bool
                   val hash: t -> word
                   val layout: t -> Layout.t

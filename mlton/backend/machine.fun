@@ -713,26 +713,53 @@ structure FrameInfo =
    struct
       structure Kind =
          struct
-            datatype t = C_FRAME | ML_FRAME
+            datatype t =
+               CONT_FRAME
+             | CRETURN_FRAME
+             | FUNC_FRAME
+             | HANDLER_FRAME
+             | PCALL_CONT_FRAME
+             | PCALL_PARL_FRAME
+             | PCALL_PARR_FRAME
             fun equals (k1, k2) =
                case (k1, k2) of
-                  (C_FRAME, C_FRAME) => true
-                | (ML_FRAME, ML_FRAME) => true
+                  (CONT_FRAME, CONT_FRAME) => true
+                | (CRETURN_FRAME, CRETURN_FRAME) => true
+                | (FUNC_FRAME, FUNC_FRAME) => true
+                | (HANDLER_FRAME, HANDLER_FRAME) => true
+                | (PCALL_CONT_FRAME, PCALL_CONT_FRAME) => true
+                | (PCALL_PARL_FRAME, PCALL_PARL_FRAME) => true
+                | (PCALL_PARR_FRAME, PCALL_PARR_FRAME) => true
                 | _ => false
             local
                val newHash = Random.word
-               val c = newHash ()
-               val ml = newHash ()
+               val cont = newHash ()
+               val creturn = newHash ()
+               val func = newHash ()
+               val handler = newHash ()
+               val pcall_cont = newHash ()
+               val pcall_parl = newHash ()
+               val pcall_parr = newHash ()
             in
                fun hash k =
                   case k of
-                     C_FRAME => c
-                   | ML_FRAME => ml
+                     CONT_FRAME => cont
+                   | CRETURN_FRAME => creturn
+                   | FUNC_FRAME => func
+                   | HANDLER_FRAME => handler
+                   | PCALL_CONT_FRAME => pcall_cont
+                   | PCALL_PARL_FRAME => pcall_parl
+                   | PCALL_PARR_FRAME => pcall_parr
             end
             fun toString k =
                case k of
-                  C_FRAME => "C_FRAME"
-                | ML_FRAME => "ML_FRAME"
+                  CONT_FRAME => "CONT_FRAME"
+                | CRETURN_FRAME => "CRETURN_FRAME"
+                | FUNC_FRAME => "FUNC_FRAME"
+                | HANDLER_FRAME => "HANDLER_FRAME"
+                | PCALL_CONT_FRAME => "PCALL_CONT_FRAME"
+                | PCALL_PARL_FRAME => "PCALL_PARL_FRAME"
+                | PCALL_PARR_FRAME => "PCALL_PARR_FRAME"
             val layout = Layout.str o toString
          end
 
@@ -1330,12 +1357,12 @@ structure Program =
                let
                   datatype z = datatype Kind.t
                   exception No
-                  fun frame (frameInfo,
-                             useSlots: bool,
-                             kind: FrameInfo.Kind.t): bool =
+                  fun frame' (frameInfo,
+                              useSlots: bool,
+                              chkKind: FrameInfo.Kind.t -> bool): bool =
                      checkFrameInfo frameInfo
                      andalso
-                     FrameInfo.Kind.equals (kind, FrameInfo.kind frameInfo)
+                     chkKind (FrameInfo.kind frameInfo)
                      andalso
                      (not useSlots
                       orelse
@@ -1358,6 +1385,12 @@ structure Program =
                          (liveOffsets, FrameInfo.offsets frameInfo,
                                            Bytes.equals)
                       end) handle No => false
+                  fun frame (frameInfo,
+                             useSlots: bool,
+                             kind: FrameInfo.Kind.t): bool =
+                     frame' (frameInfo,
+                             useSlots,
+                             fn k => FrameInfo.Kind.equals (kind, k))
                   fun slotsAreInFrame (fi: FrameInfo.t): bool =
                      let
                         val size = FrameInfo.size fi
@@ -1372,7 +1405,7 @@ structure Program =
                in
                   case k of
                      Cont {args, frameInfo} =>
-                        if frame (frameInfo, true, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, true, FrameInfo.Kind.CONT_FRAME)
                            andalso slotsAreInFrame frameInfo
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
@@ -1391,13 +1424,13 @@ structure Program =
                                   then (case frameInfo of
                                            NONE => false
                                          | SOME fi =>
-                                              (frame (fi, true, FrameInfo.Kind.C_FRAME)
+                                              (frame (fi, true, FrameInfo.Kind.CRETURN_FRAME)
                                                andalso slotsAreInFrame fi))
                                else if !Control.profile = Control.ProfileNone
                                        then true
                                     else (case frameInfo of
                                              NONE => false
-                                           | SOME fi => frame (fi, false, FrameInfo.Kind.C_FRAME)))
+                                           | SOME fi => frame (fi, false, FrameInfo.Kind.CRETURN_FRAME)))
                         in
                            if ok
                               then SOME (case dst of
@@ -1406,18 +1439,23 @@ structure Program =
                            else NONE
                         end
                    | Func {frameInfo, ...} =>
-                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, false, FrameInfo.Kind.FUNC_FRAME)
                            then SOME alloc
                         else NONE
                    | Handler {args, frameInfo} =>
-                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, false, FrameInfo.Kind.HANDLER_FRAME)
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
                                        Alloc.defineLive (alloc, z)))
                         else NONE
                    | Jump => SOME alloc
                    | PCallReturn {args, frameInfo} =>
-                        if frame (frameInfo, true, FrameInfo.Kind.ML_FRAME)
+                        if frame' (frameInfo, true, fn kind =>
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_CONT_FRAME)
+                                   orelse
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARL_FRAME)
+                                   orelse
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARR_FRAME))
                            andalso slotsAreInFrame frameInfo
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
