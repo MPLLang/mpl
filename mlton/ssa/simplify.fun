@@ -120,6 +120,7 @@ val ssaPassesDefault =
    {name = "loopUnroll2", doit = LoopUnroll.transform, execute = false} ::
    {name = "commonSubexp2", doit = CommonSubexp.transform, execute = false} ::
    {name = "removeUnused4", doit = RemoveUnused.transform, execute = true} ::
+   {name = "ssaDropPCall", doit = DropPCall.transform, execute = false} ::
    nil
 
 val ssaPassesMinimal =
@@ -227,7 +228,6 @@ local
                  ("commonSubexp", CommonSubexp.transform),
                  ("constantPropagation", ConstantPropagation.transform),
                  ("contify", Contify.transform),
-                 ("dropPCall", DropPCall.transform),
                  ("duplicateGlobals", DuplicateGlobals.transform),
                  ("flatten", Flatten.transform),
                  ("introduceLoops", IntroduceLoops.transform),
@@ -247,6 +247,7 @@ local
                  ("splitTypes", SplitTypes.transform),
                  ("useless", Useless.transform),
                  ("ssaAddProfile", Profile.addProfile),
+                 ("ssaDropPCall", DropPCall.transform),
                  ("ssaDropProfile", Profile.dropProfile),
                  ("ssaBreakCriticalEdges", fn p => S.breakCriticalEdges (p, {codeMotion = true})),
                  ("ssaEliminateDeadBlocks", S.eliminateDeadBlocks),
