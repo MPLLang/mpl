@@ -1389,6 +1389,28 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         (Option.app (return, fn {return, size, ...} => push (return, size))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
+                   | PCall {label, cont, parl, parr, size, ...} =>
+                        let
+                           val _ =
+                              outputStatement
+                              (Statement.Move
+                               {dst = Operand.stackOffset
+                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 3)),
+                                       ty = Type.label parr,
+                                       volatile = false},
+                                 src = Operand.Label parr})
+                           val _ =
+                              outputStatement
+                              (Statement.Move
+                               {dst = Operand.stackOffset
+                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 2)),
+                                       ty = Type.label parl,
+                                       volatile = false},
+                                src = Operand.Label parl})
+                        in
+                           push (cont, size)
+                           ; jump label
+                        end
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2
@@ -1630,6 +1652,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
+                      | Kind.PCallReturn {frameInfo, ...} => pop frameInfo
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements
@@ -1655,6 +1678,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
+                            | PCall _ => ()
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>
