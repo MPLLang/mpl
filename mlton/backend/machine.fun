@@ -613,6 +613,12 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
+       | PCall of {label: Label.t,
+                   live: Live.t vector,
+                   cont: Label.t,
+                   parl: Label.t,
+                   parr: Label.t,
+                   size: Bytes.t}
        | Goto of Label.t
        | Raise of {raisesTo: Label.t list}
        | Return of {returnsTo: Label.t list}
@@ -645,6 +651,14 @@ structure Transfer =
                                          ("size", Bytes.layout size)])
                                 return)]]
              | Goto l => seq [str "Goto ", Label.layout l]
+             | PCall {label, live, cont, parl, parr, size} =>
+                  seq [str "PCall ",
+                       record [("label", Label.layout label),
+                               ("live", Vector.layout Live.layout live),
+                               ("cont", Label.layout cont),
+                               ("parl", Label.layout parl),
+                               ("parr", Label.layout parr),
+                               ("size", Bytes.layout size)]]
              | Raise {raisesTo} =>
                   seq [str "Raise ",
                        record [("raisesTo", List.layout Label.layout raisesTo)]]
@@ -779,6 +793,8 @@ structure Kind =
        | Handler of {args: Live.t vector,
                      frameInfo: FrameInfo.t}
        | Jump
+       | PCallReturn of {args: Live.t vector,
+                         frameInfo: FrameInfo.t}
 
       fun layout k =
          let
@@ -804,6 +820,10 @@ structure Kind =
                        record [("args", Vector.layout Live.layout args),
                                ("frameInfo", FrameInfo.layout frameInfo)]]
              | Jump => str "Jump"
+             | PCallReturn {args, frameInfo} =>
+                  seq [str "PCallReturn ",
+                       record [("args", Vector.layout Live.layout args),
+                               ("frameInfo", FrameInfo.layout frameInfo)]]
          end
 
       fun isEntry (k: t): bool =
@@ -812,6 +832,7 @@ structure Kind =
           | CReturn {func, ...} => CFunction.maySwitchThreadsTo func
           | Func _ => true
           | Handler _ => true
+          | PCallReturn _ => true
           | _ => false
 
       val frameInfoOpt =
@@ -820,6 +841,7 @@ structure Kind =
           | Func {frameInfo, ...} => SOME frameInfo
           | Handler {frameInfo, ...} => SOME frameInfo
           | Jump => NONE
+          | PCallReturn {frameInfo, ...} => SOME frameInfo
    end
 
 structure Block =
@@ -1267,6 +1289,8 @@ structure Program =
                                               | Kind.Handler {frameInfo, ...} =>
                                                    doit frameInfo
                                               | Kind.Jump => true
+                                              | Kind.PCallReturn {frameInfo, ...} =>
+                                                   doit frameInfo
                                           end)
                       | SequenceOffset {base, index, offset, scale, ty, volatile = _} =>
                            (checkOperand (base, alloc)
@@ -1392,6 +1416,13 @@ structure Program =
                                        Alloc.defineLive (alloc, z)))
                         else NONE
                    | Jump => SOME alloc
+                   | PCallReturn {args, frameInfo} =>
+                        if frame (frameInfo, true, FrameInfo.Kind.ML_FRAME)
+                           andalso slotsAreInFrame frameInfo
+                           then SOME (Vector.fold
+                                      (args, alloc, fn (z, alloc) =>
+                                       Alloc.defineLive (alloc, z)))
+                        else NONE
                end
             fun checkStatement (s: Statement.t, alloc: Alloc.t)
                : Alloc.t option =
@@ -1568,6 +1599,96 @@ structure Program =
                in
                   goto (b, raises, returns, alloc)
                end
+
+
+            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t) =
+               let
+                  val Block.T {kind, live, ...} = labelBlock label
+               in
+                  if liveIsOk (live, alloc)
+                     then
+                        (case kind of
+                            Kind.PCallReturn {args, frameInfo, ...} =>
+                               (if Bytes.equals (FrameInfo.size frameInfo, size)
+                                   then
+                                      SOME
+                                      (live,
+                                       SOME
+                                       (Vector.map
+                                        (args, fn z =>
+                                         case z of
+                                            Live.StackOffset s =>
+                                               Live.StackOffset
+                                               (StackOffset.shift (s, size))
+                                          | _ => z)))
+                                   else NONE)
+                          | _ => NONE)
+                     else NONE
+               end
+            fun pcallIsOk {alloc: Alloc.t,
+                           dst: Label.t,
+                           live: Live.t vector,
+                           cont: Label.t,
+                           parl: Label.t,
+                           parr: Label.t,
+                           size: Bytes.t} =
+               let
+                  val (contLive, contReturns) =
+                     Err.check'
+                     ("cont",
+                      fn () => checkPCallReturn (cont, size, alloc),
+                      fn () => Label.layout cont)
+                  val (parlLive, parlReturns) =
+                     Err.check'
+                     ("parl",
+                      fn () => checkPCallReturn (parl, size, alloc),
+                      fn () => Label.layout parl)
+                  val (parrLive, parrReturns) =
+                     Err.check'
+                     ("parr",
+                      fn () => checkPCallReturn (parr, size, alloc),
+                      fn () => Label.layout parr)
+                  val () =
+                     Err.check
+                     ("parlLive <= contLive",
+                      fn () => liveSubset (parlLive, contLive),
+                      fn () => Layout.tuple [Label.layout parl, Label.layout cont])
+                  val () =
+                     Err.check
+                     ("parrLive <= contLive",
+                      fn () => liveSubset (parrLive, contLive),
+                      fn () => Layout.tuple [Label.layout parr, Label.layout cont])
+                  val () =
+                     Err.check
+                     ("contReturns == parlReturns",
+                      fn () => Option.equals (contReturns, parlReturns, fn (xs, ys) =>
+                                              Vector.equals (xs, ys, Live.equals)),
+                      fn () => Layout.tuple [Label.layout cont, Label.layout parl])
+                  val () =
+                     Err.check
+                     ("parrReturns == SOME #[]",
+                      fn () => Option.equals (parrReturns, SOME (Vector.new0 ()), fn (xs, ys) =>
+                                              Vector.equals (xs, ys, Live.equals)),
+                      fn () => Label.layout parr)
+                  val b = labelBlock dst
+                  val alloc =
+                     Alloc.T
+                     (Vector.fold
+                      (live, [], fn (z, ac) =>
+                       case z of
+                          Live.StackOffset (StackOffset.T {offset, ty, volatile}) =>
+                             if Bytes.< (offset, size)
+                                then ac
+                             else (Live.StackOffset
+                                   (StackOffset.T
+                                    {offset = Bytes.- (offset, size),
+                                     ty = ty,
+                                     volatile = volatile})) :: ac
+                        | _ => ac))
+               in
+                  goto (b, NONE, contReturns, alloc)
+               end
+
             fun transferOk
                (t: Transfer.t,
                 raises: Live.t vector option,
@@ -1624,6 +1745,16 @@ structure Program =
                                   return = return,
                                   returns = returns}
                    | Goto l => jump l
+                   | PCall {label, live, cont, parl, parr, size} =>
+                        liveIsOk (live, alloc)
+                        andalso
+                        pcallIsOk {alloc = alloc,
+                                   dst = label,
+                                   live = live,
+                                   cont = cont,
+                                   parl = parl,
+                                   parr = parr,
+                                   size = size}
                    | Raise _ =>
                         (case raises of
                             NONE => false
