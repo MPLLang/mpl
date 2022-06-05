@@ -1018,9 +1018,6 @@ objptr relocateObject(
   pointer p = objptrToPointer(op, NULL);
   assert(!hasFwdPtr(p));
   assert(HM_HH_isLevelHead(tgtHeap));
-
-  HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
-
   GC_header header = getHeader(p);
   assert (!isFwdHeader(header));
 
@@ -1032,6 +1029,8 @@ objptr relocateObject(
     assert(args->concurrent);
     return op;
   }
+
+  HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
 
   size_t metaDataBytes;
   size_t objectBytes;
@@ -1047,13 +1046,10 @@ objptr relocateObject(
 
   if (!HM_getChunkOf(p)->mightContainMultipleObjects)
   {
-    /// SAM_UNSAFE :: potential bug here because race with reader
-    // what if the reader tries to access levelHead
-
     /* This chunk contains *only* this object, so no need to copy. Instead,
      * just move the chunk. Don't forget to update the levelHead, too! */
     HM_chunk chunk = HM_getChunkOf(p);
-    HM_unlinkChunk(HM_HH_getChunkList(HM_getLevelHead(chunk)), chunk);
+    HM_unlinkChunkPreserveLevelHead(HM_HH_getChunkList(HM_getLevelHead(chunk)), chunk);
     HM_appendChunk(tgtChunkList, chunk);
     chunk->levelHead = HM_HH_getUFNode(tgtHeap);
 
@@ -1066,6 +1062,7 @@ objptr relocateObject(
     return op;
   }
 
+  /* Otherwise try copying the object */
   pointer copyPointer = copyObject(p - metaDataBytes,
                                    objectBytes,
                                    copyBytes,
@@ -1078,7 +1075,6 @@ objptr relocateObject(
     assert(!isPinned(op));
     assert (__sync_bool_compare_and_swap(getFwdPtrp(p), header, newPointer));
     *(getFwdPtrp(p)) = newPointer;
-    // printf("forwarding %p from %p", p, header);
   }
   else
   {
@@ -1256,6 +1252,7 @@ void markAndAdd(
   bool isInToSpace = isObjptrInToSpace(op, args);
   if ((opDepth > args->maxDepth) || (opDepth < args->minDepth))
   {
+    /*object is outside the scope of collection*/
     return;
   }
   else if (isInToSpace) {
@@ -1264,6 +1261,7 @@ void markAndAdd(
   }
   else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk))
   {
+    /*object is outside the scope of collection*/
     return;
   }
 
@@ -1281,15 +1279,13 @@ void markAndAdd(
     return;
   }
 
-  if (pinType(getHeader(p)) == PIN_DOWN && unpinDepthOf(op) >= opDepth) {
-    // try unpinning, if it succeeds we will trace this object now.
-    disentangleObject(s, op, opDepth);
-  }
+  disentangleObject(s, op, opDepth);
+  enum PinType pt = pinType(getHeader(p));
 
-  if (pinType(getHeader(p)) == PIN_DOWN)
+  if (pt == PIN_DOWN)
   {
     // it is okay to not trace PIN_DOWN objects because the remembered set will have them
-    // and we will definitely trace; this relies on the failure of unpinning.
+    // and we will definitely trace; this relies on the failure of unpinning in disentangleObject.
     // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
     // concurrently to LGC and LGC may miss them.
     return;
@@ -1320,11 +1316,10 @@ void markAndAdd(
     else
     {
       assert (isPinned(op));
-      GC_header header = getHeader(p);
-
-      if (pinType(header) == PIN_ANY) {
-        addEntangledToRemSet(s, op, opDepth, args);
-      }
+      assert (pinType(getHeader(p)) == PIN_ANY);
+      // this is purely an optimization to prevent retracing of PIN_ANY objects
+      // so it is okay if this header read is racy. worst case the object is retraced.
+      addEntangledToRemSet(s, op, opDepth, args);
 
       if (!chunk->pinnedDuringCollection)
       {
