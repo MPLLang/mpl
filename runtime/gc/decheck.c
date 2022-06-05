@@ -362,12 +362,11 @@ void make_entangled(
   struct ManageEntangledArgs* mea = (struct ManageEntangledArgs*) rawArgs;
 
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
-  decheck_tid_t allocator = chunk->decheckState;
-
   // if (!decheckIsOrdered(mea->root, allocator)) {
   //   // while managing entanglement, we stay ordered wrt the root of the entanglement
   //   return;
   // }
+
   pointer p_ptr = objptrToPointer(ptr, NULL);
   GC_header header = getRacyHeader(p_ptr);
   assert(!isFwdHeader(header));
@@ -386,28 +385,27 @@ void make_entangled(
     {
       struct GC_foreachObjptrClosure emanageClosure =
           {.fun = make_entangled, .env = rawArgs};
-      // the unpinDepth of reachable reachab maybe smaller.
+      // the unpinDepth of reachable maybe smaller.
       mea->unpinDepth = min(unpinDepth, unpinDepthOfH(header));
       foreachObjptrInObject(s, p_ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
       new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
-      assert(pinType(getHeader(new_ptr)) == PIN_ANY);
+      assert(pinType(getHeader(objptrToPointer(new_ptr, NULL))) == PIN_ANY);
     }
     if (pinChange)
     {
       struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
-      HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+      HM_HH_rememberAtLevel(HM_getLevelHead(chunk), &(remElem_), true);
     }
   }
   mea->unpinDepth = unpinDepth;
 
-  assert (!hasFwdPtr(new_ptr));
+  assert(!hasFwdPtr(objptrToPointer(new_ptr, NULL)));
+  assert(isPinned(new_ptr));
 
   if (ptr != new_ptr) {
     // Help LGC move along--because this reader might traverse this pointer
     // and it shouldn't see the forwarded one
-    assert(hasFwdPtr(ptr));
-    assert(!hasFwdPtr(new_ptr));
-    assert(isPinned(new_ptr));
+    assert(hasFwdPtr(objptrToPointer(ptr, NULL)));
     *opp = new_ptr;
   }
 
@@ -617,12 +615,14 @@ void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t st
 }
 #endif
 
-void disentangleObject(GC_state s, objptr ptr) {
-  if (isPinned(ptr)) {
-    unpinObject(ptr);
-    if (ES_contains(NULL, ptr)) {
-      ES_unmark(s, ptr);
+bool disentangleObject(GC_state s, objptr op, uint32_t opDepth) {
+  if (isPinned(op)) {
+    bool success = tryUnpinWithDepth(op, opDepth);
+    if (success && ES_contains(NULL, op)) {
+      ES_unmark(s, op);
+      return true;
     }
   }
+  return false;
 }
 

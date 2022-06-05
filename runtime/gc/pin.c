@@ -92,7 +92,10 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
     } else {
       newUnpinDepth = unpinDepth;
     }
-    enum PinType nt = maxPT(pt, pinType(header));
+
+    /* if we are changing the unpinDepth, then the new pinType (nt) is
+     * equal to the function argument pt. Otherwise its the max. */
+    enum PinType nt = newUnpinDepth < unpinDepthOfH(header) ? pt : maxPT(pt, pinType(header));
 
     GC_header newHeader =
         (header & (~UNPIN_DEPTH_MASK))                    // clear unpin bits
@@ -149,6 +152,7 @@ uint32_t unpinDepthOf(objptr op) {
 }
 
 bool tryUnpinWithDepth(objptr op, uint32_t opDepth) {
+
   pointer p = objptrToPointer(op, NULL);
   GC_header header = getHeader(p);
   uint32_t d = unpinDepthOfH(header);
@@ -161,9 +165,7 @@ bool tryUnpinWithDepth(objptr op, uint32_t opDepth) {
 
     return __sync_bool_compare_and_swap(getHeaderp(p), header, newHeader);
   }
-
   return false;
-
 }
 
 
