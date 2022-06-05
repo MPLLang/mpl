@@ -78,8 +78,8 @@ Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
 
 static inline
 Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
-  Objptr result = __sync_val_compare_and_swap(r, x, y);
-  return Assignable_decheckObjptr(r, result);
+  Objptr res = __sync_val_compare_and_swap(r, x, y);
+  return Assignable_decheckObjptr(r, res);
 }
 
 #define ArrayW8_cas(a, i, x, y) __sync_val_compare_and_swap(((Word8*)(a)) + (i), (x), (y))
@@ -95,8 +95,8 @@ Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
 
 static inline
 Objptr ArrayP_cas(Objptr* a, Word64 i, Objptr x, Objptr y) {
-  Objptr result = __sync_val_compare_and_swap(a + i, x, y);
-  return Assignable_decheckObjptr(a, result);
+  Objptr res = __sync_val_compare_and_swap(a + i, x, y);
+  return Assignable_decheckObjptr(a, res);
 }
 
 static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {

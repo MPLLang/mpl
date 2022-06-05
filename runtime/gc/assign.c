@@ -13,30 +13,24 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   GC_state s = pthread_getspecific(gcstate_key);
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr new_src = src;
-  HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dst));
-  if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0 || !ES_contains(NULL, dst))
+  pointer dstp = objptrToPointer(dst, NULL);
+  HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dstp));
+
+  if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0)
   {
     return src;
   }
+  assert(ES_contains(NULL, dst));
 
   HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, src))
   {
-    assert (isMutable(s, dst));
-    // if (!ES_contains(NULL, dst)) {
-    //   if (!decheck(s, dst))
-    //   {
-    //     assert(false);
-    //   }
-    //   assert (isPinned(src));
-    //   assert (!hasFwdPtr(src));
-    //   assert (pinType(getHeader(src)) == PIN_ANY);
-    // }
-    objptr new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
+    assert (isMutable(s, dstp));
+    new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
   }
   HM_EBR_enterQuiescentState(s);
-  assert (!hasFwdPtr(new_src));
+  assert (!hasFwdPtr(objptrToPointer(new_src, NULL)));
   return new_src;
 }
 
@@ -49,11 +43,13 @@ objptr Assignable_readBarrier(
 
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr ptr = *field;
-  HM_HierarchicalHeap objHH = HM_getLevelHead(HM_getChunkOf(obj));
-  if (!isObjptr(ptr) || HM_HH_getDepth(objHH) == 0 || !ES_contains(NULL, obj))
+  pointer objp = objptrToPointer(obj, NULL);
+  HM_HierarchicalHeap objHH = HM_getLevelHead(HM_getChunkOf(objp));
+  if (!isObjptr(ptr) || HM_HH_getDepth(objHH) == 0)
   {
     return ptr;
   }
+  assert (ES_contains(NULL, obj));
   HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, ptr))
   {
@@ -68,22 +64,30 @@ objptr Assignable_readBarrier(
     //   assert(pinType(getHeader(ptr)) == PIN_ANY);
     // }
     ptr = manage_entangled(s, ptr, getThreadCurrent(s)->decheckState);
-    // assert (isPinned(ptr));
   }
   HM_EBR_enterQuiescentState(s);
-  assert (!hasFwdPtr(ptr));
+  assert (!hasFwdPtr(objptrToPointer(ptr, NULL)));
 
   return ptr;
 }
 
 #else
-objptr Assignable_decheckObjptr(objptr dst, objptr src) {return src;}
+
+objptr Assignable_decheckObjptr(objptr dst, objptr src) {
+  (void) dst;
+  return src;
+}
+
 objptr Assignable_readBarrier(
-    GC_state s,
-    objptr obj,
-    objptr *field)
-    {return *field;}
+  GC_state s,
+  objptr obj,
+  objptr *field) {
+  (void)s;
+  (void)obj;
+  return *field;
+}
 #endif
+
 
 void Assignable_writeBarrier(
   GC_state s,
@@ -206,14 +210,8 @@ void Assignable_writeBarrier(
         ES_add(s, HM_HH_getSuspects(dhh), dst);
       }
     }
-    else {
-      if (!isPinned(dst)) {
-        #ifdef DETECT_ENTANGLEMENT
-          manage_entangled(s, dst, getThreadCurrent(s)->decheckState);
-        #endif
-      }
-      // assert (isPinned(dst));
-      // assert (ES_contains(NULL, dst));
+    else if(dstHH->depth != 0) {
+      traverseAndCheck(s, &dst, dst, NULL);
       manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
     }
 
@@ -267,9 +265,10 @@ void Assignable_writeBarrier(
     //   ES_add(s, HM_HH_getSuspects(dhh), dst);
     // }
   } else {
-    assert (isPinned(src));
-    assert (!hasFwdPtr(srcp));
-    assert (pinType(getHeader(srcp)) == PIN_ANY);
+    // assert (isPinned(src));
+    // assert (!hasFwdPtr(srcp));
+    // assert (pinType(getHeader(srcp)) == PIN_ANY);
+    traverseAndCheck(s, &src, src, NULL);
   }
 
 
@@ -390,8 +389,9 @@ void Assignable_writeBarrier(
 //   Assignable_writeBarrier(s, dst, field, src, false);
 //   // *field = src;
 // }
-// void Assignable_casBarrier (GC_state s, objptr dst, objptr* field, objptr src) {
-//   Assignable_writeBarrier(s, dst, field, src, true);
+// void Assignable_casBarrier (objptr dst, objptr* field, objptr src) {
+//   GC_state s = pthread_getspecific(gcstate_key);
+//   Assignable_writeBarrier(s, dst, field, src);
 //   // cas(field, (*field), dst); //return?
 // }
 

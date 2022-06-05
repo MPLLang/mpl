@@ -790,13 +790,12 @@ void CC_tryUnpinOrKeepPinned(
   } else {
     GC_header header = getHeader(objptrToPointer(remElem->object, NULL));
     if (pinType(header) == PIN_ANY &&
-      unpinDepthOfH(header) > HM_HH_getDepth(args->tgtHeap)) {
+      unpinDepthOfH(header) >= HM_HH_getDepth(args->tgtHeap)) {
       return;
     }
   }
 
   HM_remember(args->newRemSet, remElem, false);
-
 
   /** SAM_NOTE: The goal of the following was to filter remset entries
     * to only keep the "shallowest" entries. But this is really tricky,
