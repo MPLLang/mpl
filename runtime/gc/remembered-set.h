@@ -54,6 +54,7 @@ void HM_remember(HM_remSet remSet, HM_remembered remElem, bool conc);
 void HM_appendRemSet(HM_remSet r1, HM_remSet r2);
 void HM_foreachRemembered(GC_state s, HM_remSet remSet, HM_foreachDownptrClosure f);
 size_t HM_numRemembered(HM_remSet remSet);
+void HM_foreachPublic(GC_state s, HM_remSet remSet, HM_foreachDownptrClosure f);
 
 #endif /* defined (MLTON_GC_INTERNAL_BASIS) */
 

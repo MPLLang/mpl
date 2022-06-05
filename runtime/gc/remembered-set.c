@@ -37,6 +37,28 @@ void HM_foreachPrivate(
   }
 }
 
+void HM_foreachPublic (
+  GC_state s,
+  HM_remSet remSet,
+  HM_foreachDownptrClosure f)
+{
+  while (TRUE)
+  {
+    struct HM_chunkList _chunkList;
+    HM_chunkList chunkList = &(_chunkList);
+    CC_popAsChunkList(&(remSet->public), chunkList);
+    if (chunkList->firstChunk == NULL)
+    {
+      break;
+    }
+    else
+    {
+      HM_foreachPrivate(s, chunkList, f);
+      HM_appendChunkList(&(remSet->private), chunkList);
+    }
+  }
+}
+
 void HM_foreachRemembered(
   GC_state s,
   HM_remSet remSet,
@@ -44,19 +66,9 @@ void HM_foreachRemembered(
 {
   assert(remSet != NULL);
   HM_foreachPrivate(s, &(remSet->private), f);
-  while (TRUE) {
-    struct HM_chunkList _chunkList;
-    HM_chunkList chunkList = &(_chunkList);
-    CC_popAsChunkList(&(remSet->public), chunkList);
-    if (chunkList->firstChunk == NULL) {
-      break;
-    }
-    else {
-      HM_foreachPrivate(s, chunkList, f);
-      HM_appendChunkList(&(remSet->private), chunkList);
-    }
-  }
+  HM_foreachPublic(s, remSet, f);
 }
+
 
 size_t HM_numRemembered(HM_remSet remSet) {
   assert(remSet != NULL);
