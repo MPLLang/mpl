@@ -44,7 +44,7 @@ void tryUnpinOrKeepPinned(
     HM_remembered remElem,
     void *rawArgs);
 
-void LGC_markAndScan(GC_state s, objptr *opp, objptr op, void *rawArgs);
+void LGC_markAndScan(GC_state s, HM_remembered remElem, void *rawArgs);
 void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
 
 void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
@@ -54,8 +54,11 @@ void forwardObjptrsOfRemembered(
     HM_remembered remElem,
     void *rawArgs);
 
-void unmarkWrapper(GC_state s, HM_remembered remElem, void *rawArgs);
-
+void unmarkWrapper(
+  __attribute__((unused)) GC_state s,
+  HM_remembered remElem,
+  __attribute__((unused)) void *rawArgs);
+void addEntangledToRemSet(GC_state s, objptr op, uint32_t opDepth, struct ForwardHHObjptrArgs *args);
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 #if ASSERT
@@ -593,9 +596,11 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 
     /* use the remembered (pinned) entries at this level as extra roots */
     /* forward the from-elements of the down-ptrs */
-    struct HM_foreachDownptrClosure closure =
-        {.fun = forwardObjptrsOfRemembered, .env = (void *)&forwardHHObjptrArgs};
-    HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
+    // struct HM_foreachDownptrClosure closure =
+    //     {.fun = forwardObjptrsOfRemembered, .env = (void *)&forwardHHObjptrArgs};
+    // HM_foreachRemembered pops the public remSet into private. So it interferes
+    // with the unmarking phase of GC.
+    // HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
 
     if (NULL != HM_HH_getChunkList(toSpaceLevel)->firstChunk)
     {
@@ -735,15 +740,22 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       continue;
     }
 
-    // HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
-    // if (toSpaceLevel != NULL) {
+    HM_HierarchicalHeap toSpaceLevel = toSpace[depth];
+    // if (fromSpaceLevel != NULL) {
     //   struct HM_foreachDownptrClosure closure =
-    //       {.fun = unmarkWrapper, .env = (void *)&forwardHHObjptrArgs};
-    //   HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
+    //       {.fun = tryUnpinOrKeepPinned, .env = (void *)&forwardHHObjptrArgs};
+    //   // HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
     //   /*go through the public of fromSpaceLevel, they will be joined later anyway*/
-    //   assert((HM_HH_getRemSet(fromSpaceLevel)->private).firstChunk == NULL);
+    //   // assert((HM_HH_getRemSet(fromSpaceLevel)->private).firstChunk == NULL);
+    //   forwardHHObjptrArgs.toDepth = depth;
     //   HM_foreachRemembered(s, HM_HH_getRemSet(fromSpaceLevel), &closure);
     // }
+
+    if (toSpaceLevel != NULL) {
+      struct HM_foreachDownptrClosure unmarkClosure =
+        {.fun = unmarkWrapper, .env = NULL};
+      HM_foreachPublic(s, HM_HH_getRemSet(toSpaceLevel), &unmarkClosure);
+    }
 
     /* unset the flags on pinned chunks and update their HH pointer */
     for (HM_chunk chunkCursor = pinned[depth].firstChunk;
@@ -753,6 +765,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       assert(chunkCursor->levelHead == HM_HH_getUFNode(fromSpaceLevel));
       assert(chunkCursor->pinnedDuringCollection);
       chunkCursor->pinnedDuringCollection = FALSE;
+      chunkCursor->retireChunk = FALSE;
     }
 
     /* put the pinned chunks into the toSpace */
@@ -1062,7 +1075,10 @@ objptr relocateObject(
   objptr newPointer = pointerToObjptr(copyPointer + metaDataBytes, NULL);
   if (!args->concurrent)
   {
+    assert(!isPinned(op));
+    assert (__sync_bool_compare_and_swap(getFwdPtrp(p), header, newPointer));
     *(getFwdPtrp(p)) = newPointer;
+    // printf("forwarding %p from %p", p, header);
   }
   else
   {
@@ -1074,9 +1090,8 @@ objptr relocateObject(
       *relocSuccess = false;
       return op;
     }
-    assert (getFwdPtr(p) == newPointer);
   }
-
+  assert (getFwdPtr(p) == newPointer);
   assert(hasFwdPtr(p));
 
   args->bytesCopied += copyBytes;
@@ -1243,7 +1258,11 @@ void markAndAdd(
   {
     return;
   }
-  else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk) && !isInToSpace)
+  else if (isInToSpace) {
+    assert(!hasFwdPtr(p));
+    return;
+  }
+  else if (args->fromSpace[opDepth] != HM_getLevelHead(chunk))
   {
     return;
   }
@@ -1257,16 +1276,27 @@ void markAndAdd(
     *opp = fop; // SAM_UNSAFE :: potential bug here because race with reader
     return;
   }
-  else if (pinType(getHeader(p)) == PIN_DOWN)
+  else if (CC_isPointerMarked(p)) {
+    assert (pinType(getHeader(p)) == PIN_ANY);
+    return;
+  }
+
+  if (pinType(getHeader(p)) == PIN_DOWN && unpinDepthOf(op) >= opDepth) {
+    // try unpinning, if it succeeds we will trace this object now.
+    disentangleObject(s, op, opDepth);
+  }
+
+  if (pinType(getHeader(p)) == PIN_DOWN)
   {
-    // it is okay to not trace PIN_DOWN header objects because the remembered set will have them
-    // and we will trace it from there.
+    // it is okay to not trace PIN_DOWN objects because the remembered set will have them
+    // and we will definitely trace; this relies on the failure of unpinning.
     // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
     // concurrently to LGC and LGC may miss them.
     return;
   }
-  else if (!isInToSpace)
+  else
   {
+    assert (!CC_isPointerMarked(p));
     assert(!hasFwdPtr(p));
     assert(args->concurrent);
     HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
@@ -1289,8 +1319,13 @@ void markAndAdd(
     }
     else
     {
-      // markObj(p);
       assert (isPinned(op));
+      GC_header header = getHeader(p);
+
+      if (pinType(header) == PIN_ANY) {
+        addEntangledToRemSet(s, op, opDepth, args);
+      }
+
       if (!chunk->pinnedDuringCollection)
       {
         chunk->pinnedDuringCollection = TRUE;
@@ -1404,18 +1439,43 @@ void phaseLoop(GC_state s, void *rawArgs, GC_foreachObjptrClosure fClosure)
   assert(CC_workList_isEmpty(s, worklist));
 }
 
+void addEntangledToRemSet(
+  GC_state s,
+  objptr op,
+  uint32_t opDepth,
+  struct ForwardHHObjptrArgs *args) {
+  pointer p = objptrToPointer(op, NULL);
+  GC_header header = getHeader(p);
+
+  if (pinType(header) == PIN_ANY && !CC_isPointerMarked(p))
+  {
+    markObj(p);
+
+    if (NULL == args->toSpace[opDepth])
+    {
+      args->toSpace[opDepth] = HM_HH_new(s, opDepth);
+    }
+
+    struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
+    HM_remember (HM_HH_getRemSet(args->toSpace[opDepth]), &remElem_, true);
+
+    traverseAndCheck(s, &op, op, NULL);
+  }
+}
+
 void LGC_markAndScan(
     GC_state s,
-    objptr *opp,
-    objptr op,
+    HM_remembered remElem,
     void *rawArgs)
 {
+  objptr op = remElem->object;
   pointer p = objptrToPointer(op, NULL);
   HM_chunk chunk = HM_getChunkOf(p);
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
   uint32_t opDepth = HM_HH_getDepth(HM_getLevelHead(chunk));
   assert(!hasFwdPtr(p));
-  CC_workList_push(s, &(args->worklist), op);
+  assert(isPinned(op));
+  addEntangledToRemSet(s, op, opDepth, args);
 
   if (!isObjptrInToSpace(op, args) && !chunk->pinnedDuringCollection)
   {
@@ -1430,19 +1490,12 @@ void LGC_markAndScan(
         chunk);
     HM_appendChunk(&(args->pinned[opDepth]), chunk);
   }
-  struct GC_foreachObjptrClosure markClosure =
-      {.fun = markAndAdd, .env = (void *)args};
-  // markAndAdd (s, opp, op, rawArgs);
-  // CC_workList_push(s, &(args->worklist), op);
-  phaseLoop(s, rawArgs, &markClosure);
-  assert(CC_workList_isEmpty(s, &(args->worklist)));
-
-  struct GC_foreachObjptrClosure checkClosure =
-      {.fun = checkFun, .env = (void *)args};
 
   CC_workList_push(s, &(args->worklist), op);
-  phaseLoop(s, rawArgs, &checkClosure);
-  // }
+  struct GC_foreachObjptrClosure markClosure =
+      {.fun = markAndAdd, .env = (void *)args};
+  phaseLoop(s, rawArgs, &markClosure);
+  assert(CC_workList_isEmpty(s, &(args->worklist)));
 }
 // void LGC_markAndScan(
 //   GC_state s,
@@ -1518,15 +1571,22 @@ void LGC_markAndScan(
 //   }
 // }
 
-void unmarkWrapper(GC_state s, HM_remembered remElem, void *rawArgs)
+void unmarkWrapper(
+  __attribute__((unused)) GC_state s,
+  HM_remembered remElem,
+  __attribute__((unused)) void *rawArgs)
 {
-  struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
-  struct GC_foreachObjptrClosure unmarkClosure =
-      {.fun = unmarkAndAdd, .env = args};
+  objptr op = remElem->object;
+  pointer p = objptrToPointer (op, NULL);
+  assert (pinType(getHeader(p)) == PIN_ANY);
+  if (CC_isPointerMarked(p)) {markObj(p);}
+  // struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArgs;
+  // struct GC_foreachObjptrClosure unmarkClosure =
+  //     {.fun = unmarkAndAdd, .env = args};
 
-  unmarkAndAdd(s, &(remElem->object), remElem->object, rawArgs);
-  CC_workList_push(s, &(args->worklist), remElem->object);
-  phaseLoop(s, rawArgs, &unmarkClosure);
+  // unmarkAndAdd(s, &(remElem->object), remElem->object, rawArgs);
+  // CC_workList_push(s, &(args->worklist), remElem->object);
+  // phaseLoop(s, rawArgs, &unmarkClosure);
   // unmark(s, &(remElem->object), remElem->object, rawArgs);
 }
 
@@ -1567,8 +1627,8 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
     args->toSpace[opDepth] = HM_HH_new(s, opDepth);
   }
 
-  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
 #if ASSERT
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
   assert(opDepth <= args->maxDepth);
   HM_HierarchicalHeap hh = HM_getLevelHead(chunk);
   assert(args->fromSpace[opDepth] == hh);
@@ -1576,6 +1636,8 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
     assert(listContainsChunk(&(args->pinned[opDepth]), chunk));
   else
     assert(hhContainsChunk(args->fromSpace[opDepth], chunk));
+  assert(HM_getObjptrDepth(op) == opDepth);
+  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 #endif
 
 #if 0
@@ -1594,8 +1656,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   }
 #endif
 
-  assert(HM_getObjptrDepth(op) == opDepth);
-  assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 
   bool unpin = tryUnpinWithDepth(op, opDepth);
 
@@ -1630,8 +1690,13 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   }
 
   /* otherwise, object stays pinned, and we have to scavenge this remembered
-   * entry into the toSpace. */
-  HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
+   * entry into the toSpace.
+   * Entangled entries are added later because we use mark&sweep on them
+   * and use the rememebered set later for unmarking.
+   */
+  if (remElem->from != BOGUS_OBJPTR) {
+    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
+  }
   // if (remElem->from != BOGUS_OBJPTR) {
   //   uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
   //   if ((fromDepth <= args->maxDepth) && (fromDepth >= args->minDepth)) {
@@ -1651,8 +1716,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   //     return;
   //   }
   // }
-
-  LGC_markAndScan(s, &op, op, rawArgs);
+  LGC_markAndScan(s, remElem, rawArgs);
 
   // LGC_markAndScan(s, &(remElem->from), rawArgs);
 
@@ -1819,7 +1883,7 @@ void forwardHHObjptr(
   }
   else
   {
-    disentangleObject(s, op);
+    disentangleObject(s, op, opDepth);
     // This object should have been previously unpinned
     // unpinObject(op);
   }
