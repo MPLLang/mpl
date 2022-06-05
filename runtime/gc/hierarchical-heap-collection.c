@@ -59,6 +59,15 @@ void unmarkWrapper(
   HM_remembered remElem,
   __attribute__((unused)) void *rawArgs);
 void addEntangledToRemSet(GC_state s, objptr op, uint32_t opDepth, struct ForwardHHObjptrArgs *args);
+
+static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrArgs *args, uint32_t depth) {
+  if (args->toSpace[depth] == NULL)
+  {
+    /* Level does not exist, so create it */
+    args->toSpace[depth] = HM_HH_new(s, depth);
+  }
+  return args->toSpace[depth];
+}
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 #if ASSERT
@@ -1227,11 +1236,7 @@ void copySuspect(
     return;
   }
   uint32_t opDepth = args->toDepth;
-  if (NULL == args->toSpace[opDepth])
-  {
-    args->toSpace[opDepth] = HM_HH_new(s, opDepth);
-  }
-  HM_storeInchunkList(HM_HH_getSuspects(args->toSpace[opDepth]), &new_ptr, sizeof(objptr));
+  HM_storeInchunkList(HM_HH_getSuspects(toSpaceHH(s, args, opDepth)), &new_ptr, sizeof(objptr));
 }
 
 bool headerForwarded(GC_header h)
@@ -1295,13 +1300,7 @@ void markAndAdd(
     assert (!CC_isPointerMarked(p));
     assert(!hasFwdPtr(p));
     assert(args->concurrent);
-    HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
-    if (tgtHeap == NULL)
-    {
-      /* Level does not exist, so create it */
-      tgtHeap = HM_HH_new(s, opDepth);
-      args->toSpace[opDepth] = tgtHeap;
-    }
+    HM_HierarchicalHeap tgtHeap = toSpaceHH(s, args, opDepth);
     assert(p == objptrToPointer(op, NULL));
     bool relocateSuccess;
     objptr op_new = relocateObject(s, op, tgtHeap, args, &relocateSuccess);
@@ -1445,14 +1444,8 @@ void addEntangledToRemSet(
   if (pinType(header) == PIN_ANY && !CC_isPointerMarked(p))
   {
     markObj(p);
-
-    if (NULL == args->toSpace[opDepth])
-    {
-      args->toSpace[opDepth] = HM_HH_new(s, opDepth);
-    }
-
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
-    HM_remember (HM_HH_getRemSet(args->toSpace[opDepth]), &remElem_, true);
+    HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
 
     traverseAndCheck(s, &op, op, NULL);
   }
@@ -1616,12 +1609,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
    * (getLevelHead, etc.), but this should be faster. The toDepth field
    * is set by the loop that calls this function */
   uint32_t opDepth = args->toDepth;
-
-  if (NULL == args->toSpace[opDepth])
-  {
-    args->toSpace[opDepth] = HM_HH_new(s, opDepth);
-  }
-
 #if ASSERT
   HM_chunk chunk = HM_getChunkOf(objptrToPointer(op, NULL));
   assert(opDepth <= args->maxDepth);
@@ -1634,23 +1621,6 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
   assert(HM_getObjptrDepth(op) == opDepth);
   assert(HM_getLevelHead(chunk) == args->fromSpace[opDepth]);
 #endif
-
-#if 0
-  /** If it's not in our from-space, then it's entangled.
-    * KEEP THE ENTRY but don't do any of the other nasty stuff.
-    *
-    * SAM_NOTE: pinned chunks still have their HH set to the from-space,
-    * despite living in separate chunklists.
-    */
-  if (opDepth > args->maxDepth || args->fromSpace[opDepth] != hh) {
-    assert(s->controls->manageEntanglement);
-    /** TODO: assert entangled here */
-
-    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem);
-    return;
-  }
-#endif
-
 
   bool unpin = tryUnpinWithDepth(op, opDepth);
 
@@ -1690,7 +1660,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
    * and use the rememebered set later for unmarking.
    */
   if (remElem->from != BOGUS_OBJPTR) {
-    HM_remember(HM_HH_getRemSet(args->toSpace[opDepth]), remElem, false);
+    HM_remember(HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), remElem, false);
   }
   // if (remElem->from != BOGUS_OBJPTR) {
   //   uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
@@ -1923,13 +1893,7 @@ void forwardHHObjptr(
       break;
     }
 
-    HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
-    if (tgtHeap == NULL)
-    {
-      /* Level does not exist, so create it */
-      tgtHeap = HM_HH_new(s, opDepth);
-      args->toSpace[opDepth] = tgtHeap;
-    }
+    HM_HierarchicalHeap tgtHeap = toSpaceHH(s, args, opDepth);
     assert(p == objptrToPointer(op, NULL));
 
     /* use the forwarding pointer */
