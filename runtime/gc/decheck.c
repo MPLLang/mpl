@@ -615,14 +615,16 @@ void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t st
 }
 #endif
 
+// returns true if the object is unpinned.
 bool disentangleObject(GC_state s, objptr op, uint32_t opDepth) {
-  if (isPinned(op)) {
+  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
     bool success = tryUnpinWithDepth(op, opDepth);
     if (success && ES_contains(NULL, op)) {
       ES_unmark(s, op);
       return true;
     }
+    return false;
   }
-  return false;
+  return true;
 }
 
