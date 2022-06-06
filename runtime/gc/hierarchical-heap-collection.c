@@ -49,7 +49,7 @@ void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
 
 void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
 
-void forwardObjptrsOfRemembered(
+void forwardFromObjsOfRemembered(
     GC_state s,
     HM_remembered remElem,
     void *rawArgs);
@@ -603,13 +603,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
         depth,
         HM_numRemembered(HM_HH_getRemSet(toSpaceLevel)));
 
-    /* use the remembered (pinned) entries at this level as extra roots */
     /* forward the from-elements of the down-ptrs */
-    // struct HM_foreachDownptrClosure closure =
-    //     {.fun = forwardObjptrsOfRemembered, .env = (void *)&forwardHHObjptrArgs};
+    struct HM_foreachDownptrClosure closure =
+        {.fun = forwardFromObjsOfRemembered, .env = (void *)&forwardHHObjptrArgs};
     // HM_foreachRemembered pops the public remSet into private. So it interferes
-    // with the unmarking phase of GC.
-    // HM_foreachRemembered(s, HM_HH_getRemSet(toSpaceLevel), &closure);
+    // with the unmarking phase of GC. So use HM_foreachPrivate instead.
+    HM_foreachPrivate(s, &(HM_HH_getRemSet(toSpaceLevel)->private), &closure);
 
     if (NULL != HM_HH_getChunkList(toSpaceLevel)->firstChunk)
     {
@@ -1309,7 +1308,6 @@ void markAndAdd(
       chunk->retireChunk = true;
       *opp = op_new;
       assert(!hasFwdPtr(objptrToPointer(op_new, NULL)));
-      // markObj(objptrToPointer(op_new, NULL));
       CC_workList_push(s, &(args->worklist), op_new);
     }
     else
@@ -1336,33 +1334,6 @@ void markAndAdd(
       CC_workList_push(s, &(args->worklist), op);
     }
   }
-  // else if ()
-  // {
-  //   if (!CC_isPointerMarked(p))
-  //   {
-  //     assert(args->fromSpace[opDepth] == HM_getLevelHead(chunk));
-  //     markObj(p);
-
-  //   } else {
-  //     assert(args->fromSpace[opDepth] == HM_getLevelHead(chunk));
-  //     assert(chunk->pinnedDuringCollection);
-  //   }
-  // }
-  // else if (!hasFwdPtr(p)) {
-  //   assert(args->concurrent);
-  //   HM_HierarchicalHeap tgtHeap = args->toSpace[opDepth];
-  //   if (tgtHeap == NULL)
-  //   {
-  //     /* Level does not exist, so create it */
-  //     tgtHeap = HM_HH_new(s, opDepth);
-  //     args->toSpace[opDepth] = tgtHeap;
-  //   }
-  //   assert(p == objptrToPointer(op, NULL));
-
-  //   /* use the forwarding pointer */
-  //   *opp = relocateObject(s, op, tgtHeap, args);
-
-  // }
   return;
 }
 
@@ -1447,7 +1418,7 @@ void addEntangledToRemSet(
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
     HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
 
-    traverseAndCheck(s, &op, op, NULL);
+    // traverseAndCheck(s, &op, op, NULL);
   }
 }
 
@@ -1710,25 +1681,23 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
 
 // JATIN_TODO: CHANGE NAME TO FORWARD FROM
 /// COULD BE HEKLPFUL FOR DEGBUGGING TO FORWARD THE OBJECTS ANYWAY
-void forwardObjptrsOfRemembered(GC_state s, HM_remembered remElem, void *rawArgs)
+void forwardFromObjsOfRemembered(GC_state s, HM_remembered remElem, void *rawArgs)
 {
   objptr op = remElem->object;
 
   assert(isPinned(op));
 
-  struct GC_foreachObjptrClosure closure =
-      {.fun = forwardHHObjptr, .env = rawArgs};
+  // struct GC_foreachObjptrClosure closure =
+  //     {.fun = forwardHHObjptr, .env = rawArgs};
 
-  foreachObjptrInObject(
-      s,
-      objptrToPointer(op, NULL),
-      &trueObjptrPredicateClosure,
-      &closure,
-      FALSE);
-  if (remElem->from != BOGUS_OBJPTR)
-  {
-    forwardHHObjptr(s, &(remElem->from), remElem->from, rawArgs);
-  }
+  // foreachObjptrInObject(
+  //     s,
+  //     objptrToPointer(op, NULL),
+  //     &trueObjptrPredicateClosure,
+  //     &closure,
+  //     FALSE);
+  assert (remElem->from != BOGUS_OBJPTR);
+  forwardHHObjptr(s, &(remElem->from), remElem->from, rawArgs);
 }
 
 /* ========================================================================= */
@@ -2092,6 +2061,7 @@ void checkRememberedEntry(
     HM_remembered remElem,
     void *args)
 {
+  return;
   objptr object = remElem->object;
 
   HM_HierarchicalHeap hh = (HM_HierarchicalHeap)args;
