@@ -211,7 +211,7 @@ void Assignable_writeBarrier(
       }
     }
     else if(dstHH->depth != 0) {
-      traverseAndCheck(s, &dst, dst, NULL);
+      // traverseAndCheck(s, &dst, dst, NULL);
       manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
     }
 
