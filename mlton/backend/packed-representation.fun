@@ -1582,11 +1582,7 @@ structure Objptrs =
                                        shift)
                   (* We mask 19 bits, because header words reserve 19 bits for the
                    * type index. See runtime/gc/object.h *)
-                  val wmask = 0wx7ffff
-                  val wmaskint = Word.toInt wmask
-                  val wmaskintInf = IntInf.fromInt wmaskint
-                  (* val mask = Operand.word (WordX.fromIntInf (mark_mask, WordSize.shiftArg)) *)
-                  val mask = Operand.word (WordX.fromIntInf (wmaskintInf, WordSize.shiftArg))
+                  val mask = Operand.word (WordX.fromIntInf (0x7ffff, WordSize.objptrHeader ()))
                   val (s2, tag2) = Statement.andb (tag, mask)
                 in
                     ([s, s2], Switch (Switch.T {cases = cases,
