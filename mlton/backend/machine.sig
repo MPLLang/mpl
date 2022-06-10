@@ -185,6 +185,12 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
+             | PCall of {label: Label.t, (* must be kind Func *)
+                         live: Live.t vector,
+                         cont: Label.t, (* must be kind PCallReturn *)
+                         parl: Label.t, (* must be kind PCallReturn *)
+                         parr: Label.t, (* must be kind PCallReturn *)
+                         size: Bytes.t}
              | Raise of {raisesTo: Label.t list}
              | Return of {returnsTo: Label.t list}
              | Switch of Switch.t
@@ -209,7 +215,14 @@ signature MACHINE =
          sig
             structure Kind:
                sig
-                  datatype t = C_FRAME | ML_FRAME
+                  datatype t =
+                     CONT_FRAME
+                   | CRETURN_FRAME
+                   | FUNC_FRAME
+                   | HANDLER_FRAME
+                   | PCALL_CONT_FRAME
+                   | PCALL_PARL_FRAME
+                   | PCALL_PARR_FRAME
                   val equals: t * t -> bool
                   val hash: t -> word
                   val layout: t -> Layout.t
@@ -246,6 +259,8 @@ signature MACHINE =
              | Handler of {args: Live.t vector,
                            frameInfo: FrameInfo.t}
              | Jump
+             | PCallReturn of {args: Live.t vector,
+                               frameInfo: FrameInfo.t}
 
             val isEntry: t -> bool
             val frameInfoOpt: t -> FrameInfo.t option

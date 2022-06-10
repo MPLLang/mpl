@@ -542,19 +542,23 @@ fun allocate {function = f: Rssa.Function.t,
                                   :: stackInit
                              else stackInit)
              val a = Allocation.new (stackInit, temporariesInit)
+             fun mkSize extra =
+                Bytes.align
+                (Bytes.+ (Allocation.stackSize a, extra),
+                 {alignment = (case !Control.align of
+                                  Control.Align4 => Bytes.inWord32
+                                | Control.Align8 => Bytes.inWord64)})
              val size =
                 case kind of
-                   Kind.Handler =>
+                   Kind.Cont _ => mkSize (Runtime.labelSize ())
+                 | Kind.CReturn _ => mkSize (Runtime.labelSize ())
+                 | Kind.Handler =>
                       (case handlersInfo of
                           NONE => Error.bug "AllocateVariables.allocate: Handler with no handler offset"
                         | SOME {handlerOffset, ...} =>
                              Bytes.+ (handlerOffset, Runtime.labelSize ()))
-                 | _ =>
-                      Bytes.align
-                      (Bytes.+ (Allocation.stackSize a, Runtime.labelSize ()),
-                       {alignment = (case !Control.align of
-                                        Control.Align4 => Bytes.inWord32
-                                      | Control.Align8 => Bytes.inWord64)})
+                 | Kind.Jump => mkSize Bytes.zero
+                 | Kind.PCallReturn _ => mkSize (Bytes.* (Runtime.labelSize (), 3))
              val _ =
                 if Bytes.isAligned (size, {alignment = (case !Control.align of
                                                            Control.Align4 => Bytes.inWord32

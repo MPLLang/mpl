@@ -145,6 +145,11 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
                                        VarInfo.Arg i' => ArgInfo.<= (i', i)
                                      | VarInfo.None => ()
                                      | VarInfo.Tuple => ArgInfo.tuple i))
+                       | PCall {args, cont, parl, parr, ...} =>
+                            (forces args
+                             ; forceArgs cont
+                             ; forceArgs parl
+                             ; forceArgs parr)
                        | Raise xs => forces xs
                        | Return xs => forces xs
                        | Runtime {args, return, ...} =>

@@ -968,15 +968,28 @@ fun toMachine (rssa: Rssa.Program.t) =
                                []
                          val (entry, kind) =
                             case kind of
-                               R.Kind.Cont _=> (true, M.FrameInfo.Kind.ML_FRAME)
+                               R.Kind.Cont _=> (true, M.FrameInfo.Kind.CONT_FRAME)
                              | R.Kind.CReturn {func} => (CFunction.maySwitchThreadsTo func,
-                                                         M.FrameInfo.Kind.C_FRAME)
-                             | R.Kind.Handler => (true, M.FrameInfo.Kind.ML_FRAME)
-                             | R.Kind.Jump => (false, M.FrameInfo.Kind.ML_FRAME)
+                                                         M.FrameInfo.Kind.CRETURN_FRAME)
+                             | R.Kind.Handler => (true, M.FrameInfo.Kind.HANDLER_FRAME)
+                             | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
+                             | R.Kind.PCallReturn {cont, parl, parr} =>
+                                  let
+                                     val kind =
+                                        if Label.equals (label, cont)
+                                           then M.FrameInfo.Kind.PCALL_CONT_FRAME
+                                        else if Label.equals (label, parl)
+                                           then M.FrameInfo.Kind.PCALL_PARL_FRAME
+                                        else if Label.equals (label, parr)
+                                           then M.FrameInfo.Kind.PCALL_PARR_FRAME
+                                        else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn"
+                                  in
+                                     (true, kind)
+                                  end
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
-                                                  offsets = offsets,
+                                          offsets = offsets,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1069,6 +1082,31 @@ fun toMachine (rssa: Rssa.Program.t) =
                         in
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
+                        end
+                   | R.Transfer.PCall {func, args, cont, parl, parr} =>
+                        let
+                           val {liveNoFormals = contLive, size = frameSize, ...} =
+                              labelRegInfo cont
+                           val dsts =
+                              paramStackOffsets
+                              (args, R.Operand.ty, frameSize)
+                           val setupArgs =
+                              parallelMove
+                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
+                               srcs = translateOperands args}
+                           val live =
+                              Vector.concat [operandsLive contLive,
+                                             Vector.map (dsts, Live.StackOffset)]
+                           val transfer =
+                              M.Transfer.PCall
+                              {label = funcToLabel func,
+                               live = live,
+                               cont = cont,
+                               parl = parl,
+                               parr = parr,
+                               size = frameSize}
+                        in
+                           (setupArgs, transfer)
                         end
                    | R.Transfer.Raise srcs =>
                         let
@@ -1172,6 +1210,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
+                      | R.Kind.PCallReturn _ => doContHandler M.Kind.PCallReturn
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in
@@ -1190,7 +1229,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                let
                   val frameInfo =
                      getFrameInfo {entry = true,
-                                   kind = M.FrameInfo.Kind.ML_FRAME,
+                                   kind = M.FrameInfo.Kind.FUNC_FRAME,
                                    offsets = [],
                                    size = Bytes.zero,
                                    sourceSeqIndex = NONE}

@@ -350,7 +350,7 @@ void GC_handleSigProf (__attribute__ ((unused)) int signum) {
     sourceSeqIndex = s->sourceMaps.curSourceSeqIndex;
   } else {
     GC_frameIndex frameIndex = getCachedStackTopFrameIndex (s);
-    if (C_FRAME == s->frameInfos[frameIndex].kind)
+    if (CRETURN_FRAME == s->frameInfos[frameIndex].kind)
       sourceSeqIndex = s->frameInfos[frameIndex].sourceSeqIndex;
     else {
       sourceSeqIndex = s->sourceMaps.curSourceSeqIndex;

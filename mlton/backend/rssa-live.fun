@@ -167,11 +167,14 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
             fun goto l = LiveInfo.addEdge (b, #argInfo (labelInfo l))
             (* Make sure that a cont's live vars includes variables live in its
              * handler.
+             * Make sure that all PCall returns include the live vars of the other returns.
              *)
             val _ =
                case kind of
                   Kind.Cont {handler, ...} =>
                      Handler.foreachLabel (handler, goto)
+                | Kind.PCallReturn {cont, parl, parr} =>
+                     (goto cont; goto parl; goto parr)
                 | _ => ()
             fun define (x: Var.t): unit = setDefined (x, b)
             fun use (x: Var.t): unit =

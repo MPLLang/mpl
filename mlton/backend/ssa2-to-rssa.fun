@@ -810,7 +810,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
       val {get = labelInfo: (Label.t ->
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
-                              handler: Label.t option ref}),
+                              handler: Label.t option ref,
+                              pcallReturn: ({cont: Label.t,
+                                             parl: Label.t,
+                                             parr: Label.t} * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("label info", Label.layout))
@@ -863,25 +866,34 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      size = convertWordSize s,
                      test = varOp test}))
                end
+      fun eta' (l: Label.t): Label.t * (Kind.t -> unit) =
+         let
+            val l' = Label.new l
+         in
+            (l', fn kind =>
+             let
+                val {args, ...} = labelInfo l
+                val args = Vector.keepAllMap (args, fn (x, t) =>
+                                              Option.map (toRtype t, fn t =>
+                                                          (Var.new x, t)))
+             in
+                List.push
+                (extraBlocks,
+                 Block.T {args = args,
+                          kind = kind,
+                          label = l',
+                          statements = Vector.new0 (),
+                          transfer = (Transfer.Goto
+                                      {dst = l,
+                                       args = Vector.map (args, fn (var, ty) =>
+                                                          Var {var = var,
+                                                               ty = ty})})})
+             end)
+         end
       fun eta (l: Label.t, kind: Kind.t): Label.t =
          let
-            val {args, ...} = labelInfo l
-            val args = Vector.keepAllMap (args, fn (x, t) =>
-                                          Option.map (toRtype t, fn t =>
-                                                      (Var.new x, t)))
-            val l' = Label.new l
-            val _ =
-               List.push
-               (extraBlocks,
-                Block.T {args = args,
-                         kind = kind,
-                         label = l',
-                         statements = Vector.new0 (),
-                         transfer = (Transfer.Goto
-                                     {dst = l,
-                                      args = Vector.map (args, fn (var, ty) =>
-                                                         Var {var = var,
-                                                              ty = ty})})})
+            val (l', mk) = eta' l
+            val _ = mk kind
          in
             l'
          end
@@ -918,6 +930,37 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          Trace.trace2 ("SsaToRssa.labelCont",
                        Label.layout, Handler.layout, Label.layout)
          labelCont
+      fun genPCallReturns (rets as {cont, parl, parr}): {cont: Label.t, parl: Label.t, parr: Label.t} =
+         let
+            fun lkup pcallReturn =
+               List.peek (!pcallReturn, fn ({cont = cont', parl = parl', parr = parr'}, _) =>
+                          Label.equals (cont, cont') andalso
+                          Label.equals (parl, parl') andalso
+                          Label.equals (parr, parr'))
+            val {pcallReturn = contPCallReturn, ...} = labelInfo cont
+            val {pcallReturn = parlPCallReturn, ...} = labelInfo parl
+            val {pcallReturn = parrPCallReturn, ...} = labelInfo parr
+         in
+            case (lkup contPCallReturn, lkup parlPCallReturn, lkup parrPCallReturn) of
+               (SOME (_, cont), SOME (_, parl), SOME (_, parr)) =>
+                  {cont = cont, parl = parl, parr = parr}
+             | (NONE, NONE, NONE) =>
+                  let
+                     val (cont', mkc) = eta' cont
+                     val _ = List.push (contPCallReturn, (rets, cont'))
+                     val (parl', mkl) = eta' parl
+                     val _ = List.push (parlPCallReturn, (rets, parl'))
+                     val (parr', mkr) = eta' parr
+                     val _ = List.push (parrPCallReturn, (rets, parr'))
+                     val rets' = {cont = cont', parl = parl', parr = parr'}
+                     val _ = mkc (Kind.PCallReturn rets')
+                     val _ = mkl (Kind.PCallReturn rets')
+                     val _ = mkr (Kind.PCallReturn rets')
+                  in
+                     rets'
+                  end
+             | _ => Error.bug "Ssa2ToRssa.genPCallReturns"
+         end
       fun vos (xs: Var.t vector) =
          Vector.keepAllMap (xs, fn x =>
                             Option.map (toRtype (varType x), fn _ =>
@@ -978,6 +1021,18 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           | S.Transfer.Case r => translateCase r
           | S.Transfer.Goto {dst, args} =>
                ([], Transfer.Goto {dst = dst, args = vos args})
+          | S.Transfer.PCall {args, func, cont, parl, parr} =>
+               let
+                  val {cont, parl, parr} =
+                     genPCallReturns {cont = cont, parl = parl, parr = parr}
+               in
+                  ([],
+                   Transfer.PCall {args = vos args,
+                                   func = func,
+                                   cont = cont,
+                                   parl = parl,
+                                   parr = parr})
+               end
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
           | S.Transfer.Runtime {args, prim, return} =>
@@ -1920,7 +1975,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                (blocks, fn S.Block.T {label, args, ...} =>
                 setLabelInfo (label, {args = args,
                                       cont = ref [],
-                                      handler = ref NONE}))
+                                      handler = ref NONE,
+                                      pcallReturn = ref []}))
             val blocks = Vector.map (blocks, translateBlock)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
             val _ = extraBlocks := []

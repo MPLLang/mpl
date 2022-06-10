@@ -34,8 +34,13 @@
 typedef const uint16_t *GC_frameOffsets;
 
 typedef enum {
-  C_FRAME,
-  ML_FRAME
+  CONT_FRAME,
+  CRETURN_FRAME,
+  FUNC_FRAME,
+  HANDLER_FRAME,
+  PCALL_CONT_FRAME,
+  PCALL_PARL_FRAME,
+  PCALL_PARR_FRAME,
 } GC_frameKind;
 
 typedef const struct GC_frameInfo {
