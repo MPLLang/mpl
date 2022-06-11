@@ -44,12 +44,8 @@ void tryUnpinOrKeepPinned(
     HM_remembered remElem,
     void *rawArgs);
 
-<<<<<<< HEAD
 void LGC_markAndScan(GC_state s, HM_remembered remElem, void *rawArgs);
 void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
-=======
-void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
->>>>>>> 8be0c306b8060889b99715b867139e446c8c273f
 
 void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
 
@@ -1218,17 +1214,10 @@ void unfreezeDisentangledDepthAfter(
 
 /* ========================================================================= */
 void copySuspect(
-<<<<<<< HEAD
-    GC_state s,
-    __attribute__((unused)) objptr *opp,
-    objptr op,
-    void *rawArghh)
-=======
   GC_state s,
   __attribute__((unused)) objptr *opp,
   objptr op,
   void *rawArghh)
->>>>>>> 8be0c306b8060889b99715b867139e446c8c273f
 {
   struct ForwardHHObjptrArgs *args = (struct ForwardHHObjptrArgs *)rawArghh;
   assert(isObjptr(op));
