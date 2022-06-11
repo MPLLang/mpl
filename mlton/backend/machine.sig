@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2014,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -33,7 +33,8 @@ signature MACHINE =
       structure StackOffset:
          sig
             datatype t = T of {offset: Bytes.t,
-                               ty: Type.t}
+                               ty: Type.t,
+                               volatile: bool}
 
             val ty: t -> Type.t
          end
@@ -108,12 +109,14 @@ signature MACHINE =
              | Label of Label.t
              | Offset of {base: t,
                           offset: Bytes.t,
-                          ty: Type.t}
+                          ty: Type.t,
+                          volatile: bool}
              | SequenceOffset of {base: t,
                                   index: t,
                                   offset: Bytes.t,
                                   scale: Scale.t,
-                                  ty: Type.t}
+                                  ty: Type.t,
+                                  volatile: bool}
              | StackOffset of StackOffset.t
              | StackTop
              | StaticHeapRef of StaticHeap.Ref.t
@@ -124,7 +127,7 @@ signature MACHINE =
             val interfere: t * t -> bool
             val isDestination: t -> bool
             val layout: t -> Layout.t
-            val stackOffset: {offset: Bytes.t, ty: Type.t} -> t
+            val stackOffset: {offset: Bytes.t, ty: Type.t, volatile: bool} -> t
             val gcField: Runtime.GCField.t -> t
             val toString: t -> string
             val ty: t -> Type.t
@@ -157,7 +160,6 @@ signature MACHINE =
              | PrimApp of {args: Operand.t vector,
                            dst: Operand.t option,
                            prim: Type.t Prim.t}
-             | ProfileLabel of ProfileLabel.t
 
             val foldOperands: t * 'a * (Operand.t * 'a -> 'a) -> 'a
             val layout: t -> Layout.t

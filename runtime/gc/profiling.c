@@ -1,4 +1,4 @@
-/* Copyright (C) 2011-2012,2019 Matthew Fluet.
+/* Copyright (C) 2011-2012,2019,2021-2022 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -282,10 +282,7 @@ void profileWrite (GC_state s, GC_profileData p, const char *fileName) {
   case PROFILE_NONE:
     die ("impossible PROFILE_NONE");
     // break;
-  case PROFILE_TIME_FIELD:
-    kind = "time\n";
-    break;
-  case PROFILE_TIME_LABEL:
+  case PROFILE_TIME:
     kind = "time\n";
     break;
   default:
@@ -341,70 +338,24 @@ void initProfilingTime (__attribute__ ((unused)) GC_state s) {
 
 #else
 
-static GC_state handleSigProfState;
-
-void GC_handleSigProf (code_pointer pc) {
-  GC_frameIndex frameIndex;
-  GC_state s;
+void GC_handleSigProf (__attribute__ ((unused)) int signum) {
+  GC_state s = MLton_gcState ();
   GC_sourceSeqIndex sourceSeqIndex;
 
-  s = handleSigProfState;
-
   if (DEBUG_PROFILE)
-    fprintf (stderr, "GC_handleSigProf ("FMTPTR") [%d]\n", (uintptr_t)pc,
-             Proc_processorNumber (s));
+    fprintf (stderr, "GC_handleSigProf () [%d]\n", Proc_processorNumber (s));
   if (s->amInGC)
     sourceSeqIndex = GC_SOURCE_SEQ_INDEX;
-  else {
-    frameIndex = getCachedStackTopFrameIndex (s);
-    /*
-     * RAM_NOTE: This if-condition (and the else-block!) feels like a hack to
-     * get things to work. Figure out intent and fix.
-     */
-    if (frameIndex < s->frameInfosLength) {
+  else if (s->stackTop == s->stackBottom) {
+    sourceSeqIndex = s->sourceMaps.curSourceSeqIndex;
+  } else {
+    GC_frameIndex frameIndex = getCachedStackTopFrameIndex (s);
     if (C_FRAME == s->frameInfos[frameIndex].kind)
       sourceSeqIndex = s->frameInfos[frameIndex].sourceSeqIndex;
     else {
-      if (PROFILE_TIME_LABEL == s->profiling.kind) {
-        uint32_t start, end, i;
-        
-        /* Binary search labels to find which method contains PC */
-        start = 0;
-        end = s->sourceMaps.profileLabelInfosLength;
-        while (end - start > 1) {
-          i = (start+end)/2;
-          if ((uintptr_t)s->sourceMaps.profileLabelInfos[i].profileLabel <= (uintptr_t)pc)
-            start = i;
-          else
-            end = i;
-        }
-        i = start;
-        
-        /* The last label is dead code. Any address past it is thus unknown.
-         * The first label is before all SML code. Before it is also unknown.
-         */
-        if (i-1 == s->sourceMaps.profileLabelInfosLength ||
-            (i == 0 && 
-             (uintptr_t)pc < (uintptr_t)s->sourceMaps.profileLabelInfos[i].profileLabel)) {
-          if (DEBUG_PROFILE)
-            fprintf (stderr, "pc out of bounds\n");
-          sourceSeqIndex = UNKNOWN_SOURCE_SEQ_INDEX;
-        } else {
-          sourceSeqIndex = s->sourceMaps.profileLabelInfos[start].sourceSeqIndex;
-        }
-      } else {
-        sourceSeqIndex = s->sourceMaps.curSourceSeqIndex;
-      }
-    }
-    } else {
-      if (DEBUG_PROFILE) {
-        fprintf (stderr, "unknown frame index\n");
-      }
-
-      sourceSeqIndex = UNKNOWN_SOURCE_SEQ_INDEX;
+      sourceSeqIndex = s->sourceMaps.curSourceSeqIndex;
     }
   }
-
   incForProfiling (s, 1, sourceSeqIndex);
 }
 
@@ -419,11 +370,7 @@ static void initProfilingTime (GC_state s) {
   struct sigaction sa;
 
   s->profiling.data = profileMalloc (s);
-  if (PROFILE_TIME_LABEL == s->profiling.kind) {
-    initProfileLabelInfos (s);
-  } else {
-    s->sourceMaps.curSourceSeqIndex = UNKNOWN_SOURCE_SEQ_INDEX;
-  }
+  s->sourceMaps.curSourceSeqIndex = UNKNOWN_SOURCE_SEQ_INDEX;
   /*
    * Install catcher, which handles SIGPROF and calls MLton_Profile_inc.
    *
@@ -437,9 +384,15 @@ static void initProfilingTime (GC_state s) {
    * in order to have profiling cover as much as possible, you want it
    * to occur right after the sigaltstack() call.
    */
-  handleSigProfState = s;
   sigemptyset (&sa.sa_mask);
-  GC_setSigProfHandler (&sa);
+  sa.sa_flags = 0;
+#if HAS_SIGALTSTACK
+  sa.sa_flags |= SA_ONSTACK;
+#endif
+#ifdef SA_RESTART
+  sa.sa_flags |= SA_RESTART;
+#endif
+  sa.sa_handler = GC_handleSigProf;
   unless (sigaction (SIGPROF, &sa, NULL) == 0)
     diee ("initProfilingTime: sigaction failed");
   /* Start the SIGPROF timer. */
@@ -480,8 +433,7 @@ void initProfiling (GC_state s) {
     case PROFILE_NONE:
       die ("impossible PROFILE_NONE");
       // break;
-    case PROFILE_TIME_FIELD:
-    case PROFILE_TIME_LABEL:
+    case PROFILE_TIME:
       initProfilingTime (s);
       break;
     default:
@@ -500,8 +452,7 @@ void GC_profileDone (GC_state s) {
     fprintf (stderr, "GC_profileDone () [%d]\n",
              Proc_processorNumber (s));
   assert (s->profiling.isOn);
-  if (PROFILE_TIME_FIELD == s->profiling.kind
-      or PROFILE_TIME_LABEL == s->profiling.kind)
+  if (PROFILE_TIME == s->profiling.kind)
     setProfTimer (0);
   s->profiling.isOn = FALSE;
   p = s->profiling.data;

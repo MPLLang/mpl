@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2016-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009,2016-2017,2019-2021 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -164,7 +164,6 @@ structure Statement =
                      dst: (Var.t * Type.t) option,
                      prim: Type.t Prim.t}
        | Profile of ProfileExp.t
-       | ProfileLabel of ProfileLabel.t
        | SetExnStackLocal
        | SetExnStackSlot
        | SetHandler of Label.t
@@ -185,7 +184,6 @@ structure Statement =
                                             def (x, t, a)),
                                useOperand)
              | Profile _ => a
-             | ProfileLabel _ => a
              | SetExnStackLocal => a
              | SetExnStackSlot => a
              | SetHandler _ => a
@@ -225,7 +223,6 @@ structure Statement =
                            dst = dst,
                            prim = prim}
              | Profile _ => s
-             | ProfileLabel _ => s
              | SetExnStackLocal => s
              | SetExnStackSlot => s
              | SetHandler _ => s
@@ -257,8 +254,6 @@ structure Statement =
                                 Vector.layout Operand.layout args],
                            2)]
              | Profile e => ProfileExp.layout e
-             | ProfileLabel p =>
-                  seq [str "ProfileLabel ", ProfileLabel.layout p]
              | SetExnStackLocal => str "SetExnStackLocal"
              | SetExnStackSlot => str "SetExnStackSlot "
              | SetHandler l => seq [str "SetHandler ", Label.layout l]
@@ -435,23 +430,39 @@ structure Transfer =
       fun foreachUse (t, f) = foldUse (t, (), f o #1)
 
       local
-         fun make i = WordX.fromIntInf (i, WordSize.bool)
+         fun make (i, ws) = WordX.fromIntInf (i, ws)
       in
          fun ifBoolE (test, expect, {falsee, truee}) =
-            Switch (Switch.T
-                    {cases = Vector.new2 ((make 0, falsee), (make 1, truee)),
-                     default = NONE,
-                     expect = Option.map (expect, fn expect => if expect then make 1 else make 0),
-                     size = WordSize.bool,
-                     test = test})
+            let
+               val ws =
+                  case Type.deWord (Operand.ty test) of
+                     NONE => Error.bug "RssaTree.Transfer.ifBoolE: non-Word test type"
+                   | SOME ws => ws
+               val make = fn i => make (i, ws)
+            in
+               Switch (Switch.T
+                       {cases = Vector.new2 ((make 0, falsee), (make 1, truee)),
+                        default = NONE,
+                        expect = Option.map (expect, fn expect => if expect then make 1 else make 0),
+                        size = ws,
+                        test = test})
+            end
          fun ifBool (test, branches) = ifBoolE (test, NONE, branches)
          fun ifZero (test, {falsee, truee}) =
-            Switch (Switch.T
-                    {cases = Vector.new1 (make 0, truee),
-                     default = SOME falsee,
-                     expect = NONE,
-                     size = WordSize.bool,
-                     test = test})
+            let
+               val ws =
+                  case Type.deWord (Operand.ty test) of
+                     NONE => Error.bug "RssaTree.Transfer.ifZero: non-Word test type"
+                   | SOME ws => ws
+               val make = fn i => make (i, ws)
+            in
+               Switch (Switch.T
+                       {cases = Vector.new1 (make 0, truee),
+                        default = SOME falsee,
+                        expect = NONE,
+                        size = ws,
+                        test = test})
+            end
       end
 
       fun replace (t: t, fs as {const: Const.t -> Operand.t,
@@ -749,7 +760,6 @@ structure Function =
                          statements = Vector.keepAll
                                       (statements,
                                        fn Statement.Profile _ => false
-                                        | Statement.ProfileLabel _ => false
                                         | _ => true),
                          transfer = transfer})
          in

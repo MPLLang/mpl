@@ -1,4 +1,4 @@
-(* Copyright (C) 2010-2011,2013-2020 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2022 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -85,7 +85,6 @@ val keepGenerated = ref false
 val keepO = ref false
 val output: string option ref = ref NONE
 val profileSet: bool ref = ref false
-val profileTimeSet: bool ref = ref false
 val runtimeArgs: string list ref = ref ["@MLton"]
 val show: Show.t option ref = ref NONE
 val stop = ref Place.OUT
@@ -325,6 +324,9 @@ fun makeOptions {usage} =
                            Control.setCommandLineConst {name = name,
                                                         value = value}
                       | _ => usage (concat ["invalid -const flag: ", s]))),
+       (Expert, "const-prop-absval-layout-depth", " <n>",
+        "cut-off depth for printing of abstract values in`ConstantPropagation`",
+        intRef constPropAbsValLayoutDepth),
        (Expert, "contify-into-main", " {false|true}",
         "contify functions into main",
         boolRef contifyIntoMain),
@@ -428,6 +430,8 @@ fun makeOptions {usage} =
         boolRef expert),
        (Normal, "export-header", " <file>", "write C header file for _export's",
         SpaceString (fn s => exportHeader := SOME s)),
+       (Normal, "force-handles-signals", " {false|true}", "force checks for signals",
+        boolRef forceHandlesSignals),
        (Expert, "format",
         concat [" {",
                 String.concatWith
@@ -451,14 +455,6 @@ fun makeOptions {usage} =
                        | "first" => First
                        | "every" => Every
                        | _ => usage (concat ["invalid -gc-check flag: ", s])))),
-       (Expert, "gc-expect", " {none|false|true}", "GC expect",
-        SpaceString (fn s =>
-                     gcExpect :=
-                     (case s of
-                         "false" => SOME false
-                       | "none" => NONE
-                       | "true" => SOME true
-                       | _ => usage (concat ["invalid -gc-expect flag: ", s])))),
        (Expert, "globalize-arrays", " {false|true}", "globalize arrays",
         boolRef globalizeArrays),
        (Expert, "globalize-refs", " {true|false}", "globalize refs",
@@ -567,6 +563,14 @@ fun makeOptions {usage} =
                 else usage (concat ["invalid -layout-width arg: ", Int.toString n]))),
        (Expert, "libname", " <basename>", "the name of the generated library",
         SpaceString (fn s => libname := s)),
+       (Expert, "limit-check-expect", " {none|false|true}", "whether to expect limit checks to trigger a collection",
+        SpaceString (fn s =>
+                     limitCheckExpect :=
+                     (case s of
+                         "false" => SOME false
+                       | "none" => NONE
+                       | "true" => SOME true
+                       | _ => usage (concat ["invalid -limit-check-expect flag: ", s])))),
        (Normal, "link-opt", " <opt>", "pass option to linker",
         (SpaceString o tokenizeOpt)
         (fn s => List.push (linkOpts, {opt = s, pred = OptPred.Yes}))),
@@ -738,11 +742,7 @@ fun makeOptions {usage} =
                             | "call" => ProfileCallStack
                             | "count" => ProfileCount
                             | "drop" => ProfileDrop
-                            | "label" => ProfileLabel
-                            | "time" => (profileTimeSet := true
-                                         ; ProfileTimeLabel)
-                            | "time-field" => ProfileTimeField
-                            | "time-label" => ProfileTimeLabel
+                            | "time" => ProfileTime
                             | _ => usage (concat
                                           ["invalid -profile arg: ", s]))))),
        (Expert, "profile-block", " {false|true}",
@@ -824,6 +824,23 @@ fun makeOptions {usage} =
         boolRef showBasisFlat),
        (Normal, "show-def-use", " <file>", "write def-use information",
         SpaceString (fn s => showDefUse := SOME s)),
+       (Expert, "signal-check", " {if-handles-signals|always}", "when to insert signal checks",
+        SpaceString (fn s =>
+                     signalCheck :=
+                     (case s of
+                         "always" => SignalCheck.Always
+                       | "if-handles-signals" => SignalCheck.IfHandlesSignals
+                       | _ => usage (concat ["invalid -signal-check flag: ", s])))),
+       (Expert, "signal-check-at-limit-check", " {true|false}", "whether to force a signal check at a limit check",
+        boolRef signalCheckAtLimitCheck),
+       (Expert, "signal-check-expect", " {none|false|true}", "whether to expect signal checks to trigger a collection",
+        SpaceString (fn s =>
+                     signalCheckExpect :=
+                     (case s of
+                         "false" => SOME false
+                       | "none" => NONE
+                       | "true" => SOME true
+                       | _ => usage (concat ["invalid -signal-check-expect flag: ", s])))),
        (Expert, "show-types", " {true|false}", "show types in ILs",
         boolRef showTypes),
        (Expert, "split-types-bool", " {smart|always|never}",
@@ -847,6 +864,14 @@ fun makeOptions {usage} =
          case Control.OptimizationPasses.set {il = "ssa2", passes = s} of
             Result.Yes () => ()
           | Result.No s => usage (concat ["invalid -ssa2-passes arg: ", s]))),
+       (Expert, "stack-check-expect", " {none|false|true}", "whether to expect stack checks to trigger a collection",
+        SpaceString (fn s =>
+                     stackCheckExpect :=
+                     (case s of
+                         "false" => SOME false
+                       | "none" => NONE
+                       | "true" => SOME true
+                       | _ => usage (concat ["invalid -stack-check-expect flag: ", s])))),
        (Normal, "stop", " {f|g|o|tc}", "when to stop",
         SpaceString
         (fn s =>
@@ -925,7 +950,14 @@ fun makeOptions {usage} =
         (fn (target, opt) => List.push (llvm_optOpts, {opt = opt, pred = OptPred.Target target}))),
        (Expert, #1 trace, " name1,...", "trace compiler internals", #2 trace),
        (Expert, "type-check", " {false|true}", "type check ILs",
-        boolRef typeCheck),
+        Bool
+        (fn b =>
+         let
+            val re = Regexp.seq [Regexp.anys, Regexp.string ":typeCheck"]
+            val re = Regexp.compileDFA re
+         in
+            List.push (executePasses, (re, b))
+         end)),
        (Normal, "verbose", " {0|1|2|3}", "how verbose to be",
         SpaceString
         (fn s =>
@@ -964,7 +996,7 @@ val {parse, usage} =
 
 val usage = fn s => (usage s; raise Fail "unreachable")
 
-fun commandLine (args: string list): unit =
+fun commandLine (_: string, args: string list): unit =
    let
       open Control
       datatype z = datatype MLton.Platform.Arch.t
@@ -1068,13 +1100,6 @@ fun commandLine (args: string list): unit =
                       | SOME (Explicit cg) => cg)
 *)
       val () = MLton.Rusage.measureGC (!verbosity <> Silent)
-      val () = if !profileTimeSet
-                  then (case !codegen of
-                         (*
-                           X86Codegen => profile := ProfileTimeLabel
-                         | AMD64Codegen => profile := ProfileTimeLabel
-                         | *) _ => profile := ProfileTimeField)
-                  else ()
       val () = if !exnHistory
                   then (case !profile of
                            ProfileNone => profile := ProfileCallStack
@@ -1086,8 +1111,7 @@ fun commandLine (args: string list): unit =
                   then (case !profile of
                            ProfileAlloc => ()
                          | ProfileCount => ()
-                         | ProfileTimeField => ()
-                         | ProfileTimeLabel => ()
+                         | ProfileTime => ()
                          | _ => usage "can't use '-profile-stack true' without '-profile {alloc,count,time}'")
                   else ()
 
@@ -1218,21 +1242,23 @@ fun commandLine (args: string list): unit =
              orelse (Control.Elaborate.enabled Control.Elaborate.warnUnused)
              orelse (Control.Elaborate.default Control.Elaborate.warnUnused))
       val _ =
-         case targetOS of
-            Darwin => ()
-          | FreeBSD => ()
-          | HPUX => ()
-          | Linux => ()
-          | MinGW => ()
-          | NetBSD => ()
-          | OpenBSD => ()
-          | Solaris => ()
-          | _ =>
-               if !profile = ProfileTimeField
-                  orelse !profile = ProfileTimeLabel
-                  then usage (concat ["can't use -profile time on ",
-                                      MLton.Platform.OS.toString targetOS])
-               else ()
+         if !profile = ProfileTime
+            then if (case targetOS of
+                        AIX => false
+                      | Cygwin => false
+                      | Darwin => true
+                      | FreeBSD => true
+                      | HPUX => true
+                      | Hurd => false
+                      | Linux => true
+                      | MinGW => true
+                      | NetBSD => true
+                      | OpenBSD => true
+                      | Solaris => true)
+                    then ()
+                    else usage (concat ["can't use -profile time on ",
+                                        MLton.Platform.OS.toString targetOS])
+            else ()
       val () =
          case !show of
             NONE => ()
@@ -1313,7 +1339,7 @@ fun commandLine (args: string list): unit =
                                  MinGW => ("TEMP", "C:/WINDOWS/TEMP")
                                | _ => ("TMPDIR", "/tmp")
                         in
-                           case Process.getEnv tmpVar of
+                           case OS.Process.getEnv tmpVar of
                               NONE => default
                             | SOME d => d
                         end
@@ -1634,10 +1660,8 @@ fun commandLine (args: string list): unit =
          end
    end
 
-val commandLine = Process.makeCommandLine commandLine
+val main = CommandLine.makeMain commandLine
 
-val main = fn (_, args) => commandLine args
-
-val mainWrapped = fn () => OS.Process.exit (commandLine (CommandLine.arguments ()))
+fun mainWrapped () = CommandLine.wrapMain main ()
 
 end

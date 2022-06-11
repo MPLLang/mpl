@@ -9,6 +9,13 @@ memory management based on the theory of disentanglement
 
 MPL is research software and is being actively developed.
 
+If you are you interested in using MPL, consider checking
+out the [tutorial](https://github.com/MPLLang/mpl-tutorial).
+You might also be interested in exploring
+[`mpllib`](https://github.com/MPLLang/mpllib)
+(a standard library for MPL) and the
+[Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench).
+
 ## Docker
 
 Try out MPL with Docker:
@@ -142,6 +149,8 @@ by default.
 * `-debug true -debug-runtime true -keep g` For debugging, keeps the generated
 C files and uses the debug version of the runtime (with assertions enabled).
 The resulting executable is somewhat peruse-able with tools like `gdb`.
+* `-detect-entanglement true` enables the dynamic entanglement detector.
+See below for more information.
 
 For example:
 ```
@@ -195,14 +204,29 @@ is very easy to check and is surprisingly general. Data races are fine!
 tricky to check but allows you to use any type of data. Many of our example
 programs are race-free.
 
-**To check that your program is disentangled**, you can use the experimental
-disentanglement checker which is currently in development. To do so, checkout
-the branch `new-de-check` and then build MPL from source. This version of
-MPL has the checker always turned on, so to check a program for disentanglement,
-you just need to compile and run your program as usual. Note that the checker
-is execution-dependent, so if your program is non-deterministic (e.g. racy),
-it's possible that the checker will not detect entanglement. **The checker is
-a work-in-progress**, so at the moment it doesn't come with any guarantees.
+## Entanglement Detection
+
+Whenever a thread acquires a reference
+to an object allocated concurrently by some other thread, then we say that
+the two threads are **entangled**. This is a violation of disentanglement,
+which MPL currently does not allow.
+
+To check if your program has entanglement, MPL has a built-in dynamic
+entanglement detector. You can enable the detector by using
+`-detect-entanglement true` at compile time.
+When entanglement detection is enabled, MPL will monitors individual reads
+and writes during execution; if entanglement is found, the program will
+terminate with an error message.
+
+Entanglement detection is highly optimized, and often does not have a
+significant impact on performance. We recommend using entanglement detection
+liberally.
+
+Note that the detector is execution-dependent: if your program
+is non-deterministic (e.g. racy), then entanglement may or may not
+occur depending on the outcome of a race condition. Similarly, entanglement
+could be input-dependent. Therefore, we recommend testing multiple inputs,
+as well as running on varying number of processors.
 
 ## Bugs and Known Issues
 

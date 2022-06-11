@@ -6,6 +6,7 @@ static inline bool mark_suspect(objptr op)
 {
   pointer p = objptrToPointer(op, NULL);
   GC_header header = __sync_fetch_and_or(getHeaderp(p), SUSPECT_MASK);
+<<<<<<< HEAD
   assert(1 == (header & GC_VALID_HEADER_MASK));
   // while (TRUE)
   // {
@@ -30,6 +31,9 @@ static inline bool mark_suspect(objptr op)
   // }
   // DIE("should be impossible to reach here");
   /*return true if this call marked the header, false if someone else did*/
+=======
+  assert (1 == (header & GC_VALID_HEADER_MASK));
+>>>>>>> 8be0c306b8060889b99715b867139e446c8c273f
   return !suspicious_header(header);
 }
 
@@ -37,7 +41,6 @@ static inline bool is_suspect(objptr op)
 {
   pointer p = objptrToPointer(op, NULL);
   GC_header h = getHeader(p);
-
   /* have to check first that the header is valid
    * (otherwise, there could be a forward pointer in this spot)
    */
