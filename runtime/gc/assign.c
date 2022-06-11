@@ -88,6 +88,11 @@ objptr Assignable_readBarrier(
 }
 #endif
 
+static inline bool decheck_opt_fast (GC_state s, pointer p) {
+  HM_HierarchicalHeap hh = HM_getLevelHead(HM_getChunkOf(p));
+  return (hh->depth == 1) || hh == getThreadCurrent(s)->hierarchicalHeap;
+}
+
 
 void Assignable_writeBarrier(
   GC_state s,
@@ -158,18 +163,18 @@ void Assignable_writeBarrier(
     return;
   }
 
-  uint32_t dd = dstHH->depth;
-  bool src_de = (HM_getLevelHead(HM_getChunkOf(srcp)) == getThreadCurrent(s)->hierarchicalHeap) || decheck(s, src);
-  if (src_de) {
-    bool dst_de = (dd == 1) || decheck(s, dst);
-    if (dst_de) {
-      HM_HierarchicalHeap srcHH = HM_getLevelHeadPathCompress(HM_getChunkOf(srcp));
-      if (srcHH == dstHH) {
-        /* internal pointers are always traced */
-        return;
-      }
-      uint32_t sd = srcHH->depth;
+  HM_HierarchicalHeap srcHH = HM_getLevelHead(HM_getChunkOf(srcp));
+  if (srcHH == dstHH) {
+    /* internal pointers are always traced */
+    return;
+  }
 
+  uint32_t dd = dstHH->depth;
+  bool src_de = decheck_opt_fast(s, srcp) || decheck(s, src);
+  if (src_de) {
+    bool dst_de = decheck_opt_fast(s, dstp) || decheck(s, dst);
+    if (dst_de) {
+      uint32_t sd = srcHH->depth;
       /* up pointer (snapshotted by the closure)
        * or internal (within a chain) pointer to a snapshotted heap
        */
