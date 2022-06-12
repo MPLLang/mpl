@@ -20,11 +20,11 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   {
     return src;
   }
-  assert(ES_contains(NULL, dst));
 
   HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, src))
   {
+    assert(ES_contains(NULL, dst));
     assert (isMutable(s, dstp));
     new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
@@ -49,10 +49,10 @@ objptr Assignable_readBarrier(
   {
     return ptr;
   }
-  assert (ES_contains(NULL, obj));
   HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, ptr))
   {
+    assert (ES_contains(NULL, obj));
     // assert (isMutable(s, obj));
     // if (!ES_contains(NULL, obj))
     // {
@@ -90,7 +90,7 @@ objptr Assignable_readBarrier(
 
 static inline bool decheck_opt_fast (GC_state s, pointer p) {
   HM_HierarchicalHeap hh = HM_getLevelHead(HM_getChunkOf(p));
-  return (hh->depth == 1) || hh == getThreadCurrent(s)->hierarchicalHeap;
+  return (hh->depth <= 1) || hh == getThreadCurrent(s)->hierarchicalHeap;
 }
 
 
