@@ -597,6 +597,11 @@ struct
          *
          * copy sync depths!
          *)
+
+        (* SAM_NOTE: instantiate new thread with singleton joinslot stack,
+         * and then make sure the first thing it does (when it executes)
+         * is pop.
+         *)
         case HH.forkThread interruptedLeftThread of
           NONE => ()
         | SOME rightSideThread =>
@@ -624,6 +629,9 @@ struct
                   , gcj = gcj
                   }
 
+              (* SAM_NOTE: when we make special runtime support for joinslots,
+               * make sure we put in interruptedLeftThread's joinslot stack
+               *)
               val _ = JoinSlot.put (joinslot, jp)
 
               (* double check... hopefully correct, not off by one? *)
@@ -655,6 +663,12 @@ struct
         val tidLeft = DE.decheckGetTid thread
 
         val result =
+          (* SPACE LEAK SPACE LEAK
+           * need to merge in the thread that we spawned.
+           *
+           * PERHAPS TODO: just get rid of this fast path. it's not important
+           * for efficiency anymore.
+           *)
           if popDiscard () then
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)

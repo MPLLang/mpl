@@ -194,10 +194,17 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
     return BOGUS_OBJPTR;
   }
 
+
+#if ASSERT
   GC_returnAddress ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
   assert(fi->kind == PCALL_CONT_FRAME);
-  size_t newStackReserved = alignStackReserved(s, fi->size); // TODO double check
+#endif
+
+  // SAM_NOTE: we need a decent amount of reserved space to make sure that
+  // the next call on this stack has enough space. Next call might be a
+  // non-tail, which might bump up to max frame size.
+  size_t newStackReserved = alignStackReserved(s, 2*s->maxFrameSize);
 
   uint32_t newDepth = getThreadCurrent(s)->currentDepth;
 
@@ -213,9 +220,11 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
+  // left side cont ==> main cont
   *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(pframe - 2*GC_RETURNADDRESS_SIZE);
 
+  // right side cont ==> main cont on new stack
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(newFrame - 3*GC_RETURNADDRESS_SIZE);
 
