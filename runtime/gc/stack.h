@@ -80,6 +80,9 @@ static inline size_t sizeofStackMinimumReserved (GC_state s, GC_stack stack);
 static inline size_t sizeofStackGrowReserved (GC_state s, GC_stack stack);
 static inline size_t sizeofStackShrinkReserved (GC_state s, GC_stack stack, bool current);
 
+// pointer to frame that is promotable, or NULL if no such frame
+static pointer findPromotableFrame (GC_state s, GC_stack stack);
+
 static inline void copyStack (GC_state s, GC_stack from, GC_stack to);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

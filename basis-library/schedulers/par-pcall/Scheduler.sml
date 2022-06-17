@@ -55,11 +55,6 @@ struct
     * 'd            (* parallel right-side argument *)
     -> 'c;
 
-  (** promote by copying frame off stack into new thread, and adjusting
-    * return addresses
-    *)
-  fun forkThread t = die (fn _ => "forkThread not yet implemented")
-
 
   structure Thread = MLton.Thread.Basic
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
@@ -602,7 +597,7 @@ struct
          *
          * copy sync depths!
          *)
-        case forkThread interruptedLeftThread of
+        case HH.forkThread interruptedLeftThread of
           NONE => ()
         | SOME rightSideThread =>
             let

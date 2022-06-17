@@ -235,3 +235,9 @@ void copyStack (GC_state s, GC_stack from, GC_stack to) {
              (uintmax_t)from->used);
   GC_memcpy (fromBottom, toBottom, from->used);
 }
+
+pointer findPromotableFrame (GC_state s, GC_stack stack) {
+  (void)s;
+  (void)stack;
+  return NULL;
+}

@@ -123,6 +123,10 @@ PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
 
+// Return pointer to result and mark whether or not succeeded.
+// If failed, result is BOGUS_OBJPTR.
+PRIVATE objptr GC_HH_forkThread(GC_state s, pointer thread, bool *success);
+
 /* Moves a "new" thread to the appropriate depth, before we switch to it.
  * This essentially puts the thread (and its stack) into the hierarchy.
  * Also sets the depth of the thread.

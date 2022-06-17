@@ -73,6 +73,8 @@ signature MLTON_THREAD =
           val moveNewThreadToDepth : thread * int -> unit
 
           val checkFinishedCCReadyToJoin: unit -> bool
+
+          val forkThread: thread -> thread option
         end
 
       (* disentanglement checking *)
@@ -95,7 +97,7 @@ signature MLTON_THREAD =
           val decheckGetTid : thread -> Word64.word
 
           (* arguments are (victim thread, steal depth) *)
-          val copySyncDepthsFromThread : thread * int -> unit
+          val copySyncDepthsFromThread : thread * thread * int -> unit
         end
 
       type 'a t

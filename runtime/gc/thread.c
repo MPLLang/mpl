@@ -183,6 +183,39 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
   hh->depth = depth;
 }
 
+
+objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack stack = (GC_stack)objptrToPointer(thread->stack, NULL);
+
+  pointer pframe = findPromotableFrame(s, stack);
+  if (NULL == pframe) {
+    *success = FALSE;
+    return BOGUS_OBJPTR;
+  }
+
+  uint32_t newDepth = getThreadCurrent(s)->currentDepth;
+  size_t newStackUsed = 0; // TODO: get correct used amount for the new stack
+
+  assert (s->savedThread == BOGUS_OBJPTR);
+  s->savedThread = pointerToObjptr(threadp, NULL);
+  GC_thread newThread =
+    newThreadWithHeap (s, alignStackReserved(s, newStackUsed), newDepth, TRUE);
+  assert(s->savedThread == pointerToObjptr(threadp, NULL));
+  s->savedThread = BOGUS_OBJPTR;
+  objptr newThreadp =
+    pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
+
+  // Is this right? Or are we missing one suspended depth because forkThread
+  // happens before the decheck fork? Might need to fix this by fusing decheck
+  // fork with this function.
+  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), newThreadp, newDepth);
+
+  DIE("TODO...");
+  return pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
+}
+
+
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))

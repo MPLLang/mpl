@@ -602,7 +602,7 @@ struct
                 *
                 * HOW TO FIX???
                 *)
-              val () = DE.copySyncDepthsFromThread (interruptedLeftThread, depth+1)
+              val () = DE.copySyncDepthsFromThread (interruptedLeftThread, Thread.current (), depth+1)
 
               val () = DE.decheckSetTid tidRight
               val gr = Result.result g

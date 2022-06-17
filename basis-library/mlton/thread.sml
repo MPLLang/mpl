@@ -96,6 +96,17 @@ struct
     Prim.moveNewThreadToDepth (t, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
+
+  fun forkThread t =
+    let
+      val success = ref false
+      val result = Prim.forkThread (gcState (), t, success)
+    in
+      if !success then
+        SOME result
+      else
+        NONE
+    end
 end
 
 structure Disentanglement =
@@ -128,8 +139,8 @@ struct
 
   fun decheckGetTid thread = Prim.decheckGetTid (gcState (), thread)
 
-  fun copySyncDepthsFromThread (victim, stealDepth) =
-    Prim.copySyncDepthsFromThread (gcState (), victim, Word32.fromInt stealDepth)
+  fun copySyncDepthsFromThread (from, to, stealDepth) =
+    Prim.copySyncDepthsFromThread (gcState (), from, to, Word32.fromInt stealDepth)
 end
 
 (*

@@ -386,7 +386,10 @@ structure Thread =
         GCState.t * Word64.word * Word64.word -> unit;
 
       val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
-        runtime private: GCState.t * thread * Word32.word -> unit;
+        runtime private: GCState.t * thread * thread *Word32.word -> unit;
+
+      val forkThread = _import "GC_HH_forkThread" runtime private:
+        GCState.t * thread * (bool ref) -> thread;
 
       (** If returns true, then writes result to the input ref. Otherwise, the
         * runtime is not detecting entanglement, and the ref is not modified.
