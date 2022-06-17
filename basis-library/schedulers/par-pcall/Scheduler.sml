@@ -121,7 +121,8 @@ struct
 
   datatype 'a joinpoint =
     J of
-      { rightSideThread: Thread.t
+      { leftSideThread: Thread.t
+      , rightSideThread: Thread.t
       , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
@@ -284,6 +285,7 @@ struct
     val make: ('a t -> Thread.t -> unit) -> 'a t
     val cancel: 'a t -> 'a status
     val put: 'a t * 'a joinpoint -> unit
+    val get: 'a t -> 'a joinpoint
   end =
   struct
     datatype 'a status = Empty | Full of 'a joinpoint
@@ -314,6 +316,11 @@ struct
       )
 
     fun put (T (_, jor), j) = (jor := SOME j)
+
+    fun get (T (_, jor)) =
+      case !jor of
+        SOME j => j
+      | NONE => die (fn _ => "scheduler bug: JoinSlot.get on NONE")
   end
 
   (* ========================================================================
@@ -582,137 +589,67 @@ struct
           ()
         else
 
-        (* SAM_NOTE: consider this *)
-        (*case forkThread of
+        (* SAM_NOTE:
+         * set new thread ->bytesNeeded to 0 (MLton makes no
+         * assumptions about how much space is available for threads that
+         * are about to return from pcall, which the new thread will appear
+         * to do, by taking the top frame in forkThread.)
+         *
+         * set exnStack to 0. This is okay because the right-side should
+         * never raise an exception. (The right-side should never actually
+         * return to its parent frame, neither should it raise an exception,
+         * expecting it to be caught by parent.)
+         *
+         * copy sync depths!
+         *)
+        case forkThread interruptedLeftThread of
           NONE => ()
-        | SOME rightSideThread =>*)
-
-        let
-          val gcj = spawnGC interruptedLeftThread
-
-          val _ = assertAtomic 1
-
-          val thread = Thread.current ()
-          (* val astack = jstackGetCurrent () *)
-          val depth = HH.getDepth thread
-
-          (* val rightSideThread = ref (NONE: Thread.t option) *)
-          val rightSideResult = ref (NONE: 'b Result.t option)
-          val incounter = ref 2
-
-          val (tidLeft, tidRight) = DE.decheckFork ()
-
-          (* SAM_NOTE:
-           * set new thread ->bytesNeeded to 0 (MLton makes no
-           * assumptions about how much space is available for threads that
-           * are about to return from pcall, which the new thread will appear
-           * to do, by taking the top frame in forkThread.)
-           *
-           * set exnStack to 0. This is okay because the right-side should
-           * never raise an exception. (The right-side should never actually
-           * return to its parent frame, neither should it raise an exception,
-           * expecting it to be caught by parent.)
-           *)
-          val rightSideThread = forkThread interruptedLeftThread
-
-          val jp =
-            J { rightSideThread = rightSideThread
-              , rightSideResult = rightSideResult
-              , incounter = incounter
-              , tidRight = tidRight
-              , gcj = gcj
-              }
-
-          val _ = JoinSlot.put (joinslot, jp)
-
-          (* SAM_NOTE: removed, because we don't have access to the right-side
-           * func here.
-           * TODO: this needs to be implemented at the pcall! Use operations
-           * directly on the joinslot.
-           *)
-
-          (*
-          fun g' () =
+        | SOME rightSideThread =>
             let
-              val () = jstackSetCurrentNew ()
+              val gcj = spawnGC interruptedLeftThread
 
-              (** SAM_NOTE: TODO: this copySyncDepthsFromThread call is racy, because
-                * the g' might be stolen before we finish the signal handler.
-                *
-                * HOW TO FIX???
-                *)
-              val () = DE.copySyncDepthsFromThread (interruptedLeftThread, depth+1)
+              val _ = assertAtomic 1
 
-              val () = DE.decheckSetTid tidRight
-              val gr = Result.result g
+              val thread = Thread.current ()
+              (* val astack = jstackGetCurrent () *)
+              val depth = HH.getDepth thread
 
-              val _ = Thread.atomicBegin ()
+              (* val rightSideThread = ref (NONE: Thread.t option) *)
+              val rightSideResult = ref (NONE: 'b Result.t option)
+              val incounter = ref 2
 
-              val t = Thread.current ()
+              val (tidLeft, tidRight) = DE.decheckFork ()
 
-              (** Remove it, don't need it. If we return to the scheduler, we
-                * should guarantee we don't have an activation stack. If we
-                * end up switching to some other thread, then that thread will
-                * reassign its own astack.
-                *)
-              val _ = jstackTakeCurrent ()
+              val jp =
+                J { leftSideThread = interruptedLeftThread
+                  , rightSideThread = rightSideThread
+                  , rightSideResult = rightSideResult
+                  , incounter = incounter
+                  , tidRight = tidRight
+                  , gcj = gcj
+                  }
+
+              val _ = JoinSlot.put (joinslot, jp)
+
+              (* double check... hopefully correct, not off by one? *)
+              val _ = push (Continuation (rightSideThread, depth+1))
+              val _ = HH.setDepth (thread, depth + 1)
+
+              (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+              val _ = recordForkDepth depth
+
+              val _ = DE.decheckSetTid tidLeft
+              val _ = assertAtomic 1
             in
-              rightSideThread := SOME t;
-              rightSideResult := SOME gr;
-
-              if decrementHitsZero incounter then
-                ( ()
-                ; setQueueDepth (myWorkerId ()) (depth+1)
-                  (** Atomic 1 *)
-                ; Thread.atomicBegin ()
-
-                  (** Atomic 2 *)
-
-                  (** (When sibling is resumed, it needs to be atomic 1.
-                    * Switching threads is implicit atomicEnd(), so we need
-                    * to be at atomic2
-                    *)
-                ; assertAtomic 2
-                ; threadSwitchEndAtomic interruptedLeftThread
-
-                    (** Can this possibly race with signal handler on other
-                      * processor??
-                      *   1. Other processor decrements incounter
-                      *   2. Other processor switches to signal handler
-                      *      (marking `iterruptedLeftThread` as not currently
-                      *      active for any processor)
-                      *   3. Now current processor successfully switches
-                      *      to interruptedLeftThread here
-                      *   4. Other processor finishes signal handler and tries
-                      *      to switch back, but can't.
-                      *)
-                )
-              else
-                ( assertAtomic 1
-                ; returnToSchedEndAtomic ()
-                )
+              ()
             end
-          *)
-
-
-          (* double check... hopefully correct, not off by one? *)
-          val _ = push (Continuation (rightSideThread, depth+1))
-          val _ = HH.setDepth (thread, depth + 1)
-
-          (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
-          val _ = recordForkDepth depth
-
-          val _ = DE.decheckSetTid tidLeft
-          val _ = assertAtomic 1
-        in
-          ()
-        end
       end
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj})
+        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, ...})
+        g
       =
       let
         val _ = assertAtomic 1
@@ -758,26 +695,19 @@ struct
                 jstackSetCurrent a
               end
 
-            ; case HM.refDerefNoBarrier rightSideThread of
-                NONE => die (fn _ => "scheduler bug: join failed")
-              | SOME t =>
-                  let
-                    val tidRight = DE.decheckGetTid t
-                  in
-                    HH.mergeThreads (thread, t);
-                    HH.promoteChunks thread;
-                    HH.setDepth (thread, newDepth);
-                    DE.decheckJoin (tidLeft, tidRight);
-                    setQueueDepth (myWorkerId ()) newDepth;
-                    case HM.refDerefNoBarrier rightSideResult of
-                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr =>
-                        ( ()
-                        ; assertAtomic 1
-                        ; Thread.atomicEnd ()
-                        ; gr
-                        )
-                  end
+            ; HH.mergeThreads (thread, rightSideThread)
+            ; HH.promoteChunks thread
+            ; HH.setDepth (thread, newDepth)
+            ; DE.decheckJoin (tidLeft, DE.decheckGetTid rightSideThread)
+            ; setQueueDepth (myWorkerId ()) newDepth
+            ; case HM.refDerefNoBarrier rightSideResult of
+                NONE => die (fn _ => "scheduler bug: join failed: missing result")
+              | SOME gr =>
+                  ( ()
+                  ; assertAtomic 1
+                  ; Thread.atomicEnd ()
+                  ; gr
+                  )
             )
       in
         case gcj of
@@ -863,22 +793,78 @@ struct
       let
         val j = JoinSlot.make spawn
 
-        (* fun rightside () = *)
+        fun leftSideSequentialCont fres =
+          (* what if signal handler (heartbeat) happens here?
+           * it's okay because the pcall frame will be gone, so
+           * `forkThread` won't spawn on this join slot, so spawn will
+           * fail.
+           *)
+          case JoinSlot.cancel j of
+            JoinSlot.Empty => (Result.extractResult fres, g ())
+          | JoinSlot.Full _ =>
+              die (fn _ => "scheduler bug: leftSideSequentialCont full joinslot")
+
+        fun leftSideParCont fres =
+          let
+            val _ = Thread.atomicBegin ()
+          in
+            case JoinSlot.cancel j of
+              JoinSlot.Empty =>
+                die (fn _ => "scheduler bug: leftSideParCont empty joinslot")
+            | JoinSlot.Full jp =>
+                let
+                  val gres = syncEndAtomic jp g
+                in
+                  (Result.extractResult fres, Result.extractResult gres)
+                end
+          end
+
+        fun rightSide () =
+          let
+            val depth = HH.getDepth (Thread.current ())
+            val J {leftSideThread, rightSideResult, tidRight, incounter, ...} =
+              JoinSlot.get j
+            val () = jstackSetCurrentNew ()
+            val () = DE.decheckSetTid tidRight
+            val gr = Result.result g
+            val _ = Thread.atomicBegin ()
+
+            (** Remove the jstack, don't need it. If we return to the
+              * scheduler, we should guarantee we don't have a joinslot
+              * stack. If we end up switching to some other thread, then that
+              * thread will reassign its own astack.
+              *)
+            val _ = jstackTakeCurrent ()
+          in
+            rightSideResult := SOME gr;
+
+            if decrementHitsZero incounter then
+              ( ()
+              ; setQueueDepth (myWorkerId ()) depth
+                (** Atomic 1 *)
+              ; Thread.atomicBegin ()
+
+                (** Atomic 2 *)
+
+                (** (When sibling is resumed, it needs to be atomic 1.
+                  * Switching threads is implicit atomicEnd(), so we need
+                  * to be at atomic2
+                  *)
+              ; assertAtomic 2
+              ; threadSwitchEndAtomic leftSideThread
+              )
+            else
+              ( assertAtomic 1
+              ; returnToSchedEndAtomic ()
+              )
+          end
       in
         pcall
           ( fn () => Result.result f
           , ()
-          , fn fres =>
-              (* what if signal handler (heartbeat) happens here?
-               * it's okay because the pcall frame will be gone, so
-               * `forkThread` won't spawn on this join slot, so spawn will
-               * fail.
-               *)
-              ( JoinSlot.cancel j
-              ; (Result.extractResult fres, g ())
-              )
-          , fn fres => (Result.extractResult fres, g ())
-          , fn () => Primitive.MLton.bug "pcall/parr"
+          , leftSideSequentialCont
+          , leftSideParCont
+          , rightSide
           , ()
           )
       end
