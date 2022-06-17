@@ -186,32 +186,45 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 
 objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
-  GC_stack stack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
-  pointer pframe = findPromotableFrame(s, stack);
+  pointer pframe = findPromotableFrame(s, fromStack);
   if (NULL == pframe) {
     *success = FALSE;
     return BOGUS_OBJPTR;
   }
 
+  GC_returnAddress ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
+  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
+  assert(fi->kind == PCALL_CONT_FRAME);
+  size_t newStackReserved = alignStackReserved(s, fi->size); // TODO double check
+
   uint32_t newDepth = getThreadCurrent(s)->currentDepth;
-  size_t newStackUsed = 0; // TODO: get correct used amount for the new stack
 
   assert (s->savedThread == BOGUS_OBJPTR);
   s->savedThread = pointerToObjptr(threadp, NULL);
-  GC_thread newThread =
-    newThreadWithHeap (s, alignStackReserved(s, newStackUsed), newDepth, TRUE);
+  GC_thread newThread = newThreadWithHeap (s, newStackReserved, newDepth, TRUE);
   assert(s->savedThread == pointerToObjptr(threadp, NULL));
   s->savedThread = BOGUS_OBJPTR;
   objptr newThreadp =
     pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
+
+  GC_stack toStack = (GC_stack)objptrToPointer(newThread->stack, NULL);
+  copyStackFrameToNewStack(s, pframe, fromStack, toStack);
+  pointer newFrame = getStackTop(s, toStack);
+
+  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =
+    *(GC_returnAddress*)(pframe - 2*GC_RETURNADDRESS_SIZE);
+
+  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) =
+    *(GC_returnAddress*)(newFrame - 3*GC_RETURNADDRESS_SIZE);
 
   // Is this right? Or are we missing one suspended depth because forkThread
   // happens before the decheck fork? Might need to fix this by fusing decheck
   // fork with this function.
   GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), newThreadp, newDepth);
 
-  DIE("TODO...");
+  *success = TRUE;
   return pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
 }
 

@@ -801,6 +801,7 @@ struct
 
         fun leftSideParCont fres =
           let
+            val _ = print "hello from left-side par continuation\n"
             val _ = Thread.atomicBegin ()
           in
             case JoinSlot.cancel j of
