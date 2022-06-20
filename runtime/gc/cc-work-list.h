@@ -42,6 +42,7 @@ typedef struct CC_workList_range * CC_workList_range;
 
 bool CC_workList_isEmpty(GC_state s, CC_workList w);
 void CC_workList_init(GC_state s, CC_workList w);
+void CC_workList_free(GC_state s, CC_workList w);
 void CC_workList_push(GC_state s, CC_workList w, objptr op);
 
 /** Returns a single field of an object that still needs to be traced.
