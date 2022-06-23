@@ -568,6 +568,7 @@ struct
     if HH.getDepth originalThread = 0 then ()
     else die (fn _ => "scheduler bug: root depth <> 0")
   val _ = HH.setDepth (originalThread, 1)
+  val _ = HH.forceLeftHeap (myWorkerId (), originalThread)
 
   (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
