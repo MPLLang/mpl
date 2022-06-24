@@ -352,6 +352,13 @@ void traverseAndCheck(
 }
 #endif
 
+static inline objptr getRacyFwdPtr(pointer p) {
+  while (isFwdHeader(getHeader(p))) {
+    p = objptrToPointer(getFwdPtr(p), NULL);
+  }
+  return pointerToObjptr(p, NULL);
+}
+
 void make_entangled(
   GC_state s,
   objptr *opp,
@@ -372,10 +379,10 @@ void make_entangled(
   assert(!isFwdHeader(header));
   bool mutable = isMutableH(s, header);
   bool headerChange = false, pinChange = false;
-  objptr new_ptr = ptr;
   // unpin depth according to the caller
   uint32_t unpinDepth = mea->unpinDepth;
 
+  objptr new_ptr;
   if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
   {
     bool addToRemSet = mea->firstCall;
@@ -399,6 +406,10 @@ void make_entangled(
       HM_HH_rememberAtLevel(HM_getLevelHead(chunk), &(remElem_), true);
     }
   }
+  else {
+    new_ptr = getRacyFwdPtr(ptr);
+  }
+
   mea->unpinDepth = unpinDepth;
 
   assert(!hasFwdPtr(objptrToPointer(new_ptr, NULL)));
@@ -555,7 +566,6 @@ bool decheck(GC_state s, objptr ptr) {
 
   return false;
 #if 0
-  s->cumulativeStatistics->numEntanglementsDetected++;
 
   /** set the chunk's disentangled depth. This synchronizes with GC, if there
     * is GC happening by the owner of this chunk.
