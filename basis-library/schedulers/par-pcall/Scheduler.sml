@@ -14,7 +14,7 @@ struct
   val myWorkerId = MLton.Parallel.processorNumber
 
   fun die strfn =
-    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
+    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn () ^ "\n")
     ; OS.Process.exit OS.Process.failure
     )
 
@@ -63,9 +63,13 @@ struct
     ; Thread.switchTo t
     ) *)
 
-  fun assertAtomic x =
-    if Thread.atomicState () = Word32.fromInt x then ()
-    else die (fn _ => "scheduler bug: expected atomic " ^ Int.toString x)
+  fun assertAtomic msg x =
+    let
+      val ass = Word32.toInt (Thread.atomicState ())
+    in
+      if ass = x then ()
+      else die (fn _ => "scheduler bug: " ^ msg ^ ": atomic " ^ Int.toString ass ^ " but expected " ^ Int.toString x)
+    end
 
   fun threadSwitchEndAtomic t =
     ( if Thread.atomicState () <> 0w0 then ()
@@ -160,6 +164,18 @@ struct
 
   fun dbgmsg' _ = ()
 
+
+  fun dbgmsg'' m =
+    let
+      val p = myWorkerId ()
+      (* val _ = MLton.Parallel.Deprecated.takeLock printLock *)
+      val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
+    in
+      ( TextIO.output (TextIO.stdErr, msg)
+      ; TextIO.flushOut TextIO.stdErr
+      (* ; MLton.Parallel.Deprecated.releaseLock printLock *)
+      )
+    end
 
   (* ========================================================================
    * Activators and activator stacks
@@ -481,6 +497,7 @@ struct
     let
       val myId = myWorkerId ()
       val {schedThread, ...} = vectorSub (workerLocalData, myId)
+      val _ = dbgmsg'' (fn _ => "return to sched")
     in
       threadSwitchEndAtomic (Option.valOf (HM.refDerefNoBarrier schedThread))
     end
@@ -552,9 +569,9 @@ struct
               val a = jstackTakeCurrent ()
             in
               push (Continuation (thread, newDepth))
-              ; assertAtomic 1
+              ; assertAtomic "syncGC before returnToSched" 1
               ; returnToSchedEndAtomic ()
-              ; assertAtomic 1
+              ; assertAtomic "syncGC after returnToSched" 1
               ; jstackSetCurrent a
             end
           ; dbgmsg' (fn _ => "back from GC stuff")
@@ -566,7 +583,7 @@ struct
 
         HH.promoteChunks thread;
         HH.setDepth (thread, newDepth);
-        assertAtomic 1;
+        assertAtomic "syncGC done" 1;
         Thread.atomicEnd ()
       end
 
@@ -608,11 +625,13 @@ struct
             let
               val gcj = spawnGC interruptedLeftThread
 
-              val _ = assertAtomic 1
+              val _ = assertAtomic "spawn after spawnGC" 1
 
               val thread = Thread.current ()
               (* val astack = jstackGetCurrent () *)
               val depth = HH.getDepth thread
+
+              val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
 
               (* val rightSideThread = ref (NONE: Thread.t option) *)
               val rightSideResult = ref (NONE: 'b Result.t option)
@@ -642,7 +661,7 @@ struct
               val _ = recordForkDepth depth
 
               val _ = DE.decheckSetTid tidLeft
-              val _ = assertAtomic 1
+              val _ = assertAtomic "spawn done" 1
             in
               ()
             end
@@ -655,7 +674,7 @@ struct
         g
       =
       let
-        val _ = assertAtomic 1
+        val _ = assertAtomic "syncEndAtomic begin" 1
 
         val thread = Thread.current ()
         val depth = HH.getDepth thread
@@ -670,7 +689,8 @@ struct
            * for efficiency anymore.
            *)
           if popDiscard () then
-            ( HH.promoteChunks thread
+            ( dbgmsg'' (fn _ => "popDiscard success at depth " ^ Int.toString depth)
+            ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
             ; Thread.atomicEnd ()
@@ -696,9 +716,9 @@ struct
                 else
                   ( ()
                     (** Atomic 1 *)
-                  ; assertAtomic 1
+                  ; assertAtomic "syncEndAtomic before returnToSched" 1
                   ; returnToSchedEndAtomic ()
-                  ; assertAtomic 1
+                  ; assertAtomic "syncEndAtomic after returnToSched" 1
                   );
 
                 jstackSetCurrent a
@@ -713,7 +733,7 @@ struct
                 NONE => die (fn _ => "scheduler bug: join failed: missing result")
               | SOME gr =>
                   ( ()
-                  ; assertAtomic 1
+                  ; assertAtomic "syncEndAtomic after merge" 1
                   ; Thread.atomicEnd ()
                   ; gr
                   )
@@ -815,7 +835,7 @@ struct
 
         fun leftSideParCont fres =
           let
-            val _ = print "hello from left-side par continuation\n"
+            val _ = dbgmsg'' (fn _ => "hello from left-side par continuation")
             val _ = Thread.atomicBegin ()
           in
             case JoinSlot.cancel j of
@@ -831,13 +851,36 @@ struct
 
         fun rightSide () =
           let
-            val depth = HH.getDepth (Thread.current ())
+            val _ = assertAtomic "pcallFork rightside begin" 1
+
+            (** When we forkThread, we copy the current thread's depth. Now
+              * we have switched to the copy, but the copy still appears to
+              * be at the parent depth. We need to advance, to begin working
+              * at the correct depth.
+              *)
+            val thread = Thread.current ()
+            val parentDepth = HH.getDepth thread
+            val depth = parentDepth+1
+            val _ = HH.setDepth (thread, depth)
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+
+            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
             val J {leftSideThread, rightSideResult, tidRight, incounter, ...} =
               JoinSlot.get j
             val () = jstackSetCurrentNew ()
             val () = DE.decheckSetTid tidRight
+            val _ = Thread.atomicEnd()
+
             val gr = Result.result g
+
             val _ = Thread.atomicBegin ()
+            val depth' = HH.getDepth (Thread.current ())
+            val _ =
+              if depth = depth' then ()
+              else die (fn _ => "scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
+
+            val _ = dbgmsg'' (fn _ => "rightside done at depth " ^ Int.toString depth')
+            val _ = assertAtomic "pcallFork rightside begin synchronize" 1
 
             (** Remove the jstack, don't need it. If we return to the
               * scheduler, we should guarantee we don't have a joinslot
@@ -845,6 +888,8 @@ struct
               * thread will reassign its own astack.
               *)
             val _ = jstackTakeCurrent ()
+
+            val _ = assertAtomic "pcallFork rightside after jstackTake" 1
           in
             rightSideResult := SOME gr;
 
@@ -860,11 +905,11 @@ struct
                   * Switching threads is implicit atomicEnd(), so we need
                   * to be at atomic2
                   *)
-              ; assertAtomic 2
+              ; assertAtomic "pcallFork rightside switch-to-left" 2
               ; threadSwitchEndAtomic leftSideThread
               )
             else
-              ( assertAtomic 1
+              ( assertAtomic "pcallFork rightside before returnToSched" 1
               ; returnToSchedEndAtomic ()
               )
           end
@@ -942,9 +987,9 @@ struct
 
       fun afterReturnToSched () =
         case getGCTask myId of
-          NONE => ( dbgmsg' (fn _ => "back in sched; no GC task"); () )
+          NONE => ( dbgmsg'' (fn _ => "back in sched; no GC task"); () )
         | SOME (thread, hh) =>
-            ( dbgmsg' (fn _ => "back in sched; found GC task")
+            ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
             (* ; print ("afterReturnToSched: found GC task\n") *)
             ; HH.collectThreadRoot (thread, !hh)
@@ -953,10 +998,10 @@ struct
                 NONE => ()
               | SOME (Continuation (thread, _)) =>
                   ( ()
-                  ; dbgmsg' (fn _ => "resume task thread")
+                  ; dbgmsg'' (fn _ => "resume task thread")
                   ; Thread.atomicBegin ()
                   ; Thread.atomicBegin ()
-                  ; assertAtomic 2
+                  ; assertAtomic "afterReturnToSched before thread switch" 2
                   ; threadSwitchEndAtomic thread
                   ; afterReturnToSched ()
                   )
@@ -977,12 +1022,12 @@ struct
               )
           | Continuation (thread, depth) =>
               ( ()
-              ; dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
+              ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
               ; Thread.atomicBegin ()
               ; Thread.atomicBegin ()
-              ; assertAtomic 2
+              ; assertAtomic "acquireWork before thread switch" 2
               ; threadSwitchEndAtomic thread
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
@@ -993,7 +1038,7 @@ struct
                 val taskThread = Thread.copy prototypeThread
               in
                 if depth >= 1 then () else
-                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
+                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
                 Queue.setDepth myQueue (depth+1);
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
