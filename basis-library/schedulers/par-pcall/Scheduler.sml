@@ -259,8 +259,7 @@ struct
       val _ = Thread.atomicBegin ()
       val JStack {stack, ...} = jstackGetCurrent ()
       val result = Stack.pop stack
-      val _ = if Stack.currentSize stack <> 0 then ()
-              else dbgmsg'' (fn _ => "just popped last join")
+      val _ = dbgmsg'' (fn _ => "jstack size after pop: " ^ Int.toString (Stack.currentSize stack))
     in
       Thread.atomicEnd ();
       result
@@ -300,10 +299,11 @@ struct
     val make: ('a t -> Thread.t -> unit) -> 'a t
     val cancel: 'a t -> 'a status
     val put: 'a t * 'a joinpoint -> unit
+    val markUnsuccessful: 'a t -> unit
     val get: 'a t -> 'a joinpoint
   end =
   struct
-    datatype 'a internal_status = JNone | JSome of 'a joinpoint | JCancelled
+    datatype 'a internal_status = JNone | JSome of 'a joinpoint | JCancelled | JUnsuccessfulSpawn
     datatype 'a status = Empty | Full of 'a joinpoint
     datatype 'a t = T of joinslot_id * ('a internal_status ref)
 
@@ -313,6 +313,7 @@ struct
         val jid = nextJoinSlotId (myWorkerId ())
         val result = T (jid, j)
       in
+        dbgmsg'' (fn _ => "making " ^ Word64.toString jid);
         jstackPush (jid, doSpawn result);
         result
       end
@@ -322,32 +323,64 @@ struct
 
       ; case jstackPop () of
           NONE => ()
+            (* (case !j of JSome _ => () | _ => die (fn _ => "scheduler bug: non-full popped join")) *)
         | SOME (jid', _) =>
             if jid = jid' then ()
             else die (fn _ => "scheduler bug: activator pop mismatch")
 
       ; case !j of
-          JNone => (j := JCancelled; Empty)
-        | JSome jp => (j := JCancelled; Full jp)
+          JNone =>
+            ( dbgmsg'' (fn _ => "cancelling " ^ Word64.toString jid ^ ": no spawn")
+            ; j := JCancelled
+            ; Empty
+            )
+        | JUnsuccessfulSpawn =>
+            ( dbgmsg'' (fn _ => "cancelling " ^ Word64.toString jid ^ ": unsuccessful spawn")
+            ; j := JCancelled
+            ; Empty
+            )
+        | JSome jp =>
+            ( dbgmsg'' (fn _ => "cancelling " ^ Word64.toString jid ^ ": spawned")
+            ; j := JCancelled
+            ; Full jp
+            )
         | JCancelled => die (fn _ => "scheduler bug: double join cancel")
       )
 
-    fun put (T (_, jor), j) =
+    fun put (T (jid, jor), j) =
       let
+        val _ = dbgmsg'' (fn _ => "putting " ^ Word64.toString jid)
         val _ =
           case !jor of
             JCancelled => die (fn _ => "scheduler bug: join put after cancel")
+          | JUnsuccessfulSpawn => die (fn _ => "scheduler bug: join put after unsuccessful spawn")
           | JSome _ => die (fn _ => "scheduler bug: join double put")
           | JNone => ()
       in
         jor := JSome j
       end
 
-    fun get (T (_, jor)) =
-      case !jor of
-        JSome j => j
-      | JNone => die (fn _ => "scheduler bug: JoinSlot.get on NONE")
-      | JCancelled => die (fn _ => "scheduler bug: get cancelled")
+    fun get (T (jid, jor)) =
+      ( dbgmsg'' (fn _ => "getting " ^ Word64.toString jid)
+      ; case !jor of
+          JSome j => j
+        | JNone => die (fn _ => "scheduler bug: JoinSlot.get on NONE")
+        | JUnsuccessfulSpawn => die (fn _ => "scheduler bug: get after unsuccessful spawn")
+        | JCancelled => die (fn _ => "scheduler bug: get cancelled")
+      )
+
+    fun markUnsuccessful (T (jid, jor)) =
+      let
+        val _ = dbgmsg'' (fn _ => "marking unsuccessful " ^ Word64.toString jid)
+        val _ =
+          case !jor of
+            JCancelled => die (fn _ => "scheduler bug: join mark unsuccessful after cancel")
+          | JUnsuccessfulSpawn => die (fn _ => "scheduler bug: double mark unsuccessful")
+          | JSome _ => die (fn _ => "scheduler bug: join mark unsuccessful after put")
+          | JNone => ()
+      in
+        jor := JUnsuccessfulSpawn
+      end
   end
 
   (* ========================================================================
@@ -614,7 +647,7 @@ struct
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth)
         then
-          ()
+          JoinSlot.markUnsuccessful joinslot
         else
 
         (* SAM_NOTE:
@@ -636,7 +669,7 @@ struct
          * is pop.
          *)
         case HH.forkThread interruptedLeftThread of
-          NONE => ()
+          NONE => JoinSlot.markUnsuccessful joinslot
         | SOME rightSideThread =>
             let
               val gcj = spawnGC interruptedLeftThread
@@ -836,6 +869,7 @@ struct
 
     fun pcallFork (f: unit -> 'a, g: unit -> 'b) =
       let
+        val _ = Thread.atomicBegin ()
         val j = JoinSlot.make spawn
 
         fun leftSideSequentialCont fres = (
@@ -847,7 +881,11 @@ struct
            *)
            (*...... *)
           case JoinSlot.cancel j of
-            JoinSlot.Empty => (Result.extractResult fres, g ())
+            JoinSlot.Empty =>
+              ( assertAtomic "leftSideSequentialCont" 1
+              ; Thread.atomicEnd ()
+              ; (Result.extractResult fres, g ())
+              )
           | JoinSlot.Full _ =>
               die (fn _ => "scheduler bug: leftSideSequentialCont full joinslot")
         )
@@ -855,7 +893,8 @@ struct
         fun leftSideParCont fres =
           let
             val _ = dbgmsg'' (fn _ => "hello from left-side par continuation")
-            val _ = Thread.atomicBegin ()
+            (* val _ = Thread.atomicBegin () *)
+            val _ = assertAtomic "leftSideParCont" 1
           in
             case JoinSlot.cancel j of
               JoinSlot.Empty =>
@@ -936,9 +975,13 @@ struct
         pcall
           ( fn () =>
               let
+                val _ = assertAtomic "pcall left-side begin" 1
+                val _ = Thread.atomicEnd ()
                 val r = Result.result f
               in
                 (* (_import "AABBCC": unit -> unit;)(); *)
+                assertAtomic "pcall left-side done" 0;
+                Thread.atomicBegin();
                 r
               end
           , ()

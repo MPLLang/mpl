@@ -22,7 +22,7 @@ local
   ../shh/FORK_JOIN.sig
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
-  ../shh/Stack.sml
+  Stack.sml
   ../shh/Result.sml
   ann
     "allowFFI true"
