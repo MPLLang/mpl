@@ -16,7 +16,7 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   pointer dstp = objptrToPointer(dst, NULL);
   HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dstp));
 
-  if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0)
+  if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0 || !ES_contains(NULL, dst))
   {
     return src;
   }
@@ -24,7 +24,6 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, src))
   {
-    assert(ES_contains(NULL, dst));
     assert (isMutable(s, dstp));
     new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
@@ -45,7 +44,7 @@ objptr Assignable_readBarrier(
   objptr ptr = *field;
   pointer objp = objptrToPointer(obj, NULL);
   HM_HierarchicalHeap objHH = HM_getLevelHead(HM_getChunkOf(objp));
-  if (!isObjptr(ptr) || HM_HH_getDepth(objHH) == 0)
+  if (!isObjptr(ptr) || HM_HH_getDepth(objHH) == 0 || !ES_contains(NULL, obj))
   {
     return ptr;
   }
