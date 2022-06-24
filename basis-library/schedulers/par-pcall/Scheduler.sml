@@ -6,6 +6,8 @@
 structure Scheduler =
 struct
 
+  val _ = print ("J DEBUGGING\n")
+
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
@@ -257,6 +259,8 @@ struct
       val _ = Thread.atomicBegin ()
       val JStack {stack, ...} = jstackGetCurrent ()
       val result = Stack.pop stack
+      val _ = if Stack.currentSize stack <> 0 then ()
+              else dbgmsg'' (fn _ => "just popped last join")
     in
       Thread.atomicEnd ();
       result
@@ -299,12 +303,13 @@ struct
     val get: 'a t -> 'a joinpoint
   end =
   struct
+    datatype 'a internal_status = JNone | JSome of 'a joinpoint | JCancelled
     datatype 'a status = Empty | Full of 'a joinpoint
-    datatype 'a t = T of joinslot_id * ('a joinpoint option ref)
+    datatype 'a t = T of joinslot_id * ('a internal_status ref)
 
     fun make (doSpawn: 'a t -> Thread.t -> unit) =
       let
-        val j: 'a joinpoint option ref = ref NONE
+        val j: 'a internal_status ref = ref JNone
         val jid = nextJoinSlotId (myWorkerId ())
         val result = T (jid, j)
       in
@@ -322,16 +327,27 @@ struct
             else die (fn _ => "scheduler bug: activator pop mismatch")
 
       ; case !j of
-          NONE => Empty
-        | SOME jp => Full jp
+          JNone => (j := JCancelled; Empty)
+        | JSome jp => (j := JCancelled; Full jp)
+        | JCancelled => die (fn _ => "scheduler bug: double join cancel")
       )
 
-    fun put (T (_, jor), j) = (jor := SOME j)
+    fun put (T (_, jor), j) =
+      let
+        val _ =
+          case !jor of
+            JCancelled => die (fn _ => "scheduler bug: join put after cancel")
+          | JSome _ => die (fn _ => "scheduler bug: join double put")
+          | JNone => ()
+      in
+        jor := JSome j
+      end
 
     fun get (T (_, jor)) =
       case !jor of
-        SOME j => j
-      | NONE => die (fn _ => "scheduler bug: JoinSlot.get on NONE")
+        JSome j => j
+      | JNone => die (fn _ => "scheduler bug: JoinSlot.get on NONE")
+      | JCancelled => die (fn _ => "scheduler bug: get cancelled")
   end
 
   (* ========================================================================
@@ -822,16 +838,19 @@ struct
       let
         val j = JoinSlot.make spawn
 
-        fun leftSideSequentialCont fres =
+        fun leftSideSequentialCont fres = (
+          (* (_import "XXYYZZ": unit -> unit;)(); *)
           (* what if signal handler (heartbeat) happens here?
            * it's okay because the pcall frame will be gone, so
            * `forkThread` won't spawn on this join slot, so spawn will
            * fail.
            *)
+           (*...... *)
           case JoinSlot.cancel j of
             JoinSlot.Empty => (Result.extractResult fres, g ())
           | JoinSlot.Full _ =>
               die (fn _ => "scheduler bug: leftSideSequentialCont full joinslot")
+        )
 
         fun leftSideParCont fres =
           let
@@ -915,7 +934,13 @@ struct
           end
       in
         pcall
-          ( fn () => Result.result f
+          ( fn () =>
+              let
+                val r = Result.result f
+              in
+                (* (_import "AABBCC": unit -> unit;)(); *)
+                r
+              end
           , ()
           , leftSideSequentialCont
           , leftSideParCont
