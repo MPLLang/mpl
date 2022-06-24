@@ -853,7 +853,7 @@ void CC_filterPinned(
   /** Save "valid" entries to newRemSet, throw away old entries, and store
     * valid entries back into the main remembered set.
     */
-  HM_foreachRemembered(s, oldRemSet, &closure);
+  HM_foreachRemembered(s, oldRemSet, &closure, false);
 
   struct CC_chunkInfo info =
     {.initialDepth = initialDepth,
@@ -986,7 +986,7 @@ size_t CC_collectWithRoots(
 
   struct HM_foreachDownptrClosure forwardPinnedClosure =
     {.fun = forwardPinned, .env = (void*)&lists};
-  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &forwardPinnedClosure);
+  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &forwardPinnedClosure, false);
 
   // forward closures, stack and deque?
   forceForward(s, &(cp->snapLeft), &lists);
@@ -1046,7 +1046,7 @@ size_t CC_collectWithRoots(
 
   struct HM_foreachDownptrClosure unmarkPinnedClosure =
     {.fun = unmarkPinned, .env = &lists};
-  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &unmarkPinnedClosure);
+  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &unmarkPinnedClosure, false);
 
   forceUnmark(s, &(cp->snapLeft), &lists);
   forceUnmark(s, &(cp->snapRight), &lists);

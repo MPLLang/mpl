@@ -459,7 +459,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 
     struct HM_foreachDownptrClosure closure =
         {.fun = tryUnpinOrKeepPinned, .env = (void *)&forwardHHObjptrArgs};
-    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
+    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure, true);
   }
   forwardHHObjptrArgs.concurrent = false;
   forwardHHObjptrArgs.toDepth = HM_HH_INVALID_DEPTH;
@@ -762,7 +762,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     if (toSpaceLevel != NULL) {
       struct HM_foreachDownptrClosure unmarkClosure =
         {.fun = unmarkWrapper, .env = NULL};
-      HM_foreachPublic(s, HM_HH_getRemSet(toSpaceLevel), &unmarkClosure);
+      HM_foreachPublic(s, HM_HH_getRemSet(toSpaceLevel), &unmarkClosure, true);
     }
 
     /* unset the flags on pinned chunks and update their HH pointer */
@@ -877,7 +877,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   {
     struct HM_foreachDownptrClosure closure =
         {.fun = checkRememberedEntry, .env = (void *)cursor};
-    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure);
+    HM_foreachRemembered(s, HM_HH_getRemSet(cursor), &closure, false);
   }
 
   // make sure that original representatives haven't been messed up
@@ -1417,8 +1417,6 @@ void addEntangledToRemSet(
     markObj(p);
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
     HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
-
-    // traverseAndCheck(s, &op, op, NULL);
   }
 }
 

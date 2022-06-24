@@ -37,36 +37,126 @@ void HM_foreachPrivate(
   }
 }
 
+typedef struct FishyChunk
+{
+  HM_chunk chunk;
+  pointer scanned;
+} FishyChunk;
+
+void makeChunkFishy(FishyChunk * fc, HM_chunk chunk, pointer frontier, int* numFishyChunks) {
+  (fc[*numFishyChunks]).chunk = chunk;
+  (fc[*numFishyChunks]).scanned = frontier;
+  *numFishyChunks = *numFishyChunks + 1;
+  return;
+}
+
+void checkFishyChunks(GC_state s,
+  FishyChunk * fishyChunks,
+  int numFishyChunks,
+  HM_foreachDownptrClosure f)
+{
+  if (fishyChunks == NULL) {
+    return;
+  }
+  while (TRUE) {
+    int i = numFishyChunks - 1;
+    bool changed = false;
+    while (i >= 0)
+    {
+      HM_chunk chunk = fishyChunks[i].chunk;
+      pointer p = fishyChunks[i].scanned;
+      pointer frontier = HM_getChunkFrontier(chunk);
+      while (p < frontier)
+      {
+        f->fun(s, (HM_remembered)p, f->env);
+        p += sizeof(struct HM_remembered);
+      }
+      if (p != fishyChunks[i].scanned) {
+        fishyChunks[i].scanned = p;
+        changed = true;
+      }
+      i --;
+    }
+    if (!changed) {
+      return;
+    }
+  }
+}
+
 void HM_foreachPublic (
   GC_state s,
   HM_remSet remSet,
-  HM_foreachDownptrClosure f)
+  HM_foreachDownptrClosure f,
+  bool trackFishyChunks)
 {
-  while (TRUE)
-  {
+
+  if ((remSet->public).firstChunk == NULL) {
+    return;
+  }
+
+  if (!trackFishyChunks) {
     struct HM_chunkList _chunkList;
     HM_chunkList chunkList = &(_chunkList);
     CC_popAsChunkList(&(remSet->public), chunkList);
-    if (chunkList->firstChunk == NULL)
+    HM_foreachPrivate(s, chunkList, f);
+    HM_appendChunkList(&(remSet->private), chunkList);
+    return;
+  }
+
+  HM_chunk chunk = (remSet->public).firstChunk;
+  FishyChunk* fishyChunks = malloc(sizeof(struct FishyChunk) * 2 * s->numberOfProcs);
+  int numFishyChunks = 0;
+  while (TRUE)
+  {
+    if (chunk == NULL)
     {
       break;
     }
     else
     {
-      HM_foreachPrivate(s, chunkList, f);
-      HM_appendChunkList(&(remSet->private), chunkList);
+      while (chunk != NULL)
+      {
+        pointer p = HM_getChunkStart(chunk);
+        pointer frontier = HM_getChunkFrontier(chunk);
+        while (p < frontier)
+        {
+          f->fun(s, (HM_remembered)p, f->env);
+          p += sizeof(struct HM_remembered);
+        }
+        if ((chunk->retireChunk || chunk->nextChunk == NULL))
+        {
+          if (numFishyChunks < 2 * s->numberOfProcs) {
+            makeChunkFishy(fishyChunks, chunk, p, &numFishyChunks);
+          }
+          else {
+            DIE("Fishy chunk limit exceeded");
+          }
+        }
+        chunk = chunk->nextChunk;
+      }
+      checkFishyChunks(s, fishyChunks, numFishyChunks, f);
+      HM_chunk lastChunk = (remSet->public).lastChunk;
+      if (lastChunk != fishyChunks[numFishyChunks - 1].chunk) {
+        chunk = lastChunk;
+      }
     }
+    struct HM_chunkList _chunkList;
+    HM_chunkList chunkList = &(_chunkList);
+    CC_popAsChunkList(&(remSet->public), chunkList);
+    HM_appendChunkList(&(remSet->private), chunkList);
   }
+  free(fishyChunks);
 }
 
 void HM_foreachRemembered(
   GC_state s,
   HM_remSet remSet,
-  HM_foreachDownptrClosure f)
+  HM_foreachDownptrClosure f,
+  bool trackFishyChunks)
 {
   assert(remSet != NULL);
   HM_foreachPrivate(s, &(remSet->private), f);
-  HM_foreachPublic(s, remSet, f);
+  HM_foreachPublic(s, remSet, f, trackFishyChunks);
 }
 
 
