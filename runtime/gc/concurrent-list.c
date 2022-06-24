@@ -10,9 +10,9 @@ void allocateChunkInConcList(
   HM_chunk lastChunk) {
   GC_state s = pthread_getspecific(gcstate_key);
 
-  // pthread_mutex_lock(&concList->mutex);
+  pthread_mutex_lock(&concList->mutex);
   if(concList->lastChunk != lastChunk) {
-    // pthread_mutex_unlock(&concList->mutex);
+    pthread_mutex_unlock(&concList->mutex);
     return;
   }
 
@@ -39,12 +39,12 @@ void allocateChunkInConcList(
   {
     concList->firstChunk = chunk;
   }
-  // pthread_mutex_unlock(&concList->mutex);
+  pthread_mutex_unlock(&concList->mutex);
 }
 
 pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize){
   assert(concList != NULL);
-  pthread_mutex_lock(&concList->mutex);
+  // pthread_mutex_lock(&concList->mutex);
   while(TRUE) {
     HM_chunk chunk = concList->lastChunk;
     if (NULL == chunk) {
@@ -62,12 +62,12 @@ pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize){
       bool success = __sync_bool_compare_and_swap(&(chunk->frontier), frontier, new_frontier);
       if (success) {
         memcpy(frontier, p, objSize);
-        pthread_mutex_unlock(&concList->mutex);
+        // pthread_mutex_unlock(&concList->mutex);
         return frontier;
       }
     }
   }
-  pthread_mutex_unlock(&concList->mutex);
+  // pthread_mutex_unlock(&concList->mutex);
   DIE("should never come here");
   return NULL;
 }
@@ -166,6 +166,7 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
     return;
   }
 
+
   pthread_mutex_lock(&concList1->mutex);
   if (concList1->lastChunk == NULL) {
     concList1->firstChunk = firstChunk;
@@ -173,6 +174,7 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
   }
   else {
     concList1->lastChunk->nextChunk = firstChunk;
+    concList1->lastChunk->retireChunk = true;
     firstChunk->prevChunk = concList1->lastChunk;
     concList1->lastChunk = lastChunk;
   }
