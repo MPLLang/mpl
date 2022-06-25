@@ -166,7 +166,7 @@ structure GC =
 
       val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
 
-      val numberEntanglementsDetected = _import "GC_numEntanglementsDetected" runtime private: GCState.t -> C_UIntmax.t;
+      val approxRaceFactor = _import "GC_approxRaceFactor" runtime private: GCState.t -> Real32.real;
 
       val numberSuspectsMarked = _import "GC_numSuspectsMarked" runtime private: GCState.t -> C_UIntmax.t;
 

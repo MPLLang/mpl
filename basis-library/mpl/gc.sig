@@ -19,7 +19,7 @@ sig
 
   (* How many times entanglement has been detected at a read barrier.
    *)
-  val numberEntanglementsDetected: unit -> IntInf.int
+  val approxRaceFactor: unit -> Real32.real
 
   val numberSuspectsMarked: unit -> IntInf.int
   val numberSuspectsCleared: unit -> IntInf.int

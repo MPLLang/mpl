@@ -309,6 +309,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       .pinned = NULL,
       .containingObject = BOGUS_OBJPTR,
       .bytesCopied = 0,
+      .entangledBytes = 0,
       .objectsCopied = 0,
       .stacksCopied = 0,
       .bytesMoved = 0,
@@ -903,6 +904,10 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   thread->bytesSurvivedLastCollection =
       forwardHHObjptrArgs.bytesMoved + forwardHHObjptrArgs.bytesCopied;
 
+  float new_rf = forwardHHObjptrArgs.entangledBytes;
+
+  s->cumulativeStatistics->approxRaceFactor = max(s->cumulativeStatistics->approxRaceFactor, new_rf);
+
   thread->bytesAllocatedSinceLastCollection = 0;
 
   // sizes info and stats
@@ -1417,6 +1422,19 @@ void addEntangledToRemSet(
     markObj(p);
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
     HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
+
+    size_t metaDataBytes;
+    size_t objectBytes;
+    size_t copyBytes;
+
+    /* compute object size and bytes to be copied */
+    computeObjectCopyParameters(s,
+                                header,
+                                p,
+                                &objectBytes,
+                                &copyBytes,
+                                &metaDataBytes);
+    args->entangledBytes += copyBytes;
   }
 }
 

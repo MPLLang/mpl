@@ -40,6 +40,7 @@ struct ForwardHHObjptrArgs
   objptr containingObject;
 
   size_t bytesCopied;
+  size_t entangledBytes;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
 

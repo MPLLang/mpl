@@ -40,8 +40,8 @@ struct
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
 
-    fun numberEntanglementsDetected () =
-      C_UIntmax.toLargeInt (GC.numberEntanglementsDetected (gcState ()))
+    fun approxRaceFactor () =
+      (GC.approxRaceFactor (gcState ()))
 
     fun numberSuspectsMarked () =
       C_UIntmax.toLargeInt (GC.numberSuspectsMarked (gcState ()))
