@@ -341,7 +341,7 @@ struct
             )
         | JSome jp =>
             ( dbgmsg'' (fn _ => "cancelling " ^ Word64.toString jid ^ ": spawned")
-            ; j := JCancelled
+            (* ; j := JCancelled *)
             ; Full jp
             )
         | JCancelled => die (fn _ => "scheduler bug: double join cancel")
