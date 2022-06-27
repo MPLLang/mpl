@@ -30,6 +30,7 @@ pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize);
 // void CC_foreachRemInConc(GC_state s, CC_concList concList, struct HM_foreachDownptrClosure* f);
 void CC_popAsChunkList(CC_concList concList, HM_chunkList chunkList);
 
+HM_chunk CC_getLastChunk (CC_concList concList);
 void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info);
 void CC_appendConcList(CC_concList concList1, CC_concList concList2);
 

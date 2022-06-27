@@ -50,6 +50,16 @@ void makeChunkFishy(FishyChunk * fc, HM_chunk chunk, pointer frontier, int* numF
   return;
 }
 
+FishyChunk * resizeFishyArray (FishyChunk * fishyChunks, int * currentSize) {
+  int cs =  *currentSize;
+  int new_size = 2 * cs;
+  FishyChunk * fc = malloc(sizeof(struct FishyChunk) * new_size);
+  memcpy(fc, fishyChunks, sizeof(struct FishyChunk) * cs);
+  *currentSize = new_size;
+  free(fishyChunks);
+  return fc;
+}
+
 void checkFishyChunks(GC_state s,
   FishyChunk * fishyChunks,
   int numFishyChunks,
@@ -58,27 +68,32 @@ void checkFishyChunks(GC_state s,
   if (fishyChunks == NULL) {
     return;
   }
-  while (TRUE) {
+  bool changed = true;
+  while (changed) {
     int i = numFishyChunks - 1;
-    bool changed = false;
+    changed = false;
     while (i >= 0)
     {
       HM_chunk chunk = fishyChunks[i].chunk;
       pointer p = fishyChunks[i].scanned;
       pointer frontier = HM_getChunkFrontier(chunk);
-      while (p < frontier)
+      while (TRUE)
       {
-        f->fun(s, (HM_remembered)p, f->env);
-        p += sizeof(struct HM_remembered);
+        while (p < frontier)
+        {
+          f->fun(s, (HM_remembered)p, f->env);
+          p += sizeof(struct HM_remembered);
+        }
+        frontier = HM_getChunkFrontier(chunk);
+        if (p >= frontier) {
+          break;
+        }
       }
       if (p != fishyChunks[i].scanned) {
         fishyChunks[i].scanned = p;
         changed = true;
       }
       i --;
-    }
-    if (!changed) {
-      return;
     }
   }
 }
@@ -104,48 +119,42 @@ void HM_foreachPublic (
   }
 
   HM_chunk chunk = (remSet->public).firstChunk;
-  FishyChunk* fishyChunks = malloc(sizeof(struct FishyChunk) * 2 * s->numberOfProcs);
+  HM_chunk lastChunk = CC_getLastChunk (&(remSet->public));
+  int array_size = 2 * s->numberOfProcs;
+  FishyChunk* fishyChunks = malloc(sizeof(struct FishyChunk) * array_size);
   int numFishyChunks = 0;
-  while (TRUE)
+  while (chunk != NULL)
   {
-    if (chunk == NULL)
+    while (chunk != NULL)
     {
-      break;
-    }
-    else
-    {
-      while (chunk != NULL)
+      pointer p = HM_getChunkStart(chunk);
+      pointer frontier = HM_getChunkFrontier(chunk);
+      while (p < frontier)
       {
-        pointer p = HM_getChunkStart(chunk);
-        pointer frontier = HM_getChunkFrontier(chunk);
-        while (p < frontier)
-        {
-          f->fun(s, (HM_remembered)p, f->env);
-          p += sizeof(struct HM_remembered);
-        }
-        if ((chunk->retireChunk || chunk->nextChunk == NULL))
-        {
-          if (numFishyChunks < 2 * s->numberOfProcs) {
-            makeChunkFishy(fishyChunks, chunk, p, &numFishyChunks);
-          }
-          else {
-            DIE("Fishy chunk limit exceeded");
-          }
-        }
-        chunk = chunk->nextChunk;
+        f->fun(s, (HM_remembered)p, f->env);
+        p += sizeof(struct HM_remembered);
       }
-      checkFishyChunks(s, fishyChunks, numFishyChunks, f);
-      HM_chunk lastChunk = (remSet->public).lastChunk;
-      if (lastChunk != fishyChunks[numFishyChunks - 1].chunk) {
-        chunk = lastChunk;
+      if ((chunk->retireChunk || chunk->nextChunk == NULL))
+      {
+        if (numFishyChunks >= array_size) {
+          fishyChunks = resizeFishyArray(fishyChunks, &array_size);
+        }
+        makeChunkFishy(fishyChunks, chunk, p, &numFishyChunks);
       }
+      chunk = chunk->nextChunk;
     }
-    struct HM_chunkList _chunkList;
-    HM_chunkList chunkList = &(_chunkList);
-    CC_popAsChunkList(&(remSet->public), chunkList);
-    HM_appendChunkList(&(remSet->private), chunkList);
+    checkFishyChunks(s, fishyChunks, numFishyChunks, f);
+    lastChunk = CC_getLastChunk(&(remSet->public));
+    if (lastChunk != fishyChunks[numFishyChunks - 1].chunk) {
+      assert (chunk->nextChunk != NULL);
+      chunk = chunk->nextChunk;
+    }
   }
   free(fishyChunks);
+  struct HM_chunkList _chunkList;
+  HM_chunkList chunkList = &(_chunkList);
+  CC_popAsChunkList(&(remSet->public), chunkList);
+  HM_appendChunkList(&(remSet->private), chunkList);
 }
 
 void HM_foreachRemembered(

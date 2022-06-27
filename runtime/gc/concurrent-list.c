@@ -58,10 +58,12 @@ pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize){
         allocateChunkInConcList(concList, objSize, chunk);
         continue;
       }
+
+      memcpy(frontier, p, objSize);
       pointer new_frontier = frontier + objSize;
       bool success = __sync_bool_compare_and_swap(&(chunk->frontier), frontier, new_frontier);
-      if (success) {
-        memcpy(frontier, p, objSize);
+      if (memcmp(frontier, p, objSize) == 0)
+      {
         // pthread_mutex_unlock(&concList->mutex);
         return frontier;
       }
@@ -150,6 +152,14 @@ void CC_popAsChunkList(CC_concList concList, HM_chunkList chunkList) {
   chunkList->lastChunk = concList->lastChunk;
   concList->lastChunk = NULL;
   pthread_mutex_unlock(&concList->mutex);
+}
+
+HM_chunk CC_getLastChunk (CC_concList concList) {
+  HM_chunk c;
+  pthread_mutex_lock(&concList->mutex);
+  c = concList->lastChunk;
+  pthread_mutex_unlock(&concList->mutex);
+  return c;
 }
 
 void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
