@@ -404,10 +404,11 @@ void make_entangled(
     {
       struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
       HM_HH_rememberAtLevel(HM_getLevelHead(chunk), &(remElem_), true);
+      assert (HM_HH_getDepth(HM_getLevelHead(chunk)) != 1);
     }
   }
   else {
-    new_ptr = getRacyFwdPtr(ptr);
+    new_ptr = getRacyFwdPtr(p_ptr);
   }
 
   mea->unpinDepth = unpinDepth;
@@ -460,22 +461,24 @@ objptr manage_entangled(
   GC_header header = getHeader(objptrToPointer (ptr, NULL));
 
 
+  uint32_t current_ud = unpinDepthOfH(header);
+  enum PinType current_pt = pinType(header);
   bool manage = isFwdHeader(header) ||
-    pinType (header) != PIN_ANY ||
-    unpinDepthOfH(header) > unpinDepth;
+    current_pt != PIN_ANY ||
+    current_ud > unpinDepth;
 
-  if (pinType(header) != PIN_NONE && unpinDepthOfH(header) == 0)
+  if (current_pt != PIN_NONE && current_ud == 0)
   {
     return ptr;
   }
 
   if (manage) {
-    uint32_t newUnpinDepth = pinType(header) == PIN_NONE ? unpinDepth : min(unpinDepthOfH(header), unpinDepth);
+    uint32_t newUnpinDepth = current_pt == PIN_NONE ? unpinDepth : min(current_ud, unpinDepth);
     struct ManageEntangledArgs mea = {
       .reader = reader,
       .root = allocator,
       .unpinDepth = newUnpinDepth,
-      .firstCall = true
+      .firstCall = !(current_pt == PIN_DOWN && current_ud == 1)
     };
     make_entangled(s, &ptr, ptr, (void*) &mea);
   }
