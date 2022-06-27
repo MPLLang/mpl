@@ -163,7 +163,7 @@ struct
 
   fun rootBytesReclaimed () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getRootCCBytesReclaimedOfProc)
+    (sumAllProcs C_UIntmax.max getRootCCBytesReclaimedOfProc)
 
   fun internalBytesReclaimed () =
     C_UIntmax.toLargeInt

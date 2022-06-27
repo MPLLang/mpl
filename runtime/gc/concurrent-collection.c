@@ -1189,7 +1189,7 @@ size_t CC_collectWithRoots(
   if (isConcurrent) {
     timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);
     s->cumulativeStatistics->numRootCCs++;
-    s->cumulativeStatistics->bytesReclaimedByRootCC += bytesScanned-bytesSaved;
+    s->cumulativeStatistics->bytesReclaimedByRootCC = max(s->cumulativeStatistics->bytesReclaimedByRootCC, bytesSaved);
   } else {
     timespec_add(&(s->cumulativeStatistics->timeInternalCC), &stopTime);
     s->cumulativeStatistics->numInternalCCs++;
