@@ -863,8 +863,12 @@ void CC_filterPinned(
   struct writeFreedBlockInfoFnClosure infoc =
     {.fun = CC_writeFreeChunkInfo, .env = &info};
 
-  HM_freeRemSetWithInfo(s, oldRemSet, &infoc);
-  *oldRemSet = newRemSet;  // this moves all data into remset of hh
+  // HM_freeRemSetWithInfo(s, oldRemSet, &infoc);
+  // this reintializes the private remset
+  HM_freeChunksInListWithInfo(s, &(oldRemSet->private), &infoc);
+  assert (newRemSet.public.firstChunk == NULL);
+  // this moves all data into remset of hh
+  HM_appendRemSet(oldRemSet, &newRemSet);
 
   // assert(HM_HH_getRemSet(hh)->firstChunk == newRemSet.firstChunk);
   // assert(HM_HH_getRemSet(hh)->lastChunk == newRemSet.lastChunk);
