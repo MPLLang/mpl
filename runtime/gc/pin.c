@@ -96,9 +96,10 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
     /* if we are changing the unpinDepth, then the new pinType (nt) is
      * equal to the function argument pt. Otherwise its the max. */
     enum PinType nt = newUnpinDepth < unpinDepthOfH(header) ? pt : maxPT(pt, pinType(header));
+    GC_header unpinnedHeader = header & (~UNPIN_DEPTH_MASK) & (~PIN_MASK);
 
     GC_header newHeader =
-        (header & (~UNPIN_DEPTH_MASK))                    // clear unpin bits
+        unpinnedHeader
         | ((GC_header)newUnpinDepth << UNPIN_DEPTH_SHIFT) // put in new unpinDepth
         | getRep(nt);                                     // setup the pin type
 
