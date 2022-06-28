@@ -39,8 +39,11 @@ void allocateChunkInConcList(
   {
     concList->firstChunk = chunk;
   }
+
+  memset((void *)HM_getChunkStart(chunk), '\0', HM_getChunkLimit(chunk) - HM_getChunkStart(chunk));
   pthread_mutex_unlock(&concList->mutex);
 }
+
 
 pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize){
   assert(concList != NULL);
@@ -59,11 +62,11 @@ pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize){
         continue;
       }
 
-      memcpy(frontier, p, objSize);
       pointer new_frontier = frontier + objSize;
       bool success = __sync_bool_compare_and_swap(&(chunk->frontier), frontier, new_frontier);
-      if (memcmp(frontier, p, objSize) == 0)
+      if (success)
       {
+        memcpy(frontier, p, objSize);
         // pthread_mutex_unlock(&concList->mutex);
         return frontier;
       }

@@ -79,7 +79,7 @@ void checkFishyChunks(GC_state s,
       pointer frontier = HM_getChunkFrontier(chunk);
       while (TRUE)
       {
-        while (p < frontier)
+        while (p < frontier && ((HM_remembered)p)->object != 0)
         {
           f->fun(s, (HM_remembered)p, f->env);
           p += sizeof(struct HM_remembered);
@@ -129,7 +129,7 @@ void HM_foreachPublic (
     {
       pointer p = HM_getChunkStart(chunk);
       pointer frontier = HM_getChunkFrontier(chunk);
-      while (p < frontier)
+      while (p < frontier && ((HM_remembered)p)->object != 0)
       {
         f->fun(s, (HM_remembered)p, f->env);
         p += sizeof(struct HM_remembered);
