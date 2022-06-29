@@ -10,9 +10,9 @@ void allocateChunkInConcList(
   HM_chunk lastChunk) {
   GC_state s = pthread_getspecific(gcstate_key);
 
-  pthread_mutex_lock(&concList->mutex);
+  // pthread_mutex_lock(&concList->mutex);
   if(concList->lastChunk != lastChunk) {
-    pthread_mutex_unlock(&concList->mutex);
+    // pthread_mutex_unlock(&concList->mutex);
     return;
   }
 
@@ -30,18 +30,38 @@ void allocateChunkInConcList(
   assert(chunk != NULL);
 
   chunk->prevChunk = lastChunk;
-  if (lastChunk != NULL)
-  {
-    lastChunk->nextChunk = chunk;
-  }
-  concList->lastChunk = chunk;
-  if (concList->firstChunk == NULL)
-  {
-    concList->firstChunk = chunk;
-  }
+  // if (lastChunk != NULL)
+  // {
+  //   lastChunk->nextChunk = chunk;
+  // }
+  // concList->lastChunk = chunk;
 
   memset((void *)HM_getChunkStart(chunk), '\0', HM_getChunkLimit(chunk) - HM_getChunkStart(chunk));
-  pthread_mutex_unlock(&concList->mutex);
+
+  bool success = false;
+  if(concList->lastChunk == lastChunk) {
+    pthread_mutex_lock(&concList->mutex);
+    if (concList->lastChunk == lastChunk) {
+      if (concList->firstChunk == NULL) {
+        concList->firstChunk = chunk;
+      }
+      if(lastChunk != NULL) {
+        lastChunk->nextChunk = chunk;
+      }
+      concList->lastChunk = chunk;
+      success = true;
+    }
+    pthread_mutex_unlock(&concList->mutex);
+  }
+  if (!success) {
+    HM_freeChunk(s, chunk);
+  }
+
+  // if (!__sync_bool_compare_and_swap(&(concList->lastChunk), lastChunk, chunk)) {
+  //   HM_freeChunk(s, chunk);
+  // } else if (lastChunk != NULL) {
+  //   lastChunk->nextChunk = chunk;
+  // }
 }
 
 
