@@ -763,7 +763,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     if (toSpaceLevel != NULL) {
       struct HM_foreachDownptrClosure unmarkClosure =
         {.fun = unmarkWrapper, .env = NULL};
-      HM_foreachPublic(s, HM_HH_getRemSet(toSpaceLevel), &unmarkClosure, false);
+      HM_foreachPublic(s, HM_HH_getRemSet(toSpaceLevel), &unmarkClosure, true);
     }
 
     /* unset the flags on pinned chunks and update their HH pointer */

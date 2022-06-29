@@ -28,7 +28,7 @@ void HM_foreachPrivate(
   {
     pointer p = HM_getChunkStart(chunk);
     pointer frontier = HM_getChunkFrontier(chunk);
-    while (p < frontier)
+    while (p < frontier && ((HM_remembered)p)->object != 0)
     {
       f->fun(s, (HM_remembered)p, f->env);
       p += sizeof(struct HM_remembered);
