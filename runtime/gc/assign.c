@@ -185,7 +185,7 @@ void Assignable_writeBarrier(
       }
 
       uint32_t unpinDepth = dd;
-      bool success = pinObject(src, unpinDepth, PIN_DOWN);
+      bool success = pinObject(s, src, unpinDepth, PIN_DOWN);
 
       if (success || dd == unpinDepthOf(src))
       {

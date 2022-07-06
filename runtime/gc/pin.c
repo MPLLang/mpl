@@ -47,15 +47,20 @@ uint32_t unpinDepthOfH(GC_header h)
   return (h & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
 }
 
-bool pinObject(objptr op, uint32_t unpinDepth, enum PinType pt)
+bool pinObject(GC_state s, objptr op, uint32_t unpinDepth, enum PinType pt)
 {
   bool a, b;
-  pinObjectInfo(op, unpinDepth, pt, &a, &b);
+  pinObjectInfo(s, op, unpinDepth, pt, &a, &b);
   return a;
 }
 
-objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
-                      bool *headerChange, bool *pinChange)
+objptr pinObjectInfo(
+  GC_state s,
+  objptr op,
+  uint32_t unpinDepth,
+  enum PinType pt,
+  bool *headerChange,
+  bool *pinChange)
 {
   pointer p = objptrToPointer(op, NULL);
   assert(pt != PIN_NONE);
@@ -110,7 +115,11 @@ objptr pinObjectInfo(objptr op, uint32_t unpinDepth, enum PinType pt,
     else {
       if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
         *headerChange = true;
-        *pinChange = (nt != pinType(header));
+        bool didPinChange = (nt != pinType(header));
+        *pinChange = didPinChange;
+        if (nt == PIN_ANY && didPinChange) {
+          s->cumulativeStatistics->bytesPinnedEntangled += objectSize(s, p);
+        }
         assert (!hasFwdPtr(p));
         assert(pinType(newHeader) == nt);
         return op;

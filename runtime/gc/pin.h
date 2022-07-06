@@ -38,9 +38,11 @@ enum PinType
  * Note that regardless of whether or not the object was previously
  * pinned, this does a writeMin on the unpinDepth of the object.
  */
-bool pinObject(objptr op, uint32_t unpinDepth, enum PinType pt);
+bool pinObject(GC_state s, objptr op, uint32_t unpinDepth, enum PinType pt);
 
-objptr pinObjectInfo(objptr op,
+objptr pinObjectInfo(
+  GC_state s,
+  objptr op,
   uint32_t unpinDepth,
   enum PinType pt,
   bool* headerChange,

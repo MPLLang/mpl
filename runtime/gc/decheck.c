@@ -387,7 +387,7 @@ void make_entangled(
   {
     bool addToRemSet = mea->firstCall;
     if (mutable) {
-      new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+      new_ptr = pinObjectInfo(s, ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
     }
     else
     {
@@ -397,7 +397,7 @@ void make_entangled(
       // the unpinDepth of reachable maybe smaller.
       mea->unpinDepth = pinType(header) == PIN_NONE ? unpinDepth : min(unpinDepth, unpinDepthOfH(header));
       foreachObjptrInObject(s, p_ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
-      new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+      new_ptr = pinObjectInfo(s, ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
       assert(pinType(getHeader(objptrToPointer(new_ptr, NULL))) == PIN_ANY);
     }
     if (pinChange && addToRemSet)

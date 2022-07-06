@@ -48,6 +48,9 @@ struct
 
     fun numberSuspectsCleared () =
       C_UIntmax.toLargeInt (GC.numberSuspectsCleared (gcState ()))
+
+    fun bytesPinnedEntangled () =
+      C_UIntmax.toLargeInt (GC.bytesPinnedEntangled (gcState ()))
   end
 
   exception NotYetImplemented of string

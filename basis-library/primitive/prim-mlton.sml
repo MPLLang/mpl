@@ -171,6 +171,8 @@ structure GC =
       val numberSuspectsMarked = _import "GC_numSuspectsMarked" runtime private: GCState.t -> C_UIntmax.t;
 
       val numberSuspectsCleared = _import "GC_numSuspectsCleared" runtime private: GCState.t -> C_UIntmax.t;
+
+      val bytesPinnedEntangled = _import "GC_bytesPinnedEntangled" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =

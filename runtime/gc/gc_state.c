@@ -235,6 +235,16 @@ uintmax_t GC_numSuspectsCleared(GC_state s)
   return count;
 }
 
+uintmax_t GC_bytesPinnedEntangled(GC_state s)
+{
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->bytesPinnedEntangled;
+  }
+  return count;
+}
+
 float GC_approxRaceFactor(GC_state s)
 {
   float count = 0;

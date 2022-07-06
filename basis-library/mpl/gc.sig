@@ -23,6 +23,7 @@ sig
 
   val numberSuspectsMarked: unit -> IntInf.int
   val numberSuspectsCleared: unit -> IntInf.int
+  val bytesPinnedEntangled: unit -> IntInf.int
 
   (* The following are all cumulative statistics (initially 0, and only
    * increase throughout execution).
