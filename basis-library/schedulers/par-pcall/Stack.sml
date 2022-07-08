@@ -7,6 +7,7 @@ sig
   val pop: 'a t -> 'a option
 
   val popOldest: 'a t -> 'a option
+  val peekOldest: 'a t -> 'a option
 
   val currentSize: 'a t -> int
 end =
@@ -74,6 +75,14 @@ struct
         if i+1 >= j then (start := 0; stop := 0) else ();
         result
       end
+    end
+
+  fun peekOldest (T {start, stop, data}) =
+    let
+      val i = !start
+      val j = !stop
+    in
+      if i >= j then NONE else Array.sub (data, i)
     end
 
   fun currentSize (T {start, stop, ...}) =

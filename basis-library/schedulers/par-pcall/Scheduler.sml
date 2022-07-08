@@ -200,11 +200,12 @@ struct
 
   datatype joinslot_stack =
     JStack of
-      { stack: (joinslot_id * (Thread.t -> unit)) Stack.t }
+      { stack: (joinslot_id * (Thread.t -> bool)) Stack.t }
 
   fun maybeActivateOne s (t: Thread.t) =
-    case Stack.popOldest s of
-      SOME (_, f) => f t
+    case Stack.peekOldest s of
+      SOME (_, f) =>
+        if f t then (Stack.popOldest s; ()) else ()
     | NONE => ()
 
   fun jstackNew () =
@@ -296,7 +297,7 @@ struct
     type 'a t
     datatype 'a status = Empty | Full of 'a joinpoint
 
-    val make: ('a t -> Thread.t -> unit) -> 'a t
+    val make: ('a t -> Thread.t -> bool) -> 'a t
     val cancel: 'a t -> 'a status
     val put: 'a t * 'a joinpoint -> unit
     val markUnsuccessful: 'a t -> unit
@@ -307,7 +308,7 @@ struct
     datatype 'a status = Empty | Full of 'a joinpoint
     datatype 'a t = T of joinslot_id * ('a internal_status ref)
 
-    fun make (doSpawn: 'a t -> Thread.t -> unit) =
+    fun make (doSpawn: 'a t -> Thread.t -> bool) =
       let
         val j: 'a internal_status ref = ref JNone
         val jid = nextJoinSlotId (myWorkerId ())
@@ -640,14 +641,16 @@ struct
     (* runs in signal handler *)
     fun spawn
         (joinslot: 'b JoinSlot.t)
-        (interruptedLeftThread: Thread.t) : unit
+        (interruptedLeftThread: Thread.t) : bool
       =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth)
         then
-          JoinSlot.markUnsuccessful joinslot
+          ( JoinSlot.markUnsuccessful joinslot
+          ; true
+          )
         else
 
         (* SAM_NOTE:
@@ -669,7 +672,12 @@ struct
          * is pop.
          *)
         case HH.forkThread interruptedLeftThread of
-          NONE => JoinSlot.markUnsuccessful joinslot
+
+          (** this is the edge case, where spawn signal happens inbetween
+            * JoinSlot.make and pcall
+            *)
+          NONE => false
+
         | SOME rightSideThread =>
             let
               val gcj = spawnGC interruptedLeftThread
@@ -712,7 +720,7 @@ struct
               val _ = DE.decheckSetTid tidLeft
               val _ = assertAtomic "spawn done" 1
             in
-              ()
+              true
             end
       end
 
@@ -869,7 +877,7 @@ struct
 
     fun pcallFork (f: unit -> 'a, g: unit -> 'b) =
       let
-        val _ = Thread.atomicBegin ()
+        (* val _ = Thread.atomicBegin () *)
         val j = JoinSlot.make spawn
 
         fun leftSideSequentialCont fres = (
@@ -882,8 +890,9 @@ struct
            (*...... *)
           case JoinSlot.cancel j of
             JoinSlot.Empty =>
-              ( assertAtomic "leftSideSequentialCont" 1
-              ; Thread.atomicEnd ()
+              ( ()
+              (* ; assertAtomic "leftSideSequentialCont" 1 *)
+              (* ; Thread.atomicEnd () *)
               ; (Result.extractResult fres, g ())
               )
           | JoinSlot.Full _ =>
@@ -893,7 +902,7 @@ struct
         fun leftSideParCont fres =
           let
             val _ = dbgmsg'' (fn _ => "hello from left-side par continuation")
-            (* val _ = Thread.atomicBegin () *)
+            val _ = Thread.atomicBegin ()
             val _ = assertAtomic "leftSideParCont" 1
           in
             case JoinSlot.cancel j of
@@ -975,13 +984,13 @@ struct
         pcall
           ( fn () =>
               let
-                val _ = assertAtomic "pcall left-side begin" 1
-                val _ = Thread.atomicEnd ()
+                (* val _ = assertAtomic "pcall left-side begin" 1 *)
+                (* val _ = Thread.atomicEnd () *)
                 val r = Result.result f
               in
                 (* (_import "AABBCC": unit -> unit;)(); *)
-                assertAtomic "pcall left-side done" 0;
-                Thread.atomicBegin();
+                (* assertAtomic "pcall left-side done" 0; *)
+                (* Thread.atomicBegin(); *)
                 r
               end
           , ()
