@@ -185,12 +185,14 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 
 
 objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
+  enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
   pointer pframe = findPromotableFrame(s, fromStack);
   if (NULL == pframe) {
     *success = FALSE;
+    leave(s);
     return BOGUS_OBJPTR;
   }
 
@@ -210,13 +212,13 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
 
   assert (s->savedThread == BOGUS_OBJPTR);
   s->savedThread = pointerToObjptr(threadp, NULL);
-  GC_thread newThread = newThreadWithHeap (s, newStackReserved, newDepth, TRUE);
+  GC_thread copied = newThread (s, newStackReserved);
   assert(s->savedThread == pointerToObjptr(threadp, NULL));
   s->savedThread = BOGUS_OBJPTR;
-  objptr newThreadp =
-    pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
+  objptr copiedp =
+    pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
 
-  GC_stack toStack = (GC_stack)objptrToPointer(newThread->stack, NULL);
+  GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
@@ -231,10 +233,12 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
   // Is this right? Or are we missing one suspended depth because forkThread
   // happens before the decheck fork? Might need to fix this by fusing decheck
   // fork with this function.
-  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), newThreadp, newDepth);
+  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
 
   *success = TRUE;
-  return pointerToObjptr((pointer)newThread - offsetofThread(s), NULL);
+
+  leave(s);
+  return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
 }
 
 

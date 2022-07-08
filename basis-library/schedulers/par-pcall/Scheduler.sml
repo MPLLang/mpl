@@ -123,7 +123,7 @@ struct
   datatype 'a joinpoint =
     J of
       { leftSideThread: Thread.t
-      , rightSideThread: Thread.t
+      , rightSideThread: Thread.t option ref
       , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
@@ -389,8 +389,9 @@ struct
    *)
 
   datatype task =
-    NormalTask of unit -> unit
-  | Continuation of Thread.t * int
+    (* NormalTask of unit -> unit *)
+    Continuation of Thread.t * int
+  | NewThread of Thread.p * int
   | GCTask of gctask_data
 
   (* ========================================================================
@@ -690,7 +691,7 @@ struct
 
               val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
 
-              (* val rightSideThread = ref (NONE: Thread.t option) *)
+              val rightSideThreadSlot = ref (NONE: Thread.t option)
               val rightSideResult = ref (NONE: 'b Result.t option)
               val incounter = ref 2
 
@@ -698,7 +699,7 @@ struct
 
               val jp =
                 J { leftSideThread = interruptedLeftThread
-                  , rightSideThread = rightSideThread
+                  , rightSideThread = rightSideThreadSlot
                   , rightSideResult = rightSideResult
                   , incounter = incounter
                   , tidRight = tidRight
@@ -711,7 +712,7 @@ struct
               val _ = JoinSlot.put (joinslot, jp)
 
               (* double check... hopefully correct, not off by one? *)
-              val _ = push (Continuation (rightSideThread, depth+1))
+              val _ = push (NewThread (rightSideThread, depth))
               val _ = HH.setDepth (thread, depth + 1)
 
               (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
@@ -781,19 +782,26 @@ struct
                 jstackSetCurrent a
               end
 
-            ; HH.mergeThreads (thread, rightSideThread)
-            ; HH.promoteChunks thread
-            ; HH.setDepth (thread, newDepth)
-            ; DE.decheckJoin (tidLeft, DE.decheckGetTid rightSideThread)
-            ; setQueueDepth (myWorkerId ()) newDepth
-            ; case HM.refDerefNoBarrier rightSideResult of
-                NONE => die (fn _ => "scheduler bug: join failed: missing result")
-              | SOME gr =>
-                  ( ()
-                  ; assertAtomic "syncEndAtomic after merge" 1
-                  ; Thread.atomicEnd ()
-                  ; gr
-                  )
+            ; case HM.refDerefNoBarrier rightSideThread of
+                NONE => die (fn _ => "scheduler bug: join failed")
+              | SOME rightSideThread =>
+                  let
+                    val tidRight = DE.decheckGetTid rightSideThread
+                  in
+                    HH.mergeThreads (thread, rightSideThread);
+                    HH.promoteChunks thread;
+                    HH.setDepth (thread, newDepth);
+                    DE.decheckJoin (tidLeft, tidRight);
+                    setQueueDepth (myWorkerId ()) newDepth;
+                    case HM.refDerefNoBarrier rightSideResult of
+                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                    | SOME gr =>
+                        ( ()
+                        ; assertAtomic "syncEndAtomic after merge" 1
+                        ; Thread.atomicEnd ()
+                        ; gr
+                        )
+                  end
             )
       in
         case gcj of
@@ -919,20 +927,12 @@ struct
         fun rightSide () =
           let
             val _ = assertAtomic "pcallFork rightside begin" 1
-
-            (** When we forkThread, we copy the current thread's depth. Now
-              * we have switched to the copy, but the copy still appears to
-              * be at the parent depth. We need to advance, to begin working
-              * at the correct depth.
-              *)
             val thread = Thread.current ()
-            val parentDepth = HH.getDepth thread
-            val depth = parentDepth+1
-            val _ = HH.setDepth (thread, depth)
+            val depth = HH.getDepth thread
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
 
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
-            val J {leftSideThread, rightSideResult, tidRight, incounter, ...} =
+            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, ...} =
               JoinSlot.get j
             val () = jstackSetCurrentNew ()
             val () = DE.decheckSetTid tidRight
@@ -958,6 +958,7 @@ struct
 
             val _ = assertAtomic "pcallFork rightside after jstackTake" 1
           in
+            rightSideThread := SOME thread;
             rightSideResult := SOME gr;
 
             if decrementHitsZero incounter then
@@ -1110,18 +1111,19 @@ struct
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
-          | NormalTask t =>
+          | NewThread (thread, depth) =>
               let
-                val taskThread = Thread.copy prototypeThread
+                val taskThread = Thread.copy thread
               in
                 if depth >= 1 then () else
                   die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
                 Queue.setDepth myQueue (depth+1);
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
-                setTaskBox myId t;
-                dbgmsg' (fn _ => "switch to new task thread");
+                (* setTaskBox myId t; *)
                 Thread.atomicBegin ();
+                Thread.atomicBegin ();
+                assertAtomic "acquireWork before thread switch" 2;
                 threadSwitchEndAtomic taskThread;
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;

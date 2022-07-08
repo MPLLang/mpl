@@ -389,7 +389,7 @@ structure Thread =
         runtime private: GCState.t * thread * thread *Word32.word -> unit;
 
       val forkThread = _import "GC_HH_forkThread" runtime private:
-        GCState.t * thread * (bool ref) -> thread;
+        GCState.t * thread * (bool ref) -> preThread;
 
       (** If returns true, then writes result to the input ref. Otherwise, the
         * runtime is not detecting entanglement, and the ref is not modified.
