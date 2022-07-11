@@ -25,10 +25,20 @@ $ docker run -it shwestrick/mpl /bin/bash
 ...# examples/bin/primes @mpl procs 4 --
 ```
 
-If you want to mount a volume from your harddrive so that you can write code and compile, use the following command
+If you want to try out MPL by writing and compiling your own code, we recommend
+mounting a local directory inside the container. For example, here's how you
+can use MPL to compile and run your own `main.mlb` in the current directory.
+(To mount some other directory, replace `$(pwd -P)` with a different path.)
 ```
-docker run  -it -v /Users/myhome/mycode/is/here:/root/my/code/is/here shwestrick/mpl  /bin/bash
+$ ls
+main.mlb
+$ docker run -it -v $(pwd -P):/root/mycode shwestrick/mpl /bin/bash
+...# cd /root/mycode
+...# mpl main.mlb
+...# ./main @mpl procs 4 --
 ```
+
+
 ## Build and Install (from source)
 
 ### Requirements
