@@ -25,6 +25,10 @@ $ docker run -it shwestrick/mpl /bin/bash
 ...# examples/bin/primes @mpl procs 4 --
 ```
 
+If you want to mount a volume from your harddrive so that you can write code and compile, use the following command
+```
+docker run  -it -v /Users/myhome/mycode/is/here:/root/my/code/is/here shwestrick/mpl  /bin/bash
+```
 ## Build and Install (from source)
 
 ### Requirements
