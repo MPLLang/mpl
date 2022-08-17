@@ -343,7 +343,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     // traverseEachObjInChunkList(s, HM_HH_getChunkList(cursor));
 #endif
     uint32_t d = HM_HH_getDepth(cursor);
-    size_t sz = HM_getChunkListSize(HM_HH_getChunkList(cursor));
+    size_t sz = HM_getChunkListUsedSize(HM_HH_getChunkList(cursor));
     sizesBefore[d] = sz;
     totalSizeBefore += sz;
   }
@@ -797,7 +797,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     uint32_t i = HM_HH_getDepth(cursor);
 
     HM_chunkList lev = HM_HH_getChunkList(cursor);
-    size_t sizeAfter = HM_getChunkListSize(lev);
+    size_t sizeAfter = HM_getChunkListUsedSize(lev);
     totalSizeAfter += sizeAfter;
 
 #if ASSERT
