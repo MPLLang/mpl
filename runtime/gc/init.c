@@ -355,6 +355,16 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (s->controls->hhConfig.collectionThresholdRatio < 1.0) {
             die("%s collection-threshold-ratio must be at least 1.0", atName);
           }
+        } else if (0 == strcmp (arg, "cc-threshold-ratio")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s cc-threshold-ratio missing argument.", atName);
+          }
+
+          s->controls->hhConfig.ccThresholdRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.ccThresholdRatio <= 1.0) {
+            die("%s cc-threshold-ratio must be > 1.0", atName);
+          }
         } else if (0 == strcmp(arg, "min-collection-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -446,6 +456,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
   s->controls->hhConfig.maxCCChainLength = 2;
+  s->controls->hhConfig.ccThresholdRatio = 2.0f;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
