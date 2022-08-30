@@ -36,6 +36,7 @@ struct HM_HierarchicalHeapConfig {
 
   size_t maxCCChainLength;
   double ccThresholdRatio;
+  uint32_t maxCCDepth;
 
   /* the shallowest depth that will be claimed for a local
    * collection. */
