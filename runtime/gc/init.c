@@ -355,6 +355,16 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (s->controls->hhConfig.collectionThresholdRatio < 1.0) {
             die("%s collection-threshold-ratio must be at least 1.0", atName);
           }
+        } else if (0 == strcmp (arg, "cc-threshold-ratio")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s cc-threshold-ratio missing argument.", atName);
+          }
+
+          s->controls->hhConfig.ccThresholdRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.ccThresholdRatio <= 1.0) {
+            die("%s cc-threshold-ratio must be > 1.0", atName);
+          }
         } else if (0 == strcmp(arg, "min-collection-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -369,6 +379,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.minCCSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "max-cc-chain-length")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s max-cc-chain-length missing argument.", atName);
+          }
+
+          int len = stringToInt(argv[i++]);
+          if (len <= 0) {
+            die ("%s max-cc-chain-length must be >= 1", atName);
+          }
+          s->controls->hhConfig.maxCCChainLength = len;
         } else if (0 == strcmp(arg, "min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -380,6 +401,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die ("%s min-collection-depth must be > 0", atName);
           }
           s->controls->hhConfig.minLocalDepth = minDepth;
+        } else if (0 == strcmp(arg, "max-cc-depth")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s max-cc-depth missing argument.", atName);
+          }
+
+          int maxd = stringToInt(argv[i++]);
+          if (maxd < 0) {
+            die ("%s max-cc-depth must be >= 0", atName);
+          }
+          s->controls->hhConfig.maxCCDepth = maxd;
         } else if (0 == strcmp(arg, "trace-buffer-size")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -434,6 +466,9 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.collectionThresholdRatio = 8.0;
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
+  s->controls->hhConfig.maxCCChainLength = 2;
+  s->controls->hhConfig.ccThresholdRatio = 2.0f;
+  s->controls->hhConfig.maxCCDepth = 3;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;

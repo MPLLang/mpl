@@ -43,6 +43,8 @@ struct
     | SOME m => depth < m
   end
 
+  val maxCCDepth = MPL.GC.getControlMaxCCDepth ()
+
   val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
@@ -426,7 +428,7 @@ struct
         val depth = HH.getDepth thread
       in
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= 3 then
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
           forkGC thread depth (f, g)
         else if depth < Queue.capacity andalso depthOkayForDECheck depth then
           parfork thread depth (f, g)

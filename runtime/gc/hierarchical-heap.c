@@ -804,7 +804,7 @@ bool checkPolicyforRoot(
        cursor = cursor->subHeapForCC)
   {
     chainLen++;
-    if (chainLen > 2)
+    if (chainLen > s->controls->hhConfig.maxCCChainLength)
       return FALSE;
   }
 
@@ -817,7 +817,7 @@ bool checkPolicyforRoot(
       HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
   }
 
-  if((2*bytesSurvived) >
+  if((s->controls->hhConfig.ccThresholdRatio * bytesSurvived) >
       (HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection)
     || bytesSurvived == 0) {
     // if (!HM_HH_getConcurrentPack(hh)->shouldCollect) {

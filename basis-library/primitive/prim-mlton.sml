@@ -149,6 +149,8 @@ structure GC =
       val setSummary = _import "GC_setControlsSummary" private: GCState.t * bool -> unit;
       val unpack = _import "GC_unpack" runtime private: GCState.t -> unit;
 
+      val getControlMaxCCDepth = _import "GC_getControlMaxCCDepth" runtime private: GCState.t -> Word32.word;
+
       (* SAM_NOTE: TODO: move these to prim-mpl.sml *)
       val getLocalGCMillisecondsOfProc = _import "GC_getLocalGCMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;
       val getPromoMillisecondsOfProc = _import "GC_getPromoMillisecondsOfProc" runtime private : GCState.t * Word32.word -> C_UIntmax.t;

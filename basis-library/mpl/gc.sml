@@ -43,6 +43,9 @@ struct
     fun numberEntanglementsDetected () =
       C_UIntmax.toLargeInt (GC.numberEntanglementsDetected (gcState ()))
 
+    fun getControlMaxCCDepth () =
+      Word32.toInt (GC.getControlMaxCCDepth (gcState ()))
+
     fun numberSuspectsMarked () =
       C_UIntmax.toLargeInt (GC.numberSuspectsMarked (gcState ()))
 
