@@ -804,7 +804,7 @@ bool checkPolicyforRoot(
        cursor = cursor->subHeapForCC)
   {
     chainLen++;
-    if (chainLen > 2)
+    if (chainLen > s->controls->hhConfig.maxCCChainLength)
       return FALSE;
   }
 

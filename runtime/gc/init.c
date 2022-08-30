@@ -369,6 +369,17 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           }
 
           s->controls->hhConfig.minCCSize = stringToBytes(argv[i++]);
+        } else if (0 == strcmp(arg, "max-cc-chain-length")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s max-cc-chain-length missing argument.", atName);
+          }
+
+          int len = stringToInt(argv[i++]);
+          if (len <= 0) {
+            die ("%s max-cc-chain-length must be >= 1", atName);
+          }
+          s->controls->hhConfig.maxCCChainLength = len;
         } else if (0 == strcmp(arg, "min-collection-depth")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -434,6 +445,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.collectionThresholdRatio = 8.0;
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
+  s->controls->hhConfig.maxCCChainLength = 2;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
