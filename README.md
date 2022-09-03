@@ -5,7 +5,7 @@ compiler for Standard ML which implements support for
 nested (fork-join) parallelism. MPL generates executables with
 excellent multicore performance, utilizing a novel approach to
 memory management based on the theory of disentanglement
-[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21)].
+[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22)].
 
 MPL is research software and is being actively developed.
 
@@ -13,7 +13,7 @@ If you are you interested in using MPL, consider checking
 out the [tutorial](https://github.com/MPLLang/mpl-tutorial).
 You might also be interested in exploring
 [`mpllib`](https://github.com/MPLLang/mpllib)
-(a standard library for MPL) and the
+(a library for MPL) and the
 [Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench).
 
 ## Docker
@@ -225,22 +225,23 @@ to an object allocated concurrently by some other thread, then we say that
 the two threads are **entangled**. This is a violation of disentanglement,
 which MPL currently does not allow.
 
-To check if your program has entanglement, MPL has a built-in dynamic
-entanglement detector. You can enable the detector by using
-`-detect-entanglement true` at compile time.
-When entanglement detection is enabled, MPL will monitors individual reads
-and writes during execution; if entanglement is found, the program will
-terminate with an error message.
+MPL has a built-in dynamic entanglement detector which is enabled by default.
+The entanglement detector monitors individual reads and writes during execution;
+if entanglement is found, the program will terminate with an error message.
 
-Entanglement detection is highly optimized, and often does not have a
-significant impact on performance. We recommend using entanglement detection
-liberally.
+The entanglement detector is both "sound" and "complete": there are neither
+false negatives nor false positives. In other words, the detector always raises
+an alarm when entanglement occurs, and never raises an alarm otherwise. Note
+however that entanglement (and therefore also entanglement detection) can
+be execution-dependent: if your program is non-deterministic (e.g. racy),
+then entanglement may or may not occur depending on the outcome of a race
+condition. Similarly, entanglement could be input-dependent.
 
-Note that the detector is execution-dependent: if your program
-is non-deterministic (e.g. racy), then entanglement may or may not
-occur depending on the outcome of a race condition. Similarly, entanglement
-could be input-dependent. Therefore, we recommend testing multiple inputs,
-as well as running on varying number of processors.
+Entanglement detection is highly optimized, and typically has negligible
+overhead (see [[5](#waa22)]). It can be disabled at compile-time by passing
+`-detect-entanglement false`; however, we recommend against doing so. MPL
+relies on entanglement detection to ensure memory safety. We recommend leaving
+entanglement detection enabled at all times.
 
 ## Bugs and Known Issues
 
@@ -294,3 +295,8 @@ POPL 2020.
 [Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
 Jatin Arora, Sam Westrick, and Umut A. Acar.
 POPL 2021.
+
+[<a name="waa22">5</a>]
+[Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
+Sam Westrick, Jatin Arora, and Umut A. Acar.
+ICFP 2022.
