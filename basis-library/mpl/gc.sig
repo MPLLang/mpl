@@ -25,6 +25,8 @@ sig
   val numberSuspectsCleared: unit -> IntInf.int
   val bytesPinnedEntangled: unit -> IntInf.int
 
+  val getControlMaxCCDepth: unit -> int
+
   (* The following are all cumulative statistics (initially 0, and only
    * increase throughout execution).
    *

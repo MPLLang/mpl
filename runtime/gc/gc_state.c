@@ -77,6 +77,10 @@ void GC_setControlsRusageMeasureGC (GC_state s, Bool_t b) {
   s->controls->rusageMeasureGC = (bool)b;
 }
 
+uint32_t GC_getControlMaxCCDepth(GC_state s) {
+  return (uint32_t)s->controls->hhConfig.maxCCDepth;
+}
+
 // SAM_NOTE: TODO: remove this and replace with blocks statistics
 size_t GC_getMaxChunkPoolOccupancy (void) {
   return 0;

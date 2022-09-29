@@ -145,6 +145,8 @@ PRIVATE uintmax_t GC_numSuspectsMarked(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsCleared(GC_state s);
 PRIVATE uintmax_t GC_bytesPinnedEntangled(GC_state s);
 
+PRIVATE uint32_t GC_getControlMaxCCDepth(GC_state s);
+
 PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
 PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);
 PRIVATE pointer GC_getCurrentThread (GC_state s);

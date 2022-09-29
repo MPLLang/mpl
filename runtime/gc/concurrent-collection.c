@@ -1115,9 +1115,9 @@ size_t CC_collectWithRoots(
   }
 #endif
 
-  uint64_t bytesSaved =  HM_getChunkListSize(repList);
-  uint64_t bytesScanned =  HM_getChunkListSize(repList)
-                          + HM_getChunkListSize(origList);
+  uint64_t bytesSaved =  HM_getChunkListUsedSize(repList);
+  uint64_t bytesScanned =  HM_getChunkListUsedSize(repList)
+                          + HM_getChunkListUsedSize(origList);
 
   cp->bytesSurvivedLastCollection = bytesSaved;
   cp->bytesAllocatedSinceLastCollection = 0;
