@@ -296,12 +296,12 @@ val defaultWord = control {name = "defaultWord",
 
 val detectEntanglement =
   control {name = "detect-entanglement",
-           default = false,
+           default = true,
            toString = Bool.toString}
 
 val detectEntanglementRuntime =
   control {name = "detect-entanglement-runtime",
-           default = false,
+           default = true,
            toString = Bool.toString}
 
 val diagPasses =

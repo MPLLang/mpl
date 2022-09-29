@@ -74,7 +74,6 @@ val llvm_optOpts: {opt: string, pred: OptPred.t} list ref = ref []
 
 val debugRuntime: bool ref = ref false
 val traceRuntime: bool ref = ref false
-val detectEntanglementRuntime: bool ref = ref false
 val expert: bool ref = ref false
 val explicitAlign: Control.align option ref = ref NONE
 val explicitChunkify: Control.Chunkify.t option ref = ref NONE

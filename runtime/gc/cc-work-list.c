@@ -17,11 +17,11 @@ void CC_workList_free(
     __attribute__((unused)) GC_state s,
     CC_workList w)
 {
-
   HM_chunkList c = &(w->storage);
   HM_freeChunksInListWithInfo(s, c, NULL);
   w->currentChunk = NULL;
 }
+
 bool CC_workList_isEmpty(
   __attribute__((unused)) GC_state s,
   CC_workList w)
