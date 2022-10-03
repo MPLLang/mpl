@@ -53,7 +53,11 @@ void growStackCurrent(GC_state s) {
 
   /* in this case, the new stack needs more space, so allocate a new chunk,
    * copy the stack, and throw away the old chunk. */
-  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(newhh), stackSize);
+  HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(newhh),
+    stackSize,
+    BLOCK_FOR_HEAP_CHUNK);
+    
   if (NULL == newChunk) {
     DIE("Ran out of space to grow stack!");
   }

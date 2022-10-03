@@ -311,6 +311,25 @@ static void deallocateInSuperBlock(
   assert(sb->owner != NULL);
   assert(sb->owner->numBlocksInUse[purpose] >= ((size_t)1 << sb->sizeClass));
   sb->owner->numBlocksInUse[purpose] -= (1 << sb->sizeClass);
+
+#if 0
+  size_t nb = 1 << sb->sizeClass;
+  if (nb <= sb->owner->numBlocksInUse[purpose]) {
+    sb->owner->numBlocksInUse[purpose] -= nb;
+  }
+  else {
+    // Somehow the tracking is off; perhaps the allocateBlocks/freeBlocks calls
+    // are mismatched somehow. No worries; we'll just track as best we can by
+    // assuming that the remainder blocks were marked as unknown purpose. This
+    // works as long as freeing blocks with purpose is more precise than
+    // allocating.
+    size_t amountTracked = sb->owner->numBlocksInUse[purpose];
+    size_t amountRem = nb - amountTracked;
+    sb->owner->numBlocksInUse[purpose] = 0;
+    assert( sb->owner->numBlocksInUse[BLOCK_FOR_UNKNOWN_PURPOSE] >= amountRem );
+    sb->owner->numBlocksInUse[BLOCK_FOR_UNKNOWN_PURPOSE] -= amountRem;
+  }
+#endif
 }
 
 
@@ -684,11 +703,14 @@ void logCurrentBlockUsage(GC_state s) {
   timespec_now(&now);
   LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
     "block-allocator(%zu.%.9zu):\n"
-    "  total mmap'ed     %zu\n"
-    "  BLOCK_FOR_UNKNOWN_PURPOSE %zu (%zu%%)",
+    "  total mmap'ed             %zu\n"
+    "  BLOCK_FOR_HEAP_CHUNK      %zu (%zu%%)\n"
+    "  BLOCK_FOR_UNKNOWN_PURPOSE %zu (%zu%%)\n",
     now.tv_sec,
     now.tv_nsec,
     count,
+    inUse[BLOCK_FOR_HEAP_CHUNK],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_HEAP_CHUNK] / (double)count),
     inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count));
 }

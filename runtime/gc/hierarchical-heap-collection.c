@@ -717,7 +717,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       }
       else
       {
-        HM_freeChunk(s, chunk);
+        HM_freeChunkWithInfo(s, chunk, &infoc, BLOCK_FOR_HEAP_CHUNK);
       }
       chunk = next;
     }
@@ -1931,7 +1931,11 @@ pointer copyObject(pointer p,
     /* Need to allocate a new chunk. Safe to use the dechecker state of where
      * the object came from, as all objects in the same heap can be safely
      * reassigned to any dechecker state of that heap. */
-    chunk = HM_allocateChunk(tgtChunkList, objectSize);
+    chunk = HM_allocateChunkWithPurpose(
+      tgtChunkList,
+      objectSize,
+      BLOCK_FOR_HEAP_CHUNK);
+
     if (NULL == chunk)
     {
       DIE("Ran out of space for Hierarchical Heap!");
