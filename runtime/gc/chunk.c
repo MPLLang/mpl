@@ -199,6 +199,7 @@ void HM_freeChunkWithInfo(
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;
   bs->container = container;
+  bs->purpose = BLOCK_FOR_UNKNOWN;
   freeBlocks(s, bs, &c);
 }
 

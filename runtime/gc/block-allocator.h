@@ -16,6 +16,17 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+enum BlockPurpose {
+  BLOCK_FOR_HEAP_CHUNK,
+  BLOCK_FOR_REMEMBERED_SET,
+  BLOCK_FOR_FORGOTTEN_SET,
+  BLOCK_FOR_HH_ALLOCATOR,
+  BLOCK_FOR_UF_ALLOCATOR,
+  BLOCK_FOR_UNKNOWN,
+  NUM_BLOCK_PURPOSES /** Hack to know statically how many there are. Make sure
+                       * this comes last in the list. */
+};
+
 /** This is used for debugging, to write info about freed blocks when
   * s->controls->debugKeepFreedBlocks is enabled.
   *
@@ -48,6 +59,7 @@ typedef struct DebugKeptFreeBlock {
 typedef struct FreeBlock {
   struct FreeBlock *nextFree;
   struct SuperBlock *container;
+  enum BlockPurpose purpose;
 } *FreeBlock;
 
 
@@ -103,6 +115,7 @@ typedef struct SuperBlockList {
 typedef struct MegaBlock {
   struct MegaBlock *nextMegaBlock;
   size_t numBlocks;
+  enum BlockPurpose purpose;
 } *MegaBlock;
 
 
@@ -124,11 +137,8 @@ enum FullnessGroup {
 
 typedef struct BlockAllocator {
 
-  /** These are used for local to decide to move things to global, but
-    * are ignored in global.
-    */
   size_t numBlocks;
-  size_t numBlocksInUse;
+  size_t numBlocksInUse[NUM_BLOCK_PURPOSES];
 
   /** There are 3 fullness groups in each size class:
     *   0 is completely full, i.e. no free blocks available
@@ -160,6 +170,7 @@ typedef struct BlockAllocator {
 typedef struct Blocks {
   SuperBlock container;
   size_t numBlocks;
+  enum BlockPurpose purpose;
 } *Blocks;
 
 #else
@@ -178,6 +189,18 @@ void initLocalBlockAllocator(GC_state s, BlockAllocator globalAllocator);
 
 /** Get a pointer to the start of some number of free contiguous blocks. */
 Blocks allocateBlocks(GC_state s, size_t numBlocks);
+
+Blocks allocateBlocksWithPurpose(GC_state s, size_t numBlocks, enum BlockPurpose purpose);
+
+/** populate:
+  *   *numBlocks := current total number of blocks mmap'ed
+  *   blocksInUseArr[p] := current number of blocks allocated for purpose `p`
+  *
+  * The `blocksInUseArr` must be an array of length `NUM_BLOCK_PURPOSES`
+  */
+void queryCurrentBlockUsage(GC_state s, size_t *numBlocks, size_t *blocksInUseArr);
+
+void logCurrentBlockUsage(GC_state s);
 
 /** Free a group of contiguous blocks. */
 void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);

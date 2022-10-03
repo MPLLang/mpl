@@ -609,6 +609,13 @@ void GC_lateInit(GC_state s) {
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
 
+  struct timespec now;
+  timespec_now(&now);
+  LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
+    "block-allocator(%zu.%.9zu): init",
+    now.tv_sec,
+    now.tv_nsec);
+
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
   /* Initialize profiling.  This must occur after processing
