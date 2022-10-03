@@ -18,7 +18,7 @@ void CC_workList_free(
     CC_workList w)
 {
   HM_chunkList c = &(w->storage);
-  HM_freeChunksInListWithInfo(s, c, NULL);
+  HM_freeChunksInListWithInfo(s, c, NULL, BLOCK_FOR_UNKNOWN_PURPOSE);
   w->currentChunk = NULL;
 }
 

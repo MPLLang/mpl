@@ -664,7 +664,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       ES_foreachSuspect(s, suspects, &fObjptrClosure);
       info.depth = depth;
       info.freedType = LGC_FREED_SUSPECT_CHUNK;
-      HM_freeChunksInListWithInfo(s, suspects, &infoc);
+      HM_freeChunksInListWithInfo(s, suspects, &infoc, BLOCK_FOR_UNKNOWN_PURPOSE);
     }
   }
 
@@ -693,7 +693,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 #endif
       info.depth = HM_HH_getDepth(hhTail);
       info.freedType = LGC_FREED_REMSET_CHUNK;
-      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc);
+      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc, BLOCK_FOR_UNKNOWN_PURPOSE);
     }
 
 #if ASSERT

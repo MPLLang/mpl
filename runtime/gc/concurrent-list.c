@@ -217,5 +217,5 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
 void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info) {
   struct HM_chunkList _chunkList;
   CC_popAsChunkList(concList, &(_chunkList));
-  HM_freeChunksInListWithInfo(s, &(_chunkList), info);
+  HM_freeChunksInListWithInfo(s, &(_chunkList), info, BLOCK_FOR_UNKNOWN_PURPOSE);
 }

@@ -566,7 +566,7 @@ Blocks allocateBlocksWithPurpose(GC_state s, size_t numBlocks, enum BlockPurpose
 
 
 Blocks allocateBlocks(GC_state s, size_t numBlocks) {
-  return allocateBlocksWithPurpose(s, numBlocks, BLOCK_FOR_UNKNOWN);
+  return allocateBlocksWithPurpose(s, numBlocks, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 
@@ -685,12 +685,12 @@ void logCurrentBlockUsage(GC_state s) {
   LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
     "block-allocator(%zu.%.9zu):\n"
     "  total mmap'ed     %zu\n"
-    "  BLOCK_FOR_UNKNOWN %zu (%zu%%)",
+    "  BLOCK_FOR_UNKNOWN_PURPOSE %zu (%zu%%)",
     now.tv_sec,
     now.tv_nsec,
     count,
-    inUse[BLOCK_FOR_UNKNOWN],
-    (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN] / (double)count));
+    inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count));
 }
 
 #endif
