@@ -266,7 +266,8 @@ pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes);
 pointer HM_getChunkStartGap(HM_chunk chunk);
 
 /* store the object pointed by p at the end of list and return the address */
-pointer HM_storeInchunkList(HM_chunkList chunkList, void* p, size_t objSize);
+pointer HM_storeInChunkList(HM_chunkList chunkList, void* p, size_t objSize);
+pointer HM_storeInchunkListWithPurpose(HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose);
 
 
 /**

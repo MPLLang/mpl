@@ -71,7 +71,7 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
     stack->storage[stack->size++] = datum;
 #endif
 
-    HM_storeInchunkList(&(stack->storage), &(datum), sizeof(datum));
+    HM_storeInChunkList(&(stack->storage), &(datum), sizeof(datum));
     pthread_mutex_unlock(&stack->mutex);
     return TRUE;
 }

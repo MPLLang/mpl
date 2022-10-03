@@ -693,7 +693,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 #endif
       info.depth = HM_HH_getDepth(hhTail);
       info.freedType = LGC_FREED_REMSET_CHUNK;
-      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc, BLOCK_FOR_UNKNOWN_PURPOSE);
+      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc, BLOCK_FOR_REMEMBERED_SET);
     }
 
 #if ASSERT
@@ -1240,7 +1240,7 @@ void copySuspect(
     return;
   }
   uint32_t opDepth = args->toDepth;
-  HM_storeInchunkList(HM_HH_getSuspects(toSpaceHH(s, args, opDepth)), &new_ptr, sizeof(objptr));
+  HM_storeInChunkList(HM_HH_getSuspects(toSpaceHH(s, args, opDepth)), &new_ptr, sizeof(objptr));
 }
 
 bool headerForwarded(GC_header h)

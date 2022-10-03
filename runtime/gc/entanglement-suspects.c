@@ -58,7 +58,7 @@ void clear_suspect(
   if (pinType(header) == PIN_ANY && unpinDepth < eargs->heapDepth) {
     /* Not ready to be cleared */
     HM_HierarchicalHeap unpinHeap = HM_HH_getHeapAtDepth(s, eargs->thread, unpinDepth);
-    HM_storeInchunkList(HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr));
+    HM_storeInChunkList(HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr));
     return;
   }
 
@@ -69,7 +69,7 @@ void clear_suspect(
   }
   else {
     /*oops something changed in b/w, let's try at the next join*/
-    HM_storeInchunkList(eargs->newList, opp, sizeof(objptr));
+    HM_storeInChunkList(eargs->newList, opp, sizeof(objptr));
   }
 }
 
@@ -95,7 +95,7 @@ void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)
     return;
   }
   s->cumulativeStatistics->numSuspectsMarked++;
-  HM_storeInchunkList(es, &op, sizeof(objptr));
+  HM_storeInChunkList(es, &op, sizeof(objptr));
 }
 
 int ES_foreachSuspect(
