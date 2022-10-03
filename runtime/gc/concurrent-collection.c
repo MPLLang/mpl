@@ -1064,7 +1064,7 @@ size_t CC_collectWithRoots(
   forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndUnmarkLoop, &lists);
   unmarkLoop(s, &lists);
 
-  HM_freeChunksInList(s, removedFromCCBag);
+  HM_freeChunksInListWithInfo(s, removedFromCCBag, NULL, BLOCK_FOR_FORGOTTEN_SET);
 
   assert(CC_workList_isEmpty(s, &(lists.worklist)));
   CC_workList_free(s, &(lists.worklist));

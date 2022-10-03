@@ -706,8 +706,10 @@ void logCurrentBlockUsage(GC_state s) {
     "  total mmap'ed              %zu\n"
     "  BLOCK_FOR_HEAP_CHUNK       %zu (%zu%%)\n"
     "  BLOCK_FOR_REMEMBERED_SET   %zu (%zu%%)\n"
+    "  BLOCK_FOR_FORGOTTEN_SET    %zu (%zu%%)\n"
     "  BLOCK_FOR_HH_ALLOCATOR     %zu (%zu%%)\n"
     "  BLOCK_FOR_UF_ALLOCATOR     %zu (%zu%%)\n"
+    "  BLOCK_FOR_GC_WORKLIST      %zu (%zu%%)\n"
     "  BLOCK_FOR_UNKNOWN_PURPOSE  %zu (%zu%%)\n",
     now.tv_sec,
     now.tv_nsec,
@@ -719,11 +721,17 @@ void logCurrentBlockUsage(GC_state s) {
     inUse[BLOCK_FOR_REMEMBERED_SET],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_REMEMBERED_SET] / (double)count),
 
+    inUse[BLOCK_FOR_FORGOTTEN_SET],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_FORGOTTEN_SET] / (double)count),
+
     inUse[BLOCK_FOR_HH_ALLOCATOR],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_HH_ALLOCATOR] / (double)count),
 
     inUse[BLOCK_FOR_UF_ALLOCATOR],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UF_ALLOCATOR] / (double)count),
+
+    inUse[BLOCK_FOR_GC_WORKLIST],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_GC_WORKLIST] / (double)count),
 
     inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count));
