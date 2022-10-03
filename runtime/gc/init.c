@@ -509,8 +509,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
-  initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
-  initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
+  initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
+  initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
   s->numberDisentanglementChecks = 0;
 
   s->signalHandlerThread = BOGUS_OBJPTR;
@@ -648,8 +648,8 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
   initLocalBlockAllocator(d, s->blockAllocatorGlobal);
-  initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
-  initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
+  initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
+  initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
   d->hhEBR = s->hhEBR;
   d->hmEBR = s->hmEBR;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
