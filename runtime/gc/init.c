@@ -608,13 +608,7 @@ void GC_lateInit(GC_state s) {
   HM_EBR_init(s);
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
-
-  struct timespec now;
-  timespec_now(&now);
-  LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
-    "block-allocator(%zu.%.9zu): init",
-    now.tv_sec,
-    now.tv_nsec);
+  s->blockUsageSampler = newBlockUsageSampler(s);
 
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
@@ -648,6 +642,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
   initLocalBlockAllocator(d, s->blockAllocatorGlobal);
+  d->blockUsageSampler = s->blockUsageSampler;
   initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
   d->hhEBR = s->hhEBR;

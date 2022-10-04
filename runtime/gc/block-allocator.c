@@ -694,13 +694,15 @@ void queryCurrentBlockUsage(GC_state s, size_t *numBlocks, size_t *blocksInUseAr
 }
 
 
-void logCurrentBlockUsage(GC_state s) {
+void logCurrentBlockUsage(
+  GC_state s, 
+  struct timespec *now, 
+  __attribute__((unused)) void *env)
+{
   size_t count;
   size_t inUse[NUM_BLOCK_PURPOSES];
   queryCurrentBlockUsage(s, &count, (size_t*)inUse);
 
-  struct timespec now;
-  timespec_now(&now);
   LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
     "block-allocator(%zu.%.9zu):\n"
     "  total mmap'ed              %zu\n"
@@ -711,8 +713,8 @@ void logCurrentBlockUsage(GC_state s) {
     "  BLOCK_FOR_UF_ALLOCATOR     %zu (%zu%%)\n"
     "  BLOCK_FOR_GC_WORKLIST      %zu (%zu%%)\n"
     "  BLOCK_FOR_UNKNOWN_PURPOSE  %zu (%zu%%)\n",
-    now.tv_sec,
-    now.tv_nsec,
+    now->tv_sec,
+    now->tv_nsec,
     count,
 
     inUse[BLOCK_FOR_HEAP_CHUNK],
@@ -735,6 +737,21 @@ void logCurrentBlockUsage(GC_state s) {
 
     inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count));
+}
+
+Sampler newBlockUsageSampler(GC_state s) {
+  struct SamplerClosure func;
+  func.fun = logCurrentBlockUsage;
+  func.env = NULL;
+
+  struct timespec desiredInterval;
+  desiredInterval.tv_sec = 0;
+  desiredInterval.tv_nsec = 1000000; // 1 ms
+
+  Sampler result = malloc(sizeof(struct Sampler));
+  initSampler(s, result, &func, &desiredInterval);
+
+  return result;
 }
 
 #endif

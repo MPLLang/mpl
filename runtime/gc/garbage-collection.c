@@ -106,9 +106,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   HM_EBR_leaveQuiescentState(s);
   HM_EBR_enterQuiescentState(s);
 
-  if (s->procNumber == 0) {
-    logCurrentBlockUsage(s);
-  }
+  maybeSample(s, s->blockUsageSampler);
 
   // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
   // while (h->nextAncestor != NULL) h = h->nextAncestor;

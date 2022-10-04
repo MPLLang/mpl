@@ -193,6 +193,10 @@ Blocks allocateBlocks(GC_state s, size_t numBlocks);
 
 Blocks allocateBlocksWithPurpose(GC_state s, size_t numBlocks, enum BlockPurpose purpose);
 
+/** Free a group of contiguous blocks. */
+void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);
+
+
 /** populate:
   *   *numBlocks := current total number of blocks mmap'ed
   *   blocksInUseArr[p] := current number of blocks allocated for purpose `p`
@@ -201,10 +205,7 @@ Blocks allocateBlocksWithPurpose(GC_state s, size_t numBlocks, enum BlockPurpose
   */
 void queryCurrentBlockUsage(GC_state s, size_t *numBlocks, size_t *blocksInUseArr);
 
-void logCurrentBlockUsage(GC_state s);
-
-/** Free a group of contiguous blocks. */
-void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);
+Sampler newBlockUsageSampler(GC_state s);
 
 #endif
 
