@@ -768,10 +768,7 @@ Sampler newBlockUsageSampler(GC_state s) {
   func.fun = logCurrentBlockUsage;
   func.env = NULL;
 
-  struct timespec desiredInterval;
-  desiredInterval.tv_sec = 0;
-  desiredInterval.tv_nsec = 1000000; // 1 ms
-
+  struct timespec desiredInterval = s->controls->blockUsageSampleInterval;
   Sampler result = malloc(sizeof(struct Sampler));
   initSampler(s, result, &func, &desiredInterval);
 
