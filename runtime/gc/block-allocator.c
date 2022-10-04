@@ -135,9 +135,11 @@ static void initBlockAllocator(GC_state s, BlockAllocator ball) {
   ball->completelyEmptyGroup.firstSuperBlock = NULL;
 
   ball->firstFreedByOther = NULL;
-  ball->numBlocks = 0;
+  ball->numBlocksMapped = 0;
+  ball->numBlocksReleased = 0;
   for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
-    ball->numBlocksInUse[p] = 0;
+    ball->numBlocksAllocated[p] = 0;
+    ball->numBlocksFreed[p] = 0;
   }
 
   for (size_t i = 0; i < numMegaBlockSizeClasses; i++) {
@@ -241,7 +243,7 @@ static void mmapNewSuperBlocks(
     prependSuperBlock(getFullnessGroup(s, ball, 0, COMPLETELY_EMPTY), sb);
   }
 
-  ball->numBlocks += count*(SUPERBLOCK_SIZE(s));
+  ball->numBlocksMapped += count*(SUPERBLOCK_SIZE(s));
 }
 
 
@@ -265,7 +267,7 @@ static Blocks allocateInSuperBlock(
 
     sb->numBlocksFree -= (1 << sb->sizeClass);
     assert(sb->owner != NULL);
-    sb->owner->numBlocksInUse[purpose] += (1 << sb->sizeClass);
+    sb->owner->numBlocksAllocated[purpose] += (1 << sb->sizeClass);
 
     result->container = sb;
     result->numBlocks = 1 << sb->sizeClass;
@@ -280,7 +282,7 @@ static Blocks allocateInSuperBlock(
   sb->numBlocksFree -= (1 << sb->sizeClass);
 
   assert(sb->owner != NULL);
-  sb->owner->numBlocksInUse[purpose] += (1 << sb->sizeClass);
+  sb->owner->numBlocksAllocated[purpose] += (1 << sb->sizeClass);
 
   Blocks bs = (Blocks)result;
   bs->container = sb;
@@ -309,27 +311,7 @@ static void deallocateInSuperBlock(
   assert( purpose < NUM_BLOCK_PURPOSES );
 
   assert(sb->owner != NULL);
-  assert(sb->owner->numBlocksInUse[purpose] >= ((size_t)1 << sb->sizeClass));
-  sb->owner->numBlocksInUse[purpose] -= (1 << sb->sizeClass);
-
-#if 0
-  size_t nb = 1 << sb->sizeClass;
-  if (nb <= sb->owner->numBlocksInUse[purpose]) {
-    sb->owner->numBlocksInUse[purpose] -= nb;
-  }
-  else {
-    // Somehow the tracking is off; perhaps the allocateBlocks/freeBlocks calls
-    // are mismatched somehow. No worries; we'll just track as best we can by
-    // assuming that the remainder blocks were marked as unknown purpose. This
-    // works as long as freeing blocks with purpose is more precise than
-    // allocating.
-    size_t amountTracked = sb->owner->numBlocksInUse[purpose];
-    size_t amountRem = nb - amountTracked;
-    sb->owner->numBlocksInUse[purpose] = 0;
-    assert( sb->owner->numBlocksInUse[BLOCK_FOR_UNKNOWN_PURPOSE] >= amountRem );
-    sb->owner->numBlocksInUse[BLOCK_FOR_UNKNOWN_PURPOSE] -= amountRem;
-  }
-#endif
+  sb->owner->numBlocksFreed[purpose] += (1 << sb->sizeClass);
 }
 
 
@@ -437,8 +419,8 @@ static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
       (size_t)1 << (s->controls->megablockThreshold - 1));
       
     pthread_mutex_lock(&(global->megaBlockLock));
-    global->numBlocks -= nb;
-    global->numBlocksInUse[purpose] -= nb;
+    global->numBlocksReleased += nb;
+    global->numBlocksFreed[purpose] += nb;
     pthread_mutex_unlock(&(global->megaBlockLock));
     return;
   }
@@ -448,8 +430,7 @@ static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
   pthread_mutex_lock(&(global->megaBlockLock));
   mb->nextMegaBlock = global->megaBlockSizeClass[mbClass].firstMegaBlock;
   global->megaBlockSizeClass[mbClass].firstMegaBlock = mb;
-  assert( global->numBlocksInUse[mb->purpose] >= mb->numBlocks );
-  global->numBlocksInUse[mb->purpose] -= mb->numBlocks;
+  global->numBlocksFreed[mb->purpose] += mb->numBlocks;
   pthread_mutex_unlock(&(global->megaBlockLock));
   return;
 }
@@ -487,7 +468,7 @@ static MegaBlock tryFindMegaBlock(
       if (mb->numBlocks >= numBlocksNeeded) {
         *mbp = mb->nextMegaBlock;
         mb->nextMegaBlock = NULL;
-        global->numBlocksInUse[purpose] += mb->numBlocks;
+        global->numBlocksAllocated[purpose] += mb->numBlocks;
         pthread_mutex_unlock(&(global->megaBlockLock));
 
         LOG(LM_CHUNK_POOL, LL_INFO,
@@ -518,8 +499,8 @@ static MegaBlock mmapNewMegaBlock(GC_state s, size_t numBlocks, enum BlockPurpos
 
   BlockAllocator global = s->blockAllocatorGlobal;
   pthread_mutex_lock(&(global->megaBlockLock));
-  global->numBlocks += numBlocks;
-  global->numBlocksInUse[purpose] += numBlocks;
+  global->numBlocksMapped += numBlocks;
+  global->numBlocksAllocated[purpose] += numBlocks;
   pthread_mutex_unlock(&(global->megaBlockLock));
 
   MegaBlock mb = (MegaBlock)start;
@@ -670,26 +651,38 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f) {
 }
 
 
-void queryCurrentBlockUsage(GC_state s, size_t *numBlocks, size_t *blocksInUseArr) {
-  *numBlocks = 0;
+void queryCurrentBlockUsage(
+  GC_state s,
+  size_t *numBlocksMapped,
+  size_t *numBlocksReleased,
+  size_t *numBlocksAllocated,
+  size_t *numBlocksFreed)
+{
+  *numBlocksMapped = 0;
+  *numBlocksReleased = 0;
   for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
-    blocksInUseArr[p] = 0;
+    numBlocksAllocated[p] = 0;
+    numBlocksFreed[p] = 0;
   }
 
   // query local allocators
   for (uint32_t i = 0; i < s->numberOfProcs; i++) {
     BlockAllocator ball = s->procStates[i].blockAllocatorLocal;
-    *numBlocks += ball->numBlocks;
+    *numBlocksMapped += ball->numBlocksMapped;
+    *numBlocksReleased += ball->numBlocksReleased;
     for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
-      blocksInUseArr[p] += ball->numBlocksInUse[p];
+      numBlocksAllocated[p] += ball->numBlocksAllocated[p];
+      numBlocksFreed[p] += ball->numBlocksFreed[p];
     }
   }
 
   // query global allocator
   BlockAllocator global = s->blockAllocatorGlobal;
-  *numBlocks += global->numBlocks;
+  *numBlocksMapped += global->numBlocksMapped;
+  *numBlocksReleased += global->numBlocksReleased;
   for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
-    blocksInUseArr[p] += global->numBlocksInUse[p];
+    numBlocksAllocated[p] += global->numBlocksAllocated[p];
+    numBlocksFreed[p] += global->numBlocksFreed[p];
   }
 }
 
@@ -699,44 +692,75 @@ void logCurrentBlockUsage(
   struct timespec *now, 
   __attribute__((unused)) void *env)
 {
-  size_t count;
+  size_t mapped;
+  size_t released;
+  size_t allocated[NUM_BLOCK_PURPOSES];
+  size_t freed[NUM_BLOCK_PURPOSES];
+  queryCurrentBlockUsage(s, &mapped, &released, (size_t*)allocated, (size_t*)freed);
+
   size_t inUse[NUM_BLOCK_PURPOSES];
-  queryCurrentBlockUsage(s, &count, (size_t*)inUse);
+  for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
+    if (freed[p] > allocated[p]) {
+      inUse[p] = 0;
+    }
+    else {
+      inUse[p] = allocated[p] - freed[p];
+    }
+  }
+
+  size_t count = mapped-released;
+  if (released > mapped) count = 0;
 
   LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
-    "block-allocator(%zu.%.9zu):\n"
-    "  total mmap'ed              %zu\n"
-    "  BLOCK_FOR_HEAP_CHUNK       %zu (%zu%%)\n"
-    "  BLOCK_FOR_REMEMBERED_SET   %zu (%zu%%)\n"
-    "  BLOCK_FOR_FORGOTTEN_SET    %zu (%zu%%)\n"
-    "  BLOCK_FOR_HH_ALLOCATOR     %zu (%zu%%)\n"
-    "  BLOCK_FOR_UF_ALLOCATOR     %zu (%zu%%)\n"
-    "  BLOCK_FOR_GC_WORKLIST      %zu (%zu%%)\n"
-    "  BLOCK_FOR_UNKNOWN_PURPOSE  %zu (%zu%%)\n",
+    "block-allocator(%zu.%.9zu)\n"
+    "  currently mapped           %zu (= %zu - %zu)\n"
+    "  BLOCK_FOR_HEAP_CHUNK       %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_REMEMBERED_SET   %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_FORGOTTEN_SET    %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_HH_ALLOCATOR     %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_UF_ALLOCATOR     %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_GC_WORKLIST      %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_UNKNOWN_PURPOSE  %zu (%zu%%) (= %zu - %zu)\n",
     now->tv_sec,
     now->tv_nsec,
     count,
+    mapped,
+    released,
 
     inUse[BLOCK_FOR_HEAP_CHUNK],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_HEAP_CHUNK] / (double)count),
+    allocated[BLOCK_FOR_HEAP_CHUNK],
+    freed[BLOCK_FOR_HEAP_CHUNK],
 
     inUse[BLOCK_FOR_REMEMBERED_SET],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_REMEMBERED_SET] / (double)count),
+    allocated[BLOCK_FOR_REMEMBERED_SET],
+    freed[BLOCK_FOR_REMEMBERED_SET],
 
     inUse[BLOCK_FOR_FORGOTTEN_SET],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_FORGOTTEN_SET] / (double)count),
+    allocated[BLOCK_FOR_FORGOTTEN_SET],
+    freed[BLOCK_FOR_FORGOTTEN_SET],
 
     inUse[BLOCK_FOR_HH_ALLOCATOR],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_HH_ALLOCATOR] / (double)count),
+    allocated[BLOCK_FOR_HH_ALLOCATOR],
+    freed[BLOCK_FOR_HH_ALLOCATOR],
 
     inUse[BLOCK_FOR_UF_ALLOCATOR],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UF_ALLOCATOR] / (double)count),
+    allocated[BLOCK_FOR_UF_ALLOCATOR],
+    freed[BLOCK_FOR_UF_ALLOCATOR],
 
     inUse[BLOCK_FOR_GC_WORKLIST],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_GC_WORKLIST] / (double)count),
+    allocated[BLOCK_FOR_GC_WORKLIST],
+    freed[BLOCK_FOR_GC_WORKLIST],
 
     inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
-    (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count));
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count),
+    allocated[BLOCK_FOR_UNKNOWN_PURPOSE],
+    freed[BLOCK_FOR_UNKNOWN_PURPOSE]);
 }
 
 Sampler newBlockUsageSampler(GC_state s) {

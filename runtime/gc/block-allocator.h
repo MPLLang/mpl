@@ -138,8 +138,10 @@ enum FullnessGroup {
 
 typedef struct BlockAllocator {
 
-  size_t numBlocks;
-  size_t numBlocksInUse[NUM_BLOCK_PURPOSES];
+  size_t numBlocksMapped;
+  size_t numBlocksReleased;
+  size_t numBlocksAllocated[NUM_BLOCK_PURPOSES];
+  size_t numBlocksFreed[NUM_BLOCK_PURPOSES];
 
   /** There are 3 fullness groups in each size class:
     *   0 is completely full, i.e. no free blocks available
@@ -199,11 +201,17 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);
 
 /** populate:
   *   *numBlocks := current total number of blocks mmap'ed
-  *   blocksInUseArr[p] := current number of blocks allocated for purpose `p`
+  *   blocksAllocated[p] := cumulative number of blocks allocated for purpose `p`
+  *   blocksFreed[p] := cumulative number of blocks freed for purpose `p`
   *
-  * The `blocksInUseArr` must be an array of length `NUM_BLOCK_PURPOSES`
+  * The `blocksAllocated` and `blocksFreed` arrays must have length `NUM_BLOCK_PURPOSES`
   */
-void queryCurrentBlockUsage(GC_state s, size_t *numBlocks, size_t *blocksInUseArr);
+void queryCurrentBlockUsage(
+  GC_state s,
+  size_t *numBlocksMapped,
+  size_t *numBlocksReleased,
+  size_t *blocksAllocated,
+  size_t *blocksFreed);
 
 Sampler newBlockUsageSampler(GC_state s);
 
