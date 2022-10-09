@@ -408,20 +408,18 @@ static void clearOutOtherFrees(GC_state s) {
 
 static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
   BlockAllocator global = s->blockAllocatorGlobal;
+  size_t nb = mb->numBlocks;
+  enum BlockPurpose purpose = mb->purpose;
 
   if (sizeClass >= s->controls->megablockThreshold) {
-    size_t nb = mb->numBlocks;
-    enum BlockPurpose purpose = mb->purpose;
     GC_release((pointer)mb, s->controls->blockSize * mb->numBlocks);
     LOG(LM_CHUNK_POOL, LL_INFO,
       "Released large allocation of %zu blocks (unmap threshold: %zu)",
       nb,
       (size_t)1 << (s->controls->megablockThreshold - 1));
       
-    pthread_mutex_lock(&(global->megaBlockLock));
-    global->numBlocksReleased += nb;
-    global->numBlocksFreed[purpose] += nb;
-    pthread_mutex_unlock(&(global->megaBlockLock));
+    __sync_fetch_and_add(&(global->numBlocksFreed[purpose]), nb);
+    __sync_fetch_and_add(&(global->numBlocksReleased), nb);
     return;
   }
 
@@ -430,8 +428,9 @@ static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
   pthread_mutex_lock(&(global->megaBlockLock));
   mb->nextMegaBlock = global->megaBlockSizeClass[mbClass].firstMegaBlock;
   global->megaBlockSizeClass[mbClass].firstMegaBlock = mb;
-  global->numBlocksFreed[mb->purpose] += mb->numBlocks;
   pthread_mutex_unlock(&(global->megaBlockLock));
+
+  __sync_fetch_and_add(&(global->numBlocksFreed[purpose]), nb);
   return;
 }
 
@@ -468,8 +467,9 @@ static MegaBlock tryFindMegaBlock(
       if (mb->numBlocks >= numBlocksNeeded) {
         *mbp = mb->nextMegaBlock;
         mb->nextMegaBlock = NULL;
-        global->numBlocksAllocated[purpose] += mb->numBlocks;
         pthread_mutex_unlock(&(global->megaBlockLock));
+
+        __sync_fetch_and_add(&(global->numBlocksAllocated[purpose]), mb->numBlocks);
 
         LOG(LM_CHUNK_POOL, LL_INFO,
           "inspected %zu, satisfied large alloc of %zu blocks using megablock of %zu",
@@ -498,10 +498,8 @@ static MegaBlock mmapNewMegaBlock(GC_state s, size_t numBlocks, enum BlockPurpos
   }
 
   BlockAllocator global = s->blockAllocatorGlobal;
-  pthread_mutex_lock(&(global->megaBlockLock));
-  global->numBlocksMapped += numBlocks;
-  global->numBlocksAllocated[purpose] += numBlocks;
-  pthread_mutex_unlock(&(global->megaBlockLock));
+  __sync_fetch_and_add(&(global->numBlocksMapped), numBlocks);
+  __sync_fetch_and_add(&(global->numBlocksAllocated[purpose]), numBlocks);
 
   MegaBlock mb = (MegaBlock)start;
   mb->numBlocks = numBlocks;
