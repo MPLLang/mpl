@@ -80,6 +80,49 @@ bad:
   die ("Invalid @MLton/@mpl memory amount: %s.", s);
 }
 
+
+static void stringToTime(const char *s, struct timespec *t) {
+  double d;
+  char *endptr;
+  size_t factor;
+
+  d = strtod (s, &endptr);
+  if (s == endptr)
+    goto bad;
+
+  switch (*endptr++) {
+    case 's':
+      factor = 1;
+      break;
+    case 'm':
+      factor = 1000;
+      break;
+    case 'u':
+      factor = 1000 * 1000;
+      break;
+    case 'n':
+      factor = 1000 * 1000 * 1000;
+      break;
+    default:
+      goto bad;
+  }
+
+  d /= (double)factor;
+  size_t sec = (size_t)d;
+  size_t nsec = (size_t)((d - (double)sec) * 1000000000.0);
+
+  unless (*endptr == '\0'
+          and 0.0 <= d)
+    goto bad;
+
+  t->tv_sec = sec;
+  t->tv_nsec = nsec;
+  return;
+
+bad:
+  die ("Invalid @MLton/@mpl time spec: %s.", s);
+}
+
 /* ---------------------------------------------------------------- */
 /*                             GC_init                              */
 /* ---------------------------------------------------------------- */
@@ -327,6 +370,14 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
             die("%s megablock-threshold must be at least 1", atName);
           }
           s->controls->megablockThreshold = xx;
+        } else if (0 == strcmp(arg, "block-usage-sample-interval")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s block-usage-sample-interval missing argument.", atName);
+          }
+          struct timespec tm;
+          stringToTime(argv[i++], &tm);
+          s->controls->blockUsageSampleInterval = tm;
         } else if (0 == strcmp (arg, "collection-type")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
@@ -481,6 +532,10 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->megablockThreshold = 18;
   s->controls->manageEntanglement = TRUE;
 
+  // default: sample block usage once a second
+  s->controls->blockUsageSampleInterval.tv_sec = 1;
+  s->controls->blockUsageSampleInterval.tv_nsec = 0;
+
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
@@ -509,8 +564,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
 
-  initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap));
-  initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode));
+  initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
+  initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
   s->numberDisentanglementChecks = 0;
 
   s->signalHandlerThread = BOGUS_OBJPTR;
@@ -608,6 +663,7 @@ void GC_lateInit(GC_state s) {
   HM_EBR_init(s);
 
   initLocalBlockAllocator(s, initGlobalBlockAllocator(s));
+  s->blockUsageSampler = newBlockUsageSampler(s);
 
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
@@ -641,8 +697,9 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->wsQueueTop = BOGUS_OBJPTR;
   d->wsQueueBot = BOGUS_OBJPTR;
   initLocalBlockAllocator(d, s->blockAllocatorGlobal);
-  initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap));
-  initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
+  d->blockUsageSampler = s->blockUsageSampler;
+  initFixedSizeAllocator(getHHAllocator(d), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
+  initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
   d->hhEBR = s->hhEBR;
   d->hmEBR = s->hmEBR;
   d->nextChunkAllocSize = s->nextChunkAllocSize;

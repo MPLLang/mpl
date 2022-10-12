@@ -664,7 +664,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       ES_foreachSuspect(s, suspects, &fObjptrClosure);
       info.depth = depth;
       info.freedType = LGC_FREED_SUSPECT_CHUNK;
-      HM_freeChunksInListWithInfo(s, suspects, &infoc);
+      HM_freeChunksInListWithInfo(s, suspects, &infoc, BLOCK_FOR_SUSPECTS);
     }
   }
 
@@ -693,7 +693,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 #endif
       info.depth = HM_HH_getDepth(hhTail);
       info.freedType = LGC_FREED_REMSET_CHUNK;
-      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc);
+      HM_freeChunksInListWithInfo(s, &(remset->private), &infoc, BLOCK_FOR_REMEMBERED_SET);
     }
 
 #if ASSERT
@@ -717,7 +717,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       }
       else
       {
-        HM_freeChunk(s, chunk);
+        HM_freeChunkWithInfo(s, chunk, &infoc, BLOCK_FOR_HEAP_CHUNK);
       }
       chunk = next;
     }
@@ -1240,7 +1240,11 @@ void copySuspect(
     return;
   }
   uint32_t opDepth = args->toDepth;
-  HM_storeInchunkList(HM_HH_getSuspects(toSpaceHH(s, args, opDepth)), &new_ptr, sizeof(objptr));
+  HM_storeInChunkListWithPurpose(
+    HM_HH_getSuspects(toSpaceHH(s, args, opDepth)),
+    &new_ptr,
+    sizeof(objptr),
+    BLOCK_FOR_SUSPECTS);
 }
 
 bool headerForwarded(GC_header h)
@@ -1931,7 +1935,11 @@ pointer copyObject(pointer p,
     /* Need to allocate a new chunk. Safe to use the dechecker state of where
      * the object came from, as all objects in the same heap can be safely
      * reassigned to any dechecker state of that heap. */
-    chunk = HM_allocateChunk(tgtChunkList, objectSize);
+    chunk = HM_allocateChunkWithPurpose(
+      tgtChunkList,
+      objectSize,
+      BLOCK_FOR_HEAP_CHUNK);
+
     if (NULL == chunk)
     {
       DIE("Ran out of space for Hierarchical Heap!");

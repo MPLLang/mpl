@@ -865,7 +865,7 @@ void CC_filterPinned(
 
   // HM_freeRemSetWithInfo(s, oldRemSet, &infoc);
   // this reintializes the private remset
-  HM_freeChunksInListWithInfo(s, &(oldRemSet->private), &infoc);
+  HM_freeChunksInListWithInfo(s, &(oldRemSet->private), &infoc, BLOCK_FOR_REMEMBERED_SET);
   assert (newRemSet.public.firstChunk == NULL);
   // this moves all data into remset of hh
   HM_appendRemSet(oldRemSet, &newRemSet);
@@ -1064,7 +1064,7 @@ size_t CC_collectWithRoots(
   forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndUnmarkLoop, &lists);
   unmarkLoop(s, &lists);
 
-  HM_freeChunksInList(s, removedFromCCBag);
+  HM_freeChunksInListWithInfo(s, removedFromCCBag, NULL, BLOCK_FOR_FORGOTTEN_SET);
 
   assert(CC_workList_isEmpty(s, &(lists.worklist)));
   CC_workList_free(s, &(lists.worklist));
@@ -1151,8 +1151,8 @@ size_t CC_collectWithRoots(
   /** SAM_NOTE: TODO: deleteList no longer needed, because
     * block allocator handles that.
     */
-  HM_freeChunksInListWithInfo(s, origList, &infoc);
-  HM_freeChunksInListWithInfo(s, deleteList, &infoc);
+  HM_freeChunksInListWithInfo(s, origList, &infoc, BLOCK_FOR_HEAP_CHUNK);
+  HM_freeChunksInListWithInfo(s, deleteList, &infoc, BLOCK_FOR_HEAP_CHUNK);
 
   for(HM_chunk chunk = repList->firstChunk;
     chunk!=NULL; chunk = chunk->nextChunk) {
@@ -1168,7 +1168,7 @@ size_t CC_collectWithRoots(
   assert(isChunkInList(stackChunk, origList));
   HM_unlinkChunk(origList, stackChunk);
   info.freedType = CC_FREED_STACK_CHUNK;
-  HM_freeChunkWithInfo(s, stackChunk, &infoc);
+  HM_freeChunkWithInfo(s, stackChunk, &infoc, BLOCK_FOR_HEAP_CHUNK);
   info.freedType = CC_FREED_NORMAL_CHUNK;
   cp->stack = BOGUS_OBJPTR;
 

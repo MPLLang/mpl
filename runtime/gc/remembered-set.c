@@ -11,10 +11,10 @@ void HM_initRemSet(HM_remSet remSet) {
 
 void HM_remember(HM_remSet remSet, HM_remembered remElem, bool conc) {
   if (!conc) {
-    HM_storeInchunkList(&(remSet->private), (void*)remElem, sizeof(struct HM_remembered));
+    HM_storeInChunkListWithPurpose(&(remSet->private), (void*)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
   }
   else {
-    CC_storeInConcList(&(remSet->public), (void *)remElem, sizeof(struct HM_remembered));
+    CC_storeInConcListWithPurpose(&(remSet->public), (void *)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
   }
 }
 
@@ -189,6 +189,6 @@ void HM_appendRemSet(HM_remSet r1, HM_remSet r2) {
 }
 
 void HM_freeRemSetWithInfo(GC_state s, HM_remSet remSet, void* info) {
-  HM_freeChunksInListWithInfo(s, &(remSet->private), info);
-  CC_freeChunksInConcListWithInfo(s, &(remSet->public), info);
+  HM_freeChunksInListWithInfo(s, &(remSet->private), info, BLOCK_FOR_REMEMBERED_SET);
+  CC_freeChunksInConcListWithInfo(s, &(remSet->public), info, BLOCK_FOR_REMEMBERED_SET);
 }

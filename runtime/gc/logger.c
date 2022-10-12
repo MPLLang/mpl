@@ -205,6 +205,7 @@ bool stringToLogModule(enum LogModule* module, const char* moduleString) {
 
   struct Conversion conversions[] =
       {{.string = "allocation", .module = LM_ALLOCATION},
+       {.string = "block-allocator", .module = LM_BLOCK_ALLOCATOR},
        {.string = "chunk", .module = LM_CHUNK},
        {.string = "chunk-pool", .module = LM_CHUNK_POOL},
        {.string = "dfs-mark", .module = LM_DFS_MARK},

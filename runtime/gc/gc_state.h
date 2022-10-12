@@ -32,6 +32,7 @@ struct GC_state {
   volatile uint32_t atomicState;
   struct BlockAllocator *blockAllocatorGlobal;
   struct BlockAllocator *blockAllocatorLocal;
+  struct Sampler *blockUsageSampler;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
   pointer callFromCOpArgsResPtr; /* Pass op, args, and res from exported C call */
   struct GC_controls *controls;

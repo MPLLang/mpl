@@ -6,8 +6,8 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void freeChunk (GC_state s, void *ptr) {
-  HM_freeChunk(s, (HM_chunk)ptr);
+void freeChunk(GC_state s, void *ptr) {
+  HM_freeChunkWithInfo(s, (HM_chunk)ptr, NULL, BLOCK_FOR_HEAP_CHUNK);
 }
 
 void HM_EBR_init(GC_state s) {

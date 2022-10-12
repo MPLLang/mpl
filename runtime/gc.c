@@ -95,6 +95,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/concurrent-list.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"
+#include "gc/sampler.c"
 #include "gc/sequence-allocate.c"
 #include "gc/sequence.c"
 #include "gc/share.c"

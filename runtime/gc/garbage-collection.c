@@ -53,7 +53,11 @@ void growStackCurrent(GC_state s) {
 
   /* in this case, the new stack needs more space, so allocate a new chunk,
    * copy the stack, and throw away the old chunk. */
-  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(newhh), stackSize);
+  HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(newhh),
+    stackSize,
+    BLOCK_FOR_HEAP_CHUNK);
+    
   if (NULL == newChunk) {
     DIE("Ran out of space to grow stack!");
   }
@@ -101,6 +105,8 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   // ebr for chunks
   HM_EBR_leaveQuiescentState(s);
   HM_EBR_enterQuiescentState(s);
+
+  maybeSample(s, s->blockUsageSampler);
 
   // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
   // while (h->nextAncestor != NULL) h = h->nextAncestor;

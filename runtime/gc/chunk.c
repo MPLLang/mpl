@@ -119,11 +119,11 @@ HM_chunk HM_initializeChunk(pointer start, pointer end) {
 }
 
 
-HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
+HM_chunk HM_getFreeChunkWithPurpose(GC_state s, size_t bytesRequested, enum BlockPurpose purpose) {
   size_t chunkWidth =
     align(bytesRequested + sizeof(struct HM_chunk), HM_BLOCK_SIZE);
   size_t numBlocks = chunkWidth / HM_BLOCK_SIZE;
-  Blocks start = allocateBlocks(s, numBlocks);
+  Blocks start = allocateBlocksWithPurpose(s, numBlocks, purpose);
   SuperBlock container = start->container;
   numBlocks = start->numBlocks;
   HM_chunk result =
@@ -131,6 +131,11 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
   result->container = container;
   result->numBlocks = numBlocks;
   return result;
+}
+
+
+HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested) {
+  return HM_getFreeChunkWithPurpose(s, bytesRequested, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 
@@ -174,7 +179,8 @@ void writeChunkInfo(
 void HM_freeChunkWithInfo(
   GC_state s,
   HM_chunk chunk,
-  writeFreedBlockInfoFnClosure f)
+  writeFreedBlockInfoFnClosure f,
+  enum BlockPurpose purpose)
 {
 
   struct writeChunkInfoArgs args;
@@ -199,34 +205,40 @@ void HM_freeChunkWithInfo(
   Blocks bs = (Blocks)chunk;
   bs->numBlocks = numBlocks;
   bs->container = container;
+  bs->purpose = purpose;
   freeBlocks(s, bs, &c);
 }
 
 void HM_freeChunk(GC_state s, HM_chunk chunk) {
-  HM_freeChunkWithInfo(s, chunk, NULL);
+  HM_freeChunkWithInfo(s, chunk, NULL, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 void HM_freeChunksInListWithInfo(
   GC_state s,
   HM_chunkList list,
-  writeFreedBlockInfoFnClosure f)
+  writeFreedBlockInfoFnClosure f,
+  enum BlockPurpose purpose)
 {
   HM_chunk chunk = list->firstChunk;
   while (chunk != NULL) {
     HM_chunk next = chunk->nextChunk;
-    HM_freeChunkWithInfo(s, chunk, f);
+    HM_freeChunkWithInfo(s, chunk, f, purpose);
     chunk = next;
   }
   HM_initChunkList(list);
 }
 
 void HM_freeChunksInList(GC_state s, HM_chunkList list) {
-  HM_freeChunksInListWithInfo(s, list, NULL);
+  HM_freeChunksInListWithInfo(s, list, NULL, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
-HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
+HM_chunk HM_allocateChunkWithPurpose(
+  HM_chunkList list,
+  size_t bytesRequested,
+  enum BlockPurpose purpose)
+{
   GC_state s = pthread_getspecific(gcstate_key);
-  HM_chunk chunk = HM_getFreeChunk(s, bytesRequested);
+  HM_chunk chunk = HM_getFreeChunkWithPurpose(s, bytesRequested, purpose);
 
   if (NULL == chunk) {
     DIE("Out of memory. Unable to allocate chunk of size %zu.",
@@ -244,6 +256,12 @@ HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
 
   return chunk;
 }
+
+
+HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
+  return HM_allocateChunkWithPurpose(list, bytesRequested, BLOCK_FOR_UNKNOWN_PURPOSE);
+}
+
 
 void HM_initChunkList(HM_chunkList list) {
   list->firstChunk = NULL;
@@ -475,10 +493,10 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
   return list->usedSize;
 }
 
-pointer HM_storeInchunkList(HM_chunkList chunkList, void* p, size_t objSize) {
+pointer HM_storeInChunkListWithPurpose(HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose) {
   HM_chunk chunk = HM_getChunkListLastChunk(chunkList);
   if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < objSize) {
-    chunk = HM_allocateChunk(chunkList, objSize);
+    chunk = HM_allocateChunkWithPurpose(chunkList, objSize, purpose);
   }
 
   assert(NULL != chunk);
@@ -491,6 +509,10 @@ pointer HM_storeInchunkList(HM_chunkList chunkList, void* p, size_t objSize) {
 
   memcpy(frontier, p, objSize);
   return frontier;
+}
+
+pointer HM_storeInChunkList(HM_chunkList chunkList, void* p, size_t objSize) {
+  return HM_storeInChunkListWithPurpose(chunkList, p, objSize, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {

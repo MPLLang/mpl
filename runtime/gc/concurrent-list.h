@@ -25,13 +25,14 @@ struct CC_concList {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void CC_initConcList(CC_concList concList);
-pointer CC_storeInConcList(CC_concList concList, void* p, size_t objSize);
+pointer CC_storeInConcListWithPurpose(CC_concList concList, void* p, size_t objSize, enum BlockPurpose purpose);
+
 // void CC_foreachObjInList(CC_concList concList, size_t objSize, HM_foreachObjClosure f);
 // void CC_foreachRemInConc(GC_state s, CC_concList concList, struct HM_foreachDownptrClosure* f);
 void CC_popAsChunkList(CC_concList concList, HM_chunkList chunkList);
 
 HM_chunk CC_getLastChunk (CC_concList concList);
-void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info);
+void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info, enum BlockPurpose purpose);
 void CC_appendConcList(CC_concList concList1, CC_concList concList2);
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

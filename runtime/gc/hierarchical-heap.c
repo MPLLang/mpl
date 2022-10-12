@@ -588,7 +588,10 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     hh = newhh;
   }
 
-  chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
+  chunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(hh),
+    bytesRequested,
+    BLOCK_FOR_HEAP_CHUNK);
 
   if (NULL == chunk) {
     return FALSE;
@@ -690,8 +693,11 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
   thread->hierarchicalHeap = newHH;
-  HM_chunk chunk =
-    HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
+  HM_chunk chunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(newHH),
+    GC_HEAP_LIMIT_SLOP,
+    BLOCK_FOR_HEAP_CHUNK);
+    
   chunk->levelHead = HM_HH_getUFNode(newHH);
 
 #ifdef DETECT_ENTANGLEMENT
@@ -874,7 +880,11 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   assert(isStackReservedAligned(s, reserved));
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
 
-  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(hh),
+    stackSize,
+    BLOCK_FOR_HEAP_CHUNK);
+
   if (NULL == newChunk) {
     DIE("Ran out of space to copy stack!");
   }
