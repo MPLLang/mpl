@@ -139,7 +139,11 @@ void CC_workList_push(
     if (chunk->nextChunk != NULL) {
       chunk = chunk->nextChunk; // this will be an empty chunk
     } else {
-      chunk = HM_allocateChunk(list, elemSize);
+      // chunk = HM_allocateChunk(list, elemSize);
+      chunk = HM_allocateChunkWithPurpose(
+        list,
+        elemSize,
+        BLOCK_FOR_GC_WORKLIST);
     }
     w->currentChunk = chunk;
   }

@@ -718,6 +718,8 @@ void logCurrentBlockUsage(
     "  BLOCK_FOR_HH_ALLOCATOR     %zu (%zu%%) (= %zu - %zu)\n"
     "  BLOCK_FOR_UF_ALLOCATOR     %zu (%zu%%) (= %zu - %zu)\n"
     "  BLOCK_FOR_GC_WORKLIST      %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_SUSPECTS         %zu (%zu%%) (= %zu - %zu)\n"
+    "  BLOCK_FOR_EBR              %zu (%zu%%) (= %zu - %zu)\n"
     "  BLOCK_FOR_UNKNOWN_PURPOSE  %zu (%zu%%) (= %zu - %zu)\n",
     now->tv_sec,
     now->tv_nsec,
@@ -754,6 +756,16 @@ void logCurrentBlockUsage(
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_GC_WORKLIST] / (double)count),
     allocated[BLOCK_FOR_GC_WORKLIST],
     freed[BLOCK_FOR_GC_WORKLIST],
+
+    inUse[BLOCK_FOR_SUSPECTS],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_SUSPECTS] / (double)count),
+    allocated[BLOCK_FOR_SUSPECTS],
+    freed[BLOCK_FOR_SUSPECTS],
+
+    inUse[BLOCK_FOR_EBR],
+    (size_t)(100.0 * (double)inUse[BLOCK_FOR_EBR] / (double)count),
+    allocated[BLOCK_FOR_EBR],
+    freed[BLOCK_FOR_EBR],
 
     inUse[BLOCK_FOR_UNKNOWN_PURPOSE],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_UNKNOWN_PURPOSE] / (double)count),

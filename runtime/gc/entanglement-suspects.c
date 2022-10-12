@@ -58,7 +58,7 @@ void clear_suspect(
   if (pinType(header) == PIN_ANY && unpinDepth < eargs->heapDepth) {
     /* Not ready to be cleared */
     HM_HierarchicalHeap unpinHeap = HM_HH_getHeapAtDepth(s, eargs->thread, unpinDepth);
-    HM_storeInChunkList(HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr));
+    HM_storeInChunkListWithPurpose(HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
     return;
   }
 
@@ -69,7 +69,7 @@ void clear_suspect(
   }
   else {
     /*oops something changed in b/w, let's try at the next join*/
-    HM_storeInChunkList(eargs->newList, opp, sizeof(objptr));
+    HM_storeInChunkListWithPurpose(eargs->newList, opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
   }
 }
 
@@ -95,7 +95,7 @@ void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)
     return;
   }
   s->cumulativeStatistics->numSuspectsMarked++;
-  HM_storeInChunkList(es, &op, sizeof(objptr));
+  HM_storeInChunkListWithPurpose(es, &op, sizeof(objptr), BLOCK_FOR_SUSPECTS);
 }
 
 int ES_foreachSuspect(
@@ -154,5 +154,5 @@ void ES_clear(GC_state s, HM_HierarchicalHeap hh)
   int numSuspects = ES_foreachSuspect(s, &oldList, &fObjptrClosure);
   s->cumulativeStatistics->numSuspectsCleared+=numSuspects;
 
-  HM_freeChunksInList(s, &(oldList));
+  HM_freeChunksInListWithInfo(s, &(oldList), NULL, BLOCK_FOR_SUSPECTS);
 }

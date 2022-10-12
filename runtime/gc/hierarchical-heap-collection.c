@@ -664,7 +664,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       ES_foreachSuspect(s, suspects, &fObjptrClosure);
       info.depth = depth;
       info.freedType = LGC_FREED_SUSPECT_CHUNK;
-      HM_freeChunksInListWithInfo(s, suspects, &infoc, BLOCK_FOR_UNKNOWN_PURPOSE);
+      HM_freeChunksInListWithInfo(s, suspects, &infoc, BLOCK_FOR_SUSPECTS);
     }
   }
 
@@ -1240,7 +1240,11 @@ void copySuspect(
     return;
   }
   uint32_t opDepth = args->toDepth;
-  HM_storeInChunkList(HM_HH_getSuspects(toSpaceHH(s, args, opDepth)), &new_ptr, sizeof(objptr));
+  HM_storeInChunkListWithPurpose(
+    HM_HH_getSuspects(toSpaceHH(s, args, opDepth)),
+    &new_ptr,
+    sizeof(objptr),
+    BLOCK_FOR_SUSPECTS);
 }
 
 bool headerForwarded(GC_header h)

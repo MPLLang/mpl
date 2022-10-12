@@ -217,8 +217,8 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
   pthread_mutex_unlock(&concList1->mutex);
 }
 
-void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info) {
+void CC_freeChunksInConcListWithInfo(GC_state s, CC_concList concList, void *info, enum BlockPurpose purpose) {
   struct HM_chunkList _chunkList;
   CC_popAsChunkList(concList, &(_chunkList));
-  HM_freeChunksInListWithInfo(s, &(_chunkList), info, BLOCK_FOR_UNKNOWN_PURPOSE);
+  HM_freeChunksInListWithInfo(s, &(_chunkList), info, purpose);
 }

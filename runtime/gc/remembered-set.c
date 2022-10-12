@@ -189,6 +189,6 @@ void HM_appendRemSet(HM_remSet r1, HM_remSet r2) {
 }
 
 void HM_freeRemSetWithInfo(GC_state s, HM_remSet remSet, void* info) {
-  HM_freeChunksInListWithInfo(s, &(remSet->private), info, BLOCK_FOR_UNKNOWN_PURPOSE);
-  CC_freeChunksInConcListWithInfo(s, &(remSet->public), info);
+  HM_freeChunksInListWithInfo(s, &(remSet->private), info, BLOCK_FOR_REMEMBERED_SET);
+  CC_freeChunksInConcListWithInfo(s, &(remSet->public), info, BLOCK_FOR_REMEMBERED_SET);
 }

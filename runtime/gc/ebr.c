@@ -73,7 +73,7 @@ static void rotateAndReclaim(GC_state s, EBR_shared ebr)
     }
   }
 
-  HM_freeChunksInList(s, limboBag);
+  HM_freeChunksInListWithInfo(s, limboBag, NULL, BLOCK_FOR_EBR);
   HM_initChunkList(limboBag); // clear it out
 }
 
@@ -153,7 +153,10 @@ void EBR_retire(GC_state s, EBR_shared ebr, void *ptr)
 
   // slow path: allocate new chunk
 
-  chunk = HM_allocateChunk(limboBag, sizeof(void *));
+  chunk = HM_allocateChunkWithPurpose(
+    limboBag,
+    sizeof(void *),
+    BLOCK_FOR_EBR);
 
   assert(NULL != chunk &&
          HM_getChunkSizePastFrontier(chunk) >= sizeof(void *));

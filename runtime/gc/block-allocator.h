@@ -23,6 +23,8 @@ enum BlockPurpose {
   BLOCK_FOR_HH_ALLOCATOR,
   BLOCK_FOR_UF_ALLOCATOR,
   BLOCK_FOR_GC_WORKLIST,
+  BLOCK_FOR_SUSPECTS,
+  BLOCK_FOR_EBR,
   BLOCK_FOR_UNKNOWN_PURPOSE,
   NUM_BLOCK_PURPOSES /** Hack to know statically how many there are. Make sure
                        * this comes last in the list. */
