@@ -65,6 +65,10 @@ struct
   val setJoinLeft = _prim "setJoinLeft": Thread.t * 'a -> unit;
   val setJoinRight = _prim "setJoinRight": Thread.p * 'a -> unit;
 
+  (* TODO: set this up with single setJoin primitive
+  val setJoin = _prim "setJoin": Thread.t * 'a -> unit;
+   *)
+
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
   (* fun threadSwitch t =
     ( Thread.atomicBegin ()
@@ -434,6 +438,30 @@ struct
         assertAtomic "syncGC done" 1;
         Thread.atomicEnd ()
       end
+
+
+(*  SINGLE SETJOIN PRIMITIVE:
+
+    fun maybeSpawn (interruptedLeftThread: Thread.t) : unit =
+      let
+        val depth = HH.getDepth (Thread.current ())
+      in
+        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
+          ()
+        else if not (HH.existsPromotableFrame interruptedLeftThread) then
+          ()
+        else
+          let
+            ...
+            val jp = ...
+            val _ = setJoin (interruptedLeftThread, jp)
+            val rightThread = HH.forkThread interruptedLeftThread
+            ...
+          in
+          end
+          
+*)
+
 
 
     (* runs in signal handler *)
