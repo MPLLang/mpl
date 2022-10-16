@@ -336,7 +336,8 @@ struct
 
         val gr =
           if popDiscard () then
-            ( HH.promoteChunks thread
+            ( HH.clearSuspectsAtDepth (thread, depth)
+            ; HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
             ; DE.decheckJoin (tidLeft, tidRight)
             (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
@@ -358,6 +359,7 @@ struct
                     val tidRight = DE.decheckGetTid t
                   in
                     HH.mergeThreads (thread, t);
+                    HH.clearSuspectsAtDepth (thread, depth);
                     HH.promoteChunks thread;
                     HH.setDepth (thread, depth);
                     DE.decheckJoin (tidLeft, tidRight);
@@ -414,6 +416,7 @@ struct
                 ; setQueueDepth (myWorkerId ()) depth
                 )
 
+            val _ = HH.clearSuspectsAtDepth (thread, depth)
             val _ = HH.promoteChunks thread
             val _ = HH.setDepth (thread, depth)
             (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)

@@ -164,6 +164,18 @@ void GC_HH_promoteChunks(pointer threadp) {
   HM_HH_promoteChunks(s, thread);
 }
 
+void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HH_clearSuspectsAtDepth(s, thread, depth);
+}
+
 void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

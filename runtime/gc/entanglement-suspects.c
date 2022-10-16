@@ -138,21 +138,47 @@ void ES_move(HM_chunkList list1, HM_chunkList list2) {
   HM_initChunkList(list2);
 }
 
+static size_t SUSPECTS_THRESHOLD = 10000;
+
+
 void ES_clear(GC_state s, HM_HierarchicalHeap hh)
 {
+  struct timespec startTime;
+  struct timespec stopTime;
+
   HM_chunkList es = HM_HH_getSuspects(hh);
   uint32_t heapDepth = HM_HH_getDepth(hh);
   struct HM_chunkList oldList = *(es);
   HM_initChunkList(HM_HH_getSuspects(hh));
+
+  size_t numSuspects = HM_getChunkListUsedSize(&oldList) / sizeof(objptr);
+  if (numSuspects >= SUSPECTS_THRESHOLD) {
+    timespec_now(&startTime);
+  }
+
   struct ES_clearArgs eargs = {
     .newList = HM_HH_getSuspects(hh),
     .heapDepth = heapDepth,
     .thread = getThreadCurrent(s)
   };
+  
   struct GC_foreachObjptrClosure fObjptrClosure =
       {.fun = clear_suspect, .env = &(eargs)};
-  int numSuspects = ES_foreachSuspect(s, &oldList, &fObjptrClosure);
-  s->cumulativeStatistics->numSuspectsCleared+=numSuspects;
+  int ns = ES_foreachSuspect(s, &oldList, &fObjptrClosure);
+  assert(numSuspects == ns);
+  s->cumulativeStatistics->numSuspectsCleared += numSuspects;
 
   HM_freeChunksInListWithInfo(s, &(oldList), NULL, BLOCK_FOR_SUSPECTS);
+
+  if (numSuspects >= SUSPECTS_THRESHOLD) {
+    timespec_now(&stopTime);
+    timespec_sub(&stopTime, &startTime);
+    LOG(LM_HIERARCHICAL_HEAP, LL_FORCE,
+      "time to clear %zu suspects at depth %u: %d.%09d",
+      numSuspects,
+      HM_HH_getDepth(hh),
+      stopTime.tv_sec,
+      stopTime.tv_nsec
+    );
+  }
 }

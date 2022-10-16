@@ -90,6 +90,9 @@ struct
     Prim.moveNewThreadToDepth (t, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
+
+  fun clearSuspectsAtDepth (t, d) =
+    Prim.clearSuspectsAtDepth (gcState (), t, Word32.fromInt d)
 end
 
 structure Disentanglement =

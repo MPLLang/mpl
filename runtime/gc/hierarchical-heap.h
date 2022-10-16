@@ -160,6 +160,11 @@ void HM_HH_resetList(pointer threadp);
 
 void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh);
 
+void HM_HH_clearSuspectsAtDepth(
+  GC_state s,
+  GC_thread thread,
+  uint32_t targetDepth);
+
 
 /** Very fancy (constant-space) loop that frees each dependant union-find
   * node of hh. Specifically, calls this on each dependant ufnode:
