@@ -730,7 +730,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   }
 
   HM_EBR_leaveQuiescentState(s);
-  HM_EBR_enterQuiescentState(s);
+  // HM_EBR_enterQuiescentState(s);
 
   /* after everything has been scavenged, we have to move the pinned chunks */
   depth = thread->currentDepth + 1;
