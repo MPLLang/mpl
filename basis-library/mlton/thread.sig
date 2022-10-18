@@ -42,6 +42,8 @@ signature MLTON_THREAD =
       structure HierarchicalHeap :
         sig
           type thread = Basic.t
+          type clear_set
+          type finished_clear_set_grain
 
           (* The level (depth) of a thread's heap in the hierarchy. *)
           val getDepth : thread -> int
@@ -70,6 +72,12 @@ signature MLTON_THREAD =
           val promoteChunks : thread -> unit
 
           val clearSuspectsAtDepth: thread * int -> unit
+          val numSuspectsAtDepth: thread * int -> int
+          val takeClearSetAtDepth: thread * int -> clear_set
+          val numChunksInClearSet: clear_set -> int
+          val processClearSetGrain: clear_set * int * int -> finished_clear_set_grain
+          val commitFinishedClearSetGrain: thread * finished_clear_set_grain -> unit
+          val deleteClearSet: clear_set -> unit
 
           (* "put a new thread in the hierarchy *)
           val moveNewThreadToDepth : thread * int -> unit

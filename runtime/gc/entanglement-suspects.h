@@ -20,6 +20,8 @@ typedef struct ES_clearSet {
   HM_chunk *chunkArray; // array of chunks that need to be processed
   size_t lenChunkArray; // len(chunkArray)
   uint32_t depth;
+  size_t numSuspects;
+  struct timespec startTime;
 } * ES_clearSet;
 
 typedef struct ES_finishedClearSetGrain {

@@ -210,6 +210,11 @@ ES_clearSet ES_takeClearSet(
   __attribute__((unused)) GC_state s,
   HM_HierarchicalHeap hh)
 {
+  struct timespec startTime;
+  timespec_now(&startTime);
+
+  size_t numSuspects = ES_numSuspects(s, hh);
+
   ES_clearSet result = malloc(sizeof(struct ES_clearSet));
   HM_chunkList es = HM_HH_getSuspects(hh);
   struct HM_chunkList oldList = *es;
@@ -227,6 +232,8 @@ ES_clearSet ES_takeClearSet(
   result->chunkArray = chunkArray;
   result->lenChunkArray = numChunks;
   result->depth = HM_HH_getDepth(hh);
+  result->numSuspects = numSuspects;
+  result->startTime = startTime;
 
   size_t i = 0;
   for (HM_chunk cursor = HM_getChunkListFirstChunk(&oldList);
@@ -341,9 +348,27 @@ void ES_commitFinishedClearSetGrain(
 
 
 void ES_deleteClearSet(GC_state s, ES_clearSet es) {
+  s->cumulativeStatistics->numSuspectsCleared += es->numSuspects;
+
   for (size_t i = 0; i < es->lenChunkArray; i++) {
     HM_freeChunkWithInfo(s, es->chunkArray[i], NULL, BLOCK_FOR_SUSPECTS);
   }
+
+  size_t numSuspects = es->numSuspects;
+  uint32_t depth = es->depth;
+  struct timespec startTime = es->startTime;
   free(es->chunkArray);
   free(es);
+
+  struct timespec stopTime;
+  timespec_now(&stopTime);
+  timespec_sub(&stopTime, &startTime);
+  LOG(LM_HIERARCHICAL_HEAP, LL_FORCE,
+    "time to process %zu suspects at depth %u: %ld.%09ld",
+    numSuspects,
+    depth,
+    (long)stopTime.tv_sec,
+    stopTime.tv_nsec
+  );
+
 }

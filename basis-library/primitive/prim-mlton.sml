@@ -372,6 +372,18 @@ structure Thread =
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
       val clearSuspectsAtDepth = _import "GC_HH_clearSuspectsAtDepth" runtime private: 
         GCState.t * thread * Word32.word -> unit;
+      val numSuspectsAtDepth = _import "GC_HH_numSuspectsAtDepth" runtime private:
+        GCState.t * thread * Word32.word -> Word64.word;
+      val takeClearSetAtDepth = _import "GC_HH_takeClearSetAtDepth" runtime private:
+        GCState.t * thread * Word32.word -> Pointer.t;
+      val numChunksInClearSet = _import "GC_HH_numChunksInClearSet" runtime private:
+        GCState.t * Pointer.t -> Word64.word;
+      val processClearSetGrain = _import "GC_HH_processClearSetGrain" runtime private:
+        GCState.t * Pointer.t * Word64.word * Word64.word -> Pointer.t;
+      val commitFinishedClearSetGrain = _import "GC_HH_commitFinishedClearSetGrain" runtime private:
+        GCState.t * thread * Pointer.t -> unit;
+      val deleteClearSet = _import "GC_HH_deleteClearSet" runtime private:
+        GCState.t * Pointer.t -> unit;
 
       val decheckFork = _import "GC_HH_decheckFork" runtime private:
         GCState.t * Word64.word ref * Word64.word ref -> unit;
