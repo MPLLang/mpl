@@ -319,7 +319,7 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 
 #ifdef DETECT_ENTANGLEMENT
 
-#ifdef ASSERT
+#if ASSERT
 void traverseAndCheck(
   GC_state s,
   __attribute__((unused)) objptr *opp,
@@ -340,14 +340,12 @@ void traverseAndCheck(
   }
 }
 #else
-void traverseAndCheck(
-    GC_state s,
+void inline traverseAndCheck(
+    __attribute__((unused)) GC_state s,
     __attribute__((unused)) objptr *opp,
-    objptr op,
+    __attribute__((unused)) objptr op,
     __attribute__((unused)) void *rawArgs)
 {
-  (void)s;
-  (void)op;
   return;
 }
 #endif
