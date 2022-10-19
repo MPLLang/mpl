@@ -170,8 +170,12 @@ void ES_clear(GC_state s, HM_HierarchicalHeap hh)
   
   struct GC_foreachObjptrClosure fObjptrClosure =
       {.fun = clear_suspect, .env = &(eargs)};
+#if ASSERT
   int ns = ES_foreachSuspect(s, &oldList, &fObjptrClosure);
-  assert(numSuspects == ns);
+  assert(numSuspects == (size_t)ns);
+#else
+  ES_foreachSuspect(s, &oldList, &fObjptrClosure);
+#endif
   s->cumulativeStatistics->numSuspectsCleared += numSuspects;
 
   HM_freeChunksInListWithInfo(s, &(oldList), NULL, BLOCK_FOR_SUSPECTS);
@@ -363,7 +367,7 @@ void ES_deleteClearSet(GC_state s, ES_clearSet es) {
   struct timespec stopTime;
   timespec_now(&stopTime);
   timespec_sub(&stopTime, &startTime);
-  LOG(LM_HIERARCHICAL_HEAP, LL_FORCE,
+  LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
     "time to process %zu suspects at depth %u: %ld.%09ld",
     numSuspects,
     depth,

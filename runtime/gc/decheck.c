@@ -340,11 +340,11 @@ void traverseAndCheck(
   }
 }
 #else
-void inline traverseAndCheck(
-    __attribute__((unused)) GC_state s,
-    __attribute__((unused)) objptr *opp,
-    __attribute__((unused)) objptr op,
-    __attribute__((unused)) void *rawArgs)
+inline void traverseAndCheck(
+  __attribute__((unused)) GC_state s,
+  __attribute__((unused)) objptr *opp,
+  __attribute__((unused)) objptr op,
+  __attribute__((unused)) void *rawArgs)
 {
   return;
 }

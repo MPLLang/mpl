@@ -1703,9 +1703,10 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
 /// COULD BE HEKLPFUL FOR DEGBUGGING TO FORWARD THE OBJECTS ANYWAY
 void forwardFromObjsOfRemembered(GC_state s, HM_remembered remElem, void *rawArgs)
 {
+#if ASSERT
   objptr op = remElem->object;
-
   assert(isPinned(op));
+#endif
 
   // struct GC_foreachObjptrClosure closure =
   //     {.fun = forwardHHObjptr, .env = rawArgs};
