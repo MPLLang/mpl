@@ -104,7 +104,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
 
   // ebr for chunks
   HM_EBR_leaveQuiescentState(s);
-  HM_EBR_enterQuiescentState(s);
+  // HM_EBR_enterQuiescentState(s);
 
   maybeSample(s, s->blockUsageSampler);
 

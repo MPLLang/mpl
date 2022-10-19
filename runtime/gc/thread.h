@@ -129,6 +129,15 @@ PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
  */
 PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word32 depth);
 
+PRIVATE void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth);
+
+PRIVATE Word64 GC_HH_numSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth);
+PRIVATE Pointer /*ES_clearSet*/ GC_HH_takeClearSetAtDepth(GC_state s, pointer threadp, uint32_t depth);
+PRIVATE Word64 GC_HH_numChunksInClearSet(GC_state s, pointer clearSet);
+PRIVATE Pointer /*ES_finishedClearSetGrain*/ GC_HH_processClearSetGrain(GC_state s, pointer clearSet, Word64 start, Word64 stop);
+PRIVATE void GC_HH_commitFinishedClearSetGrain(GC_state s, pointer threadp, pointer finClearSetGrain);
+PRIVATE void GC_HH_deleteClearSet(GC_state s, pointer clearSet);
+
 PRIVATE Bool GC_HH_checkFinishedCCReadyToJoin(GC_state s);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */

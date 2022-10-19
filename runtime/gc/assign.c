@@ -21,14 +21,14 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
     return src;
   }
 
-  HM_EBR_leaveQuiescentState(s);
+  // HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, src))
   {
     assert (isMutable(s, dstp));
     new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
   }
-  HM_EBR_enterQuiescentState(s);
+  // HM_EBR_enterQuiescentState(s);
   assert (!hasFwdPtr(objptrToPointer(new_src, NULL)));
   return new_src;
 }
@@ -48,7 +48,7 @@ objptr Assignable_readBarrier(
   {
     return ptr;
   }
-  HM_EBR_leaveQuiescentState(s);
+  // HM_EBR_leaveQuiescentState(s);
   if (!decheck(s, ptr))
   {
     assert (ES_contains(NULL, obj));
@@ -64,7 +64,7 @@ objptr Assignable_readBarrier(
     // }
     ptr = manage_entangled(s, ptr, getThreadCurrent(s)->decheckState);
   }
-  HM_EBR_enterQuiescentState(s);
+  // HM_EBR_enterQuiescentState(s);
   assert (!hasFwdPtr(objptrToPointer(ptr, NULL)));
 
   return ptr;

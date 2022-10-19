@@ -340,6 +340,26 @@ void HM_HH_merge(
   assertInvariants(parentThread);
 }
 
+
+void HM_HH_clearSuspectsAtDepth(
+  GC_state s,
+  GC_thread thread,
+  uint32_t targetDepth)
+{
+  // walk to find heap; only clear suspects at the target depth
+  for (HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    uint32_t d = HM_HH_getDepth(cursor);
+    if (d <= targetDepth) {
+      if (d == targetDepth) ES_clear(s, cursor);
+      return;
+    }
+  }
+}
+
+
 void HM_HH_promoteChunks(
   GC_state s,
   GC_thread thread)
@@ -350,7 +370,6 @@ void HM_HH_promoteChunks(
   {
     /* no need to do anything; this function only guarantees that the
      * current depth has been completely evacuated. */
-    ES_clear(s, thread->hierarchicalHeap);
     return;
   }
 
@@ -458,9 +477,6 @@ void HM_HH_promoteChunks(
   }
   assert(hh == thread->hierarchicalHeap);
 
-  ES_clear(s, thread->hierarchicalHeap);
-  assert(hh == thread->hierarchicalHeap);
-
 #if ASSERT
   assert(hh == thread->hierarchicalHeap);
   uint32_t newDepth = HM_HH_getDepth(hh);
@@ -469,6 +485,7 @@ void HM_HH_promoteChunks(
   assertInvariants(thread);
 #endif
 }
+
 
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 {
