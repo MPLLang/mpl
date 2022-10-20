@@ -181,8 +181,8 @@ void ES_clear(GC_state s, HM_HierarchicalHeap hh)
   HM_freeChunksInListWithInfo(s, &(oldList), NULL, BLOCK_FOR_SUSPECTS);
 
   if (eargs.numFailed > 0) {
-    LOG(LM_HIERARCHICAL_HEAP, LL_FORCE,
-      "WARNING: %zu failed suspect clears",
+    LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
+      "WARNING: %zu failed suspect clear(s)",
       eargs.numFailed);
   }
 
@@ -268,29 +268,32 @@ void clear_suspect_par_safe(
   size_t lenOutput)
 {
   pointer p = objptrToPointer(op, NULL);
-  GC_header header = getHeader(p);
-  uint32_t unpinDepth = (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+  while (TRUE) {
+    GC_header header = getHeader(p);
+    uint32_t unpinDepth = (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
 
-  // Note: lenOutput == depth of heap whose suspects we are clearing
-  if (pinType(header) == PIN_ANY && unpinDepth < lenOutput) {
-    /* Not ready to be cleared; move it instead */
-    HM_storeInChunkListWithPurpose(&(output[unpinDepth]), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
-    return;
-  }
+    // Note: lenOutput == depth of heap whose suspects we are clearing
+    if (pinType(header) == PIN_ANY && unpinDepth < lenOutput) {
+      /* Not ready to be cleared; move it instead */
+      HM_storeInChunkListWithPurpose(&(output[unpinDepth]), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
+      return;
+    }
 
-  GC_header newHeader = header & ~(SUSPECT_MASK);
-  if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
-    /* clearing successful */
-    return;
-  }
-  else {
-    // oops, something changed in between
-    // Is this possible?
-    //   - Seems like it could be, if there is a CGC happening
-    //   simultaneously at the same level (and it's marking/unmarking objects)?
-    //   - If this is the only possibility, then we should be able to just
-    //   do the CAS with newHeader in a loop?
-    DIE("TODO: is this possible?");
+    GC_header newHeader = header & ~(SUSPECT_MASK);
+    if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
+      /* clearing successful */
+      return;
+    }
+    else {
+      // oops, something changed in between
+      // Is this possible?
+      //   - Seems like it could be, if there is a CGC happening
+      //   simultaneously at the same level (and it's marking/unmarking objects)?
+      //   - If this is the only possibility, then we should be able to just
+      //   do the CAS with newHeader in a loop?
+      LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
+        "WARNING: failed suspect clear; trying again");
+    }
   }
 }
 
