@@ -184,7 +184,7 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 }
 
 
-objptr GC_HH_canForkThread(GC_state s, pointer threadp) {
+bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
@@ -230,6 +230,15 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
+
+  // Matthew's recommendation:
+  //   1. grab one of the continuations
+  //   2. compute frame size: getFrameInfoFromReturnAddress ... frameInfo->size
+  //   3. go to bottom of that frame
+  //   4. joinslot will be at the bottom (bottommost sizeof(objptr) bytes)
+  //
+  //   bottomOfFrame = ...
+  //   *(objptr*)bottomOfFrame = jop;
 
   // left side cont ==> main cont
   *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =

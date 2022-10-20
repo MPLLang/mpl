@@ -511,7 +511,7 @@ struct
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           ()
-        else if not HH.canForkThread interruptedLeftThread then
+        else if not (HH.canForkThread interruptedLeftThread) then
           ()
         else
           doSpawn interruptedLeftThread

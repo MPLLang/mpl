@@ -125,7 +125,7 @@ PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
 
 // forkThread should only be called if canForkThread returns true
 // (and without resuming the thread in between)
-PRIVATE objptr GC_HH_canForkThread(GC_state s, pointer thread);
+PRIVATE bool GC_HH_canForkThread(GC_state s, pointer thread);
 PRIVATE objptr GC_HH_forkThread(GC_state s, pointer thread, pointer jp);
 
 /* Moves a "new" thread to the appropriate depth, before we switch to it.
