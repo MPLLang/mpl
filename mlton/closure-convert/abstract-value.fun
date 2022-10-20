@@ -388,6 +388,9 @@ open Dest
 val {get = serialValue: Type.t -> t, ...} =
    Property.get (Type.plist, Property.initFun fromType)
 
+val {get = joinValue: Type.t -> t, ...} =
+   Property.get (Type.plist, Property.initFun fromType)
+
 fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
    let
       fun result () = fromType resultTy
@@ -500,6 +503,12 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
        | Prim.MLton_serialize =>
             let val arg = oneArg ()
             in coerce {from = arg, to = serialValue (ty arg)}
+               ; result ()
+            end
+       | Prim.PCall_getJoin => joinValue resultTy
+       | Prim.PCall_setJoin =>
+            let val (_, arg) = twoArgs ()
+            in coerce {from = arg, to = joinValue (ty arg)}
                ; result ()
             end
        | Prim.Ref_assign _ =>

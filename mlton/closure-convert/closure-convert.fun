@@ -1189,6 +1189,27 @@ fun closureConvert
                              if handlesSignals
                                 then Dexp.truee
                              else Dexp.falsee
+                        | Prim.MLton_serialize =>
+                             let
+                                val y = varExpInfo (arg 0)
+                                val v =
+                                   Value.serialValue (Vector.first targs)
+                             in
+                                primApp (v1 (valueType v),
+                                         v1 (coerce (convertVarInfo y,
+                                                     VarInfo.value y, v)))
+                             end
+                        | Prim.PCall_setJoin =>
+                             let
+                                val t = varExpInfo (arg 0)
+                                val x = varExpInfo (arg 1)
+                                val v = Value.joinValue (Vector.first targs)
+                             in
+                                primApp (v1 (valueType v),
+                                         v2 (convertVarInfo t,
+                                             coerce (convertVarInfo x,
+                                                     VarInfo.value x, v)))
+                             end
                         | Prim.Ref_assign _ =>
                              let
                                 val r = varExpInfo (arg 0)
@@ -1204,16 +1225,6 @@ fun closureConvert
                              let
                                 val y = varExpInfo (arg 0)
                                 val v = Value.deRef v
-                             in
-                                primApp (v1 (valueType v),
-                                         v1 (coerce (convertVarInfo y,
-                                                     VarInfo.value y, v)))
-                             end
-                        | Prim.MLton_serialize =>
-                             let
-                                val y = varExpInfo (arg 0)
-                                val v =
-                                   Value.serialValue (Vector.first targs)
                              in
                                 primApp (v1 (valueType v),
                                          v1 (coerce (convertVarInfo y,
