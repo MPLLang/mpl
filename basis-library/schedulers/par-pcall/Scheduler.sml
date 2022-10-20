@@ -59,15 +59,9 @@ struct
     -> 'c;
 
   (* Matthew will implement. Make sure 'a is objptr. *)
-  val getJoin = _prim "getJoin": unit -> 'a;
-
-  (* This will walk the stack. Implemented as runtime call. *)
-  val setJoinLeft = _prim "setJoinLeft": Thread.t * 'a -> unit;
-  val setJoinRight = _prim "setJoinRight": Thread.p * 'a -> unit;
-
-  (* TODO: set this up with single setJoin primitive
-  val setJoin = _prim "setJoin": Thread.t * 'a -> unit;
-   *)
+  val primGetJoin = _prim "getJoin": unit -> 'a;
+  (* Replacement for setJoin primitive. *)
+  val primForkThread = _prim "forkThread": Thread.t * 'a -> Thread.p;
 
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
   (* fun threadSwitch t =
@@ -462,6 +456,52 @@ struct
           
 *)
 
+    (* runs in signal handler *)
+    fun doSpawn (interruptedLeftThread: Thread.t) : unit =
+      let
+        val gcj = spawnGC interruptedLeftThread
+
+        val _ = assertAtomic "spawn after spawnGC" 1
+
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
+        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
+
+        (* We use a ref here instead of using rightSideThread directly.
+          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
+          * The thief will convert it into a Thread.t and give it a heap,
+          * and then write it into this slot. *)
+        val rightSideThreadSlot = ref (NONE: Thread.t option)
+        val rightSideResult = ref (NONE: 'b Result.t option)
+        val incounter = ref 2
+
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
+        val jp =
+          J { leftSideThread = interruptedLeftThread
+            , rightSideThread = rightSideThreadSlot
+            , rightSideResult = rightSideResult
+            , incounter = incounter
+            , tidRight = tidRight
+            , gcj = gcj
+            }
+
+        (* this sets the join for both threads (left and right) *)
+        val rightSideThread = primForkThread (interruptedLeftThread, jp)
+
+        (* double check... hopefully correct, not off by one? *)
+        val _ = push (NewThread (rightSideThread, depth))
+        val _ = HH.setDepth (thread, depth + 1)
+
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
+
+        val _ = DE.decheckSetTid tidLeft
+        val _ = assertAtomic "spawn done" 1
+      in
+        ()
+      end
 
 
     (* runs in signal handler *)
@@ -471,53 +511,10 @@ struct
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           ()
-        else case HH.forkThread interruptedLeftThread of
-          NONE => ()
-        | SOME rightSideThread =>
-            let
-              val gcj = spawnGC interruptedLeftThread
-
-              val _ = assertAtomic "spawn after spawnGC" 1
-
-              val thread = Thread.current ()
-              val depth = HH.getDepth thread
-
-              val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
-
-              (* We use a ref here instead of using rightSideThread directly.
-               * The rightSideThread is a Thread.p (it doesn't have a heap yet).
-               * The thief will convert it into a Thread.t and give it a heap,
-               * and then write it into this slot. *)
-              val rightSideThreadSlot = ref (NONE: Thread.t option)
-              val rightSideResult = ref (NONE: 'b Result.t option)
-              val incounter = ref 2
-
-              val (tidLeft, tidRight) = DE.decheckFork ()
-
-              val jp =
-                J { leftSideThread = interruptedLeftThread
-                  , rightSideThread = rightSideThreadSlot
-                  , rightSideResult = rightSideResult
-                  , incounter = incounter
-                  , tidRight = tidRight
-                  , gcj = gcj
-                  }
-
-              val _ = setJoinLeft (interruptedLeftThread, jp)
-              val _ = setJoinRight (rightSideThread, jp)
-
-              (* double check... hopefully correct, not off by one? *)
-              val _ = push (NewThread (rightSideThread, depth))
-              val _ = HH.setDepth (thread, depth + 1)
-
-              (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
-              val _ = recordForkDepth depth
-
-              val _ = DE.decheckSetTid tidLeft
-              val _ = assertAtomic "spawn done" 1
-            in
-              ()
-            end
+        else if not HH.canForkThread interruptedLeftThread then
+          ()
+        else
+          doSpawn interruptedLeftThread
       end
 
 

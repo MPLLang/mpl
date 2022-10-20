@@ -96,17 +96,10 @@ struct
     Prim.moveNewThreadToDepth (t, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
-
-  fun forkThread t =
-    let
-      val success = ref false
-      val result = Prim.forkThread (gcState (), t, success)
-    in
-      if !success then
-        SOME result
-      else
-        NONE
-    end
+  fun canForkThread t =
+    Prim.canForkThread (gcState (), t)
+  (* fun forkThread (t, jp) =
+    Prim.forkThread (gcState (), t, jp) *)
 end
 
 structure Disentanglement =

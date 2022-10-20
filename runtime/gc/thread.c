@@ -184,18 +184,27 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 }
 
 
-objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
+objptr GC_HH_canForkThread(GC_state s, pointer threadp) {
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  pointer pframe = findPromotableFrame(s, fromStack);
+  leave(s);
+  return NULL != pframe;
+}
+
+
+objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
   pointer pframe = findPromotableFrame(s, fromStack);
   if (NULL == pframe) {
-    *success = FALSE;
+    DIE("forkThread failed!");
     leave(s);
     return BOGUS_OBJPTR;
   }
-
 
 #if ASSERT
   GC_returnAddress ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
@@ -230,12 +239,13 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, bool *success) {
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(newFrame - 3*GC_RETURNADDRESS_SIZE);
 
+  objptr jop = pointerToObjptr(jp, NULL);
+  DIE("TODO: set pframe and newFrame joinslots to jop");
+
   // Is this right? Or are we missing one suspended depth because forkThread
   // happens before the decheck fork? Might need to fix this by fusing decheck
   // fork with this function.
   GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
-
-  *success = TRUE;
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
