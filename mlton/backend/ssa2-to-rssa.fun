@@ -198,6 +198,28 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_readBarrier"}
 
+      (* CHECK; thread as objptr *)
+      val pcallSetJoin = fn ty =>
+         T {args = Vector.new3 (Type.gcState (), Type.thread (), ty),
+            convention = Cdecl,
+            inline = false,
+            kind = Kind.Runtime {bytesNeeded = NONE,
+                                 ensuresBytesFree = NONE,
+                                 mayGC = false,
+                                 maySwitchThreadsFrom = false,
+                                 maySwitchThreadsTo = false,
+                                 modifiesFrontier = false,
+                                 readsStackTop = false,
+                                 writesStackTop = false},
+            prototype = let
+                           open CType
+                        in
+                           (Vector.new3 (CPointer, CPointer, Objptr), NONE)
+                        end,
+            return = Type.unit,
+            symbolScope = Private,
+            target = Direct "PCall_setJoin"}
+
       fun updateObjectHeader {obj} =
         T {args = Vector.new3 (Type.gcState(),
                                obj,
@@ -1634,6 +1656,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
+                               | Prim.PCall_getJoin => primApp (prim, Vector.new0 ())
+                               | Prim.PCall_setJoin =>
+                                    simpleCCallWithGCState
+                                    (CFunction.pcallSetJoin (Operand.ty (a 1)))
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)
