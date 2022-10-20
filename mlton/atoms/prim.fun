@@ -114,6 +114,8 @@ datatype 'a t =
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
  | ParWrap (* defunctorize *)
  | PCall (* closure convert *)
+ | PCall_getJoin (* ??? *)
+ | PCall_setJoin (* ??? *)
  | Real_Math_acos of RealSize.t (* codegen *)
  | Real_Math_asin of RealSize.t (* codegen *)
  | Real_Math_atan of RealSize.t (* codegen *)
@@ -293,6 +295,8 @@ fun toString (n: 'a t): string =
        | MLton_touch => "MLton_touch"
        | ParWrap => "parWrap"
        | PCall => "PCall"
+       | PCall_getJoin => "PCall_getJoin"
+       | PCall_setJoin => "PCall_setJoin"
        | Real_Math_acos s => real (s, "Math_acos")
        | Real_Math_asin s => real (s, "Math_asin")
        | Real_Math_atan s => real (s, "Math_atan")
@@ -455,6 +459,8 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_touch, MLton_touch) => true
     | (ParWrap, ParWrap) => true
     | (PCall, PCall) => true
+    | (PCall_getJoin, PCall_getJoin) => true
+    | (PCall_setJoin, PCall_setJoin) => true
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
     | (Real_Math_asin s, Real_Math_asin s') => RealSize.equals (s, s')
     | (Real_Math_atan s, Real_Math_atan s') => RealSize.equals (s, s')
@@ -638,6 +644,8 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_touch => MLton_touch
     | ParWrap => ParWrap
     | PCall => PCall
+    | PCall_getJoin => PCall_getJoin
+    | PCall_setJoin => PCall_setJoin
     | Real_Math_acos z => Real_Math_acos z
     | Real_Math_asin z => Real_Math_asin z
     | Real_Math_atan z => Real_Math_atan z
@@ -847,6 +855,8 @@ val kind: 'a t -> Kind.t =
        | MLton_touch => SideEffect
        | ParWrap => Functional
        | PCall => SideEffect
+       | PCall_getJoin => DependsOnState
+       | PCall_setJoin => SideEffect
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_asin _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_atan _ => DependsOnState (* depends on rounding mode *)
@@ -1405,6 +1415,8 @@ fun 'a checkApp (prim: 'a t,
                        in
                           (sixArgs (func,farg,cont,parl,parr,rarg), tc)
                        end)
+       | PCall_getJoin => oneTarg (fn t => (noArgs, t))
+       | PCall_setJoin => oneTarg (fn t => (twoArgs (thread, t), unit))
        | Real_Math_acos s => realUnary s
        | Real_Math_asin s => realUnary s
        | Real_Math_atan s => realUnary s
@@ -1554,6 +1566,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                   #2 (deArrow (arg 2)),
                   #1 (deArrow (arg 4)),
                   #2 (deArrow (arg 4)))
+       | PCall_getJoin => one result
+       | PCall_setJoin => one (arg 1)
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref _ => one (deRef (arg 0))
