@@ -100,33 +100,11 @@ struct
   fun dbgmsg' _ = ()
 
   (* ========================================================================
-   * IDLENESS TRACKING
+   * TIMERS
    *)
 
-  val idleTotals = Array.array (P, Time.zeroTime)
-  fun getIdleTime p = arraySub (idleTotals, p)
-  fun updateIdleTime (p, deltaTime) =
-    arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
-
-(*
-  val timerGrain = 256
-  fun startTimer myId = (myId, 0, Time.now ())
-  fun tickTimer (p, count, t) =
-    if count < timerGrain then (p, count+1, t) else
-    let
-      val t' = Time.now ()
-      val diff = Time.- (t', t)
-      val _ = updateIdleTime (p, diff)
-    in
-      (p, 0, t')
-    end
-  fun stopTimer (p, _, t) =
-    (tickTimer (p, timerGrain, t); ())
-*)
-
-  fun startTimer _ = ()
-  fun tickTimer _ = ()
-  fun stopTimer _ = ()
+  structure IdleTimer = CumulativePerProcTimer(val timerName = "idle")
+  structure WorkTimer = CumulativePerProcTimer(val timerName = "work")
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -218,8 +196,6 @@ struct
         Queue.tryPopTop queue
     end
 
-  fun communicate () = ()
-
   fun push x =
     let
       val myId = myWorkerId ()
@@ -272,9 +248,6 @@ struct
       case r of
         Finished x => x
       | Raised e => raise e
-
-    val communicate = communicate
-    val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
@@ -599,22 +572,25 @@ struct
         in if other < myId then other else other+1
         end
 
-      fun request idleTimer =
+      fun stealLoop () =
         let
-          fun loop tries it =
+          fun loop tries =
             if tries = P * 100 then
-              (OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
-               loop 0 (tickTimer idleTimer))
+              ( IdleTimer.tick ()
+              ; OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
+              ; loop 0 )
             else
             let
               val friend = randomOtherId ()
             in
               case trySteal friend of
-                NONE => loop (tries+1) (tickTimer idleTimer)
-              | SOME (task, depth) => (task, depth, tickTimer idleTimer)
+                NONE => loop (tries+1)
+              | SOME (task, depth) => (task, depth)
             end
+
+          val result = loop 0
         in
-          loop 0 idleTimer
+          result
         end
 
       (* ------------------------------------------------------------------- *)
@@ -625,33 +601,44 @@ struct
         | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
             ;*) setGCTask myId NONE
+            ; IdleTimer.stop ()
+            ; WorkTimer.start ()
             ; HH.collectThreadRoot (thread, !hh)
             ; if popDiscard () then
-                ( (*dbgmsg' (fn _ => "resume task thread")
-                ;*) threadSwitch thread
+                ( threadSwitch thread
+                ; WorkTimer.stop ()
+                ; IdleTimer.start ()
                 ; afterReturnToSched ()
                 )
               else
-                ()
+                ( WorkTimer.stop ()
+                ; IdleTimer.start ()
+                )
             )
 
 
       fun acquireWork () : unit =
         let
-          val idleTimer = startTimer myId
-          val (task, depth, idleTimer') = request idleTimer
-          val _ = stopTimer idleTimer'
+          val (task, depth) = stealLoop ()
         in
           case task of
             GCTask (thread, hh) =>
-              ( HH.collectThreadRoot (thread, !hh)
+              ( IdleTimer.stop ()
+              ; WorkTimer.start ()
+              ; HH.collectThreadRoot (thread, !hh)
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; acquireWork ()
               )
           | Continuation (thread, depth) =>
               ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               ; dbgmsg' (fn _ => "resume task thread")
               ;*) Queue.setDepth myQueue depth
+              ; IdleTimer.stop ()
+              ; WorkTimer.start ()
               ; threadSwitch thread
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
@@ -667,7 +654,11 @@ struct
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId t;
                 (* dbgmsg' (fn _ => "switch to new task thread"); *)
+                IdleTimer.stop ();
+                WorkTimer.start ();
                 threadSwitch taskThread;
+                WorkTimer.stop ();
+                IdleTimer.start ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -686,6 +677,7 @@ struct
     let
       val (_, acquireWork) = setupSchedLoop ()
     in
+      IdleTimer.start ();
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
@@ -722,7 +714,10 @@ struct
       let
         val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
+        WorkTimer.start ();
         threadSwitch originalThread;
+        WorkTimer.stop ();
+        IdleTimer.start ();
         afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
@@ -761,5 +756,7 @@ struct
       ArrayExtra.Raw.unsafeToArray a
     end
 
+  val idleTimeSoFar = Scheduler.IdleTimer.cumulative
+  val workTimeSoFar = Scheduler.WorkTimer.cumulative
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
 end
