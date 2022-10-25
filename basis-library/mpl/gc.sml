@@ -142,4 +142,27 @@ struct
     C_UIntmax.toLargeInt
     (sumAllProcs C_UIntmax.max getCCBytesReclaimedOfProc)
 
+
+  (* ======================================================================
+   * DEPRECATED
+   *)
+
+  exception Deprecated of string
+
+  fun d name (_: 'a) : 'b =
+    raise Deprecated ("MPL.GC." ^ name)
+  
+  val rootBytesReclaimed = d "rootBytesReclaimed"
+  val rootBytesReclaimedOfProc = d "rootBytesReclaimedOfProc"
+  val internalBytesReclaimed = d "internalBytesReclaimed"
+  val internalBytesReclaimedOfProc = d "internalBytesReclaimedOfProc"
+  val numRootCCs = d "numRootCCs"
+  val numRootCCsOfProc = d "numRootCCsOfProc"
+  val numInternalCCs = d "numInternalCCs"
+  val numInternalCCsOfProc = d "numInternalCCsOfProc"
+  val rootCCTime = d "rootCCTime"
+  val rootCCTimeOfProc = d "rootCCTimeOfProc"
+  val internalCCTime = d "internalCCTime"
+  val internalCCTimeOfProc = d "internalCCTimeOfProc"
+
 end

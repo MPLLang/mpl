@@ -61,4 +61,18 @@ sig
 
   val ccTime: unit -> Time.time
   val ccTimeOfProc: int -> Time.time
+
+  (* DEPRECATED *)
+  val rootBytesReclaimed: unit -> IntInf.int
+  val rootBytesReclaimedOfProc: int -> IntInf.int
+  val internalBytesReclaimed: unit -> IntInf.int
+  val internalBytesReclaimedOfProc: int -> IntInf.int
+  val numRootCCs: unit -> IntInf.int
+  val numRootCCsOfProc: int -> IntInf.int
+  val numInternalCCs: unit -> IntInf.int
+  val numInternalCCsOfProc: int -> IntInf.int
+  val rootCCTime: unit -> Time.time
+  val rootCCTimeOfProc: int -> Time.time
+  val internalCCTime: unit -> Time.time
+  val internalCCTimeOfProc: int -> Time.time
 end
