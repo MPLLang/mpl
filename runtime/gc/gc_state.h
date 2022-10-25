@@ -133,12 +133,9 @@ PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(GC_state s, uint32_t proc);
 
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc);
 
-PRIVATE uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_numDisentanglementChecks(GC_state s);
 PRIVATE float GC_approxRaceFactor(GC_state s);
 PRIVATE uintmax_t GC_numChecksSkipped(GC_state s);

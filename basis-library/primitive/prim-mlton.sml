@@ -159,12 +159,9 @@ structure GC =
       val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
       "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
-      val getNumRootCCsOfProc = _import "GC_getNumRootCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getNumInternalCCsOfProc = _import "GC_getNumInternalCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getRootCCMillisecondsOfProc = _import "GC_getRootCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getNumCCsOfProc = _import "GC_getNumCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCCMillisecondsOfProc = _import "GC_getCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCCBytesReclaimedOfProc = _import "GC_getCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
       val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
 

@@ -935,9 +935,6 @@ size_t CC_collectWithRoots(
   // chunks in which all objects are garbage. Before exiting, chunks in
   // origList are added to the free list.
 
-  bool isConcurrent = (HM_HH_getDepth(targetHH) == 1);
-  // assert(isConcurrent);
-
   uint32_t initialDepth = HM_HH_getDepth(targetHH);
 
   struct HM_chunkList _repList;
@@ -1166,6 +1163,8 @@ size_t CC_collectWithRoots(
   assert(!(stackChunk->mightContainMultipleObjects));
   assert(HM_HH_getChunkList(HM_getLevelHead(stackChunk)) == origList);
   assert(isChunkInList(stackChunk, origList));
+  assert(bytesSaved >= HM_getChunkUsedSize(stackChunk));
+  bytesSaved -= HM_getChunkUsedSize(stackChunk);
   HM_unlinkChunk(origList, stackChunk);
   info.freedType = CC_FREED_STACK_CHUNK;
   HM_freeChunkWithInfo(s, stackChunk, &infoc, BLOCK_FOR_HEAP_CHUNK);
@@ -1189,19 +1188,13 @@ size_t CC_collectWithRoots(
 
   timespec_now(&stopTime);
   timespec_sub(&stopTime, &startTime);
-
-  if (isConcurrent) {
-    timespec_add(&(s->cumulativeStatistics->timeRootCC), &stopTime);
-    s->cumulativeStatistics->numRootCCs++;
-    s->cumulativeStatistics->bytesReclaimedByRootCC = max(s->cumulativeStatistics->bytesReclaimedByRootCC, bytesSaved);
-  } else {
-    timespec_add(&(s->cumulativeStatistics->timeInternalCC), &stopTime);
-    s->cumulativeStatistics->numInternalCCs++;
-    s->cumulativeStatistics->bytesReclaimedByInternalCC += bytesScanned-bytesSaved;
-  }
+  timespec_add(&(s->cumulativeStatistics->timeCC), &stopTime);
+  s->cumulativeStatistics->numCCs++;
+  assert(bytesScanned >= bytesSaved);
+  uintmax_t bytesReclaimed = bytesScanned-bytesSaved;
+  s->cumulativeStatistics->bytesReclaimedByCC += bytesReclaimed;
 
   return lists.bytesSaved;
-
 }
 
 #endif

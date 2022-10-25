@@ -24,18 +24,12 @@ struct
       GC.getCumulativeStatisticsBytesAllocatedOfProc (gcState (), Word32.fromInt p)
     fun getCumulativeStatisticsLocalBytesReclaimedOfProc p =
       GC.getCumulativeStatisticsLocalBytesReclaimedOfProc (gcState (), Word32.fromInt p)
-    fun getNumRootCCsOfProc p =
-      GC.getNumRootCCsOfProc (gcState (), Word32.fromInt p)
-    fun getNumInternalCCsOfProc p =
-      GC.getNumInternalCCsOfProc (gcState (), Word32.fromInt p)
-    fun getRootCCMillisecondsOfProc p =
-      GC.getRootCCMillisecondsOfProc (gcState (), Word32.fromInt p)
-    fun getInternalCCMillisecondsOfProc p =
-      GC.getInternalCCMillisecondsOfProc (gcState (), Word32.fromInt p)
-    fun getRootCCBytesReclaimedOfProc p =
-      GC.getRootCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
-    fun getInternalCCBytesReclaimedOfProc p =
-      GC.getInternalCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+    fun getNumCCsOfProc p =
+      GC.getNumCCsOfProc (gcState (), Word32.fromInt p)
+    fun getCCMillisecondsOfProc p =
+      GC.getCCMillisecondsOfProc (gcState (), Word32.fromInt p)
+    fun getCCBytesReclaimedOfProc p =
+      GC.getCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
 
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
@@ -95,34 +89,19 @@ struct
     ; millisecondsToTime (getPromoMillisecondsOfProc p)
     )
 
-  fun numRootCCsOfProc p =
+  fun numCCsOfProc p =
     ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getNumRootCCsOfProc p)
+    ; C_UIntmax.toLargeInt (getNumCCsOfProc p)
     )
 
-  fun numInternalCCsOfProc p =
+  fun ccTimeOfProc p =
     ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getNumInternalCCsOfProc p)
+    ; millisecondsToTime (getCCMillisecondsOfProc p)
     )
 
-  fun rootCCTimeOfProc p =
+  fun ccBytesReclaimedOfProc p =
     ( checkProcNum p
-    ; millisecondsToTime (getRootCCMillisecondsOfProc p)
-    )
-
-  fun internalCCTimeOfProc p =
-    ( checkProcNum p
-    ; millisecondsToTime (getInternalCCMillisecondsOfProc p)
-    )
-
-  fun rootBytesReclaimedOfProc p =
-    ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getRootCCBytesReclaimedOfProc p)
-    )
-
-  fun internalBytesReclaimedOfProc p =
-    ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getInternalCCBytesReclaimedOfProc p)
+    ; C_UIntmax.toLargeInt (getCCBytesReclaimedOfProc p)
     )
 
   fun sumAllProcs (f: 'a * 'a -> 'a) (perProc: int -> 'a) =
@@ -151,28 +130,16 @@ struct
   fun promoTime () =
     millisecondsToTime (sumAllProcs C_UIntmax.+ getPromoMillisecondsOfProc)
 
-  fun numRootCCs () =
+  fun numCCs () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getNumRootCCsOfProc)
+    (sumAllProcs C_UIntmax.+ getNumCCsOfProc)
 
-  fun numInternalCCs () =
-    C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getNumInternalCCsOfProc)
-
-  fun rootCCTime () =
+  fun ccTime () =
     millisecondsToTime
-    (sumAllProcs C_UIntmax.+ getRootCCMillisecondsOfProc)
+    (sumAllProcs C_UIntmax.+ getCCMillisecondsOfProc)
 
-  fun internalCCTime () =
-    millisecondsToTime
-    (sumAllProcs C_UIntmax.+ getInternalCCMillisecondsOfProc)
-
-  fun rootBytesReclaimed () =
+  fun ccBytesReclaimed () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.max getRootCCBytesReclaimedOfProc)
-
-  fun internalBytesReclaimed () =
-    C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getInternalCCBytesReclaimedOfProc)
+    (sumAllProcs C_UIntmax.max getCCBytesReclaimedOfProc)
 
 end

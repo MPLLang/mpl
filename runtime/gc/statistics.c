@@ -47,8 +47,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->bytesScannedMinor = 0;
   cumulativeStatistics->bytesHHLocaled = 0;
   cumulativeStatistics->bytesReclaimedByLocal = 0;
-  cumulativeStatistics->bytesReclaimedByRootCC = 0;
-  cumulativeStatistics->bytesReclaimedByInternalCC = 0;
+  cumulativeStatistics->bytesReclaimedByCC = 0;
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
   cumulativeStatistics->maxHeapSize = 0;
@@ -67,8 +66,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numMarkCompactGCs = 0;
   cumulativeStatistics->numMinorGCs = 0;
   cumulativeStatistics->numHHLocalGCs = 0;
-  cumulativeStatistics->numRootCCs = 0;
-  cumulativeStatistics->numInternalCCs = 0;
+  cumulativeStatistics->numCCs = 0;
   cumulativeStatistics->numDisentanglementChecks = 0;
   cumulativeStatistics->numChecksSkipped = 0;
   cumulativeStatistics->numSuspectsMarked = 0;
@@ -80,10 +78,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->timeLocalGC.tv_nsec = 0;
   cumulativeStatistics->timeLocalPromo.tv_sec = 0;
   cumulativeStatistics->timeLocalPromo.tv_nsec = 0;
-  cumulativeStatistics->timeRootCC.tv_sec = 0;
-  cumulativeStatistics->timeRootCC.tv_nsec = 0;
-  cumulativeStatistics->timeInternalCC.tv_sec = 0;
-  cumulativeStatistics->timeInternalCC.tv_nsec = 0;
+  cumulativeStatistics->timeCC.tv_sec = 0;
+  cumulativeStatistics->timeCC.tv_nsec = 0;
 
   rusageZero (&cumulativeStatistics->ru_gc);
   rusageZero (&cumulativeStatistics->ru_gcCopying);

@@ -165,30 +165,17 @@ uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc)
   return s->procStates[proc].cumulativeStatistics->numHHLocalGCs;
 }
 
-uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->numRootCCs;
+uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->numCCs;
 }
 
-uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->numInternalCCs;
-}
-
-uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc) {
-  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeRootCC);
+uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc) {
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeCC);
   return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
 }
 
-uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc) {
-  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeInternalCC);
-  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
-}
-
-uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByRootCC;
-}
-
-uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByInternalCC;
+uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByCC;
 }
 
 uintmax_t GC_getLocalGCMillisecondsOfProc(GC_state s, uint32_t proc) {
