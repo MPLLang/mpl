@@ -137,6 +137,7 @@ PRIVATE uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_numDisentanglementChecks(GC_state s);
+PRIVATE uintmax_t GC_numEntanglements(GC_state s);
 PRIVATE float GC_approxRaceFactor(GC_state s);
 PRIVATE uintmax_t GC_numChecksSkipped(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsMarked(GC_state s);

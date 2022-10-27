@@ -196,6 +196,14 @@ uintmax_t GC_numDisentanglementChecks(GC_state s) {
   return count;
 }
 
+uintmax_t GC_numEntanglements(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count += s->procStates[p].cumulativeStatistics->numEntanglements;
+  }
+  return count;
+}
+
 uintmax_t GC_numChecksSkipped(GC_state s)
 {
   uintmax_t count = 0;

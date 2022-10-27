@@ -164,6 +164,7 @@ structure GC =
       val getCCBytesReclaimedOfProc = _import "GC_getCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
       val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
+      val numberEntanglements = _import "GC_numEntanglements" runtime private: GCState.t -> C_UIntmax.t;
 
       val approxRaceFactor = _import "GC_approxRaceFactor" runtime private: GCState.t -> Real32.real;
 

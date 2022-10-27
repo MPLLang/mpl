@@ -68,6 +68,7 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numHHLocalGCs = 0;
   cumulativeStatistics->numCCs = 0;
   cumulativeStatistics->numDisentanglementChecks = 0;
+  cumulativeStatistics->numEntanglements = 0;
   cumulativeStatistics->numChecksSkipped = 0;
   cumulativeStatistics->numSuspectsMarked = 0;
   cumulativeStatistics->numSuspectsCleared = 0;

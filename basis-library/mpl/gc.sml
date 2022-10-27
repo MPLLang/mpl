@@ -34,6 +34,9 @@ struct
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
 
+    fun numberEntanglements () =
+      C_UIntmax.toLargeInt (GC.numberEntanglements (gcState ()))
+
     fun approxRaceFactor () =
       (GC.approxRaceFactor (gcState ()))
 

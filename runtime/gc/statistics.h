@@ -63,7 +63,8 @@ struct GC_cumulativeStatistics {
   uintmax_t numMinorGCs;
   uintmax_t numHHLocalGCs;
   uintmax_t numCCs;
-  uintmax_t numDisentanglementChecks;
+  uintmax_t numDisentanglementChecks; // count full read barriers
+  uintmax_t numEntanglements;         // count instances entanglement is detected
   uintmax_t numChecksSkipped;
   uintmax_t numSuspectsMarked;
   uintmax_t numSuspectsCleared;

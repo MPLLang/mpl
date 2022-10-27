@@ -25,6 +25,7 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   if (!decheck(s, src))
   {
     assert (isMutable(s, dstp));
+    s->cumulativeStatistics->numEntanglements++;
     new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
   }
@@ -62,6 +63,7 @@ objptr Assignable_readBarrier(
     //   assert(!hasFwdPtr(ptr));
     //   assert(pinType(getHeader(ptr)) == PIN_ANY);
     // }
+    s->cumulativeStatistics->numEntanglements++;
     ptr = manage_entangled(s, ptr, getThreadCurrent(s)->decheckState);
   }
   // HM_EBR_enterQuiescentState(s);
@@ -216,6 +218,9 @@ void Assignable_writeBarrier(
     }
     else if(dstHH->depth != 0) {
       // traverseAndCheck(s, &dst, dst, NULL);
+
+      // SAM_NOTE: TODO: do we count this one??
+      s->cumulativeStatistics->numEntanglements++;
       manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
     }
 
