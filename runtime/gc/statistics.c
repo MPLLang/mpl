@@ -73,6 +73,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->numSuspectsMarked = 0;
   cumulativeStatistics->numSuspectsCleared = 0;
   cumulativeStatistics->bytesPinnedEntangled = 0;
+  cumulativeStatistics->currentPhaseBytesPinnedEntangled = 0;
+  cumulativeStatistics->bytesPinnedEntangledWatermark = 0;
   cumulativeStatistics->approxRaceFactor = 0;
 
   cumulativeStatistics->timeLocalGC.tv_sec = 0;

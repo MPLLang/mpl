@@ -313,6 +313,7 @@ struct
             ; HH.setDepth (thread, depth)
             ; DE.decheckJoin (tidLeft, tidRight)
             ; maybeParClearSuspectsAtDepth (thread, depth)
+            ; if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
             (* ; HH.forceNewChunk () *)
             ; let
@@ -337,6 +338,7 @@ struct
                     DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) depth;
                     maybeParClearSuspectsAtDepth (thread, depth);
+                    if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
@@ -389,6 +391,7 @@ struct
             ; HH.setDepth (thread, depth)
             ; DE.decheckJoin (tidLeft, tidRight)
             ; maybeParClearSuspectsAtDepth (thread, depth)
+            ; if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
             (* ; HH.forceNewChunk () *)
             ; let
@@ -413,6 +416,7 @@ struct
                     DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) depth;
                     maybeParClearSuspectsAtDepth (thread, depth);
+                    if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
@@ -467,6 +471,7 @@ struct
             val _ = HH.promoteChunks thread
             val _ = HH.setDepth (thread, depth)
             val _ = maybeParClearSuspectsAtDepth (thread, depth)
+            val _ = if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
           in
             result

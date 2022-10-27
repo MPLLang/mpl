@@ -51,6 +51,9 @@ struct
 
     fun bytesPinnedEntangled () =
       C_UIntmax.toLargeInt (GC.bytesPinnedEntangled (gcState ()))
+
+    fun bytesPinnedEntangledWatermark () =
+      C_UIntmax.toLargeInt (GC.bytesPinnedEntangledWatermark (gcState ()))
   end
 
   exception NotYetImplemented of string

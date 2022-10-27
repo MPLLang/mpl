@@ -69,6 +69,8 @@ struct GC_cumulativeStatistics {
   uintmax_t numSuspectsMarked;
   uintmax_t numSuspectsCleared;
   uintmax_t bytesPinnedEntangled;
+  uintmax_t currentPhaseBytesPinnedEntangled;
+  uintmax_t bytesPinnedEntangledWatermark;
   float approxRaceFactor;
 
   struct timespec timeLocalGC;

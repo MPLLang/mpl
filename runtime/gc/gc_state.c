@@ -244,6 +244,41 @@ uintmax_t GC_bytesPinnedEntangled(GC_state s)
   return count;
 }
 
+uintmax_t GC_bytesPinnedEntangledWatermark(GC_state s)
+{
+  uintmax_t mark = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    mark = max(mark,
+      s->procStates[p].cumulativeStatistics->bytesPinnedEntangledWatermark);
+  }
+  return mark;
+}
+
+// must only be called immediately after join at root depth
+void GC_updateBytesPinnedEntangledWatermark(GC_state s)
+{
+  uintmax_t total = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    uintmax_t *currp = 
+      &(s->procStates[p].cumulativeStatistics->currentPhaseBytesPinnedEntangled);
+    uintmax_t curr = __atomic_load_n(currp, __ATOMIC_SEQ_CST);
+    __atomic_store_n(currp, 0, __ATOMIC_SEQ_CST);
+    total += curr;
+  }
+
+  // if (total > 0) {
+  //   LOG(LM_HIERARCHICAL_HEAP, LL_FORCE, "hello %zu", total);
+  // }
+  
+  s->cumulativeStatistics->bytesPinnedEntangledWatermark =
+    max(
+      s->cumulativeStatistics->bytesPinnedEntangledWatermark,
+      total
+    );
+}
+
 float GC_approxRaceFactor(GC_state s)
 {
   float count = 0;

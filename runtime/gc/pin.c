@@ -118,7 +118,12 @@ objptr pinObjectInfo(
         bool didPinChange = (nt != pinType(header));
         *pinChange = didPinChange;
         if (nt == PIN_ANY && didPinChange) {
-          s->cumulativeStatistics->bytesPinnedEntangled += objectSize(s, p);
+          size_t sz = objectSize(s, p);
+          s->cumulativeStatistics->bytesPinnedEntangled += sz;
+          __sync_fetch_and_add(
+            &(s->cumulativeStatistics->currentPhaseBytesPinnedEntangled),
+            (uintmax_t)sz
+          );
         }
         assert (!hasFwdPtr(p));
         assert(pinType(newHeader) == nt);

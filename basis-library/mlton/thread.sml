@@ -114,6 +114,9 @@ struct
 
   fun deleteClearSet c =
     Prim.deleteClearSet (gcState (), c)
+
+  fun updateBytesPinnedEntangledWatermark () =
+    Prim.updateBytesPinnedEntangledWatermark (gcState ())
 end
 
 structure Disentanglement =

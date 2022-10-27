@@ -25,6 +25,7 @@ sig
   val numberSuspectsMarked: unit -> IntInf.int
   val numberSuspectsCleared: unit -> IntInf.int
   val bytesPinnedEntangled: unit -> IntInf.int
+  val bytesPinnedEntangledWatermark: unit -> IntInf.int
 
   val getControlMaxCCDepth: unit -> int
 

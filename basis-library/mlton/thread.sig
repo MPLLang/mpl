@@ -79,6 +79,8 @@ signature MLTON_THREAD =
           val commitFinishedClearSetGrain: thread * finished_clear_set_grain -> unit
           val deleteClearSet: clear_set -> unit
 
+          val updateBytesPinnedEntangledWatermark: unit -> unit
+
           (* "put a new thread in the hierarchy *)
           val moveNewThreadToDepth : thread * int -> unit
 

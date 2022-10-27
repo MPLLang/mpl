@@ -173,6 +173,7 @@ structure GC =
       val numberSuspectsCleared = _import "GC_numSuspectsCleared" runtime private: GCState.t -> C_UIntmax.t;
 
       val bytesPinnedEntangled = _import "GC_bytesPinnedEntangled" runtime private: GCState.t -> C_UIntmax.t;
+      val bytesPinnedEntangledWatermark = _import "GC_bytesPinnedEntangledWatermark" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
@@ -382,6 +383,10 @@ structure Thread =
         GCState.t * thread * Pointer.t -> unit;
       val deleteClearSet = _import "GC_HH_deleteClearSet" runtime private:
         GCState.t * Pointer.t -> unit;
+
+      val updateBytesPinnedEntangledWatermark = 
+        _import "GC_updateBytesPinnedEntangledWatermark" runtime private:
+        GCState.t -> unit;
 
       val decheckFork = _import "GC_HH_decheckFork" runtime private:
         GCState.t * Word64.word ref * Word64.word ref -> unit;

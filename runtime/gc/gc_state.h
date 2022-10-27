@@ -143,6 +143,8 @@ PRIVATE uintmax_t GC_numChecksSkipped(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsMarked(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsCleared(GC_state s);
 PRIVATE uintmax_t GC_bytesPinnedEntangled(GC_state s);
+PRIVATE uintmax_t GC_bytesPinnedEntangledWatermark(GC_state s);
+PRIVATE void GC_updateBytesPinnedEntangledWatermark(GC_state s);
 
 PRIVATE uint32_t GC_getControlMaxCCDepth(GC_state s);
 
