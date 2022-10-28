@@ -957,6 +957,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     }
   }
 
+  s->cumulativeStatistics->bytesInScopeForLocal += totalSizeBefore;
+
   if (totalSizeAfter > totalSizeBefore)
   {
     // whoops?

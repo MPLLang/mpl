@@ -98,6 +98,22 @@ uintmax_t GC_getCumulativeStatisticsLocalBytesReclaimedOfProc(GC_state s, uint32
   return s->procStates[proc].cumulativeStatistics->bytesReclaimedByLocal;
 }
 
+uintmax_t GC_bytesInScopeForLocal(GC_state s) {
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesInScopeForLocal;
+  }
+  return retVal;
+}
+
+uintmax_t GC_bytesInScopeForCC(GC_state s) {
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesInScopeForCC;
+  }
+  return retVal;
+}
+
 uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s) {
   /* return sum across all processors */
   size_t retVal = 0;

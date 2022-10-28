@@ -48,6 +48,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->bytesHHLocaled = 0;
   cumulativeStatistics->bytesReclaimedByLocal = 0;
   cumulativeStatistics->bytesReclaimedByCC = 0;
+  cumulativeStatistics->bytesInScopeForLocal = 0;
+  cumulativeStatistics->bytesInScopeForCC = 0;
   cumulativeStatistics->maxBytesLive = 0;
   cumulativeStatistics->maxBytesLiveSinceReset = 0;
   cumulativeStatistics->maxHeapSize = 0;

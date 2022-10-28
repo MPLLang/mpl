@@ -136,6 +136,8 @@ PRIVATE uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32
 PRIVATE uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc);
 PRIVATE uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_bytesInScopeForLocal(GC_state s);
+PRIVATE uintmax_t GC_bytesInScopeForCC(GC_state s);
 PRIVATE uintmax_t GC_numDisentanglementChecks(GC_state s);
 PRIVATE uintmax_t GC_numEntanglements(GC_state s);
 PRIVATE float GC_approxRaceFactor(GC_state s);

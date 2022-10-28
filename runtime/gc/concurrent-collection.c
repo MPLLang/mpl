@@ -1192,6 +1192,7 @@ size_t CC_collectWithRoots(
   s->cumulativeStatistics->numCCs++;
   assert(bytesScanned >= bytesSaved);
   uintmax_t bytesReclaimed = bytesScanned-bytesSaved;
+  s->cumulativeStatistics->bytesInScopeForCC += bytesScanned;
   s->cumulativeStatistics->bytesReclaimedByCC += bytesReclaimed;
 
   return lists.bytesSaved;

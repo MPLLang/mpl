@@ -46,6 +46,8 @@ sig
   val localBytesReclaimed: unit -> IntInf.int
   val localBytesReclaimedOfProc: int -> IntInf.int
 
+  val bytesInScopeForLocal: unit -> IntInf.int
+
   val numLocalGCs: unit -> IntInf.int
   val numLocalGCsOfProc: int -> IntInf.int
 
@@ -60,6 +62,8 @@ sig
 
   val ccBytesReclaimed: unit -> IntInf.int
   val ccBytesReclaimedOfProc: int -> IntInf.int
+
+  val bytesInScopeForCC: unit -> IntInf.int
 
   val ccTime: unit -> Time.time
   val ccTimeOfProc: int -> Time.time

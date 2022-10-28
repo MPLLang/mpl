@@ -31,6 +31,12 @@ struct
     fun getCCBytesReclaimedOfProc p =
       GC.getCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
 
+    fun bytesInScopeForLocal () =
+      C_UIntmax.toLargeInt (GC.bytesInScopeForLocal (gcState ()))
+
+    fun bytesInScopeForCC () =
+      C_UIntmax.toLargeInt (GC.bytesInScopeForCC (gcState ()))
+
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
 
