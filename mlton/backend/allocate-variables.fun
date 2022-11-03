@@ -289,7 +289,9 @@ structure Info =
 (* ------------------------------------------------- *)
 
 fun allocate {function = f: Rssa.Function.t,
-              paramOffsets,
+              paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t,
+                                                                  ty: Rssa.Type.t,
+                                                                  volatile: bool} vector,
               varInfo: Var.t -> {operand: Machine.Operand.t option ref option,
                                  ty: Type.t}} =
    let
@@ -340,11 +342,13 @@ fun allocate {function = f: Rssa.Function.t,
          Property.get (Var.plist, Property.initFun (fn _ => ref Temporary))
       (* The arguments for each Handler block in the function. *)
       val handlersArgs: (Var.t * Type.t) vector list ref = ref []
+      (* The `PCall_getJoin` types in the function. *)
+      val joinSlotTys: Type.t list ref = ref []
       fun forceStack (x: Var.t): unit = place x := Stack
       val _ =
          Vector.foreach
          (blocks,
-          fn R.Block.T {args, kind, label, ...} =>
+          fn R.Block.T {args, kind, label, statements, ...} =>
           let
              val {beginNoFormals, ...} = labelLive label
              val _ =
@@ -357,6 +361,15 @@ fun allocate {function = f: Rssa.Function.t,
                 case kind of
                    Kind.Handler => List.push (handlersArgs, args)
                  | _ => ()
+             val _ =
+                Vector.foreach
+                (statements, fn stmt =>
+                 case stmt of
+                    R.Statement.PrimApp
+                    {dst = SOME (_, ty),
+                     prim = R.Prim.PCall_getJoin,
+                     ...} => List.push (joinSlotTys, ty)
+                    | _ => ())
           in
              ()
           end)
@@ -424,41 +437,35 @@ fun allocate {function = f: Rssa.Function.t,
           R.Label.layout, Info.layout, Unit.layout)
          setLabelInfo
 
-      (* Allocate stacks slots and/or temporaries for the formals.
-       * Don't use `allocateVar`, because a stack formal
-       * should use the stack slot of the incoming actual.
-       *)
-      val () =
-         let
-            val temps = Allocation.Temporaries.empty ()
-         in
-            Vector.foreach2
-            (args, paramOffsets args, fn ((x, ty), so) =>
-             let
-                val oper =
-                   case ! (place x) of
-                      Stack => Operand.StackOffset (StackOffset.T so)
-                    | Temporary => Operand.Temporary (Allocation.Temporaries.get (temps, ty))
-                val () = removePlace x
-                val () = valOf (#operand (varInfo x)) := SOME oper
-             in
-                ()
-             end)
-         end
-      (* Also, create a stack allocation that includes all incoming actuals;
-       * if link, handler label, and handler args stack slots are required,
-       * then they will be allocated against this stack.
-       *)
-      val stack =
-         Allocation.Stack.new (Vector.toListMap (paramOffsets args, StackOffset.T))
+      (* Allocate stack slot for joinPt. *)
+      val (joinSlotInfo, alloc) =
+         case !joinSlotTys of
+            [] => (NONE, Allocation.new ([], []))
+          | ty::tys =>
+               let
+                  val joinSlotTyMax =
+                     List.fold
+                     (tys, ty, fn (tya, tyb) =>
+                      if Bytes.>= (Type.bytes tya, Type.bytes tyb)
+                         then tya
+                         else tyb)
+                  val joinSlotOffset = Bytes.zero
+                  val joinSlot = StackOffset.T {offset = joinSlotOffset,
+                                                ty = joinSlotTyMax,
+                                                volatile = false}
+                  val alloc = Allocation.new ([joinSlot], [])
+               in
+                  (SOME {joinSlot = joinSlot}, alloc)
+               end
+      (* Allocate stacks slots and/or temporaries for the formals. *)
+      val () = Vector.foreach (args, fn (x, _) => allocateVar (x, alloc))
+      (* Allocate stack slots for link, handler label, and handler args. *)
       val handlersInfo =
          case !handlersArgs of
             [] => NONE
           | handlersArgs =>
                let
-                  (* Choose fixed and permanently allocated stack slots
-                   * that do not conflict with incoming actuals.
-                   *)
+                  val stack = Allocation.stack alloc
                   val (stack, {offset = linkOffset, ...}) =
                      Allocation.Stack.get (stack, Type.exnStack ())
                   val (_, {offset = handlerOffset, ...}) =
@@ -492,6 +499,15 @@ fun allocate {function = f: Rssa.Function.t,
                   handler = handlerLive,
                   link = linkLive} = labelLive label
              val () = remLabelLive label
+             fun addJP (ops: Operand.t vector): Operand.t vector =
+                case joinSlotInfo of
+                   NONE => ops
+                 | SOME {joinSlot, ...} =>
+                      let
+                         val joinSlot = Operand.StackOffset joinSlot
+                      in
+                         Vector.concat [Vector.new1 joinSlot, ops]
+                      end
              fun addHS (ops: Operand.t vector): Operand.t vector =
                 case handlersInfo of
                    NONE => ops
@@ -541,6 +557,10 @@ fun allocate {function = f: Rssa.Function.t,
                                                  volatile = false}
                                   :: stackInit
                              else stackInit)
+             val stackInit =
+                case joinSlotInfo of
+                   NONE => stackInit
+                 | SOME {joinSlot, ...} => joinSlot :: stackInit
              val a = Allocation.new (stackInit, temporariesInit)
              fun mkSize extra =
                 Bytes.align
@@ -582,8 +602,8 @@ fun allocate {function = f: Rssa.Function.t,
                 Vector.foreach (statements, fn statement =>
                                 R.Statement.foreachDef (statement, one))
              val _ =
-                setLabelInfo (label, {live = addHS live,
-                                      liveNoFormals = addHS liveNoFormals,
+                setLabelInfo (label, {live = addJP (addHS live),
+                                      liveNoFormals = addJP (addHS liveNoFormals),
                                       size = size})
           in
              fn () => ()
@@ -622,9 +642,13 @@ fun allocate {function = f: Rssa.Function.t,
           in ()
           end)
    in
-      {handlersInfo = Option.map (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
-                                  {handlerOffset = handlerOffset,
-                                   linkOffset = linkOffset}),
+      {handlersInfo = Option.map
+                      (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
+                       {handlerOffset = handlerOffset,
+                        linkOffset = linkOffset}),
+       joinSlotInfo = Option.map
+                      (joinSlotInfo, fn {joinSlot = StackOffset.T {offset, ...}} =>
+                       {joinSlotOffset = offset}),
        labelInfo = labelInfo}
    end
 

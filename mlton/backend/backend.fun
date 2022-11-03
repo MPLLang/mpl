@@ -624,7 +624,8 @@ fun toMachine (rssa: Rssa.Program.t) =
       fun translateOperands ops = Vector.map (ops, translateOperand)
       fun genStatement (s: R.Statement.t,
                         handlersInfo: {handlerOffset: Bytes.t,
-                                       linkOffset: Bytes.t} option)
+                                       linkOffset: Bytes.t} option,
+                        joinSlotInfo: {joinSlotOffset: Bytes.t} option)
          : M.Statement.t vector =
          let
             fun handlerOffset () = #handlerOffset (valOf handlersInfo)
@@ -713,6 +714,24 @@ fun toMachine (rssa: Rssa.Program.t) =
              | PrimApp {dst, prim, args} =>
                   (case prim of
                       Prim.MLton_touch => Vector.new0 ()
+                    | Prim.PCall_getJoin =>
+                         let
+                            val (dst, dstTy) =
+                               case dst of
+                                  SOME (dst, dstTy) => (varOperand dst, dstTy)
+                                | NONE => Error.bug "Backend.genStatement: PCall_getJoin has no dst"
+                            val _ =
+                               if Type.isObjptr dstTy
+                                  then ()
+                                  else Error.bug "Backend.genStatement: PCall_getJoin is not objptr"
+                            val src =
+                               M.Operand.stackOffset
+                               {offset = #joinSlotOffset (valOf joinSlotInfo),
+                                ty = dstTy,
+                                volatile = false}
+                         in
+                            Vector.new1 (M.Statement.Move {dst = dst, src = src})
+                         end
                     | _ =>
                          Vector.new1
                          (M.Statement.PrimApp
@@ -935,7 +954,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                       ty = ty}
                   end
             in
-               val {handlersInfo, labelInfo = labelRegInfo, ...} =
+               val {handlersInfo, joinSlotInfo, labelInfo = labelRegInfo, ...} =
                   let
                      val paramOffsets = fn args =>
                         paramOffsets (args, fn (_, ty) => ty, fn so => so)
@@ -1171,7 +1190,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                   val statements =
                      Vector.concatV
                      (Vector.map (statements, fn s =>
-                                  genStatement (s, handlersInfo)))
+                                  genStatement (s, handlersInfo, joinSlotInfo)))
                   val (preTransfer, transfer) = genTransfer transfer
                   fun doContHandler mkMachineKind =
                      let
