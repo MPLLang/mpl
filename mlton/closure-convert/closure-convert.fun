@@ -1199,7 +1199,7 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
-                        | Prim.PCall_setJoin =>
+                        | Prim.PCall_forkThread =>
                              let
                                 val t = varExpInfo (arg 0)
                                 val x = varExpInfo (arg 1)

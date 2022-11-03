@@ -1371,14 +1371,14 @@ fun transform (program: Program.t): Program.t =
                 | Prim.Array_toArray => arrayToArray (arg 0)
                 | Prim.Array_toVector => arrayToVector (arg 0)
                 | Prim.Array_update _ => sequenceUpd arraySequence
-                | Prim.PCall_getJoin => joinValue resultType
-                | Prim.PCall_setJoin =>
+                | Prim.PCall_forkThread =>
                      let
                         val x = arg 1
                      in
                         coerce {from = x, to = joinValue (Value.ty x)}
-                        ; unit ()
+                        ; unknown resultType
                      end
+                | Prim.PCall_getJoin => joinValue resultType
                 | Prim.Ref_assign _ => (coerce {from = arg 1, to = refArg (arg 0)}; unit ())
                 | Prim.Ref_cas _ => (coerce {from = arg 2, to = refArg (arg 0)}; refArg (arg 0))
                 | Prim.Ref_deref _ => refArg (arg 0)

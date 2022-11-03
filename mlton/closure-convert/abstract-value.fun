@@ -505,12 +505,12 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | Prim.PCall_getJoin => joinValue resultTy
-       | Prim.PCall_setJoin =>
+       | Prim.PCall_forkThread =>
             let val (_, arg) = twoArgs ()
             in coerce {from = arg, to = joinValue (ty arg)}
                ; result ()
             end
+       | Prim.PCall_getJoin => joinValue resultTy
        | Prim.Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of
