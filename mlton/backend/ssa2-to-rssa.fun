@@ -205,12 +205,12 @@ structure CFunction =
             inline = false,
             kind = Kind.Runtime {bytesNeeded = NONE,
                                  ensuresBytesFree = NONE,
-                                 mayGC = false,
+                                 mayGC = true,
                                  maySwitchThreadsFrom = false,
                                  maySwitchThreadsTo = false,
-                                 modifiesFrontier = false,
-                                 readsStackTop = false,
-                                 writesStackTop = false},
+                                 modifiesFrontier = true,
+                                 readsStackTop = true,
+                                 writesStackTop = true},
             prototype = let
                            open CType
                         in
