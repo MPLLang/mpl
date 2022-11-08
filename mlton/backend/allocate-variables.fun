@@ -497,17 +497,20 @@ fun allocate {function = f: Rssa.Function.t,
           let
              val {begin, beginNoFormals,
                   handler = handlerLive,
-                  link = linkLive} = labelLive label
+                  link = linkLive,
+                  joinSlot = joinSlotLive} = labelLive label
              val () = remLabelLive label
-             fun addJP (ops: Operand.t vector): Operand.t vector =
+             fun addJS (ops: Operand.t vector): Operand.t vector =
                 case joinSlotInfo of
                    NONE => ops
                  | SOME {joinSlot, ...} =>
-                      let
-                         val joinSlot = Operand.StackOffset joinSlot
-                      in
-                         Vector.concat [Vector.new1 joinSlot, ops]
-                      end
+                      if joinSlotLive
+                         then let
+                                 val joinSlot = Operand.StackOffset joinSlot
+                              in
+                                 Vector.concat [Vector.new1 joinSlot, ops]
+                              end
+                         else ops
              fun addHS (ops: Operand.t vector): Operand.t vector =
                 case handlersInfo of
                    NONE => ops
@@ -602,8 +605,8 @@ fun allocate {function = f: Rssa.Function.t,
                 Vector.foreach (statements, fn statement =>
                                 R.Statement.foreachDef (statement, one))
              val _ =
-                setLabelInfo (label, {live = addJP (addHS live),
-                                      liveNoFormals = addJP (addHS liveNoFormals),
+                setLabelInfo (label, {live = addJS (addHS live),
+                                      liveNoFormals = addJS (addHS liveNoFormals),
                                       size = size})
           in
              fn () => ()
