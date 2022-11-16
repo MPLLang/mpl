@@ -473,7 +473,7 @@ struct
           * The thief will convert it into a Thread.t and give it a heap,
           * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: 'b Result.t option)
+        val rightSideResult = ref (NONE: exn Result.t option)
         val incounter = ref 2
 
         val (tidLeft, tidRight) = DE.decheckFork ()
@@ -623,6 +623,8 @@ struct
 
     fun pcallFork (f: unit -> 'a, g: unit -> 'b) =
       let
+        exception GRes of 'b
+
         fun leftSide () =
           Result.result f
 
@@ -635,9 +637,12 @@ struct
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "leftSideParCont" 1
             val jp = primGetJoin ()
-            val gres = syncEndAtomic jp g
+            val gres = syncEndAtomic jp (GRes o g)
           in
-            (Result.extractResult fres, Result.extractResult gres)
+            (Result.extractResult fres,
+             case Result.extractResult gres of
+                GRes gres => gres
+              | _ => die (fn _ => "scheduler bug: not `GRes of 'b` in `leftSideParCont`"))
           end
 
         fun rightSide () =
@@ -653,7 +658,7 @@ struct
             val () = DE.decheckSetTid tidRight
             val _ = Thread.atomicEnd()
 
-            val gr = Result.result g
+            val gr = Result.result (GRes o g)
 
             val _ = Thread.atomicBegin ()
             val depth' = HH.getDepth (Thread.current ())
