@@ -143,6 +143,9 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
       val _ = List.map ([Con.truee, Con.falsee], fn con =>
          TypeInfo.coerce (TypeInfo.fromCon {con=con, args=Vector.new0 (), tycon = primBoolTycon}, primBoolInfo))
 
+      val {get = joinValue: Type.t -> TypeInfo.t, ...} =
+         Property.get (Type.plist, Property.initFun TypeInfo.fromType)
+
       fun primApp {args, prim, resultType, resultVar=_, targs} =
          let
             fun derefPrim args =
@@ -186,6 +189,15 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                | Prim.Array_toArray => Vector.sub (args, 0)
                | Prim.Array_toVector => Vector.sub (args, 0)
                | Prim.Array_update _ => updatePrim TypeInfo.Array args
+               | Prim.PCall_forkThread =>
+                  let
+                     val ty = Vector.first targs
+                     val x = Vector.sub (args, 1)
+                  in
+                     TypeInfo.coerce (x, joinValue ty)
+                     ; TypeInfo.fromType resultType
+                  end
+               | Prim.PCall_getJoin => joinValue resultType
                | Prim.Ref_ref => refPrim TypeInfo.Ref args
                | Prim.Ref_deref _ => derefPrim args
                | Prim.Ref_assign _ => assignPrim TypeInfo.Ref args
