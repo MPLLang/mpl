@@ -59,9 +59,9 @@ struct
     -> 'c;
 
   (* Matthew will implement. Make sure 'a is objptr. *)
-  val primGetJoin = _prim "getJoin": unit -> 'a;
+  val primGetJoin = _prim "PCall_getJoin": unit -> 'a;
   (* Replacement for setJoin primitive. *)
-  val primForkThread = _prim "forkThread": Thread.t * 'a -> Thread.p;
+  val primForkThread = _prim "PCall_forkThread": Thread.t * 'a -> Thread.p;
 
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
   (* fun threadSwitch t =
