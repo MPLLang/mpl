@@ -1639,9 +1639,20 @@ structure Program =
                end
 
 
-            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t) =
+            fun removeJoinSlot (live: Live.t vector) =
+               Vector.keepAll
+               (live, fn l =>
+                case l of
+                   Live.StackOffset (StackOffset.T {offset, ...}) =>
+                      not (Bytes.isZero offset)
+                 | _ => true)
+            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, joinSlot: bool) =
                let
                   val Block.T {kind, live, ...} = labelBlock label
+                  val live =
+                     if joinSlot
+                        then removeJoinSlot live
+                        else live
                in
                   if liveIsOk (live, alloc)
                      then
@@ -1674,26 +1685,26 @@ structure Program =
                   val (contLive, contReturns) =
                      Err.check'
                      ("cont",
-                      fn () => checkPCallReturn (cont, size, alloc),
+                      fn () => checkPCallReturn (cont, size, alloc, false),
                       fn () => Label.layout cont)
                   val (parlLive, parlReturns) =
                      Err.check'
                      ("parl",
-                      fn () => checkPCallReturn (parl, size, alloc),
+                      fn () => checkPCallReturn (parl, size, alloc, true),
                       fn () => Label.layout parl)
                   val (parrLive, parrReturns) =
                      Err.check'
                      ("parr",
-                      fn () => checkPCallReturn (parr, size, alloc),
+                      fn () => checkPCallReturn (parr, size, alloc, true),
                       fn () => Label.layout parr)
                   val () =
                      Err.check
-                     ("parlLive <= contLive",
+                     ("parlLive - {joinSlot} <= contLive",
                       fn () => liveSubset (parlLive, contLive),
                       fn () => Layout.tuple [Label.layout parl, Label.layout cont])
                   val () =
                      Err.check
-                     ("parrLive <= contLive",
+                     ("parrLive - {joinSlot} <= contLive",
                       fn () => liveSubset (parrLive, contLive),
                       fn () => Layout.tuple [Label.layout parr, Label.layout cont])
                   val () =
