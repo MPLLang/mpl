@@ -74,7 +74,10 @@ signature MLTON_THREAD =
 
           val checkFinishedCCReadyToJoin: unit -> bool
 
-          val forkThread: thread -> Basic.p option
+          val canForkThread: thread -> bool
+
+          (* second arg is joinpoint *)
+          (* val forkThread: thread * 'a ref -> Basic.p *)
         end
 
       (* disentanglement checking *)

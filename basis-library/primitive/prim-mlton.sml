@@ -388,8 +388,12 @@ structure Thread =
       val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
         runtime private: GCState.t * thread * thread *Word32.word -> unit;
 
-      val forkThread = _import "GC_HH_forkThread" runtime private:
-        GCState.t * thread * (bool ref) -> preThread;
+      val canForkThread = _import "GC_HH_canForkThread" runtime private:
+        GCState.t * thread -> bool;
+
+      (* third arg is joinpoint record *)
+      (* val forkThread = _import "GC_HH_forkThread" runtime private:
+        GCState.t * thread * 'a -> preThread; *)
 
       (** If returns true, then writes result to the input ref. Otherwise, the
         * runtime is not detecting entanglement, and the ref is not modified.
