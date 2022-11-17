@@ -206,11 +206,20 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
     return BOGUS_OBJPTR;
   }
 
-#if ASSERT
+  // =========================================================================
+  // First, write jp onto the promotable frame
+  // =========================================================================
+
   GC_returnAddress ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
   assert(fi->kind == PCALL_CONT_FRAME);
-#endif
+  pointer bottomOfFrame = pframe - fi->size;
+  objptr jop = pointerToObjptr(jp, NULL);
+  *(objptr*)bottomOfFrame = jop;
+
+  // =========================================================================
+  // Next, copy the promotable frame
+  // =========================================================================
 
   // SAM_NOTE: we need a decent amount of reserved space to make sure that
   // the next call on this stack has enough space. Next call might be a
@@ -231,15 +240,6 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
-  // Matthew's recommendation:
-  //   1. grab one of the continuations
-  //   2. compute frame size: getFrameInfoFromReturnAddress ... frameInfo->size
-  //   3. go to bottom of that frame
-  //   4. joinslot will be at the bottom (bottommost sizeof(objptr) bytes)
-  //
-  //   bottomOfFrame = ...
-  //   *(objptr*)bottomOfFrame = jop;
-
   // left side cont ==> main cont
   *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(pframe - 2*GC_RETURNADDRESS_SIZE);
@@ -248,8 +248,8 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(newFrame - 3*GC_RETURNADDRESS_SIZE);
 
-  objptr jop = pointerToObjptr(jp, NULL);
-  DIE("TODO: set pframe and newFrame joinslots to jop");
+  assert(*(objptr*)(pframe - fi->size) == jop);
+  assert(*(objptr*)(newFrame - fi->size) == jop);
 
   // Is this right? Or are we missing one suspended depth because forkThread
   // happens before the decheck fork? Might need to fix this by fusing decheck
