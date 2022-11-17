@@ -183,10 +183,13 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                      Handler.foreachLabel (handler, goto)
                 | Kind.PCallReturn {cont, parl, parr} =>
                      let
-                        val _ =
+                        val _ = goto cont
+                        val _ = goto parl
+                        val _ = goto parr 
+                        (* val _ =
                            if Label.equals (label, cont)
                               then (goto parl; goto parr)
-                              else ()
+                              else () *)
                         val _ =
                            if Label.equals (label, parl) orelse Label.equals (label, parr)
                               then List.push (joinSlotDefs, b)
