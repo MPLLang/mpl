@@ -10,6 +10,13 @@
 structure MLtonSignal: MLTON_SIGNAL_EXTRA =
 struct
 
+fun die (s: string): 'a =
+   (PrimitiveFFI.Stdio.print s
+    ; PrimitiveFFI.Posix.Process.exit 1
+    ; let exception DieFailed
+      in raise DieFailed
+      end)
+
 open Posix.Signal
 structure Prim = PrimitiveFFI.Posix.Signal
 structure GCState = Primitive.MLton.GCState
@@ -229,7 +236,8 @@ fun suspend m =
     ; MLtonThread.switchToSignalHandler ())
 
 fun handleGC f =
-   (Prim.handleGC (GCState.gcState ())
+   ( ignore (die ("MLton.Signal.handleGC unsupported\n"))
+    ; Prim.handleGC (GCState.gcState ())
     ; gcHandler := Handler.simple f)
 
 end

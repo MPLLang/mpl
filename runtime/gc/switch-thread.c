@@ -43,6 +43,7 @@ void switchToThread(GC_state s, objptr op) {
 }
 
 void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
+  enter(s);
   objptr currop = getThreadCurrentObjptr(s);
   // GC_thread currThread = threadObjptrToStruct(s, currop);
   LOG(LM_THREAD, LL_DEBUG,
@@ -63,12 +64,12 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   //ENTER1 (s, p);
   /* SPOONHOWER_NOTE: copied from enter() */
   /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  oldCurrentThread->exnStack = s->exnStack;
-  beginAtomic(s);
+  // getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  // oldCurrentThread->exnStack = s->exnStack;
+  // beginAtomic(s);
 
-  assert(threadAndHeapOkay(s));
-  HM_HH_updateValues(oldCurrentThread, s->frontier);
+  // assert(threadAndHeapOkay(s));
+  // HM_HH_updateValues(oldCurrentThread, s->frontier);
   s->frontier = 0;
   s->limitPlusSlop = 0;
   s->limit = 0;
@@ -95,8 +96,14 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   HM_ensureHierarchicalHeapAssurances(s, FALSE, getThreadCurrent(s)->bytesNeeded, FALSE);
 
-  endAtomic (s);
-  assert(strongInvariantForMutatorFrontier(s));
-  assert(invariantForMutatorStack(s));
+  LOG(LM_THREAD, LL_DEBUG,
+    "GC_switchToThread succeeded: old current = %p, new = %p",
+    (void*)objptrToPointer(currop, NULL),
+    (void*)objptrToPointer(getThreadCurrentObjptr(s), NULL));
+
+  leave(s);
+  // endAtomic (s);
+  // assert(strongInvariantForMutatorFrontier(s));
+  // assert(invariantForMutatorStack(s));
   //LEAVE0 (s);
 }
