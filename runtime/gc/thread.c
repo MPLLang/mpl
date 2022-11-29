@@ -217,6 +217,28 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   objptr jop = pointerToObjptr(jp, NULL);
   *(objptr*)bottomOfFrame = jop;
 
+  /* SAM_NOTE: VERY SUBTLE: the next line (which updates the pframe's return
+   * address) absolutely must happen before we call newThread. This is because
+   * newThread might trigger a GC, and we need to forward the jop. By updating
+   * pframe's return address, we inform the GC that the frame is a
+   * PCALL_PARL_FRAME, and the GC then knows that the joinslot pointer is live
+   * and will forward it appropriately. When we later copy this frame, all
+   * values in the frame have already been forwarded, and we get the new
+   * versions of those values in the new frame for free.
+   *
+   * It's possible we could work around this another way. For example, we
+   * could create additional roots in the gcstate, e.g. s->roots[0] = jop,
+   * and then handle these explicitly during GC, allowing us to read off the
+   * forwarded value s->roots[0] after GC completes.
+   * 
+   * I prefer this little hack over the alternative, because it is much easier,
+   * just subtle. Hence the hopefully informative comment :)
+   */
+
+  // left side: transition to PCALL_PARL_FRAME
+  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =
+    *(GC_returnAddress*)(pframe - 2*GC_RETURNADDRESS_SIZE);
+
   // =========================================================================
   // Next, copy the promotable frame
   // =========================================================================
@@ -240,16 +262,15 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
-  // left side cont ==> main cont
-  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) =
-    *(GC_returnAddress*)(pframe - 2*GC_RETURNADDRESS_SIZE);
-
-  // right side cont ==> main cont on new stack
+  // right side: transition to PCALL_PARR_FRAME
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) =
     *(GC_returnAddress*)(newFrame - 3*GC_RETURNADDRESS_SIZE);
 
-  assert(*(objptr*)(pframe - fi->size) == jop);
-  assert(*(objptr*)(newFrame - fi->size) == jop);
+  /* SAM_NOTE: would like to assert these, but jop may have already been
+   * forwarded above (calling newThread, above, might trigger a GC)
+   */
+  // assert(*(objptr*)(pframe - fi->size) == jop);
+  // assert(*(objptr*)(newFrame - fi->size) == jop);
 
   // Is this right? Or are we missing one suspended depth because forkThread
   // happens before the decheck fork? Might need to fix this by fusing decheck

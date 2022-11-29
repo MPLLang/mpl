@@ -534,6 +534,45 @@ void HM_HHC_collectLocal(uint32_t desiredScope) {
     );
   }
 
+  /* =======================================================================
+   * forward s->savedThread, if necessary
+   */
+
+  if (s->savedThread != BOGUS_OBJPTR) {
+    /* forward contents of stack */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        threadObjptrToStruct(s, s->savedThread)->stack,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    /* forward contents of thread (hence including stack) */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        s->savedThread,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    forwardHHObjptr(
+      s,
+      &(s->savedThread),
+      s->savedThread,
+      &forwardHHObjptrArgs
+    );
+  }
+
+  /* ======================================================================= */
+
   /* forward contents of deque */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
   foreachObjptrInObject(s,

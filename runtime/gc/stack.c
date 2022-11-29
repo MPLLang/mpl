@@ -247,7 +247,7 @@ void copyStackFrameToNewStack (
 
   GC_returnAddress ret = *((GC_returnAddress*)(frame - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-  assert(fi->kind == PCALL_CONT_FRAME);
+  assert(fi->kind == PCALL_PARL_FRAME);
   pointer frameBottom = frame - fi->size;
   GC_memcpy(frameBottom, getStackBottom(s, to), fi->size);
   to->used = fi->size;
@@ -290,13 +290,13 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
     cursor = cursor - fi->size;
   }
 
-  LOG(LM_PARALLEL, LL_FORCE,
-    "frames %zu, cont %zu, parl %zu, parr %zu",
-    numFrames,
-    numCFrames,
-    numLFrames,
-    numRFrames
-  );
+  // LOG(LM_PARALLEL, LL_FORCE,
+  //   "frames %zu, cont %zu, parl %zu, parr %zu",
+  //   numFrames,
+  //   numCFrames,
+  //   numLFrames,
+  //   numRFrames
+  // );
 
   if (oldestCFrame == NULL) {
     return NULL;
