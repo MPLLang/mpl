@@ -108,13 +108,14 @@ void MLton_threadFunc (void* arg) {                                     \
    */                                                                   \
   else if (s->numberOfProcs > 16 && Proc_processorNumber(s) == 0) {     \
     Proc_waitForInitialization (s);                                     \
+    HH_EBR_enterQuiescentState(s);                                      \
     size_t tcounter = 0;                                                \
     while (!GC_CheckForTerminationRequestRarely(s, &tcounter)) {        \
       /* busy loop, waiting for signal arrivals */                      \
       /* TODO: what else do we need to check here? some epoch-based     \
        * stuff, perhaps?                                                \
        */                                                               \
-      pthread_yield();                                                  \
+      if (tcounter == 0) pthread_yield();                               \
     }                                                                   \
   }                                                                     \
   else {                                                                \
