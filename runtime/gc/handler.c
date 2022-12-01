@@ -87,6 +87,15 @@ static inline void relaySignalTo(GC_state s, int id, int signum) {
   }
 }
 
+void broadcastHeartbeat(GC_state s) {
+  for (uint32_t p = 1;
+       p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
+       p++)
+  {
+    relaySignalTo(s, p, SIGUSR1);
+  }
+}
+
 /* GC_handler sets s->limit = 0 so that the next limit check will
  * fail.  Signals need to be blocked during the handler (i.e. it
  * should run atomically) because sigaddset does both a read and a
@@ -126,12 +135,7 @@ void GC_handler (int signum) {
       relaySignalTo(s, 0, SIGALRM);
     }
     else {
-      for (uint32_t p = 1;
-           p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
-           p++)
-      {
-        relaySignalTo(s, p, SIGUSR1);
-      }
+      broadcastHeartbeat(s);
     }
   }
 

@@ -19,7 +19,8 @@ struct
     ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn () ^ "\n")
     ; OS.Process.exit OS.Process.failure
     )
-
+    
+(*
   fun search key args =
     case args of
       [] => NONE
@@ -41,10 +42,18 @@ struct
         case Int.fromString s of
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
+*)
 
   (* val activatePar = parseFlag "activate-par" *)
+  (* val heartbeatMicroseconds =
+    LargeInt.fromInt (parseInt "heartbeat-us" 300) *)
+
+  type gcstate = MLton.Pointer.t
+  val gcstate = _prim "GC_state": unit -> gcstate;
+  val getHeartbeatMicroseconds =
+    _import "GC_getHeartbeatMicroseconds" runtime private: gcstate -> Word32.word;
   val heartbeatMicroseconds =
-    LargeInt.fromInt (parseInt "heartbeat-us" 300)
+    LargeInt.fromInt (Word32.toInt (getHeartbeatMicroseconds (gcstate())))
 
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic

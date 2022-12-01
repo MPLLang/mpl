@@ -107,15 +107,11 @@ void MLton_threadFunc (void* arg) {                                     \
    * processors overall to allow one to be designated as the relayer)   \
    */                                                                   \
   else if (s->numberOfProcs > 16 && Proc_processorNumber(s) == 0) {     \
-    Proc_waitForInitialization (s);                                     \
+    Proc_waitForInitialization(s);                                      \
     HH_EBR_enterQuiescentState(s);                                      \
-    size_t tcounter = 0;                                                \
-    while (!GC_CheckForTerminationRequestRarely(s, &tcounter)) {        \
-      /* busy loop, waiting for signal arrivals */                      \
-      /* TODO: what else do we need to check here? some epoch-based     \
-       * stuff, perhaps?                                                \
-       */                                                               \
-      if (tcounter == 0) pthread_yield();                               \
+    while (!GC_CheckForTerminationRequest(s)) {                         \
+      broadcastHeartbeat(s);                                            \
+      usleep(s->controls->heartbeatMicroseconds);                       \
     }                                                                   \
   }                                                                     \
   else {                                                                \

@@ -11,6 +11,8 @@
 
 static inline void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s);
 
+void broadcastHeartbeat(GC_state s);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
