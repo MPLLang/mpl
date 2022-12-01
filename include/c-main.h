@@ -93,16 +93,34 @@ void MLton_threadFunc (void* arg) {                                     \
     /* Return to the saved world */                                     \
     nextBlock = getNextBlockFromStackTop (s);                           \
   }                                                                     \
-  /* Check to see whether or not we are the first thread */             \
-  if (Proc_processorNumber (s) == 0) {                                  \
+  /* Check to see whether or not we are the last thread; this assigns   \
+   * the "main" computation to the last thread, so that we can use the  \
+   * first thread as the signal relayer if necessary.                   \
+   */                                                                   \
+  if (Proc_processorNumber (s) == s->numberOfProcs-1) {                 \
     Trace0(EVENT_LAUNCH);                                               \
     /* Trampoline */                                                    \
     MLton_trampoline (s, nextBlock, FALSE);                             \
   }                                                                     \
+  /* TODO: @mpl arg to control this threshold. It's correct as long as  \
+   * the threshold (here, 16) is at least 1 (i.e., we need at least 2   \
+   * processors overall to allow one to be designated as the relayer)   \
+   */                                                                   \
+  else if (s->numberOfProcs > 16 && Proc_processorNumber(s) == 0) {     \
+    Proc_waitForInitialization (s);                                     \
+    size_t tcounter = 0;                                                \
+    while (!GC_CheckForTerminationRequestRarely(s, &tcounter)) {        \
+      /* busy loop, waiting for signal arrivals */                      \
+      /* TODO: what else do we need to check here? some epoch-based     \
+       * stuff, perhaps?                                                \
+       */                                                               \
+      pthread_yield();                                                  \
+    }                                                                   \
+  }                                                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \
     Trace0(EVENT_LAUNCH);                                               \
-    /*printf("[%d] calling Parallel_run\n", s->procNumber);*/               \
+    /*printf("[%d] calling Parallel_run\n", s->procNumber);*/           \
     Parallel_run ();                                                    \
   }                                                                     \
   return 1;                                                             \

@@ -44,7 +44,7 @@ struct
 
   (* val activatePar = parseFlag "activate-par" *)
   val heartbeatMicroseconds =
-    LargeInt.fromInt (parseInt "heartbeat-us" 1000)
+    LargeInt.fromInt (parseInt "heartbeat-us" 300)
 
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
@@ -182,6 +182,8 @@ struct
       (* ; MLton.Parallel.Deprecated.releaseLock printLock *)
       )
     end
+
+  fun dbgmsg'' _ = ()
 
 
   (* ========================================================================

@@ -64,6 +64,29 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
   }
 }
 
+static inline void relaySignalTo(GC_state s, int id, int signum) {
+  if (id == Proc_processorNumber(s))
+    return;
+
+  // first, try to prevent them from terminating
+  uint32_t *statusp = &(s->procStates[id].terminationStatus);
+  uint32_t status = atomicLoadU32(statusp);
+  bool success = FALSE;
+  while (status > 0 && !GC_CheckForTerminationRequest(s)) {
+    success = __sync_bool_compare_and_swap(statusp, status, status+1);
+    if (success)
+      break;
+    status = atomicLoadU32(statusp);
+  }
+
+  if (success) {
+    assert(atomicLoadU32(statusp) >= 2);
+    pthread_kill(s->procStates[id].self, signum);
+    assert(atomicLoadU32(statusp) >= 2);
+    __sync_fetch_and_sub(statusp, 1);
+  }
+}
+
 /* GC_handler sets s->limit = 0 so that the next limit check will
  * fail.  Signals need to be blocked during the handler (i.e. it
  * should run atomically) because sigaddset does both a read and a
@@ -96,34 +119,39 @@ void GC_handler (int signum) {
   s->signalsInfo.signalIsPending = TRUE;
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
+  int me = Proc_processorNumber(s);
+
   if (signum == SIGALRM) {
-    // printf("[%d] relaying alarm\n", Proc_processorNumber(s));
-    for (uint32_t i = 0;
-         i < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
-         i++)
-    {
-      int id = (int)i;
-      if (id == Proc_processorNumber(s)) continue;
-
-      // first, try to prevent them from terminating
-      uint32_t *statusp = &(s->procStates[id].terminationStatus);
-      uint32_t status = atomicLoadU32(statusp);
-      bool success = FALSE;
-      while (status > 0 && !GC_CheckForTerminationRequest(s)) {
-        success = __sync_bool_compare_and_swap(statusp, status, status+1);
-        if (success)
-          break;
-        status = atomicLoadU32(statusp);
-      }
-
-      if (success) {
-        assert(atomicLoadU32(statusp) >= 2);
-        pthread_kill(s->procStates[id].self, SIGUSR1);
-        assert(atomicLoadU32(statusp) >= 2);
-        __sync_fetch_and_sub(statusp, 1);
+    if (me != 0) {
+      relaySignalTo(s, 0, SIGALRM);
+    }
+    else {
+      for (uint32_t p = 1;
+           p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
+           p++)
+      {
+        relaySignalTo(s, p, SIGUSR1);
       }
     }
   }
+
+  /* some old code below: this implements a relay tree, where each processor
+   * relays to its children. relayCount controls how many children each
+   * processor has, and we build a full n-ary tree with processor 0 at the
+   * root. This would need to be called if a processor receives SIGUSR1, and
+   * requires that the SIGALRM is always immediately relayed to the root.
+   * The root would call this code when it receives SIGALRM.
+   */
+  // int relayCount = 16;
+  // uint32_t start = relayCount * me + 1;
+  // uint32_t stop = relayCount * me + relayCount;
+  // for (uint32_t p = start;
+  //       p <= stop && p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
+  //       p++)
+  // {
+  //   relaySignalTo(s, p, SIGUSR1);
+  // }
+
 
   // if (signum == SIGUSR1) {
   //   printf("[%d] received relay\n", Proc_processorNumber(s));
