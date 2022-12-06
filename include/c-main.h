@@ -102,17 +102,12 @@ void MLton_threadFunc (void* arg) {                                     \
     /* Trampoline */                                                    \
     MLton_trampoline (s, nextBlock, FALSE);                             \
   }                                                                     \
-  /* TODO: @mpl arg to control this threshold. It's correct as long as  \
-   * the threshold (here, 16) is at least 1 (i.e., we need at least 2   \
-   * processors overall to allow one to be designated as the relayer)   \
-   */                                                                   \
-  else if (s->numberOfProcs > 16 && Proc_processorNumber(s) == 0) {     \
+  else if (s->numberOfProcs > s->controls->heartbeatRelayerThreshold    \
+           && Proc_processorNumber(s) == 0)                             \
+  {                                                                     \
     Proc_waitForInitialization(s);                                      \
     HH_EBR_enterQuiescentState(s);                                      \
-    while (!GC_CheckForTerminationRequest(s)) {                         \
-      broadcastHeartbeat(s);                                            \
-      usleep(s->controls->heartbeatMicroseconds);                       \
-    }                                                                   \
+    relayerLoop(s);                                                     \
   }                                                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \

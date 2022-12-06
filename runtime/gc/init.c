@@ -170,6 +170,11 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("%s heartbeat-us missing argument.", atName);
           s->controls->heartbeatMicroseconds = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "heartbeat-relayer-threshold")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--")))
+            die ("%s heartbeat-relayer-threshold missing argument.", atName);
+          s->controls->heartbeatRelayerThreshold = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -451,6 +456,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->megablockThreshold = 18;
   s->controls->manageEntanglement = FALSE;
   s->controls->heartbeatMicroseconds = 500;
+  s->controls->heartbeatRelayerThreshold = 16;
 
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
@@ -466,6 +472,8 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
+
+  timespec_now(&(s->lastHeartbeatBroadcast));
 
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
@@ -569,6 +577,9 @@ int GC_init (GC_state s, int argc, char **argv) {
       s->controls->superblockThreshold,
       s->controls->megablockThreshold);
 
+  unless (s->controls->heartbeatRelayerThreshold >= 1)
+    die ("heartbeat-relayer-threshold must be at least 1.");
+
   return res;
 }
 
@@ -617,6 +628,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   initFixedSizeAllocator(getUFAllocator(d), sizeof(struct HM_UnionFindNode));
   d->hhEBR = s->hhEBR;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
+  d->lastHeartbeatBroadcast = s->lastHeartbeatBroadcast;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
   d->numberDisentanglementChecks = 0;

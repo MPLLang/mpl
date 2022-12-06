@@ -87,12 +87,58 @@ static inline void relaySignalTo(GC_state s, int id, int signum) {
   }
 }
 
+
+static inline bool timespec_geq(struct timespec *t1, struct timespec *t2) {
+  if (t1->tv_sec > t2->tv_sec)
+    return TRUE;
+  if (t1->tv_sec < t2->tv_sec)
+    return FALSE;
+  return t1->tv_nsec >= t2->tv_nsec;
+}
+
+
 void broadcastHeartbeat(GC_state s) {
   for (uint32_t p = 1;
        p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
        p++)
   {
     relaySignalTo(s, p, SIGUSR1);
+  }
+}
+
+
+/* broadcast a heartbeat if ready, and then return number of microseconds
+ * remaining until next heartbeat is due
+ */
+void checkBroadcastHeartbeat(GC_state s, struct timespec *rem) {
+  struct timespec now;
+  timespec_now(&now);
+
+  struct timespec elapsedSinceLast = now;
+  timespec_sub(&elapsedSinceLast, &(s->lastHeartbeatBroadcast));
+
+  struct timespec desired;
+  desired.tv_sec = s->controls->heartbeatMicroseconds / 1000000;
+  desired.tv_nsec = 1000 * (s->controls->heartbeatMicroseconds % 1000000);
+  *rem = desired;
+
+  if (timespec_geq(&elapsedSinceLast, &desired)) {
+    s->lastHeartbeatBroadcast = now;
+    broadcastHeartbeat(s);
+  }
+  else {
+    timespec_sub(rem, &elapsedSinceLast);
+  }
+
+  return;
+}
+
+
+void relayerLoop(GC_state s) {
+  while (!GC_CheckForTerminationRequest(s)) {
+    struct timespec rem;
+    checkBroadcastHeartbeat(s, &rem);
+    nanosleep(&rem, NULL);
   }
 }
 
@@ -134,7 +180,11 @@ void GC_handler (int signum) {
     if (me != 0) {
       relaySignalTo(s, 0, SIGALRM);
     }
-    else {
+
+    bool existsRelayer =
+      (s->numberOfProcs > s->controls->heartbeatRelayerThreshold);
+
+    if (me == 0 && !existsRelayer) {
       broadcastHeartbeat(s);
     }
   }
