@@ -24,6 +24,7 @@ local
   ../shh/queue/DequeABP.sml
   (*Stack.sml*)
   ../shh/Result.sml
+  Universal.sml
   ann
     "allowFFI true"
     "allowPrim true"

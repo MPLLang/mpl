@@ -133,11 +133,11 @@ struct
       * affects the GC snapshot, which is already murky.
       *)
 
-  datatype 'a joinpoint =
+  datatype joinpoint =
     J of
       { leftSideThread: Thread.t
       , rightSideThread: Thread.t option ref
-      , rightSideResult: 'a Result.t option ref
+      , rightSideResult: Universal.t Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
       , gcj: gc_joinpoint option
@@ -484,7 +484,7 @@ struct
           * The thief will convert it into a Thread.t and give it a heap,
           * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: exn Result.t option)
+        val rightSideResult = ref (NONE: Universal.t Result.t option)
         val incounter = ref 2
 
         val (tidLeft, tidRight) = DE.decheckFork ()
@@ -634,7 +634,7 @@ struct
 
     fun pcallFork (f: unit -> 'a, g: unit -> 'b) =
       let
-        exception GRes of 'b
+        val (inject, project) = Universal.embed ()
 
         fun leftSide () =
           Result.result f
@@ -648,12 +648,12 @@ struct
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "leftSideParCont" 1
             val jp = primGetJoin ()
-            val gres = syncEndAtomic jp (GRes o g)
+            val gres = syncEndAtomic jp (inject o g)
           in
             (Result.extractResult fres,
-             case Result.extractResult gres of
-                GRes gres => gres
-              | _ => die (fn _ => "scheduler bug: not `GRes of 'b` in `leftSideParCont`"))
+             case project (Result.extractResult gres) of
+                SOME gres => gres
+              | _ => die (fn _ => "scheduler bug: leftSideParCont: failed project right-side result"))
           end
 
         fun rightSide () =
@@ -669,7 +669,7 @@ struct
             val () = DE.decheckSetTid tidRight
             val _ = Thread.atomicEnd()
 
-            val gr = Result.result (GRes o g)
+            val gr = Result.result (inject o g)
 
             val _ = Thread.atomicBegin ()
             val depth' = HH.getDepth (Thread.current ())
