@@ -527,6 +527,10 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
 
+  if (!isObjptr(op)) {
+    return;
+  }
+
   assert(isObjptr(op));
 
   bool saved = saveNoForward(s, p, rawArgs);
@@ -546,6 +550,10 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
   ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
   objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
+
+  if (!isObjptr(op)) {
+    return;
+  }
 
   assert(isObjptr(op));
 

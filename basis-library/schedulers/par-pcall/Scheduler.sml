@@ -20,7 +20,6 @@ struct
     ; OS.Process.exit OS.Process.failure
     )
     
-(*
   fun search key args =
     case args of
       [] => NONE
@@ -42,7 +41,8 @@ struct
         case Int.fromString s of
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
-*)
+
+  val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5
 
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
@@ -200,8 +200,8 @@ struct
    *)
 
   datatype task =
-    (* NormalTask of unit -> unit *)
-    Continuation of Thread.t * int
+    NormalTask of (unit -> unit) * int
+  | Continuation of Thread.t * int
   | NewThread of Thread.p * int
   | GCTask of gctask_data
 
@@ -250,7 +250,9 @@ struct
       if arraySub (maxForkDepths, p) >= d then
         ()
       else
-        arrayUpdate (maxForkDepths, p, d)
+        ( (*print ("max increased: " ^ Int.toString d ^ "\n")*) ()
+        ; arrayUpdate (maxForkDepths, p, d)
+        )
     end
 
   (* ========================================================================
@@ -529,6 +531,96 @@ struct
       end
 
 
+    fun doSpawnFunc (g: unit -> Universal.t) : joinpoint =
+      let
+        val _ = Thread.atomicBegin ()
+        val thread = Thread.current ()
+        val gcj = spawnGC thread
+
+        val _ = assertAtomic "spawn after spawnGC" 1
+
+        val depth = HH.getDepth thread
+
+        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
+
+        (* We use a ref here instead of using rightSideThread directly.
+          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
+          * The thief will convert it into a Thread.t and give it a heap,
+          * and then write it into this slot. *)
+        val rightSideThreadSlot = ref (NONE: Thread.t option)
+        val rightSideResult = ref (NONE: Universal.t Result.t option)
+        val incounter = ref 2
+
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
+        fun g' () =
+          let
+            val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
+            val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
+            val () = DE.decheckSetTid tidRight
+            val _ = Thread.atomicEnd()
+
+            val gr = Result.result g
+
+            val _ = Thread.atomicBegin ()
+            val t = Thread.current ()
+          in
+            rightSideThreadSlot := SOME t;
+            rightSideResult := SOME gr;
+
+            if decrementHitsZero incounter then
+              ( ()
+              ; setQueueDepth (myWorkerId ()) depth
+                (** Atomic 1 *)
+              ; Thread.atomicBegin ()
+
+                (** Atomic 2 *)
+
+                (** (When sibling is resumed, it needs to be atomic 1.
+                  * Switching threads is implicit atomicEnd(), so we need
+                  * to be at atomic2
+                  *)
+              ; assertAtomic "rightside switch-to-left" 2
+              ; threadSwitchEndAtomic thread
+              )
+            else
+              ( assertAtomic "rightside before returnToSched" 1
+              ; returnToSchedEndAtomic ()
+              )
+          end
+
+        (* double check... hopefully correct, not off by one? *)
+        val _ = push (NormalTask (g', depth))
+        val _ = HH.setDepth (thread, depth + 1)
+
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
+
+        val _ = DE.decheckSetTid tidLeft
+        val _ = assertAtomic "spawn done" 1
+        val _ = Thread.atomicEnd ()
+      in
+        J { leftSideThread = thread
+          , rightSideThread = rightSideThreadSlot
+          , rightSideResult = rightSideResult
+          , incounter = incounter
+          , tidRight = tidRight
+          , gcj = gcj
+          }
+      end
+
+
+    fun maybeSpawnFunc (g: unit -> Universal.t) : joinpoint option =
+      let
+        val depth = HH.getDepth (Thread.current ())
+      in
+        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
+          NONE
+        else
+          SOME (doSpawnFunc g)
+      end
+
+
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
         (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, ...})
@@ -611,7 +703,11 @@ struct
 
     fun handler msg =
       MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        maybeSpawn thread
+        ( maybeSpawn thread
+        ; maybeSpawn thread
+        ; maybeSpawn thread
+        ; maybeSpawn thread
+        )
       )
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
@@ -714,9 +810,65 @@ struct
           )
       end
 
+    
+    fun eagerFork (f, g) =
+      let
+        val (inject, project) = Universal.embed ()
+      in
+        case maybeSpawnFunc (inject o g) of
+          SOME jp =>
+            let
+              val fres = Result.result f
+              val _ = Thread.atomicBegin ()
+              val gres = syncEndAtomic jp (inject o g)
+            in
+              (Result.extractResult fres,
+              case project (Result.extractResult gres) of
+                  SOME gres => gres
+                | _ => die (fn _ => "scheduler bug: failed project right-side result"))
+            end
+
+        | NONE => (f (), g ())
+      end
+
+
+    (* other possible heuristics:
+      *   - if (deque is almost empty) then eager else lazy
+      *       - TODO: does this screw up the heap architecture (parent heap below child heap...?)
+      *   - if (lots of promotable frames already) then sequential else ...
+      * 
+      * possible heuristics for heartbeats themselves:
+      *   - at heartbeat, promote N pcalls.
+      *       - N can depend on current state: e.g. promote half of all
+      *         available pcalls, or look at deque and promote enough to
+      *         "fill it up"
+      *   - dynamically adjust heartbeat interval based on saturation of parallelism?
+      *       - lots of parallelism? increase interval; to little parallelism? decrease interval
+      *       - could use steal requests to figure out how much parallelism there is;
+      *         processors can request increase/decrease interval based on failed steals
+      *   - send individual heartbeat signals for failed steals?
+      *       - processor A requests processor B to promote a pcall (so that A can steal from B)
+      *
+      * idea: discharge the "debt" of eager fork by skipping heartbeats
+      *   - marry the heuristic with the amortization theory
+      *)
+
+    (*
+      "eager" by promoting above us:
+        pcallFork
+          (fn _ => 
+            ( promote () (* promote: simulate signal arrival, and then call GC.collect *)
+            ; f()
+            )
+          , g
+          )
+    *)
 
     fun fork (f, g) =
-      pcallFork (f, g)
+      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
+        eagerFork (f, g)
+      else
+        pcallFork (f, g)
 
   end
 
@@ -805,7 +957,8 @@ struct
         in
           case task of
             GCTask (thread, hh) =>
-              ( HH.collectThreadRoot (thread, !hh)
+              ( dbgmsg'' (fn _ => "starting GCTask")
+              ; HH.collectThreadRoot (thread, !hh)
               ; acquireWork ()
               )
           | Continuation (thread, depth) =>
@@ -821,6 +974,24 @@ struct
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
+          | NormalTask (taskFn, depth) =>
+              let
+                val taskThread = Thread.copy prototypeThread
+              in
+                if depth >= 1 then () else
+                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
+                Queue.setDepth myQueue (depth+1);
+                HH.moveNewThreadToDepth (taskThread, depth);
+                HH.setDepth (taskThread, depth+1);
+                setTaskBox myId taskFn;
+                Thread.atomicBegin ();
+                Thread.atomicBegin ();
+                assertAtomic "acquireWork before thread switch" 2;
+                threadSwitchEndAtomic taskThread;
+                afterReturnToSched ();
+                Queue.setDepth myQueue 1;
+                acquireWork ()
+              end
           | NewThread (thread, depth) =>
               let
                 val taskThread = Thread.copy thread
