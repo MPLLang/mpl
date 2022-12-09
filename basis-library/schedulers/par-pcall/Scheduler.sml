@@ -43,6 +43,7 @@ struct
         | SOME x => x
 
   val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5
+  val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
@@ -518,16 +519,18 @@ struct
 
 
     (* runs in signal handler *)
-    fun maybeSpawn (interruptedLeftThread: Thread.t) : unit =
+    fun maybeSpawn (interruptedLeftThread: Thread.t) : bool =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
-          ()
+          false
         else if not (HH.canForkThread interruptedLeftThread) then
-          ()
+          false
         else
-          doSpawn interruptedLeftThread
+          ( doSpawn interruptedLeftThread
+          ; true
+          )
       end
 
 
@@ -703,12 +706,15 @@ struct
 
     fun handler msg =
       MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        ( maybeSpawn thread
-        ; maybeSpawn thread
-        ; maybeSpawn thread
-        ; maybeSpawn thread
-        )
-      )
+        let
+          fun loop i =
+            if i < numSpawnsPerHeartbeat andalso maybeSpawn thread then
+              loop (i+1)
+            else
+              ()
+        in
+          loop 0
+        end)
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
