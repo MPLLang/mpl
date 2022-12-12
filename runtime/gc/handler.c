@@ -61,6 +61,19 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
     s->currentThread = BOGUS_OBJPTR;
 
     switchToThread (s, s->signalHandlerThread);
+
+    if (s->controls->heartbeatStats &&
+        (sigismember(&s->signalsInfo.signalsPending, SIGUSR1)
+         ||
+         sigismember(&s->signalsInfo.signalsPending, SIGALRM)))
+    {
+      struct timespec now;
+      timespec_now(&now);
+      struct timespec diff = now;
+      timespec_sub(&diff, &(s->cumulativeStatistics->lastHeartbeatHandlerTimestamp));
+      TimeHistogram_insert(s->cumulativeStatistics->heartbeatHandlers, &diff);
+      s->cumulativeStatistics->lastHeartbeatHandlerTimestamp = now;
+    }
   }
 }
 
@@ -85,15 +98,6 @@ static inline void relaySignalTo(GC_state s, int id, int signum) {
     assert(atomicLoadU32(statusp) >= 2);
     __sync_fetch_and_sub(statusp, 1);
   }
-}
-
-
-static inline bool timespec_geq(struct timespec *t1, struct timespec *t2) {
-  if (t1->tv_sec > t2->tv_sec)
-    return TRUE;
-  if (t1->tv_sec < t2->tv_sec)
-    return FALSE;
-  return t1->tv_nsec >= t2->tv_nsec;
 }
 
 
@@ -135,7 +139,8 @@ void checkBroadcastHeartbeat(GC_state s, struct timespec *rem) {
 
 
 void relayerLoop(GC_state s) {
-  while (!GC_CheckForTerminationRequest(s)) {
+  while (TRUE) {
+    GC_MayTerminateThread(s);
     struct timespec rem;
     checkBroadcastHeartbeat(s, &rem);
     nanosleep(&rem, NULL);
@@ -175,6 +180,15 @@ void GC_handler (int signum) {
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
   int me = Proc_processorNumber(s);
+
+  if (s->controls->heartbeatStats && (signum == SIGALRM || signum == SIGUSR1)) {
+    struct timespec now;
+    timespec_now(&now);
+    struct timespec diff = now;
+    timespec_sub(&diff, &(s->cumulativeStatistics->lastHeartbeatSignalTimestamp));
+    TimeHistogram_insert(s->cumulativeStatistics->heartbeatSignals, &diff);
+    s->cumulativeStatistics->lastHeartbeatSignalTimestamp = now;
+  }
 
   if (signum == SIGALRM) {
     if (me != 0) {

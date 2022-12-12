@@ -165,6 +165,9 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "debug-keep-free-blocks")) {
           i++;
           s->controls->debugKeepFreeBlocks = TRUE;
+        } else if (0 == strcmp (arg, "heartbeat-stats")) {
+          i++;
+          s->controls->heartbeatStats = TRUE;
         } else if (0 == strcmp (arg, "heartbeat-us")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
@@ -455,6 +458,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->superblockThreshold = 7;  // superblocks of 128 blocks
   s->controls->megablockThreshold = 18;
   s->controls->manageEntanglement = FALSE;
+  s->controls->heartbeatStats = FALSE;
   s->controls->heartbeatMicroseconds = 500;
   s->controls->heartbeatRelayerThreshold = 16;
 

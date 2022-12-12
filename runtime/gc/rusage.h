@@ -28,4 +28,6 @@ void timespec_sub(struct timespec *dst, struct timespec *x);
 /* compute dst = dst + x */
 void timespec_add(struct timespec *dst, struct timespec *x);
 
+bool timespec_geq(struct timespec *t1, struct timespec *t2);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

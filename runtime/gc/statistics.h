@@ -87,6 +87,11 @@ struct GC_cumulativeStatistics {
   struct rusage ru_crit; /* total time in critical sections */
   struct rusage ru_sync; /* total time synchronizing for critical sections */
   struct rusage ru_bsp; /* total time in BSP rounds */
+
+  struct timespec lastHeartbeatHandlerTimestamp;
+  struct timespec lastHeartbeatSignalTimestamp;
+  TimeHistogram heartbeatHandlers;
+  TimeHistogram heartbeatSignals;
 };
 
 struct GC_lastMajorStatistics {

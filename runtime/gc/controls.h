@@ -55,6 +55,7 @@ struct GC_controls {
   bool mayLoadWorld;
   bool mayProcessAtMLton;
   bool messages; /* Print a message at the start and end of each gc. */
+  bool heartbeatStats;
   int heartbeatMicroseconds;
   int heartbeatRelayerThreshold;
   size_t allocChunkSize;

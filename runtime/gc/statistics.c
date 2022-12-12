@@ -93,6 +93,15 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   rusageZero (&cumulativeStatistics->ru_sync);
   rusageZero (&cumulativeStatistics->ru_bsp);
 
+  timespec_now(&(cumulativeStatistics->lastHeartbeatHandlerTimestamp));
+  timespec_now(&(cumulativeStatistics->lastHeartbeatSignalTimestamp));
+
+  struct timespec bucketWidth;
+  bucketWidth.tv_sec = 0;
+  bucketWidth.tv_nsec = 100 * 1000; // 100 us
+  cumulativeStatistics->heartbeatHandlers = TimeHistogram_new(15, &bucketWidth);
+  cumulativeStatistics->heartbeatSignals = TimeHistogram_new(15, &bucketWidth);
+
   return cumulativeStatistics;
 }
 
