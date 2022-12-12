@@ -101,6 +101,13 @@ static inline void relaySignalTo(GC_state s, int id, int signum) {
 }
 
 
+void GC_sendHeartbeatToOtherProc(GC_state s, uint32_t target) {
+  enter(s);
+  relaySignalTo(s, target, SIGUSR1);
+  leave(s);
+}
+
+
 void broadcastHeartbeat(GC_state s) {
   for (uint32_t p = 1;
        p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);

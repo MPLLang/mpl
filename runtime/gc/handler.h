@@ -20,6 +20,8 @@ void relayerLoop(GC_state s);
 PRIVATE void GC_startSignalHandler (GC_state s);
 PRIVATE void GC_finishSignalHandler (GC_state s);
 
+PRIVATE void GC_sendHeartbeatToOtherProc(GC_state s, uint32_t target);
+
 /** Returns the HH that we abandoned. This should then be passed to
   * GC_handlerLeaveHeapOfThread, to get back to it.
   */

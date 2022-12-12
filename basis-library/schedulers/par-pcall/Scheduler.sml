@@ -56,6 +56,11 @@ struct
   val heartbeatMicroseconds =
     LargeInt.fromInt (Word32.toInt (getHeartbeatMicroseconds (gcstate())))
 
+  val sendHeartbeatToOtherProc =
+    _import "GC_sendHeartbeatToOtherProc" runtime private: gcstate * Word32.word -> unit;
+  val sendHeartbeatToOtherProc =
+    (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p))
+
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
 
