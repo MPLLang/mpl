@@ -42,7 +42,17 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5
+  fun floorLog2 x =
+    let
+      (* acc = 2^i *)
+      fun loop acc i = if 2*acc > x then i else loop (2*acc) (i+1)
+    in
+      loop 1 0
+    end
+
+  val maxEagerForkDepth = floorLog2 P
+
+  (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
   (* val activatePar = parseFlag "activate-par" *)
@@ -139,11 +149,11 @@ struct
       * affects the GC snapshot, which is already murky.
       *)
 
-  datatype joinpoint =
+  datatype 'a joinpoint =
     J of
       { leftSideThread: Thread.t
       , rightSideThread: Thread.t option ref
-      , rightSideResult: Universal.t Result.t option ref
+      , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
       , gcj: gc_joinpoint option
@@ -539,7 +549,7 @@ struct
       end
 
 
-    fun doSpawnFunc (g: unit -> Universal.t) : joinpoint =
+    fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
@@ -556,7 +566,7 @@ struct
           * The thief will convert it into a Thread.t and give it a heap,
           * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: Universal.t Result.t option)
+        val rightSideResult = ref (NONE: 'a Result.t option)
         val incounter = ref 2
 
         val (tidLeft, tidRight) = DE.decheckFork ()
@@ -618,7 +628,7 @@ struct
       end
 
 
-    fun maybeSpawnFunc (g: unit -> Universal.t) : joinpoint option =
+    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -631,8 +641,9 @@ struct
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, ...})
-        g
+        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, ...} : 'a joinpoint)
+        (g: unit -> 'a)
+        : 'a Result.t
       =
       let
         val _ = assertAtomic "syncEndAtomic begin" 1
@@ -823,24 +834,17 @@ struct
 
     
     fun eagerFork (f, g) =
-      let
-        val (inject, project) = Universal.embed ()
-      in
-        case maybeSpawnFunc (inject o g) of
-          SOME jp =>
-            let
-              val fres = Result.result f
-              val _ = Thread.atomicBegin ()
-              val gres = syncEndAtomic jp (inject o g)
-            in
-              (Result.extractResult fres,
-              case project (Result.extractResult gres) of
-                  SOME gres => gres
-                | _ => die (fn _ => "scheduler bug: failed project right-side result"))
-            end
+      case maybeSpawnFunc g of
+        SOME jp =>
+          let
+            val fres = Result.result f
+            val _ = Thread.atomicBegin ()
+            val gres = syncEndAtomic jp g
+          in
+            (Result.extractResult fres, Result.extractResult gres)
+          end
 
-        | NONE => (f (), g ())
-      end
+      | NONE => (f (), g ())
 
 
     (* other possible heuristics:
