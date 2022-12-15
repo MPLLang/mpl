@@ -53,6 +53,7 @@ struct
   val maxEagerForkDepth = floorLog2 P
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
+  val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
   (* val activatePar = parseFlag "activate-par" *)
@@ -343,6 +344,14 @@ struct
     end
 
   fun communicate () = ()
+
+  fun queueSize () =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      Queue.size queue
+    end
 
   fun push x =
     let
@@ -729,6 +738,7 @@ struct
             else
               ()
         in
+          (* if queueSize () >= skipHeartbeatThreshold then () else *)
           loop 0
         end)
 
