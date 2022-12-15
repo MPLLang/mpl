@@ -49,7 +49,7 @@ void TimeHistogram_insert(TimeHistogram h, struct timespec *elem) {
 }
 
 
-void TimeHistogram_reportDistribution(TimeHistogram h, double *output) {
+size_t TimeHistogram_reportDistribution(TimeHistogram h, double *output) {
   size_t total = 0;
   for (size_t i = 0; i < h->numBuckets; i++) {
     total += h->buckets[i];
@@ -65,6 +65,8 @@ void TimeHistogram_reportDistribution(TimeHistogram h, double *output) {
       output[i] = (double)0.0;
     }
   }
+
+  return total;
 }
 
 #endif /* MLTON_GC_INTERNAL_FUNCS */

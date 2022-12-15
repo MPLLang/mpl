@@ -218,25 +218,28 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 void displayHeartbeatStatistics(FILE *out, GC_state s) {
   TimeHistogram signalsH = s->cumulativeStatistics->heartbeatSignals;
   double signalsDist[TimeHistogram_numBuckets(signalsH)];
-  TimeHistogram_reportDistribution(signalsH, signalsDist);
+  size_t totalS = TimeHistogram_reportDistribution(signalsH, signalsDist);
 
   TimeHistogram handlersH = s->cumulativeStatistics->heartbeatHandlers;
   double handlersDist[TimeHistogram_numBuckets(handlersH)];
-  TimeHistogram_reportDistribution(handlersH, handlersDist);
+  size_t totalH = TimeHistogram_reportDistribution(handlersH, handlersDist);
 
   fprintf(out, "              ");
+  fprintf(out, "  count ");
   for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(signalsH); bucket++) {
     fprintf(out, "%*zu ", 3, bucket);
   }
   fprintf(out, "\n");
 
   fprintf(out, "[%*d] signals  ", 2, Proc_processorNumber(s));
+  fprintf(out, "%*zu ", 7, totalS); 
   for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(signalsH); bucket++) {
     fprintf(out, "%*d%% ", 2, (int)(100.0 * signalsDist[bucket]));
   }
   fprintf(out, "\n");
 
   fprintf(out, "[%*d] handlers ", 2, Proc_processorNumber(s));
+  fprintf(out, "%*zu ", 7, totalH);
   for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(handlersH); bucket++) {
     fprintf(out, "%*d%% ", 2, (int)(100.0 * handlersDist[bucket]));
   }

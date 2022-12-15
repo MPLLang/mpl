@@ -39,7 +39,7 @@ size_t TimeHistogram_numBuckets(TimeHistogram h);
 
 // write bucketed distribution into output (values in range [0,1])
 // requires len(output) >= numBuckets(h)
-void TimeHistogram_reportDistribution(TimeHistogram h, double *output);
+size_t TimeHistogram_reportDistribution(TimeHistogram h, double *output);
 
 void TimeHistogram_insert(TimeHistogram th, struct timespec *elem);
 
