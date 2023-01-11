@@ -72,6 +72,11 @@ struct
   val sendHeartbeatToOtherProc =
     (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p))
 
+  val sendHeartbeatToSelf =
+    _import "GC_sendHeartbeatToSelf" runtime private: gcstate -> unit;
+  val sendHeartbeatToSelf =
+    (fn () => sendHeartbeatToSelf (gcstate ()))
+
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
 
@@ -108,6 +113,15 @@ struct
       else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
     ; Thread.switchTo t
     )
+
+
+  fun doPromoteNow () =
+    ( Thread.atomicBegin ()
+    ; sendHeartbeatToSelf ()
+    (* a hack to make signal handler happen now *)
+    ; threadSwitchEndAtomic (Thread.current ()) 
+    )
+
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
@@ -842,20 +856,6 @@ struct
           )
       end
 
-    
-    fun eagerFork (f, g) =
-      case maybeSpawnFunc g of
-        SOME jp =>
-          let
-            val fres = Result.result f
-            val _ = Thread.atomicBegin ()
-            val gres = syncEndAtomic jp g
-          in
-            (Result.extractResult fres, Result.extractResult gres)
-          end
-
-      | NONE => (f (), g ())
-
 
     (* other possible heuristics:
       *   - if (deque is almost empty) then eager else lazy
@@ -878,22 +878,18 @@ struct
       *   - marry the heuristic with the amortization theory
       *)
 
-    (*
-      "eager" by promoting above us:
-        pcallFork
-          (fn _ => 
-            ( promote () (* promote: simulate signal arrival, and then call GC.collect *)
-            ; f()
-            )
-          , g
-          )
-    *)
 
     fun fork (f, g) =
-      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
-        eagerFork (f, g)
-      else
-        pcallFork (f, g)
+      let
+        val d = HH.getDepth (Thread.current ())
+        fun f' () =
+          if d <= maxEagerForkDepth then
+            ( doPromoteNow (); f () )
+          else
+            f ()
+      in
+        pcallFork (f', g)
+      end
 
   end
 

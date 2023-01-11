@@ -108,6 +108,18 @@ void GC_sendHeartbeatToOtherProc(GC_state s, uint32_t target) {
 }
 
 
+void GC_sendHeartbeatToSelf(GC_state s) {
+  enter(s);
+
+  if (s->atomicState == 0)
+    s->limit = 0;
+  s->signalsInfo.signalIsPending = TRUE;
+  sigaddset (&s->signalsInfo.signalsPending, SIGUSR1);
+
+  leave(s);
+}
+
+
 void broadcastHeartbeat(GC_state s) {
   for (uint32_t p = 1;
        p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
