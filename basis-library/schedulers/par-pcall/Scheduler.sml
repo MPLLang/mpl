@@ -50,6 +50,10 @@ struct
       loop 1 0
     end
 
+  val doEagerHeuristic = parseFlag "eager-heuristic"
+  val eagerVersion = parseInt "eager-fork-version" 1
+  val doEagerVersion1 = eagerVersion = 1
+
   val maxEagerForkDepth = floorLog2 P
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
@@ -76,6 +80,24 @@ struct
     _import "GC_sendHeartbeatToSelf" runtime private: gcstate -> unit;
   val sendHeartbeatToSelf =
     (fn () => sendHeartbeatToSelf (gcstate ()))
+
+
+  val tryConsumeSpareHeartbeats =
+    _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
+  val tryConsumeSpareHeartbeats =
+    (fn w => tryConsumeSpareHeartbeats (gcstate (), w))
+
+  
+  val addSpareHeartbeats =
+    _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
+  val addSpareHeartbeats =
+    (fn i => Word32.toInt (addSpareHeartbeats (gcstate (), Word32.fromInt i)))
+
+  
+  val currentSpareHeartbeats =
+    _import "GC_currentSpareHeartbeats" runtime private: gcstate -> Word32.word;
+  val currentSpareHeartbeats =
+    (fn () => currentSpareHeartbeats (gcstate ()))
 
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
@@ -211,7 +233,7 @@ struct
   fun dbgmsg' _ = ()
 
 
-  fun dbgmsg'' m =
+  fun dbgmsg''' m =
     let
       val p = myWorkerId ()
       (* val _ = MLton.Parallel.Deprecated.takeLock printLock *)
@@ -285,6 +307,54 @@ struct
         ; arrayUpdate (maxForkDepths, p, d)
         )
     end
+
+  (** ========================================================================
+    * SPARE HEARTBEATS
+    *)
+
+(*
+  val globalSpares = ref 0
+
+
+  fun tryPutSpareBatch () =
+    let
+      val curr = addSpareHeartbeats 0
+    in
+      if curr < 15 then
+        ()
+      else
+        let
+          val share = curr div 2
+        in
+          if tryConsumeSpareHeartbeats (Word32.fromInt share) then
+            ( faa (globalSpares, share)
+            ; ()
+            )
+          else
+            ()
+        end
+    end
+
+
+  fun takeSpares {depth: int} =
+    let
+      fun loop () =
+        let
+          val curr = !globalSpares
+          val desired = Int.max (10-depth, curr div MLton.Parallel.numberOfProcessors)
+          val requestAmount = Int.min (curr, desired)
+        in
+          if requestAmount = 0 then
+            0
+          else if casRef globalSpares (curr, curr-requestAmount) then
+            requestAmount
+          else
+            loop ()
+        end
+    in
+      loop ()
+    end
+*)
 
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
@@ -745,16 +815,32 @@ struct
 
     fun handler msg =
       MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        let
-          fun loop i =
-            if i < numSpawnsPerHeartbeat andalso maybeSpawn thread then
-              loop (i+1)
-            else
-              ()
-        in
-          (* if queueSize () >= skipHeartbeatThreshold then () else *)
-          loop 0
-        end)
+        if doEagerHeuristic then
+          (* this is the simpler strategy, where we ignore spare heartbeats,
+           * always try to promote once at each heartbeat, and do eager forking
+           * shallow as a heuristic.
+           *)
+          (maybeSpawn thread; ())
+        else
+          (* more sophisticated strategy: keep track of spare heartbeats, and
+           * try to use them aggressively where possible.
+           *)
+          let
+            val _ = addSpareHeartbeats 1
+
+            fun loop i =
+              if currentSpareHeartbeats () > 0w0 andalso maybeSpawn thread then
+                ( tryConsumeSpareHeartbeats 0w1; loop (i+1) )
+              else
+                i
+
+            val numSpawned = loop 0
+
+            (* val _ = 
+              dbgmsg''' (fn _ => "promoted " ^ Int.toString numSpawned ^ "; " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares remaining") *)
+          in
+            ()
+          end)
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
@@ -801,9 +887,15 @@ struct
         fun rightSide () =
           let
             val _ = assertAtomic "pcallFork rightside begin" 1
+
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
+
+            (* val _ =
+              dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
+
+            (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
 
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
             val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, ...} =
@@ -879,17 +971,59 @@ struct
       *)
 
 
-    fun fork (f, g) =
+    fun eagerFork1 (f, g) =
+      case maybeSpawnFunc g of
+        SOME jp =>
+          let
+            val fres = Result.result f
+            val _ = Thread.atomicBegin ()
+            val gres = syncEndAtomic jp g
+          in
+            (Result.extractResult fres, Result.extractResult gres)
+          end
+
+      | NONE => (f (), g ())
+ 
+
+    fun eagerFork2 (f, g) =
       let
-        val d = HH.getDepth (Thread.current ())
+        fun f' () = ( doPromoteNow (); f () )
+      in
+        pcallFork (f', g)
+      end
+
+
+    fun eagerFork (f, g) =
+      if doEagerVersion1 then
+        eagerFork1 (f, g)
+      else
+        eagerFork2 (f, g)
+
+
+    fun eagerHeuristicFork (f, g) =
+      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
+        eagerFork (f, g)
+      else
+        pcallFork (f, g)
+
+
+    fun fancyFork (f, g) =
+      let
         fun f' () =
-          if d <= maxEagerForkDepth then
+          if currentSpareHeartbeats () > 0w0 then
             ( doPromoteNow (); f () )
           else
             f ()
       in
         pcallFork (f', g)
       end
+
+
+    fun fork (f, g) =
+      if doEagerHeuristic then
+        eagerHeuristicFork (f, g)
+      else
+        fancyFork (f, g)
 
   end
 

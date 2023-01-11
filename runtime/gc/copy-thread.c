@@ -62,6 +62,9 @@ GC_thread copyThreadWithHeap (GC_state s, GC_thread from, size_t used) {
   to->bytesNeeded = from->bytesNeeded;
   to->exnStack = from->exnStack;
 
+  to->spareHeartbeats += from->spareHeartbeats;
+  from->spareHeartbeats = 0;
+
   Trace2(EVENT_THREAD_COPY, (EventInt)from, (EventInt)to);
 
   return to;

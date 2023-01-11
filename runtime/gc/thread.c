@@ -184,6 +184,30 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 }
 
 
+uint32_t GC_currentSpareHeartbeats(GC_state s) {
+  return getThreadCurrent(s)->spareHeartbeats;
+}
+
+
+uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
+  GC_thread thread = getThreadCurrent(s);
+  thread->spareHeartbeats += spares;
+  return thread->spareHeartbeats;
+}
+
+
+Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
+  GC_thread thread = getThreadCurrent(s);
+  uint32_t spares = thread->spareHeartbeats;
+  if (spares >= count) {
+    // LOG(LM_PARALLEL, LL_FORCE, "success (count = %u). new spares = %u", count, spares - count);
+    thread->spareHeartbeats -= count;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
 bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
@@ -276,6 +300,11 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   // happens before the decheck fork? Might need to fix this by fusing decheck
   // fork with this function.
   GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
+
+  uint32_t spares = getThreadCurrent(s)->spareHeartbeats;
+  uint32_t half = spares / 2;
+  copied->spareHeartbeats += half;
+  getThreadCurrent(s)->spareHeartbeats -= half;
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);

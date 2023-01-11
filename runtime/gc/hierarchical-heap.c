@@ -331,6 +331,8 @@ void HM_HH_merge(
   /* Merge levels. */
   parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
 
+  parentThread->spareHeartbeats += childThread->spareHeartbeats;
+
   parentThread->bytesSurvivedLastCollection +=
     childThread->bytesSurvivedLastCollection;
   parentThread->bytesAllocatedSinceLastCollection +=
