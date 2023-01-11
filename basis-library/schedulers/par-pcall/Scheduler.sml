@@ -1009,12 +1009,31 @@ struct
 
     fun fancyFork (f, g) =
       let
-        fun f' () =
-          if currentSpareHeartbeats () > 0w0 then
-            ( doPromoteNow (); f () )
-          else
-            f ()
+        fun f' () = ( doPromoteNow (); f () )
       in
+        if currentSpareHeartbeats () = 0w0 then
+          pcallFork (f, g)
+        else
+        
+        (* This next code is an attempt at an optimization. `eagerFork1` appears
+         * to be the most efficient method of eager forking, but it is only
+         * safe to call `eagerFork1` if there are no ancestor PCalls waiting in
+         * the stack.
+         *
+         * `canForkThread` is a correct way of checking for this, but the
+         * performance is not so great. I think `canForkThread` is just too
+         * expensive.
+         *
+         * So for now, this attempted optimization is disabled. If we can check
+         * eagerFork1 safety more efficiently, then we should try this again...
+         *)
+
+        (*
+        if not (HH.canForkThread (Thread.current ())) then
+          eagerFork1 (f, g)
+        else
+        *)
+
         pcallFork (f', g)
       end
 
