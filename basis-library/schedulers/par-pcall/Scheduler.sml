@@ -60,6 +60,8 @@ struct
   val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 1
+
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
     LargeInt.fromInt (parseInt "heartbeat-us" 300) *)
@@ -138,10 +140,12 @@ struct
 
 
   fun doPromoteNow () =
-    ( Thread.atomicBegin ()
+    ( assertAtomic "start doPromoteNow" 0
+    ; Thread.atomicBegin ()
     ; sendHeartbeatToSelf ()
     (* a hack to make signal handler happen now *)
-    ; threadSwitchEndAtomic (Thread.current ()) 
+    ; threadSwitchEndAtomic (Thread.current ())
+    ; assertAtomic "end doPromoteNow" 0
     )
 
 
@@ -286,6 +290,23 @@ struct
   fun startTimer _ = ()
   fun tickTimer _ = ()
   fun stopTimer _ = ()
+
+  (* ========================================================================
+   * NUM SPAWNS
+   *)
+
+  val numSpawns = Array.array (P, 0)
+
+  fun incrementNumSpawns () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numSpawns, p)
+    in
+      arrayUpdate (numSpawns, p, c+1)
+    end
+
+  fun numSpawnsSoFar () =
+    Array.foldl op+ 0 numSpawns
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -619,6 +640,8 @@ struct
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
         val _ = recordForkDepth depth
 
+        val _ = incrementNumSpawns ()
+
         val _ = DE.decheckSetTid tidLeft
         val _ = assertAtomic "spawn done" 1
       in
@@ -706,6 +729,8 @@ struct
 
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
         val _ = recordForkDepth depth
+
+        val _ = incrementNumSpawns ()
 
         val _ = DE.decheckSetTid tidLeft
         val _ = assertAtomic "spawn done" 1
@@ -826,15 +851,21 @@ struct
            * try to use them aggressively where possible.
            *)
           let
-            val _ = addSpareHeartbeats 1
+            val _ = addSpareHeartbeats wealthPerHeartbeat
 
             fun loop i =
-              if currentSpareHeartbeats () > 0w0 andalso maybeSpawn thread then
+              if
+                currentSpareHeartbeats () > 0w0
+                andalso i < numSpawnsPerHeartbeat
+                andalso maybeSpawn thread
+              then
                 ( tryConsumeSpareHeartbeats 0w1; loop (i+1) )
               else
                 i
 
             val numSpawned = loop 0
+
+            (* val _ = if maybeSpawn thread then (tryConsumeSpareHeartbeats 0w1; ()) else () *)
 
             (* val _ = 
               dbgmsg''' (fn _ => "promoted " ^ Int.toString numSpawned ^ "; " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares remaining") *)
@@ -895,6 +926,7 @@ struct
             (* val _ =
               dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
 
+            (* val _ = addSpareHeartbeats 1 *)
             (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
 
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
@@ -1251,7 +1283,11 @@ struct
 
 end
 
-structure ForkJoin :> FORK_JOIN =
+structure ForkJoin :>
+sig
+  include FORK_JOIN
+  val numSpawnsSoFar: unit -> int
+end =
 struct
   open Scheduler.ForkJoin
 
@@ -1283,4 +1319,5 @@ struct
     end
 
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
+  val numSpawnsSoFar = Scheduler.numSpawnsSoFar
 end
