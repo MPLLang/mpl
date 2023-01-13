@@ -50,10 +50,6 @@ struct
       loop 1 0
     end
 
-  val doEagerHeuristic = parseFlag "eager-heuristic"
-  val eagerVersion = parseInt "eager-fork-version" 1
-  val doEagerVersion1 = eagerVersion = 1
-
   val maxEagerForkDepth = floorLog2 P
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
@@ -97,7 +93,7 @@ struct
 
   
   val currentSpareHeartbeats =
-    _import "GC_currentSpareHeartbeats" runtime private: gcstate -> Word32.word;
+    _import "GC_currentSpareHeartbeats" private: gcstate -> Word32.word;
   val currentSpareHeartbeats =
     (fn () => currentSpareHeartbeats (gcstate ()))
 
@@ -840,38 +836,28 @@ struct
 
     fun handler msg =
       MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        if doEagerHeuristic then
-          (* this is the simpler strategy, where we ignore spare heartbeats,
-           * always try to promote once at each heartbeat, and do eager forking
-           * shallow as a heuristic.
-           *)
-          (maybeSpawn thread; ())
-        else
-          (* more sophisticated strategy: keep track of spare heartbeats, and
-           * try to use them aggressively where possible.
-           *)
-          let
-            val _ = addSpareHeartbeats wealthPerHeartbeat
+        let
+          val _ = addSpareHeartbeats wealthPerHeartbeat
 
-            fun loop i =
-              if
-                currentSpareHeartbeats () > 0w0
-                andalso i < numSpawnsPerHeartbeat
-                andalso maybeSpawn thread
-              then
-                ( tryConsumeSpareHeartbeats 0w1; loop (i+1) )
-              else
-                i
+          fun loop i =
+            if
+              currentSpareHeartbeats () > 0w0
+              andalso i < numSpawnsPerHeartbeat
+              andalso maybeSpawn thread
+            then
+              ( tryConsumeSpareHeartbeats 0w1; loop (i+1) )
+            else
+              i
 
-            val numSpawned = loop 0
+          val numSpawned = loop 0
 
-            (* val _ = if maybeSpawn thread then (tryConsumeSpareHeartbeats 0w1; ()) else () *)
+          (* val _ = if maybeSpawn thread then (tryConsumeSpareHeartbeats 0w1; ()) else () *)
 
-            (* val _ = 
-              dbgmsg''' (fn _ => "promoted " ^ Int.toString numSpawned ^ "; " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares remaining") *)
-          in
-            ()
-          end)
+          (* val _ = 
+            dbgmsg''' (fn _ => "promoted " ^ Int.toString numSpawned ^ "; " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares remaining") *)
+        in
+          ()
+        end)
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
@@ -1025,20 +1011,20 @@ struct
       end
 
 
-    fun eagerFork (f, g) =
-      if doEagerVersion1 then
-        eagerFork1 (f, g)
-      else
-        eagerFork2 (f, g)
-
-
-    fun eagerHeuristicFork (f, g) =
+    fun eagerHeuristicFork1 (f, g) =
       if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
-        eagerFork (f, g)
+        eagerFork1 (f, g)
       else
         pcallFork (f, g)
 
+    
+    fun eagerHeuristicFork2 (f, g) =
+      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
+        eagerFork2 (f, g)
+      else
+        pcallFork (f, g)
 
+(*
     fun fancyFork (f, g) =
       let
         fun f' () = ( doPromoteNow (); f () )
@@ -1068,13 +1054,21 @@ struct
 
         pcallFork (f', g)
       end
+*)
+    
+    fun greedyWorkAmortizedFork (f, g) =
+      let
+        fun f' () =
+          ( if currentSpareHeartbeats () = 0w0 then
+              ()
+            else
+              doPromoteNow ()
 
-
-    fun fork (f, g) =
-      if doEagerHeuristic then
-        eagerHeuristicFork (f, g)
-      else
-        fancyFork (f, g)
+          ; f ()
+          )
+      in
+        pcallFork (f', g)
+      end
 
   end
 
@@ -1283,16 +1277,16 @@ struct
 
 end
 
-structure ForkJoin :>
+
+functor MkForkJoin
+  (val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b) :>
 sig
   include FORK_JOIN
   val numSpawnsSoFar: unit -> int
 end =
 struct
-  open Scheduler.ForkJoin
-
-  fun par (f, g) =
-    fork (f, g)
+  val fork = fork
+  val par = fork
 
   fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
 
@@ -1320,4 +1314,6 @@ struct
 
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
   val numSpawnsSoFar = Scheduler.numSpawnsSoFar
+  val getIdleTime = Scheduler.getIdleTime
+  fun communicate () = ()
 end
