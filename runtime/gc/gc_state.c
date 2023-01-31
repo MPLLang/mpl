@@ -43,6 +43,7 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   GC_stack stack;
 
   thread = getThreadCurrent (s);
+  s->spareHeartbeats = thread->spareHeartbeats;
   s->exnStack = thread->exnStack;
   stack = getStackCurrent (s);
   s->stackBottom = getStackBottom (s, stack);

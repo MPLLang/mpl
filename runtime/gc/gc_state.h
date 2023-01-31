@@ -18,6 +18,7 @@ struct GC_state {
    * size and improve cache performance.
    */
   pointer frontier;
+  uint32_t spareHeartbeats;
   volatile pointer limit;
   volatile pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */

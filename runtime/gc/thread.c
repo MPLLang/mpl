@@ -185,23 +185,21 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
 
 
 uint32_t GC_currentSpareHeartbeats(GC_state s) {
-  return getThreadCurrent(s)->spareHeartbeats;
+  return s->spareHeartbeats;
 }
 
 
 uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
-  GC_thread thread = getThreadCurrent(s);
-  thread->spareHeartbeats += spares;
-  return thread->spareHeartbeats;
+  s->spareHeartbeats += spares;
+  return s->spareHeartbeats;
 }
 
 
 Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
-  GC_thread thread = getThreadCurrent(s);
-  uint32_t spares = thread->spareHeartbeats;
+  uint32_t spares = s->spareHeartbeats;
   if (spares >= count) {
     // LOG(LM_PARALLEL, LL_FORCE, "success (count = %u). new spares = %u", count, spares - count);
-    thread->spareHeartbeats -= count;
+    s->spareHeartbeats -= count;
     return TRUE;
   }
   return FALSE;

@@ -11,8 +11,7 @@
  * that the function is run in a critical section and check the GC
  * invariant.
  */
-/* SAM_NOTE: these are no longer used, but perhaps they should be.
- * TODO: check that these work with the new runtime setup. */
+
 void enter (GC_state s) {
 
   Trace0(EVENT_RUNTIME_ENTER);
@@ -20,6 +19,7 @@ void enter (GC_state s) {
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+  getThreadCurrent(s)->spareHeartbeats = s->spareHeartbeats;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   HH_EBR_leaveQuiescentState(s);
   beginAtomic(s);
@@ -39,7 +39,7 @@ void leave (GC_state s) {
    * for functions that don't ensureBytesFree.
    */
   assert(invariantForMutator(s, FALSE, TRUE));
-
+  s->spareHeartbeats = getThreadCurrent(s)->spareHeartbeats;
   endAtomic (s);
   Trace0(EVENT_RUNTIME_LEAVE);
 }
