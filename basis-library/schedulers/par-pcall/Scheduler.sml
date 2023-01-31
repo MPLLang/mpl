@@ -374,6 +374,13 @@ struct
     end
 *)
 
+  fun splitSpares w =
+    if w = 0w0 then 0w0 else
+    Word32.min
+      ( w - 0w1
+      , Word32.>> (w, 0w1)
+      )
+
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
    *
@@ -620,7 +627,7 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val spareBeforeFork = currentSpareHeartbeats ()
-        val halfSpare = Word32.min (spareBeforeFork, 0w2 + Word32.>> (spareBeforeFork, 0w1))
+        val halfSpare = splitSpares spareBeforeFork
 
         val jp =
           J { leftSideThread = interruptedLeftThread
@@ -697,7 +704,7 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val currentSpare = currentSpareHeartbeats ()
-        val halfSpare = Word32.min (currentSpare, 0w2 + Word32.>> (currentSpare, 0w1))
+        val halfSpare = splitSpares currentSpare
         val _ = tryConsumeSpareHeartbeats halfSpare
 
         fun g' () =
@@ -801,7 +808,7 @@ struct
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
             ; addSpareHeartbeats spareHeartbeatsGiven
-            ; tryConsumeSpareHeartbeats 0w1
+            (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
             ; let
                 val gr = Result.result g
