@@ -56,7 +56,9 @@ struct
   val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 1
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 10
+  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 10)
+  val joinCost = Word32.fromInt (parseInt "sched-join-cost" 1)
 
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
@@ -377,7 +379,7 @@ struct
   fun splitSpares w =
     if w = 0w0 then 0w0 else
     Word32.min
-      ( w - 0w1
+      ( w - spawnCost
       , Word32.>> (w, 0w1)
       )
 
@@ -626,8 +628,9 @@ struct
 
         val (tidLeft, tidRight) = DE.decheckFork ()
 
-        val spareBeforeFork = currentSpareHeartbeats ()
-        val halfSpare = splitSpares spareBeforeFork
+        val currentSpare = currentSpareHeartbeats ()
+        val halfSpare = splitSpares currentSpare
+        val _ = tryConsumeSpareHeartbeats halfSpare
 
         val jp =
           J { leftSideThread = interruptedLeftThread
@@ -641,12 +644,6 @@ struct
 
         (* this sets the join for both threads (left and right) *)
         val rightSideThread = primForkThread (interruptedLeftThread, jp)
-
-        (* sanity check *)
-        (* val spareAfterFork = currentSpareHeartbeats ()
-        val _ =
-          if spareBeforeFork - spareAfterFork = halfSpare then ()
-          else die (fn _ => "scheduler bug: miscalculated spares given") *)
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, depth))
@@ -837,6 +834,7 @@ struct
                     val tidRight = DE.decheckGetTid rightSideThread
                   in
                     HH.mergeThreads (thread, rightSideThread);
+                    tryConsumeSpareHeartbeats joinCost;
                     HH.promoteChunks thread;
                     HH.setDepth (thread, newDepth);
                     DE.decheckJoin (tidLeft, tidRight);
@@ -871,11 +869,11 @@ struct
 
           fun loop i =
             if
-              currentSpareHeartbeats () > 0w0
+              currentSpareHeartbeats () >= spawnCost
               andalso i < numSpawnsPerHeartbeat
               andalso maybeSpawn thread
             then
-              ( tryConsumeSpareHeartbeats 0w1; loop (i+1) )
+              ( tryConsumeSpareHeartbeats spawnCost; loop (i+1) )
               (* loop (i+1) *)
             else
               i
@@ -947,9 +945,10 @@ struct
             (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
 
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
-            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, ...} =
+            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
               primGetJoin ()
             val () = DE.decheckSetTid tidRight
+            val _ = addSpareHeartbeats spareHeartbeatsGiven
             val _ = Thread.atomicEnd()
 
             val gr = Result.result (inject o g)
@@ -1090,7 +1089,7 @@ struct
     fun greedyWorkAmortizedFork (f, g) =
       let
         fun f' () =
-          ( if currentSpareHeartbeats () = 0w0 then
+          ( if currentSpareHeartbeats () < spawnCost then
               ()
             else
               doPromoteNow ()

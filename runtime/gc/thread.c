@@ -191,6 +191,7 @@ uint32_t GC_currentSpareHeartbeats(GC_state s) {
 
 uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
   s->spareHeartbeats += spares;
+  s->spareHeartbeats = min(s->spareHeartbeats, 10000);
   return s->spareHeartbeats;
 }
 
@@ -299,10 +300,10 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer jp) {
   // fork with this function.
   GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
 
-  uint32_t spares = getThreadCurrent(s)->spareHeartbeats;
-  uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
-  copied->spareHeartbeats += half;
-  getThreadCurrent(s)->spareHeartbeats -= half;
+  // uint32_t spares = getThreadCurrent(s)->spareHeartbeats;
+  // uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
+  // copied->spareHeartbeats += half;
+  // getThreadCurrent(s)->spareHeartbeats -= half;
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
