@@ -459,7 +459,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->megablockThreshold = 18;
   s->controls->manageEntanglement = FALSE;
   s->controls->heartbeatStats = FALSE;
-  s->controls->heartbeatMicroseconds = 500;
+  s->controls->heartbeatMicroseconds = 250;
   s->controls->heartbeatRelayerThreshold = 16;
 
   /* Not arbitrary; should be at least the page size and must also respect the

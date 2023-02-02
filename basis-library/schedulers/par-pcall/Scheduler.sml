@@ -53,12 +53,12 @@ struct
   val maxEagerForkDepth = floorLog2 P
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
-  val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10
+  (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 10
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 10)
-  val joinCost = Word32.fromInt (parseInt "sched-join-cost" 1)
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 4
+  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 3)
+  val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
 
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
@@ -143,6 +143,7 @@ struct
     ; sendHeartbeatToSelf ()
     (* a hack to make signal handler happen now *)
     ; threadSwitchEndAtomic (Thread.current ())
+    ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat)
     ; assertAtomic "end doPromoteNow" 0
     )
 
