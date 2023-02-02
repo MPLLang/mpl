@@ -56,9 +56,10 @@ struct
   (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 4
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 3)
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 100
+  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 95)
   val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
+  val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
 
   (* val activatePar = parseFlag "activate-par" *)
   (* val heartbeatMicroseconds =
@@ -806,6 +807,7 @@ struct
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
             ; addSpareHeartbeats spareHeartbeatsGiven
+            ; tryConsumeSpareHeartbeats localJoinCost
             (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
             ; let

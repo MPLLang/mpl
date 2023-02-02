@@ -198,6 +198,16 @@ void GC_handler (int signum) {
   s->signalsInfo.signalIsPending = TRUE;
   sigaddset (&s->signalsInfo.signalsPending, signum);
 
+  // if (s->atomicState == 0) {
+  //   s->limit = 0;
+  //   s->signalsInfo.signalIsPending = TRUE;
+  //   sigaddset (&s->signalsInfo.signalsPending, signum);
+  // }
+  // else if (signum != SIGALRM || signum != SIGUSR1) {
+  //   s->signalsInfo.signalIsPending = TRUE;
+  //   sigaddset (&s->signalsInfo.signalsPending, signum);
+  // }
+
   int me = Proc_processorNumber(s);
 
   if (s->controls->heartbeatStats && (signum == SIGALRM || signum == SIGUSR1)) {
