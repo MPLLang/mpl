@@ -114,7 +114,7 @@ void GC_sendHeartbeatToSelf(GC_state s) {
   if (s->atomicState == 0)
     s->limit = 0;
   s->signalsInfo.signalIsPending = TRUE;
-  sigaddset (&s->signalsInfo.signalsPending, SIGUSR1);
+  sigaddset (&s->signalsInfo.signalsPending, SIGUSR2);
 
   leave(s);
 }

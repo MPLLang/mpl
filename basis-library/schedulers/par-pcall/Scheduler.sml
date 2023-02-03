@@ -57,7 +57,7 @@ struct
   val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
 
   val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 100
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 95)
+  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 10)
   val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
   val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
 
@@ -144,7 +144,7 @@ struct
     ; sendHeartbeatToSelf ()
     (* a hack to make signal handler happen now *)
     ; threadSwitchEndAtomic (Thread.current ())
-    ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat)
+    (* ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat) *)
     ; assertAtomic "end doPromoteNow" 0
     )
 
@@ -806,7 +806,7 @@ struct
             ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
-            ; addSpareHeartbeats spareHeartbeatsGiven
+            (* ; addSpareHeartbeats spareHeartbeatsGiven *)
             ; tryConsumeSpareHeartbeats localJoinCost
             (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
@@ -865,44 +865,47 @@ struct
      * handler fn definitions
      *)
 
-    fun handler msg =
-      MLton.Signal.Handler.inspectInterrupted (fn thread: Thread.t =>
-        let
-          val _ = addSpareHeartbeats wealthPerHeartbeat
+    fun heartbeatHandler generateWealth (thread: Thread.t) =
+      let
+        val _ =
+          if generateWealth then
+            (addSpareHeartbeats wealthPerHeartbeat; ())
+          else ()
 
-          fun loop i =
-            if
-              currentSpareHeartbeats () >= spawnCost
-              andalso i < numSpawnsPerHeartbeat
-              andalso maybeSpawn thread
-            then
-              ( tryConsumeSpareHeartbeats spawnCost; loop (i+1) )
-              (* loop (i+1) *)
-            else
-              i
+        fun loop i =
+          if
+            currentSpareHeartbeats () >= spawnCost
+            andalso i < numSpawnsPerHeartbeat
+            andalso maybeSpawn thread
+          then
+            ( tryConsumeSpareHeartbeats spawnCost; loop (i+1) )
+            (* loop (i+1) *)
+          else
+            i
 
-          val numSpawned = loop 0
+        val numSpawned = loop 0
+      in
+        ()
+      end
 
-          (* val _ = if maybeSpawn thread then (tryConsumeSpareHeartbeats 0w1; ()) else () *)
-
-          (* val _ = 
-            dbgmsg''' (fn _ => "promoted " ^ Int.toString numSpawned ^ "; " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares remaining") *)
-        in
-          ()
-        end)
+    (* fun handler msg =
+      MLton.Signal.Handler.inspectInterrupted heartbeatHandler *)
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
       *)
     val _ = MLton.Signal.setHandler
       ( MLton.Itimer.signal MLton.Itimer.Real
-      , handler "SIGALRM"
+      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler true)
       )
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
-      , handler "SIGUSR1"
+      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler true)
       )
-
+    val _ = MLton.Signal.setHandler
+      ( Posix.Signal.usr2
+      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler false)
+      )
   
     (* ===================================================================
      * fork definition
