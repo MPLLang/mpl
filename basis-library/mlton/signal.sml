@@ -241,6 +241,7 @@ structure Handler =
 
 
             val () = MLtonThread.setSimpleSignalHandler maybeFastHandler
+            (* val () = MLtonThread.setSimpleSignalHandler normalHandler *)
          in
             Handler
          end
