@@ -508,8 +508,8 @@ struct
 
     fun choice {cpu, gpu = gpuTask} =
       if amGpuManager () then
-        ( dbgmsg'' (fn _ => "choice: gpu")
-        ; doGpuTask gpuTask
+        ( (*dbgmsg'' (fn _ => "choice: gpu")
+        ;*) doGpuTask gpuTask
         )
       else if queueSize () > 0 then
         (* this is a limitation of current runtime/scheduler interface; we're not allowed
@@ -526,19 +526,19 @@ struct
         val selfTask = Continuation (thread, depth)
         val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask)
       in
-        if sendSucceeded then (dbgmsg'' (fn _ => "choice: send succeeded"); returnToSched ()) else ();
-        dbgmsg'' (fn _ => "choice: after send");
+        if sendSucceeded then ((*dbgmsg'' (fn _ => "choice: send succeeded");*) returnToSched ()) else ();
+        (*dbgmsg'' (fn _ => "choice: after send");*)
 
         (* When we resume here, we (hopefully) are on the gpuManager, so we have
          * another attempt at the cpu/gpu choice.
          *)
         if not (amGpuManager ()) then
-          ( dbgmsg'' (fn _ => "choice: cpu after send")
-          ; cpu ()
+          ( (*dbgmsg'' (fn _ => "choice: cpu after send")
+          ;*) cpu ()
           )
         else
           let
-            val _ = dbgmsg'' (fn _ => "choice: gpu after send")
+            (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
             val result = doGpuTask gpuTask
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
@@ -549,8 +549,8 @@ struct
             val selfTask = Continuation (thread, depth)
             val sendSucceeded = RingBuffer.pushBot (hybridDoneQueue, selfTask)
           in
-            if sendSucceeded then (dbgmsg'' (fn _ => "choice: send back succeeded"); returnToSched ()) else ();
-            dbgmsg'' (fn _ => "choice: after send back");
+            if sendSucceeded then ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ()) else ();
+            (* dbgmsg'' (fn _ => "choice: after send back"); *)
             result
           end
       end
