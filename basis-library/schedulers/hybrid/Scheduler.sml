@@ -300,6 +300,16 @@ struct
   structure ForkJoin =
   struct
 
+    datatype ('package, 'result) gpu_task =
+      G of
+        { spawn: unit -> 'package
+        , poll: 'package -> bool
+        , finish: 'package -> 'result
+        }
+
+    fun gpu {spawn, poll, finish} =
+      G {spawn = spawn, poll = poll, finish = finish}
+
     datatype 'a result =
       Finished of 'a
     | Raised of exn
@@ -466,8 +476,10 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
+        if amGpuManager () then
+          (f (), g ())
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
+        else if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
           forkGC thread depth (fn _ => fork' {ccOkayAtThisDepth=false} (f, g))
         else if depth < Queue.capacity andalso depthOkayForDECheck depth then
           parfork thread depth (f, g)
@@ -480,10 +492,24 @@ struct
     fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
 
 
-    fun choice {cpu, gpu} =
+    fun doGpuTask (G {spawn, poll, finish}) =
+      let
+        val package = spawn ()
+
+        fun loopWaitForGpu () =
+          if poll package then
+            finish package
+          else
+            loopWaitForGpu ()
+      in
+        loopWaitForGpu ()
+      end
+
+
+    fun choice {cpu, gpu = gpuTask} =
       if amGpuManager () then
         ( dbgmsg'' (fn _ => "choice: gpu")
-        ; gpu ()
+        ; doGpuTask gpuTask
         )
       else if queueSize () > 0 then
         (* this is a limitation of current runtime/scheduler interface; we're not allowed
@@ -498,12 +524,7 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
         val selfTask = Continuation (thread, depth)
-        
-        val sendSucceeded =
-          ( RingBuffer.pushBot (hybridTaskQueue, selfTask)
-          ; true
-          )
-          handle RingBuffer.Full => false
+        val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask)
       in
         if sendSucceeded then (dbgmsg'' (fn _ => "choice: send succeeded"); returnToSched ()) else ();
         dbgmsg'' (fn _ => "choice: after send");
@@ -518,7 +539,7 @@ struct
         else
           let
             val _ = dbgmsg'' (fn _ => "choice: gpu after send")
-            val result = gpu ()
+            val result = doGpuTask gpuTask
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
              * send this task back to a CPU thread.
@@ -526,11 +547,7 @@ struct
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val selfTask = Continuation (thread, depth)
-            val sendSucceeded =
-              ( RingBuffer.pushBot (hybridDoneQueue, selfTask)
-              ; true
-              )
-              handle RingBuffer.Full => false
+            val sendSucceeded = RingBuffer.pushBot (hybridDoneQueue, selfTask)
           in
             if sendSucceeded then (dbgmsg'' (fn _ => "choice: send back succeeded"); returnToSched ()) else ();
             dbgmsg'' (fn _ => "choice: after send back");
@@ -577,13 +594,9 @@ struct
         let
           fun gpuManagerFindWorkLoop tries =
             if tries = P * 100 then
-              (* try to do CPU work very rarely *)
-              case RingBuffer.popTop hybridDoneQueue of
-                SOME x => (x, ~1)
-              | NONE =>
-                  ( OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
-                  ; gpuManagerFindWorkLoop 0
-                  )
+              ( OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
+              ; gpuManagerFindWorkLoop 0
+              )
             else
               case RingBuffer.popTop hybridTaskQueue of
                 SOME t => (t, ~1)
