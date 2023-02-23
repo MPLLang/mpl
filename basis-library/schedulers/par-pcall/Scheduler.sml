@@ -806,7 +806,7 @@ struct
             ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
-            ; addSpareHeartbeats spareHeartbeatsGiven
+            (* ; addSpareHeartbeats spareHeartbeatsGiven *)
             ; tryConsumeSpareHeartbeats localJoinCost
             (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
