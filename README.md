@@ -13,13 +13,14 @@ MPL-EM exploits disentanglement at the granularity of memory objects. Specifical
 it distinguishes between disentangled and entangled objects and handles disentangled objects very efficiently,
 while incurring modest overhead for entangled objects, which are rare.
 
+
 We note, for the artifact reviewers, that MPL does not support entanglement but MPL-EM (the language presented in the paper) does. We are in the process of merging MPL-EM and MPL. In the meantime, we have two separate branches within the same [repo](https://github.com/MPLLang/mpl). MPL is at the master branch and MPL-EM is at pldi23-artifact.
 
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
-Take a look at `examples/` to see these primitives in action and run MPL
-programs.
+To directly run some examples,
+please read `examples/README.md` which provides instructions to run programs.
 
 
 ### The `ForkJoin` Structure
