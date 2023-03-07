@@ -238,7 +238,9 @@ struct
       if not (Queue.pollHasWork queue) then
         NONE
       else
-        Queue.tryPopTop queue
+        case Queue.tryPopTop queue of
+          NONE => NONE
+        | SOME (t, _) => SOME t
     end
 
   fun communicate () = ()
@@ -599,7 +601,7 @@ struct
               )
             else
               case RingBuffer.popTop hybridTaskQueue of
-                SOME t => (t, ~1)
+                SOME t => t
               | NONE => gpuManagerFindWorkLoop (tries+1)
 
           fun stealLoop tries =
@@ -612,13 +614,13 @@ struct
               val friend = randomOtherId ()
             in
               case trySteal friend of
-                SOME (task, depth) => (task, depth)
+                SOME task => task
               | NONE =>
                   if not (isGpuManager friend) then
                     stealLoop (tries+1)
                   else
                   case RingBuffer.popTop hybridDoneQueue of
-                    SOME x => (x, ~1)
+                    SOME x => x
                   | NONE => stealLoop (tries+1)
             end
         in
@@ -649,7 +651,7 @@ struct
 
       fun acquireWork () : unit =
         let
-          val (task, _) = request ()
+          val task = request ()
         in
           case task of
             GCTask (thread, hh) =>
