@@ -1,82 +1,29 @@
 # MPL
 
-MaPLe (MPL) is an extension of the [MLton](http://mlton.org)
-compiler for Standard ML which implements support for
-nested (fork-join) parallelism. MPL generates executables with
-excellent multicore performance, utilizing a novel approach to
-memory management based on the theory of disentanglement
+MaPLe (MPL) is a compiler for standard ML that implements
+support for nested (fork-join) parallelism. MPL generates executables with
+excellent multicore performance because it utilizes the theory of disentanglement
+to manage memory of parallel programs.
 [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22)].
+It builds on the [MLton](http://mlton.org) compiler.
 
-MPL is research software and is being actively developed.
+Roughly speaking, the disentanglement property states that an object allocated
+by a thread may not be shared with a concurrently executing thread.
+MPL exploits disentanglement at the granularity of memory objects. Specifically,
+it distinguishes between disentangled and entangled objects and handles disentangled objects very efficiently,
+while incurring modest overhead for entangled objects, which are rare.
 
-If you are you interested in using MPL, consider checking
-out the [tutorial](https://github.com/MPLLang/mpl-tutorial).
-You might also be interested in exploring
-[`mpllib`](https://github.com/MPLLang/mpllib)
-(a library for MPL) and the
-[Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench).
-
-## Docker
-
-Try out MPL with Docker:
-```
-$ docker pull shwestrick/mpl
-$ docker run -it shwestrick/mpl /bin/bash
-...# examples/bin/primes @mpl procs 4 --
-```
-
-If you want to try out MPL by writing and compiling your own code, we recommend
-mounting a local directory inside the container. For example, here's how you
-can use MPL to compile and run your own `main.mlb` in the current directory.
-(To mount some other directory, replace `$(pwd -P)` with a different path.)
-```
-$ ls
-main.mlb
-$ docker run -it -v $(pwd -P):/root/mycode shwestrick/mpl /bin/bash
-...# cd /root/mycode
-...# mpl main.mlb
-...# ./main @mpl procs 4 --
-```
-
-
-## Build and Install (from source)
-
-### Requirements
-
-MPL has only been tested on Linux with x86-64. The following software is
-required.
- * [GCC](http://gcc.gnu.org)
- * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
- * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
- * binutils (`ar`, `ranlib`, `strip`, ...)
- * miscellaneous Unix utilities (`diff`, `find`, `grep`, `gzip`, `patch`, `sed`, `tar`, `xargs`, ...)
- * Standard ML compiler and tools:
-   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
-   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
-
-### Instructions
-
-The following builds the compiler at `build/bin/mpl`.
-```
-$ make all
-```
-
-After building, MPL can then be installed to `/usr/local`:
-```
-$ make install
-```
-or to a custom directory with the `PREFIX` option:
-```
-$ make PREFIX=/opt/mpl install
-```
+We note, for the artifact reviewers, that MPL did not support entanglement
+prior to our work. We do not elaborate on the differences between MPL and MPL* here
+and instead present the language.  The differences between MPL and MPL* are written in the paper.
+Here we use MPL to mean MPL*.
 
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
-Take a look at `examples/` to see these primitives in action.
+Take a look at `examples/` to see these primitives in action and run MPL
+programs.
 
-**Note**: Before writing any of your own code, make sure to read the section
-"Disentanglement" below.
 
 ### The `ForkJoin` Structure
 ```
@@ -198,52 +145,7 @@ argument `bar` using 4 pinned processors.
 $ foo @mpl procs 4 set-affinity -- bar
 ```
 
-## Disentanglement
-
-Currently, MPL only supports programs that are **disentangled**, which
-(roughly speaking) is the property that concurrent threads remain oblivious
-to each other's allocations [[3](#wyfa20)].
-
-Here are a number of different ways to guarantee that your code is
-disentangled.
-- (Option 1) Use only purely functional data (no `ref`s or `array`s). This is
-the simplest but most restrictive approach.
-- (Option 2) If using mutable data, use only non-pointer data. MPL guarantees
-that simple types (`int`, `word`, `char`, `real`, etc.) are never
-indirected through a
-pointer, so for example it is safe to use `int array`. Other types such as
-`int list array` and `int array array` should be avoided. This approach
-is very easy to check and is surprisingly general. Data races are fine!
-- (Option 3) Make sure that your program is race-free. This can be
-tricky to check but allows you to use any type of data. Many of our example
-programs are race-free.
-
-## Entanglement Detection
-
-Whenever a thread acquires a reference
-to an object allocated concurrently by some other thread, then we say that
-the two threads are **entangled**. This is a violation of disentanglement,
-which MPL currently does not allow.
-
-MPL has a built-in dynamic entanglement detector which is enabled by default.
-The entanglement detector monitors individual reads and writes during execution;
-if entanglement is found, the program will terminate with an error message.
-
-The entanglement detector is both "sound" and "complete": there are neither
-false negatives nor false positives. In other words, the detector always raises
-an alarm when entanglement occurs, and never raises an alarm otherwise. Note
-however that entanglement (and therefore also entanglement detection) can
-be execution-dependent: if your program is non-deterministic (e.g. racy),
-then entanglement may or may not occur depending on the outcome of a race
-condition. Similarly, entanglement could be input-dependent.
-
-Entanglement detection is highly optimized, and typically has negligible
-overhead (see [[5](#waa22)]). It can be disabled at compile-time by passing
-`-detect-entanglement false`; however, we recommend against doing so. MPL
-relies on entanglement detection to ensure memory safety. We recommend leaving
-entanglement detection enabled at all times.
-
-## Bugs and Known Issues
+## Known Issues
 
 ### Basis Library
 In general, the basis library has not yet been thoroughly scrubbed, and many
@@ -252,13 +154,6 @@ functions may not be safe for parallelism
 Some known issues:
 * `Int.toString` is racy when called in parallel.
 * `Real.fromString` may throw an error when called in parallel.
-
-### Garbage Collection
-* ([#115](https://github.com/MPLLang/mpl/issues/115)) The GC is currently
-disabled at the "top level" (outside any calls to `ForkJoin.par`).
-For highly parallel programs, this has generally not been a problem so far,
-but it can cause a memory explosion for programs that are mostly (or entirely)
-sequential.
 
 ## Unsupported MLton Features
 Many [MLton-specific features](http://mlton.org/MLtonStructure) are
