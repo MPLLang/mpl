@@ -206,12 +206,14 @@ struct
 
   type worker_local_data =
     { queue : task Queue.t
+    , sideQueue : task RingBuffer.t
     , schedThread : Thread.t option ref
     , gcTask: gctask_data option ref
     }
 
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
+    , sideQueue = RingBuffer.new {capacity=200}
     , schedThread = ref NONE
     , gcTask = ref NONE
     }
@@ -241,6 +243,20 @@ struct
         case Queue.tryPopTop queue of
           NONE => NONE
         | SOME (t, _) => SOME t
+    end
+
+  fun tryStealSide p =
+    let
+      val {sideQueue, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.popTop sideQueue  
+    end
+
+  fun tryPopSide p =
+    let
+      val {sideQueue, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.popBot sideQueue  
     end
 
   fun communicate () = ()
@@ -285,6 +301,23 @@ struct
       val {schedThread, ...} = vectorSub (workerLocalData, myId)
     in
       threadSwitch (Option.valOf (HM.refDerefNoBarrier schedThread))
+    end
+
+
+  fun moveAllTasksIntoSideQueue () =
+    let
+      val myId = myWorkerId ()
+      val {sideQueue, ...} = vectorSub (workerLocalData, myId)
+      fun loop () =
+        case trySteal myId of
+          NONE => ()
+        | SOME task =>
+            ( if RingBuffer.pushBot (sideQueue, task) then ()
+              else die (fn _ => "scheduler bug: side queue full")
+            ; loop ()
+            )
+    in
+      loop ()
     end
 
   
@@ -508,18 +541,15 @@ struct
       end
 
 
-    fun choice {cpu, gpu = gpuTask} =
+    fun choice (args as {cpu, gpu = gpuTask}) =
       if amGpuManager () then
         ( (*dbgmsg'' (fn _ => "choice: gpu")
         ;*) doGpuTask gpuTask
         )
       else if queueSize () > 0 then
-        (* this is a limitation of current runtime/scheduler interface; we're not allowed
-         * to become a stealer unless our deque is empty. *)
-        ( dbgmsg'' (fn _ => "choice: cpu yuck")
-        ; cpu ()
+        ( moveAllTasksIntoSideQueue ()
+        ; choice {cpu=cpu, gpu=gpuTask} (* this should succeed on second go, now that main deque is empty *)
         )
-
       else
       (* opportunity to send this to gpu manager and go try to work on something else *)
       let
@@ -616,6 +646,9 @@ struct
               case trySteal friend of
                 SOME task => task
               | NONE =>
+              case tryStealSide friend of
+                SOME task => task
+              | NONE =>
                   if not (isGpuManager friend) then
                     stealLoop (tries+1)
                   else
@@ -627,7 +660,9 @@ struct
           if amGpuManager () then
             gpuManagerFindWorkLoop 0
           else
-            stealLoop 0
+          case tryPopSide myId of
+            SOME task => task
+          | NONE => stealLoop 0
         end
 
       (* ------------------------------------------------------------------- *)
