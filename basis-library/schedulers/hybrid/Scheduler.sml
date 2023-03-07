@@ -24,7 +24,7 @@ struct
   type gctask_data = Thread.t * (hh_address ref)
 
   datatype task =
-    NormalTask of unit -> unit
+    NormalTask of (unit -> unit) * int (* function and depth *)
   | Continuation of Thread.t * int
   | GCTask of gctask_data
 
@@ -357,7 +357,7 @@ struct
             else
               returnToSched ()
           end
-        val _ = push (NormalTask g')
+        val _ = push (NormalTask (g', depth))
         (* val _ =
               if (depth < internalGCThresh) then
                 let
@@ -649,7 +649,7 @@ struct
 
       fun acquireWork () : unit =
         let
-          val (task, depth) = request ()
+          val (task, _) = request ()
         in
           case task of
             GCTask (thread, hh) =>
@@ -665,7 +665,7 @@ struct
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
-          | NormalTask t =>
+          | NormalTask (t, depth) =>
               let
                 val taskThread = Thread.copy prototypeThread
               in
