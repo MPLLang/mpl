@@ -1,7 +1,7 @@
 # MPL
 
-MPL* is a compiler for standard ML that implements
-support for nested (fork-join) parallelism. MPL* generates executables with
+MPL-EM (MPL\*) is a compiler for standard ML that implements
+support for nested (fork-join) parallelism. MPL-EM generates executables with
 excellent multicore performance because it utilizes the theory of disentanglement
 to manage memory of parallel programs.
 [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22)].
@@ -9,13 +9,11 @@ It builds on the [MPL](https://github.com/MPLLang/mpl) compiler.
 
 Roughly speaking, the disentanglement property states that an object allocated
 by a thread may not be shared with a concurrently executing thread.
-MPL* exploits disentanglement at the granularity of memory objects. Specifically,
+MPL-EM exploits disentanglement at the granularity of memory objects. Specifically,
 it distinguishes between disentangled and entangled objects and handles disentangled objects very efficiently,
 while incurring modest overhead for entangled objects, which are rare.
 
-We note, for the artifact reviewers, that MPL does not support entanglement but MPL* (the language presented in the paper) does. We are in the process of merging MPL* and MPL. In the meantime, we have two separate branches within the same [repo](https://github.com/MPLLang/mpl). MPL is at the master branch and MPL* is at pldi23-artifact. In this tour of MPL*, we call it MPL
-because the difference between them is not important.
-
+We note, for the artifact reviewers, that MPL does not support entanglement but MPL-EM (the language presented in the paper) does. We are in the process of merging MPL-EM and MPL. In the meantime, we have two separate branches within the same [repo](https://github.com/MPLLang/mpl). MPL is at the master branch and MPL-EM is at pldi23-artifact.
 
 ## Parallel and Concurrent Extensions
 
