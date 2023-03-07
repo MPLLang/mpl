@@ -6,6 +6,36 @@
 structure Scheduler =
 struct
 
+  val P = MLton.Parallel.numberOfProcessors
+  val myWorkerId = MLton.Parallel.processorNumber
+
+  fun die strfn =
+    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
+    ; OS.Process.exit OS.Process.failure
+    )
+
+  fun search key args =
+    case args of
+      [] => NONE
+    | x :: args' =>
+        if key = x
+        then SOME args'
+        else search key args'
+
+  fun parseFlag key =
+    case search ("--" ^ key) (CommandLine.arguments ()) of
+      NONE => false
+    | SOME _ => true
+
+  fun parseInt key default =
+    case search ("-" ^ key) (CommandLine.arguments ()) of
+      NONE => default
+    | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
+    | SOME (s :: _) =>
+        case Int.fromString s of
+          NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
+        | SOME x => x
+
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
@@ -45,10 +75,8 @@ struct
 
   val maxCCDepth = MPL.GC.getControlMaxCCDepth ()
 
-  val P = MLton.Parallel.numberOfProcessors
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
                           ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
-  val myWorkerId = MLton.Parallel.processorNumber
 
   (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
   (* fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old) *)
@@ -59,14 +87,13 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
+  
+  val gpuPassIntervalMicroseconds = parseInt "sched-gpu-pass-interval-us" 1000
+  val gpuPassIntervalSeconds = Real.fromInt gpuPassIntervalMicroseconds / 1000000.0
+
   (* ========================================================================
    * DEBUGGING
    *)
-
-  fun die strfn =
-    ( print (Int.toString (myWorkerId ()) ^ ": " ^ strfn ())
-    ; OS.Process.exit OS.Process.failure
-    )
 
   val doDebugMsg = false
 
@@ -531,13 +558,30 @@ struct
       let
         val package = spawn ()
 
-        fun loopWaitForGpu () =
+        fun tryPassOne () =
+          case RingBuffer.popBot hybridTaskQueue of
+            NONE => ()
+          | SOME task =>
+              if RingBuffer.pushBot (hybridDoneQueue, task) then ()
+              else die (fn _ => "scheduler bug: hybridDoneQueue full")
+
+        fun loopWaitForGpu lastTick =
           if poll package then
             finish package
           else
-            loopWaitForGpu ()
+            let
+              val tickNow = Time.now ()
+              val elapsed = Time.toReal (Time.- (tickNow, lastTick))
+            in
+              if elapsed < gpuPassIntervalSeconds then
+                loopWaitForGpu lastTick
+              else
+                ( tryPassOne ()
+                ; loopWaitForGpu tickNow
+                )
+            end
       in
-        loopWaitForGpu ()
+        loopWaitForGpu (Time.now ())
       end
 
 
