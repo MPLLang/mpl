@@ -5,7 +5,7 @@ Each example program has a corresponding subdirectory in `src/`.
 The `lib/` directory contains common functions used across all examples.
 
 To build everything, run `make` or `make -j`. Compiled programs are
-put into a `bin/`.
+put into a `bin/`. You can also build programs one at a time as shown below.
 
 ## Fibonacci
 
