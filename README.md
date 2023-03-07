@@ -1,22 +1,21 @@
 # MPL
 
-MaPLe (MPL) is a compiler for standard ML that implements
-support for nested (fork-join) parallelism. MPL generates executables with
+MPL* is a compiler for standard ML that implements
+support for nested (fork-join) parallelism. MPL* generates executables with
 excellent multicore performance because it utilizes the theory of disentanglement
 to manage memory of parallel programs.
 [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22)].
-It builds on the [MLton](http://mlton.org) compiler.
+It builds on the [MPL](https://github.com/MPLLang/mpl) compiler.
 
 Roughly speaking, the disentanglement property states that an object allocated
 by a thread may not be shared with a concurrently executing thread.
-MPL exploits disentanglement at the granularity of memory objects. Specifically,
+MPL* exploits disentanglement at the granularity of memory objects. Specifically,
 it distinguishes between disentangled and entangled objects and handles disentangled objects very efficiently,
 while incurring modest overhead for entangled objects, which are rare.
 
-We note, for the artifact reviewers, that MPL did not support entanglement
-prior to our work. We do not elaborate on the differences between MPL and MPL* here
-and instead present the language.  The differences between MPL and MPL* are written in the paper.
-Here we use MPL to mean MPL*.
+We note, for the artifact reviewers, that MPL does not support entanglement but MPL* (the language presented in the paper) does. We are in the process of merging MPL* and MPL. In the meantime, we have two separate branches within the same [repo](https://github.com/MPLLang/mpl). MPL is at the master branch and MPL* is at pldi23-artifact. In this tour of MPL*, we call it MPL
+because the difference between them is not important.
+
 
 ## Parallel and Concurrent Extensions
 
@@ -110,8 +109,6 @@ by default.
 * `-debug true -debug-runtime true -keep g` For debugging, keeps the generated
 C files and uses the debug version of the runtime (with assertions enabled).
 The resulting executable is somewhat peruse-able with tools like `gdb`.
-* `-detect-entanglement true` enables the dynamic entanglement detector.
-See below for more information.
 
 For example:
 ```
