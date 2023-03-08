@@ -36,6 +36,15 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
+  fun parseReal key default =
+    case search ("-" ^ key) (CommandLine.arguments ()) of
+      NONE => default
+    | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
+    | SOME (s :: _) =>
+        case Real.fromString s of
+          NONE => die (fn _ => "Cannot parse real from \"-" ^ key ^ " " ^ s ^ "\"")
+        | SOME x => x
+
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
@@ -87,9 +96,7 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  
-  val gpuPassIntervalMicroseconds = parseInt "sched-gpu-pass-interval-us" 1000
-  val gpuPassIntervalSeconds = Real.fromInt gpuPassIntervalMicroseconds / 1000000.0
+  val gpuPayout = parseReal "sched-gpu-payout" 0.001
 
   (* ========================================================================
    * DEBUGGING
@@ -226,6 +233,25 @@ struct
   
   val hybridDoneQueue: task RingBuffer.t =
     RingBuffer.new {capacity=1000}
+
+  val idlenessCounter: int ref = ref 0
+  
+  fun updateIdlenessCounterWith (f: int -> int) =
+    let
+      fun loop old =
+        let
+          val new = f old
+          val old' = MLton.Parallel.compareAndSwap idlenessCounter (old, new)
+        in
+          if MLton.eq (old, old') then
+            ()
+          else
+            loop old'
+        end
+        (* handle Overflow => () *)
+    in
+      loop (!idlenessCounter)
+    end
 
   (* ========================================================================
    * SCHEDULER LOCAL DATA
@@ -556,6 +582,8 @@ struct
 
     fun doGpuTask (G {spawn, poll, finish}) =
       let
+        val _ = updateIdlenessCounterWith (fn _ => 0)
+
         val package = spawn ()
 
         fun tryPassOne () =
@@ -571,12 +599,14 @@ struct
           else
             let
               val tickNow = Time.now ()
-              val elapsed = Time.toReal (Time.- (tickNow, lastTick))
+              val elapsed = LargeInt.toInt (Time.toMicroseconds (Time.- (tickNow, lastTick)))
+              val threshold = Real.ceil (gpuPayout * Real.fromInt elapsed)
             in
-              if elapsed < gpuPassIntervalSeconds then
+              if !idlenessCounter < threshold then
                 loopWaitForGpu lastTick
               else
                 ( tryPassOne ()
+                ; updateIdlenessCounterWith (fn x => x - threshold)
                 ; loopWaitForGpu tickNow
                 )
             end
@@ -680,9 +710,18 @@ struct
 
           fun stealLoop tries =
             if tries = P * 100 then
-              ( OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
-              ; stealLoop 0
-              )
+              let
+                (* val tickNow = Time.toReal (Time.now ()) *)
+                (* val elapsed = tickNow - lastTick *)
+                (* val elapsedMilli = Real.floor (elapsed * 1000.0) *)
+              in
+                updateIdlenessCounterWith (fn x => x + 1);
+
+                OS.Process.sleep
+                  (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
+
+                stealLoop 0
+              end
             else
             let
               val friend = randomOtherId ()
@@ -696,9 +735,9 @@ struct
                   if not (isGpuManager friend) then
                     stealLoop (tries+1)
                   else
-                  case RingBuffer.popTop hybridDoneQueue of
-                    SOME x => x
-                  | NONE => stealLoop (tries+1)
+                    case RingBuffer.popTop hybridDoneQueue of
+                      SOME x => x
+                    | NONE => stealLoop (tries+1)
             end
         in
           if amGpuManager () then
@@ -706,7 +745,7 @@ struct
           else
           case tryPopSide myId of
             SOME task => task
-          | NONE => stealLoop 0
+          | NONE => stealLoop (*(Time.toReal (Time.now ()))*) 0
         end
 
       (* ------------------------------------------------------------------- *)
