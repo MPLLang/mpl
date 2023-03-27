@@ -8,6 +8,8 @@
  */
 #ifdef DETECT_ENTANGLEMENT
 
+// read barrier for mutable objects
+// the argument dst points to object src
 objptr Assignable_decheckObjptr(objptr dst, objptr src)
 {
   GC_state s = pthread_getspecific(gcstate_key);
@@ -16,16 +18,25 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   pointer dstp = objptrToPointer(dst, NULL);
   HM_HierarchicalHeap dstHH = HM_getLevelHead(HM_getChunkOf(dstp));
 
+
+  /* if src is an unboxed value, or if it is scheduler data (depth 0),
+   * or dst is not in the frontier,
+   * then no entanglement checking required.*/
   if (!isObjptr(src) || HM_HH_getDepth(dstHH) == 0 || !ES_contains(NULL, dst))
   {
     return src;
   }
 
   // HM_EBR_leaveQuiescentState(s);
+
   if (!decheck(s, src))
   {
     assert (isMutable(s, dstp));
     s->cumulativeStatistics->numEntanglements++;
+    /* the src object is entangled and its entanglement region may be pinned*
+     * the function manage_entangled (decheck.c: 435) is called pin_region in the PLDI paper
+     * Efficient parallel programming with effects.*/
+    // the returned object new_src will differ from src if src has been relocated by garbage collection
     new_src = manage_entangled(s, src, getThreadCurrent(s)->decheckState);
     assert (isPinned(new_src));
   }
@@ -34,6 +45,8 @@ objptr Assignable_decheckObjptr(objptr dst, objptr src)
   return new_src;
 }
 
+
+// read barrier for mutable arrays
 objptr Assignable_readBarrier(
   GC_state s,
   objptr obj,
@@ -95,6 +108,7 @@ static inline bool decheck_opt_fast (GC_state s, pointer p) {
 }
 
 
+/*write barrier for updates*/
 void Assignable_writeBarrier(
   GC_state s,
   objptr dst,

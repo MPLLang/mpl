@@ -320,6 +320,8 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 #ifdef DETECT_ENTANGLEMENT
 
 #if ASSERT
+// traverse the entanglement region and check all pinning and suspect invariants
+// this function is super slow, don't call unless debugging.
 void traverseAndCheck(
   GC_state s,
   __attribute__((unused)) objptr *opp,
@@ -465,6 +467,7 @@ objptr manage_entangled(
     current_pt != PIN_ANY ||
     current_ud > unpinDepth;
 
+  /* skip entanglement management on scheduler objects (depth = 0)*/
   if (current_pt != PIN_NONE && current_ud == 0)
   {
     return ptr;
@@ -478,9 +481,14 @@ objptr manage_entangled(
       .unpinDepth = newUnpinDepth,
       .firstCall = !(current_pt == PIN_DOWN && current_ud == 1)
     };
+    // this procedure loops and pins the entanglement region of ptr
     make_entangled(s, &ptr, ptr, (void*) &mea);
   }
   else {
+    /* the object is already pinned and marked entangled.
+     * It may not be marked as an entangled suspect because another thread maybe slow.
+     * Just ensure that if mutable, the object is a suspect (named entanglement candidates in the paper).
+     * see entanglement-supects.c */
     if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {
       HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), unpinDepth);
       ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
@@ -488,7 +496,6 @@ objptr manage_entangled(
     }
     traverseAndCheck(s, &ptr, ptr, NULL);
   }
-
 
   traverseAndCheck(s, &ptr, ptr, NULL);
   return ptr;
