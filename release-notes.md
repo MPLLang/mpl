@@ -15,5 +15,5 @@ instructing the collector not to move any object of the region
 The write barrier accounts for inter-heap pointers created as a result of mutable updates by adding
 them to the remembered set of the target heaps (see `Assignable_writeBarrier` in `runtime/gc/assign.c`).
 The collection algorithm is a hybrid algorithm, which keeps the pinned entangled objects in place
-and relocates disentangled objects to compact them (see function `markAndAdd` in `hierarchical-heap-collection.c`).
+and relocates disentangled objects to compact them (see function `markAndAdd` and `HM_HHC_collectLocal` in `hierarchical-heap-collection.c`).
 
