@@ -11,6 +11,10 @@ local
     signature ARRAY_SLICE_EXTRA
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
+
+    structure PrimitiveFFI
+    structure C_Time
+    structure C_SUSeconds
   end
 
   local
