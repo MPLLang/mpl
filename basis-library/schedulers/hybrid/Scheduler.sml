@@ -45,6 +45,24 @@ struct
           NONE => die (fn _ => "Cannot parse real from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
+  fun timeNowMicroseconds () : LargeInt.int =
+    let
+      val sec = ref (C_Time.castFromFixedInt 0)
+      val usec = ref (C_SUSeconds.castFromFixedInt 0)
+      val _ =
+        if ~1 <> PrimitiveFFI.Time.getTimeOfDay (sec, usec) then ()
+        else die (fn _ => "scheduler bug: getTimeOfDay failed")
+    in
+      (1000000 * C_Time.toLargeInt (!sec))
+      +
+      C_SUSeconds.toLargeInt (!usec)
+    end
+
+  val programStartTimeMicroseconds = timeNowMicroseconds ()
+
+  fun timeNowMicrosecondsSinceProgramStart () : Int64.int =
+    Int64.fromLarge (timeNowMicroseconds () - programStartTimeMicroseconds)
+
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
@@ -234,17 +252,17 @@ struct
   val hybridDoneQueue: task RingBuffer.t =
     RingBuffer.new {capacity=1000}
 
-  val stealAttempts = Array.tabulate (P, fn _ => 0)
+  val stealTimeCounters: Int64.int array = Array.tabulate (P, fn _ => 0)
 
-  fun incrementStealAttempts () =
+  fun addStealTime delta =
     let
       val myId = myWorkerId ()
     in
-      Array.update (stealAttempts, myId, 1 + Array.sub (stealAttempts, myId))
+      Array.update (stealTimeCounters, myId, delta + Array.sub (stealTimeCounters, myId))
     end
 
-  fun currentStealAttemptCount () =
-    Array.foldl op+ 0 stealAttempts
+  fun currentStealTimeSpent () =
+    Array.foldl op+ 0 stealTimeCounters
 
   (* val idlenessCounter: int ref = ref 0
   
@@ -610,25 +628,26 @@ struct
             finish package
           else
             let
-              val tickNow = Time.now ()
-              val elapsed = LargeInt.toInt (Time.toMicroseconds (Time.- (tickNow, lastTick)))
-              val thisStealSample = currentStealAttemptCount ()
-              val numStealsSinceLastTick = thisStealSample - lastTickStealSample
-              val threshold = Real.ceil (gpuPayout * Real.fromInt elapsed)
+              val tickNow = timeNowMicrosecondsSinceProgramStart ()
+              val elapsed = Int64.toInt (tickNow - lastTick)
+              val thisStealSample = currentStealTimeSpent ()
+              val stealTimeSinceLastTick = thisStealSample - lastTickStealSample
+              val threshold =
+                Int64.fromInt (Real.ceil (gpuPayout * Real.fromInt (Int64.toInt elapsed)))
             in
-              if elapsed < 100 orelse numStealsSinceLastTick + remainingSteals < threshold then
+              if elapsed < 100 orelse stealTimeSinceLastTick + remainingSteals < threshold then
                 loopWaitForGpu lastTickStealSample remainingSteals lastTick
               else
                 let
-                  val newRemaining = numStealsSinceLastTick + remainingSteals - threshold
+                  val newRemaining = stealTimeSinceLastTick + remainingSteals - threshold
                 in
                   if not (tryPassOne ()) then ()
-                  else print ("passing! numStealSinceLastTick=" ^ Int.toString numStealsSinceLastTick ^ " remainingSteals=" ^ Int.toString remainingSteals ^ " threshold=" ^ Int.toString threshold ^ "\n");
+                  else print ("passing! numStealSinceLastTick=" ^ Int64.toString stealTimeSinceLastTick ^ " remainingSteals=" ^ Int64.toString remainingSteals ^ " threshold=" ^ Int64.toString threshold ^ "\n");
                   loopWaitForGpu thisStealSample newRemaining tickNow
                 end
             end
       in
-        loopWaitForGpu (currentStealAttemptCount ()) 0 (Time.now ())
+        loopWaitForGpu (currentStealTimeSpent ()) 0 (timeNowMicrosecondsSinceProgramStart ())
       end
 
 
@@ -725,7 +744,7 @@ struct
                 SOME t => t
               | NONE => gpuManagerFindWorkLoop (tries+1)
 
-          fun stealLoop tries =
+          fun stealLoop tries lastTick =
             if tries = P * 100 then
               let
                 (* val tickNow = Time.toReal (Time.now ()) *)
@@ -737,14 +756,24 @@ struct
                 OS.Process.sleep
                   (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
 
-                stealLoop 0
+                stealLoop 0 (timeNowMicrosecondsSinceProgramStart ())
               end
             else
             let
               val friend = randomOtherId ()
+              
+              val lastTick =
+                if tries mod 10 <> 9 then
+                  lastTick
+                else
+                let
+                  val tickNow = timeNowMicrosecondsSinceProgramStart ()
+                  val delta = tickNow - lastTick
+                in
+                  addStealTime delta;
+                  tickNow
+                end
             in
-              incrementStealAttempts ();
-
               case trySteal friend of
                 SOME task => task
               | NONE =>
@@ -752,11 +781,11 @@ struct
                 SOME task => task
               | NONE =>
                   if not (isGpuManager friend) then
-                    stealLoop (tries+1)
+                    stealLoop (tries+1) lastTick
                   else
                     case RingBuffer.popTop hybridDoneQueue of
                       SOME x => x
-                    | NONE => stealLoop (tries+1)
+                    | NONE => stealLoop (tries+1) lastTick
             end
         in
           if amGpuManager () then
@@ -764,7 +793,7 @@ struct
           else
           case tryPopSide myId of
             SOME task => task
-          | NONE => stealLoop (*(Time.toReal (Time.now ()))*) 0
+          | NONE => stealLoop 0 (timeNowMicrosecondsSinceProgramStart ())
         end
 
       (* ------------------------------------------------------------------- *)
