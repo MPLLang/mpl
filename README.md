@@ -19,14 +19,19 @@ We note, for the artifact reviewers, that MPL does not support entanglement but 
 
 ## Build and Install (from source)
 
+MPL has only been tested on Linux with x86-64. We list the compilation instructions
+and the software requirements below. We also provide a Dockerfile that
+you can use to build a docker container,
+or just to get commands and references to the software requirements.
+
 ### Requirements
 
-MPL has only been tested on Linux with x86-64. The following software is
+The following software is
 required.
  * [GCC](http://gcc.gnu.org)
  * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
  * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
- * binutils (`ar`, `ranlib`, `strip`, ...)
+ * binutils (`ar`, `ranlib`, `strip`)
  * Standard ML compiler and tools:
    - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
    - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
@@ -46,7 +51,7 @@ $ make install
 or to a custom directory with the `PREFIX` option:
 ```
 $ make PREFIX=/opt/mpl install
-
+```
 
 ## Parallel and Concurrent Extensions
 
