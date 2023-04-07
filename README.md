@@ -16,6 +16,38 @@ while incurring modest overhead for entangled objects, which are rare.
 
 We note, for the artifact reviewers, that MPL does not support entanglement but MPL-EM (the language presented in the paper) does. We are in the process of merging MPL-EM and MPL. In the meantime, we have two separate branches within the same [repo](https://github.com/MPLLang/mpl). MPL is at the master branch and MPL-EM is at pldi23-artifact.
 
+
+## Build and Install (from source)
+
+### Requirements
+
+MPL has only been tested on Linux with x86-64. The following software is
+required.
+ * [GCC](http://gcc.gnu.org)
+ * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
+ * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
+ * binutils (`ar`, `ranlib`, `strip`, ...)
+ * Standard ML compiler and tools:
+   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
+   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
+ * RECOMMENDED: miscellaneous utilities (`git`, `vim`, `time`, `numactl`, `curl`, `jq`, `zip`)
+
+### Instructions
+
+The following builds the compiler at `build/bin/mpl`.
+```
+$ make all
+```
+
+After building, MPL can then be installed to `/usr/local`:
+```
+$ make install
+```
+or to a custom directory with the `PREFIX` option:
+```
+$ make PREFIX=/opt/mpl install
+
+
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
