@@ -867,6 +867,18 @@ struct
 
     fun heartbeatHandler generateWealth (thread: Thread.t) =
       let
+        (* TODO
+         *   - generateWealth=true: this is a heartbeat
+         *   - generateWealth=false: this is a pcall check
+         *
+         * at heartbeat, if we had at least one excess token already, then
+         * no need to walk the stack -- no pcall frames exist.
+         *
+         * at a pcall check, it should be possible to not walk the whole
+         * stack. there should be exactly one pcall frame at the top of the
+         * stack.
+         *)
+
         val _ =
           if generateWealth then
             (addSpareHeartbeats wealthPerHeartbeat; ())
