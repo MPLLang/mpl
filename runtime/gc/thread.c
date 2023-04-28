@@ -211,7 +211,8 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
-  pointer pframe = findPromotableFrame(s, fromStack);
+  // pointer pframe = findPromotableFrame(s, fromStack);
+  pointer pframe = findYoungestPromotableFrame(s, fromStack);
   leave(s);
   return NULL != pframe;
 }

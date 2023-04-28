@@ -54,9 +54,9 @@ struct
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
   (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
-  val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1
+  (* val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1 *)
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 100
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 300
   val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 10)
   val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
   val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
@@ -879,6 +879,9 @@ struct
          * stack.
          *)
 
+        val hadEnoughToSpawnBefore =
+          (currentSpareHeartbeats () >= spawnCost) 
+
         val _ =
           if generateWealth then
             (addSpareHeartbeats wealthPerHeartbeat; ())
@@ -887,7 +890,7 @@ struct
         fun loop i =
           if
             currentSpareHeartbeats () >= spawnCost
-            andalso i < numSpawnsPerHeartbeat
+            (* andalso i < numSpawnsPerHeartbeat *)
             andalso maybeSpawn thread
           then
             ( tryConsumeSpareHeartbeats spawnCost; loop (i+1) )
@@ -895,7 +898,9 @@ struct
           else
             i
 
-        val numSpawned = loop 0
+        val numSpawned =
+          if generateWealth andalso hadEnoughToSpawnBefore then 0
+          else loop 0
       in
         ()
       end

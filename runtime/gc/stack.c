@@ -317,3 +317,39 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
 
   return oldestCFrame;
 }
+
+
+pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
+
+  pointer top = getStackTop(s, stack);
+  pointer bottom = getStackBottom(s, stack);
+
+  pointer youngestCFrame = NULL;
+
+  pointer cursor = top;
+  while (cursor > bottom && youngestCFrame == NULL) {
+    GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
+    GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
+
+    switch (fi->kind) {
+      case PCALL_CONT_FRAME: {
+        youngestCFrame = cursor;
+        break;
+      }
+      case PCALL_PARL_FRAME:
+        break;
+      case PCALL_PARR_FRAME:
+        break;
+      default:
+        break;
+    }
+
+    cursor = cursor - fi->size;
+  }
+
+  if (youngestCFrame == NULL) {
+    return NULL;
+  }
+
+  return youngestCFrame;
+}
