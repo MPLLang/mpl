@@ -293,10 +293,13 @@ struct
   fun stopTimer _ = ()
 
   (* ========================================================================
-   * NUM SPAWNS
+   * STATS
    *)
 
   val numSpawns = Array.array (P, 0)
+  val numEagerSpawns = Array.array (P, 0)
+  val numHeartbeats = Array.array (P, 0)
+  val numSteals = Array.array (P, 0)
 
   fun incrementNumSpawns () =
     let
@@ -306,8 +309,41 @@ struct
       arrayUpdate (numSpawns, p, c+1)
     end
 
+  fun addEagerSpawns d =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numEagerSpawns, p)
+    in
+      arrayUpdate (numEagerSpawns, p, c+d)
+    end
+
+  fun incrementNumHeartbeats () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numHeartbeats, p)
+    in
+      arrayUpdate (numHeartbeats, p, c+1)
+    end
+
+  fun incrementNumSteals () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numSteals, p)
+    in
+      arrayUpdate (numSteals, p, c+1)
+    end
+
   fun numSpawnsSoFar () =
     Array.foldl op+ 0 numSpawns
+
+  fun numEagerSpawnsSoFar () =
+    Array.foldl op+ 0 numEagerSpawns
+
+  fun numHeartbeatsSoFar () =
+    Array.foldl op+ 0 numHeartbeats
+
+  fun numStealsSoFar () =
+    Array.foldl op+ 0 numSteals
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -438,6 +474,14 @@ struct
 
   fun getGCTask p =
     ! (#gcTask (vectorSub (workerLocalData, p)))
+
+  fun getSchedThread () =
+    let
+      val myId = myWorkerId ()
+      val {schedThread, ...} = vectorSub (workerLocalData, myId)
+    in
+      HM.refDerefNoBarrier schedThread
+    end
 
   fun setQueueDepth p d =
     let
@@ -880,7 +924,7 @@ struct
          *)
 
         val hadEnoughToSpawnBefore =
-          (currentSpareHeartbeats () >= spawnCost) 
+          (currentSpareHeartbeats () >= spawnCost)
 
         val _ =
           if generateWealth then
@@ -902,26 +946,40 @@ struct
           if generateWealth andalso hadEnoughToSpawnBefore then 0
           else loop 0
       in
-        ()
+        if generateWealth then incrementNumHeartbeats () else ();
+
+        if (not generateWealth) andalso numSpawned > 0
+        then addEagerSpawns numSpawned
+        else ()
       end
 
     (* fun handler msg =
       MLton.Signal.Handler.inspectInterrupted heartbeatHandler *)
+
+    fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
+      case getSchedThread () of
+        NONE => ()
+      | SOME t =>
+          if MLton.eq (arg, t) then ()
+          else f arg
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
       *)
     val _ = MLton.Signal.setHandler
       ( MLton.Itimer.signal MLton.Itimer.Real
-      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler true)
+      , MLton.Signal.Handler.inspectInterrupted
+          (doIfArgIsNotSchedulerThread (heartbeatHandler true))
       )
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
-      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler true)
+      , MLton.Signal.Handler.inspectInterrupted
+          (doIfArgIsNotSchedulerThread (heartbeatHandler true))
       )
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr2
-      , MLton.Signal.Handler.inspectInterrupted (heartbeatHandler false)
+      , MLton.Signal.Handler.inspectInterrupted
+          (doIfArgIsNotSchedulerThread (heartbeatHandler false))
       )
   
     (* ===================================================================
@@ -1207,6 +1265,7 @@ struct
           val idleTimer = startTimer myId
           val (task, depth, idleTimer') = request idleTimer
           val _ = stopTimer idleTimer'
+          val _ = incrementNumSteals ()
         in
           case task of
             GCTask (thread, hh) =>
@@ -1336,6 +1395,9 @@ functor MkForkJoin
 sig
   include FORK_JOIN
   val numSpawnsSoFar: unit -> int
+  val numEagerSpawnsSoFar: unit -> int
+  val numHeartbeatsSoFar: unit -> int
+  val numStealsSoFar: unit -> int
 end =
 struct
   val fork = fork
@@ -1367,6 +1429,9 @@ struct
 
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
   val numSpawnsSoFar = Scheduler.numSpawnsSoFar
+  val numEagerSpawnsSoFar = Scheduler.numEagerSpawnsSoFar
+  val numHeartbeatsSoFar = Scheduler.numHeartbeatsSoFar
+  val numStealsSoFar = Scheduler.numStealsSoFar
   val getIdleTime = Scheduler.getIdleTime
   fun communicate () = ()
 end
