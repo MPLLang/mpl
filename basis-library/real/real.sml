@@ -419,7 +419,13 @@ functor Real (structure W: WORD_EXTRA
       (* toDecimal, fmt, toString: binary -> decimal conversions. *)
       datatype mode = Fix | Gen | Sci
       local
-         val decpt = ref (0: C_Int.int)
+         (* SAM_NOTE: the following shared ref was not safe for concurrency,
+          * so I commented it out and switched to doing one ref allocation per
+          * call to gdtoa. Of course, an alternative would be to separately
+          * pre-allocate a collection of refs, one per processor. Might want to
+          * consider that in the future.
+          *)
+         (* val decpt = ref (0: C_Int.int) *)
       in
          fun gdtoa (x: real, mode: mode, ndig: int,
                     rounding_mode: IEEEReal.rounding_mode) =
@@ -440,6 +446,7 @@ functor Real (structure W: WORD_EXTRA
 
                fun do_gdtoa_ffi () =
                   let
+                     val decpt = ref (0: C_Int.int)
                      val cstr = Prim.gdtoa (x, mode, ndig, rounding, decpt)
                      val str = CUtil.C_String.toString cstr
                    in
