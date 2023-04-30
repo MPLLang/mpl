@@ -21,6 +21,10 @@ C_String_t Real32_gdtoa (Real32_t f, C_Int_t mode, C_Int_t ndig,
   return (C_String_t)result;
 }
 
+void Real32_gdtoa_free(C_String_t s) {
+  gdtoa__freedtoa((char*)s);
+}
+
 /* This code is patterned on g_dfmt from the gdtoa sources. */
 C_String_t Real64_gdtoa (Real64_t d, C_Int_t mode, C_Int_t ndig, 
                          C_Int_t rounding, Ref(C_Int_t) decpt) {
@@ -48,4 +52,8 @@ C_String_t Real64_gdtoa (Real64_t d, C_Int_t mode, C_Int_t ndig,
   i = STRTOG_Normal;
   result = gdtoa__gdtoa (&fpi, ex, bits, &i, mode, ndig, (int*)decpt, NULL);
   return (C_String_t)result;
+}
+
+void Real64_gdtoa_free(C_String_t s) {
+  gdtoa__freedtoa((char*)s);
 }

@@ -437,12 +437,18 @@ functor Real (structure W: WORD_EXTRA
                    | TO_POSINF => 2
                    | TO_ZERO => 0
                val _ = Primitive.MLton.Thread.atomicBegin ()
+
+               fun do_gdtoa_ffi () =
+                  let
+                     val cstr = Prim.gdtoa (x, mode, ndig, rounding, decpt)
+                     val str = CUtil.C_String.toString cstr
+                   in
+                     Prim.gdtoa_free cstr;
+                     (str, C_Int.toInt (!decpt))
+                   end
             in
                DynamicWind.wind
-               (fn () =>
-                (CUtil.C_String.toString
-                 (Prim.gdtoa (x, mode, ndig, rounding, decpt)),
-                 C_Int.toInt (!decpt)),
+               (do_gdtoa_ffi,
                 Primitive.MLton.Thread.atomicEnd)
             end
       end
