@@ -610,6 +610,8 @@ void GC_lateInit(GC_state s) {
 
   s->nextChunkAllocSize = s->controls->allocChunkSize;
 
+  set_max_gdtoa_threads(s->numberOfProcs);
+
   /* Initialize profiling.  This must occur after processing
    * command-line arguments, because those may just be doing a
    * show-sources, in which case we don't want to initialize the
