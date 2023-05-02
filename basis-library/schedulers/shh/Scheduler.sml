@@ -452,7 +452,8 @@ struct
             val _ = HH.setDepth (thread, depth + 1)
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
             (* val _ = dbgmsg' (fn _ => "fork CC at depth " ^ Int.toString depth) *)
-            val result = fork' {ccOkayAtThisDepth=false} (f, g)
+            val res =
+              result (fn () => fork' {ccOkayAtThisDepth=false} (f, g))
 
             val _ =
               if popDiscard() then
@@ -474,7 +475,7 @@ struct
             val _ = if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
           in
-            result
+            extractResult res
           end
       end
 
