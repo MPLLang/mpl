@@ -211,7 +211,9 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f);
 void queryCurrentBlockUsage(
   GC_state s,
   size_t *numBlocksMapped,
+  size_t *numGlobalBlocksMapped,
   size_t *numBlocksReleased,
+  size_t *numGlobalBlocksReleased,
   size_t *blocksAllocated,
   size_t *blocksFreed);
 

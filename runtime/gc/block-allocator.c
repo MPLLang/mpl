@@ -399,7 +399,7 @@ static void clearOutOtherFrees(GC_state s) {
   }
 
   if (numFreed > 400) {
-    LOG(LM_CHUNK_POOL, LL_INFO,
+    LOG(LM_CHUNK_POOL, LL_DEBUG,
       "number of freed blocks: %zu",
       numFreed);
   }
@@ -410,6 +410,10 @@ static void freeMegaBlock(GC_state s, MegaBlock mb, size_t sizeClass) {
   BlockAllocator global = s->blockAllocatorGlobal;
   size_t nb = mb->numBlocks;
   enum BlockPurpose purpose = mb->purpose;
+
+  LOG(LM_CHUNK_POOL, LL_INFO,
+    "Freeing megablock of %zu blocks",
+    nb);
 
   if (sizeClass >= s->controls->megablockThreshold) {
     GC_release((pointer)mb, s->controls->blockSize * mb->numBlocks);
@@ -505,6 +509,11 @@ static MegaBlock mmapNewMegaBlock(GC_state s, size_t numBlocks, enum BlockPurpos
   mb->numBlocks = numBlocks;
   mb->nextMegaBlock = NULL;
   mb->purpose = purpose;
+
+  LOG(LM_CHUNK_POOL, LL_INFO,
+    "mmap'ed new megablock of size %zu",
+    numBlocks);
+
   return mb;
 }
 
@@ -652,12 +661,16 @@ void freeBlocks(GC_state s, Blocks bs, writeFreedBlockInfoFnClosure f) {
 void queryCurrentBlockUsage(
   GC_state s,
   size_t *numBlocksMapped,
+  size_t *numGlobalBlocksMapped,
   size_t *numBlocksReleased,
+  size_t *numGlobalBlocksReleased,
   size_t *numBlocksAllocated,
   size_t *numBlocksFreed)
 {
   *numBlocksMapped = 0;
+  *numGlobalBlocksMapped = 0;
   *numBlocksReleased = 0;
+  *numGlobalBlocksReleased = 0;
   for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
     numBlocksAllocated[p] = 0;
     numBlocksFreed[p] = 0;
@@ -682,6 +695,9 @@ void queryCurrentBlockUsage(
     numBlocksAllocated[p] += global->numBlocksAllocated[p];
     numBlocksFreed[p] += global->numBlocksFreed[p];
   }
+
+  *numGlobalBlocksMapped += global->numBlocksMapped;
+  *numGlobalBlocksReleased += global->numBlocksReleased;
 }
 
 
@@ -691,10 +707,20 @@ void logCurrentBlockUsage(
   __attribute__((unused)) void *env)
 {
   size_t mapped;
+  size_t globalMapped;
   size_t released;
+  size_t globalReleased;
   size_t allocated[NUM_BLOCK_PURPOSES];
   size_t freed[NUM_BLOCK_PURPOSES];
-  queryCurrentBlockUsage(s, &mapped, &released, (size_t*)allocated, (size_t*)freed);
+  queryCurrentBlockUsage(
+    s,
+    &mapped,
+    &globalMapped,
+    &released,
+    &globalReleased,
+    (size_t*)allocated,
+    (size_t*)freed
+  );
 
   size_t inUse[NUM_BLOCK_PURPOSES];
   for (enum BlockPurpose p = 0; p < NUM_BLOCK_PURPOSES; p++) {
@@ -709,9 +735,13 @@ void logCurrentBlockUsage(
   size_t count = mapped-released;
   if (released > mapped) count = 0;
 
+  size_t globalCount = globalMapped - globalReleased;
+  if (globalReleased > globalMapped) globalCount = 0;
+
   LOG(LM_BLOCK_ALLOCATOR, LL_INFO,
     "block-allocator(%zu.%.9zu)\n"
     "  currently mapped           %zu (= %zu - %zu)\n"
+    "  currently mapped (global)  %zu (= %zu - %zu)\n"
     "  BLOCK_FOR_HEAP_CHUNK       %zu (%zu%%) (= %zu - %zu)\n"
     "  BLOCK_FOR_REMEMBERED_SET   %zu (%zu%%) (= %zu - %zu)\n"
     "  BLOCK_FOR_FORGOTTEN_SET    %zu (%zu%%) (= %zu - %zu)\n"
@@ -726,6 +756,10 @@ void logCurrentBlockUsage(
     count,
     mapped,
     released,
+    
+    globalCount,
+    globalMapped,
+    globalReleased,
 
     inUse[BLOCK_FOR_HEAP_CHUNK],
     (size_t)(100.0 * (double)inUse[BLOCK_FOR_HEAP_CHUNK] / (double)count),

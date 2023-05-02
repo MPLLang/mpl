@@ -325,6 +325,7 @@ void tryMarkAndAddToWorkList(
   if (!CC_isPointerMarked(p)) {
     markObj(p);
     args->bytesSaved += sizeofObject(s, p);
+    args->numObjectsMarked++;
     assert(CC_isPointerMarked(p));
     CC_workList_push(s, &(args->worklist), op);
   }
@@ -540,6 +541,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
     markObj(p);
     assert(CC_isPointerMarked(p));
     args->bytesSaved += sizeofObject(s, p);
+    args->numObjectsMarked++;
   }
 
   CC_workList_push(s, &(args->worklist), op);
@@ -652,19 +654,22 @@ void CC_collectAtRoot(pointer threadp, pointer hhp) {
 #endif
 
   size_t beforeSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
-  size_t live = CC_collectWithRoots(s, heap, thread);
+  size_t live = 0;
+  size_t numObjectsMarked = 0;
+  CC_collectWithRoots(s, heap, thread, &live, &numObjectsMarked);
   size_t afterSize = HM_getChunkListSize(HM_HH_getChunkList(heap));
 
   size_t diff = beforeSize > afterSize ? beforeSize - afterSize : 0;
 
   LOG(LM_CC_COLLECTION, LL_INFO,
-    "finished at depth %u. before: %zu after: %zu (-%.01lf%%) live: %zu (%.01lf%% fragmented)",
+    "finished at depth %u. before: %zu after: %zu (-%.01lf%%) live: %zu (%.01lf%% fragmented) objects: %zu",
     heap->depth,
     beforeSize,
     afterSize,
     100.0 * ((double)diff / (double)beforeSize),
     live,
-    100.0 * (1.0 - (double)live / (double)afterSize));
+    100.0 * (1.0 - (double)live / (double)afterSize),
+    numObjectsMarked);
 
   // HM_HH_getConcurrentPack(heap)->ccstate = CC_UNREG;
   __atomic_store_n(&(HM_HH_getConcurrentPack(heap)->ccstate), CC_DONE, __ATOMIC_SEQ_CST);
@@ -698,7 +703,7 @@ void CC_collectAtPublicLevel(GC_state s, GC_thread thread, uint32_t depth) {
   // collect only if the heap is above a threshold size
   if (HM_getChunkListSize(&(heap->chunkList)) >= 2 * HM_BLOCK_SIZE) {
     assert(getThreadCurrent(s) == thread);
-    CC_collectWithRoots(s, heap, thread);
+    CC_collectWithRoots(s, heap, thread, NULL, NULL);
   }
 
   // Mark that collection is complete
@@ -908,10 +913,12 @@ void CC_filterDownPointers(GC_state s, HM_chunkList x, HM_HierarchicalHeap hh){
 #endif
 
 
-size_t CC_collectWithRoots(
+void CC_collectWithRoots(
   GC_state s,
   HM_HierarchicalHeap targetHH,
-  __attribute__((unused)) GC_thread thread)
+  __attribute__((unused)) GC_thread thread,
+  size_t *outputBytesSaved,
+  size_t *outputNumObjectsMarked)
 {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
@@ -949,7 +956,8 @@ size_t CC_collectWithRoots(
     .repList  = repList,
     .toHead = (void*)repList,
     .fromHead = (void*) &(origList),
-    .bytesSaved = 0
+    .bytesSaved = 0,
+    .numObjectsMarked = 0
   };
   CC_workList_init(s, &(lists.worklist));
 
@@ -1195,7 +1203,15 @@ size_t CC_collectWithRoots(
   s->cumulativeStatistics->bytesInScopeForCC += bytesScanned;
   s->cumulativeStatistics->bytesReclaimedByCC += bytesReclaimed;
 
-  return lists.bytesSaved;
+  if (outputBytesSaved != NULL) {
+    *outputBytesSaved = lists.bytesSaved;
+  }
+
+  if (outputNumObjectsMarked != NULL) {
+    *outputNumObjectsMarked = lists.numObjectsMarked;
+  }
+  
+  return;
 }
 
 #endif
