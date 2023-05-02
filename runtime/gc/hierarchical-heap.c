@@ -794,8 +794,17 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
     HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
     while (completed != NULL) {
       HM_HierarchicalHeap next = completed->subHeapCompletedCC;
+      
+      /* consider using max instead of addition */
       HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
+      
+      /*
+      HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection =
+        max(HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection,
+            HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection);
+      */
+
       CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
       HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
@@ -848,6 +857,8 @@ bool checkPolicyforRoot(
   }
 
   size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
+  
+  /* consider removing this: */
   for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
        NULL != cursor;
        cursor = cursor->subHeapCompletedCC)
