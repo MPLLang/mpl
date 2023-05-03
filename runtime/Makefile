@@ -295,7 +295,7 @@ GDTOA_CFILES := $(patsubst %,gdtoa/%,$(GDTOA_CFILES))
 
 GDTOA_OBJS := $(patsubst %.c,%.o,$(GDTOA_CFILES))
 
-$(foreach F,$(GDTOA_CFILES), $(eval $(F)_XCFLAGS := -w -DINFNAN_CHECK))
+$(foreach F,$(GDTOA_CFILES), $(eval $(F)_XCFLAGS := -w -DINFNAN_CHECK -DMULTIPLE_THREADS))
 
 ifneq ($(MAKECMDGOALS),clean)
 -include $(patsubst %.o,%.d,$(GDTOA_OBJS))

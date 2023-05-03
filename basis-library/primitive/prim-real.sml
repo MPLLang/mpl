@@ -56,6 +56,7 @@ signature PRIM_REAL =
       val abs: real -> real
       val frexp: real * C_Int.t ref -> real
       val gdtoa: real * C_Int.t * C_Int.t * C_Int.t * C_Int.t ref -> C_String.t
+      val gdtoa_free: C_String.t -> unit
       val ldexp: real * C_Int.t -> real
       val modf: real * real ref -> real
       val round: real -> real

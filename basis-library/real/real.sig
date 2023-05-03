@@ -38,6 +38,7 @@ signature PRE_REAL =
       val realTrunc: real -> real
       
       val gdtoa: real * C_Int.t * C_Int.t * C_Int.t * C_Int.t ref -> C_String.t
+      val gdtoa_free: C_String.t -> unit
       val strtor: Primitive.NullString8.t * C_Int.t -> real
 
       val fromInt8Unsafe: Primitive.Int8.int -> real

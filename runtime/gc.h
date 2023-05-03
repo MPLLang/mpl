@@ -24,6 +24,7 @@ typedef GC_state GCState_t;
 #error POINTER_BITS not defined
 #endif
 
+#include "gc/gdtoa-multiple-threads-defs.h"
 
 #include "gc/debug.h"
 #include "gc/logger.h"
