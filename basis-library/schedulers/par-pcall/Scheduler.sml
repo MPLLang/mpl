@@ -299,6 +299,7 @@ struct
   val numSpawns = Array.array (P, 0)
   val numEagerSpawns = Array.array (P, 0)
   val numHeartbeats = Array.array (P, 0)
+  val numSkippedHeartbeats = Array.array (P, 0)
   val numSteals = Array.array (P, 0)
 
   fun incrementNumSpawns () =
@@ -325,6 +326,14 @@ struct
       arrayUpdate (numHeartbeats, p, c+1)
     end
 
+  fun incrementNumSkippedHeartbeats () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numSkippedHeartbeats, p)
+    in
+      arrayUpdate (numSkippedHeartbeats, p, c+1)
+    end
+
   fun incrementNumSteals () =
     let
       val p = myWorkerId ()
@@ -341,6 +350,9 @@ struct
 
   fun numHeartbeatsSoFar () =
     Array.foldl op+ 0 numHeartbeats
+
+  fun numSkippedHeartbeatsSoFar () =
+    Array.foldl op+ 0 numSkippedHeartbeats
 
   fun numStealsSoFar () =
     Array.foldl op+ 0 numSteals
@@ -943,8 +955,10 @@ struct
             i
 
         val numSpawned =
-          if generateWealth andalso hadEnoughToSpawnBefore then 0
-          else loop 0
+          if generateWealth andalso hadEnoughToSpawnBefore then
+            (incrementNumSkippedHeartbeats (); 0)
+          else
+            loop 0
       in
         if generateWealth then incrementNumHeartbeats () else ();
 
@@ -1397,6 +1411,7 @@ sig
   val numSpawnsSoFar: unit -> int
   val numEagerSpawnsSoFar: unit -> int
   val numHeartbeatsSoFar: unit -> int
+  val numSkippedHeartbeatsSoFar: unit -> int
   val numStealsSoFar: unit -> int
 end =
 struct
@@ -1431,6 +1446,7 @@ struct
   val numSpawnsSoFar = Scheduler.numSpawnsSoFar
   val numEagerSpawnsSoFar = Scheduler.numEagerSpawnsSoFar
   val numHeartbeatsSoFar = Scheduler.numHeartbeatsSoFar
+  val numSkippedHeartbeatsSoFar = Scheduler.numSkippedHeartbeatsSoFar
   val numStealsSoFar = Scheduler.numStealsSoFar
   val getIdleTime = Scheduler.getIdleTime
   fun communicate () = ()
