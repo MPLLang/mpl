@@ -1,6 +1,6 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-functor MkScheduler(val keepSpares: bool) =
+functor MkScheduler(val forkStrategy: ForkStrategy.t) =
 struct
 
   val _ = print ("J DEBUGGING\n")
@@ -47,7 +47,7 @@ struct
       loop 1 0
     end
 
-  val maxEagerForkDepth = floorLog2 P
+  val maxEagerForkDepth = 1 + floorLog2 P
 
   (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
   (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
@@ -379,56 +379,8 @@ struct
     * SPARE HEARTBEATS
     *)
 
-(*
-  val globalSpares = ref 0
-
-
-  fun tryPutSpareBatch () =
-    let
-      val curr = addSpareHeartbeats 0
-    in
-      if curr < 15 then
-        ()
-      else
-        let
-          val share = curr div 2
-        in
-          if tryConsumeSpareHeartbeats (Word32.fromInt share) then
-            ( faa (globalSpares, share)
-            ; ()
-            )
-          else
-            ()
-        end
-    end
-
-
-  fun takeSpares {depth: int} =
-    let
-      fun loop () =
-        let
-          val curr = !globalSpares
-          val desired = Int.max (10-depth, curr div MLton.Parallel.numberOfProcessors)
-          val requestAmount = Int.min (curr, desired)
-        in
-          if requestAmount = 0 then
-            0
-          else if casRef globalSpares (curr, curr-requestAmount) then
-            requestAmount
-          else
-            loop ()
-        end
-    in
-      loop ()
-    end
-*)
-
   fun splitSpares w =
-    if w = 0w0 then 0w0 else
-    Word32.min
-      ( w - spawnCost
-      , Word32.>> (w, 0w1)
-      )
+    Word32.>> (w, 0w1)
 
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
@@ -638,28 +590,6 @@ struct
       end
 
 
-(*  SINGLE SETJOIN PRIMITIVE:
-
-    fun maybeSpawn (interruptedLeftThread: Thread.t) : unit =
-      let
-        val depth = HH.getDepth (Thread.current ())
-      in
-        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
-          ()
-        else if not (HH.existsPromotableFrame interruptedLeftThread) then
-          ()
-        else
-          let
-            ...
-            val jp = ...
-            val _ = setJoin (interruptedLeftThread, jp)
-            val rightThread = HH.forkThread interruptedLeftThread
-            ...
-          in
-          end
-          
-*)
-
     (* runs in signal handler *)
     fun doSpawn (interruptedLeftThread: Thread.t) : unit =
       let
@@ -683,21 +613,24 @@ struct
 
         val (tidLeft, tidRight) = DE.decheckFork ()
 
+        val _ = tryConsumeSpareHeartbeats spawnCost
         val currentSpare = currentSpareHeartbeats ()
-        
         val halfSpare =
-          if keepSpares then
-            let
-              val halfSpare = splitSpares currentSpare
-            in
-              ( tryConsumeSpareHeartbeats halfSpare
-              ; halfSpare
+          case forkStrategy of
+            ForkStrategy.GreedyWorkAmortized =>
+              let
+                val halfSpare = splitSpares currentSpare
+              in
+                ( tryConsumeSpareHeartbeats halfSpare
+                ; halfSpare
+                )
+              end
+
+          | _ =>
+              ( tryConsumeSpareHeartbeats currentSpare
+              ; 0w0
               )
-            end
-          else
-            ( tryConsumeSpareHeartbeats (currentSpare - spawnCost)
-            ; 0w0
-            )
+
 
         val jp =
           J { leftSideThread = interruptedLeftThread
@@ -834,7 +767,8 @@ struct
       end
 *)
 
-    (* fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
+(*
+    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -842,7 +776,8 @@ struct
           NONE
         else
           SOME (doSpawnFunc g)
-      end *)
+      end
+*)
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
@@ -933,9 +868,8 @@ struct
 
     fun heartbeatHandler generateWealth (thread: Thread.t) =
       let
-        (* TODO
-         *   - generateWealth=true: this is a heartbeat
-         *   - generateWealth=false: this is a pcall check
+        (* generateWealth = true: this is a heartbeat
+         * generateWealth = false: this is a pcall check
          *
          * at heartbeat, if we had at least one excess token already, then
          * no need to walk the stack -- no pcall frames exist.
@@ -956,19 +890,28 @@ struct
         fun loop i =
           if
             currentSpareHeartbeats () >= spawnCost
-            (* andalso i < numSpawnsPerHeartbeat *)
             andalso maybeSpawn thread
           then
-            ( tryConsumeSpareHeartbeats spawnCost; loop (i+1) )
-            (* loop (i+1) *)
+            loop (i+1)
           else
             i
 
         val numSpawned =
-          if generateWealth andalso keepSpares andalso hadEnoughToSpawnBefore then
-            (incrementNumSkippedHeartbeats (); 0)
-          else
-            loop 0
+          case forkStrategy of
+            ForkStrategy.GreedyWorkAmortized =>
+              if generateWealth andalso hadEnoughToSpawnBefore then
+                (incrementNumSkippedHeartbeats (); 0)
+              else
+                loop 0
+          
+          | ForkStrategy.NaivePCall =>
+              loop 0
+
+          | ForkStrategy.EagerHeuristic =>
+              if not generateWealth then
+                ( addSpareHeartbeats (Word32.toInt spawnCost); loop 0 )
+              else
+                loop 0
       in
         if generateWealth then incrementNumHeartbeats () else ();
 

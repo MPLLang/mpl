@@ -1,1 +1,1 @@
-structure Scheduler = MkScheduler(val keepSpares = true)
+structure Scheduler = MkScheduler(val forkStrategy = ForkStrategy.GreedyWorkAmortized)

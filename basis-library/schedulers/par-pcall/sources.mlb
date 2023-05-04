@@ -19,6 +19,8 @@ local
     structure SMLNJRandom = Random
   end
 
+  ForkStrategy.sml
+
   ../shh/FORK_JOIN.sig
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml

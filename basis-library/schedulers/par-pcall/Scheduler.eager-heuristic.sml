@@ -1,1 +1,1 @@
-structure Scheduler = MkScheduler(val keepSpares = false)
+structure Scheduler = MkScheduler(val forkStrategy = ForkStrategy.EagerHeuristic)
