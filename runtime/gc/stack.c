@@ -258,6 +258,11 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
   pointer top = getStackTop(s, stack);
   pointer bottom = getStackBottom(s, stack);
 
+  size_t thisStackSize = (size_t)(top-bottom);
+  s->cumulativeStatistics->maxStackSizeForHeartbeat =
+    max(s->cumulativeStatistics->maxStackSizeForHeartbeat,
+        thisStackSize);
+
   size_t numFrames = 0;
   size_t numCFrames = 0;
   size_t numLFrames = 0;
@@ -267,6 +272,8 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
 
   pointer cursor = top;
   while (cursor > bottom) {
+    numFrames++;
+    
     GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
     GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
 
@@ -286,9 +293,12 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
         break;
     }
 
-    numFrames++;
     cursor = cursor - fi->size;
   }
+
+  s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat =
+    max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
+        numFrames);
 
   // LOG(LM_PARALLEL, LL_FORCE,
   //   "frames %zu, cont %zu, parl %zu, parr %zu",
@@ -324,10 +334,19 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
   pointer top = getStackTop(s, stack);
   pointer bottom = getStackBottom(s, stack);
 
+  size_t thisStackSize = (size_t)(top-bottom);
+  s->cumulativeStatistics->maxStackSizeForHeartbeat =
+    max(s->cumulativeStatistics->maxStackSizeForHeartbeat,
+        thisStackSize);
+
   pointer youngestCFrame = NULL;
+
+  size_t numFrames = 0;
 
   pointer cursor = top;
   while (cursor > bottom && youngestCFrame == NULL) {
+    numFrames++;
+
     GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
     GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
 
@@ -346,6 +365,10 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
 
     cursor = cursor - fi->size;
   }
+
+  s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat =
+    max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
+        numFrames);
 
   if (youngestCFrame == NULL) {
     return NULL;

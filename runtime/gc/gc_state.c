@@ -248,6 +248,24 @@ uintmax_t GC_numEntanglementsDetected(GC_state s) {
   return count;
 }
 
+uintmax_t GC_maxStackFramesWalkedForHeartbeat(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count = max(count,
+      s->procStates[p].cumulativeStatistics->maxStackFramesWalkedForHeartbeat);
+  }
+  return count;
+}
+
+uintmax_t GC_maxStackSizeForHeartbeat(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count = max(count,
+      s->procStates[p].cumulativeStatistics->maxStackSizeForHeartbeat);
+  }
+  return count;
+}
+
 __attribute__((noreturn))
 void GC_setHashConsDuringGC(__attribute__((unused)) GC_state s, __attribute__((unused)) Bool_t b) {
   DIE("GC_setHashConsDuringGC unsupported");

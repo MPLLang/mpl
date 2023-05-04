@@ -56,6 +56,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->maxHHLCHS = 0;
   cumulativeStatistics->maxPauseTime = 0;
   cumulativeStatistics->maxStackSize = 0;
+  cumulativeStatistics->maxStackFramesWalkedForHeartbeat = 0;
+  cumulativeStatistics->maxStackSizeForHeartbeat = 0;
   cumulativeStatistics->syncForOldGenArray = 0;
   cumulativeStatistics->syncForNewGenArray = 0;
   cumulativeStatistics->syncForStack = 0;

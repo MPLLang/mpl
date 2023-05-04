@@ -49,6 +49,9 @@ struct GC_cumulativeStatistics {
   uintmax_t maxPauseTime;
   size_t maxStackSize;
 
+  size_t maxStackFramesWalkedForHeartbeat;
+  size_t maxStackSizeForHeartbeat;
+
   uintmax_t syncForOldGenArray;
   uintmax_t syncForNewGenArray;
   uintmax_t syncForStack;

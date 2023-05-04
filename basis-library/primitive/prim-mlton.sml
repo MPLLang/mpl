@@ -171,6 +171,9 @@ structure GC =
       val numberSuspectsMarked = _import "GC_numSuspectsMarked" runtime private: GCState.t -> C_UIntmax.t;
 
       val numberSuspectsCleared = _import "GC_numSuspectsCleared" runtime private: GCState.t -> C_UIntmax.t;
+
+      val maxStackFramesWalkedForHeartbeat = _import "GC_maxStackFramesWalkedForHeartbeat" runtime private: GCState.t -> C_UIntmax.t;
+      val maxStackSizeForHeartbeat = _import "GC_maxStackSizeForHeartbeat" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
