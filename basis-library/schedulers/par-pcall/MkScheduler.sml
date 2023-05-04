@@ -1,9 +1,6 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-(* Scheduler implements a single structure.
- *   ForkJoin : FORK_JOIN
- * It is pulled out of Scheduler at the bottom of this file. *)
-structure Scheduler =
+functor MkScheduler(val keepSpares: bool) =
 struct
 
   val _ = print ("J DEBUGGING\n")
@@ -687,8 +684,20 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val currentSpare = currentSpareHeartbeats ()
-        val halfSpare = splitSpares currentSpare
-        val _ = tryConsumeSpareHeartbeats halfSpare
+        
+        val halfSpare =
+          if keepSpares then
+            let
+              val halfSpare = splitSpares currentSpare
+            in
+              ( tryConsumeSpareHeartbeats halfSpare
+              ; halfSpare
+              )
+            end
+          else
+            ( tryConsumeSpareHeartbeats (currentSpare - spawnCost)
+            ; 0w0
+            )
 
         val jp =
           J { leftSideThread = interruptedLeftThread
@@ -735,6 +744,7 @@ struct
       end
 
 
+(*
     fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
       let
         val _ = Thread.atomicBegin ()
@@ -822,9 +832,9 @@ struct
           , gcj = gcj
           }
       end
+*)
 
-
-    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
+    (* fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -832,7 +842,7 @@ struct
           NONE
         else
           SOME (doSpawnFunc g)
-      end
+      end *)
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
@@ -955,7 +965,7 @@ struct
             i
 
         val numSpawned =
-          if generateWealth andalso hadEnoughToSpawnBefore then
+          if generateWealth andalso keepSpares andalso hadEnoughToSpawnBefore then
             (incrementNumSkippedHeartbeats (); 0)
           else
             loop 0
@@ -1092,29 +1102,7 @@ struct
       end
 
 
-    (* other possible heuristics:
-      *   - if (deque is almost empty) then eager else lazy
-      *       - TODO: does this screw up the heap architecture (parent heap below child heap...?)
-      *   - if (lots of promotable frames already) then sequential else ...
-      * 
-      * possible heuristics for heartbeats themselves:
-      *   - at heartbeat, promote N pcalls.
-      *       - N can depend on current state: e.g. promote half of all
-      *         available pcalls, or look at deque and promote enough to
-      *         "fill it up"
-      *   - dynamically adjust heartbeat interval based on saturation of parallelism?
-      *       - lots of parallelism? increase interval; to little parallelism? decrease interval
-      *       - could use steal requests to figure out how much parallelism there is;
-      *         processors can request increase/decrease interval based on failed steals
-      *   - send individual heartbeat signals for failed steals?
-      *       - processor A requests processor B to promote a pcall (so that A can steal from B)
-      *
-      * idea: discharge the "debt" of eager fork by skipping heartbeats
-      *   - marry the heuristic with the amortization theory
-      *)
-
-
-    fun eagerFork1 (f, g) =
+    (* fun eagerFork1 (f, g) =
       case maybeSpawnFunc g of
         SOME jp =>
           let
@@ -1125,61 +1113,23 @@ struct
             (Result.extractResult fres, Result.extractResult gres)
           end
 
-      | NONE => (f (), g ())
+      | NONE => (f (), g ()) *)
  
 
-    fun eagerFork2 (f, g) =
+    fun eagerFork (f, g) =
       let
         fun f' () = ( doPromoteNow (); f () )
       in
         pcallFork (f', g)
       end
-
-
-    fun eagerHeuristicFork1 (f, g) =
-      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
-        eagerFork1 (f, g)
-      else
-        pcallFork (f, g)
 
     
-    fun eagerHeuristicFork2 (f, g) =
+    fun eagerHeuristicFork (f, g) =
       if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
-        eagerFork2 (f, g)
+        eagerFork (f, g)
       else
         pcallFork (f, g)
 
-(*
-    fun fancyFork (f, g) =
-      let
-        fun f' () = ( doPromoteNow (); f () )
-      in
-        if currentSpareHeartbeats () = 0w0 then
-          pcallFork (f, g)
-        else
-        
-        (* This next code is an attempt at an optimization. `eagerFork1` appears
-         * to be the most efficient method of eager forking, but it is only
-         * safe to call `eagerFork1` if there are no ancestor PCalls waiting in
-         * the stack.
-         *
-         * `canForkThread` is a correct way of checking for this, but the
-         * performance is not so great. I think `canForkThread` is just too
-         * expensive.
-         *
-         * So for now, this attempted optimization is disabled. If we can check
-         * eagerFork1 safety more efficiently, then we should try this again...
-         *)
-
-        (*
-        if not (HH.canForkThread (Thread.current ())) then
-          eagerFork1 (f, g)
-        else
-        *)
-
-        pcallFork (f', g)
-      end
-*)
     
     fun greedyWorkAmortizedFork (f, g) =
       let
@@ -1401,53 +1351,4 @@ struct
       , value = Time.fromMicroseconds heartbeatMicroseconds
       })
 
-end
-
-
-functor MkForkJoin
-  (val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b) :>
-sig
-  include FORK_JOIN
-  val numSpawnsSoFar: unit -> int
-  val numEagerSpawnsSoFar: unit -> int
-  val numHeartbeatsSoFar: unit -> int
-  val numSkippedHeartbeatsSoFar: unit -> int
-  val numStealsSoFar: unit -> int
-end =
-struct
-  val fork = fork
-  val par = fork
-
-  fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
-
-  fun parfor grain (i, j) f =
-    if j - i <= grain then
-      for (i, j) f
-    else
-      let
-        val mid = i + (j-i) div 2
-      in
-        par (fn _ => parfor grain (i, mid) f,
-             fn _ => parfor grain (mid, j) f)
-        ; ()
-      end
-
-  fun alloc n =
-    let
-      val a = ArrayExtra.Raw.alloc n
-      val _ =
-        if ArrayExtra.Raw.uninitIsNop a then ()
-        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
-    in
-      ArrayExtra.Raw.unsafeToArray a
-    end
-
-  val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
-  val numSpawnsSoFar = Scheduler.numSpawnsSoFar
-  val numEagerSpawnsSoFar = Scheduler.numEagerSpawnsSoFar
-  val numHeartbeatsSoFar = Scheduler.numHeartbeatsSoFar
-  val numSkippedHeartbeatsSoFar = Scheduler.numSkippedHeartbeatsSoFar
-  val numStealsSoFar = Scheduler.numStealsSoFar
-  val getIdleTime = Scheduler.getIdleTime
-  fun communicate () = ()
 end
