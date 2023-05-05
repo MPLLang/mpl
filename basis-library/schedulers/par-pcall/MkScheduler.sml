@@ -112,6 +112,12 @@ struct
   (* Matthew will implement. Make sure 'a is objptr. *)
   val primGetJoin = _prim "PCall_getJoin": unit -> 'a;
   (* Replacement for setJoin primitive. *)
+
+  (* Could add boolean to prim: indicator for
+   *   findOldestPromotable     (promote at heartbeats)
+   *   vs
+   *   findYoungestPromotable   (promote at pcalls -- youngest is the ONLY promotable)
+   *)
   val primForkThread = _prim "PCall_forkThread": Thread.t * 'a -> Thread.p;
 
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
