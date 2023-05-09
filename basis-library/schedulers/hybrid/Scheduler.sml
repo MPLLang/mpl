@@ -114,7 +114,8 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  val gpuPayout = parseReal "sched-gpu-payout" 8.0
+  val gpuPayout = parseReal "sched-gpu-payout" 2.0
+  val dumpGpuInfo = parseFlag "sched-dump-gpu-info"
 
   (* ========================================================================
    * DEBUGGING
@@ -640,9 +641,18 @@ struct
               else
                 let
                   val newRemaining = stealTimeSinceLastTick + remainingSteals - threshold
+                  fun dumpinfo () =
+                    if not dumpGpuInfo then ()
+                    else print ("passing! numStealSinceLastTick="
+                                ^ Int64.toString stealTimeSinceLastTick
+                                ^ " remainingSteals="
+                                ^ Int64.toString remainingSteals
+                                ^ " threshold="
+                                ^ Int64.toString threshold ^ "\n");
                 in
                   if not (tryPassOne ()) then ()
-                  else print ("passing! numStealSinceLastTick=" ^ Int64.toString stealTimeSinceLastTick ^ " remainingSteals=" ^ Int64.toString remainingSteals ^ " threshold=" ^ Int64.toString threshold ^ "\n");
+                  else dumpinfo ();
+
                   loopWaitForGpu thisStealSample newRemaining tickNow
                 end
             end
