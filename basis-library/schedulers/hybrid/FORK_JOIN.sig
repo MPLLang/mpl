@@ -13,6 +13,14 @@ sig
     }
     -> ('package, 'result) gpu_task
 
+  val gpuWithCleanup: 
+    { spawn: unit -> 'package
+    , poll: 'package -> bool
+    , finish: 'package -> 'a
+    , cleanup: 'a -> 'result
+    }
+    -> ('package, 'result) gpu_task
+
   val choice: {cpu: unit -> 'a, gpu: ('b, 'a) gpu_task} -> 'a
 
   val alloc: int -> 'a array

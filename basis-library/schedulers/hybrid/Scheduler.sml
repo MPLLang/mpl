@@ -423,11 +423,28 @@ struct
       G of
         { spawn: unit -> 'package
         , poll: 'package -> bool
-        , finish: 'package -> 'result
+        , finish: 'package -> (unit -> 'result)
         }
 
+    fun simpleFinisher finish pkg =
+      let
+        val result = finish pkg
+      in
+        fn () => result
+      end
+
+    fun cleanupFinisher finish cleanup pkg =
+      let
+        val result = finish pkg
+      in
+        fn () => cleanup result
+      end
+
     fun gpu {spawn, poll, finish} =
-      G {spawn = spawn, poll = poll, finish = finish}
+      G {spawn = spawn, poll = poll, finish = simpleFinisher finish}
+
+    fun gpuWithCleanup {spawn, poll, finish, cleanup} =
+      G {spawn = spawn, poll = poll, finish = cleanupFinisher finish cleanup}
 
     datatype 'a result =
       Finished of 'a
@@ -661,37 +678,37 @@ struct
       end
 
 
-    fun choice (args as {cpu, gpu = gpuTask}) =
-      if amGpuManager () then
-        ( (*dbgmsg'' (fn _ => "choice: gpu")
-        ;*) doGpuTask gpuTask
-        )
+    fun tryGiveSelfToGpuManager () =
+      if amGpuManager () then ()
       else if queueSize () > 0 then
         ( moveAllTasksIntoSideQueue ()
-        ; choice {cpu=cpu, gpu=gpuTask} (* this should succeed on second go, now that main deque is empty *)
+        ; tryGiveSelfToGpuManager () (* this should succeed on second go, now that main deque is empty *)
         )
       else
-      (* opportunity to send this to gpu manager and go try to work on something else *)
-      let
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val selfTask = Continuation (thread, depth)
-        val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask)
-      in
-        if sendSucceeded then ((*dbgmsg'' (fn _ => "choice: send succeeded");*) returnToSched ()) else ();
-        (*dbgmsg'' (fn _ => "choice: after send");*)
+        let
+          val thread = Thread.current ()
+          val depth = HH.getDepth thread
+          val selfTask = Continuation (thread, depth)
+          val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask)
+        in
+          if sendSucceeded then returnToSched () else ()
+        end
 
-        (* When we resume here, we (hopefully) are on the gpuManager, so we have
-         * another attempt at the cpu/gpu choice.
+
+    fun choice (args as {cpu, gpu = gpuTask}) =
+      let
+        val _ = tryGiveSelfToGpuManager ()
+      in
+        (* When we resume here, the gpu manager has already had a chance to
+         * to consider this choice point. Resuming on a cpu means that the
+         * manager decided to return the task to the cpus.
          *)
         if not (amGpuManager ()) then
-          ( (*dbgmsg'' (fn _ => "choice: cpu after send")
-          ;*) cpu ()
-          )
+          cpu ()
         else
           let
             (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
-            val result = doGpuTask gpuTask
+            val cleanup = doGpuTask gpuTask
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
              * send this task back to a CPU thread.
@@ -703,7 +720,7 @@ struct
           in
             if sendSucceeded then ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ()) else ();
             (* dbgmsg'' (fn _ => "choice: after send back"); *)
-            result
+            cleanup ()
           end
       end
   end
