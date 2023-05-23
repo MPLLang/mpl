@@ -6,15 +6,17 @@ sig
   (* intermediate type 'package, final type 'result *)
   type ('package, 'result) gpu_task
 
+  type device = Int64.int (* device number *)
+
   val gpu: 
-    { spawn: unit -> 'package
+    { spawn: device -> 'package
     , poll: 'package -> bool
     , finish: 'package -> 'result
     }
     -> ('package, 'result) gpu_task
 
   val gpuWithCleanup: 
-    { spawn: unit -> 'package
+    { spawn: device -> 'package
     , poll: 'package -> bool
     , finish: 'package -> 'a
     , cleanup: 'a -> 'result

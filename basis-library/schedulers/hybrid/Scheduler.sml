@@ -117,6 +117,8 @@ struct
   val gpuPayout = parseReal "sched-gpu-payout" 2.0
   val dumpGpuInfo = parseFlag "sched-dump-gpu-info"
 
+  val twoGpus = parseFlag "two-gpu"
+
   (* ========================================================================
    * DEBUGGING
    *)
@@ -406,11 +408,21 @@ struct
 
   
   fun isGpuManager id =
-    id = P-1
+    if twoGpus then
+      id >= P-2
+    else
+      id = P-1
 
   
   fun amGpuManager () =
     isGpuManager (myWorkerId ())
+
+  
+  fun gpuManagerDeviceNumber () =
+    if twoGpus then
+      myWorkerId () - (P-2)
+    else
+      0
 
   (* ========================================================================
    * FORK JOIN
@@ -419,9 +431,11 @@ struct
   structure ForkJoin =
   struct
 
+    type device = Int64.int
+
     datatype ('package, 'result) gpu_task =
       G of
-        { spawn: unit -> 'package
+        { spawn: device -> 'package
         , poll: 'package -> bool
         , finish: 'package -> (unit -> 'result)
         }
@@ -632,7 +646,7 @@ struct
       let
         (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
 
-        val package = spawn ()
+        val package = spawn (gpuManagerDeviceNumber ())
 
         fun tryPassOne () =
           case RingBuffer.popBot hybridTaskQueue of
