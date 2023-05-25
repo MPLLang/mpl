@@ -65,6 +65,13 @@ Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
   return *((Real64*)&result);
 }
 
+static inline
+Real32 ArrayR32_cas(Real32* a, Word64 i, Real32 x, Real32 y) {
+  Word32 result =
+    __sync_val_compare_and_swap(((Word32*)a) + i, *((Word32*)&x), *((Word32*)&y));
+  return *((Real32*)&result);
+}
+
 #define RefW8_cas(r, x, y) __sync_val_compare_and_swap((Word8*)(r), (x), (y))
 #define RefW16_cas(r, x, y) __sync_val_compare_and_swap((Word16*)(r), (x), (y))
 #define RefW32_cas(r, x, y) __sync_val_compare_and_swap((Word32*)(r), (x), (y))
@@ -87,7 +94,7 @@ Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
 #define ArrayW32_cas(a, i, x, y) __sync_val_compare_and_swap(((Word32*)(a)) + (i), (x), (y))
 #define ArrayW64_cas(a, i, x, y) __sync_val_compare_and_swap(((Word64*)(a)) + (i), (x), (y))
 
-#define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
+// #define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
 // #define ArrayR64_cas(a, i, x, y) __sync_val_compare_and_swap(((Real64*)(a)) + (i), (x), (y))
 
 // #define ArrayP_cas(a, i, x, y) __sync_val_compare_and_swap(((Objptr*)(a)) + (i), (x), (y))
