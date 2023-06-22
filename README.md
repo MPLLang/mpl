@@ -324,7 +324,7 @@ POPL 2021.
 Sam Westrick, Jatin Arora, and Umut A. Acar.
 ICFP 2022.
 
-[<a name="awa23">5</a>]
+[<a name="awa23">6</a>]
 [Efficient Parallel Functional Programming with Effects](https://www.cs.cmu.edu/~swestric/23/epfpe.pdf).
 Jatin Arora, Sam Westrick, and Umut A. Acar.
 PLDI 2023.
