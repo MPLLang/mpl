@@ -5,7 +5,7 @@ compiler for Standard ML which implements support for
 nested (fork-join) parallelism. MPL generates executables with
 excellent multicore performance, utilizing a novel approach to
 memory management based on the theory of disentanglement
-[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22)].
+[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)].
 
 MPL is research software and is being actively developed.
 
@@ -37,6 +37,29 @@ $ docker run -it -v $(pwd -P):/root/mycode shwestrick/mpl /bin/bash
 ...# mpl main.mlb
 ...# ./main @mpl procs 4 --
 ```
+
+## Benchmark Suite
+
+The [Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench)
+provides examples of dozens of sophisticated parallel algorithms and
+applications in MPL, as well as cross-language comparisons with C++, Go, Java,
+and multicore OCaml.
+
+## Libraries
+
+We recommend using the [smlpkg](https://github.com/diku-dk/smlpkg) package
+manager. MPL supports the full SML language, so all existing libraries for
+SML can be used.
+
+In addition, here are a few libraries that make use of MPL for parallelism:
+  * [`github.com/MPLLang/mpllib`](https://github.com/MPLLang/mpllib): implements
+  a variety of data structures (sequences, sets, dictionaries, graphs, matrices, meshes,
+  images, etc.) and parallel algorithms (map, reduce, scan, filter, sorting,
+  search, tokenization, graph processing, computational geometry, etc.). Also
+  includes basic utilies (e.g. parsing command-line arguments) and
+  benchmarking infrastructure.
+  * [`github.com/shwestrick/sml-audio`](https://github.com/shwestrick/sml-audio):
+  a library for audio processing with I/O support for `.wav` files.
 
 
 ## Build and Install (from source)
@@ -300,3 +323,8 @@ POPL 2021.
 [Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
 Sam Westrick, Jatin Arora, and Umut A. Acar.
 ICFP 2022.
+
+[<a name="awa23">5</a>]
+[Efficient Parallel Functional Programming with Effects](https://www.cs.cmu.edu/~swestric/23/epfpe.pdf).
+Jatin Arora, Sam Westrick, and Umut A. Acar.
+PLDI 2023.
