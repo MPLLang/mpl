@@ -102,7 +102,6 @@ signature PRIM =
        | MLton_share (* to rssa (as nop or runtime C fn) *)
        | MLton_size (* to rssa (as runtime C fn) *)
        | MLton_touch (* to rssa (as nop) or backend (as nop) *)
-       | ParWrap (* defunctorize *)
        | PCall (* closure convert *)
        | PCall_forkThread (* to rssa (as runtime C fn) *)
        | PCall_getJoin (* backend *)

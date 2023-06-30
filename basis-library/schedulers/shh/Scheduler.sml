@@ -1019,9 +1019,7 @@ structure ForkJoin :> FORK_JOIN =
 struct
   open Scheduler.ForkJoin
 
-  fun par (f, g) =
-    (* Primitive.MPL.ForkJoin.parWrapper (fork, f, g) *)
-    fork (f, g)
+  val par = fork
 
   fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
 

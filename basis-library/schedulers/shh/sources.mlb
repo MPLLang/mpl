@@ -10,7 +10,6 @@ local
     signature ARRAY_SLICE_EXTRA
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
-    (*structure Primitive*)
   end
 
   local
