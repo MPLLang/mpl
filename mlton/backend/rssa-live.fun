@@ -42,7 +42,7 @@ structure LiveInfo =
       datatype t = T of {live: Var.t Buffer.t,
                          liveHS: {handler: Label.t option ref,
                                   link: unit option ref},
-                         liveJS: {joinSlot: bool ref},
+                         livePDS: {pcallDataSlot: bool ref},
                          name: string,
                          preds: t list ref}
 
@@ -52,7 +52,7 @@ structure LiveInfo =
          T {live = Buffer.new {dummy = Var.bogus},
             liveHS = {handler = ref NONE,
                       link = ref NONE},
-            liveJS = {joinSlot = ref false},
+            livePDS = {pcallDataSlot = ref false},
             name = name,
             preds = ref []}
 
@@ -62,8 +62,8 @@ structure LiveInfo =
          {handler = !handler,
           link = isSome (!link)}
 
-      fun liveJS (T {liveJS = {joinSlot}, ...}) =
-         {joinSlot = !joinSlot}
+      fun livePDS (T {livePDS = {pcallDataSlot}, ...}) =
+         {pcallDataSlot = !pcallDataSlot}
 
       fun equals (T {preds = r, ...}, T {preds = r', ...}) = r = r'
 
@@ -126,8 +126,8 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
       datatype 'a defuse = Def of LiveInfo.t | Use of 'a * LiveInfo.t
       val handlerCodeDefUses: Label.t defuse list ref = ref []
       val handlerLinkDefUses: unit defuse list ref = ref []
-      val joinSlotDefs: LiveInfo.t list ref = ref []
-      val joinSlotUses: LiveInfo.t list ref = ref []
+      val pcallDataSlotDefs: LiveInfo.t list ref = ref []
+      val pcallDataSlotUses: LiveInfo.t list ref = ref []
       val allVars: Var.t list ref = ref []
       fun setDefined (x: Var.t, defined): unit =
          if shouldConsider x
@@ -175,7 +175,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
             (* Make sure that a cont's live vars includes variables live in its
              * handler.
              * Make sure that a PCall cont includes the live vars of the parl and parr.
-             * Record that a PCall parl or parr defines the joinSlot.
+             * Record that a PCall parl or parr defines the pcallDataSlot.
              *)
             val _ =
                case kind of
@@ -192,7 +192,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                               else () *)
                         val _ =
                            if Label.equals (label, parl) orelse Label.equals (label, parr)
-                              then List.push (joinSlotDefs, b)
+                              then List.push (pcallDataSlotDefs, b)
                               else ()
                      in
                         ()
@@ -220,8 +220,8 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                                                         use = use})
                    val _ =
                       case s of
-                         PrimApp {prim = Prim.PCall_getJoin, ...} =>
-                            List.push (joinSlotUses, b)
+                         PrimApp {prim = Prim.PCall_getData, ...} =>
+                            List.push (pcallDataSlotUses, b)
                        | SetExnStackSlot =>
                             List.push (handlerLinkDefUses, Use ((), b))
                        | SetHandler _ =>
@@ -339,22 +339,22 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
          end
       val _ = handlerLink (handlerCodeDefUses, #handler)
       val _ = handlerLink (handlerLinkDefUses, #link)
-      (* joinSlot is mostly easy; back propagate from a use to a def. *)
-      fun joinSlot () =
+      (* pcallDataSlot is mostly easy; back propagate from a use to a def. *)
+      fun pcallDataSlot () =
          let
-            val defs = !joinSlotDefs
+            val defs = !pcallDataSlotDefs
             val _ =
                List.foreach
-               (defs, fn LiveInfo.T {liveJS = {joinSlot, ...}, ...} =>
-                joinSlot := true)
+               (defs, fn LiveInfo.T {livePDS = {pcallDataSlot, ...}, ...} =>
+                pcallDataSlot := true)
             val todo: LiveInfo.t list ref = ref []
-            fun consider (b as LiveInfo.T {liveJS = {joinSlot, ...}, ...}) =
+            fun consider (b as LiveInfo.T {livePDS = {pcallDataSlot, ...}, ...}) =
                 if List.exists (defs, fn b' => LiveInfo.equals (b, b'))
-                   orelse !joinSlot
+                   orelse !pcallDataSlot
                    then ()
-                   else (joinSlot := true
+                   else (pcallDataSlot := true
                          ; List.push (todo, b))
-            val _ = List.foreach (!joinSlotUses, consider)
+            val _ = List.foreach (!pcallDataSlotUses, consider)
             fun loop () =
                 case !todo of
                    [] => ()
@@ -366,7 +366,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
          in
             ()
          end
-      val _ = joinSlot ()
+      val _ = pcallDataSlot ()
       val {get = labelLive, rem = remLabelLive, ...} =
          Property.get
          (Label.plist,
@@ -376,13 +376,13 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
               val {bodyInfo, argInfo, ...} = labelInfo l
               val () = removeLabelInfo l
               val {handler, link} = LiveInfo.liveHS bodyInfo
-              val {joinSlot} = LiveInfo.liveJS bodyInfo
+              val {pcallDataSlot} = LiveInfo.livePDS bodyInfo
            in
               {begin = LiveInfo.live bodyInfo,
                beginNoFormals = LiveInfo.live argInfo,
                handler = handler,
                link = link,
-               joinSlot = joinSlot}
+               pcallDataSlot = pcallDataSlot}
            end))
       val () = Vector.foreach (blocks, fn b =>
                                ignore (labelLive (Block.label b)))
@@ -395,7 +395,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
              (blocks, fn b =>
               let
                  val l = Block.label b           
-                 val {begin, beginNoFormals, handler, link, joinSlot} = labelLive l
+                 val {begin, beginNoFormals, handler, link, pcallDataSlot} = labelLive l
               in
                  display
                  (seq [Label.layout l,
@@ -405,7 +405,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                                 Vector.layout Var.layout beginNoFormals),
                                ("handler", Option.layout Label.layout handler),
                                ("link", Bool.layout link),
-                               ("joinSlot", Bool.layout joinSlot)]])
+                               ("pcallDataSlot", Bool.layout pcallDataSlot)]])
               end)
           end)
    in 

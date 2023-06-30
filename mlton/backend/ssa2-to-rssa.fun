@@ -199,7 +199,7 @@ structure CFunction =
           target = Direct "GC_readBarrier"}
 
       (* CHECK; thread as objptr *)
-      val pcallForkThread = fn ty =>
+      val pcallForkThreadAndSetData = fn ty =>
          T {args = Vector.new3 (Type.gcState (), Type.thread (), ty),
             convention = Cdecl,
             inline = false,
@@ -1656,10 +1656,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
-                               | Prim.PCall_forkThread =>
+                               | Prim.PCall_forkThreadAndSetData =>
                                     simpleCCallWithGCState
-                                    (CFunction.pcallForkThread (Operand.ty (a 1)))
-                               | Prim.PCall_getJoin => primApp (prim, Vector.new0 ())
+                                    (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))
+                               | Prim.PCall_getData => primApp (prim, Vector.new0 ())
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)

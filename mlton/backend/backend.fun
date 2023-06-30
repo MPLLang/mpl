@@ -625,7 +625,7 @@ fun toMachine (rssa: Rssa.Program.t) =
       fun genStatement (s: R.Statement.t,
                         handlersInfo: {handlerOffset: Bytes.t,
                                        linkOffset: Bytes.t} option,
-                        joinSlotInfo: {joinSlotOffset: Bytes.t} option)
+                        pcallDataSlotInfo: {pcallDataSlotOffset: Bytes.t} option)
          : M.Statement.t vector =
          let
             fun handlerOffset () = #handlerOffset (valOf handlersInfo)
@@ -714,7 +714,7 @@ fun toMachine (rssa: Rssa.Program.t) =
              | PrimApp {dst, prim, args} =>
                   (case prim of
                       Prim.MLton_touch => Vector.new0 ()
-                    | Prim.PCall_getJoin =>
+                    | Prim.PCall_getData =>
                          let
                             val (dst, dstTy) =
                                case dst of
@@ -726,7 +726,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                   else Error.bug "Backend.genStatement: PCall_getJoin is not objptr"
                             val src =
                                M.Operand.stackOffset
-                               {offset = #joinSlotOffset (valOf joinSlotInfo),
+                               {offset = #pcallDataSlotOffset (valOf pcallDataSlotInfo),
                                 ty = dstTy,
                                 volatile = false}
                          in
@@ -954,7 +954,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                       ty = ty}
                   end
             in
-               val {handlersInfo, joinSlotInfo, labelInfo = labelRegInfo, ...} =
+               val {handlersInfo, pcallDataSlotInfo, labelInfo = labelRegInfo, ...} =
                   let
                      val paramOffsets = fn args =>
                         paramOffsets (args, fn (_, ty) => ty, fn so => so)
@@ -1190,7 +1190,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                   val statements =
                      Vector.concatV
                      (Vector.map (statements, fn s =>
-                                  genStatement (s, handlersInfo, joinSlotInfo)))
+                                  genStatement (s, handlersInfo, pcallDataSlotInfo)))
                   val (preTransfer, transfer) = genTransfer transfer
                   fun doContHandler mkMachineKind =
                      let

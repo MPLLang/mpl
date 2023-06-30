@@ -342,8 +342,8 @@ fun allocate {function = f: Rssa.Function.t,
          Property.get (Var.plist, Property.initFun (fn _ => ref Temporary))
       (* The arguments for each Handler block in the function. *)
       val handlersArgs: (Var.t * Type.t) vector list ref = ref []
-      (* The `PCall_getJoin` types in the function. *)
-      val joinSlotTys: Type.t list ref = ref []
+      (* The `PCall_getData` types in the function. *)
+      val pcallDataSlotTys: Type.t list ref = ref []
       fun forceStack (x: Var.t): unit = place x := Stack
       val _ =
          Vector.foreach
@@ -367,8 +367,8 @@ fun allocate {function = f: Rssa.Function.t,
                  case stmt of
                     R.Statement.PrimApp
                     {dst = SOME (_, ty),
-                     prim = R.Prim.PCall_getJoin,
-                     ...} => List.push (joinSlotTys, ty)
+                     prim = R.Prim.PCall_getData,
+                     ...} => List.push (pcallDataSlotTys, ty)
                     | _ => ())
           in
              ()
@@ -437,25 +437,25 @@ fun allocate {function = f: Rssa.Function.t,
           R.Label.layout, Info.layout, Unit.layout)
          setLabelInfo
 
-      (* Allocate stack slot for joinPt. *)
-      val (joinSlotInfo, alloc) =
-         case !joinSlotTys of
+      (* Allocate stack slot for pcall data. *)
+      val (pcallDataSlotInfo, alloc) =
+         case !pcallDataSlotTys of
             [] => (NONE, Allocation.new ([], []))
           | ty::tys =>
                let
-                  val joinSlotTyMax =
+                  val pcallDataSlotTyMax =
                      List.fold
                      (tys, ty, fn (tya, tyb) =>
                       if Bytes.>= (Type.bytes tya, Type.bytes tyb)
                          then tya
                          else tyb)
-                  val joinSlotOffset = Bytes.zero
-                  val joinSlot = StackOffset.T {offset = joinSlotOffset,
-                                                ty = joinSlotTyMax,
-                                                volatile = false}
-                  val alloc = Allocation.new ([joinSlot], [])
+                  val pcallDataSlotOffset = Bytes.zero
+                  val pcallDataSlot = StackOffset.T {offset = pcallDataSlotOffset,
+                                                     ty = pcallDataSlotTyMax,
+                                                     volatile = false}
+                  val alloc = Allocation.new ([pcallDataSlot], [])
                in
-                  (SOME {joinSlot = joinSlot}, alloc)
+                  (SOME {pcallDataSlot = pcallDataSlot}, alloc)
                end
       (* Allocate stacks slots and/or temporaries for the formals. *)
       val () = Vector.foreach (args, fn (x, _) => allocateVar (x, alloc))
@@ -498,17 +498,17 @@ fun allocate {function = f: Rssa.Function.t,
              val {begin, beginNoFormals,
                   handler = handlerLive,
                   link = linkLive,
-                  joinSlot = joinSlotLive} = labelLive label
+                  pcallDataSlot = pcallDataSlotLive} = labelLive label
              val () = remLabelLive label
              fun addJS (ops: Operand.t vector): Operand.t vector =
-                case joinSlotInfo of
+                case pcallDataSlotInfo of
                    NONE => ops
-                 | SOME {joinSlot, ...} =>
-                      if joinSlotLive
+                 | SOME {pcallDataSlot, ...} =>
+                      if pcallDataSlotLive
                          then let
-                                 val joinSlot = Operand.StackOffset joinSlot
+                                 val pcallDataSlot = Operand.StackOffset pcallDataSlot
                               in
-                                 Vector.concat [Vector.new1 joinSlot, ops]
+                                 Vector.concat [Vector.new1 pcallDataSlot, ops]
                               end
                          else ops
              fun addHS (ops: Operand.t vector): Operand.t vector =
@@ -561,9 +561,9 @@ fun allocate {function = f: Rssa.Function.t,
                                   :: stackInit
                              else stackInit)
              val stackInit =
-                case joinSlotInfo of
+                case pcallDataSlotInfo of
                    NONE => stackInit
-                 | SOME {joinSlot, ...} => joinSlot :: stackInit
+                 | SOME {pcallDataSlot, ...} => pcallDataSlot :: stackInit
              val a = Allocation.new (stackInit, temporariesInit)
              fun mkSize extra =
                 Bytes.align
@@ -649,9 +649,9 @@ fun allocate {function = f: Rssa.Function.t,
                       (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
                        {handlerOffset = handlerOffset,
                         linkOffset = linkOffset}),
-       joinSlotInfo = Option.map
-                      (joinSlotInfo, fn {joinSlot = StackOffset.T {offset, ...}} =>
-                       {joinSlotOffset = offset}),
+       pcallDataSlotInfo = Option.map
+                           (pcallDataSlotInfo, fn {pcallDataSlot = StackOffset.T {offset, ...}} =>
+                            {pcallDataSlotOffset = offset}),
        labelInfo = labelInfo}
    end
 
