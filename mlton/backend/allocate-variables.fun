@@ -289,9 +289,7 @@ structure Info =
 (* ------------------------------------------------- *)
 
 fun allocate {function = f: Rssa.Function.t,
-              paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t,
-                                                                  ty: Rssa.Type.t,
-                                                                  volatile: bool} vector,
+              paramOffsets,
               varInfo: Var.t -> {operand: Machine.Operand.t option ref option,
                                  ty: Type.t}} =
    let
@@ -342,13 +340,11 @@ fun allocate {function = f: Rssa.Function.t,
          Property.get (Var.plist, Property.initFun (fn _ => ref Temporary))
       (* The arguments for each Handler block in the function. *)
       val handlersArgs: (Var.t * Type.t) vector list ref = ref []
-      (* The `PCall_getData` types in the function. *)
-      val pcallDataSlotTys: Type.t list ref = ref []
       fun forceStack (x: Var.t): unit = place x := Stack
       val _ =
          Vector.foreach
          (blocks,
-          fn R.Block.T {args, kind, label, statements, ...} =>
+          fn R.Block.T {args, kind, label, ...} =>
           let
              val {beginNoFormals, ...} = labelLive label
              val _ =
@@ -361,15 +357,6 @@ fun allocate {function = f: Rssa.Function.t,
                 case kind of
                    Kind.Handler => List.push (handlersArgs, args)
                  | _ => ()
-             val _ =
-                Vector.foreach
-                (statements, fn stmt =>
-                 case stmt of
-                    R.Statement.PrimApp
-                    {dst = SOME (_, ty),
-                     prim = R.Prim.PCall_getData,
-                     ...} => List.push (pcallDataSlotTys, ty)
-                    | _ => ())
           in
              ()
           end)
@@ -437,35 +424,41 @@ fun allocate {function = f: Rssa.Function.t,
           R.Label.layout, Info.layout, Unit.layout)
          setLabelInfo
 
-      (* Allocate stack slot for pcall data. *)
-      val (pcallDataSlotInfo, alloc) =
-         case !pcallDataSlotTys of
-            [] => (NONE, Allocation.new ([], []))
-          | ty::tys =>
-               let
-                  val pcallDataSlotTyMax =
-                     List.fold
-                     (tys, ty, fn (tya, tyb) =>
-                      if Bytes.>= (Type.bytes tya, Type.bytes tyb)
-                         then tya
-                         else tyb)
-                  val pcallDataSlotOffset = Bytes.zero
-                  val pcallDataSlot = StackOffset.T {offset = pcallDataSlotOffset,
-                                                     ty = pcallDataSlotTyMax,
-                                                     volatile = false}
-                  val alloc = Allocation.new ([pcallDataSlot], [])
-               in
-                  (SOME {pcallDataSlot = pcallDataSlot}, alloc)
-               end
-      (* Allocate stacks slots and/or temporaries for the formals. *)
-      val () = Vector.foreach (args, fn (x, _) => allocateVar (x, alloc))
-      (* Allocate stack slots for link, handler label, and handler args. *)
+      (* Allocate stacks slots and/or temporaries for the formals.
+       * Don't use `allocateVar`, because a stack formal
+       * should use the stack slot of the incoming actual.
+       *)
+      val () =
+         let
+            val temps = Allocation.Temporaries.empty ()
+         in
+            Vector.foreach2
+            (args, paramOffsets args, fn ((x, ty), so) =>
+             let
+                val oper =
+                   case ! (place x) of
+                      Stack => Operand.StackOffset (StackOffset.T so)
+                    | Temporary => Operand.Temporary (Allocation.Temporaries.get (temps, ty))
+                val () = removePlace x
+                val () = valOf (#operand (varInfo x)) := SOME oper
+             in
+                ()
+             end)
+         end
+      (* Also, create a stack allocation that includes all incoming actuals;
+       * if link, handler label, and handler args stack slots are required,
+       * then they will be allocated against this stack.
+       *)
+      val stack =
+         Allocation.Stack.new (Vector.toListMap (paramOffsets args, StackOffset.T))
       val handlersInfo =
          case !handlersArgs of
             [] => NONE
           | handlersArgs =>
                let
-                  val stack = Allocation.stack alloc
+                  (* Choose fixed and permanently allocated stack slots
+                   * that do not conflict with incoming actuals.
+                   *)
                   val (stack, {offset = linkOffset, ...}) =
                      Allocation.Stack.get (stack, Type.exnStack ())
                   val (_, {offset = handlerOffset, ...}) =
@@ -497,20 +490,8 @@ fun allocate {function = f: Rssa.Function.t,
           let
              val {begin, beginNoFormals,
                   handler = handlerLive,
-                  link = linkLive,
-                  pcallDataSlot = pcallDataSlotLive} = labelLive label
+                  link = linkLive} = labelLive label
              val () = remLabelLive label
-             fun addJS (ops: Operand.t vector): Operand.t vector =
-                case pcallDataSlotInfo of
-                   NONE => ops
-                 | SOME {pcallDataSlot, ...} =>
-                      if pcallDataSlotLive
-                         then let
-                                 val pcallDataSlot = Operand.StackOffset pcallDataSlot
-                              in
-                                 Vector.concat [Vector.new1 pcallDataSlot, ops]
-                              end
-                         else ops
              fun addHS (ops: Operand.t vector): Operand.t vector =
                 case handlersInfo of
                    NONE => ops
@@ -560,10 +541,6 @@ fun allocate {function = f: Rssa.Function.t,
                                                  volatile = false}
                                   :: stackInit
                              else stackInit)
-             val stackInit =
-                case pcallDataSlotInfo of
-                   NONE => stackInit
-                 | SOME {pcallDataSlot, ...} => pcallDataSlot :: stackInit
              val a = Allocation.new (stackInit, temporariesInit)
              fun mkSize extra =
                 Bytes.align
@@ -605,8 +582,8 @@ fun allocate {function = f: Rssa.Function.t,
                 Vector.foreach (statements, fn statement =>
                                 R.Statement.foreachDef (statement, one))
              val _ =
-                setLabelInfo (label, {live = addJS (addHS live),
-                                      liveNoFormals = addJS (addHS liveNoFormals),
+                setLabelInfo (label, {live = addHS live,
+                                      liveNoFormals = addHS liveNoFormals,
                                       size = size})
           in
              fn () => ()
@@ -645,13 +622,9 @@ fun allocate {function = f: Rssa.Function.t,
           in ()
           end)
    in
-      {handlersInfo = Option.map
-                      (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
-                       {handlerOffset = handlerOffset,
-                        linkOffset = linkOffset}),
-       pcallDataSlotInfo = Option.map
-                           (pcallDataSlotInfo, fn {pcallDataSlot = StackOffset.T {offset, ...}} =>
-                            {pcallDataSlotOffset = offset}),
+      {handlersInfo = Option.map (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
+                                  {handlerOffset = handlerOffset,
+                                   linkOffset = linkOffset}),
        labelInfo = labelInfo}
    end
 

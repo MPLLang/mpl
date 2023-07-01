@@ -633,6 +633,12 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
          end
       fun pcallIsOk {args, func, cont, parl, parr} =
          let
+            val pcallDataTy =
+               let
+                  val Block.T {args, ...} = labelBlock parl
+               in
+                  Vector.new1 (#2 (Vector.last args))
+               end
             val {args = formals, returns = returns', ...} =
                Function.dest (funcInfo func)
             val rets = {cont = cont, parl = parl, parr = parr}
@@ -656,8 +662,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
             Vector.equals (args, formals, fn (z, (_, t)) =>
                            Type.isSubtype (Operand.ty z, t))
             andalso check (#cont, returns')
-            andalso check (#parl, returns')
-            andalso check (#parr, SOME (Vector.new0 ()))
+            andalso check (#parl, Option.map (returns', fn returns' => Vector.concat [returns', pcallDataTy]))
+            andalso check (#parr, SOME pcallDataTy)
          end
 
       fun checkFunction f =

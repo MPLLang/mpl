@@ -35,10 +35,6 @@ signature ALLOCATE_VARIABLES =
               *)
              handlersInfo: {handlerOffset: Bytes.t,
                             linkOffset: Bytes.t} option,
-             (* If PCalls are used, pcallDataSlotInfo gives the stack offset
-              * where the data objptr should be stored.
-              *)
-             pcallDataSlotInfo: {pcallDataSlotOffset: Bytes.t} option,
              labelInfo:
              Rssa.Label.t -> {(* Live operands at the beginning of the block. *)
                               live: Machine.Operand.t vector,
