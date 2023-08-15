@@ -25,7 +25,7 @@ $ docker run -it shwestrick/mpl /bin/bash
 ...# examples/bin/primes @mpl procs 4 --
 ```
 
-If you want to try out MPL by writing and compiling your own code, we recommend
+To write and compile your own code, we recommend
 mounting a local directory inside the container. For example, here's how you
 can use MPL to compile and run your own `main.mlb` in the current directory.
 (To mount some other directory, replace `$(pwd -P)` with a different path.)
@@ -41,14 +41,15 @@ $ docker run -it -v $(pwd -P):/root/mycode shwestrick/mpl /bin/bash
 ## Benchmark Suite
 
 The [Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench)
-provides examples of dozens of sophisticated parallel algorithms and
-applications in MPL, as well as cross-language comparisons with C++, Go, Java,
+provides many examples of sophisticated parallel algorithms and
+applications in MPL, as well as cross-language performance comparisons with
+C++, Go, Java,
 and multicore OCaml.
 
 ## Libraries
 
 We recommend using the [smlpkg](https://github.com/diku-dk/smlpkg) package
-manager. MPL supports the full SML language, so all existing libraries for
+manager. MPL supports the full SML language, so existing libraries for
 SML can be used.
 
 In addition, here are a few libraries that make use of MPL for parallelism:
@@ -62,44 +63,10 @@ In addition, here are a few libraries that make use of MPL for parallelism:
   a library for audio processing with I/O support for `.wav` files.
 
 
-## Build and Install (from source)
-
-### Requirements
-
-MPL has only been tested on Linux with x86-64. The following software is
-required.
- * [GCC](http://gcc.gnu.org)
- * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
- * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
- * binutils (`ar`, `ranlib`, `strip`, ...)
- * miscellaneous Unix utilities (`diff`, `find`, `grep`, `gzip`, `patch`, `sed`, `tar`, `xargs`, ...)
- * Standard ML compiler and tools:
-   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
-   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
-
-### Instructions
-
-The following builds the compiler at `build/bin/mpl`.
-```
-$ make all
-```
-
-After building, MPL can then be installed to `/usr/local`:
-```
-$ make install
-```
-or to a custom directory with the `PREFIX` option:
-```
-$ make PREFIX=/opt/mpl install
-```
-
 ## Parallel and Concurrent Extensions
 
 MPL extends SML with a number of primitives for parallelism and concurrency.
 Take a look at `examples/` to see these primitives in action.
-
-**Note**: Before writing any of your own code, make sure to read the section
-"Disentanglement" below.
 
 ### The `ForkJoin` Structure
 ```
@@ -186,8 +153,6 @@ by default.
 * `-debug true -debug-runtime true -keep g` For debugging, keeps the generated
 C files and uses the debug version of the runtime (with assertions enabled).
 The resulting executable is somewhat peruse-able with tools like `gdb`.
-* `-detect-entanglement true` enables the dynamic entanglement detector.
-See below for more information.
 
 For example:
 ```
@@ -221,60 +186,13 @@ argument `bar` using 4 pinned processors.
 $ foo @mpl procs 4 set-affinity -- bar
 ```
 
-## Disentanglement
-
-Currently, MPL only supports programs that are **disentangled**, which
-(roughly speaking) is the property that concurrent threads remain oblivious
-to each other's allocations [[3](#wyfa20)].
-
-Here are a number of different ways to guarantee that your code is
-disentangled.
-- (Option 1) Use only purely functional data (no `ref`s or `array`s). This is
-the simplest but most restrictive approach.
-- (Option 2) If using mutable data, use only non-pointer data. MPL guarantees
-that simple types (`int`, `word`, `char`, `real`, etc.) are never
-indirected through a
-pointer, so for example it is safe to use `int array`. Other types such as
-`int list array` and `int array array` should be avoided. This approach
-is very easy to check and is surprisingly general. Data races are fine!
-- (Option 3) Make sure that your program is race-free. This can be
-tricky to check but allows you to use any type of data. Many of our example
-programs are race-free.
-
-## Entanglement Detection
-
-Whenever a thread acquires a reference
-to an object allocated concurrently by some other thread, then we say that
-the two threads are **entangled**. This is a violation of disentanglement,
-which MPL currently does not allow.
-
-MPL has a built-in dynamic entanglement detector which is enabled by default.
-The entanglement detector monitors individual reads and writes during execution;
-if entanglement is found, the program will terminate with an error message.
-
-The entanglement detector is both "sound" and "complete": there are neither
-false negatives nor false positives. In other words, the detector always raises
-an alarm when entanglement occurs, and never raises an alarm otherwise. Note
-however that entanglement (and therefore also entanglement detection) can
-be execution-dependent: if your program is non-deterministic (e.g. racy),
-then entanglement may or may not occur depending on the outcome of a race
-condition. Similarly, entanglement could be input-dependent.
-
-Entanglement detection is highly optimized, and typically has negligible
-overhead (see [[5](#waa22)]). It can be disabled at compile-time by passing
-`-detect-entanglement false`; however, we recommend against doing so. MPL
-relies on entanglement detection to ensure memory safety. We recommend leaving
-entanglement detection enabled at all times.
 
 ## Bugs and Known Issues
 
 ### Basis Library
-In general, the basis library has not yet been thoroughly scrubbed, and many
-functions may not be safe for parallelism
+The basis library is inherited from (sequential) SML. It has not yet been 
+thoroughly scrubbed, and some functions may not be safe for parallelism
 ([#41](https://github.com/MPLLang/mpl/issues/41)).
-Some known issues:
-* `Int.toString` is racy when called in parallel.
-* `Real.fromString` may throw an error when called in parallel.
 
 ### Garbage Collection
 * ([#115](https://github.com/MPLLang/mpl/issues/115)) The GC is currently
@@ -296,6 +214,61 @@ unsupported, including (but not limited to):
 * `Cont` (partially supported but not documented)
 * `Weak`
 * `World`
+
+
+## Build and Install (from source)
+
+### Requirements
+
+MPL has only been tested on Linux with x86-64. The following software is
+required.
+ * [GCC](http://gcc.gnu.org)
+ * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
+ * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
+ * binutils (`ar`, `ranlib`, `strip`, ...)
+ * miscellaneous Unix utilities (`diff`, `find`, `grep`, `gzip`, `patch`, `sed`, `tar`, `xargs`, ...)
+ * Standard ML compiler and tools:
+   - Recommended: [MLton](http://mlton.org) (`mlton`, `mllex`, and `mlyacc`).  Pre-built binary packages for MLton can be installed via an OS package manager or (for select platforms) obtained from http://mlton.org.
+   - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
+ * (If using [`mpl-switch`](https://github.com/mpllang/mpl-switch)): Python 3, and `git`.
+
+### Installation with `mpl-switch`
+
+The [`mpl-switch`](https://github.com/mpllang/mpl-switch) utility makes it
+easy to install multiple versions of MPL on the same system and switch
+between them. After setting up `mpl-switch`, you can install MPL as follows:
+```
+$ mpl-switch install v0.4
+$ mpl-switch select v0.4
+```
+
+You can use any commit hash or tag name from the MPL repo to pick a
+particular version of MPL. Installed versions are stored in `~/.mpl/`; this
+folder is safe to delete at any moment, as it can always be regenerated. To
+see what versions of MPL are currently installed, do:
+```
+$ mpl-switch list
+```
+
+### Manual Instructions
+
+Alternatively, you can manually build `mpl` by cloning this repo and then
+performing the following.
+
+**Build the executable**. This produces an executable at `build/bin/mpl`:
+```
+$ make
+```
+
+**Put it where you want it**. After building, MPL can then be installed to
+`/usr/local`:
+```
+$ make install
+```
+or to a custom directory with the `PREFIX` option:
+```
+$ make PREFIX=/opt/mpl install
+```
 
 ## References
 
