@@ -34,18 +34,18 @@ bool GC_HH_decheckMaxDepth(ARG_USED_FOR_DETECT_ENTANGLEMENT objptr resultRef) {
 #ifdef DETECT_ENTANGLEMENT
 void decheckInit(GC_state s) {
 #if ASSERT
-    if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
-        perror("mmap error");
-        exit(-1);
-    }
-    memset(synch_depths, 0, MAX_PATHS * sizeof(uint32_t));
-    synch_depths[1] = 0;
+  if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE,
+          MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
+      perror("mmap error");
+      exit(-1);
+  }
+  memset(synch_depths, 0, MAX_PATHS * sizeof(uint32_t));
+  synch_depths[1] = 0;
 #endif
 
-    GC_thread thread = getThreadCurrent(s);
-    thread->decheckState.internal.path = 1;
-    thread->decheckState.internal.depth = 0;
+  GC_thread thread = getThreadCurrent(s);
+  thread->decheckState.internal.path = 1;
+  thread->decheckState.internal.depth = 0;
 }
 #else
 inline void decheckInit(GC_state s) {
@@ -55,16 +55,16 @@ inline void decheckInit(GC_state s) {
 #endif
 
 static inline unsigned int tree_depth(decheck_tid_t tid) {
-    return tid.internal.depth & 0x1f;
+  return tid.internal.depth & 0x1f;
 }
 
 static inline unsigned int dag_depth(decheck_tid_t tid) {
-    return tid.internal.depth >> 5;
+  return tid.internal.depth >> 5;
 }
 
 static inline uint32_t norm_path(decheck_tid_t tid) {
-    unsigned int td = tree_depth(tid);
-    return tid.internal.path & ((1 << (td+1)) - 1);
+  unsigned int td = tree_depth(tid);
+  return tid.internal.path & ((1 << (td+1)) - 1);
 }
 
 
@@ -89,31 +89,31 @@ static inline uint32_t decheckGetSyncDepth(GC_thread thread, uint32_t pathLen) {
  * refs just to pass values by destination-passing through the FFI.
  */
 void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
-    GC_thread thread = getThreadCurrent(s);
-    decheck_tid_t tid = thread->decheckState;
-    assert(tid.bits != DECHECK_BOGUS_BITS);
-    unsigned int h = tree_depth(tid);
-    assert(h < MAX_FORK_DEPTH);
+  GC_thread thread = getThreadCurrent(s);
+  decheck_tid_t tid = thread->decheckState;
+  assert(tid.bits != DECHECK_BOGUS_BITS);
+  unsigned int h = tree_depth(tid);
+  assert(h < MAX_FORK_DEPTH);
 
-    decheck_tid_t t1;
-    t1.internal.path = (tid.internal.path & ~(1 << h)) | (1 << (h+1));
-    t1.internal.depth = tid.internal.depth + (1 << 5) + 1;
-    *left = t1.bits;
+  decheck_tid_t t1;
+  t1.internal.path = (tid.internal.path & ~(1 << h)) | (1 << (h+1));
+  t1.internal.depth = tid.internal.depth + (1 << 5) + 1;
+  *left = t1.bits;
 
-    decheck_tid_t t2;
-    t2.internal.path = (tid.internal.path | (1 << h)) | (1 << (h+1));
-    t2.internal.depth = tid.internal.depth + (1 << 5) + 1;
-    *right = t2.bits;
+  decheck_tid_t t2;
+  t2.internal.path = (tid.internal.path | (1 << h)) | (1 << (h+1));
+  t2.internal.depth = tid.internal.depth + (1 << 5) + 1;
+  *right = t2.bits;
 
-    assert(tree_depth(t1) == tree_depth(tid)+1);
-    assert(tree_depth(t2) == tree_depth(tid)+1);
-    assert(dag_depth(t1) == dag_depth(tid)+1);
-    assert(dag_depth(t2) == dag_depth(tid)+1);
-    assert((norm_path(t1) ^ norm_path(t2)) == (uint32_t)(1 << h));
+  assert(tree_depth(t1) == tree_depth(tid)+1);
+  assert(tree_depth(t2) == tree_depth(tid)+1);
+  assert(dag_depth(t1) == dag_depth(tid)+1);
+  assert(dag_depth(t2) == dag_depth(tid)+1);
+  assert((norm_path(t1) ^ norm_path(t2)) == (uint32_t)(1 << h));
 
 #if ASSERT
-    synch_depths[norm_path(t1)] = dag_depth(t1);
-    synch_depths[norm_path(t2)] = dag_depth(t2);
+  synch_depths[norm_path(t1)] = dag_depth(t1);
+  synch_depths[norm_path(t2)] = dag_depth(t2);
 #endif
 }
 #else
@@ -127,19 +127,27 @@ void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right) {
 
 
 #ifdef DETECT_ENTANGLEMENT
+
+void setStateIfBogus(HM_chunk chunk, decheck_tid_t tid) {
+  if ((chunk->decheckState).bits == DECHECK_BOGUS_BITS)
+  {
+    chunk->decheckState = tid;
+  }
+}
+
 void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
-    decheck_tid_t tid;
-    tid.bits = bits;
+  decheck_tid_t tid;
+  tid.bits = bits;
 
-    GC_thread thread = getThreadCurrent(s);
-    thread->decheckState = tid;
+  GC_thread thread = getThreadCurrent(s);
+  thread->decheckState = tid;
 
-// #if ASSERT
-//     synch_depths[norm_path(tid)] = dag_depth(tid);
-// #endif
-    decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
+  setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
+  setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
 
-    assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
+  decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
+
+  assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
 }
 #else
 void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
@@ -165,32 +173,32 @@ uint64_t GC_HH_decheckGetTid(GC_state s, objptr threadp) {
 
 #ifdef DETECT_ENTANGLEMENT
 void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
-    decheck_tid_t t1;
-    t1.bits = left;
-    decheck_tid_t t2;
-    t2.bits = right;
+  decheck_tid_t t1;
+  t1.bits = left;
+  decheck_tid_t t2;
+  t2.bits = right;
 
-    assert(tree_depth(t1) == tree_depth(t2));
-    assert(tree_depth(t1) >= 1);
+  assert(tree_depth(t1) == tree_depth(t2));
+  assert(tree_depth(t1) >= 1);
 
-    GC_thread thread = getThreadCurrent(s);
-    unsigned int td = tree_depth(t1) - 1;
-    unsigned int dd = MAX(dag_depth(t1), dag_depth(t2)) + 1;
-    assert(dag_depth(t1) == synch_depths[norm_path(t1)]);
-    assert(dag_depth(t2) == synch_depths[norm_path(t2)]);
-    decheck_tid_t tid;
-    tid.internal.path = t1.internal.path | (1 << td);
-    tid.internal.depth = (dd << 5) + td;
-    thread->decheckState = tid;
+  GC_thread thread = getThreadCurrent(s);
+  unsigned int td = tree_depth(t1) - 1;
+  unsigned int dd = MAX(dag_depth(t1), dag_depth(t2)) + 1;
+  assert(dag_depth(t1) == synch_depths[norm_path(t1)]);
+  assert(dag_depth(t2) == synch_depths[norm_path(t2)]);
+  decheck_tid_t tid;
+  tid.internal.path = t1.internal.path | (1 << td);
+  tid.internal.depth = (dd << 5) + td;
+  thread->decheckState = tid;
 
-    assert(tree_depth(tid) == tree_depth(t1)-1);
+  assert(tree_depth(tid) == tree_depth(t1)-1);
 
 #if ASSERT
-    synch_depths[norm_path(tid)] = dd;
+  synch_depths[norm_path(tid)] = dd;
 #endif
-    decheckSetSyncDepth(thread, tree_depth(tid), dd);
+  decheckSetSyncDepth(thread, tree_depth(tid), dd);
 
-    assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
+  assert(decheckGetSyncDepth(thread, tree_depth(tid)) == synch_depths[norm_path(tid)]);
 }
 #else
 void GC_HH_decheckJoin(GC_state s, uint64_t left, uint64_t right) {
@@ -262,13 +270,15 @@ int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2)
   uint32_t p1mask = (1 << tree_depth(t1)) - 1;
   uint32_t p2 = norm_path(t2);
   uint32_t p2mask = (1 << tree_depth(t2)) - 1;
-  assert(p1 != p2);
   uint32_t shared_mask = p1mask & p2mask;
   uint32_t shared_upper_bit = shared_mask+1;
   uint32_t x = ((p1 ^ p2) & shared_mask) | shared_upper_bit;
   uint32_t lca_bit = x & -x;
   // uint32_t lca_mask = lca_bit-1;
   int llen = bitIndex(lca_bit);
+  if (p1 == p2) {
+    return tree_depth(t1) + 1;
+  }
   assert(llen == lcaLen(p1, p2));
   return llen+1;
 }
@@ -307,69 +317,284 @@ bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1) {
 }
 #endif
 
+#ifdef DETECT_ENTANGLEMENT
+
+#if ASSERT
+void traverseAndCheck(
+  GC_state s,
+  __attribute__((unused)) objptr *opp,
+  objptr op,
+  __attribute__((unused)) void *rawArgs)
+{
+  GC_header header = getHeader(objptrToPointer(op, NULL));
+  pointer p = objptrToPointer (op, NULL);
+  assert (pinType(header) == PIN_ANY);
+  assert (!isFwdHeader(header));
+  if (isMutableH(s, header)) {
+    assert (ES_contains(NULL, op));
+  }
+  else {
+    struct GC_foreachObjptrClosure echeckClosure =
+        {.fun = traverseAndCheck, .env = NULL};
+    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &echeckClosure, FALSE);
+  }
+}
+#else
+inline void traverseAndCheck(
+  __attribute__((unused)) GC_state s,
+  __attribute__((unused)) objptr *opp,
+  __attribute__((unused)) objptr op,
+  __attribute__((unused)) void *rawArgs)
+{
+  return;
+}
+#endif
+
+static inline objptr getRacyFwdPtr(pointer p) {
+  while (isFwdHeader(getHeader(p))) {
+    p = objptrToPointer(getFwdPtr(p), NULL);
+  }
+  return pointerToObjptr(p, NULL);
+}
+
+void make_entangled(
+  GC_state s,
+  objptr *opp,
+  objptr ptr,
+  void *rawArgs)
+{
+
+  struct ManageEntangledArgs* mea = (struct ManageEntangledArgs*) rawArgs;
+
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+  // if (!decheckIsOrdered(mea->root, allocator)) {
+  //   // while managing entanglement, we stay ordered wrt the root of the entanglement
+  //   return;
+  // }
+
+  pointer p_ptr = objptrToPointer(ptr, NULL);
+  GC_header header = getRacyHeader(p_ptr);
+  assert(!isFwdHeader(header));
+  bool mutable = isMutableH(s, header);
+  bool headerChange = false, pinChange = false;
+  // unpin depth according to the caller
+  uint32_t unpinDepth = mea->unpinDepth;
+
+  objptr new_ptr;
+  if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
+  {
+    bool addToRemSet = mea->firstCall;
+    if (mutable) {
+      new_ptr = pinObjectInfo(s, ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+    }
+    else
+    {
+      mea->firstCall = false;
+      struct GC_foreachObjptrClosure emanageClosure =
+          {.fun = make_entangled, .env = rawArgs};
+      // the unpinDepth of reachable maybe smaller.
+      mea->unpinDepth = pinType(header) == PIN_NONE ? unpinDepth : min(unpinDepth, unpinDepthOfH(header));
+      foreachObjptrInObject(s, p_ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+      new_ptr = pinObjectInfo(s, ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+      assert(pinType(getHeader(objptrToPointer(new_ptr, NULL))) == PIN_ANY);
+    }
+    if (pinChange && addToRemSet)
+    {
+      struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
+      HM_HH_rememberAtLevel(HM_getLevelHead(chunk), &(remElem_), true);
+      assert (HM_HH_getDepth(HM_getLevelHead(chunk)) != 1);
+    }
+  }
+  else {
+    new_ptr = getRacyFwdPtr(p_ptr);
+  }
+
+  mea->unpinDepth = unpinDepth;
+
+  assert(!hasFwdPtr(objptrToPointer(new_ptr, NULL)));
+  assert(isPinned(new_ptr));
+
+  if (ptr != new_ptr) {
+    // Help LGC move along--because this reader might traverse this pointer
+    // and it shouldn't see the forwarded one
+    assert(hasFwdPtr(objptrToPointer(ptr, NULL)));
+    *opp = new_ptr;
+  }
+
+  if (mutable && !ES_contains(NULL, new_ptr)) {
+    HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), unpinDepth);
+    ES_add(s, HM_HH_getSuspects(lcaHeap), new_ptr);
+    assert(ES_contains(NULL, new_ptr));
+  }
+
+  traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+
+  assert (!mutable || ES_contains(NULL, new_ptr));
+}
+
+objptr manage_entangled(
+  GC_state s,
+  objptr ptr,
+  decheck_tid_t reader)
+{
+
+  // GC_thread thread = getThreadCurrent(s);
+  // decheck_tid_t tid = thread->decheckState;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+  decheck_tid_t allocator = chunk->decheckState;
+
+  if (!s->controls->manageEntanglement && false)
+  {
+    printf("Entanglement detected: object at %p\n", (void *)ptr);
+    printf("Allocator tree depth: %d\n", tree_depth(allocator));
+    printf("Allocator path: 0x%x\n", allocator.internal.path);
+    printf("Allocator dag depth: %d\n", dag_depth(allocator));
+    printf("Reader tree depth: %d\n", tree_depth(allocator));
+    printf("Reader path: 0x%x\n", allocator.internal.path);
+    printf("Reader dag depth: %d\n", dag_depth(allocator));
+    exit(-1);
+  }
+
+  uint32_t unpinDepth = lcaHeapDepth(reader, allocator);
+  GC_header header = getHeader(objptrToPointer (ptr, NULL));
+
+
+  uint32_t current_ud = unpinDepthOfH(header);
+  enum PinType current_pt = pinType(header);
+  bool manage = isFwdHeader(header) ||
+    current_pt != PIN_ANY ||
+    current_ud > unpinDepth;
+
+  if (current_pt != PIN_NONE && current_ud == 0)
+  {
+    return ptr;
+  }
+
+  if (manage) {
+    uint32_t newUnpinDepth = current_pt == PIN_NONE ? unpinDepth : min(current_ud, unpinDepth);
+    struct ManageEntangledArgs mea = {
+      .reader = reader,
+      .root = allocator,
+      .unpinDepth = newUnpinDepth,
+      .firstCall = !(current_pt == PIN_DOWN && current_ud == 1)
+    };
+    make_entangled(s, &ptr, ptr, (void*) &mea);
+  }
+  else {
+    if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {
+      HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, getThreadCurrent(s), unpinDepth);
+      ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
+      assert(ES_contains(NULL, ptr));
+    }
+    traverseAndCheck(s, &ptr, ptr, NULL);
+  }
+
+
+  traverseAndCheck(s, &ptr, ptr, NULL);
+  return ptr;
+  // GC_header header = getRacyHeader(objptrToPointer(ptr, NULL));
+  // bool mutable = isMutableH(s, header);
+  // bool headerChange = false, pinChange = false;
+  // objptr new_ptr = ptr;
+  // if (pinType(header) != PIN_ANY || unpinDepthOfH(header) > unpinDepth)
+  // {
+  //   if (mutable)
+  //   {
+  //     new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+  //     if (!ES_contains(NULL, new_ptr)) {
+  //       HM_HierarchicalHeap lcaHeap = HM_HH_getHeapAtDepth(s, thread, unpinDepth);
+  //       ES_add(s, HM_HH_getSuspects(lcaHeap), new_ptr);
+  //     }
+  //   }
+  //   else
+  //   {
+  //     struct GC_foreachObjptrClosure emanageClosure =
+  //         {.fun = manage_entangled, .env = NULL};
+  //     foreachObjptrInObject(s, ptr, &trueObjptrPredicateClosure, &emanageClosure, FALSE);
+  //     new_ptr = pinObjectInfo(ptr, unpinDepth, PIN_ANY, &headerChange, &pinChange);
+  //   }
+  //   if (pinChange)
+  //   {
+  //     struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
+  //     HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+  //   }
+  // }
+  // else
+  // {
+  //   if (!mutable)
+  //   {
+  //     traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+  //   }
+  // }
+
+  // traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+  // return new_ptr;
+}
+
+#else
+objptr manage_entangled(GC_state s, objptr ptr, decheck_tid_t reader) {
+  (void)s;
+  (void)ptr;
+  (void)reader;
+  return ptr;
+}
+#endif
 
 #ifdef DETECT_ENTANGLEMENT
-void decheckRead(GC_state s, objptr ptr) {
-    GC_thread thread = getThreadCurrent(s);
-    if (thread == NULL)
-        return;
-    decheck_tid_t tid = thread->decheckState;
-    if (tid.bits == DECHECK_BOGUS_BITS)
-        return;
-    if (!isObjptr(ptr))
-        return;
-    HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
-    if (chunk == NULL)
-        return;
-    decheck_tid_t allocator = chunk->decheckState;
-    if (allocator.bits == DECHECK_BOGUS_BITS)
-        return;
-    if (decheckIsOrdered(thread, allocator))
-        return;
 
-    /** If we get here, there is entanglement. Next is how to handle it. */
+bool decheck(GC_state s, objptr ptr) {
+  if (!s->controls->manageEntanglement) {
+    return true;
+  }
+  GC_thread thread = getThreadCurrent(s);
+  if (thread == NULL)
+      return true;
+  decheck_tid_t tid = thread->decheckState;
+  if (tid.bits == DECHECK_BOGUS_BITS)
+      return true;
+  if (!isObjptr(ptr))
+      return true;
+  HM_chunk chunk = HM_getChunkOf(objptrToPointer(ptr, NULL));
+  if (chunk == NULL)
+      return true;
+  decheck_tid_t allocator = chunk->decheckState;
+  if (allocator.bits == DECHECK_BOGUS_BITS) {
+      // assert (false);
+    return true;
+  }
+  if (decheckIsOrdered(thread, allocator))
+      return true;
 
-    assert(!s->controls->manageEntanglement);
-    if (!s->controls->manageEntanglement) {
-        printf("Entanglement detected: object at %p\n", (void *) ptr);
-        printf("Allocator tree depth: %d\n", tree_depth(allocator));
-        printf("Allocator path: 0x%x\n", allocator.internal.path);
-        printf("Allocator dag depth: %d\n", dag_depth(allocator));
-        printf("Reader tree depth: %d\n", tree_depth(tid));
-        printf("Reader path: 0x%x\n", tid.internal.path);
-        printf("Reader dag depth: %d\n", dag_depth(tid));
-        exit(-1);
-    }
-
+  return false;
 #if 0
-    s->cumulativeStatistics->numEntanglementsDetected++;
 
-    /** set the chunk's disentangled depth. This synchronizes with GC, if there
-      * is GC happening by the owner of this chunk.
-      */
-    int32_t newDD = lcaHeapDepth(thread->decheckState, allocator);
-    assert(newDD >= 1);
-    while (TRUE) {
-      int32_t oldDD = atomicLoadS32(&(chunk->disentangledDepth));
+  /** set the chunk's disentangled depth. This synchronizes with GC, if there
+    * is GC happening by the owner of this chunk.
+    */
+  int32_t newDD = lcaHeapDepth(thread->decheckState, allocator);
+  assert(newDD >= 1);
+  while (TRUE) {
+    int32_t oldDD = atomicLoadS32(&(chunk->disentangledDepth));
 
-      /** Negative means it's frozen for GC. Wait until it's unfrozen... */
-      while (oldDD < 0) {
-        pthread_yield();
-        oldDD = atomicLoadS32(&(chunk->disentangledDepth));
-      }
-
-      /** And then attempt to update. */
-      if (newDD >= oldDD ||
-          __sync_bool_compare_and_swap(&(chunk->disentangledDepth), oldDD, newDD))
-        break;
+    /** Negative means it's frozen for GC. Wait until it's unfrozen... */
+    while (oldDD < 0) {
+      pthread_yield();
+      oldDD = atomicLoadS32(&(chunk->disentangledDepth));
     }
+
+    /** And then attempt to update. */
+    if (newDD >= oldDD ||
+        __sync_bool_compare_and_swap(&(chunk->disentangledDepth), oldDD, newDD))
+      break;
+  }
 #endif
 }
 #else
-void decheckRead(GC_state s, objptr ptr) {
+bool decheck(GC_state s, objptr ptr)
+{
   (void)s;
   (void)ptr;
-  return;
+  return true;
 }
 #endif
 
@@ -400,11 +625,27 @@ void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t st
    */
   memcpy(to, from, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
 }
+
 #else
-void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth) {
+void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth)
+{
   (void)s;
   (void)victimThread;
   (void)stealDepth;
   return;
 }
 #endif
+
+// returns true if the object is unpinned.
+bool disentangleObject(GC_state s, objptr op, uint32_t opDepth) {
+  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
+    bool success = tryUnpinWithDepth(op, opDepth);
+    if (success && ES_contains(NULL, op)) {
+      ES_unmark(s, op);
+      return true;
+    }
+    return false;
+  }
+  return true;
+}
+

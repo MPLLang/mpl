@@ -56,13 +56,20 @@
 
 extern void Assignable_writeBarrier(CPointer, Objptr, Objptr*, Objptr);
 extern Objptr Assignable_readBarrier(CPointer, Objptr, Objptr*);
-extern void Assignable_decheckObjptr(Objptr);
+extern Objptr Assignable_decheckObjptr(Objptr, Objptr);
 
 static inline
 Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
   Word64 result =
     __sync_val_compare_and_swap(((Word64*)a) + i, *((Word64*)&x), *((Word64*)&y));
   return *((Real64*)&result);
+}
+
+static inline
+Real32 ArrayR32_cas(Real32* a, Word64 i, Real32 x, Real32 y) {
+  Word32 result =
+    __sync_val_compare_and_swap(((Word32*)a) + i, *((Word32*)&x), *((Word32*)&y));
+  return *((Real32*)&result);
 }
 
 #define RefW8_cas(r, x, y) __sync_val_compare_and_swap((Word8*)(r), (x), (y))
@@ -78,9 +85,8 @@ Real64 ArrayR64_cas(Real64* a, Word64 i, Real64 x, Real64 y) {
 
 static inline
 Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
-  Objptr result = __sync_val_compare_and_swap(r, x, y);
-  Assignable_decheckObjptr(result);
-  return result;
+  Objptr res = __sync_val_compare_and_swap(r, x, y);
+  return Assignable_decheckObjptr(r, res);
 }
 
 #define ArrayW8_cas(a, i, x, y) __sync_val_compare_and_swap(((Word8*)(a)) + (i), (x), (y))
@@ -88,7 +94,7 @@ Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
 #define ArrayW32_cas(a, i, x, y) __sync_val_compare_and_swap(((Word32*)(a)) + (i), (x), (y))
 #define ArrayW64_cas(a, i, x, y) __sync_val_compare_and_swap(((Word64*)(a)) + (i), (x), (y))
 
-#define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
+// #define ArrayR32_cas(a, i, x, y) __sync_val_compare_and_swap(((Real32*)(a)) + (i), (x), (y))
 // #define ArrayR64_cas(a, i, x, y) __sync_val_compare_and_swap(((Real64*)(a)) + (i), (x), (y))
 
 // #define ArrayP_cas(a, i, x, y) __sync_val_compare_and_swap(((Objptr*)(a)) + (i), (x), (y))
@@ -96,9 +102,8 @@ Objptr RefP_cas(Objptr* r, Objptr x, Objptr y) {
 
 static inline
 Objptr ArrayP_cas(Objptr* a, Word64 i, Objptr x, Objptr y) {
-  Objptr result = __sync_val_compare_and_swap(a + i, x, y);
-  Assignable_decheckObjptr(result);
-  return result;
+  Objptr res = __sync_val_compare_and_swap(a + i, x, y);
+  return Assignable_decheckObjptr(a, res);
 }
 
 static inline void GC_writeBarrier(CPointer s, Objptr obj, CPointer dst, Objptr src) {

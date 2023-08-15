@@ -159,20 +159,29 @@ structure GC =
       val getCumulativeStatisticsLocalBytesReclaimedOfProc = _import
       "GC_getCumulativeStatisticsLocalBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
-      val getNumRootCCsOfProc = _import "GC_getNumRootCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getNumInternalCCsOfProc = _import "GC_getNumInternalCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getRootCCMillisecondsOfProc = _import "GC_getRootCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getInternalCCMillisecondsOfProc = _import "GC_getInternalCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getRootCCBytesReclaimedOfProc = _import "GC_getRootCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
-      val getInternalCCBytesReclaimedOfProc = _import "GC_getInternalCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val bytesInScopeForLocal =
+        _import "GC_bytesInScopeForLocal" runtime private:
+        GCState.t -> C_UIntmax.t;
+      
+      val bytesInScopeForCC =
+        _import "GC_bytesInScopeForCC" runtime private:
+        GCState.t -> C_UIntmax.t;
+
+      val getNumCCsOfProc = _import "GC_getNumCCsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCCMillisecondsOfProc = _import "GC_getCCMillisecondsOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
+      val getCCBytesReclaimedOfProc = _import "GC_getCCBytesReclaimedOfProc" runtime private: GCState.t * Word32.word -> C_UIntmax.t;
 
       val numberDisentanglementChecks = _import "GC_numDisentanglementChecks" runtime private: GCState.t -> C_UIntmax.t;
+      val numberEntanglements = _import "GC_numEntanglements" runtime private: GCState.t -> C_UIntmax.t;
 
-      val numberEntanglementsDetected = _import "GC_numEntanglementsDetected" runtime private: GCState.t -> C_UIntmax.t;
+      val approxRaceFactor = _import "GC_approxRaceFactor" runtime private: GCState.t -> Real32.real;
 
       val numberSuspectsMarked = _import "GC_numSuspectsMarked" runtime private: GCState.t -> C_UIntmax.t;
 
       val numberSuspectsCleared = _import "GC_numSuspectsCleared" runtime private: GCState.t -> C_UIntmax.t;
+
+      val bytesPinnedEntangled = _import "GC_bytesPinnedEntangled" runtime private: GCState.t -> C_UIntmax.t;
+      val bytesPinnedEntangledWatermark = _import "GC_bytesPinnedEntangledWatermark" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
@@ -368,6 +377,24 @@ structure Thread =
       val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+      val clearSuspectsAtDepth = _import "GC_HH_clearSuspectsAtDepth" runtime private: 
+        GCState.t * thread * Word32.word -> unit;
+      val numSuspectsAtDepth = _import "GC_HH_numSuspectsAtDepth" runtime private:
+        GCState.t * thread * Word32.word -> Word64.word;
+      val takeClearSetAtDepth = _import "GC_HH_takeClearSetAtDepth" runtime private:
+        GCState.t * thread * Word32.word -> Pointer.t;
+      val numChunksInClearSet = _import "GC_HH_numChunksInClearSet" runtime private:
+        GCState.t * Pointer.t -> Word64.word;
+      val processClearSetGrain = _import "GC_HH_processClearSetGrain" runtime private:
+        GCState.t * Pointer.t * Word64.word * Word64.word -> Pointer.t;
+      val commitFinishedClearSetGrain = _import "GC_HH_commitFinishedClearSetGrain" runtime private:
+        GCState.t * thread * Pointer.t -> unit;
+      val deleteClearSet = _import "GC_HH_deleteClearSet" runtime private:
+        GCState.t * Pointer.t -> unit;
+
+      val updateBytesPinnedEntangledWatermark = 
+        _import "GC_updateBytesPinnedEntangledWatermark" runtime private:
+        GCState.t -> unit;
 
       val decheckFork = _import "GC_HH_decheckFork" runtime private:
         GCState.t * Word64.word ref * Word64.word ref -> unit;

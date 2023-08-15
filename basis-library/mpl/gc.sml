@@ -24,24 +24,27 @@ struct
       GC.getCumulativeStatisticsBytesAllocatedOfProc (gcState (), Word32.fromInt p)
     fun getCumulativeStatisticsLocalBytesReclaimedOfProc p =
       GC.getCumulativeStatisticsLocalBytesReclaimedOfProc (gcState (), Word32.fromInt p)
-    fun getNumRootCCsOfProc p =
-      GC.getNumRootCCsOfProc (gcState (), Word32.fromInt p)
-    fun getNumInternalCCsOfProc p =
-      GC.getNumInternalCCsOfProc (gcState (), Word32.fromInt p)
-    fun getRootCCMillisecondsOfProc p =
-      GC.getRootCCMillisecondsOfProc (gcState (), Word32.fromInt p)
-    fun getInternalCCMillisecondsOfProc p =
-      GC.getInternalCCMillisecondsOfProc (gcState (), Word32.fromInt p)
-    fun getRootCCBytesReclaimedOfProc p =
-      GC.getRootCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
-    fun getInternalCCBytesReclaimedOfProc p =
-      GC.getInternalCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+    fun getNumCCsOfProc p =
+      GC.getNumCCsOfProc (gcState (), Word32.fromInt p)
+    fun getCCMillisecondsOfProc p =
+      GC.getCCMillisecondsOfProc (gcState (), Word32.fromInt p)
+    fun getCCBytesReclaimedOfProc p =
+      GC.getCCBytesReclaimedOfProc (gcState (), Word32.fromInt p)
+
+    fun bytesInScopeForLocal () =
+      C_UIntmax.toLargeInt (GC.bytesInScopeForLocal (gcState ()))
+
+    fun bytesInScopeForCC () =
+      C_UIntmax.toLargeInt (GC.bytesInScopeForCC (gcState ()))
 
     fun numberDisentanglementChecks () =
       C_UIntmax.toLargeInt (GC.numberDisentanglementChecks (gcState ()))
 
-    fun numberEntanglementsDetected () =
-      C_UIntmax.toLargeInt (GC.numberEntanglementsDetected (gcState ()))
+    fun numberEntanglements () =
+      C_UIntmax.toLargeInt (GC.numberEntanglements (gcState ()))
+
+    fun approxRaceFactor () =
+      (GC.approxRaceFactor (gcState ()))
 
     fun getControlMaxCCDepth () =
       Word32.toInt (GC.getControlMaxCCDepth (gcState ()))
@@ -51,6 +54,12 @@ struct
 
     fun numberSuspectsCleared () =
       C_UIntmax.toLargeInt (GC.numberSuspectsCleared (gcState ()))
+
+    fun bytesPinnedEntangled () =
+      C_UIntmax.toLargeInt (GC.bytesPinnedEntangled (gcState ()))
+
+    fun bytesPinnedEntangledWatermark () =
+      C_UIntmax.toLargeInt (GC.bytesPinnedEntangledWatermark (gcState ()))
   end
 
   exception NotYetImplemented of string
@@ -92,34 +101,19 @@ struct
     ; millisecondsToTime (getPromoMillisecondsOfProc p)
     )
 
-  fun numRootCCsOfProc p =
+  fun numCCsOfProc p =
     ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getNumRootCCsOfProc p)
+    ; C_UIntmax.toLargeInt (getNumCCsOfProc p)
     )
 
-  fun numInternalCCsOfProc p =
+  fun ccTimeOfProc p =
     ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getNumInternalCCsOfProc p)
+    ; millisecondsToTime (getCCMillisecondsOfProc p)
     )
 
-  fun rootCCTimeOfProc p =
+  fun ccBytesReclaimedOfProc p =
     ( checkProcNum p
-    ; millisecondsToTime (getRootCCMillisecondsOfProc p)
-    )
-
-  fun internalCCTimeOfProc p =
-    ( checkProcNum p
-    ; millisecondsToTime (getInternalCCMillisecondsOfProc p)
-    )
-
-  fun rootBytesReclaimedOfProc p =
-    ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getRootCCBytesReclaimedOfProc p)
-    )
-
-  fun internalBytesReclaimedOfProc p =
-    ( checkProcNum p
-    ; C_UIntmax.toLargeInt (getInternalCCBytesReclaimedOfProc p)
+    ; C_UIntmax.toLargeInt (getCCBytesReclaimedOfProc p)
     )
 
   fun sumAllProcs (f: 'a * 'a -> 'a) (perProc: int -> 'a) =
@@ -148,28 +142,39 @@ struct
   fun promoTime () =
     millisecondsToTime (sumAllProcs C_UIntmax.+ getPromoMillisecondsOfProc)
 
-  fun numRootCCs () =
+  fun numCCs () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getNumRootCCsOfProc)
+    (sumAllProcs C_UIntmax.+ getNumCCsOfProc)
 
-  fun numInternalCCs () =
-    C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getNumInternalCCsOfProc)
-
-  fun rootCCTime () =
+  fun ccTime () =
     millisecondsToTime
-    (sumAllProcs C_UIntmax.+ getRootCCMillisecondsOfProc)
+    (sumAllProcs C_UIntmax.+ getCCMillisecondsOfProc)
 
-  fun internalCCTime () =
-    millisecondsToTime
-    (sumAllProcs C_UIntmax.+ getInternalCCMillisecondsOfProc)
-
-  fun rootBytesReclaimed () =
+  fun ccBytesReclaimed () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getRootCCBytesReclaimedOfProc)
+    (sumAllProcs C_UIntmax.max getCCBytesReclaimedOfProc)
 
-  fun internalBytesReclaimed () =
-    C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.+ getInternalCCBytesReclaimedOfProc)
+
+  (* ======================================================================
+   * DEPRECATED
+   *)
+
+  exception Deprecated of string
+
+  fun d name (_: 'a) : 'b =
+    raise Deprecated ("MPL.GC." ^ name)
+  
+  val rootBytesReclaimed = d "rootBytesReclaimed"
+  val rootBytesReclaimedOfProc = d "rootBytesReclaimedOfProc"
+  val internalBytesReclaimed = d "internalBytesReclaimed"
+  val internalBytesReclaimedOfProc = d "internalBytesReclaimedOfProc"
+  val numRootCCs = d "numRootCCs"
+  val numRootCCsOfProc = d "numRootCCsOfProc"
+  val numInternalCCs = d "numInternalCCs"
+  val numInternalCCsOfProc = d "numInternalCCsOfProc"
+  val rootCCTime = d "rootCCTime"
+  val rootCCTimeOfProc = d "rootCCTimeOfProc"
+  val internalCCTime = d "internalCCTime"
+  val internalCCTimeOfProc = d "internalCCTimeOfProc"
 
 end

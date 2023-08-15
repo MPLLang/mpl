@@ -29,6 +29,7 @@ typedef struct FixedSizeAllocator {
   size_t numAllocated;
   size_t numLocalFreed;
   size_t numSharedFreed;
+  enum BlockPurpose purpose;
 
   /** A bit of a hack. I just want quick access to pages to store elements.
     * I'll reuse the frontier mechanism inherent to chunks to remember which
@@ -66,7 +67,10 @@ typedef struct FixedSizeAllocator *FixedSizeAllocator;
 /** Initialize [fsa] to be able to allocate objects of size [fixedSize].
   * You should never re-initialize an allocator.
   */
-void initFixedSizeAllocator(FixedSizeAllocator fsa, size_t fixedSize);
+void initFixedSizeAllocator(
+  FixedSizeAllocator fsa,
+  size_t fixedSize,
+  enum BlockPurpose purpose);
 
 
 /** Allocate an object of the size specified when the allocator was initialized.

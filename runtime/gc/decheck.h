@@ -20,6 +20,14 @@ typedef union {
     uint64_t bits;
 } decheck_tid_t;
 
+struct ManageEntangledArgs
+{
+  decheck_tid_t reader;
+  decheck_tid_t root;
+  uint32_t unpinDepth;
+  bool firstCall;
+};
+
 #define DECHECK_BOGUS_BITS ((uint64_t)0)
 #define DECHECK_BOGUS_TID ((decheck_tid_t){ .bits = DECHECK_BOGUS_BITS })
 
@@ -40,10 +48,12 @@ PRIVATE bool GC_HH_decheckMaxDepth(objptr resultRef);
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void decheckInit(GC_state s);
-void decheckRead(GC_state s, objptr ptr);
+bool decheck(GC_state s, objptr ptr);
 bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1);
 int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2);
-
+bool disentangleObject(GC_state s, objptr op, uint32_t opDepth);
+objptr manage_entangled(GC_state s, objptr ptr, decheck_tid_t reader);
+void traverseAndCheck(GC_state s, objptr *opp ,objptr op, void *rawArgs);
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #endif /* _DECHECK_H_ */

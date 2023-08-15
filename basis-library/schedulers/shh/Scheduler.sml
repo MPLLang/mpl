@@ -100,33 +100,11 @@ struct
   fun dbgmsg' _ = ()
 
   (* ========================================================================
-   * IDLENESS TRACKING
+   * TIMERS
    *)
 
-  val idleTotals = Array.array (P, Time.zeroTime)
-  fun getIdleTime p = arraySub (idleTotals, p)
-  fun updateIdleTime (p, deltaTime) =
-    arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
-
-(*
-  val timerGrain = 256
-  fun startTimer myId = (myId, 0, Time.now ())
-  fun tickTimer (p, count, t) =
-    if count < timerGrain then (p, count+1, t) else
-    let
-      val t' = Time.now ()
-      val diff = Time.- (t', t)
-      val _ = updateIdleTime (p, diff)
-    in
-      (p, 0, t')
-    end
-  fun stopTimer (p, _, t) =
-    (tickTimer (p, timerGrain, t); ())
-*)
-
-  fun startTimer _ = ()
-  fun tickTimer _ = ()
-  fun stopTimer _ = ()
+  structure IdleTimer = CumulativePerProcTimer(val timerName = "idle")
+  structure WorkTimer = CumulativePerProcTimer(val timerName = "work")
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -218,8 +196,6 @@ struct
         Queue.tryPopTop queue
     end
 
-  fun communicate () = ()
-
   fun push x =
     let
       val myId = myWorkerId ()
@@ -272,9 +248,6 @@ struct
       case r of
         Finished x => x
       | Raised e => raise e
-
-    val communicate = communicate
-    val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
     fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
@@ -339,6 +312,8 @@ struct
             ( HH.promoteChunks thread
             ; HH.setDepth (thread, depth)
             ; DE.decheckJoin (tidLeft, tidRight)
+            ; maybeParClearSuspectsAtDepth (thread, depth)
+            ; if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
             (* ; HH.forceNewChunk () *)
             ; let
@@ -362,6 +337,8 @@ struct
                     HH.setDepth (thread, depth);
                     DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) depth;
+                    maybeParClearSuspectsAtDepth (thread, depth);
+                    if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")
@@ -374,8 +351,85 @@ struct
         (extractResult fr, extractResult gr)
       end
 
+    
+    and simpleParFork thread depth (f: unit -> unit, g: unit -> unit) : unit =
+      let
+        val rightSideThread = ref (NONE: Thread.t option)
+        val rightSideResult = ref (NONE: unit result option)
+        val incounter = ref 2
 
-    fun forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
+        val (tidLeft, tidRight) = DE.decheckFork ()
+
+        fun g' () =
+          let
+            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            val () = DE.decheckSetTid tidRight
+            val gr = result g
+            val t = Thread.current ()
+          in
+            rightSideThread := SOME t;
+            rightSideResult := SOME gr;
+            if decrementHitsZero incounter then
+              ( setQueueDepth (myWorkerId ()) (depth+1)
+              ; threadSwitch thread
+              )
+            else
+              returnToSched ()
+          end
+        val _ = push (NormalTask g')
+        val _ = HH.setDepth (thread, depth + 1)
+        (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
+        val _ = recordForkDepth depth
+
+        val _ = DE.decheckSetTid tidLeft
+        val fr = result f
+        val tidLeft = DE.decheckGetTid thread
+
+        val gr =
+          if popDiscard () then
+            ( HH.promoteChunks thread
+            ; HH.setDepth (thread, depth)
+            ; DE.decheckJoin (tidLeft, tidRight)
+            ; maybeParClearSuspectsAtDepth (thread, depth)
+            ; if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
+            (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
+            (* ; HH.forceNewChunk () *)
+            ; let
+                val gr = result g
+              in
+                (* (gr, DE.decheckGetTid thread) *)
+                gr
+              end
+            )
+          else
+            ( clear () (* this should be safe after popDiscard fails? *)
+            ; if decrementHitsZero incounter then () else returnToSched ()
+            ; case HM.refDerefNoBarrier rightSideThread of
+                NONE => die (fn _ => "scheduler bug: join failed")
+              | SOME t =>
+                  let
+                    val tidRight = DE.decheckGetTid t
+                  in
+                    HH.mergeThreads (thread, t);
+                    HH.promoteChunks thread;
+                    HH.setDepth (thread, depth);
+                    DE.decheckJoin (tidLeft, tidRight);
+                    setQueueDepth (myWorkerId ()) depth;
+                    maybeParClearSuspectsAtDepth (thread, depth);
+                    if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
+                    (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
+                    case HM.refDerefNoBarrier rightSideResult of
+                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                    | SOME gr => gr
+                  end
+            )
+      in
+        (extractResult fr, extractResult gr);
+        ()
+      end
+
+
+    and forkGC thread depth (f : unit -> 'a, g : unit -> 'b) =
       let
         val heapId = ref (HH.getRoot thread)
         val gcTaskTuple = (thread, heapId)
@@ -398,7 +452,8 @@ struct
             val _ = HH.setDepth (thread, depth + 1)
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
             (* val _ = dbgmsg' (fn _ => "fork CC at depth " ^ Int.toString depth) *)
-            val result = fork' {ccOkayAtThisDepth=false} (f, g)
+            val res =
+              result (fn () => fork' {ccOkayAtThisDepth=false} (f, g))
 
             val _ =
               if popDiscard() then
@@ -416,9 +471,11 @@ struct
 
             val _ = HH.promoteChunks thread
             val _ = HH.setDepth (thread, depth)
+            val _ = maybeParClearSuspectsAtDepth (thread, depth)
+            val _ = if depth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
           in
-            result
+            extractResult res
           end
       end
 
@@ -437,7 +494,55 @@ struct
           (f (), g ())
       end
 
-    fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
+    and fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
+
+    and simpleFork (f, g) =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+      in
+        (* if ccOkayAtThisDepth andalso depth = 1 then *)
+        if depth < Queue.capacity andalso depthOkayForDECheck depth then
+          simpleParFork thread depth (f, g)
+        else
+          (* don't let us hit an error, just sequentialize instead *)
+          (f (); g ())
+      end
+
+    and maybeParClearSuspectsAtDepth (t, d) =
+      if HH.numSuspectsAtDepth (t, d) <= 10000 then
+        HH.clearSuspectsAtDepth (t, d)
+      else
+        let
+          val cs = HH.takeClearSetAtDepth (t, d)
+          val count = HH.numChunksInClearSet cs
+          val grainSize = 20
+          val numGrains = 1 + (count-1) div grainSize
+          val results = ArrayExtra.alloc numGrains
+          fun start i = i*grainSize
+          fun stop i = Int.min (grainSize + start i, count)
+
+          fun processLoop i j =
+            if j-i = 1 then
+              Array.update (results, i, HH.processClearSetGrain (cs, start i, stop i))
+            else
+              let
+                val mid = i + (j-i) div 2
+              in
+                simpleFork (fn _ => processLoop i mid, fn _ => processLoop mid j)
+              end
+
+          fun commitLoop i =
+            if i >= numGrains then () else
+            ( HH.commitFinishedClearSetGrain (t, Array.sub (results, i))
+            ; commitLoop (i+1)
+            )
+        in
+          processLoop 0 numGrains;
+          commitLoop 0;
+          HH.deleteClearSet cs;
+          maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
+        end
   end
 
   (* ========================================================================
@@ -473,22 +578,25 @@ struct
         in if other < myId then other else other+1
         end
 
-      fun request idleTimer =
+      fun stealLoop () =
         let
-          fun loop tries it =
+          fun loop tries =
             if tries = P * 100 then
-              (OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
-               loop 0 (tickTimer idleTimer))
+              ( IdleTimer.tick ()
+              ; OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
+              ; loop 0 )
             else
             let
               val friend = randomOtherId ()
             in
               case trySteal friend of
-                NONE => loop (tries+1) (tickTimer idleTimer)
-              | SOME (task, depth) => (task, depth, tickTimer idleTimer)
+                NONE => loop (tries+1)
+              | SOME (task, depth) => (task, depth)
             end
+
+          val result = loop 0
         in
-          loop 0 idleTimer
+          result
         end
 
       (* ------------------------------------------------------------------- *)
@@ -499,33 +607,44 @@ struct
         | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
             ;*) setGCTask myId NONE
+            ; IdleTimer.stop ()
+            ; WorkTimer.start ()
             ; HH.collectThreadRoot (thread, !hh)
             ; if popDiscard () then
-                ( (*dbgmsg' (fn _ => "resume task thread")
-                ;*) threadSwitch thread
+                ( threadSwitch thread
+                ; WorkTimer.stop ()
+                ; IdleTimer.start ()
                 ; afterReturnToSched ()
                 )
               else
-                ()
+                ( WorkTimer.stop ()
+                ; IdleTimer.start ()
+                )
             )
 
 
       fun acquireWork () : unit =
         let
-          val idleTimer = startTimer myId
-          val (task, depth, idleTimer') = request idleTimer
-          val _ = stopTimer idleTimer'
+          val (task, depth) = stealLoop ()
         in
           case task of
             GCTask (thread, hh) =>
-              ( HH.collectThreadRoot (thread, !hh)
+              ( IdleTimer.stop ()
+              ; WorkTimer.start ()
+              ; HH.collectThreadRoot (thread, !hh)
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; acquireWork ()
               )
           | Continuation (thread, depth) =>
               ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               ; dbgmsg' (fn _ => "resume task thread")
               ;*) Queue.setDepth myQueue depth
+              ; IdleTimer.stop ()
+              ; WorkTimer.start ()
               ; threadSwitch thread
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
@@ -541,7 +660,11 @@ struct
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId t;
                 (* dbgmsg' (fn _ => "switch to new task thread"); *)
+                IdleTimer.stop ();
+                WorkTimer.start ();
                 threadSwitch taskThread;
+                WorkTimer.stop ();
+                IdleTimer.start ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -560,6 +683,7 @@ struct
     let
       val (_, acquireWork) = setupSchedLoop ()
     in
+      IdleTimer.start ();
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
@@ -570,7 +694,7 @@ struct
     if HH.getDepth originalThread = 0 then ()
     else die (fn _ => "scheduler bug: root depth <> 0")
   val _ = HH.setDepth (originalThread, 1)
-  val _ = HH.forceLeftHeap (myWorkerId (), originalThread)
+  val _ = HH.forceLeftHeap (myWorkerId(), originalThread)
 
   (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
@@ -596,7 +720,10 @@ struct
       let
         val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
+        WorkTimer.start ();
         threadSwitch originalThread;
+        WorkTimer.stop ();
+        IdleTimer.start ();
         afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
@@ -635,5 +762,7 @@ struct
       ArrayExtra.Raw.unsafeToArray a
     end
 
+  val idleTimeSoFar = Scheduler.IdleTimer.cumulative
+  val workTimeSoFar = Scheduler.WorkTimer.cumulative
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
 end

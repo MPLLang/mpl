@@ -6,7 +6,11 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-void initFixedSizeAllocator(FixedSizeAllocator fsa, size_t fixedSize) {
+void initFixedSizeAllocator(
+  FixedSizeAllocator fsa,
+  size_t fixedSize,
+  enum BlockPurpose purpose)
+{
   size_t minSize = sizeof(struct FixedSizeElement);
   fsa->fixedSize = align(fixedSize < minSize ? minSize : fixedSize, 8);
   HM_initChunkList(&(fsa->buffer));
@@ -16,6 +20,7 @@ void initFixedSizeAllocator(FixedSizeAllocator fsa, size_t fixedSize) {
   fsa->numAllocated = 0;
   fsa->numLocalFreed = 0;
   fsa->numSharedFreed = 0;
+  fsa->purpose = purpose;
   return;
 }
 
@@ -86,7 +91,7 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
     * to their original buffer, by looking up the chunk header.
     */
 
-  chunk = HM_allocateChunk(buffer, fsa->fixedSize + sizeof(void*));
+  chunk = HM_allocateChunkWithPurpose(buffer, fsa->fixedSize + sizeof(void*), fsa->purpose);
   pointer gap = HM_shiftChunkStart(chunk, sizeof(void*));
   *(FixedSizeAllocator *)gap = fsa;
 

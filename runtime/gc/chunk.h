@@ -69,7 +69,7 @@ struct HM_chunk {
   /** set during entanglement when in "safe" mode, to help temporarily disable
     * local GCs while the entanglement persists.
     */
-  int32_t disentangledDepth;
+  bool retireChunk;
 
   bool mightContainMultipleObjects;
   void* tmpHeap;
@@ -156,14 +156,15 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
  *   chunk->limit - chunk->frontier <= bytesRequested
  * Returns NULL if unable to find space for such a chunk. */
 HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
+HM_chunk HM_allocateChunkWithPurpose(HM_chunkList list, size_t bytesRequested, enum BlockPurpose purpose);
 
 void HM_initChunkList(HM_chunkList list);
 
 void HM_freeChunk(GC_state s, HM_chunk chunk);
 void HM_freeChunksInList(GC_state s, HM_chunkList list);
 
-void HM_freeChunkWithInfo(GC_state s, HM_chunk chunk, writeFreedBlockInfoFnClosure f);
-void HM_freeChunksInListWithInfo(GC_state s, HM_chunkList list, writeFreedBlockInfoFnClosure f);
+void HM_freeChunkWithInfo(GC_state s, HM_chunk chunk, writeFreedBlockInfoFnClosure f, enum BlockPurpose purpose);
+void HM_freeChunksInListWithInfo(GC_state s, HM_chunkList list, writeFreedBlockInfoFnClosure f, enum BlockPurpose purpose);
 
 // void HM_deleteChunks(GC_state s, HM_chunkList deleteList);
 void HM_appendChunkList(HM_chunkList destinationChunkList, HM_chunkList chunkList);
@@ -265,7 +266,8 @@ pointer HM_shiftChunkStart(HM_chunk chunk, size_t bytes);
 pointer HM_getChunkStartGap(HM_chunk chunk);
 
 /* store the object pointed by p at the end of list and return the address */
-pointer HM_storeInchunkList(HM_chunkList chunkList, void* p, size_t objSize);
+pointer HM_storeInChunkList(HM_chunkList chunkList, void* p, size_t objSize);
+pointer HM_storeInchunkListWithPurpose(HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose);
 
 
 /**

@@ -230,15 +230,16 @@ HM_HierarchicalHeap HM_HH_zip(
 
     if (depth1 == depth2)
     {
-      HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
-      HM_appendChunkList(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
-      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
-      linkCCChains(s, hh1, hh2);
-
       // This has to happen before linkInto (which frees hh2)
       HM_HierarchicalHeap hh2anc = hh2->nextAncestor;
       CC_freeStack(s, HM_HH_getConcurrentPack(hh2));
+      linkCCChains(s, hh1, hh2);
       linkInto(s, hh1, hh2);
+
+      HM_appendChunkList(HM_HH_getChunkList(hh1), HM_HH_getChunkList(hh2));
+      ES_move(HM_HH_getSuspects(hh1), HM_HH_getSuspects(hh2));
+      HM_appendRemSet(HM_HH_getRemSet(hh1), HM_HH_getRemSet(hh2));
+
 
       *cursor = hh1;
       cursor = &(hh1->nextAncestor);
@@ -339,6 +340,26 @@ void HM_HH_merge(
   assertInvariants(parentThread);
 }
 
+
+void HM_HH_clearSuspectsAtDepth(
+  GC_state s,
+  GC_thread thread,
+  uint32_t targetDepth)
+{
+  // walk to find heap; only clear suspects at the target depth
+  for (HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    uint32_t d = HM_HH_getDepth(cursor);
+    if (d <= targetDepth) {
+      if (d == targetDepth) ES_clear(s, cursor);
+      return;
+    }
+  }
+}
+
+
 void HM_HH_promoteChunks(
   GC_state s,
   GC_thread thread)
@@ -349,7 +370,6 @@ void HM_HH_promoteChunks(
   {
     /* no need to do anything; this function only guarantees that the
      * current depth has been completely evacuated. */
-    ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
     return;
   }
 
@@ -378,18 +398,20 @@ void HM_HH_promoteChunks(
 
     if (NULL == hh->subHeapForCC) {
       assert(NULL == hh->subHeapCompletedCC);
-      HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
-      HM_appendChunkList(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
-      ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
-      linkCCChains(s, parent, hh);
-      /* shortcut.  */
-      thread->hierarchicalHeap = parent;
       /* don't need the snapshot for this heap now. */
       CC_freeStack(s, HM_HH_getConcurrentPack(hh));
+      linkCCChains(s, parent, hh);
       linkInto(s, parent, hh);
+
+      HM_appendChunkList(HM_HH_getChunkList(parent), HM_HH_getChunkList(hh));
+      ES_move(HM_HH_getSuspects(parent), HM_HH_getSuspects(hh));
+      HM_appendRemSet(HM_HH_getRemSet(parent), HM_HH_getRemSet(hh));
+      /* shortcut.  */
+      thread->hierarchicalHeap = parent;
       hh = parent;
     }
-    else {
+    else
+    {
       assert(HM_getLevelHead(thread->currentChunk) == hh);
 
 #if ASSERT
@@ -453,8 +475,7 @@ void HM_HH_promoteChunks(
 
     assert(HM_HH_getDepth(hh) == currentDepth-1);
   }
-
-  ES_clear(s, HM_HH_getSuspects(thread->hierarchicalHeap));
+  assert(hh == thread->hierarchicalHeap);
 
 #if ASSERT
   assert(hh == thread->hierarchicalHeap);
@@ -464,6 +485,7 @@ void HM_HH_promoteChunks(
   assertInvariants(thread);
 #endif
 }
+
 
 bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 {
@@ -503,7 +525,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   hh->heightDependants = 0;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
-  HM_initChunkList(HM_HH_getRemSet(hh));
+  HM_initRemSet(HM_HH_getRemSet(hh));
   HM_initChunkList(HM_HH_getSuspects(hh));
 
   return hh;
@@ -583,7 +605,10 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
     hh = newhh;
   }
 
-  chunk = HM_allocateChunk(HM_HH_getChunkList(hh), bytesRequested);
+  chunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(hh),
+    bytesRequested,
+    BLOCK_FOR_HEAP_CHUNK);
 
   if (NULL == chunk) {
     return FALSE;
@@ -596,6 +621,17 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 #endif
 
   chunk->levelHead = HM_HH_getUFNode(hh);
+  // hh->chunkList <--> og
+  // toList --> hh
+  // 1. in-place collection of unionFind nodes?
+  // 2. How do you make the hh fully concurrent?
+  // how do you make the union-find fully concurrent and collectible?
+      // what is the hh?? list of heaps
+          // ->
+          // ->
+          // ->
+          // ->
+  // 3.
 
   thread->currentChunk = chunk;
   HM_HH_addRecentBytesAllocated(thread, HM_getChunkSize(chunk));
@@ -674,8 +710,11 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
   thread->hierarchicalHeap = newHH;
-  HM_chunk chunk =
-    HM_allocateChunk(HM_HH_getChunkList(newHH), GC_HEAP_LIMIT_SLOP);
+  HM_chunk chunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(newHH),
+    GC_HEAP_LIMIT_SLOP,
+    BLOCK_FOR_HEAP_CHUNK);
+    
   chunk->levelHead = HM_HH_getUFNode(newHH);
 
 #ifdef DETECT_ENTANGLEMENT
@@ -755,12 +794,21 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
     HM_HierarchicalHeap completed = hh->subHeapCompletedCC;
     while (completed != NULL) {
       HM_HierarchicalHeap next = completed->subHeapCompletedCC;
+      
+      /* consider using max instead of addition */
       HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
-      HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
-      HM_appendChunkList(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
+      
+      /*
+      HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection =
+        max(HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection,
+            HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection);
+      */
+
       CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
+      HM_appendChunkList(HM_HH_getChunkList(hh), HM_HH_getChunkList(completed));
+      HM_appendRemSet(HM_HH_getRemSet(hh), HM_HH_getRemSet(completed));
       completed = next;
     }
 
@@ -809,6 +857,8 @@ bool checkPolicyforRoot(
   }
 
   size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
+  
+  /* consider removing this: */
   for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
        NULL != cursor;
        cursor = cursor->subHeapCompletedCC)
@@ -858,7 +908,11 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   assert(isStackReservedAligned(s, reserved));
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
 
-  HM_chunk newChunk = HM_allocateChunk(HM_HH_getChunkList(hh), stackSize);
+  HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    HM_HH_getChunkList(hh),
+    stackSize,
+    BLOCK_FOR_HEAP_CHUNK);
+
   if (NULL == newChunk) {
     DIE("Ran out of space to copy stack!");
   }
@@ -940,7 +994,7 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
   mainhh->subHeapForCC = heap->subHeapForCC;
   HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(heap));
-  HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(heap));
+  HM_appendRemSet(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(heap));
   linkInto(s, mainhh, heap);
 
 
@@ -953,7 +1007,7 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
       HM_HH_getConcurrentPack(mainhh)->bytesSurvivedLastCollection +=
         HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
       HM_appendChunkList(HM_HH_getChunkList(mainhh), HM_HH_getChunkList(completed));
-      HM_appendChunkList(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(completed));
+      HM_appendRemSet(HM_HH_getRemSet(mainhh), HM_HH_getRemSet(completed));
       linkInto(s, mainhh, completed);
       completed = next;
     }
@@ -1168,6 +1222,32 @@ void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p) {
   }
 }
 
+void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool conc) {
+  assert(hh != NULL);
+  if (!conc) {
+    HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+  } else {
+    HM_UnionFindNode cursor = HM_HH_getUFNode(hh);
+    while(true) {
+      while (NULL != cursor->representative) {
+        cursor = cursor->representative;
+      }
+      hh = cursor->payload;
+      if (hh == NULL){
+        /* race with a join that changed the cursor, iterate again */
+        /*should not happen if we retire hh just like ufnodes*/
+        assert (false);
+        continue;
+      }
+      HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+      if (NULL == cursor->representative) {
+        return;
+      }
+    }
+  }
+
+}
+
 
 void HM_HH_freeAllDependants(
   GC_state s,
@@ -1259,7 +1339,7 @@ void HM_HH_freeAllDependants(
 /*******************************/
 
 static inline void linkInto(
-  GC_state s,
+  __attribute__((unused)) GC_state s,
   HM_HierarchicalHeap left,
   HM_HierarchicalHeap right)
 {
@@ -1279,8 +1359,9 @@ static inline void linkInto(
 
   assert(NULL == HM_HH_getUFNode(left)->dependant2);
 
-  HM_HH_getUFNode(right)->payload = NULL;
-  freeFixedSize(getHHAllocator(s), right);
+  // HM_HH_getUFNode(right)->payload = NULL;
+  // freeFixedSize(getHHAllocator(s), right);
+  // HH_EBR_retire(s, HM_HH_getUFNode(right));
 
   assert(HM_HH_isLevelHead(left));
 }
@@ -1307,9 +1388,7 @@ void assertInvariants(GC_thread thread)
          NULL != chunk;
          chunk = chunk->nextChunk)
     {
-      assert(HM_getLevelHead(chunk) == cursor);
-      assert(chunk->disentangledDepth >= 1);
-    }
+      assert(HM_getLevelHead(chunk) == cursor);    }
   }
 
   /* check sorted by depth */

@@ -8,9 +8,7 @@ sig
   (* synonym for par *)
   val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
 
-  (* other scheduler hooks *)
-  val communicate: unit -> unit
-  val getIdleTime: int -> Time.time
-
+  val idleTimeSoFar: unit -> Time.time
+  val workTimeSoFar: unit -> Time.time
   val maxForkDepthSoFar: unit -> int
 end

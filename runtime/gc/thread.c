@@ -164,6 +164,75 @@ void GC_HH_promoteChunks(pointer threadp) {
   HM_HH_promoteChunks(s, thread);
 }
 
+void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  HM_HH_clearSuspectsAtDepth(s, thread, depth);
+}
+
+Word64 GC_HH_numSuspectsAtDepth(GC_state s, pointer threadp, uint32_t targetDepth) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+
+  for (HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
+       NULL != cursor;
+       cursor = cursor->nextAncestor)
+  {
+    uint32_t d = HM_HH_getDepth(cursor);
+    if (d <= targetDepth) {
+      if (d == targetDepth) return (Word64)ES_numSuspects(s, cursor);
+      return 0;
+    }
+  }
+
+  return 0;
+}
+
+Pointer /*ES_clearSet*/
+GC_HH_takeClearSetAtDepth(GC_state s, pointer threadp, uint32_t targetDepth) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  return (pointer)ES_takeClearSet(s, HM_HH_getHeapAtDepth(s, thread, targetDepth));
+}
+
+Word64 GC_HH_numChunksInClearSet(GC_state s, pointer clearSet) {
+  return (Word64)ES_numChunksInClearSet(s, (ES_clearSet)clearSet);
+}
+
+Pointer /*ES_finishedClearSetGrain*/
+GC_HH_processClearSetGrain(GC_state s, pointer clearSet, Word64 start, Word64 stop) {
+  return (pointer)ES_processClearSetGrain(s, (ES_clearSet)clearSet, (size_t)start, (size_t)stop);
+}
+
+void GC_HH_commitFinishedClearSetGrain(GC_state s, pointer threadp, pointer finClearSetGrain) {
+  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
+  getThreadCurrent(s)->exnStack = s->exnStack;
+  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  assert(threadAndHeapOkay(s));
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  ES_commitFinishedClearSetGrain(s, thread, (ES_finishedClearSetGrain)finClearSetGrain);
+}
+
+void GC_HH_deleteClearSet(GC_state s, pointer clearSet) {
+  ES_deleteClearSet(s, (ES_clearSet)clearSet);
+}
+
 void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

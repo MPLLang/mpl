@@ -14,22 +14,25 @@
  * Definition of the HierarchicalHeap collection interface
  */
 
-
 #ifndef HIERARCHICAL_HEAP_COLLECTION_H_
 #define HIERARCHICAL_HEAP_COLLECTION_H_
 
 #include "chunk.h"
+#include "cc-work-list.h"
 
-#if (defined (MLTON_GC_INTERNAL_TYPES))
-struct ForwardHHObjptrArgs {
-  struct HM_HierarchicalHeap* hh;
+#if (defined(MLTON_GC_INTERNAL_TYPES))
+struct ForwardHHObjptrArgs
+{
+  struct HM_HierarchicalHeap *hh;
   uint32_t minDepth;
   uint32_t maxDepth;
   uint32_t toDepth; /* if == HM_HH_INVALID_DEPTH, preserve level of the forwarded object */
 
   /* arrays of HH objects, e.g. HM_HH_getDepth(toSpace[i]) == i */
-  HM_HierarchicalHeap* fromSpace;
-  HM_HierarchicalHeap* toSpace;
+  HM_HierarchicalHeap *fromSpace;
+  HM_HierarchicalHeap *toSpace;
+  pointer *toSpaceStart;
+  HM_chunk *toSpaceStartChunk;
   /* an array of pinned chunklists */
   struct HM_chunkList *pinned;
 
@@ -37,18 +40,24 @@ struct ForwardHHObjptrArgs {
   objptr containingObject;
 
   size_t bytesCopied;
+  size_t entangledBytes;
   uint64_t objectsCopied;
   uint64_t stacksCopied;
 
   /* large objects are "moved" (rather than copied). */
   size_t bytesMoved;
   uint64_t objectsMoved;
+
+  /*worklist for mark and scan*/
+  struct CC_workList worklist;
+  bool concurrent;
 };
 
-struct checkDEDepthsArgs {
+struct checkDEDepthsArgs
+{
   int32_t minDisentangledDepth;
-  HM_HierarchicalHeap* fromSpace;
-  HM_HierarchicalHeap* toSpace;
+  HM_HierarchicalHeap *fromSpace;
+  HM_HierarchicalHeap *toSpace;
   uint32_t maxDepth;
 };
 
@@ -56,10 +65,10 @@ struct checkDEDepthsArgs {
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
-#if (defined (MLTON_GC_INTERNAL_BASIS))
+#if (defined(MLTON_GC_INTERNAL_BASIS))
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
+#if (defined(MLTON_GC_INTERNAL_FUNCS))
 /**
  * This function performs a local collection on the current hierarchical heap
  */
@@ -73,12 +82,12 @@ void HM_HHC_collectLocal(uint32_t desiredScope);
  * @param opp The objptr to forward
  * @param args The struct ForwardHHObjptrArgs* for this call, cast as a void*
  */
-void forwardHHObjptr(GC_state s, objptr* opp, objptr op, void* rawArgs);
+void forwardHHObjptr(GC_state s, objptr *opp, objptr op, void *rawArgs);
 
 /* check if `op` is in args->toSpace[depth(op)] */
 bool isObjptrInToSpace(objptr op, struct ForwardHHObjptrArgs *args);
 
-objptr relocateObject(GC_state s, objptr obj, HM_HierarchicalHeap tgtHeap, struct ForwardHHObjptrArgs *args);
+objptr relocateObject(GC_state s, objptr obj, HM_HierarchicalHeap tgtHeap, struct ForwardHHObjptrArgs *args, bool *relocSuccess);
 
 pointer copyObject(pointer p, size_t objectSize, size_t copySize, HM_HierarchicalHeap tgtHeap);
 #endif /* MLTON_GC_INTERNAL_FUNCS */

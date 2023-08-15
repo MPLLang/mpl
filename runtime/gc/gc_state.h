@@ -32,6 +32,7 @@ struct GC_state {
   volatile uint32_t atomicState;
   struct BlockAllocator *blockAllocatorGlobal;
   struct BlockAllocator *blockAllocatorLocal;
+  struct Sampler *blockUsageSampler;
   objptr callFromCHandlerThread; /* Handler for exported C calls (in heap). */
   pointer callFromCOpArgsResPtr; /* Pass op, args, and res from exported C call */
   struct GC_controls *controls;
@@ -51,7 +52,8 @@ struct GC_state {
   uint32_t globalsLength;
   struct FixedSizeAllocator hhAllocator;
   struct FixedSizeAllocator hhUnionFindAllocator;
-  struct HH_EBR_shared * hhEBR;
+  struct EBR_shared * hhEBR;
+  struct EBR_shared * hmEBR;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
@@ -131,17 +133,20 @@ PRIVATE uintmax_t GC_getPromoMillisecondsOfProc(GC_state s, uint32_t proc);
 
 PRIVATE uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc);
 
-PRIVATE uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
-PRIVATE uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc);
+PRIVATE uintmax_t GC_bytesInScopeForLocal(GC_state s);
+PRIVATE uintmax_t GC_bytesInScopeForCC(GC_state s);
 PRIVATE uintmax_t GC_numDisentanglementChecks(GC_state s);
-PRIVATE uintmax_t GC_numEntanglementsDetected(GC_state s);
+PRIVATE uintmax_t GC_numEntanglements(GC_state s);
+PRIVATE float GC_approxRaceFactor(GC_state s);
 PRIVATE uintmax_t GC_numChecksSkipped(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsMarked(GC_state s);
 PRIVATE uintmax_t GC_numSuspectsCleared(GC_state s);
+PRIVATE uintmax_t GC_bytesPinnedEntangled(GC_state s);
+PRIVATE uintmax_t GC_bytesPinnedEntangledWatermark(GC_state s);
+PRIVATE void GC_updateBytesPinnedEntangledWatermark(GC_state s);
 
 PRIVATE uint32_t GC_getControlMaxCCDepth(GC_state s);
 

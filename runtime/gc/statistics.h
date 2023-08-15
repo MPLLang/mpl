@@ -36,8 +36,9 @@ struct GC_cumulativeStatistics {
   uintmax_t bytesScannedMinor;
   uintmax_t bytesHHLocaled;
   uintmax_t bytesReclaimedByLocal;
-  uintmax_t bytesReclaimedByRootCC;
-  uintmax_t bytesReclaimedByInternalCC;
+  uintmax_t bytesReclaimedByCC;
+  uintmax_t bytesInScopeForLocal;
+  uintmax_t bytesInScopeForCC;
 
   size_t maxBytesLive;
   size_t maxBytesLiveSinceReset;
@@ -63,19 +64,21 @@ struct GC_cumulativeStatistics {
   uintmax_t numMarkCompactGCs;
   uintmax_t numMinorGCs;
   uintmax_t numHHLocalGCs;
-  uintmax_t numRootCCs;
-  uintmax_t numInternalCCs;
-  uintmax_t numDisentanglementChecks;
+  uintmax_t numCCs;
+  uintmax_t numDisentanglementChecks; // count full read barriers
+  uintmax_t numEntanglements;         // count instances entanglement is detected
   uintmax_t numChecksSkipped;
   uintmax_t numSuspectsMarked;
   uintmax_t numSuspectsCleared;
-  uintmax_t numEntanglementsDetected;
+  uintmax_t bytesPinnedEntangled;
+  uintmax_t currentPhaseBytesPinnedEntangled;
+  uintmax_t bytesPinnedEntangledWatermark;
+  float approxRaceFactor;
 
   struct timespec timeLocalGC;
   struct timespec timeLocalPromo;
 
-  struct timespec timeRootCC;
-  struct timespec timeInternalCC;
+  struct timespec timeCC;
 
   struct rusage ru_gc; /* total resource usage in gc. */
   struct rusage ru_gcCopying; /* resource usage in major copying gcs. */

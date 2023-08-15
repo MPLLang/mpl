@@ -17,12 +17,15 @@ sig
    *)
   val numberDisentanglementChecks: unit -> IntInf.int
 
-  (* How many times entanglement has been detected at a read barrier.
-   *)
-  val numberEntanglementsDetected: unit -> IntInf.int
+  (* How many times the entanglement is detected *)
+  val numberEntanglements: unit -> IntInf.int
+
+  val approxRaceFactor: unit -> Real32.real
 
   val numberSuspectsMarked: unit -> IntInf.int
   val numberSuspectsCleared: unit -> IntInf.int
+  val bytesPinnedEntangled: unit -> IntInf.int
+  val bytesPinnedEntangledWatermark: unit -> IntInf.int
 
   val getControlMaxCCDepth: unit -> int
 
@@ -43,6 +46,8 @@ sig
   val localBytesReclaimed: unit -> IntInf.int
   val localBytesReclaimedOfProc: int -> IntInf.int
 
+  val bytesInScopeForLocal: unit -> IntInf.int
+
   val numLocalGCs: unit -> IntInf.int
   val numLocalGCsOfProc: int -> IntInf.int
 
@@ -52,21 +57,28 @@ sig
   val promoTime: unit -> Time.time
   val promoTimeOfProc: int -> Time.time
 
+  val numCCs: unit -> IntInf.t
+  val numCCsOfProc: int -> IntInf.t
+
+  val ccBytesReclaimed: unit -> IntInf.int
+  val ccBytesReclaimedOfProc: int -> IntInf.int
+
+  val bytesInScopeForCC: unit -> IntInf.int
+
+  val ccTime: unit -> Time.time
+  val ccTimeOfProc: int -> Time.time
+
+  (* DEPRECATED *)
   val rootBytesReclaimed: unit -> IntInf.int
   val rootBytesReclaimedOfProc: int -> IntInf.int
-
   val internalBytesReclaimed: unit -> IntInf.int
   val internalBytesReclaimedOfProc: int -> IntInf.int
-
   val numRootCCs: unit -> IntInf.int
   val numRootCCsOfProc: int -> IntInf.int
-
   val numInternalCCs: unit -> IntInf.int
   val numInternalCCsOfProc: int -> IntInf.int
-
   val rootCCTime: unit -> Time.time
   val rootCCTimeOfProc: int -> Time.time
-
   val internalCCTime: unit -> Time.time
   val internalCCTimeOfProc: int -> Time.time
 end

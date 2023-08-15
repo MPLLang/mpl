@@ -28,6 +28,7 @@ typedef GC_state GCState_t;
 
 #include "gc/debug.h"
 #include "gc/logger.h"
+#include "gc/sampler.h"
 #include "gc/block-allocator.h"
 
 #include "gc/tls-objects.h"
@@ -84,12 +85,15 @@ typedef GC_state GCState_t;
 #include "gc/processor.h"
 #include "gc/pin.h"
 #include "gc/hierarchical-heap.h"
+#include "gc/ebr.h"
 #include "gc/hierarchical-heap-ebr.h"
+#include "gc/entangled-ebr.h"
 #include "gc/hierarchical-heap-collection.h"
 #include "gc/entanglement-suspects.h"
 #include "gc/local-scope.h"
 #include "gc/local-heap.h"
 #include "gc/assign.h"
+#include "gc/concurrent-list.h"
 #include "gc/remembered-set.h"
 #include "gc/gap.h"
 // #include "gc/deferred-promote.h"
