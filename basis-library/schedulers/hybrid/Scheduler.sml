@@ -303,7 +303,7 @@ struct
     end *)
 
 
-  fun i64ToReal x = Real.fromLargeInt (Int64.toLarge x)
+  fun i64ToReal x = Real.fromInt (Int64.toInt x)
   fun realToi64 r = Int64.fromLarge (Real.toLargeInt IEEEReal.TO_NEAREST r)
 
   
