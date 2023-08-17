@@ -243,13 +243,31 @@ struct
   end
 
   (* ========================================================================
-   * SCHEDULER LOCAL DATA
+   * HYBRID SCHEDULER DATA
    *)
 
-  (* should switch to one per gpu manager *)
-  val hybridTaskQueue: task RingBuffer.t =
-    RingBuffer.new {capacity=1000}
-  
+  (* hybridStartTime = ~1 when no current hybrid region is active.
+   * hybridNumChoicesKeptOnCPU is only used when a hybrid region is active. *)
+  val hybridStartTime: Int64.int ref = ref (~1)
+  val hybridIdlenessStart: Int64.int ref = ref 0
+  val hybridNumChoicesKeptOnCPU: Int64.int ref = ref 0
+
+  (* SAM_NOTE: if/when we switch to the par+choice+gpu interface, we can add
+   * an explicit queue to send `gpu ...` expressions to the gpu manager, but
+   * otherwise execute everything else
+   *
+   *   choice {
+   *     cpu = (fn _ => ...),                (* exec by worker *)
+   *     gpu = (fn _ =>
+   *       copyToGPU...;                     (* exec by worker *)
+   *       gpu (fn i => callCudaOnDevice i)  (* exec by GPU manager *)
+   *       copyFromGPU...;                   (* exec by worker *)
+   *   }
+   *)
+
+  (* val hybridTaskQueue: task RingBuffer.t =
+    RingBuffer.new {capacity=1000} *)
+
   val hybridDoneQueue: task RingBuffer.t =
     RingBuffer.new {capacity=1000}
 
@@ -284,6 +302,29 @@ struct
       loop (!idlenessCounter)
     end *)
 
+
+  fun i64ToReal x = Real.fromLargeInt (Int64.toLarge x)
+  fun realToi64 r = Int64.fromLarge (Real.toLargeInt IEEEReal.TO_NEAREST r)
+
+  
+  fun pendingChoiceBoundToKeep () =
+    let
+      val hstart = !hybridStartTime
+    in
+      if hstart < 0 then
+        0
+      else
+        let
+          val idleness =
+            i64ToReal (currentStealTimeSpent () - !hybridIdlenessStart)
+          val elapsed =
+            i64ToReal (timeNowMicrosecondsSinceProgramStart () - !hybridStartTime)
+        in
+          Real.floor ((idleness - (gpuPayout * elapsed)) / 100.0)
+        end
+    end
+
+
   (* ========================================================================
    * SCHEDULER LOCAL DATA
    *)
@@ -291,6 +332,7 @@ struct
   type worker_local_data =
     { queue : task Queue.t
     , sideQueue : task RingBuffer.t
+    , pendingChoices: task RingBuffer.t
     , schedThread : Thread.t option ref
     , gcTask: gctask_data option ref
     }
@@ -298,6 +340,7 @@ struct
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
     , sideQueue = RingBuffer.new {capacity=200}
+    , pendingChoices = RingBuffer.new {capacity=200}
     , schedThread = ref NONE
     , gcTask = ref NONE
     }
@@ -342,6 +385,43 @@ struct
     in
       RingBuffer.popBot sideQueue  
     end
+
+  fun tryStealPendingChoice p =
+    let
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.popTop pendingChoices
+    end
+
+  fun tryPopPendingChoice p =
+    let
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.popBot pendingChoices
+    end
+
+  fun tryPushPendingChoice p x =
+    let
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.pushBot (pendingChoices, x)
+    end
+
+
+  fun tryKeepPendingChoice p =
+    let
+      val numKept = !hybridNumChoicesKeptOnCPU
+      val keepBound = pendingChoiceBoundToKeep ()
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      if numKept >= keepBound orelse RingBuffer.size pendingChoices = 0 then
+        NONE
+      else if casRef hybridNumChoicesKeptOnCPU (numKept, numKept+1) then
+        RingBuffer.popBot pendingChoices
+      else
+        tryKeepPendingChoice p
+    end
+
 
   fun communicate () = ()
 
@@ -632,8 +712,32 @@ struct
       let
         (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
 
+        val rest = Time.fromMicroseconds 10
+        fun hiccup () = OS.Process.sleep rest
+
+        val _ = hybridNumChoicesKeptOnCPU := 0
+        val _ = hybridIdlenessStart := currentStealTimeSpent ()
+        val startTime = timeNowMicrosecondsSinceProgramStart ()
+        val _ =
+          if casRef hybridStartTime (~1, startTime) then ()
+          else die (fn _ => "scheduler bug: start hybrid section failed")
+
         val package = spawn ()
 
+        fun loopWaitForGpu () =
+          ( hiccup ()
+          ; if not (poll package) then
+              loopWaitForGpu ()
+            else
+              let
+                val result = finish package
+              in
+                hybridStartTime := ~1;
+                result
+              end
+          )
+
+(*
         fun tryPassOne () =
           case RingBuffer.popBot hybridTaskQueue of
             NONE => false
@@ -673,8 +777,12 @@ struct
                   loopWaitForGpu thisStealSample newRemaining tickNow
                 end
             end
+*)
       in
+(*
         loopWaitForGpu (currentStealTimeSpent ()) 0 (timeNowMicrosecondsSinceProgramStart ())
+*)
+        loopWaitForGpu ()
       end
 
 
@@ -689,7 +797,8 @@ struct
           val thread = Thread.current ()
           val depth = HH.getDepth thread
           val selfTask = Continuation (thread, depth)
-          val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask)
+          val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
+          (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
         in
           if sendSucceeded then returnToSched () else ()
         end
@@ -767,24 +876,36 @@ struct
               ; gpuManagerFindWorkLoop 0
               )
             else
-              case RingBuffer.popTop hybridTaskQueue of
+              (* case RingBuffer.popTop hybridTaskQueue of
                 SOME t => t
-              | NONE => gpuManagerFindWorkLoop (tries+1)
-
-          fun stealLoop tries lastTick =
-            if tries = P * 100 then
+              | NONE => gpuManagerFindWorkLoop (tries+1) *)
               let
-                (* val tickNow = Time.toReal (Time.now ()) *)
-                (* val elapsed = tickNow - lastTick *)
-                (* val elapsedMilli = Real.floor (elapsed * 1000.0) *)
+                val friend = randomOtherId ()
               in
-                (* updateIdlenessCounterWith (fn x => x + P); *)
-
-                OS.Process.sleep
-                  (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
-
-                stealLoop 0 (timeNowMicrosecondsSinceProgramStart ())
+                case tryStealPendingChoice friend of
+                  NONE => gpuManagerFindWorkLoop (tries+1)
+                | SOME t => t
               end
+
+          fun stealLoop allowTakePending tries lastTick =
+            if tries = P * 50 then
+              if allowTakePending then
+                let
+                  (* val tickNow = Time.toReal (Time.now ()) *)
+                  (* val elapsed = tickNow - lastTick *)
+                  (* val elapsedMilli = Real.floor (elapsed * 1000.0) *)
+                in
+                  (* updateIdlenessCounterWith (fn x => x + P); *)
+
+                  OS.Process.sleep
+                    (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
+
+                  stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
+                end
+              else
+                (case tryKeepPendingChoice (myWorkerId ()) of
+                   NONE => stealLoop true tries lastTick
+                 | SOME t => t)
             else
             let
               val friend = randomOtherId ()
@@ -807,12 +928,16 @@ struct
               case tryStealSide friend of
                 SOME task => task
               | NONE =>
-                  if not (isGpuManager friend) then
-                    stealLoop (tries+1) lastTick
+                  if not (isGpuManager friend) andalso allowTakePending then
+                    case tryKeepPendingChoice friend of
+                      SOME x => x
+                    | NONE => stealLoop allowTakePending (tries+1) lastTick
+                  else if not (isGpuManager friend) then 
+                    stealLoop allowTakePending (tries+1) lastTick
                   else
                     case RingBuffer.popTop hybridDoneQueue of
                       SOME x => x
-                    | NONE => stealLoop (tries+1) lastTick
+                    | NONE => stealLoop allowTakePending (tries+1) lastTick
             end
         in
           if amGpuManager () then
@@ -820,7 +945,7 @@ struct
           else
           case tryPopSide myId of
             SOME task => task
-          | NONE => stealLoop 0 (timeNowMicrosecondsSinceProgramStart ())
+          | NONE => stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
         end
 
       (* ------------------------------------------------------------------- *)
