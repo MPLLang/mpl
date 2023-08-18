@@ -120,8 +120,8 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  val gpuPayout = parseReal "sched-gpu-payout" 1.0
-  val keepDamper = parseReal "sched-keep-damper" 500.0
+  (* val gpuPayout = parseReal "sched-gpu-payout" 1.0 *)
+  (* val keepDamper = parseReal "sched-keep-damper" 500.0 *)
   val dumpGpuInfo = parseFlag "sched-dump-gpu-info"
 
 
@@ -274,9 +274,12 @@ struct
 
   (* hybridStartTime = ~1 when no current hybrid region is active.
    * hybridNumChoicesKeptOnCPU is only used when a hybrid region is active. *)
+
+  (*
   val hybridStartTime: Int64.int ref = ref (~1)
   val hybridIdlenessStart: Int64.int ref = ref 0
   val hybridNumChoicesKeptOnCPU: Int64.int ref = ref 0
+  *)
 
   (* SAM_NOTE: if/when we switch to the par+choice+gpu interface, we can add
    * an explicit queue to send `gpu ...` expressions to the gpu manager, but
@@ -297,6 +300,7 @@ struct
   val hybridDoneQueue: task RingBuffer.t =
     RingBuffer.new {capacity=1000}
 
+  (*
   val stealTimeCounters: Int64.int array = Array.tabulate (P, fn _ => 0)
 
   fun addStealTime delta =
@@ -308,6 +312,7 @@ struct
 
   fun currentStealTimeSpent () =
     Array.foldl op+ 0 stealTimeCounters
+  *)
 
   (* val idlenessCounter: int ref = ref 0
   
@@ -332,7 +337,7 @@ struct
   fun i64ToReal x = Real.fromInt (Int64.toInt x)
   fun realToi64 r = Int64.fromLarge (Real.toLargeInt IEEEReal.TO_NEAREST r)
 
-  
+(*
   fun pendingChoiceBoundToKeep () =
     let
       val hstart = !hybridStartTime
@@ -344,12 +349,12 @@ struct
           val idleness =
             i64ToReal (currentStealTimeSpent () - !hybridIdlenessStart)
           val elapsed =
-            i64ToReal (timeNowMicrosecondsSinceProgramStart () - !hybridStartTime)
+            i64ToReal (timeNowMicrosecondsSinceProgramStart () - hstart)
         in
           Real.floor ((idleness - (gpuPayout * elapsed)) / keepDamper)
         end
     end
-
+*)
 
   (* ========================================================================
    * SCHEDULER LOCAL DATA
@@ -441,7 +446,7 @@ struct
     end
 
 
-  fun tryKeepPendingChoice p =
+  (* fun tryKeepPendingChoice p =
     let
       val numKept = !hybridNumChoicesKeptOnCPU
       val keepBound = pendingChoiceBoundToKeep ()
@@ -457,7 +462,10 @@ struct
           RingBuffer.popTop pendingChoices *)
       else
         tryKeepPendingChoice p
-    end
+    end *)
+
+
+  fun tryKeepPendingChoice p = tryPopPendingChoice p
 
 
   fun communicate () = ()
@@ -749,12 +757,14 @@ struct
       let
         (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
 
+        (*
         val _ = hybridNumChoicesKeptOnCPU := 0
         val _ = hybridIdlenessStart := currentStealTimeSpent ()
         val startTime = timeNowMicrosecondsSinceProgramStart ()
         val _ =
           if casRef hybridStartTime (~1, startTime) then ()
           else die (fn _ => "scheduler bug: start hybrid section failed")
+        *)
 
         val package = spawn ()
 
@@ -766,7 +776,7 @@ struct
               let
                 val result = finish package
               in
-                hybridStartTime := ~1;
+                (* hybridStartTime := ~1; *)
                 result
               end
           )
@@ -962,6 +972,7 @@ struct
             let
               val friend = randomOtherId ()
               
+              (*
               val lastTick =
                 if tries mod 10 <> 9 then
                   lastTick
@@ -973,6 +984,7 @@ struct
                   addStealTime delta;
                   tickNow
                 end
+              *)
             in
               case trySteal friend of
                 SOME task => task
