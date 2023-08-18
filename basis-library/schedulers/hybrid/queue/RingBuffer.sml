@@ -10,11 +10,14 @@ sig
   val full: 'a t -> bool
   val empty: 'a t -> bool
 
+  val peekTop: 'a t -> 'a option
+
   (* destructive *)
   val pushBot: 'a t * 'a -> bool
   val pushTop: 'a t * 'a -> bool
   val popBot: 'a t -> 'a option
   val popTop: 'a t -> 'a option
+  
 end =
 struct
   datatype 'a t =
@@ -154,4 +157,25 @@ struct
         )
       end
     )
+
+
+  fun peekTop (q as B {data, start, size, lock} : 'a t) : 'a option =
+    if !size = 0 then NONE else
+    ( SpinLock.lock lock
+    ; if !size = 0 then (SpinLock.unlock lock; NONE) else
+      let
+        val _ = check q "before peekTop"
+        val i = !start + !size - 1
+        val i' = if i < Array.length data then i else i - Array.length data
+        val result = arraySub (data, i')
+        (* val _ = arrayUpdate (data, i', NONE) *)
+      in
+        ( (*size := !size - 1
+        ;*) check q "after peekTop"
+        ; SpinLock.unlock lock
+        ; result
+        )
+      end
+    )
+
 end
