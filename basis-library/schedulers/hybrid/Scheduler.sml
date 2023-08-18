@@ -45,6 +45,12 @@ struct
           NONE => die (fn _ => "Cannot parse real from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
+  fun parseString key default =
+    case search ("-" ^ key) (CommandLine.arguments ()) of
+      NONE => default
+    | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
+    | SOME (s :: _) => s
+
   fun timeNowMicroseconds () : LargeInt.int =
     let
       val sec = ref (C_Time.castFromFixedInt 0)
@@ -114,8 +120,28 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  val gpuPayout = parseReal "sched-gpu-payout" 2.0
+  val gpuPayout = parseReal "sched-gpu-payout" 1.0
+  val keepDamper = parseReal "sched-keep-damper" 500.0
   val dumpGpuInfo = parseFlag "sched-dump-gpu-info"
+
+
+  (*
+  val gpuSelectPolicyStr = parseString "sched-gpu-select" "min-depth"
+
+  datatype gpu_select_policy =
+    MinDepth
+  | RandomSteal
+
+  val gpuSelectPolicy =
+    case gpuSelectPolicyStr of
+      "min-depth" => MinDepth
+    | "random-steal" => RandomSteal
+    | _ => die (fn _ => "unknown sched-gpu-select: " ^ gpuSelectPolicyStr)
+  *)
+
+
+  val hiccupTime = Time.fromMicroseconds 100
+  fun hiccup () = OS.Process.sleep hiccupTime
 
   (* ========================================================================
    * DEBUGGING
@@ -320,7 +346,7 @@ struct
           val elapsed =
             i64ToReal (timeNowMicrosecondsSinceProgramStart () - !hybridStartTime)
         in
-          Real.floor ((idleness - (gpuPayout * elapsed)) / 100.0)
+          Real.floor ((idleness - (gpuPayout * elapsed)) / keepDamper)
         end
     end
 
@@ -400,6 +426,13 @@ struct
       RingBuffer.popBot pendingChoices
     end
 
+  fun peekPendingChoice p =
+    let
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.peekTop pendingChoices
+    end
+
   fun tryPushPendingChoice p x =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
@@ -418,6 +451,10 @@ struct
         NONE
       else if casRef hybridNumChoicesKeptOnCPU (numKept, numKept+1) then
         RingBuffer.popBot pendingChoices
+        (* if p = myWorkerId () then
+          RingBuffer.popBot pendingChoices
+        else
+          RingBuffer.popTop pendingChoices *)
       else
         tryKeepPendingChoice p
     end
@@ -712,9 +749,6 @@ struct
       let
         (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
 
-        val rest = Time.fromMicroseconds 10
-        fun hiccup () = OS.Process.sleep rest
-
         val _ = hybridNumChoicesKeptOnCPU := 0
         val _ = hybridIdlenessStart := currentStealTimeSpent ()
         val startTime = timeNowMicrosecondsSinceProgramStart ()
@@ -868,44 +902,62 @@ struct
         in if other < myId then other else other+1
         end
 
-      fun request () =
-        let
-          fun gpuManagerFindWorkLoop tries =
-            if tries = P * 100 then
-              ( OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
-              ; gpuManagerFindWorkLoop 0
-              )
-            else
-              (* case RingBuffer.popTop hybridTaskQueue of
-                SOME t => t
-              | NONE => gpuManagerFindWorkLoop (tries+1) *)
-              let
-                val friend = randomOtherId ()
-              in
-                case tryStealPendingChoice friend of
-                  NONE => gpuManagerFindWorkLoop (tries+1)
-                | SOME t => t
-              end
 
+      
+      fun gpuManagerFindWorkLoop_policy_minDepth () =
+        let
+          fun check (bestFriend, bestDepth) friend =
+            case peekPendingChoice friend of
+              SOME (Continuation (_, d)) =>
+                if d < bestDepth then (friend, d)
+                else (bestFriend, bestDepth)
+            | _ => (bestFriend, bestDepth)
+          
+          fun loop (bf, bd) i =
+            if i >= P-1 then (bf, bd)
+            else loop (check (bf, bd) i) (i+1)
+
+          val (bf, _) = loop (~1, valOf Int.maxInt) 0
+        in
+          if bf < 0 then
+            ( hiccup ()
+            ; gpuManagerFindWorkLoop_policy_minDepth ()
+            )
+          else
+          case tryStealPendingChoice bf of
+            SOME t => t
+          | NONE => gpuManagerFindWorkLoop_policy_minDepth ()
+        end
+
+(*
+      fun gpuManagerFindWorkLoop_policy_randomSteal tries =
+        if tries = P * 100 then
+          ( hiccup ()
+          ; gpuManagerFindWorkLoop_policy_randomSteal 0
+          )
+        else
+          let
+            val friend = randomOtherId ()
+          in
+            case tryStealPendingChoice friend of
+              NONE => gpuManagerFindWorkLoop_policy_randomSteal (tries+1)
+            | SOME t => t
+          end
+*)
+
+      fun workerFindWork () =
+        let
           fun stealLoop allowTakePending tries lastTick =
             if tries = P * 50 then
               if allowTakePending then
-                let
-                  (* val tickNow = Time.toReal (Time.now ()) *)
-                  (* val elapsed = tickNow - lastTick *)
-                  (* val elapsedMilli = Real.floor (elapsed * 1000.0) *)
-                in
-                  (* updateIdlenessCounterWith (fn x => x + P); *)
-
-                  OS.Process.sleep
-                    (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
-
-                  stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
-                end
+                ( hiccup ()
+                ; stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
+                )
               else
-                (case tryKeepPendingChoice (myWorkerId ()) of
-                   NONE => stealLoop true tries lastTick
-                 | SOME t => t)
+                case tryKeepPendingChoice (myWorkerId ()) of
+                  NONE => stealLoop true tries lastTick
+                | SOME t => t
+
             else
             let
               val friend = randomOtherId ()
@@ -940,13 +992,18 @@ struct
                     | NONE => stealLoop allowTakePending (tries+1) lastTick
             end
         in
-          if amGpuManager () then
-            gpuManagerFindWorkLoop 0
-          else
           case tryPopSide myId of
             SOME task => task
           | NONE => stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
         end
+
+
+      fun findWork () =
+        if amGpuManager () then
+          gpuManagerFindWorkLoop_policy_minDepth ()
+        else
+          workerFindWork ()
+          
 
       (* ------------------------------------------------------------------- *)
 
@@ -969,7 +1026,7 @@ struct
 
       fun acquireWork () : unit =
         let
-          val task = request ()
+          val task = findWork ()
         in
           case task of
             GCTask (thread, hh) =>
