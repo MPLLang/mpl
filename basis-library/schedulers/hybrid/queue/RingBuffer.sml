@@ -11,6 +11,7 @@ sig
   val empty: 'a t -> bool
 
   val peekTop: 'a t -> 'a option
+  val peekBot: 'a t -> 'a option
 
   (* destructive *)
   val pushBot: 'a t * 'a -> bool
@@ -172,6 +173,26 @@ struct
       in
         ( (*size := !size - 1
         ;*) check q "after peekTop"
+        ; SpinLock.unlock lock
+        ; result
+        )
+      end
+    )
+
+
+  fun peekBot (q as B {data, start, size, lock} : 'a t) : 'a option =
+    if !size = 0 then NONE else
+    ( SpinLock.lock lock
+    ; if !size = 0 then (SpinLock.unlock lock; NONE) else
+      let
+        val _ = check q "before peekBot"
+        val result = arraySub (data, !start)
+        (* val _ = arrayUpdate (data, !start, NONE)
+        val start' = if !start = Array.length data - 1 then 0 else !start + 1 *)
+      in
+        ( (*start := start'
+        ; size := !size - 1
+        ;*) check q "after peekBot"
         ; SpinLock.unlock lock
         ; result
         )

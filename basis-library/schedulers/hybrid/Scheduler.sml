@@ -438,6 +438,13 @@ struct
       RingBuffer.peekTop pendingChoices
     end
 
+  fun peekBotPendingChoice p =
+    let
+      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in
+      RingBuffer.peekBot pendingChoices
+    end
+
   fun tryPushPendingChoice p x =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
@@ -518,8 +525,10 @@ struct
       val myId = myWorkerId ()
       val {sideQueue, ...} = vectorSub (workerLocalData, myId)
       fun loop () =
+        if queueSize () = 0 then ()
+        else
         case trySteal myId of
-          NONE => ()
+          NONE => loop ()
         | SOME task =>
             ( if RingBuffer.pushBot (sideQueue, task) then ()
               else die (fn _ => "scheduler bug: side queue full")
@@ -755,6 +764,7 @@ struct
 
     fun doGpuTask (G {spawn, poll, finish}) =
       let
+        val t0 = timeNowMicrosecondsSinceProgramStart ()
         (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
 
         (*
@@ -792,7 +802,10 @@ struct
         val _ = HH.promoteChunks thread
         val _ = HH.setDepth (thread, depth)
         val result = finish package
+
+        val t1 = timeNowMicrosecondsSinceProgramStart ()
       in
+        print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
         result
       end
 
@@ -932,11 +945,18 @@ struct
           end
 *)
 
+
+      (* SAM_NOTE: TODO: currently we don't guarantee that the pending choice
+       * queues are sorted by depth! When it goes idle, a worker might have
+       * pending choices, but then might steal other CPU work which generates
+       * more pending choices, but at different depths. These all go into
+       * the same queue, so the order is not maintained.
+       *)
       fun workerFindWork_tryKeepChoicePoint_maxdepth () =
         let
           fun check (bestFriend, bestDepth) friend =
             if friend = bestFriend then (false, (bestFriend, bestDepth)) else
-            case peekPendingChoice friend of
+            case peekBotPendingChoice friend of
               SOME (Continuation (_, d)) =>
                 ( true
                 , if d > bestDepth then (friend, d)
@@ -945,7 +965,7 @@ struct
             | _ => (false, (bestFriend, bestDepth))
           
           fun loop (bf, bd) numFound tries =
-            if tries >= 10 * P orelse numFound >= 3 then
+            if tries >= 100 * P orelse numFound >= 10 then
               (bf, bd)
             else
               let
@@ -955,12 +975,17 @@ struct
                 loop (bf', bd') numFound' (tries+1)
               end
 
-          val (bf, _) = loop (~1, valOf Int.minInt) 0 0
+          val (bf, bd) = loop (~1, valOf Int.minInt) 0 0
         in
           if bf < 0 then
             NONE
           else
-            tryKeepPendingChoice bf
+            case tryKeepPendingChoice bf of
+              NONE => NONE
+            | SOME (t as Continuation (_, d)) =>
+                if d = bd then SOME t
+                else if tryPushPendingChoice bf t then NONE
+                else die (fn _ => "scheduler error: push pending back failed\n")
         end
 
 
@@ -971,7 +996,7 @@ struct
               ( hiccup ()
               ; case workerFindWork_tryKeepChoicePoint_maxdepth () of
                   SOME t => t
-                | NONE => stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
+                | NONE => (hiccup (); stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ()))
               )
             else
             let
