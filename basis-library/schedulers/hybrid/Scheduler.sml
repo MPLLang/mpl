@@ -140,7 +140,7 @@ struct
   *)
 
 
-  val hiccupTime = Time.fromMicroseconds 100
+  val hiccupTime = Time.fromMicroseconds 10
   fun hiccup () = OS.Process.sleep hiccupTime
 
   (* ========================================================================
@@ -766,67 +766,34 @@ struct
           else die (fn _ => "scheduler bug: start hybrid section failed")
         *)
 
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+
         val package = spawn ()
 
+        val _ = HH.setDepth (thread, depth + 1)
+        val _ = HH.forceLeftHeap(myWorkerId(), thread)
+        val _ = setQueueDepth (myWorkerId ()) (depth+1)
+
+        (* TODO: might be unsafety here? What happens if a local GC is
+         * triggered during this loop? Perhaps we need to advance the depth
+         * and use a fresh heap while waiting for the GPU to finish?
+         *)
         fun loopWaitForGpu () =
           ( hiccup ()
           ; if not (poll package) then
               loopWaitForGpu ()
             else
-              let
-                val result = finish package
-              in
-                (* hybridStartTime := ~1; *)
-                result
-              end
+              ()
           )
 
-(*
-        fun tryPassOne () =
-          case RingBuffer.popBot hybridTaskQueue of
-            NONE => false
-          | SOME task =>
-              if RingBuffer.pushBot (hybridDoneQueue, task) then true
-              else die (fn _ => "scheduler bug: hybridDoneQueue full")
-
-        fun loopWaitForGpu lastTickStealSample remainingSteals lastTick =
-          if poll package then
-            finish package
-          else
-            let
-              val tickNow = timeNowMicrosecondsSinceProgramStart ()
-              val elapsed = Int64.toInt (tickNow - lastTick)
-              val thisStealSample = currentStealTimeSpent ()
-              val stealTimeSinceLastTick = thisStealSample - lastTickStealSample
-              val threshold =
-                Int64.fromInt (Real.ceil (gpuPayout * Real.fromInt (Int64.toInt elapsed)))
-            in
-              if elapsed < 100 orelse stealTimeSinceLastTick + remainingSteals < threshold then
-                loopWaitForGpu lastTickStealSample remainingSteals lastTick
-              else
-                let
-                  val newRemaining = stealTimeSinceLastTick + remainingSteals - threshold
-                  fun dumpinfo () =
-                    if not dumpGpuInfo then ()
-                    else print ("passing! numStealSinceLastTick="
-                                ^ Int64.toString stealTimeSinceLastTick
-                                ^ " remainingSteals="
-                                ^ Int64.toString remainingSteals
-                                ^ " threshold="
-                                ^ Int64.toString threshold ^ "\n");
-                in
-                  if not (tryPassOne ()) then ()
-                  else dumpinfo ();
-
-                  loopWaitForGpu thisStealSample newRemaining tickNow
-                end
-            end
-*)
+        val _ = loopWaitForGpu ()
+        val _ = setQueueDepth (myWorkerId ()) depth
+        val _ = HH.promoteChunks thread
+        val _ = HH.setDepth (thread, depth)
+        val result = finish package
       in
-(*
-        loopWaitForGpu (currentStealTimeSpent ()) 0 (timeNowMicrosecondsSinceProgramStart ())
-*)
-        loopWaitForGpu ()
+        result
       end
 
 
@@ -834,6 +801,8 @@ struct
       if amGpuManager () then ()
       else if queueSize () > 0 then
         ( moveAllTasksIntoSideQueue ()
+        ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
+        ; clear ()
         ; tryGiveSelfToGpuManager () (* this should succeed on second go, now that main deque is empty *)
         )
       else
@@ -871,7 +840,11 @@ struct
             val selfTask = Continuation (thread, depth)
             val sendSucceeded = RingBuffer.pushBot (hybridDoneQueue, selfTask)
           in
-            if sendSucceeded then ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ()) else ();
+            if sendSucceeded then
+              ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ())
+            else
+              die (fn _ => "scheduler: choice: send back failed\n");
+
             (* dbgmsg'' (fn _ => "choice: after send back"); *)
             cleanup ()
           end
@@ -911,6 +884,10 @@ struct
         let val other = SMLNJRandom.randRange (0, P-2) myRand
         in if other < myId then other else other+1
         end
+
+      
+      fun randomId () =
+        SMLNJRandom.randRange (0, P-1) myRand
 
 
       
@@ -955,19 +932,47 @@ struct
           end
 *)
 
+      fun workerFindWork_tryKeepChoicePoint_maxdepth () =
+        let
+          fun check (bestFriend, bestDepth) friend =
+            if friend = bestFriend then (false, (bestFriend, bestDepth)) else
+            case peekPendingChoice friend of
+              SOME (Continuation (_, d)) =>
+                ( true
+                , if d > bestDepth then (friend, d)
+                  else (bestFriend, bestDepth)
+                )
+            | _ => (false, (bestFriend, bestDepth))
+          
+          fun loop (bf, bd) numFound tries =
+            if tries >= 10 * P orelse numFound >= 3 then
+              (bf, bd)
+            else
+              let
+                val (foundOne, (bf', bd')) = check (bf, bd) (randomId ())
+                val numFound' = if foundOne then numFound+1 else numFound
+              in
+                loop (bf', bd') numFound' (tries+1)
+              end
+
+          val (bf, _) = loop (~1, valOf Int.minInt) 0 0
+        in
+          if bf < 0 then
+            NONE
+          else
+            tryKeepPendingChoice bf
+        end
+
+
       fun workerFindWork () =
         let
           fun stealLoop allowTakePending tries lastTick =
-            if tries = P * 50 then
-              if allowTakePending then
-                ( hiccup ()
-                ; stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
-                )
-              else
-                case tryKeepPendingChoice (myWorkerId ()) of
-                  NONE => stealLoop true tries lastTick
-                | SOME t => t
-
+            if tries >= P * 100 then
+              ( hiccup ()
+              ; case workerFindWork_tryKeepChoicePoint_maxdepth () of
+                  SOME t => t
+                | NONE => stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
+              )
             else
             let
               val friend = randomOtherId ()
@@ -992,11 +997,11 @@ struct
               case tryStealSide friend of
                 SOME task => task
               | NONE =>
-                  if not (isGpuManager friend) andalso allowTakePending then
+                  (*if not (isGpuManager friend) andalso allowTakePending then
                     case tryKeepPendingChoice friend of
                       SOME x => x
                     | NONE => stealLoop allowTakePending (tries+1) lastTick
-                  else if not (isGpuManager friend) then 
+                  else*) if not (isGpuManager friend) then 
                     stealLoop allowTakePending (tries+1) lastTick
                   else
                     case RingBuffer.popTop hybridDoneQueue of
@@ -1012,7 +1017,14 @@ struct
 
       fun findWork () =
         if amGpuManager () then
-          gpuManagerFindWorkLoop_policy_minDepth ()
+          let
+            val t0 = timeNowMicrosecondsSinceProgramStart ()
+            val result = gpuManagerFindWorkLoop_policy_minDepth ()
+            val t1 = timeNowMicrosecondsSinceProgramStart ()
+          in
+            print ("gpu manager find work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
+            result
+          end
         else
           workerFindWork ()
           
