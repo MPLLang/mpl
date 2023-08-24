@@ -135,7 +135,7 @@ struct
       val {idx, ...} = TagIdx.unpack oldTop
     in
       if idx < oldBot then
-        die (fn _ => "scheduler bug: setDepth must be on empty deque " ^
+        die (fn _ => "[" ^ (Int.toString (myWorkerId ())) ^ "] scheduler bug: setDepth must be on empty deque " ^
                      "(top=" ^ Int.toString idx ^ " bot=" ^ Int.toString oldBot ^ ")")
       else
         ( depth := d
