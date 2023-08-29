@@ -25,6 +25,7 @@ local
 
   SpinLock.sml
   queue/RingBuffer.sml
+  queue/ConcurrentBinaryHeap.sml
   FORK_JOIN.sig
   SimpleRandom.sml
   queue/DequeABP.sml
