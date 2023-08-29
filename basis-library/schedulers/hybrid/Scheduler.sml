@@ -91,6 +91,12 @@ struct
   | Continuation of Thread.t * int
   | GCTask of gctask_data
 
+
+  fun cmpContinuationTaskDepth (t1, t2) =
+    case (t1, t2) of
+      (Continuation (_, d1), Continuation (_, d2)) => Int.compare (d1, d2)
+    | _ => die (fn _ => "scheduler bug: cmpContinuationTaskDepth: not both continuations")
+
   structure DE = MLton.Thread.Disentanglement
 
   local
@@ -363,7 +369,7 @@ struct
   type worker_local_data =
     { queue : task Queue.t
     , sideQueue : task RingBuffer.t
-    , pendingChoices: task RingBuffer.t
+    , pendingChoices: task ConcurrentBinaryHeap.t
     , schedThread : Thread.t option ref
     , gcTask: gctask_data option ref
     }
@@ -371,7 +377,7 @@ struct
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
     , sideQueue = RingBuffer.new {capacity=200}
-    , pendingChoices = RingBuffer.new {capacity=200}
+    , pendingChoices = ConcurrentBinaryHeap.new {capacity=200, cmp=cmpContinuationTaskDepth}
     , schedThread = ref NONE
     , gcTask = ref NONE
     }
@@ -421,35 +427,35 @@ struct
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
     in
-      RingBuffer.popTop pendingChoices
+      ConcurrentBinaryHeap.popMin pendingChoices
     end
 
-  fun tryPopPendingChoice p =
+  fun tryKeepPendingChoice p =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
     in
-      RingBuffer.popBot pendingChoices
+      ConcurrentBinaryHeap.popNearMax pendingChoices
     end
 
   fun peekPendingChoice p =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
     in
-      RingBuffer.peekTop pendingChoices
+      ConcurrentBinaryHeap.peekMin pendingChoices
     end
 
   fun peekBotPendingChoice p =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
     in
-      RingBuffer.peekBot pendingChoices
+      ConcurrentBinaryHeap.peekNearMaxAllowBackoff pendingChoices
     end
 
   fun tryPushPendingChoice p x =
     let
       val {pendingChoices, ...} = vectorSub (workerLocalData, p)
     in
-      RingBuffer.pushBot (pendingChoices, x)
+      ConcurrentBinaryHeap.push pendingChoices x
     end
 
 
@@ -470,9 +476,6 @@ struct
       else
         tryKeepPendingChoice p
     end *)
-
-
-  fun tryKeepPendingChoice p = tryPopPendingChoice p
 
 
   fun communicate () = ()
@@ -906,27 +909,43 @@ struct
       
       fun gpuManagerFindWorkLoop_policy_minDepth () =
         let
-          fun check (bestFriend, bestDepth) friend =
+          fun check (bestFriend, bestDepth, holding) friend =
             case peekPendingChoice friend of
               SOME (Continuation (_, d)) =>
-                if d < bestDepth then (friend, d)
-                else (bestFriend, bestDepth)
-            | _ => (bestFriend, bestDepth)
-          
-          fun loop (bf, bd) i =
-            if i >= P-1 then (bf, bd)
-            else loop (check (bf, bd) i) (i+1)
+                if d >= bestDepth then
+                  (bestFriend, bestDepth, holding)
+                else
+                  ( case tryStealPendingChoice friend of
+                      SOME (holding' as Continuation (_, d')) =>
+                        if d' >= bestDepth then
+                          ( tryPushPendingChoice friend holding'
+                          ; (bestFriend, bestDepth, holding)
+                          )
+                        else
+                          ( Option.app
+                              (fn t =>
+                                (tryPushPendingChoice bestFriend t; ()))
+                              holding
+                          ; (friend, d', SOME holding')
+                          )
 
-          val (bf, _) = loop (~1, valOf Int.maxInt) 0
+                    | NONE => (bestFriend, bestDepth, holding)
+                  )
+
+            | _ => (bestFriend, bestDepth, holding)
+          
+
+          fun loop xxx i =
+            if i >= P-1 then xxx else loop (check xxx i) (i+1)
+
+          val (_, _, holding) = loop (~1, valOf Int.maxInt, NONE) 0
         in
-          if bf < 0 then
-            ( hiccup ()
-            ; gpuManagerFindWorkLoop_policy_minDepth ()
-            )
-          else
-          case tryStealPendingChoice bf of
+          case holding of
             SOME t => t
-          | NONE => gpuManagerFindWorkLoop_policy_minDepth ()
+          | NONE => 
+              ( hiccup ()
+              ; gpuManagerFindWorkLoop_policy_minDepth ()
+              )
         end
 
 (*
@@ -980,10 +999,11 @@ struct
           if bf < 0 then
             NONE
           else
+            (* tryKeepPendingChoice bf *)
             case tryKeepPendingChoice bf of
               NONE => NONE
             | SOME (t as Continuation (_, d)) =>
-                if d = bd then SOME t
+                if d >= bd then SOME t
                 else if tryPushPendingChoice bf t then NONE
                 else die (fn _ => "scheduler error: push pending back failed\n")
         end
@@ -991,13 +1011,9 @@ struct
 
       fun workerFindWork () =
         let
-          fun stealLoop allowTakePending tries lastTick =
+          fun stealLoop tries lastTick =
             if tries >= P * 100 then
-              ( hiccup ()
-              ; case workerFindWork_tryKeepChoicePoint_maxdepth () of
-                  SOME t => t
-                | NONE => (hiccup (); stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ()))
-              )
+              NONE
             else
             let
               val friend = randomOtherId ()
@@ -1017,26 +1033,33 @@ struct
               *)
             in
               case trySteal friend of
-                SOME task => task
+                SOME task => SOME task
               | NONE =>
               case tryStealSide friend of
-                SOME task => task
+                SOME task => SOME task
               | NONE =>
-                  (*if not (isGpuManager friend) andalso allowTakePending then
-                    case tryKeepPendingChoice friend of
-                      SOME x => x
-                    | NONE => stealLoop allowTakePending (tries+1) lastTick
-                  else*) if not (isGpuManager friend) then 
-                    stealLoop allowTakePending (tries+1) lastTick
+                  if not (isGpuManager friend) then 
+                    stealLoop (tries+1) lastTick
                   else
                     case RingBuffer.popTop hybridDoneQueue of
-                      SOME x => x
-                    | NONE => stealLoop allowTakePending (tries+1) lastTick
+                      SOME x => SOME x
+                    | NONE => stealLoop (tries+1) lastTick
             end
+
+
+          fun actualStealLoop rounds =
+            if rounds >= 2 then
+              case workerFindWork_tryKeepChoicePoint_maxdepth () of
+                SOME t => t
+              | NONE => (hiccup (); actualStealLoop 0)
+            else
+              case stealLoop 0 (timeNowMicrosecondsSinceProgramStart ()) of
+                SOME t => t
+              | NONE => (hiccup (); actualStealLoop (rounds+1))
         in
           case tryPopSide myId of
             SOME task => task
-          | NONE => stealLoop false 0 (timeNowMicrosecondsSinceProgramStart ())
+          | NONE => actualStealLoop 0
         end
 
 
