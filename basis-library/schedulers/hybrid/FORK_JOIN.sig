@@ -6,22 +6,7 @@ sig
   (* intermediate type 'package, final type 'result *)
   type ('package, 'result) gpu_task
 
-  val gpu: 
-    { spawn: unit -> 'package
-    , poll: 'package -> bool
-    , finish: 'package -> 'result
-    }
-    -> ('package, 'result) gpu_task
-
-  val gpuWithCleanup: 
-    { spawn: unit -> 'package
-    , poll: 'package -> bool
-    , finish: 'package -> 'a
-    , cleanup: 'a -> 'result
-    }
-    -> ('package, 'result) gpu_task
-
-  val choice: {cpu: unit -> 'a, gpu: ('b, 'a) gpu_task} -> 'a
+  val choice: {prefer_cpu: unit -> 'a, prefer_gpu: unit -> 'a} -> 'a
 
   val alloc: int -> 'a array
 
