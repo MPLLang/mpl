@@ -121,7 +121,7 @@ struct
   (* fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old) *)
   fun faa (r, d) = MLton.Parallel.fetchAndAdd r d
   fun casRef r (old, new) =
-    (MLton.Parallel.compareAndSwap r (old, new) = old)
+    MLton.eq (MLton.Parallel.compareAndSwap r (old, new), old)
 
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
@@ -567,39 +567,68 @@ struct
    *)
   
   local
-    val currentGpuManager = ref ~1
+    datatype choice_status =
+      NoPendingChoice
+    | SearchingForChoice
+    | ActiveChoice of Thread.t
+
+    val currentChoiceStatus = ref NoPendingChoice
+    val currentSearcher = ref ~1
   in
 
-  fun tryBecomeGpuManager () =
+  fun tryBecomeChoiceSearcher () =
     let
       val success =
-        (!currentGpuManager = ~1) andalso
-        casRef currentGpuManager (~1, myWorkerId ())
+        MLton.eq (!currentChoiceStatus, NoPendingChoice) andalso
+        casRef currentChoiceStatus (NoPendingChoice, SearchingForChoice)
     in
       if success then
         ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] became GPU manager\n")*) ()
+        ; currentSearcher := myWorkerId ()
         ; true
         )
       else
         false
     end
 
+
+  fun startActiveChoice task =
+    case task of
+      Continuation (t, _) => 
+        ( currentSearcher := ~1
+        ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice t)
+        )
+    | _ => die (fn _ => "scheduler bug: startActiveChoice: expected Continuation(...)")
+
   
-  fun isGpuManager id =
+  fun finishActiveChoice () =
+    ( HM.refAssignNoBarrier (currentChoiceStatus, SearchingForChoice)
+    ; currentSearcher := myWorkerId ()
+    )
+
+
+  fun isActiveChoice t =
+    case HM.refDerefNoBarrier currentChoiceStatus of
+      ActiveChoice t' => MLton.eq (t, t')
+    | _ => false
+  
+
+  (* fun isGpuManager id =
     !currentGpuManager = id
 
   
   fun amGpuManager () =
-    isGpuManager (myWorkerId ())
+    isGpuManager (myWorkerId ()) *)
+
+
+  fun shouldSearchForChoices () = 
+    !currentSearcher = myWorkerId ()
 
   
-  fun relinquishGpuManager () =
-    if amGpuManager () then
-      ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] relinquish GPU manager\n")*) ()
-      ; currentGpuManager := ~1
-      )
-    else
-      die (fn _ => "scheduler bug: non GPU manager called relinquishGpuManager()")
+  fun markNoPendingChoices () =
+    ( currentSearcher := ~1
+    ; HM.refAssignNoBarrier (currentChoiceStatus, NoPendingChoice)
+    )
 
   end
 
@@ -803,10 +832,10 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
-        if amGpuManager () then
-          (f (), g ())
+        (* if amGpuManager () then
+          (f (), g ()) *)
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        else if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
+        (*else*) if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
           forkGC thread depth (fn _ => fork' {ccOkayAtThisDepth=false} (f, g))
         else if depth < Queue.capacity andalso depthOkayForDECheck depth then
           parfork thread depth (f, g)
@@ -867,12 +896,12 @@ struct
       end
 
 
-    fun tryGiveSelfToGpuManager () =
+    fun announceCurrentThreadPendingChoice () =
       if queueSize () > 0 then
         ( moveAllTasksIntoSideQueue ()
         ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
         ; clear ()
-        ; tryGiveSelfToGpuManager () (* this should succeed on second go, now that main deque is empty *)
+        ; announceCurrentThreadPendingChoice () (* this should succeed on second go, now that main deque is empty *)
         )
       else
         let
@@ -888,14 +917,14 @@ struct
 
     fun choice (args as {cpu, gpu = gpuTask}) =
       let
-        val _ = tryBecomeGpuManager ()
-        val _ = tryGiveSelfToGpuManager ()
+        val _ = tryBecomeChoiceSearcher ()
+        val _ = announceCurrentThreadPendingChoice ()
       in
         (* When we resume here, the gpu manager has already had a chance to
          * to consider this choice point. Resuming on a cpu means that the
          * manager decided to return the task to the cpus.
          *)
-        if not (amGpuManager ()) then
+        if not (isActiveChoice (Thread.current ())) then
           cpu ()
         else
           let
@@ -908,6 +937,7 @@ struct
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val selfTask = Continuation (thread, depth)
+            val _ = finishActiveChoice ()
             val sendSucceeded =
               (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
               pushSide selfTask
@@ -1110,7 +1140,7 @@ struct
 
 
       fun findWork () =
-        if not (amGpuManager ()) then
+        if not (shouldSearchForChoices ()) then
           workerFindWork ()
         else
           (* let
@@ -1122,10 +1152,13 @@ struct
             result
           end *)
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
-            SOME t => t
+            SOME t =>
+              ( startActiveChoice t
+              ; t
+              )
           | NONE =>
-              ( relinquishGpuManager ()
-              ; if existsPendingChoice () andalso tryBecomeGpuManager () then
+              ( markNoPendingChoices ()
+              ; if existsPendingChoice () andalso tryBecomeChoiceSearcher () then
                   findWork ()
                 else
                   workerFindWork ()
