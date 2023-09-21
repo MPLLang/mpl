@@ -303,8 +303,8 @@ struct
   (* val hybridTaskQueue: task RingBuffer.t =
     RingBuffer.new {capacity=1000} *)
 
-  val hybridDoneQueue: task RingBuffer.t =
-    RingBuffer.new {capacity=1000}
+  (* val hybridDoneQueue: task RingBuffer.t =
+    RingBuffer.new {capacity=1000} *)
 
   (*
   val stealTimeCounters: Int64.int array = Array.tabulate (P, fn _ => 0)
@@ -488,6 +488,14 @@ struct
       Queue.pushBot queue x
     end
 
+  fun pushSide x =
+    let
+      val myId = myWorkerId ()
+      val {sideQueue, ...} = vectorSub (workerLocalData, myId)
+    in
+      RingBuffer.pushBot (sideQueue, x)
+    end
+
   fun clear () =
     let
       val myId = myWorkerId ()
@@ -541,13 +549,59 @@ struct
       loop ()
     end
 
+
+  fun existsPendingChoice () =
+    let
+      fun loop i =
+        if i >= P then false else
+        case peekPendingChoice i of
+          SOME _ => true
+        | NONE => loop (i+1)
+    in
+      loop 0
+    end
+
+
+  (* ========================================================================
+   * FORK JOIN
+   *)
+  
+  local
+    val currentGpuManager = ref ~1
+  in
+
+  fun tryBecomeGpuManager () =
+    let
+      val success =
+        (!currentGpuManager = ~1) andalso
+        casRef currentGpuManager (~1, myWorkerId ())
+    in
+      if success then
+        ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] became GPU manager\n")*) ()
+        ; true
+        )
+      else
+        false
+    end
+
   
   fun isGpuManager id =
-    id = P-1
+    !currentGpuManager = id
 
   
   fun amGpuManager () =
     isGpuManager (myWorkerId ())
+
+  
+  fun relinquishGpuManager () =
+    if amGpuManager () then
+      ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] relinquish GPU manager\n")*) ()
+      ; currentGpuManager := ~1
+      )
+    else
+      die (fn _ => "scheduler bug: non GPU manager called relinquishGpuManager()")
+
+  end
 
   (* ========================================================================
    * FORK JOIN
@@ -814,8 +868,7 @@ struct
 
 
     fun tryGiveSelfToGpuManager () =
-      if amGpuManager () then ()
-      else if queueSize () > 0 then
+      if queueSize () > 0 then
         ( moveAllTasksIntoSideQueue ()
         ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
         ; clear ()
@@ -835,6 +888,7 @@ struct
 
     fun choice (args as {cpu, gpu = gpuTask}) =
       let
+        val _ = tryBecomeGpuManager ()
         val _ = tryGiveSelfToGpuManager ()
       in
         (* When we resume here, the gpu manager has already had a chance to
@@ -854,7 +908,9 @@ struct
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val selfTask = Continuation (thread, depth)
-            val sendSucceeded = RingBuffer.pushBot (hybridDoneQueue, selfTask)
+            val sendSucceeded =
+              (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
+              pushSide selfTask
           in
             if sendSucceeded then
               ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ())
@@ -905,9 +961,8 @@ struct
       fun randomId () =
         SMLNJRandom.randRange (0, P-1) myRand
 
-
       
-      fun gpuManagerFindWorkLoop_policy_minDepth () =
+      fun gpuManager_tryFindWorkLoop_policy_minDepth () =
         let
           fun check (bestFriend, bestDepth, holding) friend =
             case peekPendingChoice friend of
@@ -936,16 +991,13 @@ struct
           
 
           fun loop xxx i =
-            if i >= P-1 then xxx else loop (check xxx i) (i+1)
+            if i >= P then xxx else loop (check xxx i) (i+1)
 
           val (_, _, holding) = loop (~1, valOf Int.maxInt, NONE) 0
         in
           case holding of
-            SOME t => t
-          | NONE => 
-              ( hiccup ()
-              ; gpuManagerFindWorkLoop_policy_minDepth ()
-              )
+            SOME t => SOME t
+          | NONE => NONE
         end
 
 (*
@@ -1037,13 +1089,7 @@ struct
               | NONE =>
               case tryStealSide friend of
                 SOME task => SOME task
-              | NONE =>
-                  if not (isGpuManager friend) then 
-                    stealLoop (tries+1) lastTick
-                  else
-                    case RingBuffer.popTop hybridDoneQueue of
-                      SOME x => SOME x
-                    | NONE => stealLoop (tries+1) lastTick
+              | NONE => stealLoop (tries+1) lastTick
             end
 
 
@@ -1064,17 +1110,26 @@ struct
 
 
       fun findWork () =
-        if amGpuManager () then
-          let
+        if not (amGpuManager ()) then
+          workerFindWork ()
+        else
+          (* let
             val t0 = timeNowMicrosecondsSinceProgramStart ()
-            val result = gpuManagerFindWorkLoop_policy_minDepth ()
+            val result = 
             val t1 = timeNowMicrosecondsSinceProgramStart ()
           in
             print ("gpu manager find work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
             result
-          end
-        else
-          workerFindWork ()
+          end *)
+          case gpuManager_tryFindWorkLoop_policy_minDepth () of
+            SOME t => t
+          | NONE =>
+              ( relinquishGpuManager ()
+              ; if existsPendingChoice () andalso tryBecomeGpuManager () then
+                  findWork ()
+                else
+                  workerFindWork ()
+              )
           
 
       (* ------------------------------------------------------------------- *)
