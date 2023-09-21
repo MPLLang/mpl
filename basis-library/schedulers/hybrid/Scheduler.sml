@@ -639,33 +639,6 @@ struct
   structure ForkJoin =
   struct
 
-    datatype ('package, 'result) gpu_task =
-      G of
-        { spawn: unit -> 'package
-        , poll: 'package -> bool
-        , finish: 'package -> (unit -> 'result)
-        }
-
-    fun simpleFinisher finish pkg =
-      let
-        val result = finish pkg
-      in
-        fn () => result
-      end
-
-    fun cleanupFinisher finish cleanup pkg =
-      let
-        val result = finish pkg
-      in
-        fn () => cleanup result
-      end
-
-    fun gpu {spawn, poll, finish} =
-      G {spawn = spawn, poll = poll, finish = simpleFinisher finish}
-
-    fun gpuWithCleanup {spawn, poll, finish, cleanup} =
-      G {spawn = spawn, poll = poll, finish = cleanupFinisher finish cleanup}
-
     datatype 'a result =
       Finished of 'a
     | Raised of exn
@@ -848,6 +821,7 @@ struct
     fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
 
 
+(*
     fun doGpuTask (G {spawn, poll, finish}) =
       let
         val t0 = timeNowMicrosecondsSinceProgramStart ()
@@ -894,6 +868,18 @@ struct
         print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
         result
       end
+*)
+
+
+    fun doGpuTask g =
+      let
+        val t0 = timeNowMicrosecondsSinceProgramStart ()
+        val result = g ()
+        val t1 = timeNowMicrosecondsSinceProgramStart ()
+      in
+        print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
+        result
+      end
 
 
     fun announceCurrentThreadPendingChoice () =
@@ -915,7 +901,7 @@ struct
         end
 
 
-    fun choice (args as {cpu, gpu = gpuTask}) =
+    fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
       let
         val _ = tryBecomeChoiceSearcher ()
         val _ = announceCurrentThreadPendingChoice ()
@@ -925,11 +911,11 @@ struct
          * manager decided to return the task to the cpus.
          *)
         if not (isActiveChoice (Thread.current ())) then
-          cpu ()
+          cpuTask ()
         else
           let
             (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
-            val cleanup = doGpuTask gpuTask
+            val result = doGpuTask gpuTask
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
              * send this task back to a CPU thread.
@@ -948,7 +934,7 @@ struct
               die (fn _ => "scheduler: choice: send back failed\n");
 
             (* dbgmsg'' (fn _ => "choice: after send back"); *)
-            cleanup ()
+            result
           end
       end
   end
