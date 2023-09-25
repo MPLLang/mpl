@@ -3,9 +3,6 @@ sig
   val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
   val parfor: int -> int * int -> (int -> unit) -> unit
 
-  (* intermediate type 'package, final type 'result *)
-  type ('package, 'result) gpu_task
-
   val choice: {prefer_cpu: unit -> 'a, prefer_gpu: unit -> 'a} -> 'a
 
   val alloc: int -> 'a array
