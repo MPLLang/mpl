@@ -877,7 +877,7 @@ struct
         val result = g ()
         val t1 = timeNowMicrosecondsSinceProgramStart ()
       in
-        print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
+        (* print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n"); *)
         result
       end
 
@@ -1000,7 +1000,7 @@ struct
                           ; (friend, d', SOME holding')
                           )
 
-                    | NONE => (bestFriend, bestDepth, holding)
+                    | _ => (bestFriend, bestDepth, holding)
                   )
 
             | _ => (bestFriend, bestDepth, holding)
@@ -1069,11 +1069,12 @@ struct
           else
             (* tryKeepPendingChoice bf *)
             case tryKeepPendingChoice bf of
-              NONE => NONE
-            | SOME (t as Continuation (_, d)) =>
+              SOME (t as Continuation (_, d)) =>
                 if d >= bd then SOME t
                 else if tryPushPendingChoice bf t then NONE
                 else die (fn _ => "scheduler error: push pending back failed\n")
+                
+            | _ => NONE
         end
 
 
