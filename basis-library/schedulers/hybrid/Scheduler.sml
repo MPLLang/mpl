@@ -501,7 +501,10 @@ struct
       val myId = myWorkerId ()
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
-      Queue.clear queue
+      if Queue.size queue > 0 then
+        die (fn _ => "scheduler bug: clear on non-empty queue")
+      else
+        Queue.clear queue
     end
 
   fun popDiscard () =
@@ -1186,6 +1189,7 @@ struct
               ;*) Queue.setDepth myQueue depth
               ; threadSwitch thread
               ; afterReturnToSched ()
+              ; clear ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
@@ -1202,6 +1206,7 @@ struct
                 (* dbgmsg' (fn _ => "switch to new task thread"); *)
                 threadSwitch taskThread;
                 afterReturnToSched ();
+                clear ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
               end
