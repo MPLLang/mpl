@@ -92,6 +92,16 @@ struct
   | GCTask of gctask_data
 
 
+  datatype pending_choice =
+    PendingChoice of {thread: Thread.t, depth: int, gpu_payout: real}
+
+  
+  fun cmpPendingChoicePayouts (PendingChoice pc1, PendingChoice pc2) =
+    (* Pending choices are stored in min-heaps. But, we want max-heaps.
+     * So, invert the comparison. *)
+    Real.compare (#gpu_payout pc2, #gpu_payout pc1)
+
+
   fun cmpContinuationTaskDepth (t1, t2) =
     case (t1, t2) of
       (Continuation (_, d1), Continuation (_, d2)) => Int.compare (d1, d2)
@@ -369,7 +379,7 @@ struct
   type worker_local_data =
     { queue : task Queue.t
     , sideQueue : task RingBuffer.t
-    , pendingChoices: task ConcurrentBinaryHeap.t
+    , pendingChoices: pending_choice ConcurrentBinaryHeap.t
     , schedThread : Thread.t option ref
     , gcTask: gctask_data option ref
     }
@@ -377,7 +387,7 @@ struct
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
     , sideQueue = RingBuffer.new {capacity=200}
-    , pendingChoices = ConcurrentBinaryHeap.new {capacity=200, cmp=cmpContinuationTaskDepth}
+    , pendingChoices = ConcurrentBinaryHeap.new {capacity=200, cmp=cmpPendingChoicePayouts}
     , schedThread = ref NONE
     , gcTask = ref NONE
     }
@@ -595,13 +605,10 @@ struct
     end
 
 
-  fun startActiveChoice task =
-    case task of
-      Continuation (t, _) => 
-        ( currentSearcher := ~1
-        ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice t)
-        )
-    | _ => die (fn _ => "scheduler bug: startActiveChoice: expected Continuation(...)")
+  fun startActiveChoice (PendingChoice {thread, ...}) =
+    ( currentSearcher := ~1
+    ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice thread)
+    )
 
   
   fun finishActiveChoice () =
@@ -885,18 +892,20 @@ struct
       end
 
 
-    fun announceCurrentThreadPendingChoice () =
+    fun announceCurrentThreadPendingChoice gpu_payout =
       if queueSize () > 0 then
         ( moveAllTasksIntoSideQueue ()
         ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
         ; clear ()
-        ; announceCurrentThreadPendingChoice () (* this should succeed on second go, now that main deque is empty *)
+
+          (* this should succeed on second go, now that main deque is empty *)
+        ; announceCurrentThreadPendingChoice gpu_payout 
         )
       else
         let
           val thread = Thread.current ()
           val depth = HH.getDepth thread
-          val selfTask = Continuation (thread, depth)
+          val selfTask = PendingChoice {thread=thread, depth=depth, gpu_payout=gpu_payout}
           val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
           (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
         in
@@ -904,21 +913,21 @@ struct
         end
 
 
-    fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
+    fun choice_with_payout {prefer_cpu, prefer_gpu, gpu_payout} =
       let
         val _ = tryBecomeChoiceSearcher ()
-        val _ = announceCurrentThreadPendingChoice ()
+        val _ = announceCurrentThreadPendingChoice gpu_payout
       in
         (* When we resume here, the gpu manager has already had a chance to
          * to consider this choice point. Resuming on a cpu means that the
          * manager decided to return the task to the cpus.
          *)
         if not (isActiveChoice (Thread.current ())) then
-          cpuTask ()
+          prefer_cpu ()
         else
           let
             (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
-            val result = doGpuTask gpuTask
+            val result = doGpuTask prefer_gpu
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
              * send this task back to a CPU thread.
@@ -940,6 +949,20 @@ struct
             result
           end
       end
+
+
+    fun choice {prefer_cpu, prefer_gpu} =
+      let
+        val depth = HH.getDepth (Thread.current ())
+        val payout = Real.fromInt (4*P) / Math.pow (2.0, Real.fromInt depth) 
+      in
+        choice_with_payout
+          { prefer_cpu = prefer_cpu
+          , prefer_gpu = prefer_gpu
+          , gpu_payout = payout
+          }
+      end
+
   end
 
   (* ========================================================================
@@ -981,38 +1004,38 @@ struct
         SMLNJRandom.randRange (0, P-1) myRand
 
       
-      fun gpuManager_tryFindWorkLoop_policy_minDepth () =
+      fun gpuManager_tryFindWorkLoop_policy_maxPayout () =
         let
-          fun check (bestFriend, bestDepth, holding) friend =
+          fun check (bestFriend, bestPayout, holding) friend =
             case peekPendingChoice friend of
-              SOME (Continuation (_, d)) =>
-                if d >= bestDepth then
-                  (bestFriend, bestDepth, holding)
+              SOME (PendingChoice {gpu_payout=po, ...}) =>
+                if po <= bestPayout then
+                  (bestFriend, bestPayout, holding)
                 else
                   ( case tryStealPendingChoice friend of
-                      SOME (holding' as Continuation (_, d')) =>
-                        if d' >= bestDepth then
+                      SOME (holding' as PendingChoice {gpu_payout=po', ...}) =>
+                        if po' <= bestPayout then
                           ( tryPushPendingChoice friend holding'
-                          ; (bestFriend, bestDepth, holding)
+                          ; (bestFriend, bestPayout, holding)
                           )
                         else
                           ( Option.app
                               (fn t =>
                                 (tryPushPendingChoice bestFriend t; ()))
                               holding
-                          ; (friend, d', SOME holding')
+                          ; (friend, po', SOME holding')
                           )
 
-                    | _ => (bestFriend, bestDepth, holding)
+                    | _ => (bestFriend, bestPayout, holding)
                   )
 
-            | _ => (bestFriend, bestDepth, holding)
+            | _ => (bestFriend, bestPayout, holding)
           
 
           fun loop xxx i =
             if i >= P then xxx else loop (check xxx i) (i+1)
 
-          val (_, _, holding) = loop (~1, valOf Int.maxInt, NONE) 0
+          val (_, _, holding) = loop (~1, Real.negInf, NONE) 0
         in
           case holding of
             SOME t => SOME t
@@ -1036,44 +1059,39 @@ struct
 *)
 
 
-      (* SAM_NOTE: TODO: currently we don't guarantee that the pending choice
-       * queues are sorted by depth! When it goes idle, a worker might have
-       * pending choices, but then might steal other CPU work which generates
-       * more pending choices, but at different depths. These all go into
-       * the same queue, so the order is not maintained.
-       *)
-      fun workerFindWork_tryKeepChoicePoint_maxdepth () =
+      fun workerFindWork_tryKeepChoicePoint_minPayout () =
         let
-          fun check (bestFriend, bestDepth) friend =
-            if friend = bestFriend then (false, (bestFriend, bestDepth)) else
-            case peekBotPendingChoice friend of
-              SOME (Continuation (_, d)) =>
-                ( true
-                , if d > bestDepth then (friend, d)
-                  else (bestFriend, bestDepth)
-                )
-            | _ => (false, (bestFriend, bestDepth))
+          fun check (bestFriend, bestPayout) friend =
+            if friend = bestFriend then
+              (false, (bestFriend, bestPayout))
+            else
+              case peekBotPendingChoice friend of
+                SOME (PendingChoice {gpu_payout=po, ...}) =>
+                  ( true
+                  , if po < bestPayout then (friend, po)
+                    else (bestFriend, bestPayout)
+                  )
+              | _ => (false, (bestFriend, bestPayout))
           
-          fun loop (bf, bd) numFound tries =
+          fun loop (bf, bpo) numFound tries =
             if tries >= 100 * P orelse numFound >= 10 then
-              (bf, bd)
+              (bf, bpo)
             else
               let
-                val (foundOne, (bf', bd')) = check (bf, bd) (randomId ())
+                val (foundOne, (bf', bpo')) = check (bf, bpo) (randomId ())
                 val numFound' = if foundOne then numFound+1 else numFound
               in
-                loop (bf', bd') numFound' (tries+1)
+                loop (bf', bpo') numFound' (tries+1)
               end
 
-          val (bf, bd) = loop (~1, valOf Int.minInt) 0 0
+          val (bf, bpo) = loop (~1, Real.posInf) 0 0
         in
           if bf < 0 then
             NONE
           else
-            (* tryKeepPendingChoice bf *)
             case tryKeepPendingChoice bf of
-              SOME (t as Continuation (_, d)) =>
-                if d >= bd then SOME t
+              SOME (t as PendingChoice {gpu_payout=po, ...}) =>
+                if po <= bpo then SOME t
                 else if tryPushPendingChoice bf t then NONE
                 else die (fn _ => "scheduler error: push pending back failed\n")
                 
@@ -1115,8 +1133,9 @@ struct
 
           fun actualStealLoop rounds =
             if rounds >= 2 then
-              case workerFindWork_tryKeepChoicePoint_maxdepth () of
-                SOME t => t
+              case workerFindWork_tryKeepChoicePoint_minPayout () of
+                SOME (PendingChoice {thread=t, depth=d, ...}) =>
+                  Continuation (t, d)
               | NONE => (hiccup (); actualStealLoop 0)
             else
               case stealLoop 0 (timeNowMicrosecondsSinceProgramStart ()) of
@@ -1141,10 +1160,10 @@ struct
             print ("gpu manager find work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
             result
           end *)
-          case gpuManager_tryFindWorkLoop_policy_minDepth () of
-            SOME t =>
-              ( startActiveChoice t
-              ; t
+          case gpuManager_tryFindWorkLoop_policy_maxPayout () of
+            SOME (pc as PendingChoice {thread=t, depth=d, ...}) =>
+              ( startActiveChoice pc
+              ; Continuation (t, d)
               )
           | NONE =>
               ( markNoPendingChoices ()
