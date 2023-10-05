@@ -93,7 +93,12 @@ struct
 
 
   datatype pending_choice =
-    PendingChoice of {thread: Thread.t, depth: int, gpu_payout: real}
+    PendingChoice of
+      { thread: Thread.t
+      , depth: int
+      , gpu_payout: real
+      , timestamp: Int64.int  (* unit: microseconds *)
+      }
 
   
   fun cmpPendingChoicePayouts (PendingChoice pc1, PendingChoice pc2) =
@@ -136,7 +141,7 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  (* val gpuPayout = parseReal "sched-gpu-payout" 1.0 *)
+  val gpuRelax = parseReal "sched-gpu-relax" 1750.0
   (* val keepDamper = parseReal "sched-keep-damper" 500.0 *)
   val dumpGpuInfo = parseFlag "sched-dump-gpu-info"
 
@@ -905,7 +910,13 @@ struct
         let
           val thread = Thread.current ()
           val depth = HH.getDepth thread
-          val selfTask = PendingChoice {thread=thread, depth=depth, gpu_payout=gpu_payout}
+          val timestamp = timeNowMicrosecondsSinceProgramStart ()
+          val selfTask = PendingChoice
+            { thread = thread
+            , depth = depth
+            , gpu_payout = gpu_payout
+            , timestamp = timestamp
+            }
           val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
           (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
         in
@@ -914,6 +925,9 @@ struct
 
 
     fun choice_with_payout {prefer_cpu, prefer_gpu, gpu_payout} =
+      if gpu_payout <= 1.0 then
+        prefer_cpu ()
+      else
       let
         val _ = tryBecomeChoiceSearcher ()
         val _ = announceCurrentThreadPendingChoice gpu_payout
@@ -954,7 +968,7 @@ struct
     fun choice {prefer_cpu, prefer_gpu} =
       let
         val depth = HH.getDepth (Thread.current ())
-        val payout = Real.fromInt (4*P) / Math.pow (2.0, Real.fromInt depth) 
+        val payout = 200.0 / Math.pow (2.0, Real.fromInt depth) 
       in
         choice_with_payout
           { prefer_cpu = prefer_cpu
@@ -1004,42 +1018,55 @@ struct
         SMLNJRandom.randRange (0, P-1) myRand
 
       
+      val rP = Real.fromInt P
+
+      
       fun gpuManager_tryFindWorkLoop_policy_maxPayout () =
         let
-          fun check (bestFriend, bestPayout, holding) friend =
+          val now = timeNowMicrosecondsSinceProgramStart ()
+
+          fun check (existsChoice, bestFriend, bestPayout, holding) friend =
             case peekPendingChoice friend of
-              SOME (PendingChoice {gpu_payout=po, ...}) =>
+              SOME (PendingChoice {gpu_payout=po, timestamp, ...}) =>
                 if po <= bestPayout then
-                  (bestFriend, bestPayout, holding)
+                  (true, bestFriend, bestPayout, holding)
+
+                else if
+                  po <= rP andalso
+                  Real.fromInt (Int64.toInt (now - timestamp)) / gpuRelax < rP - po
+                then
+                  (true, bestFriend, bestPayout, holding)
+
                 else
                   ( case tryStealPendingChoice friend of
                       SOME (holding' as PendingChoice {gpu_payout=po', ...}) =>
                         if po' <= bestPayout then
                           ( tryPushPendingChoice friend holding'
-                          ; (bestFriend, bestPayout, holding)
+                          ; (true, bestFriend, bestPayout, holding)
                           )
                         else
                           ( Option.app
                               (fn t =>
                                 (tryPushPendingChoice bestFriend t; ()))
                               holding
-                          ; (friend, po', SOME holding')
+                          ; (true, friend, po', SOME holding')
                           )
 
-                    | _ => (bestFriend, bestPayout, holding)
+                    | _ => (true, bestFriend, bestPayout, holding)
                   )
 
-            | _ => (bestFriend, bestPayout, holding)
+            | _ => (existsChoice, bestFriend, bestPayout, holding)
           
 
           fun loop xxx i =
             if i >= P then xxx else loop (check xxx i) (i+1)
 
-          val (_, _, holding) = loop (~1, Real.negInf, NONE) 0
+          val (existsChoice, _, _, holding) = loop (false, ~1, Real.negInf, NONE) 0
         in
-          case holding of
+          (existsChoice, holding)
+          (* case holding of
             SOME t => SOME t
-          | NONE => NONE
+          | NONE => NONE *)
         end
 
 (*
@@ -1074,7 +1101,7 @@ struct
               | _ => (false, (bestFriend, bestPayout))
           
           fun loop (bf, bpo) numFound tries =
-            if tries >= 100 * P orelse numFound >= 10 then
+            if tries >= 10 * P orelse numFound >= 3 then
               (bf, bpo)
             else
               let
@@ -1102,7 +1129,7 @@ struct
       fun workerFindWork () =
         let
           fun stealLoop tries lastTick =
-            if tries >= P * 100 then
+            if tries >= P * 10 then
               NONE
             else
             let
@@ -1164,11 +1191,15 @@ struct
             result
           end *)
           case gpuManager_tryFindWorkLoop_policy_maxPayout () of
-            SOME (pc as PendingChoice {thread=t, depth=d, ...}) =>
+            (_, SOME (pc as PendingChoice {thread=t, depth=d, ...})) =>
               ( startActiveChoice pc
               ; Continuation (t, d)
               )
-          | NONE =>
+          | (true, NONE) =>
+              ( hiccup ()
+              ; findWork ()
+              )
+          | (false, NONE) =>
               ( markNoPendingChoices ()
               ; if existsPendingChoice () andalso tryBecomeChoiceSearcher () then
                   findWork ()
