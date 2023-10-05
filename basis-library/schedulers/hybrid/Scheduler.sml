@@ -1059,7 +1059,7 @@ struct
 *)
 
 
-      fun workerFindWork_tryKeepChoicePoint_minPayout () =
+      fun workerFindWork_tryKeepChoicePoint_minPayoutAtMost upperLimit =
         let
           fun check (bestFriend, bestPayout) friend =
             if friend = bestFriend then
@@ -1084,7 +1084,7 @@ struct
                 loop (bf', bpo') numFound' (tries+1)
               end
 
-          val (bf, bpo) = loop (~1, Real.posInf) 0 0
+          val (bf, bpo) = loop (~1, upperLimit + 0.000001) 0 0
         in
           if bf < 0 then
             NONE
@@ -1132,11 +1132,14 @@ struct
 
 
           fun actualStealLoop rounds =
-            if rounds >= 2 then
-              case workerFindWork_tryKeepChoicePoint_minPayout () of
+            if rounds mod 2 = 1 then
+              case
+                workerFindWork_tryKeepChoicePoint_minPayoutAtMost
+                  (Real.fromInt (rounds + 3) / 2.0)
+              of
                 SOME (PendingChoice {thread=t, depth=d, ...}) =>
                   Continuation (t, d)
-              | NONE => (hiccup (); actualStealLoop 0)
+              | NONE => (hiccup (); actualStealLoop (rounds+1))
             else
               case stealLoop 0 (timeNowMicrosecondsSinceProgramStart ()) of
                 SOME t => t
