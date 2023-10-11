@@ -1036,12 +1036,7 @@ struct
 *)
 
 
-      (* SAM_NOTE: TODO: currently we don't guarantee that the pending choice
-       * queues are sorted by depth! When it goes idle, a worker might have
-       * pending choices, but then might steal other CPU work which generates
-       * more pending choices, but at different depths. These all go into
-       * the same queue, so the order is not maintained.
-       *)
+      (*
       fun workerFindWork_tryKeepChoicePoint_maxdepth () =
         let
           fun check (bestFriend, bestDepth) friend =
@@ -1055,7 +1050,7 @@ struct
             | _ => (false, (bestFriend, bestDepth))
           
           fun loop (bf, bd) numFound tries =
-            if tries >= 100 * P orelse numFound >= 10 then
+            if tries >= 10 * P orelse numFound >= 3 then
               (bf, bd)
             else
               let
@@ -1079,12 +1074,94 @@ struct
                 
             | _ => NONE
         end
-
+      *)
 
       fun workerFindWork () =
         let
+          fun loopStealAny count (numPendingSeen, bestFriend, bestDepth) =
+            if bestFriend >= 0 andalso (numPendingSeen >= 2 orelse count >= P * 10) then
+              case tryKeepPendingChoice bestFriend of
+                SOME (t as Continuation (_, d)) =>
+                  if d >= bestDepth then
+                    t
+                  else if tryPushPendingChoice bestFriend t then
+                    loopStealAny count (0, ~1, ~1)
+                  else
+                    die (fn _ => "scheduler error: push pending back failed\n")
+              | _ => 
+                loopStealAny count (0, ~1, ~1)
+            
+            else if count >= P * 10 then
+              ( hiccup ()
+              ; loopStealAny 0 (0, ~1, ~1)
+              )
+
+            else
+              let
+                (* including self, to make sure we consider our own pending
+                 * choices *)
+                val friend = randomId () 
+
+                (* only look at side for everyone else *)
+                val sideResult =
+                  if friend = myId then NONE else tryStealSide friend
+              in
+                case sideResult of
+                  SOME task => task
+                | NONE => 
+
+                case trySteal friend of
+                  SOME task => task
+                | NONE =>
+
+                if friend = bestFriend then
+                  loopStealAny (count+1) (numPendingSeen, bestFriend, bestDepth)
+                else
+
+                case peekBotPendingChoice friend of
+                  SOME (Continuation (_, d)) =>
+                    if d > bestDepth then
+                      loopStealAny (count+1) (numPendingSeen+1, friend, d)
+                    else
+                      loopStealAny (count+1) (numPendingSeen+1, bestFriend, bestDepth)
+
+                | _ =>
+                    loopStealAny (count+1) (numPendingSeen, bestFriend, bestDepth)
+              end
+
+          (*
+          fun loopPrioritizeNonChoiceBeforeChoice count =
+            if count >= 0 then
+              case peekBotPendingChoice myId of
+                SOME (Continuation (_, d)) => loopStealAny 0 (1, myId, d)
+              | _ => loopStealAny 0 (0, ~1, ~1)
+            else
+              let
+                val friend = randomOtherId ()
+              in
+                case tryStealSide friend of
+                  SOME task => task
+                | NONE => 
+                case trySteal friend of
+                  SOME task => task
+                | NONE => loopPrioritizeNonChoiceBeforeChoice (count+1)
+              end
+          *)
+        in
+          case tryPopSide myId of
+            SOME task => task
+          | NONE =>
+              (* loopPrioritizeNonChoiceBeforeChoice 0 *)
+              case peekBotPendingChoice myId of
+                SOME (Continuation (_, d)) => loopStealAny 0 (1, myId, d)
+              | _ => loopStealAny 0 (0, ~1, ~1)
+        end
+
+      (*
+      fun workerFindWork () =
+        let
           fun stealLoop tries lastTick =
-            if tries >= P * 100 then
+            if tries >= P * 10 then
               NONE
             else
             let
@@ -1127,6 +1204,7 @@ struct
             SOME task => task
           | NONE => actualStealLoop 0
         end
+      *)
 
 
       fun findWork () =
