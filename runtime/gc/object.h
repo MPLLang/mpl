@@ -82,7 +82,8 @@ COMPILE_TIME_ASSERT(sizeof_objptr__eq__sizeof_header,
 
 static inline GC_header* getHeaderp (pointer p);
 static inline GC_header getHeader (pointer p);
-static inline GC_header buildHeaderFromTypeIndex (uint32_t t);
+static inline GC_header getRacyHeader (pointer p);
+static inline GC_header buildHeaderFromTypeIndex(uint32_t t);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
@@ -180,6 +181,8 @@ enum {
 static inline void splitHeader (GC_state s, GC_header header,
                                 GC_objectTypeTag *tagRet, bool *hasIdentityRet,
                                 uint16_t *bytesNonObjptrsRet, uint16_t *numObjptrsRet);
+static inline bool isMutable(GC_state s, pointer p);
+static inline bool isMutableH(GC_state s, GC_header h);
 static inline pointer advanceToObjectData (GC_state s, pointer p);
 static inline size_t objectSize(GC_state s, pointer p);
 

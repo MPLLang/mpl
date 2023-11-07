@@ -125,7 +125,7 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
 
   bool skip = !pred->fun(s, p, pred->env);
 
-  header = getHeader (p);
+  header = getRacyHeader (p);
   splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
   if (DEBUG_DETAILED)
     fprintf (stderr,

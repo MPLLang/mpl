@@ -73,6 +73,9 @@ struct
   type thread = Basic.t
   type t = MLtonPointer.t
 
+  type clear_set = MLtonPointer.t
+  type finished_clear_set_grain = MLtonPointer.t
+
   fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
   fun forceNewChunk () = Prim.forceNewChunk (gcState ())
   fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
@@ -90,6 +93,30 @@ struct
     Prim.moveNewThreadToDepth (t, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
+
+  fun clearSuspectsAtDepth (t, d) =
+    Prim.clearSuspectsAtDepth (gcState (), t, Word32.fromInt d)
+  
+  fun numSuspectsAtDepth (t, d) =
+    Word64.toInt (Prim.numSuspectsAtDepth (gcState (), t, Word32.fromInt d))
+
+  fun takeClearSetAtDepth (t, d) =
+    Prim.takeClearSetAtDepth (gcState (), t, Word32.fromInt d)
+
+  fun numChunksInClearSet c =
+    Word64.toInt (Prim.numChunksInClearSet (gcState (), c))
+
+  fun processClearSetGrain (c, start, stop) =
+    Prim.processClearSetGrain (gcState (), c, Word64.fromInt start, Word64.fromInt stop)
+
+  fun commitFinishedClearSetGrain (t, fcsg) =
+    Prim.commitFinishedClearSetGrain (gcState (), t, fcsg)
+
+  fun deleteClearSet c =
+    Prim.deleteClearSet (gcState (), c)
+
+  fun updateBytesPinnedEntangledWatermark () =
+    Prim.updateBytesPinnedEntangledWatermark (gcState ())
 end
 
 structure Disentanglement =

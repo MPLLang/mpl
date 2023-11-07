@@ -98,6 +98,22 @@ uintmax_t GC_getCumulativeStatisticsLocalBytesReclaimedOfProc(GC_state s, uint32
   return s->procStates[proc].cumulativeStatistics->bytesReclaimedByLocal;
 }
 
+uintmax_t GC_bytesInScopeForLocal(GC_state s) {
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesInScopeForLocal;
+  }
+  return retVal;
+}
+
+uintmax_t GC_bytesInScopeForCC(GC_state s) {
+  uintmax_t retVal = 0;
+  for (size_t i = 0; i < s->numberOfProcs; i++) {
+    retVal += s->procStates[i].cumulativeStatistics->bytesInScopeForCC;
+  }
+  return retVal;
+}
+
 uintmax_t GC_getCumulativeStatisticsBytesAllocated (GC_state s) {
   /* return sum across all processors */
   size_t retVal = 0;
@@ -165,30 +181,17 @@ uintmax_t GC_getCumulativeStatisticsNumLocalGCsOfProc(GC_state s, uint32_t proc)
   return s->procStates[proc].cumulativeStatistics->numHHLocalGCs;
 }
 
-uintmax_t GC_getNumRootCCsOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->numRootCCs;
+uintmax_t GC_getNumCCsOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->numCCs;
 }
 
-uintmax_t GC_getNumInternalCCsOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->numInternalCCs;
-}
-
-uintmax_t GC_getRootCCMillisecondsOfProc(GC_state s, uint32_t proc) {
-  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeRootCC);
+uintmax_t GC_getCCMillisecondsOfProc(GC_state s, uint32_t proc) {
+  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeCC);
   return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
 }
 
-uintmax_t GC_getInternalCCMillisecondsOfProc(GC_state s, uint32_t proc) {
-  struct timespec *t = &(s->procStates[proc].cumulativeStatistics->timeInternalCC);
-  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
-}
-
-uintmax_t GC_getRootCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByRootCC;
-}
-
-uintmax_t GC_getInternalCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
-  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByInternalCC;
+uintmax_t GC_getCCBytesReclaimedOfProc(GC_state s, uint32_t proc) {
+  return s->procStates[proc].cumulativeStatistics->bytesReclaimedByCC;
 }
 
 uintmax_t GC_getLocalGCMillisecondsOfProc(GC_state s, uint32_t proc) {
@@ -205,6 +208,14 @@ uintmax_t GC_numDisentanglementChecks(GC_state s) {
   uintmax_t count = 0;
   for (uint32_t p = 0; p < s->numberOfProcs; p++) {
     count += s->procStates[p].cumulativeStatistics->numDisentanglementChecks;
+  }
+  return count;
+}
+
+uintmax_t GC_numEntanglements(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count += s->procStates[p].cumulativeStatistics->numEntanglements;
   }
   return count;
 }
@@ -239,10 +250,56 @@ uintmax_t GC_numSuspectsCleared(GC_state s)
   return count;
 }
 
-uintmax_t GC_numEntanglementsDetected(GC_state s) {
+uintmax_t GC_bytesPinnedEntangled(GC_state s)
+{
   uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    count += s->procStates[p].cumulativeStatistics->bytesPinnedEntangled;
+  }
+  return count;
+}
+
+uintmax_t GC_bytesPinnedEntangledWatermark(GC_state s)
+{
+  uintmax_t mark = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    mark = max(mark,
+      s->procStates[p].cumulativeStatistics->bytesPinnedEntangledWatermark);
+  }
+  return mark;
+}
+
+// must only be called immediately after join at root depth
+void GC_updateBytesPinnedEntangledWatermark(GC_state s)
+{
+  uintmax_t total = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++)
+  {
+    uintmax_t *currp = 
+      &(s->procStates[p].cumulativeStatistics->currentPhaseBytesPinnedEntangled);
+    uintmax_t curr = __atomic_load_n(currp, __ATOMIC_SEQ_CST);
+    __atomic_store_n(currp, 0, __ATOMIC_SEQ_CST);
+    total += curr;
+  }
+
+  // if (total > 0) {
+  //   LOG(LM_HIERARCHICAL_HEAP, LL_FORCE, "hello %zu", total);
+  // }
+  
+  s->cumulativeStatistics->bytesPinnedEntangledWatermark =
+    max(
+      s->cumulativeStatistics->bytesPinnedEntangledWatermark,
+      total
+    );
+}
+
+float GC_approxRaceFactor(GC_state s)
+{
+  float count = 0;
   for (uint32_t p = 0; p < s->numberOfProcs; p++) {
-    count += s->procStates[p].cumulativeStatistics->numEntanglementsDetected;
+    count = max(count, s->procStates[p].cumulativeStatistics->approxRaceFactor);
   }
   return count;
 }

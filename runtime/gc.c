@@ -44,6 +44,8 @@
 /* used to look up per-processor state */
 extern C_Pthread_Key_t gcstate_key;
 
+#include "gc/gdtoa-multiple-threads-defs.c"
+
 #include "gc/assign.c"
 #include "gc/atomic.c"
 #include "gc/block-allocator.c"
@@ -73,6 +75,8 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/heap.c"
 #include "gc/hierarchical-heap.c"
 #include "gc/hierarchical-heap-collection.c"
+#include "gc/ebr.c"
+#include "gc/entangled-ebr.c"
 #include "gc/hierarchical-heap-ebr.c"
 #include "gc/init-world.c"
 #include "gc/init.c"
@@ -90,8 +94,10 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/pin.c"
 #include "gc/pointer.c"
 #include "gc/profiling.c"
+#include "gc/concurrent-list.c"
 #include "gc/remembered-set.c"
 #include "gc/rusage.c"
+#include "gc/sampler.c"
 #include "gc/sequence-allocate.c"
 #include "gc/sequence.c"
 #include "gc/share.c"

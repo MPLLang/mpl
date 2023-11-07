@@ -25,10 +25,14 @@ objptr getFwdPtr (pointer p) {
   return *(getFwdPtrp(p));
 }
 
+bool isFwdHeader (GC_header h) {
+  return (not (GC_VALID_HEADER_MASK & h));
+}
+
 /* hasFwdPtr (p)
  *
  * Returns true if the object pointed to by p has a valid forwarding pointer.
  */
 bool hasFwdPtr (pointer p) {
-  return (not (GC_VALID_HEADER_MASK & getHeader(p)));
+  return isFwdHeader (getHeader(p));
 }

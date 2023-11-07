@@ -10,16 +10,18 @@ void CC_workList_init(
   HM_chunkList c = &(w->storage);
   HM_initChunkList(c);
   // arbitrary, just need an initial chunk
-  w->currentChunk = HM_allocateChunk(c, sizeof(struct CC_workList_elem));
+  w->currentChunk = HM_allocateChunkWithPurpose(
+    c,
+    sizeof(struct CC_workList_elem),
+    BLOCK_FOR_GC_WORKLIST);
 }
 
 void CC_workList_free(
     __attribute__((unused)) GC_state s,
     CC_workList w)
 {
-
   HM_chunkList c = &(w->storage);
-  HM_freeChunksInListWithInfo(s, c, NULL);
+  HM_freeChunksInListWithInfo(s, c, NULL, BLOCK_FOR_GC_WORKLIST);
   w->currentChunk = NULL;
 }
 
@@ -137,7 +139,11 @@ void CC_workList_push(
     if (chunk->nextChunk != NULL) {
       chunk = chunk->nextChunk; // this will be an empty chunk
     } else {
-      chunk = HM_allocateChunk(list, elemSize);
+      // chunk = HM_allocateChunk(list, elemSize);
+      chunk = HM_allocateChunkWithPurpose(
+        list,
+        elemSize,
+        BLOCK_FOR_GC_WORKLIST);
     }
     w->currentChunk = chunk;
   }
@@ -298,7 +304,7 @@ objptr* CC_workList_pop(
     if (NULL != chunk->nextChunk) {
       HM_chunk nextChunk = chunk->nextChunk;
       HM_unlinkChunk(list, nextChunk);
-      HM_freeChunk(s, nextChunk);
+      HM_freeChunkWithInfo(s, nextChunk, NULL, BLOCK_FOR_GC_WORKLIST);
     }
 
     assert(NULL == chunk->nextChunk);

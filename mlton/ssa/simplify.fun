@@ -55,7 +55,10 @@ val ssaPassesDefault =
    {name = "localFlatten1", doit = LocalFlatten.transform, execute = true} ::
    {name = "constantPropagation", doit = ConstantPropagation.transform, execute = true} ::
    {name = "duplicateGlobals1", doit = DuplicateGlobals.transform, execute = false} ::
-   {name = "splitTypes1", doit = SplitTypes.transform, execute = true} ::
+   (* SAM_NOTE: disabling splitTypes1 because it does not yet support primitive
+    * polymorphic CAS. We should update the pass and then re-enable.
+    *)
+   {name = "splitTypes1", doit = SplitTypes.transform, execute = false} ::
    (* useless should run 
     *   - after constant propagation because constant propagation makes
     *     slots of tuples that are constant useless
@@ -67,7 +70,10 @@ val ssaPassesDefault =
    {name = "loopUnroll1", doit = LoopUnroll.transform, execute = false} ::
    {name = "removeUnused2", doit = RemoveUnused.transform, execute = true} ::
    {name = "duplicateGlobals2", doit = DuplicateGlobals.transform, execute = true} ::
-   {name = "splitTypes2", doit = SplitTypes.transform, execute = true} ::
+   (* SAM_NOTE: disabling splitTypes2 because it does not yet support primitive
+    * polymorphic CAS. We should update the pass and then re-enable.
+    *)
+   {name = "splitTypes2", doit = SplitTypes.transform, execute = false} ::
    {name = "simplifyTypes", doit = SimplifyTypes.transform, execute = true} ::
    (* polyEqual should run
     *   - after types are simplified so that many equals are turned into eqs

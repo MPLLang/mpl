@@ -22,6 +22,8 @@ local
   FORK_JOIN.sig
   SimpleRandom.sml
   queue/DequeABP.sml
+  DummyTimer.sml
+  CumulativePerProcTimer.sml
   Scheduler.sml
 in
   structure ForkJoin

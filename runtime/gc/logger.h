@@ -18,6 +18,7 @@
 
 enum LogModule {
   LM_ALLOCATION,
+  LM_BLOCK_ALLOCATOR,
   LM_CHUNK,
   LM_CHUNK_POOL,
   LM_DFS_MARK,

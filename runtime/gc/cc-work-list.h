@@ -51,6 +51,8 @@ void CC_workList_push(GC_state s, CC_workList w, objptr op);
   * Returns NULL if work list is empty */
 objptr* CC_workList_pop(GC_state s, CC_workList w);
 
+void CC_workList_free(GC_state s, CC_workList w);
+
 #endif /* MLTON_GC_INTERNAL_FUNCS */
 
 #endif /* CC_WORK_LIST_H */

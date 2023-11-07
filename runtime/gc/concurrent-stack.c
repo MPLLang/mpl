@@ -71,7 +71,7 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
     stack->storage[stack->size++] = datum;
 #endif
 
-    HM_storeInchunkList(&(stack->storage), &(datum), sizeof(datum));
+    HM_storeInChunkListWithPurpose(&(stack->storage), &(datum), sizeof(datum), BLOCK_FOR_FORGOTTEN_SET);
     pthread_mutex_unlock(&stack->mutex);
     return TRUE;
 }
@@ -141,7 +141,7 @@ void CC_stack_data_free(CC_stack_data* stack){
 #endif
 
 void CC_stack_data_free(GC_state s, CC_stack_data* stack) {
-  HM_freeChunksInList(s, &(stack->storage));
+  HM_freeChunksInListWithInfo(s, &(stack->storage), NULL, BLOCK_FOR_FORGOTTEN_SET);
 }
 
 void CC_stack_free(GC_state s, CC_stack* stack) {
@@ -154,7 +154,7 @@ void CC_stack_free(GC_state s, CC_stack* stack) {
 
 void CC_stack_data_clear(GC_state s, CC_stack_data* stack){
     pthread_mutex_lock(&stack->mutex);
-    HM_freeChunksInList(s, &(stack->storage));
+    HM_freeChunksInListWithInfo(s, &(stack->storage), NULL, BLOCK_FOR_FORGOTTEN_SET);
     pthread_mutex_unlock(&stack->mutex);
 }
 
