@@ -699,7 +699,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
           | Value.Weak {arg, ...} => arg
           | _ => Error.bug "DeepFlatten.primApp: Value.deWeak"
 
-      val {get = joinValue: Type.t -> Value.t, ...} =
+      val {get = pcallDataValue: Type.t -> Value.t, ...} =
          Property.get (Type.plist, Property.initFun typeValue)
       fun primApp {args, prim, resultVar = _, resultType} =
          let
@@ -766,16 +766,16 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Prim.MLton_equal => equal ()
              | Prim.MLton_size => dontFlatten ()
              | Prim.MLton_share => dontFlatten ()
-             | Prim.PCall_forkThread =>
+             | Prim.PCall_forkThreadAndSetData =>
                   let
                      val x = Vector.sub (args, 1)
                      val _ = Value.dontFlatten x
                   in
-                     (* Value.coerce {from = x, to = joinValue (Value.origType x)} *)
-                     Value.unify (x, joinValue (Value.origType x))
+                     (* Value.coerce {from = x, to = pcallDataValue (Value.origType x)} *)
+                     Value.unify (x, pcallDataValue (Value.origType x))
                      ; dontFlatten ()
                   end
-             | Prim.PCall_getJoin => joinValue resultType
+             | Prim.PCall_getData => pcallDataValue resultType
              | Prim.Ref_cas _ =>
                  let
                     val c = select {base = arg 0, offset = 0}

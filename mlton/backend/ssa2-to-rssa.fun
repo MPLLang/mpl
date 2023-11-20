@@ -199,7 +199,7 @@ structure CFunction =
           target = Direct "GC_readBarrier"}
 
       (* CHECK; thread as objptr *)
-      val pcallForkThread = fn ty =>
+      val pcallForkThreadAndSetData = fn ty =>
          T {args = Vector.new3 (Type.gcState (), Type.thread (), ty),
             convention = Cdecl,
             inline = false,
@@ -800,6 +800,55 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
              end)
       end
 
+      val {get = pcallDataArg: Label.t -> Var.t * S.Type.t,
+           set = setPCallDataArg, ...} =
+         Property.getSetOnce (Label.plist,
+                              Property.initRaise ("pcallDataArg", Label.layout))
+      val () =
+         List.foreach
+         (functions, fn f =>
+          let
+             val dt = S.Function.dominatorTree f
+             fun loop (Tree.T (b, dts), l: Label.t option) =
+                let
+                   val S.Block.T {statements, transfer, ...} = b
+                   val () =
+                      Vector.foreach
+                      (statements, fn stmt =>
+                       case stmt of
+                          S.Statement.Bind {var, ty,
+                                            exp = S.Exp.PrimApp
+                                                  {prim = Prim.PCall_getData, ...}} =>
+                             let
+                                val l =
+                                   case l of
+                                      NONE => Error.bug "Ssa2ToRssa.setPCallDataArg: PCall_getData not dominated by PCall"
+                                    | SOME l => l
+                                val var =
+                                   case var of
+                                      NONE => Var.newNoname ()
+                                    | SOME var => var
+                             in
+                                setPCallDataArg (l, (var, ty))
+                             end
+                        | _ => ())
+                   val doit =
+                      case transfer of
+                         S.Transfer.PCall {parl, parr, ...} =>
+                            (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
+                             if Label.equals (label, parl)
+                                then loop (dt, SOME parl)
+                             else if Label.equals (label, parr)
+                                then loop (dt, SOME parr)
+                             else loop (dt, l))
+                       | _ => (fn dt => loop (dt, l))
+                in
+                   Vector.foreach (dts, doit)
+                end
+          in
+             loop (dt, NONE)
+          end)
+
       val {get = varInfo: Var.t -> {ty: S.Type.t},
            set = setVarInfo, ...} =
          Property.getSetOnce (Var.plist,
@@ -888,7 +937,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      size = convertWordSize s,
                      test = varOp test}))
                end
-      fun eta' (l: Label.t): Label.t * (Kind.t -> unit) =
+      fun eta'' (l: Label.t, xtraArgs): Label.t * (Kind.t -> unit) =
          let
             val l' = Label.new l
          in
@@ -898,10 +947,13 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                 val args = Vector.keepAllMap (args, fn (x, t) =>
                                               Option.map (toRtype t, fn t =>
                                                           (Var.new x, t)))
+                val xtraArgs = Vector.keepAllMap (xtraArgs, fn (x, t) =>
+                                                  Option.map (toRtype t, fn t =>
+                                                              (x, t)))
              in
                 List.push
                 (extraBlocks,
-                 Block.T {args = args,
+                 Block.T {args = Vector.concat [args, xtraArgs],
                           kind = kind,
                           label = l',
                           statements = Vector.new0 (),
@@ -912,6 +964,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                ty = ty})})})
              end)
          end
+      fun eta' (l: Label.t): Label.t * (Kind.t -> unit) =
+         eta'' (l, Vector.new0 ())
       fun eta (l: Label.t, kind: Kind.t): Label.t =
          let
             val (l', mk) = eta' l
@@ -970,9 +1024,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                   let
                      val (cont', mkc) = eta' cont
                      val _ = List.push (contPCallReturn, (rets, cont'))
-                     val (parl', mkl) = eta' parl
+                     val parlPCallDataArg = pcallDataArg parl
+                     val (parl', mkl) = eta'' (parl, Vector.new1 parlPCallDataArg)
                      val _ = List.push (parlPCallReturn, (rets, parl'))
-                     val (parr', mkr) = eta' parr
+                     val parrPCallDataArg = pcallDataArg parr
+                     val (parr', mkr) = eta'' (parr, Vector.new1 parrPCallDataArg)
                      val _ = List.push (parrPCallReturn, (rets, parr'))
                      val rets' = {cont = cont', parl = parl', parr = parr'}
                      val _ = mkc (Kind.PCallReturn rets')
@@ -1656,10 +1712,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
-                               | Prim.PCall_forkThread =>
+                               | Prim.PCall_forkThreadAndSetData =>
                                     simpleCCallWithGCState
-                                    (CFunction.pcallForkThread (Operand.ty (a 1)))
-                               | Prim.PCall_getJoin => primApp (prim, Vector.new0 ())
+                                    (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))
+                               | Prim.PCall_getData => none ()
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)

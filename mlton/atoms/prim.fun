@@ -112,10 +112,9 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
- | ParWrap (* defunctorize *)
  | PCall (* closure convert *)
- | PCall_forkThread (* to rssa (as runtime C fn) *)
- | PCall_getJoin (* backend *)
+ | PCall_forkThreadAndSetData (* to rssa (as runtime C fn) *)
+ | PCall_getData (* backend *)
  | Real_Math_acos of RealSize.t (* codegen *)
  | Real_Math_asin of RealSize.t (* codegen *)
  | Real_Math_atan of RealSize.t (* codegen *)
@@ -293,10 +292,9 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
-       | ParWrap => "parWrap"
        | PCall => "PCall"
-       | PCall_forkThread => "PCall_forkThread"
-       | PCall_getJoin => "PCall_getJoin"
+       | PCall_forkThreadAndSetData => "PCall_forkThreadAndSetData"
+       | PCall_getData => "PCall_getData"
        | Real_Math_acos s => real (s, "Math_acos")
        | Real_Math_asin s => real (s, "Math_asin")
        | Real_Math_atan s => real (s, "Math_atan")
@@ -457,10 +455,9 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
-    | (ParWrap, ParWrap) => true
     | (PCall, PCall) => true
-    | (PCall_getJoin, PCall_getJoin) => true
-    | (PCall_forkThread, PCall_forkThread) => true
+    | (PCall_forkThreadAndSetData, PCall_forkThreadAndSetData) => true
+    | (PCall_getData, PCall_getData) => true
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
     | (Real_Math_asin s, Real_Math_asin s') => RealSize.equals (s, s')
     | (Real_Math_atan s, Real_Math_atan s') => RealSize.equals (s, s')
@@ -642,10 +639,9 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
-    | ParWrap => ParWrap
     | PCall => PCall
-    | PCall_getJoin => PCall_getJoin
-    | PCall_forkThread => PCall_forkThread
+    | PCall_forkThreadAndSetData => PCall_forkThreadAndSetData
+    | PCall_getData => PCall_getData
     | Real_Math_acos z => Real_Math_acos z
     | Real_Math_asin z => Real_Math_asin z
     | Real_Math_atan z => Real_Math_atan z
@@ -853,10 +849,9 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
-       | ParWrap => Functional
        | PCall => SideEffect
-       | PCall_getJoin => DependsOnState
-       | PCall_forkThread => SideEffect
+       | PCall_forkThreadAndSetData => SideEffect
+       | PCall_getData => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_asin _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_atan _ => DependsOnState (* depends on rounding mode *)
@@ -1064,10 +1059,9 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       ParWrap,
        PCall,
-       PCall_forkThread,
-       PCall_getJoin,
+       PCall_forkThreadAndSetData,
+       PCall_getData,
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
        Ref_cas NONE,
@@ -1403,7 +1397,6 @@ fun 'a checkApp (prim: 'a t,
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
-       | ParWrap => false (* par should be eliminated before we need to check? *)
        | PCall =>
             (* pcall : ('a -> 'b) * 'a * ('b -> 'c) * ('b -> 'c) * ('d -> 'e) * 'd -> 'c *)
             fiveTargs (fn (ta, tb, tc, td, te) =>
@@ -1417,8 +1410,8 @@ fun 'a checkApp (prim: 'a t,
                        in
                           (sixArgs (func,farg,cont,parl,parr,rarg), tc)
                        end)
-       | PCall_getJoin => oneTarg (fn t => (noArgs, t))
-       | PCall_forkThread => oneTarg (fn t => (twoArgs (thread, t), thread))
+       | PCall_forkThreadAndSetData => oneTarg (fn t => (twoArgs (thread, t), thread))
+       | PCall_getData => oneTarg (fn t => (noArgs, t))
        | Real_Math_acos s => realUnary s
        | Real_Math_asin s => realUnary s
        | Real_Math_atan s => realUnary s
@@ -1529,7 +1522,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                                        deWeak: 'a -> 'a}}) =
    let
       val one = Vector.new1
-      val two = Vector.new2
       val five = Vector.new5
       fun arg i = Vector.sub (args, i)
       datatype z = datatype t
@@ -1560,7 +1552,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       | ParWrap => two (#2 (deArrow (arg 1)), #2 (deArrow (arg 2)))
        | PCall =>
             (* pcall : ('a -> 'b) * 'a * ('b -> 'c) * ('b -> 'c) * ('d -> 'e) * 'd -> 'c *)
             five (#1 (deArrow (arg 0)),
@@ -1568,8 +1559,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                   #2 (deArrow (arg 2)),
                   #1 (deArrow (arg 4)),
                   #2 (deArrow (arg 4)))
-       | PCall_getJoin => one result
-       | PCall_forkThread => one (arg 1)
+       | PCall_forkThreadAndSetData => one (arg 1)
+       | PCall_getData => one result
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref _ => one (deRef (arg 0))

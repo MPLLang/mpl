@@ -27,9 +27,7 @@ signature RSSA_LIVE =
                                beginNoFormals: Var.t vector,
                                (* live handler slots at beginning of block. *)
                                handler: Label.t option,
-                               link: bool,
-                               (* is PCall joinSlot live at beginning of block. *)
-                               joinSlot: bool},
+                               link: bool},
                    remLabelLive: Label.t -> unit}
          end
    end

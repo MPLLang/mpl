@@ -776,7 +776,7 @@ fun checkPrimApp {args, prim, result} =
        | Prim.CPointer_sub => done ([cpointer, cptrdiff], SOME cpointer)
        | Prim.CPointer_toWord => done ([cpointer], SOME csize)
        | Prim.MLton_touch => done ([objptr], NONE)
-       | Prim.PCall_getJoin => done ([], SOME (fn _ => true))
+       | Prim.PCall_getData => done ([], SOME objptr)
        | Prim.Real_Math_acos s => realUnary s
        | Prim.Real_Math_asin s => realUnary s
        | Prim.Real_Math_atan s => realUnary s

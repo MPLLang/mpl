@@ -110,7 +110,7 @@ struct
     -> 'c;
 
   (* Matthew will implement. Make sure 'a is objptr. *)
-  val primGetJoin = _prim "PCall_getJoin": unit -> 'a;
+  val primGetData = _prim "PCall_getData": unit -> 'a;
   (* Replacement for setJoin primitive. *)
 
   (* Could add boolean to prim: indicator for
@@ -118,7 +118,7 @@ struct
    *   vs
    *   findYoungestPromotable   (promote at pcalls -- youngest is the ONLY promotable)
    *)
-  val primForkThread = _prim "PCall_forkThread": Thread.t * 'a -> Thread.p;
+  val primForkThreadAndSetData = _prim "PCall_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
 
   (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
   (* fun threadSwitch t =
@@ -649,7 +649,7 @@ struct
             }
 
         (* this sets the join for both threads (left and right) *)
-        val rightSideThread = primForkThread (interruptedLeftThread, jp)
+        val rightSideThread = primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, depth))
@@ -975,7 +975,7 @@ struct
             val _ = dbgmsg'' (fn _ => "hello from left-side par continuation")
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "leftSideParCont" 1
-            val jp = primGetJoin ()
+            val jp = primGetData ()
             val gres = syncEndAtomic jp (inject o g)
           in
             (Result.extractResult fres,
@@ -1000,7 +1000,7 @@ struct
 
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
             val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
-              primGetJoin ()
+              primGetData ()
             val () = DE.decheckSetTid tidRight
             val _ = addSpareHeartbeats spareHeartbeatsGiven
             val _ = Thread.atomicEnd()

@@ -35,10 +35,6 @@ signature ALLOCATE_VARIABLES =
               *)
              handlersInfo: {handlerOffset: Bytes.t,
                             linkOffset: Bytes.t} option,
-             (* If PCalls are used, joinSlotInfo gives the stack offset
-              * where the join point should be stored.
-              *)
-             joinSlotInfo: {joinSlotOffset: Bytes.t} option,
              labelInfo:
              Rssa.Label.t -> {(* Live operands at the beginning of the block. *)
                               live: Machine.Operand.t vector,

@@ -1174,7 +1174,7 @@ fun transform (program: Program.t): Program.t =
                             ("args", Vector.layout layout args)],
              Unit.layout)
             filter
-         val {get = joinValue: Type.t -> Value.t, ...} =
+         val {get = pcallDataValue: Type.t -> Value.t, ...} =
             Property.get (Type.plist, Property.initFun Value.fromType)
          fun primApp {prim,
                       targs = _,
@@ -1371,14 +1371,14 @@ fun transform (program: Program.t): Program.t =
                 | Prim.Array_toArray => arrayToArray (arg 0)
                 | Prim.Array_toVector => arrayToVector (arg 0)
                 | Prim.Array_update _ => sequenceUpd arraySequence
-                | Prim.PCall_forkThread =>
+                | Prim.PCall_forkThreadAndSetData =>
                      let
                         val x = arg 1
                      in
-                        coerce {from = x, to = joinValue (Value.ty x)}
+                        coerce {from = x, to = pcallDataValue (Value.ty x)}
                         ; unknown resultType
                      end
-                | Prim.PCall_getJoin => joinValue resultType
+                | Prim.PCall_getData => pcallDataValue resultType
                 | Prim.Ref_assign _ => (coerce {from = arg 1, to = refArg (arg 0)}; unit ())
                 | Prim.Ref_cas _ => (coerce {from = arg 2, to = refArg (arg 0)}; refArg (arg 0))
                 | Prim.Ref_deref _ => refArg (arg 0)

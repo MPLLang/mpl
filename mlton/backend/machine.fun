@@ -1382,8 +1382,7 @@ structure Program =
                             val liveOffsets = Vector.fromArray liveOffsets
                          in
                          Vector.equals
-                         (liveOffsets, FrameInfo.offsets frameInfo,
-                                           Bytes.equals)
+                         (liveOffsets, FrameInfo.offsets frameInfo, Bytes.equals)
                       end) handle No => false
                   fun frame (frameInfo,
                              useSlots: bool,
@@ -1639,19 +1638,24 @@ structure Program =
                end
 
 
-            fun removeJoinSlot (live: Live.t vector) =
-               Vector.keepAll
-               (live, fn l =>
-                case l of
-                   Live.StackOffset (StackOffset.T {offset, ...}) =>
-                      not (Bytes.isZero offset)
-                 | _ => true)
-            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, joinSlot: bool) =
+            fun removePCallDataSlot (size, live: Live.t vector) =
+               let
+                  val pcallDataOffset =
+                     Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
+               in
+                  Vector.keepAll
+                  (live, fn l =>
+                   case l of
+                      Live.StackOffset (StackOffset.T {offset, ...}) =>
+                         not (Bytes.equals (offset, pcallDataOffset))
+                    | _ => true)
+               end
+            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, pcallDataSlot: bool) =
                let
                   val Block.T {kind, live, ...} = labelBlock label
                   val live =
-                     if joinSlot
-                        then removeJoinSlot live
+                     if pcallDataSlot
+                        then removePCallDataSlot (size, live)
                         else live
                in
                   if liveIsOk (live, alloc)
@@ -1699,12 +1703,12 @@ structure Program =
                       fn () => Label.layout parr)
                   val () =
                      Err.check
-                     ("parlLive - {joinSlot} <= contLive",
+                     ("parlLive - {pcallDataSlot} <= contLive",
                       fn () => liveSubset (parlLive, contLive),
                       fn () => Layout.tuple [Label.layout parl, Label.layout cont])
                   val () =
                      Err.check
-                     ("parrLive - {joinSlot} <= contLive",
+                     ("parrLive - {pcallDataSlot} <= contLive",
                       fn () => liveSubset (parrLive, contLive),
                       fn () => Layout.tuple [Label.layout parr, Label.layout cont])
                   val () =

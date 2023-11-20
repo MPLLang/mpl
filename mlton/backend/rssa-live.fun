@@ -42,7 +42,6 @@ structure LiveInfo =
       datatype t = T of {live: Var.t Buffer.t,
                          liveHS: {handler: Label.t option ref,
                                   link: unit option ref},
-                         liveJS: {joinSlot: bool ref},
                          name: string,
                          preds: t list ref}
 
@@ -52,7 +51,6 @@ structure LiveInfo =
          T {live = Buffer.new {dummy = Var.bogus},
             liveHS = {handler = ref NONE,
                       link = ref NONE},
-            liveJS = {joinSlot = ref false},
             name = name,
             preds = ref []}
 
@@ -61,9 +59,6 @@ structure LiveInfo =
       fun liveHS (T {liveHS = {handler, link}, ...}) =
          {handler = !handler,
           link = isSome (!link)}
-
-      fun liveJS (T {liveJS = {joinSlot}, ...}) =
-         {joinSlot = !joinSlot}
 
       fun equals (T {preds = r, ...}, T {preds = r', ...}) = r = r'
 
@@ -126,8 +121,6 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
       datatype 'a defuse = Def of LiveInfo.t | Use of 'a * LiveInfo.t
       val handlerCodeDefUses: Label.t defuse list ref = ref []
       val handlerLinkDefUses: unit defuse list ref = ref []
-      val joinSlotDefs: LiveInfo.t list ref = ref []
-      val joinSlotUses: LiveInfo.t list ref = ref []
       val allVars: Var.t list ref = ref []
       fun setDefined (x: Var.t, defined): unit =
          if shouldConsider x
@@ -172,27 +165,24 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
             val {argInfo, bodyInfo = b, ...} = labelInfo label
             val _ = Vector.foreach (args, fn (x, _) => setDefined (x, argInfo))
             fun goto l = LiveInfo.addEdge (b, #argInfo (labelInfo l))
-            (* Make sure that a cont's live vars includes variables live in its
-             * handler.
-             * Make sure that a PCall cont includes the live vars of the parl and parr.
-             * Record that a PCall parl or parr defines the joinSlot.
-             *)
             val _ =
                case kind of
                   Kind.Cont {handler, ...} =>
+                     (* Make sure that a cont's live vars includes variables
+                      * live in its handler.
+                      *)
                      Handler.foreachLabel (handler, goto)
                 | Kind.PCallReturn {cont, parl, parr} =>
+                     (* Make sure that a PCall cont's live vars includes
+                      * variables live in the parll and parr.
+                      *)
                      let
-                        val _ = goto cont
-                        val _ = goto parl
-                        val _ = goto parr 
-                        (* val _ =
+                        (* val _ = goto cont *)
+                        (* val _ = goto parl *)
+                        (* val _ = goto parr *)
+                        val _ =
                            if Label.equals (label, cont)
                               then (goto parl; goto parr)
-                              else () *)
-                        val _ =
-                           if Label.equals (label, parl) orelse Label.equals (label, parr)
-                              then List.push (joinSlotDefs, b)
                               else ()
                      in
                         ()
@@ -220,9 +210,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                                                         use = use})
                    val _ =
                       case s of
-                         PrimApp {prim = Prim.PCall_getJoin, ...} =>
-                            List.push (joinSlotUses, b)
-                       | SetExnStackSlot =>
+                         SetExnStackSlot =>
                             List.push (handlerLinkDefUses, Use ((), b))
                        | SetHandler _ =>
                             List.push (handlerCodeDefUses, Def b)
@@ -339,34 +327,6 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
          end
       val _ = handlerLink (handlerCodeDefUses, #handler)
       val _ = handlerLink (handlerLinkDefUses, #link)
-      (* joinSlot is mostly easy; back propagate from a use to a def. *)
-      fun joinSlot () =
-         let
-            val defs = !joinSlotDefs
-            val _ =
-               List.foreach
-               (defs, fn LiveInfo.T {liveJS = {joinSlot, ...}, ...} =>
-                joinSlot := true)
-            val todo: LiveInfo.t list ref = ref []
-            fun consider (b as LiveInfo.T {liveJS = {joinSlot, ...}, ...}) =
-                if List.exists (defs, fn b' => LiveInfo.equals (b, b'))
-                   orelse !joinSlot
-                   then ()
-                   else (joinSlot := true
-                         ; List.push (todo, b))
-            val _ = List.foreach (!joinSlotUses, consider)
-            fun loop () =
-                case !todo of
-                   [] => ()
-                 | (LiveInfo.T {preds, ...}) :: bs =>
-                      (todo := bs
-                       ; List.foreach (!preds, consider)
-                       ; loop ())
-            val _ = loop ()
-         in
-            ()
-         end
-      val _ = joinSlot ()
       val {get = labelLive, rem = remLabelLive, ...} =
          Property.get
          (Label.plist,
@@ -376,13 +336,11 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
               val {bodyInfo, argInfo, ...} = labelInfo l
               val () = removeLabelInfo l
               val {handler, link} = LiveInfo.liveHS bodyInfo
-              val {joinSlot} = LiveInfo.liveJS bodyInfo
            in
               {begin = LiveInfo.live bodyInfo,
                beginNoFormals = LiveInfo.live argInfo,
                handler = handler,
-               link = link,
-               joinSlot = joinSlot}
+               link = link}
            end))
       val () = Vector.foreach (blocks, fn b =>
                                ignore (labelLive (Block.label b)))
@@ -395,7 +353,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
              (blocks, fn b =>
               let
                  val l = Block.label b           
-                 val {begin, beginNoFormals, handler, link, joinSlot} = labelLive l
+                 val {begin, beginNoFormals, handler, link} = labelLive l
               in
                  display
                  (seq [Label.layout l,
@@ -404,8 +362,7 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                                ("beginNoFormals",
                                 Vector.layout Var.layout beginNoFormals),
                                ("handler", Option.layout Label.layout handler),
-                               ("link", Bool.layout link),
-                               ("joinSlot", Bool.layout joinSlot)]])
+                               ("link", Bool.layout link)]])
               end)
           end)
    in 
