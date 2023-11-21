@@ -198,6 +198,28 @@ structure CFunction =
           symbolScope = Private,
           target = Direct "GC_readBarrier"}
 
+      (* CHECK; thread as objptr *)
+      val pcallForkThreadAndSetData = fn ty =>
+         T {args = Vector.new3 (Type.gcState (), Type.thread (), ty),
+            convention = Cdecl,
+            inline = false,
+            kind = Kind.Runtime {bytesNeeded = NONE,
+                                 ensuresBytesFree = NONE,
+                                 mayGC = true,
+                                 maySwitchThreadsFrom = false,
+                                 maySwitchThreadsTo = false,
+                                 modifiesFrontier = true,
+                                 readsStackTop = true,
+                                 writesStackTop = true},
+            prototype = let
+                           open CType
+                        in
+                           (Vector.new3 (CPointer, CPointer, Objptr), SOME CPointer)
+                        end,
+            return = Type.thread (),
+            symbolScope = Private,
+            target = Direct "GC_HH_forkThread"}
+
       fun updateObjectHeader {obj} =
         T {args = Vector.new3 (Type.gcState(),
                                obj,
@@ -778,6 +800,55 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
              end)
       end
 
+      val {get = pcallDataArg: Label.t -> Var.t * S.Type.t,
+           set = setPCallDataArg, ...} =
+         Property.getSetOnce (Label.plist,
+                              Property.initRaise ("pcallDataArg", Label.layout))
+      val () =
+         List.foreach
+         (functions, fn f =>
+          let
+             val dt = S.Function.dominatorTree f
+             fun loop (Tree.T (b, dts), l: Label.t option) =
+                let
+                   val S.Block.T {statements, transfer, ...} = b
+                   val () =
+                      Vector.foreach
+                      (statements, fn stmt =>
+                       case stmt of
+                          S.Statement.Bind {var, ty,
+                                            exp = S.Exp.PrimApp
+                                                  {prim = Prim.PCall_getData, ...}} =>
+                             let
+                                val l =
+                                   case l of
+                                      NONE => Error.bug "Ssa2ToRssa.setPCallDataArg: PCall_getData not dominated by PCall"
+                                    | SOME l => l
+                                val var =
+                                   case var of
+                                      NONE => Var.newNoname ()
+                                    | SOME var => var
+                             in
+                                setPCallDataArg (l, (var, ty))
+                             end
+                        | _ => ())
+                   val doit =
+                      case transfer of
+                         S.Transfer.PCall {parl, parr, ...} =>
+                            (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
+                             if Label.equals (label, parl)
+                                then loop (dt, SOME parl)
+                             else if Label.equals (label, parr)
+                                then loop (dt, SOME parr)
+                             else loop (dt, l))
+                       | _ => (fn dt => loop (dt, l))
+                in
+                   Vector.foreach (dts, doit)
+                end
+          in
+             loop (dt, NONE)
+          end)
+
       val {get = varInfo: Var.t -> {ty: S.Type.t},
            set = setVarInfo, ...} =
          Property.getSetOnce (Var.plist,
@@ -810,7 +881,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
       val {get = labelInfo: (Label.t ->
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
-                              handler: Label.t option ref}),
+                              handler: Label.t option ref,
+                              pcallReturn: ({cont: Label.t,
+                                             parl: Label.t,
+                                             parr: Label.t} * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("label info", Label.layout))
@@ -863,25 +937,39 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      size = convertWordSize s,
                      test = varOp test}))
                end
+      fun eta'' (l: Label.t, xtraArgs): Label.t * (Kind.t -> unit) =
+         let
+            val l' = Label.new l
+         in
+            (l', fn kind =>
+             let
+                val {args, ...} = labelInfo l
+                val args = Vector.keepAllMap (args, fn (x, t) =>
+                                              Option.map (toRtype t, fn t =>
+                                                          (Var.new x, t)))
+                val xtraArgs = Vector.keepAllMap (xtraArgs, fn (x, t) =>
+                                                  Option.map (toRtype t, fn t =>
+                                                              (x, t)))
+             in
+                List.push
+                (extraBlocks,
+                 Block.T {args = Vector.concat [args, xtraArgs],
+                          kind = kind,
+                          label = l',
+                          statements = Vector.new0 (),
+                          transfer = (Transfer.Goto
+                                      {dst = l,
+                                       args = Vector.map (args, fn (var, ty) =>
+                                                          Var {var = var,
+                                                               ty = ty})})})
+             end)
+         end
+      fun eta' (l: Label.t): Label.t * (Kind.t -> unit) =
+         eta'' (l, Vector.new0 ())
       fun eta (l: Label.t, kind: Kind.t): Label.t =
          let
-            val {args, ...} = labelInfo l
-            val args = Vector.keepAllMap (args, fn (x, t) =>
-                                          Option.map (toRtype t, fn t =>
-                                                      (Var.new x, t)))
-            val l' = Label.new l
-            val _ =
-               List.push
-               (extraBlocks,
-                Block.T {args = args,
-                         kind = kind,
-                         label = l',
-                         statements = Vector.new0 (),
-                         transfer = (Transfer.Goto
-                                     {dst = l,
-                                      args = Vector.map (args, fn (var, ty) =>
-                                                         Var {var = var,
-                                                              ty = ty})})})
+            val (l', mk) = eta' l
+            val _ = mk kind
          in
             l'
          end
@@ -918,6 +1006,39 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          Trace.trace2 ("SsaToRssa.labelCont",
                        Label.layout, Handler.layout, Label.layout)
          labelCont
+      fun genPCallReturns (rets as {cont, parl, parr}): {cont: Label.t, parl: Label.t, parr: Label.t} =
+         let
+            fun lkup pcallReturn =
+               List.peek (!pcallReturn, fn ({cont = cont', parl = parl', parr = parr'}, _) =>
+                          Label.equals (cont, cont') andalso
+                          Label.equals (parl, parl') andalso
+                          Label.equals (parr, parr'))
+            val {pcallReturn = contPCallReturn, ...} = labelInfo cont
+            val {pcallReturn = parlPCallReturn, ...} = labelInfo parl
+            val {pcallReturn = parrPCallReturn, ...} = labelInfo parr
+         in
+            case (lkup contPCallReturn, lkup parlPCallReturn, lkup parrPCallReturn) of
+               (SOME (_, cont), SOME (_, parl), SOME (_, parr)) =>
+                  {cont = cont, parl = parl, parr = parr}
+             | (NONE, NONE, NONE) =>
+                  let
+                     val (cont', mkc) = eta' cont
+                     val _ = List.push (contPCallReturn, (rets, cont'))
+                     val parlPCallDataArg = pcallDataArg parl
+                     val (parl', mkl) = eta'' (parl, Vector.new1 parlPCallDataArg)
+                     val _ = List.push (parlPCallReturn, (rets, parl'))
+                     val parrPCallDataArg = pcallDataArg parr
+                     val (parr', mkr) = eta'' (parr, Vector.new1 parrPCallDataArg)
+                     val _ = List.push (parrPCallReturn, (rets, parr'))
+                     val rets' = {cont = cont', parl = parl', parr = parr'}
+                     val _ = mkc (Kind.PCallReturn rets')
+                     val _ = mkl (Kind.PCallReturn rets')
+                     val _ = mkr (Kind.PCallReturn rets')
+                  in
+                     rets'
+                  end
+             | _ => Error.bug "Ssa2ToRssa.genPCallReturns"
+         end
       fun vos (xs: Var.t vector) =
          Vector.keepAllMap (xs, fn x =>
                             Option.map (toRtype (varType x), fn _ =>
@@ -978,6 +1099,18 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           | S.Transfer.Case r => translateCase r
           | S.Transfer.Goto {dst, args} =>
                ([], Transfer.Goto {dst = dst, args = vos args})
+          | S.Transfer.PCall {args, func, cont, parl, parr} =>
+               let
+                  val {cont, parl, parr} =
+                     genPCallReturns {cont = cont, parl = parl, parr = parr}
+               in
+                  ([],
+                   Transfer.PCall {args = vos args,
+                                   func = func,
+                                   cont = cont,
+                                   parl = parl,
+                                   parr = parr})
+               end
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
           | S.Transfer.Runtime {args, prim, return} =>
@@ -1579,6 +1712,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
+                               | Prim.PCall_forkThreadAndSetData =>
+                                    simpleCCallWithGCState
+                                    (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))
+                               | Prim.PCall_getData => none ()
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)
@@ -1920,7 +2057,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                (blocks, fn S.Block.T {label, args, ...} =>
                 setLabelInfo (label, {args = args,
                                       cont = ref [],
-                                      handler = ref NONE}))
+                                      handler = ref NONE,
+                                      pcallReturn = ref []}))
             val blocks = Vector.map (blocks, translateBlock)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
             val _ = extraBlocks := []

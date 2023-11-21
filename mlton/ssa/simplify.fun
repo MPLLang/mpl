@@ -18,6 +18,7 @@ structure CommonSubexp = CommonSubexp (S)
 structure CombineConversions = CombineConversions (S)
 structure ConstantPropagation = ConstantPropagation (S)
 structure Contify = Contify (S)
+structure DropPCall = DropPCall (S)
 structure DuplicateGlobals = DuplicateGlobals (S)
 structure Flatten = Flatten (S)
 structure Inline = Inline (S)
@@ -125,6 +126,7 @@ val ssaPassesDefault =
    {name = "loopUnroll2", doit = LoopUnroll.transform, execute = false} ::
    {name = "commonSubexp2", doit = CommonSubexp.transform, execute = false} ::
    {name = "removeUnused4", doit = RemoveUnused.transform, execute = true} ::
+   {name = "ssaDropPCall", doit = DropPCall.transform, execute = false} ::
    nil
 
 val ssaPassesMinimal =
@@ -251,6 +253,7 @@ local
                  ("splitTypes", SplitTypes.transform),
                  ("useless", Useless.transform),
                  ("ssaAddProfile", Profile.addProfile),
+                 ("ssaDropPCall", DropPCall.transform),
                  ("ssaDropProfile", Profile.dropProfile),
                  ("ssaBreakCriticalEdges", fn p => S.breakCriticalEdges (p, {codeMotion = true})),
                  ("ssaEliminateDeadBlocks", S.eliminateDeadBlocks),

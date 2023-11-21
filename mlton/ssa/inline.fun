@@ -24,6 +24,7 @@ structure Function =
            (Function.blocks f, fn Block.T {transfer, ...} =>
             case transfer of
                Call _ => escape true
+             | PCall _ => escape true
              | _ => ())
            ; false))
       fun containsLoop (f: Function.t): bool =
@@ -49,10 +50,28 @@ structure Function =
          end
    end
 
+fun mkIsPCalled (Program.T {functions, ...}) =
+   let
+      val {get = isPCalled: Func.t -> bool,
+           set = setIsPCalled, ...} =
+         Property.getSetOnce (Func.plist, Property.initConst false)
+      val _ =
+         List.foreach
+         (functions, fn f =>
+          Vector.foreach
+          (Function.blocks f, fn b =>
+           case Block.transfer b of
+              Transfer.PCall {func, ...} => setIsPCalled (func, true)
+            | _ => ()))
+   in
+      isPCalled
+   end
+
 local
-   fun 'a make (dontInlineFunc: Function.t * 'a -> bool)
-      (Program.T {functions, ...}, a: 'a): Func.t -> bool =
+   fun 'a make (dontInlineFunc: Program.t -> Function.t * 'a -> bool)
+      (program as Program.T {functions, ...}, a: 'a): Func.t -> bool =
       let
+         val dontInlineFunc = dontInlineFunc program
          val {get = shouldInline: Func.t -> bool, 
               set = setShouldInline, ...} =
             Property.getSetOnce (Func.plist, Property.initConst false)
@@ -79,26 +98,39 @@ local
          ; shouldInline
       end
 in
-   val leafOnce = make (fn (f, {size}) =>
-                        Option.isNone (Function.sizeMax (f, {max = size,
-                                                             sizeExp = Exp.size,
-                                                             sizeTransfer =Transfer.size}))
-                        orelse Function.containsCall f)
-   val leafOnceNoLoop = make (fn (f, {size}) =>
-                              Option.isNone (Function.sizeMax (f, {max = size,
-                                                                   sizeExp = Exp.size,
-                                                                   sizeTransfer =Transfer.size}))
-                              orelse Function.containsCall f
-                              orelse Function.containsLoop f)
+   val leafOnce = make (fn p =>
+                        let
+                           val isPCalled = mkIsPCalled p
+                        in
+                           fn (f, {size}) =>
+                           Option.isNone (Function.sizeMax (f, {max = size,
+                                                                sizeExp = Exp.size,
+                                                                sizeTransfer =Transfer.size}))
+                           orelse Function.containsCall f
+                           orelse isPCalled (Function.name f)
+                        end)
+   val leafOnceNoLoop = make (fn p =>
+                              let
+                                 val isPCalled = mkIsPCalled p
+                              in
+                                 fn (f, {size}) =>
+                                 Option.isNone (Function.sizeMax (f, {max = size,
+                                                                      sizeExp = Exp.size,
+                                                                      sizeTransfer =Transfer.size}))
+                                 orelse Function.containsCall f
+                                 orelse Function.containsLoop f
+                                 orelse isPCalled (Function.name f)
+                              end)
 end
 
 structure Graph = DirectedGraph
 structure Node = Graph.Node
 
 local
-   fun make (dontInline: Function.t -> bool)
-      (Program.T {functions, ...}, {size: int option}) =
+   fun make (dontInline: Program.t -> Function.t -> bool)
+      (program as Program.T {functions, ...}, {size: int option}) =
       let
+         val dontInline = dontInline program
          val max = size
          type info = {function: Function.t,
                       node: unit Node.t,
@@ -210,14 +242,29 @@ local
          ! o #shouldInline o funcInfo
       end
 in
-   val leafRepeat = make (fn _ => false)
-   val leafRepeatNoLoop = make (fn f => Function.containsLoop f)
+   val leafRepeat = make (fn p =>
+                          let
+                             val isPCalled = mkIsPCalled p
+                          in
+                             fn f =>
+                             false
+                             orelse isPCalled (Function.name f)
+                          end)
+   val leafRepeatNoLoop = make (fn p =>
+                                let
+                                   val isPCalled = mkIsPCalled p
+                                in
+                                   fn f =>
+                                   Function.containsLoop f
+                                   orelse isPCalled (Function.name f)
+                                end)
 end
 
 fun nonRecursive (Program.T {functions, ...}, {small: int, product: int}) =
    let
       type info = {doesCallSelf: bool ref,
                    function: Function.t,
+                   isPCalled: bool ref,
                    node: unit Node.t,
                    numCalls: int ref,
                    shouldInline: bool ref,
@@ -242,6 +289,7 @@ fun nonRecursive (Program.T {functions, ...}, {small: int, product: int}) =
              setNodeFunc (n, name)
              ; setFuncInfo (name, {doesCallSelf = ref false,
                                    function = f,
+                                   isPCalled = ref false,
                                    node = n,
                                    numCalls = ref 0,
                                    shouldInline = ref false,
@@ -266,12 +314,19 @@ fun nonRecursive (Program.T {functions, ...}, {small: int, product: int}) =
                           then doesCallSelf := true
                        else Int.inc numCalls
                     end
+               | PCall {func, ...} =>
+                    let
+                       val {isPCalled, ...} = funcInfo func
+                    in
+                       isPCalled := true
+                    end
                | _ => ())
           end)
       fun mayInline (setSize: bool,
-                     {function, doesCallSelf, numCalls, size, ...}: info): bool =
+                     {function, doesCallSelf, isPCalled, numCalls, size, ...}: info): bool =
          Function.mayInline function
          andalso not (!doesCallSelf)
+         andalso not (!isPCalled)
          andalso let
                     val n =
                        Function.size

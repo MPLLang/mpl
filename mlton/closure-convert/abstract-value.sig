@@ -58,6 +58,7 @@ signature ABSTRACT_VALUE =
       val equals: t * t -> bool
       val fromType: Sxml.Type.t -> t
       val isEmpty: t -> bool (* no possible values correspond to me *)
+      val pcallDataValue: Sxml.Type.t -> t
       val lambda: Sxml.Lambda.t * Sxml.Type.t (* The type of the lambda. *) -> t
       val layout: t -> Layout.t
       val primApply: {prim: Sxml.Type.t Sxml.Prim.t,

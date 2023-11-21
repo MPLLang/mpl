@@ -191,6 +191,10 @@ struct
         in
           if oldTop = cas top (oldTop, newTop) then
             SOME (Option.valOf x, idx)
+            handle Option =>
+              ( print ("[" ^ Int.toString (myWorkerId()) ^ "] Queue.tryPopTop error at idx " ^ Int.toString idx ^ "\n")
+              ; raise Option
+              )
           else
             NONE
         end

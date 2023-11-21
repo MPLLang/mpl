@@ -502,6 +502,8 @@ structure ObjectType =
                       | Control.Align8 => Bytes.fromInt 8
                   val bytesMetaData =
                      Bits.toBytes (Control.Target.Size.normalMetaData ())
+                  val bytesSpareHeartbeats =
+                     Bits.toBytes (Type.width Type.word32)
                   val bytesCurrentProcNum =
                      Bits.toBytes (Type.width Type.word32)
                   val bytesBytesNeeded =
@@ -534,6 +536,7 @@ structure ObjectType =
                         val op+ = Bytes.+
                      in
                         bytesMetaData +
+                        bytesSpareHeartbeats +
                         bytesCurrentProcNum +
                         bytesBytesNeeded +
                         bytesExnStack +
@@ -558,6 +561,7 @@ structure ObjectType =
             val components =
                Vector.fromList (
                   [Type.word32,
+                   Type.word32,
                    Type.csize (),
                    Type.exnStack (),
                    Type.word32,
@@ -772,6 +776,7 @@ fun checkPrimApp {args, prim, result} =
        | Prim.CPointer_sub => done ([cpointer, cptrdiff], SOME cpointer)
        | Prim.CPointer_toWord => done ([cpointer], SOME csize)
        | Prim.MLton_touch => done ([objptr], NONE)
+       | Prim.PCall_getData => done ([], SOME objptr)
        | Prim.Real_Math_acos s => realUnary s
        | Prim.Real_Math_asin s => realUnary s
        | Prim.Real_Math_atan s => realUnary s

@@ -57,6 +57,8 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   cumulativeStatistics->maxHHLCHS = 0;
   cumulativeStatistics->maxPauseTime = 0;
   cumulativeStatistics->maxStackSize = 0;
+  cumulativeStatistics->maxStackFramesWalkedForHeartbeat = 0;
+  cumulativeStatistics->maxStackSizeForHeartbeat = 0;
   cumulativeStatistics->syncForOldGenArray = 0;
   cumulativeStatistics->syncForNewGenArray = 0;
   cumulativeStatistics->syncForStack = 0;
@@ -94,6 +96,15 @@ struct GC_cumulativeStatistics *newCumulativeStatistics(void) {
   rusageZero (&cumulativeStatistics->ru_crit);
   rusageZero (&cumulativeStatistics->ru_sync);
   rusageZero (&cumulativeStatistics->ru_bsp);
+
+  timespec_now(&(cumulativeStatistics->lastHeartbeatHandlerTimestamp));
+  timespec_now(&(cumulativeStatistics->lastHeartbeatSignalTimestamp));
+
+  struct timespec bucketWidth;
+  bucketWidth.tv_sec = 0;
+  bucketWidth.tv_nsec = 100 * 1000; // 100 us
+  cumulativeStatistics->heartbeatHandlers = TimeHistogram_new(15, &bucketWidth);
+  cumulativeStatistics->heartbeatSignals = TimeHistogram_new(15, &bucketWidth);
 
   return cumulativeStatistics;
 }

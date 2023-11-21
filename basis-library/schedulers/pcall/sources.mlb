@@ -1,0 +1,24 @@
+local
+   $(SML_LIB)/basis/basis.mlb
+
+   local
+      $(SML_LIB)/basis/build/sources.mlb
+   in
+      signature ARRAY_EXTRA
+      signature ARRAY_SLICE_EXTRA
+      structure ArrayExtra = Array
+      structure ArraySliceExtra = ArraySlice
+      structure Primitive
+   end
+
+   ../shh/Result.sml
+
+   fork-join.sig
+   ann
+      "allowPrim true"
+   in
+      fork-join.sml
+   end
+in
+   structure ForkJoin
+end

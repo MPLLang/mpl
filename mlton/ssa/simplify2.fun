@@ -13,6 +13,7 @@ struct
 open S
 
 structure DeepFlatten = DeepFlatten (S)
+structure DropPCall2 = DropPCall2 (S)
 structure Profile2 = Profile2 (S)
 structure RefFlatten = RefFlatten (S)
 structure RemoveUnused2 = RemoveUnused2 (S)
@@ -27,6 +28,7 @@ val ssa2PassesDefault =
    {name = "refFlatten", doit = RefFlatten.transform2, execute = true} ::
    {name = "removeUnused5", doit = RemoveUnused2.transform2, execute = true} ::
    {name = "zone", doit = Zone.transform2, execute = false} ::
+   {name = "ssa2DropPCall", doit = DropPCall2.transform2, execute = false} ::
    nil
 
 val ssa2PassesMinimal =
@@ -54,6 +56,7 @@ local
                 ("removeUnused", RemoveUnused2.transform2),
                 ("zone", Zone.transform2),
                 ("ssa2AddProfile", Profile2.addProfile),
+                ("ssa2DropPCall", DropPCall2.transform2),
                 ("ssa2DropProfile", Profile2.dropProfile),
                 ("ssa2EliminateDeadBlocks", S.eliminateDeadBlocks),
                 ("ssa2OrderFunctions", S.orderFunctions),

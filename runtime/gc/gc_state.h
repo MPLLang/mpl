@@ -18,6 +18,7 @@ struct GC_state {
    * size and improve cache performance.
    */
   pointer frontier;
+  uint32_t spareHeartbeats;
   volatile pointer limit;
   volatile pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */
@@ -54,6 +55,7 @@ struct GC_state {
   struct FixedSizeAllocator hhUnionFindAllocator;
   struct EBR_shared * hhEBR;
   struct EBR_shared * hmEBR;
+  struct timespec lastHeartbeatBroadcast;
   struct GC_lastMajorStatistics *lastMajorStatistics;
   pointer limitPlusSlop; /* limit + GC_HEAP_LIMIT_SLOP */
   int (*loadGlobals)(FILE *f); /* loads the globals from the file. */
@@ -77,6 +79,10 @@ struct GC_state {
   objptr savedThread; /* Result of GC_copyCurrentThread.
                        * Thread interrupted by arrival of signal.
                        */
+  objptr savedThreadDuringSignalHandler; /* additional root for GC during
+                                          * signal handler (the thread that
+                                          * was interrupted)
+                                          */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
   objptr signalHandlerThread; /* Handler for signals (in heap). */
@@ -87,6 +93,11 @@ struct GC_state {
   struct GC_staticHeaps staticHeaps;
   struct GC_sysvals sysvals;
   uint32_t terminationLeader;
+  uint32_t terminationStatus; /** >=2: not allowed to terminate; someone might
+                                *      be sending me a signal.
+                                * 1: okay to terminate
+                                * 0: ready to terminate
+                                */
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;
   struct TracingContext *trace;
@@ -149,6 +160,9 @@ PRIVATE uintmax_t GC_bytesPinnedEntangledWatermark(GC_state s);
 PRIVATE void GC_updateBytesPinnedEntangledWatermark(GC_state s);
 
 PRIVATE uint32_t GC_getControlMaxCCDepth(GC_state s);
+
+PRIVATE uintmax_t GC_maxStackFramesWalkedForHeartbeat(GC_state s);
+PRIVATE uintmax_t GC_maxStackSizeForHeartbeat(GC_state s);
 
 PRIVATE pointer GC_getCallFromCHandlerThread (GC_state s);
 PRIVATE void GC_setCallFromCHandlerThreads (GC_state s, pointer p);

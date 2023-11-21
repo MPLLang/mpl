@@ -182,6 +182,9 @@ structure GC =
 
       val bytesPinnedEntangled = _import "GC_bytesPinnedEntangled" runtime private: GCState.t -> C_UIntmax.t;
       val bytesPinnedEntangledWatermark = _import "GC_bytesPinnedEntangledWatermark" runtime private: GCState.t -> C_UIntmax.t;
+      
+      val maxStackFramesWalkedForHeartbeat = _import "GC_maxStackFramesWalkedForHeartbeat" runtime private: GCState.t -> C_UIntmax.t;
+      val maxStackSizeForHeartbeat = _import "GC_maxStackSizeForHeartbeat" runtime private: GCState.t -> C_UIntmax.t;
    end
 
 structure HM =
@@ -325,6 +328,9 @@ structure Thread =
       type preThread = PreThread.t
       type thread = Thread.t
 
+      val assertAtomicState = _import "GC_assertAtomicState":
+        GCState.t * Word32.word -> unit;
+
       val atomicState = _prim "Thread_atomicState": unit -> Word32.word;
       val atomicBegin = _prim "Thread_atomicBegin": unit -> unit;
       fun atomicEnd () =
@@ -358,6 +364,9 @@ structure Thread =
       val setSaved = _import "GC_setSavedThread" private: GCState.t * thread -> unit;
       val startSignalHandler = _import "GC_startSignalHandler" private: GCState.t -> unit;
       val switchTo = _prim "Thread_switchTo": thread -> unit;
+
+      val handlerEnterHeapOfThread = _import "GC_handlerEnterHeapOfThread" runtime private: GCState.t * thread -> Word64.word;
+      val handlerLeaveHeapOfThread = _import "GC_handlerLeaveHeapOfThread" runtime private: GCState.t * thread * Word64.word -> unit;
 
       val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
       val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
@@ -409,7 +418,14 @@ structure Thread =
         GCState.t * Word64.word * Word64.word -> unit;
 
       val copySyncDepthsFromThread = _import "GC_HH_copySyncDepthsFromThread"
-        runtime private: GCState.t * thread * Word32.word -> unit;
+        runtime private: GCState.t * thread * thread *Word32.word -> unit;
+
+      val canForkThread = _import "GC_HH_canForkThread" runtime private:
+        GCState.t * thread -> bool;
+
+      (* third arg is joinpoint record *)
+      (* val forkThread = _import "GC_HH_forkThread" runtime private:
+        GCState.t * thread * 'a -> preThread; *)
 
       (** If returns true, then writes result to the input ref. Otherwise, the
         * runtime is not detecting entanglement, and the ref is not modified.

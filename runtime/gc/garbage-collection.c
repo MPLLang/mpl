@@ -10,6 +10,8 @@
 
 #include "hierarchical-heap.h"
 
+// extern int64_t CheckActivationStack(void);
+
 void growStackCurrent(GC_state s) {
   size_t reserved;
   size_t stackSize;
@@ -87,25 +89,7 @@ void growStackCurrent(GC_state s) {
 }
 
 void GC_collect (GC_state s, size_t bytesRequested, bool force) {
-  Trace0(EVENT_RUNTIME_ENTER);
-
-  /* Exit as soon as termination is requested. */
-  GC_MayTerminateThread(s);
-
-  /* SPOONHOWER_NOTE: Used to be enter() here */
-  /* XXX copied from enter() */
-  /* used needs to be set because the mutator has changed s->stackTop. */
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  beginAtomic(s);
-  // ebr for hh nodes
-  HH_EBR_leaveQuiescentState(s);
-
-  // ebr for chunks
-  HM_EBR_leaveQuiescentState(s);
-  // HM_EBR_enterQuiescentState(s);
-
+  enter(s);
   maybeSample(s, s->blockUsageSampler);
 
   // HM_HierarchicalHeap h = getThreadCurrent(s)->hierarchicalHeap;
@@ -120,9 +104,6 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   //     100.0 * ((double)gusize / (double)gsize));
   // }
 
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
-
   /* adjust bytesRequested */
   /*
    * When the mutator requests zero bytes, it may actually need as
@@ -135,13 +116,21 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
+  /* SAM_NOTE: don't use HM_HH_getFrontier here, because invariant is possibly
+   * violated (might have frontier == limitPlusSlop)
+   */
+  s->frontier = HM_getChunkFrontier(getThreadCurrent(s)->currentChunk);
+  s->limitPlusSlop = HM_getChunkLimit(getThreadCurrent(s)->currentChunk);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+
   /* SAM_NOTE: shouldn't this be
    *   getThreadCurrent(s)->bytesNeeded
    * instead of bytesRequested? */
-  HM_ensureHierarchicalHeapAssurances(s, force, bytesRequested, FALSE);
-  // CC_collectWithRoots(s, )
+  HM_ensureHierarchicalHeapAssurances(
+    s,
+    force,
+    getThreadCurrent(s)->bytesNeeded,
+    FALSE);
 
-  endAtomic(s);
-
-  Trace0(EVENT_RUNTIME_LEAVE);
+  leave(s);
 }

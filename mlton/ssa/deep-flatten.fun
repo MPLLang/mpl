@@ -465,6 +465,18 @@ structure Value =
             Object e => SOME (Equatable.value e)
           | _ => NONE
 
+      fun origType (v: t): Type.t =
+         case v of
+            Ground ty => ty
+          | Weak {arg} => Type.weak (origType arg)
+          | Object e =>
+               let
+                  val {args, con, ...} = Equatable.value e
+               in
+                  Type.object {args = Prod.map (args, origType),
+                               con = con}
+               end
+
       val traceFinalType =
          Trace.trace ("DeepFlatten.Value.finalType", layout, Type.layout)
       val traceFinalTypes =
@@ -686,6 +698,9 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                            | _ => Error.bug "DeepFlatten.primApp: deWeak")
           | Value.Weak {arg, ...} => arg
           | _ => Error.bug "DeepFlatten.primApp: Value.deWeak"
+
+      val {get = pcallDataValue: Type.t -> Value.t, ...} =
+         Property.get (Type.plist, Property.initFun typeValue)
       fun primApp {args, prim, resultVar = _, resultType} =
          let
             fun weak v =
@@ -751,6 +766,16 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Prim.MLton_equal => equal ()
              | Prim.MLton_size => dontFlatten ()
              | Prim.MLton_share => dontFlatten ()
+             | Prim.PCall_forkThreadAndSetData =>
+                  let
+                     val x = Vector.sub (args, 1)
+                     val _ = Value.dontFlatten x
+                  in
+                     (* Value.coerce {from = x, to = pcallDataValue (Value.origType x)} *)
+                     Value.unify (x, pcallDataValue (Value.origType x))
+                     ; dontFlatten ()
+                  end
+             | Prim.PCall_getData => pcallDataValue resultType
              | Prim.Ref_cas _ =>
                  let
                     val c = select {base = arg 0, offset = 0}

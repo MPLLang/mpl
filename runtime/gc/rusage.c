@@ -135,3 +135,12 @@ void timespec_add(struct timespec *x, struct timespec *y) {
     x->tv_nsec -= 1000000000L;
   }
 }
+
+
+bool timespec_geq(struct timespec *t1, struct timespec *t2) {
+  if (t1->tv_sec > t2->tv_sec)
+    return TRUE;
+  if (t1->tv_sec < t2->tv_sec)
+    return FALSE;
+  return t1->tv_nsec >= t2->tv_nsec;
+}

@@ -1,8 +1,10 @@
+val grain = CommandLineArgs.parseInt "grain" 20
+
 fun sfib n =
   if n <= 1 then n else sfib (n-1) + sfib (n-2)
 
 fun fib n =
-  if n <= 20 then sfib n
+  if n <= grain then sfib n
   else
     let
       val (x,y) = ForkJoin.par (fn _ => fib (n-1), fn _ => fib (n-2))

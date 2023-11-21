@@ -1011,9 +1011,9 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                 ty: Type.t}: string =
          if handleMisaligned ty
             then (case (dstIsMem, srcIsMem) of
-               (false, false) => concat [dst, " = ", src, ";\n"]
-             | (false, true) => concat [dst, " = ", fetch (src, ty), ";\n"]
-             | (true, false) => store ({dst = dst, src = src}, ty)
+                     (false, false) => concat [dst, " = ", src, ";\n"]
+                   | (false, true) => concat [dst, " = ", fetch (src, ty), ";\n"]
+                   | (true, false) => store ({dst = dst, src = src}, ty)
                    | (true, true) => move' ({dst = dst, src = src}, ty))
             else concat [dst, " = ", src, ";\n"]
 
@@ -1034,12 +1034,12 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
              | Label l => labelIndexAsString (l, {pretty = true})
              | Offset {base, offset, ty, volatile} =>
                   concat ["O", C.args [concat [if volatile then "volatile " else "",
-                                               Type.toC ty],
+                                                  Type.toC ty],
                                        toString base,
                                        C.bytes offset]]
              | SequenceOffset {base, index, offset, scale, ty, volatile} =>
                   concat ["X", C.args [concat [if volatile then "volatile " else "",
-                                               Type.toC ty],
+                                                  Type.toC ty],
                                        toString base,
                                        toString index,
                                        Scale.toString scale,
@@ -1080,16 +1080,16 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                declareVar' (name, CType.toString ct, unused, init)
 
             fun outputStatement s =
-         let
-            datatype z = datatype Statement.t
-         in
-            case s of
-                         Move {dst, src} =>
+               let
+                  datatype z = datatype Statement.t
+               in
+                  case s of
+                     Move {dst, src} =>
                         (print "\t"
                          ; print (move {dst = operandToString dst,
-                                   dstIsMem = Operand.isMem dst,
-                                   src = operandToString src,
-                                   srcIsMem = Operand.isMem src,
+                                        dstIsMem = Operand.isMem dst,
+                                        src = operandToString src,
+                                        srcIsMem = Operand.isMem src,
                                         ty = Operand.ty dst}))
                    | PrimApp {args, dst, prim} =>
                         let
@@ -1255,7 +1255,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                           end
                end
             fun outputTransfer t =
-                                let
+               let
                   datatype z = datatype Transfer.t
                   fun jump label =
                      let
@@ -1389,6 +1389,28 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         (Option.app (return, fn {return, size, ...} => push (return, size))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
+                   | PCall {label, cont, parl, parr, size, ...} =>
+                        let
+                           val _ =
+                              outputStatement
+                              (Statement.Move
+                               {dst = Operand.stackOffset
+                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 3)),
+                                       ty = Type.label parr,
+                                       volatile = false},
+                                 src = Operand.Label parr})
+                           val _ =
+                              outputStatement
+                              (Statement.Move
+                               {dst = Operand.stackOffset
+                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 2)),
+                                       ty = Type.label parl,
+                                       volatile = false},
+                                src = Operand.Label parl})
+                        in
+                           push (cont, size)
+                           ; jump label
+                        end
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2
@@ -1630,6 +1652,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
+                      | Kind.PCallReturn {frameInfo, ...} => pop frameInfo
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements
@@ -1655,6 +1678,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
+                            | PCall _ => ()
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>

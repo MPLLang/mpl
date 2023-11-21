@@ -6,6 +6,12 @@
  * See the file MLton-LICENSE for details.
  */
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+
+PRIVATE void GC_assertAtomicState(GC_state s, uint32_t expected);
+
+#endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
+
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 static inline void beginAtomic (GC_state s);

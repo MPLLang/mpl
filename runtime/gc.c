@@ -109,6 +109,7 @@ extern C_Pthread_Key_t gcstate_key;
 #include "gc/statistics.c"
 #include "gc/switch-thread.c"
 #include "gc/thread.c"
+#include "gc/time-histogram.c"
 #include "gc/weak.c"
 #include "gc/world.c"
 #include "gc/decheck.c"

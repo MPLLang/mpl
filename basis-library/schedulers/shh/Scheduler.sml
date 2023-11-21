@@ -267,7 +267,8 @@ struct
 
         fun g' () =
           let
-            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            (* val () = DE.copySyncDepthsFromThread (thread, depth+1) *)
+            val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
@@ -362,7 +363,8 @@ struct
 
         fun g' () =
           let
-            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            (* val () = DE.copySyncDepthsFromThread (thread, depth+1) *)
+            val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
@@ -678,6 +680,18 @@ struct
   (* ========================================================================
    * INITIALIZATION
    *)
+
+  
+  (* for compatibility with heartbeat signals *)
+  val _ = MLton.Signal.setHandler
+    ( Posix.Signal.usr1
+    , MLton.Signal.Handler.inspectInterrupted (fn t => ())
+    )
+  val _ = MLton.Signal.setHandler
+    ( Posix.Signal.usr2
+    , MLton.Signal.Handler.inspectInterrupted (fn t => ())
+    )
+
 
   fun sched () =
     let

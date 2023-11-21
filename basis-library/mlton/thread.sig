@@ -85,6 +85,11 @@ signature MLTON_THREAD =
           val moveNewThreadToDepth : thread * int -> unit
 
           val checkFinishedCCReadyToJoin: unit -> bool
+
+          val canForkThread: thread -> bool
+
+          (* second arg is joinpoint *)
+          (* val forkThread: thread * 'a ref -> Basic.p *)
         end
 
       (* disentanglement checking *)
@@ -107,7 +112,7 @@ signature MLTON_THREAD =
           val decheckGetTid : thread -> Word64.word
 
           (* arguments are (victim thread, steal depth) *)
-          val copySyncDepthsFromThread : thread * int -> unit
+          val copySyncDepthsFromThread : thread * thread * int -> unit
         end
 
       type 'a t
@@ -151,6 +156,7 @@ signature MLTON_THREAD_EXTRA =
       val amInSignalHandler: unit -> bool
       val register: int * (MLtonPointer.t -> unit) -> unit
       val setSignalHandler: (Runnable.t -> Runnable.t) -> unit
+      val setSimpleSignalHandler: (Basic.t -> unit) -> unit
       val switchToSignalHandler: unit -> unit
 
       val initPrimitive: unit t -> Runnable.t

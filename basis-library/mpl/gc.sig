@@ -29,6 +29,9 @@ sig
 
   val getControlMaxCCDepth: unit -> int
 
+  val maxStackSizeForHeartbeat: unit -> IntInf.int
+  val maxStackFramesWalkedForHeartbeat: unit -> IntInf.int
+
   (* The following are all cumulative statistics (initially 0, and only
    * increase throughout execution).
    *

@@ -60,6 +60,11 @@ struct
 
     fun bytesPinnedEntangledWatermark () =
       C_UIntmax.toLargeInt (GC.bytesPinnedEntangledWatermark (gcState ()))
+    fun maxStackSizeForHeartbeat () =
+      C_UIntmax.toLargeInt (GC.maxStackSizeForHeartbeat (gcState ()))
+  
+    fun maxStackFramesWalkedForHeartbeat () =
+      C_UIntmax.toLargeInt (GC.maxStackFramesWalkedForHeartbeat (gcState ()))
   end
 
   exception NotYetImplemented of string

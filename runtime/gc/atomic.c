@@ -6,6 +6,18 @@
  * See the file MLton-LICENSE for details.
  */
 
+#if (defined (MLTON_GC_INTERNAL_BASIS))
+
+void GC_assertAtomicState(GC_state s, uint32_t expected) {
+  if (s->atomicState != expected) {
+    DIE("expected atomic state %"PRIu32", found %"PRIu32,
+      expected,
+      s->atomicState);
+  }
+}
+
+#endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
+
 void beginAtomic (GC_state s) {
   s->atomicState++;
   /* SPOONHOWER_NOTE: this seems ok but strange */
@@ -14,6 +26,7 @@ void beginAtomic (GC_state s) {
 }
 
 void endAtomic (GC_state s) {
+  assert(s->atomicState >= 1);
   s->atomicState--;
   if (0 == s->atomicState
       and s->signalsInfo.signalIsPending)

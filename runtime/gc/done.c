@@ -214,8 +214,46 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
   fprintf(out, " }");
 }
 
+
+void displayHeartbeatStatistics(FILE *out, GC_state s) {
+  TimeHistogram signalsH = s->cumulativeStatistics->heartbeatSignals;
+  double signalsDist[TimeHistogram_numBuckets(signalsH)];
+  size_t totalS = TimeHistogram_reportDistribution(signalsH, signalsDist);
+
+  TimeHistogram handlersH = s->cumulativeStatistics->heartbeatHandlers;
+  double handlersDist[TimeHistogram_numBuckets(handlersH)];
+  size_t totalH = TimeHistogram_reportDistribution(handlersH, handlersDist);
+
+  fprintf(out, "              ");
+  fprintf(out, "  count ");
+  for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(signalsH); bucket++) {
+    fprintf(out, "%*zu ", 3, bucket);
+  }
+  fprintf(out, "\n");
+
+  fprintf(out, "[%*d] signals  ", 2, Proc_processorNumber(s));
+  fprintf(out, "%*zu ", 7, totalS); 
+  for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(signalsH); bucket++) {
+    fprintf(out, "%*d%% ", 2, (int)(100.0 * signalsDist[bucket]));
+  }
+  fprintf(out, "\n");
+
+  fprintf(out, "[%*d] handlers ", 2, Proc_processorNumber(s));
+  fprintf(out, "%*zu ", 7, totalH);
+  for (size_t bucket = 0; bucket < TimeHistogram_numBuckets(handlersH); bucket++) {
+    fprintf(out, "%*d%% ", 2, (int)(100.0 * handlersDist[bucket]));
+  }
+  fprintf(out, "\n");
+}
+
 void GC_done(GC_state s) {
   GC_PthreadAtExit(s);
+
+  if (s->controls->heartbeatStats) {
+    for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
+      displayHeartbeatStatistics(s->controls->summaryFile, &(s->procStates[proc]));
+    }
+  }
 
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {

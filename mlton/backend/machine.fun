@@ -613,6 +613,12 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
+       | PCall of {label: Label.t,
+                   live: Live.t vector,
+                   cont: Label.t,
+                   parl: Label.t,
+                   parr: Label.t,
+                   size: Bytes.t}
        | Goto of Label.t
        | Raise of {raisesTo: Label.t list}
        | Return of {returnsTo: Label.t list}
@@ -645,6 +651,14 @@ structure Transfer =
                                          ("size", Bytes.layout size)])
                                 return)]]
              | Goto l => seq [str "Goto ", Label.layout l]
+             | PCall {label, live, cont, parl, parr, size} =>
+                  seq [str "PCall ",
+                       record [("label", Label.layout label),
+                               ("live", Vector.layout Live.layout live),
+                               ("cont", Label.layout cont),
+                               ("parl", Label.layout parl),
+                               ("parr", Label.layout parr),
+                               ("size", Bytes.layout size)]]
              | Raise {raisesTo} =>
                   seq [str "Raise ",
                        record [("raisesTo", List.layout Label.layout raisesTo)]]
@@ -699,26 +713,53 @@ structure FrameInfo =
    struct
       structure Kind =
          struct
-            datatype t = C_FRAME | ML_FRAME
+            datatype t =
+               CONT_FRAME
+             | CRETURN_FRAME
+             | FUNC_FRAME
+             | HANDLER_FRAME
+             | PCALL_CONT_FRAME
+             | PCALL_PARL_FRAME
+             | PCALL_PARR_FRAME
             fun equals (k1, k2) =
                case (k1, k2) of
-                  (C_FRAME, C_FRAME) => true
-                | (ML_FRAME, ML_FRAME) => true
+                  (CONT_FRAME, CONT_FRAME) => true
+                | (CRETURN_FRAME, CRETURN_FRAME) => true
+                | (FUNC_FRAME, FUNC_FRAME) => true
+                | (HANDLER_FRAME, HANDLER_FRAME) => true
+                | (PCALL_CONT_FRAME, PCALL_CONT_FRAME) => true
+                | (PCALL_PARL_FRAME, PCALL_PARL_FRAME) => true
+                | (PCALL_PARR_FRAME, PCALL_PARR_FRAME) => true
                 | _ => false
             local
                val newHash = Random.word
-               val c = newHash ()
-               val ml = newHash ()
+               val cont = newHash ()
+               val creturn = newHash ()
+               val func = newHash ()
+               val handler = newHash ()
+               val pcall_cont = newHash ()
+               val pcall_parl = newHash ()
+               val pcall_parr = newHash ()
             in
                fun hash k =
                   case k of
-                     C_FRAME => c
-                   | ML_FRAME => ml
+                     CONT_FRAME => cont
+                   | CRETURN_FRAME => creturn
+                   | FUNC_FRAME => func
+                   | HANDLER_FRAME => handler
+                   | PCALL_CONT_FRAME => pcall_cont
+                   | PCALL_PARL_FRAME => pcall_parl
+                   | PCALL_PARR_FRAME => pcall_parr
             end
             fun toString k =
                case k of
-                  C_FRAME => "C_FRAME"
-                | ML_FRAME => "ML_FRAME"
+                  CONT_FRAME => "CONT_FRAME"
+                | CRETURN_FRAME => "CRETURN_FRAME"
+                | FUNC_FRAME => "FUNC_FRAME"
+                | HANDLER_FRAME => "HANDLER_FRAME"
+                | PCALL_CONT_FRAME => "PCALL_CONT_FRAME"
+                | PCALL_PARL_FRAME => "PCALL_PARL_FRAME"
+                | PCALL_PARR_FRAME => "PCALL_PARR_FRAME"
             val layout = Layout.str o toString
          end
 
@@ -779,6 +820,8 @@ structure Kind =
        | Handler of {args: Live.t vector,
                      frameInfo: FrameInfo.t}
        | Jump
+       | PCallReturn of {args: Live.t vector,
+                         frameInfo: FrameInfo.t}
 
       fun layout k =
          let
@@ -804,6 +847,10 @@ structure Kind =
                        record [("args", Vector.layout Live.layout args),
                                ("frameInfo", FrameInfo.layout frameInfo)]]
              | Jump => str "Jump"
+             | PCallReturn {args, frameInfo} =>
+                  seq [str "PCallReturn ",
+                       record [("args", Vector.layout Live.layout args),
+                               ("frameInfo", FrameInfo.layout frameInfo)]]
          end
 
       fun isEntry (k: t): bool =
@@ -812,6 +859,7 @@ structure Kind =
           | CReturn {func, ...} => CFunction.maySwitchThreadsTo func
           | Func _ => true
           | Handler _ => true
+          | PCallReturn _ => true
           | _ => false
 
       val frameInfoOpt =
@@ -820,6 +868,7 @@ structure Kind =
           | Func {frameInfo, ...} => SOME frameInfo
           | Handler {frameInfo, ...} => SOME frameInfo
           | Jump => NONE
+          | PCallReturn {frameInfo, ...} => SOME frameInfo
    end
 
 structure Block =
@@ -1267,6 +1316,8 @@ structure Program =
                                               | Kind.Handler {frameInfo, ...} =>
                                                    doit frameInfo
                                               | Kind.Jump => true
+                                              | Kind.PCallReturn {frameInfo, ...} =>
+                                                   doit frameInfo
                                           end)
                       | SequenceOffset {base, index, offset, scale, ty, volatile = _} =>
                            (checkOperand (base, alloc)
@@ -1306,12 +1357,12 @@ structure Program =
                let
                   datatype z = datatype Kind.t
                   exception No
-                  fun frame (frameInfo,
-                             useSlots: bool,
-                             kind: FrameInfo.Kind.t): bool =
+                  fun frame' (frameInfo,
+                              useSlots: bool,
+                              chkKind: FrameInfo.Kind.t -> bool): bool =
                      checkFrameInfo frameInfo
                      andalso
-                     FrameInfo.Kind.equals (kind, FrameInfo.kind frameInfo)
+                     chkKind (FrameInfo.kind frameInfo)
                      andalso
                      (not useSlots
                       orelse
@@ -1331,9 +1382,14 @@ structure Program =
                             val liveOffsets = Vector.fromArray liveOffsets
                          in
                          Vector.equals
-                         (liveOffsets, FrameInfo.offsets frameInfo,
-                                           Bytes.equals)
+                         (liveOffsets, FrameInfo.offsets frameInfo, Bytes.equals)
                       end) handle No => false
+                  fun frame (frameInfo,
+                             useSlots: bool,
+                             kind: FrameInfo.Kind.t): bool =
+                     frame' (frameInfo,
+                             useSlots,
+                             fn k => FrameInfo.Kind.equals (kind, k))
                   fun slotsAreInFrame (fi: FrameInfo.t): bool =
                      let
                         val size = FrameInfo.size fi
@@ -1348,7 +1404,7 @@ structure Program =
                in
                   case k of
                      Cont {args, frameInfo} =>
-                        if frame (frameInfo, true, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, true, FrameInfo.Kind.CONT_FRAME)
                            andalso slotsAreInFrame frameInfo
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
@@ -1367,13 +1423,13 @@ structure Program =
                                   then (case frameInfo of
                                            NONE => false
                                          | SOME fi =>
-                                              (frame (fi, true, FrameInfo.Kind.C_FRAME)
+                                              (frame (fi, true, FrameInfo.Kind.CRETURN_FRAME)
                                                andalso slotsAreInFrame fi))
                                else if !Control.profile = Control.ProfileNone
                                        then true
                                     else (case frameInfo of
                                              NONE => false
-                                           | SOME fi => frame (fi, false, FrameInfo.Kind.C_FRAME)))
+                                           | SOME fi => frame (fi, false, FrameInfo.Kind.CRETURN_FRAME)))
                         in
                            if ok
                               then SOME (case dst of
@@ -1382,16 +1438,28 @@ structure Program =
                            else NONE
                         end
                    | Func {frameInfo, ...} =>
-                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, false, FrameInfo.Kind.FUNC_FRAME)
                            then SOME alloc
                         else NONE
                    | Handler {args, frameInfo} =>
-                        if frame (frameInfo, false, FrameInfo.Kind.ML_FRAME)
+                        if frame (frameInfo, false, FrameInfo.Kind.HANDLER_FRAME)
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
                                        Alloc.defineLive (alloc, z)))
                         else NONE
                    | Jump => SOME alloc
+                   | PCallReturn {args, frameInfo} =>
+                        if frame' (frameInfo, true, fn kind =>
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_CONT_FRAME)
+                                   orelse
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARL_FRAME)
+                                   orelse
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARR_FRAME))
+                           andalso slotsAreInFrame frameInfo
+                           then SOME (Vector.fold
+                                      (args, alloc, fn (z, alloc) =>
+                                       Alloc.defineLive (alloc, z)))
+                        else NONE
                end
             fun checkStatement (s: Statement.t, alloc: Alloc.t)
                : Alloc.t option =
@@ -1568,6 +1636,112 @@ structure Program =
                in
                   goto (b, raises, returns, alloc)
                end
+
+
+            fun removePCallDataSlot (size, live: Live.t vector) =
+               let
+                  val pcallDataOffset =
+                     Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
+               in
+                  Vector.keepAll
+                  (live, fn l =>
+                   case l of
+                      Live.StackOffset (StackOffset.T {offset, ...}) =>
+                         not (Bytes.equals (offset, pcallDataOffset))
+                    | _ => true)
+               end
+            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, pcallDataSlot: bool) =
+               let
+                  val Block.T {kind, live, ...} = labelBlock label
+                  val live =
+                     if pcallDataSlot
+                        then removePCallDataSlot (size, live)
+                        else live
+               in
+                  if liveIsOk (live, alloc)
+                     then
+                        (case kind of
+                            Kind.PCallReturn {args, frameInfo, ...} =>
+                               (if Bytes.equals (FrameInfo.size frameInfo, size)
+                                   then
+                                      SOME
+                                      (live,
+                                       SOME
+                                       (Vector.map
+                                        (args, fn z =>
+                                         case z of
+                                            Live.StackOffset s =>
+                                               Live.StackOffset
+                                               (StackOffset.shift (s, size))
+                                          | _ => z)))
+                                   else NONE)
+                          | _ => NONE)
+                     else NONE
+               end
+            fun pcallIsOk {alloc: Alloc.t,
+                           dst: Label.t,
+                           live: Live.t vector,
+                           cont: Label.t,
+                           parl: Label.t,
+                           parr: Label.t,
+                           size: Bytes.t} =
+               let
+                  val (contLive, contReturns) =
+                     Err.check'
+                     ("cont",
+                      fn () => checkPCallReturn (cont, size, alloc, false),
+                      fn () => Label.layout cont)
+                  val (parlLive, parlReturns) =
+                     Err.check'
+                     ("parl",
+                      fn () => checkPCallReturn (parl, size, alloc, true),
+                      fn () => Label.layout parl)
+                  val (parrLive, parrReturns) =
+                     Err.check'
+                     ("parr",
+                      fn () => checkPCallReturn (parr, size, alloc, true),
+                      fn () => Label.layout parr)
+                  val () =
+                     Err.check
+                     ("parlLive - {pcallDataSlot} <= contLive",
+                      fn () => liveSubset (parlLive, contLive),
+                      fn () => Layout.tuple [Label.layout parl, Label.layout cont])
+                  val () =
+                     Err.check
+                     ("parrLive - {pcallDataSlot} <= contLive",
+                      fn () => liveSubset (parrLive, contLive),
+                      fn () => Layout.tuple [Label.layout parr, Label.layout cont])
+                  val () =
+                     Err.check
+                     ("contReturns == parlReturns",
+                      fn () => Option.equals (contReturns, parlReturns, fn (xs, ys) =>
+                                              Vector.equals (xs, ys, Live.equals)),
+                      fn () => Layout.tuple [Label.layout cont, Label.layout parl])
+                  val () =
+                     Err.check
+                     ("parrReturns == SOME #[]",
+                      fn () => Option.equals (parrReturns, SOME (Vector.new0 ()), fn (xs, ys) =>
+                                              Vector.equals (xs, ys, Live.equals)),
+                      fn () => Label.layout parr)
+                  val b = labelBlock dst
+                  val alloc =
+                     Alloc.T
+                     (Vector.fold
+                      (live, [], fn (z, ac) =>
+                       case z of
+                          Live.StackOffset (StackOffset.T {offset, ty, volatile}) =>
+                             if Bytes.< (offset, size)
+                                then ac
+                             else (Live.StackOffset
+                                   (StackOffset.T
+                                    {offset = Bytes.- (offset, size),
+                                     ty = ty,
+                                     volatile = volatile})) :: ac
+                        | _ => ac))
+               in
+                  goto (b, NONE, contReturns, alloc)
+               end
+
             fun transferOk
                (t: Transfer.t,
                 raises: Live.t vector option,
@@ -1624,6 +1798,16 @@ structure Program =
                                   return = return,
                                   returns = returns}
                    | Goto l => jump l
+                   | PCall {label, live, cont, parl, parr, size} =>
+                        liveIsOk (live, alloc)
+                        andalso
+                        pcallIsOk {alloc = alloc,
+                                   dst = label,
+                                   live = live,
+                                   cont = cont,
+                                   parl = parl,
+                                   parr = parr,
+                                   size = size}
                    | Raise _ =>
                         (case raises of
                             NONE => false

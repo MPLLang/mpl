@@ -23,10 +23,10 @@
 // Struct to pass around args. repList is the new chunklist.
 typedef struct ConcurrentCollectArgs {
   struct CC_workList worklist;
-	HM_chunkList origList;
-	HM_chunkList repList;
-	void* toHead;
-	void* fromHead;
+  HM_chunkList origList;
+  HM_chunkList repList;
+  void* toHead;
+  void* fromHead;
   size_t bytesSaved;
 	size_t numObjectsMarked;
 } ConcurrentCollectArgs;
@@ -41,27 +41,28 @@ enum CCState{
 
 typedef struct ConcurrentPackage {
 //  It is possible that the collection turned off and the stack isn't empty
-//	This is a result of the non-atomicity in the write barrier implementation
-//	from checking of isCollecting to addition into the stack
-	CC_stack* rootList;
-	//children roots
-	objptr snapLeft;
-	objptr snapRight;
-	objptr snapTemp;
-	// bool isCollecting;
-	bool shouldCollect;
-	enum CCState ccstate;
-	objptr stack;
+//  This is a result of the non-atomicity in the write barrier implementation
+//  from checking of isCollecting to addition into the stack
+  CC_stack* rootList;
+  //children roots
+  objptr snapLeft;
+  objptr snapRight;
+  objptr snapTemp;
+  // bool isCollecting;
+  bool shouldCollect;
+  enum CCState ccstate;
+  objptr stack;
+  objptr additionalStack;
 
   /** For deciding when to collect. Could be cleaned up.
     */
-	size_t bytesAllocatedSinceLastCollection;
-	size_t bytesSurvivedLastCollection;
+  size_t bytesAllocatedSinceLastCollection;
+  size_t bytesSurvivedLastCollection;
 
   /** To avoid races with other processor adding to the remset (writebarrier or
     * promotions).
     */
-	// struct HM_chunkList remSet;
+  // struct HM_chunkList remSet;
 
 } * ConcurrentPackage;
 

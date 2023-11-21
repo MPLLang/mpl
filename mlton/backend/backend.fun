@@ -966,17 +966,41 @@ fun toMachine (rssa: Rssa.Program.t) =
                                     | _ => ac)
                             else
                                []
-                         val (entry, kind) =
+                         val (entry, kind, offsets, size) =
                             case kind of
-                               R.Kind.Cont _=> (true, M.FrameInfo.Kind.ML_FRAME)
-                             | R.Kind.CReturn {func} => (CFunction.maySwitchThreadsTo func,
-                                                         M.FrameInfo.Kind.C_FRAME)
-                             | R.Kind.Handler => (true, M.FrameInfo.Kind.ML_FRAME)
-                             | R.Kind.Jump => (false, M.FrameInfo.Kind.ML_FRAME)
+                               R.Kind.Cont _ =>
+                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, size)
+                             | R.Kind.CReturn {func} =>
+                                  (CFunction.maySwitchThreadsTo func,
+                                   M.FrameInfo.Kind.CRETURN_FRAME,
+                                   offsets, size)
+                             | R.Kind.Handler =>
+                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, size)
+                             | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
+                             | R.Kind.PCallReturn {cont, parl, parr} =>
+                                  let
+                                     val kind =
+                                        if Label.equals (label, cont)
+                                           then M.FrameInfo.Kind.PCALL_CONT_FRAME
+                                        else if Label.equals (label, parl)
+                                           then M.FrameInfo.Kind.PCALL_PARL_FRAME
+                                        else if Label.equals (label, parr)
+                                           then M.FrameInfo.Kind.PCALL_PARR_FRAME
+                                        else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn"
+                                     (* The size is that of the cont *)
+                                     val size = #size (labelRegInfo cont)
+                                     (* The PCall DataPtr slot is also live. *)
+                                     val offsets =
+                                        if Label.equals (label, parl) orelse Label.equals (label, parr)
+                                           then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
+                                           else offsets
+                                  in
+                                     (true, kind, offsets, size)
+                                  end
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
-                                                  offsets = offsets,
+                                          offsets = offsets,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1070,6 +1094,31 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
+                   | R.Transfer.PCall {func, args, cont, parl, parr} =>
+                        let
+                           val {liveNoFormals = contLive, size = frameSize, ...} =
+                              labelRegInfo cont
+                           val dsts =
+                              paramStackOffsets
+                              (args, R.Operand.ty, frameSize)
+                           val setupArgs =
+                              parallelMove
+                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
+                               srcs = translateOperands args}
+                           val live =
+                              Vector.concat [operandsLive contLive,
+                                             Vector.map (dsts, Live.StackOffset)]
+                           val transfer =
+                              M.Transfer.PCall
+                              {label = funcToLabel func,
+                               live = live,
+                               cont = cont,
+                               parl = parl,
+                               parr = parr,
+                               size = frameSize}
+                        in
+                           (setupArgs, transfer)
+                        end
                    | R.Transfer.Raise srcs =>
                         let
                            val handlerStackTop =
@@ -1151,6 +1200,32 @@ fun toMachine (rssa: Rssa.Program.t) =
                          liveNoFormals,
                          parallelMove {dsts = dsts', srcs = srcs'})
                      end
+                  fun doPCallHandler size =
+                     let
+                        val (args, pcallDataArg) = Vector.splitLast args
+                        val srcs = paramStackOffsets (args, #2, size)
+                        val pcallDataOffset =
+                           Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
+                        val pcallDataSrc =
+                           StackOffset.T {offset = pcallDataOffset,
+                                          ty = #2 pcallDataArg,
+                                          volatile = false}
+
+                        val (dsts', srcs') =
+                           Vector.unzip
+                           (Vector.keepAllMap2
+                            (Vector.concat [args, Vector.new1 pcallDataArg],
+                             Vector.concat [srcs, Vector.new1 pcallDataSrc],
+                             fn ((dst, _), src) =>
+                             case varOperandOpt dst of
+                                NONE => NONE
+                              | SOME dst => SOME (dst, M.Operand.StackOffset src)))
+                     in
+                        (M.Kind.PCallReturn {args = Vector.map (srcs, Live.StackOffset),
+                                             frameInfo = valOf (frameInfo label)},
+                         Vector.concat [liveNoFormals, Vector.new1 (M.Operand.StackOffset pcallDataSrc)],
+                         parallelMove {dsts = dsts', srcs = srcs'})
+                     end
                   val (kind, live, pre) =
                      case kind of
                         R.Kind.Cont _ => doContHandler M.Kind.Cont
@@ -1172,6 +1247,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
+                      | R.Kind.PCallReturn {cont, parl, parr} =>
+                           if Label.equals (label, cont)
+                              then doContHandler M.Kind.PCallReturn
+                              else doPCallHandler (#size (labelRegInfo cont))
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in
@@ -1190,7 +1269,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                let
                   val frameInfo =
                      getFrameInfo {entry = true,
-                                   kind = M.FrameInfo.Kind.ML_FRAME,
+                                   kind = M.FrameInfo.Kind.FUNC_FRAME,
                                    offsets = [],
                                    size = Bytes.zero,
                                    sourceSeqIndex = NONE}

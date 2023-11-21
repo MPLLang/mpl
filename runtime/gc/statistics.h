@@ -50,6 +50,9 @@ struct GC_cumulativeStatistics {
   uintmax_t maxPauseTime;
   size_t maxStackSize;
 
+  size_t maxStackFramesWalkedForHeartbeat;
+  size_t maxStackSizeForHeartbeat;
+
   uintmax_t syncForOldGenArray;
   uintmax_t syncForNewGenArray;
   uintmax_t syncForStack;
@@ -90,6 +93,11 @@ struct GC_cumulativeStatistics {
   struct rusage ru_crit; /* total time in critical sections */
   struct rusage ru_sync; /* total time synchronizing for critical sections */
   struct rusage ru_bsp; /* total time in BSP rounds */
+
+  struct timespec lastHeartbeatHandlerTimestamp;
+  struct timespec lastHeartbeatSignalTimestamp;
+  TimeHistogram heartbeatHandlers;
+  TimeHistogram heartbeatSignals;
 };
 
 struct GC_lastMajorStatistics {

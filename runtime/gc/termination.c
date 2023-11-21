@@ -20,6 +20,21 @@ void GC_TerminateThread(GC_state s) {
   GC_PthreadAtExit(s);
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
+
+  /** Make sure no one is going to try to send me a signal after I exit. */
+  uint32_t *statusp = &(s->terminationStatus);
+  while (TRUE) {
+    uint32_t status = atomicLoadU32(statusp);
+    while (status != 1) {
+      pthread_yield();
+      status = atomicLoadU32(statusp);
+    }
+    bool success = __sync_bool_compare_and_swap(statusp, 1, 0);
+    if (success)
+      break;
+  }
+
+  assert(atomicLoadU32(statusp) == 0);
   Trace0(EVENT_RUNTIME_LEAVE);
   pthread_exit(NULL);
 }

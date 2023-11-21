@@ -10,6 +10,13 @@
 structure MLtonSignal: MLTON_SIGNAL_EXTRA =
 struct
 
+fun die (s: string): 'a =
+   (PrimitiveFFI.Stdio.print s
+    ; PrimitiveFFI.Posix.Process.exit 1
+    ; let exception DieFailed
+      in raise DieFailed
+      end)
+
 open Posix.Signal
 structure Prim = PrimitiveFFI.Posix.Signal
 structure GCState = Primitive.MLton.GCState
@@ -88,7 +95,9 @@ structure Handler =
    struct
       datatype t =
          Default
-       | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t
+       (* | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t *)
+       (* | Handler of unit -> unit *)
+       | Handler of MLtonThread.Basic.t -> unit
        | Ignore
        | InvalidSignal
    end
@@ -143,7 +152,7 @@ structure Handler =
       val isDefault = fn Default => true | _ => false
       val isIgnore = fn Ignore => true | _ => false
 
-      val handler =
+      val handler_ =
          (* This let is used so that Thread.setHandler is only used if
           * Handler.handler is used.  This prevents threads from being part
           * of every program.
@@ -166,37 +175,82 @@ structure Handler =
                             fn () => Mask.setBlocked m
                          end)
 
-            val () =
-               MLtonThread.setSignalHandler
-               (fn t =>
-                let
-                   val mask = Mask.getBlocked ()
-                   val () = Mask.block (handled ())
-                   val fs = 
-                      case !gcHandler of
-                         Handler f => if Prim.isPendingGC (GCState.gcState ()) <> C_Int.zero
-                                         then [f] 
-                                         else []
-                       | _ => []
-                   val fs =
-                      Array.foldri
-                      (fn (s, h, fs) =>
-                       case h of
-                          Handler f =>
-                             if Prim.isPending (GCState.gcState (), repFromInt s) <> C_Int.zero
-                                then f::fs 
-                                else fs
-                        | _ => fs) fs handlers
-                   val () = Prim.resetPending (GCState.gcState ())
-                   val () = Mask.setBlocked mask
-                in
-                   List.foldl (fn (f, t) => f t) t fs
-                end)
+
+            fun normalHandler t =
+              let
+                val mask = Mask.getBlocked ()
+                val () = Mask.block (handled ())
+                val fs = 
+                  case !gcHandler of
+                      Handler f => if Prim.isPendingGC (GCState.gcState ()) <> C_Int.zero
+                                      then [f] 
+                                      else []
+                    | _ => []
+                val fs =
+                  Array.foldri
+                  (fn (s, h, fs) =>
+                    case h of
+                      Handler f =>
+                          if Prim.isPending (GCState.gcState (), repFromInt s) <> C_Int.zero
+                            then f::fs 
+                            else fs
+                    | _ => fs) fs handlers
+                val () = Prim.resetPending (GCState.gcState ())
+                val () = Mask.setBlocked mask
+              in
+                (* List.foldl (fn (f, t) => f t) t fs *)
+                List.app (fn f => f t) fs
+              end
+
+            
+            (* SAM_NOTE: TODO: Check with Matthew. This is probably subtly
+             * incorrect.
+             *
+             * The goal is to do a "fast path" for the signal handling code.
+             * The common case is that just a single signal handler needs to
+             * run, and we should be able to find this handler without any
+             * intermediate allocation if possible.
+             *)
+            fun maybeFastHandler t =
+              let
+                val n = Array.length handlers
+                fun loop f count i =
+                  if i >= n then (f, count)
+                  else
+                  case Array.sub (handlers, i) of
+                    Handler g =>
+                      if Prim.isPending (GCState.gcState (), repFromInt i) <> C_Int.zero
+                      then loop g (count+1) (i+1)
+                      else loop f count (i+1)
+
+                  | _ => loop f count (i+1)
+              in
+                case loop (fn t => ()) 0 0 of
+                  (f, 1) =>
+                    (* fast path succeeds if we find just a single handler that
+                     * needs to be run.
+                     *)
+                    let
+                      val _ = Prim.resetPending (GCState.gcState ())
+                    in
+                      f t
+                    end
+
+                | _ => normalHandler t
+              end
+
+
+            val () = MLtonThread.setSimpleSignalHandler maybeFastHandler
+            (* val () = MLtonThread.setSimpleSignalHandler normalHandler *)
          in
             Handler
          end
 
-      fun simple (f: unit -> unit) = handler (fn t => (f (); t))
+      fun handler _ = raise Fail "Signal.Handler.handler not supported"
+
+      fun simple (f: unit -> unit) = handler_ (fn t => f ())
+
+      fun inspectInterrupted f = handler_ f
    end
 
 val setHandler = fn (s, h) =>
@@ -222,7 +276,8 @@ fun suspend m =
     ; MLtonThread.switchToSignalHandler ())
 
 fun handleGC f =
-   (Prim.handleGC (GCState.gcState ())
+   ( ignore (die ("MLton.Signal.handleGC unsupported\n"))
+    ; Prim.handleGC (GCState.gcState ())
     ; gcHandler := Handler.simple f)
 
 end

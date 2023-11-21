@@ -123,6 +123,7 @@ fun addProfileFunction (f: Function.t)  =
                                     end
                                | Handler.Handle _ => doitL ())
                         | Return.Tail => doitLF ())
+                 | Transfer.PCall _ => doitL ()
                  | Transfer.Raise _ => doitLF ()
                  | Transfer.Return _ => doitLF ()
                  | _ => doitL ()

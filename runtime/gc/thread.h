@@ -1,4 +1,4 @@
-/* Copyright (C) 2018-2020 Sam Westrick
+/* Copyright (C) 2018-2023 Sam Westrick
  * Copyright (C) 2014-2016 Ram Raghunathan
  * Copyright (C) 2019 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
@@ -39,6 +39,10 @@
  * normal object.
  */
 typedef struct GC_thread {
+
+  /* unspent heartbeats */
+  uint32_t spareHeartbeats;
+
   int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
   ptrdiff_t exnStack;
@@ -74,6 +78,7 @@ typedef struct GC_thread {
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
+                    sizeof(uint32_t) + // spareHeartbeats
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(ptrdiff_t) +  // exnStack
@@ -92,6 +97,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
+                    sizeof(uint32_t) + // spareHeartbeats
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(ptrdiff_t) +  // exnStack
@@ -123,6 +129,11 @@ PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
 
+// forkThread should only be called if canForkThread returns true
+// (and without resuming the thread in between)
+PRIVATE bool GC_HH_canForkThread(GC_state s, pointer thread);
+PRIVATE objptr GC_HH_forkThread(GC_state s, pointer thread, pointer jp);
+
 /* Moves a "new" thread to the appropriate depth, before we switch to it.
  * This essentially puts the thread (and its stack) into the hierarchy.
  * Also sets the depth of the thread.
@@ -139,6 +150,13 @@ PRIVATE void GC_HH_commitFinishedClearSetGrain(GC_state s, pointer threadp, poin
 PRIVATE void GC_HH_deleteClearSet(GC_state s, pointer clearSet);
 
 PRIVATE Bool GC_HH_checkFinishedCCReadyToJoin(GC_state s);
+
+PRIVATE Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count);
+
+// returns new count
+PRIVATE uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares);
+
+PRIVATE uint32_t GC_currentSpareHeartbeats(GC_state s);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
