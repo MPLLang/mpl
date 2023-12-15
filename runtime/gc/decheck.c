@@ -46,6 +46,11 @@ void decheckInit(GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   thread->decheckState.internal.path = 1;
   thread->decheckState.internal.depth = 0;
+
+  // LOG(LM_THREAD, LL_FORCE,
+  //   "thread %p got decheckState %lu",
+  //   (void*)thread,
+  //   thread->decheckState.bits);
 }
 #else
 inline void decheckInit(GC_state s) {

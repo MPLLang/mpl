@@ -813,6 +813,11 @@ struct
             ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
+
+            (* TODO: PARALLEL CLEAR SUSPECTS??? *)
+            ; HH.clearSuspectsAtDepth (thread, newDepth)
+
+            ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* ; addSpareHeartbeats spareHeartbeatsGiven *)
             ; tryConsumeSpareHeartbeats localJoinCost
             (* ; tryConsumeSpareHeartbeats 0w1 *)
@@ -849,6 +854,11 @@ struct
                     HH.setDepth (thread, newDepth);
                     DE.decheckJoin (tidLeft, tidRight);
                     setQueueDepth (myWorkerId ()) newDepth;
+
+                    (* TODO: PARALLEL CLEAR SUSPECTS??? *)
+                    HH.clearSuspectsAtDepth (thread, newDepth);
+
+                    if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     (* tryConsumeSpareHeartbeats 0w1; *)
                     case HM.refDerefNoBarrier rightSideResult of
                       NONE => die (fn _ => "scheduler bug: join failed: missing result")

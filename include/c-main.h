@@ -97,13 +97,14 @@ void MLton_threadFunc (void* arg) {                                     \
    * the "main" computation to the last thread, so that we can use the  \
    * first thread as the signal relayer if necessary.                   \
    */                                                                   \
-  if (Proc_processorNumber (s) == s->numberOfProcs-1) {                 \
+  if (Proc_processorNumber (s) == 0) {                                  \
     Trace0(EVENT_LAUNCH);                                               \
     /* Trampoline */                                                    \
     MLton_trampoline (s, nextBlock, FALSE);                             \
   }                                                                     \
   else if (s->numberOfProcs > s->controls->heartbeatRelayerThreshold    \
-           && Proc_processorNumber(s) == 0)                             \
+           && s->numberOfProcs >= 2                                     \
+           && Proc_processorNumber(s) == s->numberOfProcs-1)            \
   {                                                                     \
     Proc_waitForInitialization(s);                                      \
     HH_EBR_enterQuiescentState(s);                                      \

@@ -281,6 +281,13 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
 
 #ifdef DETECT_ENTANGLEMENT
   getThreadCurrent(s)->decheckState = target->decheckState;
+
+  // LOG(LM_THREAD, LL_FORCE,
+  //   "handler thread %p got decheckState %lu from thread %p",
+  //   (void*)getThreadCurrent(s),
+  //   target->decheckState.bits,
+  //   (void*)target);
+
   uint32_t* fromSyncDepths = &(target->decheckSyncDepths[0]);
   uint32_t* toSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
   memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
@@ -337,6 +344,13 @@ void GC_handlerLeaveHeapOfThread(
 
 #ifdef DETECT_ENTANGLEMENT
   target->decheckState = getThreadCurrent(s)->decheckState;
+
+  // LOG(LM_THREAD, LL_FORCE,
+  //   "handler thread %p put back decheckState %lu into thread %p",
+  //   (void*)getThreadCurrent(s),
+  //   target->decheckState.bits,
+  //   (void*)target);
+
   uint32_t* fromSyncDepths = &(getThreadCurrent(s)->decheckSyncDepths[0]);
   uint32_t* toSyncDepths = &(target->decheckSyncDepths[0]);
   memcpy(toSyncDepths, fromSyncDepths, DECHECK_DEPTHS_LEN * sizeof(uint32_t));
