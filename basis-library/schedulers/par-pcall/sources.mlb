@@ -1,6 +1,7 @@
 local
   $(SML_LIB)/basis/basis.mlb
   $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/mpl.mlb
   $(SML_LIB)/basis/unsafe.mlb
 
   local
@@ -21,6 +22,7 @@ local
 
   ForkStrategy.sml
 
+  ../shh/CumulativePerProcTimer.sml
   ../shh/FORK_JOIN.sig
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml

@@ -9,6 +9,7 @@ struct
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
 
+  val maxCCDepth = MPL.GC.getControlMaxCCDepth ()
   val P = MLton.Parallel.numberOfProcessors
   val myWorkerId = MLton.Parallel.processorNumber
 
@@ -267,35 +268,6 @@ struct
   | GCTask of gctask_data
 
   (* ========================================================================
-   * IDLENESS TRACKING
-   *)
-
-  val idleTotals = Array.array (P, Time.zeroTime)
-  fun getIdleTime p = arraySub (idleTotals, p)
-  fun updateIdleTime (p, deltaTime) =
-    arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
-
-(*
-  val timerGrain = 256
-  fun startTimer myId = (myId, 0, Time.now ())
-  fun tickTimer (p, count, t) =
-    if count < timerGrain then (p, count+1, t) else
-    let
-      val t' = Time.now ()
-      val diff = Time.- (t', t)
-      val _ = updateIdleTime (p, diff)
-    in
-      (p, 0, t')
-    end
-  fun stopTimer (p, _, t) =
-    (tickTimer (p, timerGrain, t); ())
-*)
-
-  fun startTimer _ = ()
-  fun tickTimer _ = ()
-  fun stopTimer _ = ()
-
-  (* ========================================================================
    * STATS
    *)
 
@@ -359,6 +331,13 @@ struct
 
   fun numStealsSoFar () =
     Array.foldl op+ 0 numSteals
+
+  (** ========================================================================
+    * TIMERS
+    *)
+
+  structure IdleTimer = CumulativePerProcTimer(val timerName = "idle")
+  structure WorkTimer = CumulativePerProcTimer(val timerName = "work")
 
   (** ========================================================================
     * MAXIMUM FORK DEPTHS
@@ -522,17 +501,12 @@ struct
   structure ForkJoin =
   struct
 
-    val communicate = communicate
-    val getIdleTime = getIdleTime
-
-    val maxPermittedCCDepth = 3
-
     fun spawnGC interruptedThread : gc_joinpoint option =
       let
         val thread = Thread.current ()
         val depth = HH.getDepth thread
       in
-        if depth > maxPermittedCCDepth then
+        if depth > maxCCDepth then
           NONE
         else
           let
@@ -813,15 +787,15 @@ struct
             ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
-
-            (* TODO: PARALLEL CLEAR SUSPECTS??? *)
-            ; HH.clearSuspectsAtDepth (thread, newDepth)
-
-            ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
             (* ; addSpareHeartbeats spareHeartbeatsGiven *)
             ; tryConsumeSpareHeartbeats localJoinCost
             (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
+
+            (* TODO: PARALLEL CLEAR SUSPECTS??? *)
+            ; HH.clearSuspectsAtDepth (thread, newDepth)
+            ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
+
             ; let
                 val gr = Result.result g
               in
@@ -847,27 +821,26 @@ struct
               | SOME rightSideThread =>
                   let
                     val tidRight = DE.decheckGetTid rightSideThread
+                    val _ = HH.mergeThreads (thread, rightSideThread)
+                    val _ = tryConsumeSpareHeartbeats joinCost
+                    val _ = HH.promoteChunks thread
+                    val _ = HH.setDepth (thread, newDepth)
+                    val _ = DE.decheckJoin (tidLeft, tidRight)
+                    val _ = setQueueDepth (myWorkerId ()) newDepth
+                    val result = 
+                      case HM.refDerefNoBarrier rightSideResult of
+                        NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                      | SOME gr =>
+                          ( ()
+                          ; assertAtomic "syncEndAtomic after merge" 1
+                          ; Thread.atomicEnd ()
+                          ; gr
+                          )
                   in
-                    HH.mergeThreads (thread, rightSideThread);
-                    tryConsumeSpareHeartbeats joinCost;
-                    HH.promoteChunks thread;
-                    HH.setDepth (thread, newDepth);
-                    DE.decheckJoin (tidLeft, tidRight);
-                    setQueueDepth (myWorkerId ()) newDepth;
-
                     (* TODO: PARALLEL CLEAR SUSPECTS??? *)
                     HH.clearSuspectsAtDepth (thread, newDepth);
-
                     if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
-                    (* tryConsumeSpareHeartbeats 0w1; *)
-                    case HM.refDerefNoBarrier rightSideResult of
-                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
-                    | SOME gr =>
-                        ( ()
-                        ; assertAtomic "syncEndAtomic after merge" 1
-                        ; Thread.atomicEnd ()
-                        ; gr
-                        )
+                    result
                   end
             )
       in
@@ -1139,22 +1112,25 @@ struct
         in if other < myId then other else other+1
         end
 
-      fun request idleTimer =
+      fun stealLoop () =
         let
-          fun loop tries it =
+          fun loop tries =
             if tries = P * 100 then
-              (OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)));
-               loop 0 (tickTimer idleTimer))
+              ( IdleTimer.tick ()
+              ; OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
+              ; loop 0 )
             else
             let
               val friend = randomOtherId ()
             in
               case trySteal friend of
-                NONE => loop (tries+1) (tickTimer idleTimer)
-              | SOME (task, depth) => (task, depth, tickTimer idleTimer)
+                NONE => loop (tries+1)
+              | SOME (task, depth) => (task, depth)
             end
+
+          val result = loop 0
         in
-          loop 0 idleTimer
+          result
         end
 
       (* ------------------------------------------------------------------- *)
@@ -1166,10 +1142,15 @@ struct
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
             (* ; print ("afterReturnToSched: found GC task\n") *)
+            ; IdleTimer.stop ()
+            ; WorkTimer.start ()
             ; HH.collectThreadRoot (thread, !hh)
             (* ; print ("afterReturnToSched: done with GC\n") *)
             ; case pop () of
-                NONE => ()
+                NONE =>
+                  ( WorkTimer.stop ()
+                  ; IdleTimer.start ()
+                  )
               | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg'' (fn _ => "resume task thread")
@@ -1177,6 +1158,8 @@ struct
                   ; Thread.atomicBegin ()
                   ; assertAtomic "afterReturnToSched before thread switch" 2
                   ; threadSwitchEndAtomic thread
+                  ; WorkTimer.stop ()
+                  ; IdleTimer.start ()
                   ; afterReturnToSched ()
                   )
               | SOME _ =>
@@ -1185,15 +1168,17 @@ struct
 
       fun acquireWork () : unit =
         let
-          val idleTimer = startTimer myId
-          val (task, depth, idleTimer') = request idleTimer
-          val _ = stopTimer idleTimer'
+          val (task, depth) = stealLoop ()
           val _ = incrementNumSteals ()
         in
           case task of
             GCTask (thread, hh) =>
               ( dbgmsg'' (fn _ => "starting GCTask")
+              ; IdleTimer.stop ()
+              ; WorkTimer.start ()
               ; HH.collectThreadRoot (thread, !hh)
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; acquireWork ()
               )
           | Continuation (thread, depth) =>
@@ -1201,10 +1186,14 @@ struct
               ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
+              ; IdleTimer.stop ()
+              ; WorkTimer.start ()
               ; Thread.atomicBegin ()
               ; Thread.atomicBegin ()
               ; assertAtomic "acquireWork before thread switch" 2
               ; threadSwitchEndAtomic thread
+              ; WorkTimer.stop ()
+              ; IdleTimer.start ()
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
@@ -1219,10 +1208,14 @@ struct
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId taskFn;
+                IdleTimer.stop ();
+                WorkTimer.start ();
                 Thread.atomicBegin ();
                 Thread.atomicBegin ();
                 assertAtomic "acquireWork before thread switch" 2;
                 threadSwitchEndAtomic taskThread;
+                WorkTimer.stop ();
+                IdleTimer.start ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -1237,10 +1230,14 @@ struct
                 HH.moveNewThreadToDepth (taskThread, depth);
                 HH.setDepth (taskThread, depth+1);
                 (* setTaskBox myId t; *)
+                IdleTimer.stop ();
+                WorkTimer.start ();
                 Thread.atomicBegin ();
                 Thread.atomicBegin ();
                 assertAtomic "acquireWork before thread switch" 2;
                 threadSwitchEndAtomic taskThread;
+                WorkTimer.stop ();
+                IdleTimer.start ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -1259,6 +1256,7 @@ struct
     let
       val (_, acquireWork) = setupSchedLoop ()
     in
+      IdleTimer.start ();
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
     end
@@ -1295,8 +1293,11 @@ struct
       let
         val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
+        WorkTimer.start ();
         Thread.atomicBegin ();
         threadSwitchEndAtomic originalThread;
+        WorkTimer.stop ();
+        IdleTimer.start ();
         afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();

@@ -43,8 +43,8 @@ struct
   val numSkippedHeartbeatsSoFar = Scheduler.numSkippedHeartbeatsSoFar
   val numStealsSoFar = Scheduler.numStealsSoFar
 
-  fun idleTimeSoFar () = raise Fail "ForkJoin.idleTimeSoFar: TODO"
-  fun workTimeSoFar () = raise Fail "ForkJoin.workTimeSoFar: TODO"
+  val idleTimeSoFar = Scheduler.IdleTimer.cumulative
+  val workTimeSoFar = Scheduler.WorkTimer.cumulative
 
   fun communicate () = ()
 end
