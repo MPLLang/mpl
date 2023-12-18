@@ -166,9 +166,10 @@ GC_thread newThreadWithHeap(
   sChunk->mightContainMultipleObjects = FALSE;
 
 #ifdef DETECT_ENTANGLEMENT
-  decheck_tid_t decheckState =
-    (existsCurrentThread ?
-    getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
+  decheck_tid_t decheckState = DECHECK_BOGUS_TID;
+  // decheck_tid_t decheckState =
+  //   (existsCurrentThread ?
+  //   getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
 #else
   decheck_tid_t decheckState = DECHECK_BOGUS_TID;
 #endif

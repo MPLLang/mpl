@@ -147,8 +147,8 @@ void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
   GC_thread thread = getThreadCurrent(s);
   thread->decheckState = tid;
 
-  setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
-  setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
+  // setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
+  // setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
 
   decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
 

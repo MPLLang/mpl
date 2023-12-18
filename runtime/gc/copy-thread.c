@@ -65,6 +65,14 @@ GC_thread copyThreadWithHeap (GC_state s, GC_thread from, size_t used) {
   to->spareHeartbeats += from->spareHeartbeats;
   from->spareHeartbeats = 0;
 
+#ifdef DETECT_ENTANGLEMENT
+  memcpy(
+    &(to->decheckSyncDepths[0]),
+    &(from->decheckSyncDepths[0]),
+    sizeof(uint32_t) * DECHECK_DEPTHS_LEN
+  );
+#endif
+
   Trace2(EVENT_THREAD_COPY, (EventInt)from, (EventInt)to);
 
   return to;

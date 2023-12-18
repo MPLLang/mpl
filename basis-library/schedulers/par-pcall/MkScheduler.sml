@@ -255,6 +255,7 @@ struct
     end
 
   fun dbgmsg'' _ = ()
+  (* fun dbgmsg'' m = dbgmsg''' m *)
 
 
   (* ========================================================================
@@ -970,22 +971,22 @@ struct
         fun rightSide () =
           let
             val _ = assertAtomic "pcallFork rightside begin" 1
+            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
+              primGetData ()
+            val () = DE.decheckSetTid tidRight
 
             val thread = Thread.current ()
             val depth = HH.getDepth thread
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             (* val _ =
               dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
 
             (* val _ = addSpareHeartbeats 1 *)
             (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
-
-            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
-            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
-              primGetData ()
-            val () = DE.decheckSetTid tidRight
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
             val _ = addSpareHeartbeats spareHeartbeatsGiven
+            val _ = assertAtomic "pcallfork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
             val gr = Result.result (inject o g)
@@ -996,7 +997,7 @@ struct
               if depth = depth' then ()
               else die (fn _ => "scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
 
-            val _ = dbgmsg'' (fn _ => "rightside done at depth " ^ Int.toString depth')
+            val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
             val _ = assertAtomic "pcallFork rightside begin synchronize" 1
           in
             rightSideThread := SOME thread;
@@ -1004,6 +1005,7 @@ struct
 
             if decrementHitsZero incounter then
               ( ()
+              ; dbgmsg'' (fn _ => "rightside synchronize: become left")
               ; setQueueDepth (myWorkerId ()) depth
                 (** Atomic 1 *)
               ; Thread.atomicBegin ()
@@ -1018,7 +1020,8 @@ struct
               ; threadSwitchEndAtomic leftSideThread
               )
             else
-              ( assertAtomic "pcallFork rightside before returnToSched" 1
+              ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
+              ; assertAtomic "pcallFork rightside before returnToSched" 1
               ; returnToSchedEndAtomic ()
               )
           end
