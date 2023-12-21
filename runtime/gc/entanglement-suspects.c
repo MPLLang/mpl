@@ -43,6 +43,36 @@ static inline bool is_suspect(objptr op)
   return (1 == (h & GC_VALID_HEADER_MASK)) && suspicious_header(h);
 }
 
+
+
+bool try_clear_suspect(objptr op, uint32_t opDepth)
+{
+  pointer p = objptrToPointer(op, NULL);
+  
+  while (TRUE) {
+    GC_header header = getHeader(p);
+    assert(suspicious_header(header));
+    uint32_t unpinDepth = (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
+
+    if (pinType(header) == PIN_ANY && unpinDepth < opDepth) {
+      return FALSE;
+    }
+
+    GC_header newHeader = header & ~(SUSPECT_MASK);
+    if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
+      return TRUE;
+    }
+    else {
+      LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
+          "WARNING: Failed suspect clear due to intermediate change! Trying again.");
+    }
+  }
+}
+
+
+
+
+
 void clear_suspect(
     GC_state s,
     objptr *opp,
@@ -73,6 +103,9 @@ void clear_suspect(
     /*oops something changed in b/w, let's try at the next join*/
     HM_storeInChunkListWithPurpose(eargs->newList, opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
     eargs->numFailed++;
+
+    LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
+        "WARNING: failed suspect clear!");
   }
 }
 
@@ -85,8 +118,8 @@ bool ES_mark(__attribute__((unused)) GC_state s, objptr op) {
   return mark_suspect(op);
 }
 
-void ES_unmark(GC_state s, objptr op) {
-  clear_suspect(s, &op, op, NULL);
+void ES_unmark(GC_state s, objptr op, ES_clearArgs args) {
+  clear_suspect(s, &op, op, args);
 }
 
 void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)

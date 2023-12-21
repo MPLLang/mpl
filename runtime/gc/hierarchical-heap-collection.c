@@ -45,7 +45,7 @@ void tryUnpinOrKeepPinned(
     void *rawArgs);
 
 void LGC_markAndScan(GC_state s, HM_remembered remElem, void *rawArgs);
-void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
+// void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
 
 void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
 
@@ -69,6 +69,23 @@ static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrA
   return args->toSpace[depth];
 }
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
+
+
+
+static bool try_disentangle_object(objptr op, uint32_t opDepth) {
+  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
+    bool successful_unpin = tryUnpinWithDepth(op, opDepth);
+    if (successful_unpin && ES_contains(NULL, op)) {
+      LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
+          "disentangling a suspect at depth %u",
+          opDepth);
+      return try_clear_suspect(op, opDepth);
+    }
+    return successful_unpin;
+  }
+  return TRUE;
+}
+
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void *args);
@@ -1369,13 +1386,17 @@ void markAndAdd(
     return;
   }
 
-  disentangleObject(s, op, opDepth);
+  bool de_success = try_disentangle_object(op, opDepth);
+  if (!de_success) {
+    DIE("try_disentangle_object failed? should be impossible");
+  }
+
   enum PinType pt = pinType(getHeader(p));
 
   if (pt == PIN_DOWN)
   {
     // it is okay to not trace PIN_DOWN objects because the remembered set will have them
-    // and we will definitely trace; this relies on the failure of unpinning in disentangleObject.
+    // and we will definitely trace; this relies on the failure of unpinning in try_disentangle_object.
     // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
     // concurrently to LGC and LGC may miss them.
     return;
@@ -1423,6 +1444,7 @@ void markAndAdd(
   return;
 }
 
+#if 0
 void unmarkAndAdd(
     GC_state s,
     __attribute__((unused)) objptr *opp,
@@ -1448,6 +1470,7 @@ void unmarkAndAdd(
     CC_workList_push(s, &(args->worklist), op);
   }
 }
+#endif
 
 void unmark(
     GC_state s,
@@ -1914,10 +1937,11 @@ void forwardHHObjptr(
     return;
   }
   else
-  {
-    disentangleObject(s, op, opDepth);
-    // This object should have been previously unpinned
-    // unpinObject(op);
+  {    
+    bool de_success = try_disentangle_object(op, opDepth);
+    if (!de_success) {
+      DIE("try_disentangle_object failed? should be impossible");
+    }
   }
 
   /* ========================================================================

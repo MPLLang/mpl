@@ -51,7 +51,6 @@ void decheckInit(GC_state s);
 bool decheck(GC_state s, objptr ptr);
 bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1);
 int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2);
-bool disentangleObject(GC_state s, objptr op, uint32_t opDepth);
 objptr manage_entangled(GC_state s, objptr ptr, decheck_tid_t reader);
 void traverseAndCheck(GC_state s, objptr *opp ,objptr op, void *rawArgs);
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

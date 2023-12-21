@@ -31,7 +31,7 @@ typedef struct ES_finishedClearSetGrain {
 
 
 bool ES_mark(__attribute__((unused)) GC_state s, objptr op);
-void ES_unmark(GC_state s, objptr op);
+void ES_unmark(GC_state s, objptr op, ES_clearArgs args);
 
 void ES_add(GC_state s, HM_chunkList es, objptr op);
 
@@ -40,6 +40,8 @@ bool ES_contains(HM_chunkList es, objptr op);
 HM_chunkList ES_append(GC_state s, HM_chunkList es1, HM_chunkList es2);
 
 void ES_clear(GC_state s, HM_HierarchicalHeap hh);
+
+bool try_clear_suspect(objptr op, uint32_t opDepth);
 
 // These functions allow us to clear a suspect set in parallel,
 // by integrating with the scheduler. The idea is...
