@@ -558,74 +558,91 @@ struct
    *)
 
   local
-    datatype choice_status =
-      NoPendingChoice
-    | SearchingForChoice
-    | ActiveChoice of Thread.t
+    type device_identifier = string
 
-    val currentChoiceStatus = ref NoPendingChoice
-    val currentSearcher = ref ~1
+    (* FIXME: read it from somewhere else *)
+    val deviceIds: device_identifier array = Array.fromList ["gpu0"]
+
+    (* 
+    The current implementation records a pair of (deviceId, Some workerId) if a
+    worker is holding the GPU device. 
+    Perhaps we should change the option type to a list of workerIds, enabling
+    support for multiple workers holding the same device.
+    *)
+    val deviceReservation: (device_identifier * int option) array ref =
+      ref (Array.map (!deviceIds) (fn deviceId => (deviceId, NONE)))
+
+    val workerChoice: Thread.t option array ref = ref
+      (Array.tabulate (P, fn _ => NONE))
   in
 
-    fun tryBecomeChoiceSearcher () =
+    fun tryAcquireDevice () =
+      case
+        Array.findi (fn (_, (_, workerId)) => workerId = NONE)
+          (!deviceReservation)
+      of
+        SOME (index, (deviceId, _)) =>
+          let
+            val (deviceId, prevWorkerId) =
+              MLton.Parallel.arrayCompareAndSwap (!deviceReservation, index)
+                ((deviceId, NONE), (deviceId, SOME (myWorkerId ())))
+          in
+            if prevWorkerId = NONE then SOME deviceId else tryAcquireDevice ()
+          end
+      | NONE => NONE
+
+    fun releaseDevice () =
       let
-        val success =
-          MLton.eq (!currentChoiceStatus, NoPendingChoice)
-          andalso
-          casRef currentChoiceStatus (NoPendingChoice, SearchingForChoice)
+        val myId = myWorkerId ()
       in
-        if success then
-          ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] became GPU manager\n")*)
-            ()
-          ; currentSearcher := myWorkerId ()
-          ; true
-          )
-        else
-          false
+        case
+          Array.find (fn (_, workerId) => workerId = SOME myId)
+            ((!deviceReservation))
+        of
+          SOME (index, (deviceId, _)) =>
+            let
+              val (deviceId, prevWorkerId) =
+                MLton.Parallel.arrayCompareAndSwap (!deviceReservation, i)
+                  ((deviceId, SOME myId), (deviceId, NONE))
+            in
+              Assert.assert
+                ("Scheduler.releaseDevice", fn () => prevWorkerId = SOME myId)
+                () true
+            end
+        | NONE => raise "cannot release device that is not acquired"
       end
 
+    fun isActiveChoice t =
+      Array.exists (fn t' => t' = SOME t) (!workerChoice)
+
+    fun shouldSearchForChoices () =
+      let
+        val myId = myWorkerId ()
+      in
+        case
+          Array.find (fn (_, workerId) => workerId = SOME myId)
+            ((!deviceReservation))
+        of
+          SOME _ => true
+        | NONE => false
+      end
 
     fun startActiveChoice task =
       case task of
         Continuation (t, _) =>
-          ( currentSearcher := ~1
-          ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice t)
-          )
+          let val myId = myWorkerId ()
+          in arrayUpdate (!workerChoice, myId, SOME t)
+          end
       | _ =>
           die (fn _ =>
             "scheduler bug: startActiveChoice: expected Continuation(...)")
 
-
     fun finishActiveChoice () =
-      ( HM.refAssignNoBarrier (currentChoiceStatus, SearchingForChoice)
-      ; currentSearcher := myWorkerId ()
-      )
-
-
-    fun isActiveChoice t =
-      case HM.refDerefNoBarrier currentChoiceStatus of
-        ActiveChoice t' => MLton.eq (t, t')
-      | _ => false
-
-
-    (* fun isGpuManager id =
-      !currentGpuManager = id
-    
-    
-    fun amGpuManager () =
-      isGpuManager (myWorkerId ()) *)
-
-
-    fun shouldSearchForChoices () = !currentSearcher = myWorkerId ()
-
-
-    fun markNoPendingChoices () =
-      ( currentSearcher := ~1
-      ; HM.refAssignNoBarrier (currentChoiceStatus, NoPendingChoice)
-      )
+      let val myId = myWorkerId ()
+      in arrayUpdate (!workerChoice, myId, NONE)
+      end
 
   end
-
   (* ========================================================================
    * FORK JOIN
    *)
@@ -863,9 +880,10 @@ struct
     *)
 
 
-    fun doGpuTask g =
+    fun doGpuTask g deviceId =
       let
         val t0 = timeNowMicrosecondsSinceProgramStart ()
+        (* TODO : val result = g deviceId *)
         val result = g ()
         val t1 = timeNowMicrosecondsSinceProgramStart ()
       in
@@ -896,7 +914,7 @@ struct
 
     fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
       let
-        val _ = tryBecomeChoiceSearcher ()
+        val deviceId = tryAcquireDevice ()
         val _ = announceCurrentThreadPendingChoice ()
       in
         (* When we resume here, the gpu manager has already had a chance to
@@ -908,7 +926,15 @@ struct
         else
           let
             (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
-            val result = doGpuTask gpuTask
+
+            val deviceId =
+              case deviceId of
+                SOME deviceId => deviceId
+              | NONE =>
+                  raise
+                    "scheduler bug: the worker executing an active choice is not holding a gpu device"
+
+            val result = doGpuTask gpuTask deviceId
 
             (* after finishing gpu task, we expect to run CPU code again, so try to
              * send this task back to a CPU thread.
@@ -1217,8 +1243,7 @@ struct
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
             SOME t => (startActiveChoice t; t)
           | NONE =>
-              ( markNoPendingChoices ()
-              ; if existsPendingChoice () andalso tryBecomeChoiceSearcher () then
+              (if existsPendingChoice () andalso Option.isSome (tryAcquireDevice ()) then
                   findWork ()
                 else
                   workerFindWork ()
