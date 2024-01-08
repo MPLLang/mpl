@@ -17,10 +17,7 @@ struct
   fun search key args =
     case args of
       [] => NONE
-    | x :: args' =>
-        if key = x
-        then SOME args'
-        else search key args'
+    | x :: args' => if key = x then SOME args' else search key args'
 
   fun parseFlag key =
     case search ("--" ^ key) (CommandLine.arguments ()) of
@@ -33,7 +30,8 @@ struct
     | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
     | SOME (s :: _) =>
         case Int.fromString s of
-          NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
+          NONE =>
+            die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
   fun parseReal key default =
@@ -42,7 +40,8 @@ struct
     | SOME [] => die (fn _ => "Missing argument of \"-" ^ key ^ "\" ")
     | SOME (s :: _) =>
         case Real.fromString s of
-          NONE => die (fn _ => "Cannot parse real from \"-" ^ key ^ " " ^ s ^ "\"")
+          NONE =>
+            die (fn _ => "Cannot parse real from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
   fun parseString key default =
@@ -59,9 +58,7 @@ struct
         if ~1 <> PrimitiveFFI.Time.getTimeOfDay (sec, usec) then ()
         else die (fn _ => "scheduler bug: getTimeOfDay failed")
     in
-      (1000000 * C_Time.toLargeInt (!sec))
-      +
-      C_SUSeconds.toLargeInt (!usec)
+      (1000000 * C_Time.toLargeInt (!sec)) + C_SUSeconds.toLargeInt (!usec)
     end
 
   val programStartTimeMicroseconds = timeNowMicroseconds ()
@@ -77,9 +74,7 @@ struct
 
   structure Thread = MLton.Thread.Basic
   fun threadSwitch t =
-    ( Thread.atomicBegin ()
-    ; Thread.switchTo t
-    )
+    (Thread.atomicBegin (); Thread.switchTo t)
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
@@ -95,7 +90,9 @@ struct
   fun cmpContinuationTaskDepth (t1, t2) =
     case (t1, t2) of
       (Continuation (_, d1), Continuation (_, d2)) => Int.compare (d1, d2)
-    | _ => die (fn _ => "scheduler bug: cmpContinuationTaskDepth: not both continuations")
+    | _ =>
+        die (fn _ =>
+          "scheduler bug: cmpContinuationTaskDepth: not both continuations")
 
   structure DE = MLton.Thread.Disentanglement
 
@@ -103,19 +100,19 @@ struct
     (** See MAX_FORK_DEPTH in runtime/gc/decheck.c *)
     val maxDisetanglementCheckDepth = DE.decheckMaxDepth ()
   in
-  fun depthOkayForDECheck depth =
-    case maxDisetanglementCheckDepth of
+    fun depthOkayForDECheck depth =
+      case maxDisetanglementCheckDepth of
       (* in this case, there is no entanglement detection, so no problem *)
-      NONE => true
+        NONE => true
 
       (* entanglement checks are active, and the max depth is m *)
-    | SOME m => depth < m
+      | SOME m => depth < m
   end
 
   val maxCCDepth = MPL.GC.getControlMaxCCDepth ()
 
   val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
-                          ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
+    ((Math.log10 (Real.fromInt P)) / (Math.log10 (2.0)))
 
   (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
   (* fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old) *)
@@ -123,7 +120,7 @@ struct
   fun casRef r (old, new) =
     MLton.eq (MLton.Parallel.compareAndSwap r (old, new), old)
 
-  fun decrementHitsZero (x : int ref) : bool =
+  fun decrementHitsZero (x: int ref) : bool =
     faa (x, ~1) = 1
 
   (* val gpuPayout = parseReal "sched-gpu-payout" 1.0 *)
@@ -133,11 +130,11 @@ struct
 
   (*
   val gpuSelectPolicyStr = parseString "sched-gpu-select" "min-depth"
-
+  
   datatype gpu_select_policy =
     MinDepth
   | RandomSteal
-
+  
   val gpuSelectPolicy =
     case gpuSelectPolicyStr of
       "min-depth" => MinDepth
@@ -155,20 +152,22 @@ struct
 
   val doDebugMsg = false
 
-  val printLock : Word32.word ref = ref 0w0
+  val printLock: Word32.word ref = ref 0w0
   val _ = MLton.Parallel.Deprecated.lockInit printLock
   fun dbgmsg m =
-    if not doDebugMsg then () else
-    let
-      val p = myWorkerId ()
-      val _ = MLton.Parallel.Deprecated.takeLock printLock
-      val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
-    in
-      ( TextIO.output (TextIO.stdErr, msg)
-      ; TextIO.flushOut TextIO.stdErr
-      ; MLton.Parallel.Deprecated.releaseLock printLock
-      )
-    end
+    if not doDebugMsg then
+      ()
+    else
+      let
+        val p = myWorkerId ()
+        val _ = MLton.Parallel.Deprecated.takeLock printLock
+        val msg = String.concat ["[", Int.toString p, "] ", m (), "\n"]
+      in
+        ( TextIO.output (TextIO.stdErr, msg)
+        ; TextIO.flushOut TextIO.stdErr
+        ; MLton.Parallel.Deprecated.releaseLock printLock
+        )
+      end
 
   (* fun dbgmsg' m =
     let
@@ -188,7 +187,7 @@ struct
     let
       val p = myWorkerId ()
       val _ = MLton.Parallel.Deprecated.takeLock printLock
-      val msg = String.concat ["[", Int.toString p, "] ", m(), "\n"]
+      val msg = String.concat ["[", Int.toString p, "] ", m (), "\n"]
     in
       ( TextIO.output (TextIO.stdErr, msg)
       ; TextIO.flushOut TextIO.stdErr
@@ -205,21 +204,21 @@ struct
   fun updateIdleTime (p, deltaTime) =
     arrayUpdate (idleTotals, p, Time.+ (getIdleTime p, deltaTime))
 
-(*
-  val timerGrain = 256
-  fun startTimer myId = (myId, 0, Time.now ())
-  fun tickTimer (p, count, t) =
-    if count < timerGrain then (p, count+1, t) else
-    let
-      val t' = Time.now ()
-      val diff = Time.- (t', t)
-      val _ = updateIdleTime (p, diff)
-    in
-      (p, 0, t')
-    end
-  fun stopTimer (p, _, t) =
-    (tickTimer (p, timerGrain, t); ())
-*)
+  (*
+    val timerGrain = 256
+    fun startTimer myId = (myId, 0, Time.now ())
+    fun tickTimer (p, count, t) =
+      if count < timerGrain then (p, count+1, t) else
+      let
+        val t' = Time.now ()
+        val diff = Time.- (t', t)
+        val _ = updateIdleTime (p, diff)
+      in
+        (p, 0, t')
+      end
+    fun stopTimer (p, _, t) =
+      (tickTimer (p, timerGrain, t); ())
+  *)
 
   fun startTimer _ = ()
   fun tickTimer _ = ()
@@ -238,10 +237,8 @@ struct
     let
       val p = myWorkerId ()
     in
-      if arraySub (maxForkDepths, p) >= d then
-        ()
-      else
-        arrayUpdate (maxForkDepths, p, d)
+      if arraySub (maxForkDepths, p) >= d then ()
+      else arrayUpdate (maxForkDepths, p, d)
     end
 
   (* ========================================================================
@@ -258,20 +255,20 @@ struct
     fun upd i x = HM.arrayUpdateNoBarrier (taskBoxes, i, x)
     fun sub i = HM.arraySubNoBarrier (taskBoxes, i)
   in
-  val _ = Thread.copyCurrent ()
-  val prototypeThread : Thread.p =
-    if !amOriginal then
-      (amOriginal := false; Thread.savedPre ())
-    else
-      case sub (myWorkerId ()) of
-        NONE => die (fn _ => "scheduler bug: task box is empty")
-      | SOME t =>
-          ( upd (myWorkerId ()) NONE
-          ; t () handle _ => ()
-          ; die (fn _ => "scheduler bug: child task didn't exit properly")
-          )
-  fun setTaskBox p t =
-    upd p (SOME t)
+    val _ = Thread.copyCurrent ()
+    val prototypeThread: Thread.p =
+      if !amOriginal then
+        (amOriginal := false; Thread.savedPre ())
+      else
+        case sub (myWorkerId ()) of
+          NONE => die (fn _ => "scheduler bug: task box is empty")
+        | SOME t =>
+            ( upd (myWorkerId ()) NONE
+            ; t () handle _ => ()
+            ; die (fn _ => "scheduler bug: child task didn't exit properly")
+            )
+    fun setTaskBox p t =
+      upd p (SOME t)
   end
 
   (* ========================================================================
@@ -308,14 +305,14 @@ struct
 
   (*
   val stealTimeCounters: Int64.int array = Array.tabulate (P, fn _ => 0)
-
+  
   fun addStealTime delta =
     let
       val myId = myWorkerId ()
     in
       Array.update (stealTimeCounters, myId, delta + Array.sub (stealTimeCounters, myId))
     end
-
+  
   fun currentStealTimeSpent () =
     Array.foldl op+ 0 stealTimeCounters
   *)
@@ -340,44 +337,48 @@ struct
     end *)
 
 
-  fun i64ToReal x = Real.fromInt (Int64.toInt x)
-  fun realToi64 r = Int64.fromLarge (Real.toLargeInt IEEEReal.TO_NEAREST r)
+  fun i64ToReal x =
+    Real.fromInt (Int64.toInt x)
+  fun realToi64 r =
+    Int64.fromLarge (Real.toLargeInt IEEEReal.TO_NEAREST r)
 
-(*
-  fun pendingChoiceBoundToKeep () =
-    let
-      val hstart = !hybridStartTime
-    in
-      if hstart < 0 then
-        0
-      else
-        let
-          val idleness =
-            i64ToReal (currentStealTimeSpent () - !hybridIdlenessStart)
-          val elapsed =
-            i64ToReal (timeNowMicrosecondsSinceProgramStart () - hstart)
-        in
-          Real.floor ((idleness - (gpuPayout * elapsed)) / keepDamper)
-        end
-    end
-*)
+  (*
+    fun pendingChoiceBoundToKeep () =
+      let
+        val hstart = !hybridStartTime
+      in
+        if hstart < 0 then
+          0
+        else
+          let
+            val idleness =
+              i64ToReal (currentStealTimeSpent () - !hybridIdlenessStart)
+            val elapsed =
+              i64ToReal (timeNowMicrosecondsSinceProgramStart () - hstart)
+          in
+            Real.floor ((idleness - (gpuPayout * elapsed)) / keepDamper)
+          end
+      end
+  *)
 
   (* ========================================================================
    * SCHEDULER LOCAL DATA
    *)
 
   type worker_local_data =
-    { queue : task Queue.t
-    , sideQueue : task RingBuffer.t
+    { queue: task Queue.t
+    , sideQueue: task RingBuffer.t
     , pendingChoices: task ConcurrentBinaryHeap.t
-    , schedThread : Thread.t option ref
+    , schedThread: Thread.t option ref
     , gcTask: gctask_data option ref
     }
 
   fun wldInit p : worker_local_data =
     { queue = Queue.new ()
-    , sideQueue = RingBuffer.new {capacity=200}
-    , pendingChoices = ConcurrentBinaryHeap.new {capacity=200, cmp=cmpContinuationTaskDepth}
+    , sideQueue = RingBuffer.new {capacity = 200}
+    , pendingChoices =
+        ConcurrentBinaryHeap.new
+          {capacity = 200, cmp = cmpContinuationTaskDepth}
     , schedThread = ref NONE
     , gcTask = ref NONE
     }
@@ -388,13 +389,11 @@ struct
     #gcTask (vectorSub (workerLocalData, p)) := data
 
   fun getGCTask p =
-    ! (#gcTask (vectorSub (workerLocalData, p)))
+    !(#gcTask (vectorSub (workerLocalData, p)))
 
   fun setQueueDepth p d =
-    let
-      val {queue, ...} = vectorSub (workerLocalData, p)
-    in
-      Queue.setDepth queue d
+    let val {queue, ...} = vectorSub (workerLocalData, p)
+    in Queue.setDepth queue d
     end
 
   fun trySteal p =
@@ -410,52 +409,38 @@ struct
     end
 
   fun tryStealSide p =
-    let
-      val {sideQueue, ...} = vectorSub (workerLocalData, p)
-    in
-      RingBuffer.popTop sideQueue  
+    let val {sideQueue, ...} = vectorSub (workerLocalData, p)
+    in RingBuffer.popTop sideQueue
     end
 
   fun tryPopSide p =
-    let
-      val {sideQueue, ...} = vectorSub (workerLocalData, p)
-    in
-      RingBuffer.popBot sideQueue  
+    let val {sideQueue, ...} = vectorSub (workerLocalData, p)
+    in RingBuffer.popBot sideQueue
     end
 
   fun tryStealPendingChoice p =
-    let
-      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
-    in
-      ConcurrentBinaryHeap.popMin pendingChoices
+    let val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in ConcurrentBinaryHeap.popMin pendingChoices
     end
 
   fun tryKeepPendingChoice p =
-    let
-      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
-    in
-      ConcurrentBinaryHeap.popNearMax pendingChoices
+    let val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in ConcurrentBinaryHeap.popNearMax pendingChoices
     end
 
   fun peekPendingChoice p =
-    let
-      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
-    in
-      ConcurrentBinaryHeap.peekMin pendingChoices
+    let val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in ConcurrentBinaryHeap.peekMin pendingChoices
     end
 
   fun peekBotPendingChoice p =
-    let
-      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
-    in
-      ConcurrentBinaryHeap.peekNearMaxAllowBackoff pendingChoices
+    let val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in ConcurrentBinaryHeap.peekNearMaxAllowBackoff pendingChoices
     end
 
   fun tryPushPendingChoice p x =
-    let
-      val {pendingChoices, ...} = vectorSub (workerLocalData, p)
-    in
-      ConcurrentBinaryHeap.push pendingChoices x
+    let val {pendingChoices, ...} = vectorSub (workerLocalData, p)
+    in ConcurrentBinaryHeap.push pendingChoices x
     end
 
 
@@ -513,8 +498,8 @@ struct
       val {queue, ...} = vectorSub (workerLocalData, myId)
     in
       case Queue.popBot queue of
-          NONE => false
-        | SOME _ => true
+        NONE => false
+      | SOME _ => true
     end
 
   fun queueSize () =
@@ -539,15 +524,16 @@ struct
       val myId = myWorkerId ()
       val {sideQueue, ...} = vectorSub (workerLocalData, myId)
       fun loop () =
-        if queueSize () = 0 then ()
+        if queueSize () = 0 then
+          ()
         else
-        case trySteal myId of
-          NONE => loop ()
-        | SOME task =>
-            ( if RingBuffer.pushBot (sideQueue, task) then ()
-              else die (fn _ => "scheduler bug: side queue full")
-            ; loop ()
-            )
+          case trySteal myId of
+            NONE => loop ()
+          | SOME task =>
+              ( if RingBuffer.pushBot (sideQueue, task) then ()
+                else die (fn _ => "scheduler bug: side queue full")
+              ; loop ()
+              )
     in
       loop ()
     end
@@ -556,10 +542,12 @@ struct
   fun existsPendingChoice () =
     let
       fun loop i =
-        if i >= P then false else
-        case peekPendingChoice i of
-          SOME _ => true
-        | NONE => loop (i+1)
+        if i >= P then
+          false
+        else
+          case peekPendingChoice i of
+            SOME _ => true
+          | NONE => loop (i + 1)
     in
       loop 0
     end
@@ -568,7 +556,7 @@ struct
   (* ========================================================================
    * FORK JOIN
    *)
-  
+
   local
     datatype choice_status =
       NoPendingChoice
@@ -579,59 +567,62 @@ struct
     val currentSearcher = ref ~1
   in
 
-  fun tryBecomeChoiceSearcher () =
-    let
-      val success =
-        MLton.eq (!currentChoiceStatus, NoPendingChoice) andalso
-        casRef currentChoiceStatus (NoPendingChoice, SearchingForChoice)
-    in
-      if success then
-        ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] became GPU manager\n")*) ()
-        ; currentSearcher := myWorkerId ()
-        ; true
-        )
-      else
-        false
-    end
+    fun tryBecomeChoiceSearcher () =
+      let
+        val success =
+          MLton.eq (!currentChoiceStatus, NoPendingChoice)
+          andalso
+          casRef currentChoiceStatus (NoPendingChoice, SearchingForChoice)
+      in
+        if success then
+          ( (*print ("[" ^ Int.toString (myWorkerId ()) ^ "] became GPU manager\n")*)
+            ()
+          ; currentSearcher := myWorkerId ()
+          ; true
+          )
+        else
+          false
+      end
 
 
-  fun startActiveChoice task =
-    case task of
-      Continuation (t, _) => 
-        ( currentSearcher := ~1
-        ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice t)
-        )
-    | _ => die (fn _ => "scheduler bug: startActiveChoice: expected Continuation(...)")
-
-  
-  fun finishActiveChoice () =
-    ( HM.refAssignNoBarrier (currentChoiceStatus, SearchingForChoice)
-    ; currentSearcher := myWorkerId ()
-    )
+    fun startActiveChoice task =
+      case task of
+        Continuation (t, _) =>
+          ( currentSearcher := ~1
+          ; HM.refAssignNoBarrier (currentChoiceStatus, ActiveChoice t)
+          )
+      | _ =>
+          die (fn _ =>
+            "scheduler bug: startActiveChoice: expected Continuation(...)")
 
 
-  fun isActiveChoice t =
-    case HM.refDerefNoBarrier currentChoiceStatus of
-      ActiveChoice t' => MLton.eq (t, t')
-    | _ => false
-  
-
-  (* fun isGpuManager id =
-    !currentGpuManager = id
-
-  
-  fun amGpuManager () =
-    isGpuManager (myWorkerId ()) *)
+    fun finishActiveChoice () =
+      ( HM.refAssignNoBarrier (currentChoiceStatus, SearchingForChoice)
+      ; currentSearcher := myWorkerId ()
+      )
 
 
-  fun shouldSearchForChoices () = 
-    !currentSearcher = myWorkerId ()
+    fun isActiveChoice t =
+      case HM.refDerefNoBarrier currentChoiceStatus of
+        ActiveChoice t' => MLton.eq (t, t')
+      | _ => false
 
-  
-  fun markNoPendingChoices () =
-    ( currentSearcher := ~1
-    ; HM.refAssignNoBarrier (currentChoiceStatus, NoPendingChoice)
-    )
+
+    (* fun isGpuManager id =
+      !currentGpuManager = id
+    
+    
+    fun amGpuManager () =
+      isGpuManager (myWorkerId ()) *)
+
+
+    fun shouldSearchForChoices () = !currentSearcher = myWorkerId ()
+
+
+    fun markNoPendingChoices () =
+      ( currentSearcher := ~1
+      ; HM.refAssignNoBarrier (currentChoiceStatus, NoPendingChoice)
+      )
 
   end
 
@@ -642,12 +633,11 @@ struct
   structure ForkJoin =
   struct
 
-    datatype 'a result =
-      Finished of 'a
-    | Raised of exn
+    datatype 'a result = Finished of 'a | Raised of exn
 
     fun result f =
-      Finished (f ()) handle e => Raised e
+      Finished (f ())
+      handle e => Raised e
 
     fun extractResult r =
       case r of
@@ -658,7 +648,7 @@ struct
     val getIdleTime = getIdleTime
 
     (* Must be called from a "user" thread, which has an associated HH *)
-    fun parfork thread depth (f : unit -> 'a, g : unit -> 'b) =
+    fun parfork thread depth (f: unit -> 'a, g: unit -> 'b) =
       let
         (* val _ = dbgmsg' (fn _ => "fork at depth " ^ Int.toString depth) *)
 
@@ -667,15 +657,15 @@ struct
           * is stored at a safe depth. But reading the result is entangled
           * until after the merge happens.
           *)
-        val rightSideThread = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: 'b result option)
+        val rightSideThread = ref (NONE : Thread.t option)
+        val rightSideResult = ref (NONE : 'b result option)
         val incounter = ref 2
 
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         fun g' () =
           let
-            val () = DE.copySyncDepthsFromThread (thread, depth+1)
+            val () = DE.copySyncDepthsFromThread (thread, depth + 1)
             val () = DE.decheckSetTid tidRight
             val gr = result g
             val t = Thread.current ()
@@ -683,9 +673,7 @@ struct
             rightSideThread := SOME t;
             rightSideResult := SOME gr;
             if decrementHitsZero incounter then
-              ( setQueueDepth (myWorkerId ()) (depth+1)
-              ; threadSwitch thread
-              )
+              (setQueueDepth (myWorkerId ()) (depth + 1); threadSwitch thread)
             else
               returnToSched ()
           end
@@ -722,11 +710,8 @@ struct
             ; DE.decheckJoin (tidLeft, tidRight)
             (* ; dbgmsg' (fn _ => "join fast at depth " ^ Int.toString depth) *)
             (* ; HH.forceNewChunk () *)
-            ; let
-                val gr = result g
-              in
-                (* (gr, DE.decheckGetTid thread) *)
-                gr
+            ; let val gr = result g
+              in (* (gr, DE.decheckGetTid thread) *) gr
               end
             )
           else
@@ -745,12 +730,14 @@ struct
                     setQueueDepth (myWorkerId ()) depth;
                     (* dbgmsg' (fn _ => "join slow at depth " ^ Int.toString depth); *)
                     case HM.refDerefNoBarrier rightSideResult of
-                      NONE => die (fn _ => "scheduler bug: join failed: missing result")
+                      NONE =>
+                        die (fn _ =>
+                          "scheduler bug: join failed: missing result")
                     | SOME gr => gr
                   end
             )
 
-        (* val () = DE.decheckJoin (tidLeft, tidRight) *)
+      (* val () = DE.decheckJoin (tidLeft, tidRight) *)
       in
         (extractResult fr, extractResult gr)
       end
@@ -763,7 +750,8 @@ struct
         val gcTaskData = SOME gcTaskTuple
         val gcTask = GCTask gcTaskTuple
         val cont_arr1 = ref (SOME continuation)
-        val cont_arr2 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+        val cont_arr2 = ref (SOME (fn _ =>
+          (gcTask, gcTaskData))) (* a hack, I hope it works. *)
         val cont_arr3 = ref NONE
 
         (** The above could trigger a local GC and invalidate the hh
@@ -777,27 +765,26 @@ struct
           let
             val _ = push gcTask
             val _ = HH.setDepth (thread, depth + 1)
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            val _ = HH.forceLeftHeap (myWorkerId (), thread)
             (* val _ = dbgmsg' (fn _ => "fork CC at depth " ^ Int.toString depth) *)
             val result = continuation ()
 
             val _ =
-              if popDiscard() then
+              if popDiscard () then
                 ( (*dbgmsg' (fn _ => "push current (" ^ Int.toString depth ^ ") and switch to scheduler for GCtask")
-                ;*)
-                  setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+                  ;*)
+                  setGCTask (myWorkerId ())
+                    gcTaskData (* This communicates with the scheduler thread *)
                 ; push (Continuation (thread, depth))
                 ; returnToSched ()
                 )
-                (* HH.collectThreadRoot (thread, !heapId) *)
+              (* HH.collectThreadRoot (thread, !heapId) *)
               else
-                ( clear()
-                ; setQueueDepth (myWorkerId ()) depth
-                )
+                (clear (); setQueueDepth (myWorkerId ()) depth)
 
             val _ = HH.promoteChunks thread
             val _ = HH.setDepth (thread, depth)
-            (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
+          (* val _ = dbgmsg' (fn _ => "join CC at depth " ^ Int.toString depth) *)
           in
             result
           end
@@ -811,8 +798,9 @@ struct
         (* if amGpuManager () then
           (f (), g ()) *)
         (* if ccOkayAtThisDepth andalso depth = 1 then *)
-        (*else*) if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
-          forkGC thread depth (fn _ => fork' {ccOkayAtThisDepth=false} (f, g))
+        (*else*)
+        if ccOkayAtThisDepth andalso depth >= 1 andalso depth <= maxCCDepth then
+          forkGC thread depth (fn _ => fork' {ccOkayAtThisDepth = false} (f, g))
         else if depth < Queue.capacity andalso depthOkayForDECheck depth then
           parfork thread depth (f, g)
         else
@@ -821,57 +809,58 @@ struct
       end
 
 
-    fun fork (f, g) = fork' {ccOkayAtThisDepth=true} (f, g)
+    fun fork (f, g) =
+      fork' {ccOkayAtThisDepth = true} (f, g)
 
 
-(*
-    fun doGpuTask (G {spawn, poll, finish}) =
-      let
-        val t0 = timeNowMicrosecondsSinceProgramStart ()
-        (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
-
-        (*
-        val _ = hybridNumChoicesKeptOnCPU := 0
-        val _ = hybridIdlenessStart := currentStealTimeSpent ()
-        val startTime = timeNowMicrosecondsSinceProgramStart ()
-        val _ =
-          if casRef hybridStartTime (~1, startTime) then ()
-          else die (fn _ => "scheduler bug: start hybrid section failed")
-        *)
-
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-
-        val package = spawn ()
-
-        val _ = HH.setDepth (thread, depth + 1)
-        val _ = HH.forceLeftHeap(myWorkerId(), thread)
-        val _ = setQueueDepth (myWorkerId ()) (depth+1)
-
-        (* TODO: might be unsafety here? What happens if a local GC is
-         * triggered during this loop? Perhaps we need to advance the depth
-         * and use a fresh heap while waiting for the GPU to finish?
-         *)
-        fun loopWaitForGpu () =
-          ( hiccup ()
-          ; if not (poll package) then
-              loopWaitForGpu ()
-            else
-              ()
-          )
-
-        val _ = loopWaitForGpu ()
-        val _ = setQueueDepth (myWorkerId ()) depth
-        val _ = HH.promoteChunks thread
-        val _ = HH.setDepth (thread, depth)
-        val result = finish package
-
-        val t1 = timeNowMicrosecondsSinceProgramStart ()
-      in
-        print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
-        result
-      end
-*)
+    (*
+        fun doGpuTask (G {spawn, poll, finish}) =
+          let
+            val t0 = timeNowMicrosecondsSinceProgramStart ()
+            (* val _ = updateIdlenessCounterWith (fn _ => 0) *)
+    
+            (*
+            val _ = hybridNumChoicesKeptOnCPU := 0
+            val _ = hybridIdlenessStart := currentStealTimeSpent ()
+            val startTime = timeNowMicrosecondsSinceProgramStart ()
+            val _ =
+              if casRef hybridStartTime (~1, startTime) then ()
+              else die (fn _ => "scheduler bug: start hybrid section failed")
+            *)
+    
+            val thread = Thread.current ()
+            val depth = HH.getDepth thread
+    
+            val package = spawn ()
+    
+            val _ = HH.setDepth (thread, depth + 1)
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            val _ = setQueueDepth (myWorkerId ()) (depth+1)
+    
+            (* TODO: might be unsafety here? What happens if a local GC is
+             * triggered during this loop? Perhaps we need to advance the depth
+             * and use a fresh heap while waiting for the GPU to finish?
+             *)
+            fun loopWaitForGpu () =
+              ( hiccup ()
+              ; if not (poll package) then
+                  loopWaitForGpu ()
+                else
+                  ()
+              )
+    
+            val _ = loopWaitForGpu ()
+            val _ = setQueueDepth (myWorkerId ()) depth
+            val _ = HH.promoteChunks thread
+            val _ = HH.setDepth (thread, depth)
+            val result = finish package
+    
+            val t1 = timeNowMicrosecondsSinceProgramStart ()
+          in
+            print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n");
+            result
+          end
+    *)
 
 
     fun doGpuTask g =
@@ -890,7 +879,8 @@ struct
         ( moveAllTasksIntoSideQueue ()
         ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
         ; clear ()
-        ; announceCurrentThreadPendingChoice () (* this should succeed on second go, now that main deque is empty *)
+        ; announceCurrentThreadPendingChoice
+            () (* this should succeed on second go, now that main deque is empty *)
         )
       else
         let
@@ -898,7 +888,7 @@ struct
           val depth = HH.getDepth thread
           val selfTask = Continuation (thread, depth)
           val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
-          (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
+        (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
         in
           if sendSucceeded then returnToSched () else ()
         end
@@ -932,7 +922,8 @@ struct
               pushSide selfTask
           in
             if sendSucceeded then
-              ((*dbgmsg'' (fn _ => "choice: send back succeeded");*) returnToSched ())
+              ( (*dbgmsg'' (fn _ => "choice: send back succeeded");*)
+                returnToSched ())
             else
               die (fn _ => "scheduler: choice: send back failed\n");
 
@@ -961,7 +952,7 @@ struct
       val myId = myWorkerId ()
       val myRand = SMLNJRandom.rand (0, myId)
       (*val myRand = SimpleRandom.rand myId*)
-      val {queue=myQueue, schedThread, ...} =
+      val {queue = myQueue, schedThread, ...} =
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
@@ -972,15 +963,15 @@ struct
 
       fun randomOtherId () =
         (*let val other = SimpleRandom.boundedInt (0, P-1) myRand*)
-        let val other = SMLNJRandom.randRange (0, P-2) myRand
-        in if other < myId then other else other+1
+        let val other = SMLNJRandom.randRange (0, P - 2) myRand
+        in if other < myId then other else other + 1
         end
 
-      
-      fun randomId () =
-        SMLNJRandom.randRange (0, P-1) myRand
 
-      
+      fun randomId () =
+        SMLNJRandom.randRange (0, P - 1) myRand
+
+
       fun gpuManager_tryFindWorkLoop_policy_minDepth () =
         let
           fun check (bestFriend, bestDepth, holding) friend =
@@ -989,28 +980,26 @@ struct
                 if d >= bestDepth then
                   (bestFriend, bestDepth, holding)
                 else
-                  ( case tryStealPendingChoice friend of
-                      SOME (holding' as Continuation (_, d')) =>
-                        if d' >= bestDepth then
-                          ( tryPushPendingChoice friend holding'
-                          ; (bestFriend, bestDepth, holding)
-                          )
-                        else
-                          ( Option.app
-                              (fn t =>
-                                (tryPushPendingChoice bestFriend t; ()))
-                              holding
-                          ; (friend, d', SOME holding')
-                          )
+                  (case tryStealPendingChoice friend of
+                     SOME (holding' as Continuation (_, d')) =>
+                       if d' >= bestDepth then
+                         ( tryPushPendingChoice friend holding'
+                         ; (bestFriend, bestDepth, holding)
+                         )
+                       else
+                         ( Option.app
+                             (fn t => (tryPushPendingChoice bestFriend t; ()))
+                             holding
+                         ; (friend, d', SOME holding')
+                         )
 
-                    | _ => (bestFriend, bestDepth, holding)
-                  )
+                   | _ => (bestFriend, bestDepth, holding))
 
             | _ => (bestFriend, bestDepth, holding)
-          
+
 
           fun loop xxx i =
-            if i >= P then xxx else loop (check xxx i) (i+1)
+            if i >= P then xxx else loop (check xxx i) (i + 1)
 
           val (_, _, holding) = loop (~1, valOf Int.maxInt, NONE) 0
         in
@@ -1019,21 +1008,21 @@ struct
           | NONE => NONE
         end
 
-(*
-      fun gpuManagerFindWorkLoop_policy_randomSteal tries =
-        if tries = P * 100 then
-          ( hiccup ()
-          ; gpuManagerFindWorkLoop_policy_randomSteal 0
-          )
-        else
-          let
-            val friend = randomOtherId ()
-          in
-            case tryStealPendingChoice friend of
-              NONE => gpuManagerFindWorkLoop_policy_randomSteal (tries+1)
-            | SOME t => t
-          end
-*)
+      (*
+            fun gpuManagerFindWorkLoop_policy_randomSteal tries =
+              if tries = P * 100 then
+                ( hiccup ()
+                ; gpuManagerFindWorkLoop_policy_randomSteal 0
+                )
+              else
+                let
+                  val friend = randomOtherId ()
+                in
+                  case tryStealPendingChoice friend of
+                    NONE => gpuManagerFindWorkLoop_policy_randomSteal (tries+1)
+                  | SOME t => t
+                end
+      *)
 
 
       (*
@@ -1059,7 +1048,7 @@ struct
               in
                 loop (bf', bd') numFound' (tries+1)
               end
-
+      
           val (bf, bd) = loop (~1, valOf Int.minInt) 0 0
         in
           if bf < 0 then
@@ -1079,7 +1068,10 @@ struct
       fun workerFindWork () =
         let
           fun loopStealAny count (numPendingSeen, bestFriend, bestDepth) =
-            if bestFriend >= 0 andalso (numPendingSeen >= 2 orelse count >= P * 10) then
+            if
+              bestFriend >= 0
+              andalso (numPendingSeen >= 2 orelse count >= P * 10)
+            then
               case tryKeepPendingChoice bestFriend of
                 SOME (t as Continuation (_, d)) =>
                   if d >= bestDepth then
@@ -1088,19 +1080,18 @@ struct
                     loopStealAny count (0, ~1, ~1)
                   else
                     die (fn _ => "scheduler error: push pending back failed\n")
-              | _ => 
-                loopStealAny count (0, ~1, ~1)
-            
-            else if count >= P * 10 then
-              ( hiccup ()
-              ; loopStealAny 0 (0, ~1, ~1)
-              )
+              | _ => loopStealAny count (0, ~1, ~1)
+
+            else if
+              count >= P * 10
+            then
+              (hiccup (); loopStealAny 0 (0, ~1, ~1))
 
             else
               let
                 (* including self, to make sure we consider our own pending
                  * choices *)
-                val friend = randomId () 
+                val friend = randomId ()
 
                 (* only look at side for everyone else *)
                 val sideResult =
@@ -1108,45 +1099,49 @@ struct
               in
                 case sideResult of
                   SOME task => task
-                | NONE => 
-
-                case trySteal friend of
-                  SOME task => task
                 | NONE =>
 
-                if friend = bestFriend then
-                  loopStealAny (count+1) (numPendingSeen, bestFriend, bestDepth)
-                else
+                    case trySteal friend of
+                      SOME task => task
+                    | NONE =>
 
-                case peekBotPendingChoice friend of
-                  SOME (Continuation (_, d)) =>
-                    if d > bestDepth then
-                      loopStealAny (count+1) (numPendingSeen+1, friend, d)
-                    else
-                      loopStealAny (count+1) (numPendingSeen+1, bestFriend, bestDepth)
+                        if friend = bestFriend then
+                          loopStealAny (count + 1)
+                            (numPendingSeen, bestFriend, bestDepth)
+                        else
 
-                | _ =>
-                    loopStealAny (count+1) (numPendingSeen, bestFriend, bestDepth)
+                          case peekBotPendingChoice friend of
+                            SOME (Continuation (_, d)) =>
+                              if d > bestDepth then
+                                loopStealAny (count + 1)
+                                  (numPendingSeen + 1, friend, d)
+                              else
+                                loopStealAny (count + 1)
+                                  (numPendingSeen + 1, bestFriend, bestDepth)
+
+                          | _ =>
+                              loopStealAny (count + 1)
+                                (numPendingSeen, bestFriend, bestDepth)
               end
 
-          (*
-          fun loopPrioritizeNonChoiceBeforeChoice count =
-            if count >= 0 then
-              case peekBotPendingChoice myId of
-                SOME (Continuation (_, d)) => loopStealAny 0 (1, myId, d)
-              | _ => loopStealAny 0 (0, ~1, ~1)
-            else
-              let
-                val friend = randomOtherId ()
-              in
-                case tryStealSide friend of
-                  SOME task => task
-                | NONE => 
-                case trySteal friend of
-                  SOME task => task
-                | NONE => loopPrioritizeNonChoiceBeforeChoice (count+1)
-              end
-          *)
+        (*
+        fun loopPrioritizeNonChoiceBeforeChoice count =
+          if count >= 0 then
+            case peekBotPendingChoice myId of
+              SOME (Continuation (_, d)) => loopStealAny 0 (1, myId, d)
+            | _ => loopStealAny 0 (0, ~1, ~1)
+          else
+            let
+              val friend = randomOtherId ()
+            in
+              case tryStealSide friend of
+                SOME task => task
+              | NONE => 
+              case trySteal friend of
+                SOME task => task
+              | NONE => loopPrioritizeNonChoiceBeforeChoice (count+1)
+            end
+        *)
         in
           case tryPopSide myId of
             SOME task => task
@@ -1188,8 +1183,8 @@ struct
                 SOME task => SOME task
               | NONE => stealLoop (tries+1) lastTick
             end
-
-
+      
+      
           fun actualStealLoop rounds =
             if rounds >= 2 then
               case workerFindWork_tryKeepChoicePoint_maxdepth () of
@@ -1220,10 +1215,7 @@ struct
             result
           end *)
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
-            SOME t =>
-              ( startActiveChoice t
-              ; t
-              )
+            SOME t => (startActiveChoice t; t)
           | NONE =>
               ( markNoPendingChoices ()
               ; if existsPendingChoice () andalso tryBecomeChoiceSearcher () then
@@ -1231,7 +1223,7 @@ struct
                 else
                   workerFindWork ()
               )
-          
+
 
       (* ------------------------------------------------------------------- *)
 
@@ -1240,11 +1232,12 @@ struct
           NONE => (*dbgmsg' (fn _ => "back in sched; no GC task")*) ()
         | SOME (thread, hh) =>
             ( (*dbgmsg' (fn _ => "back in sched; found GC task")
-            ;*) setGCTask myId NONE
+              ;*)
+              setGCTask myId NONE
             ; HH.collectThreadRoot (thread, !hh)
             ; if popDiscard () then
                 ( (*dbgmsg' (fn _ => "resume task thread")
-                ;*) threadSwitch thread
+                  ;*) threadSwitch thread
                 ; afterReturnToSched ()
                 )
               else
@@ -1258,13 +1251,11 @@ struct
         in
           case task of
             GCTask (thread, hh) =>
-              ( HH.collectThreadRoot (thread, !hh)
-              ; acquireWork ()
-              )
+              (HH.collectThreadRoot (thread, !hh); acquireWork ())
           | Continuation (thread, depth) =>
               ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
-              ; dbgmsg' (fn _ => "resume task thread")
-              ;*) Queue.setDepth myQueue depth
+                ; dbgmsg' (fn _ => "resume task thread")
+                ;*) Queue.setDepth myQueue depth
               ; threadSwitch thread
               ; afterReturnToSched ()
               ; clear ()
@@ -1275,11 +1266,15 @@ struct
               let
                 val taskThread = Thread.copy prototypeThread
               in
-                if depth >= 1 then () else
-                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth ^ "\n");
-                Queue.setDepth myQueue (depth+1);
+                if depth >= 1 then
+                  ()
+                else
+                  die (fn _ =>
+                    "scheduler bug: acquired with depth " ^ Int.toString depth
+                    ^ "\n");
+                Queue.setDepth myQueue (depth + 1);
                 HH.moveNewThreadToDepth (taskThread, depth);
-                HH.setDepth (taskThread, depth+1);
+                HH.setDepth (taskThread, depth + 1);
                 setTaskBox myId t;
                 (* dbgmsg' (fn _ => "switch to new task thread"); *)
                 threadSwitch taskThread;
@@ -1328,7 +1323,7 @@ struct
     if !amOriginal then
       let
         val schedThread = Thread.copy (Thread.savedPre ())
-        (* val schedHeap = HH.newHeap () *)
+      (* val schedHeap = HH.newHeap () *)
       in
         amOriginal := false;
         setQueueDepth (myWorkerId ()) 1;
@@ -1353,18 +1348,18 @@ struct
 
   val par = fork
 
-  fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
+  fun for (i, j) f =
+    if i >= j then () else (f i; for (i + 1, j) f)
 
   fun parfor grain (i, j) f =
     if j - i <= grain then
       for (i, j) f
     else
       let
-        val mid = i + (j-i) div 2
+        val mid = i + (j - i) div 2
       in
-        par (fn _ => parfor grain (i, mid) f,
-             fn _ => parfor grain (mid, j) f)
-        ; ()
+        par (fn _ => parfor grain (i, mid) f, fn _ => parfor grain (mid, j) f);
+        ()
       end
 
   fun alloc n =
