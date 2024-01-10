@@ -623,31 +623,23 @@ struct
       ) workerChoice
 
     fun shouldSearchForChoices () =
-      let
-        val myId = myWorkerId ()
-      in
         case
-          Array.find (fn (_, workerId) => workerId = SOME myId)
-            ((deviceReservation))
+          Array.find (fn (_, workerId) => workerId = SOME (myWorkerId ()))
+            deviceReservation
         of
           SOME _ => true
         | NONE => false
-      end
 
     fun startActiveChoice task =
       case task of
         Continuation (t, _) =>
-          let val myId = myWorkerId ()
-          in arrayUpdate (workerChoice, myId, SOME t)
-          end
+           arrayUpdate (workerChoice, myWorkerId (), SOME t)
       | _ =>
           die (fn _ =>
             "scheduler bug: startActiveChoice: expected Continuation(...)")
 
     fun finishActiveChoice () =
-      let val myId = myWorkerId ()
-      in arrayUpdate (workerChoice, myId, NONE)
-      end
+       arrayUpdate (workerChoice, myWorkerId (), NONE)
 
   end
   (* ========================================================================
