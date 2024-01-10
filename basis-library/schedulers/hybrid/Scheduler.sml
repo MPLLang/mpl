@@ -569,22 +569,22 @@ struct
     Perhaps we should change the option type to a list of workerIds, enabling
     support for multiple workers holding the same device.
     *)
-    val deviceReservation: (device_identifier * int option) array ref =
-      ref (Array.map (!deviceIds) (fn deviceId => (deviceId, NONE)))
+    val deviceReservation: (device_identifier * int option) array =
+      (Array.tabulate (Array.length deviceIds, fn i =>
+        (Array.sub (deviceIds, i), NONE)))
 
-    val workerChoice: Thread.t option array ref = ref
-      (Array.tabulate (P, fn _ => NONE))
+    val workerChoice: Thread.t option array = (Array.tabulate (P, fn _ => NONE))
   in
 
     fun tryAcquireDevice () =
       case
         Array.findi (fn (_, (_, workerId)) => workerId = NONE)
-          (!deviceReservation)
+          deviceReservation
       of
-        SOME (index, (deviceId, _)) =>
+        SOME (i, (deviceId, _)) =>
           let
             val (deviceId, prevWorkerId) =
-              MLton.Parallel.arrayCompareAndSwap (!deviceReservation, index)
+              MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                 ((deviceId, NONE), (deviceId, SOME (myWorkerId ())))
           in
             if prevWorkerId = NONE then SOME deviceId else tryAcquireDevice ()
@@ -596,24 +596,31 @@ struct
         val myId = myWorkerId ()
       in
         case
-          Array.find (fn (_, workerId) => workerId = SOME myId)
-            ((!deviceReservation))
+          Array.findi (fn (_, (_, workerId)) => workerId = SOME myId)
+            deviceReservation
         of
-          SOME (index, (deviceId, _)) =>
+          SOME (i, (deviceId, _)) =>
             let
               val (deviceId, prevWorkerId) =
-                MLton.Parallel.arrayCompareAndSwap (!deviceReservation, i)
+                MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                   ((deviceId, SOME myId), (deviceId, NONE))
             in
-              Assert.assert
-                ("Scheduler.releaseDevice", fn () => prevWorkerId = SOME myId)
-                () true
+              if prevWorkerId = SOME myId then
+                ()
+              else
+                die (fn _ =>
+                  "scheduler bug: trying to release not acquired device")
             end
-        | NONE => raise "cannot release device that is not acquired"
+        | NONE =>
+            die (fn _ => "scheduler bug: trying to release not acquired device")
       end
 
     fun isActiveChoice t =
-      Array.exists (fn t' => t' = SOME t) (!workerChoice)
+      Array.exists (fn t' => 
+      case t' of 
+      SOME t' => MLton.eq (t, t')
+      | NONE => false
+      ) workerChoice
 
     fun shouldSearchForChoices () =
       let
@@ -621,7 +628,7 @@ struct
       in
         case
           Array.find (fn (_, workerId) => workerId = SOME myId)
-            ((!deviceReservation))
+            ((deviceReservation))
         of
           SOME _ => true
         | NONE => false
@@ -631,7 +638,7 @@ struct
       case task of
         Continuation (t, _) =>
           let val myId = myWorkerId ()
-          in arrayUpdate (!workerChoice, myId, SOME t)
+          in arrayUpdate (workerChoice, myId, SOME t)
           end
       | _ =>
           die (fn _ =>
@@ -639,7 +646,7 @@ struct
 
     fun finishActiveChoice () =
       let val myId = myWorkerId ()
-      in arrayUpdate (!workerChoice, myId, NONE)
+      in arrayUpdate (workerChoice, myId, NONE)
       end
 
   end
@@ -931,8 +938,8 @@ struct
               case deviceId of
                 SOME deviceId => deviceId
               | NONE =>
-                  raise
-                    "scheduler bug: the worker executing an active choice is not holding a gpu device"
+                  die (fn _ =>
+                    "scheduler bug: the worker executing an active choice is not holding a gpu device")
 
             val result = doGpuTask gpuTask deviceId
 
@@ -1243,11 +1250,11 @@ struct
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
             SOME t => (startActiveChoice t; t)
           | NONE =>
-              (if existsPendingChoice () andalso Option.isSome (tryAcquireDevice ()) then
-                  findWork ()
-                else
-                  workerFindWork ()
-              )
+              (if
+                 existsPendingChoice ()
+                 andalso Option.isSome (tryAcquireDevice ())
+               then findWork ()
+               else workerFindWork ())
 
 
       (* ------------------------------------------------------------------- *)
