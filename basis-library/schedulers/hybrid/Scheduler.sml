@@ -577,14 +577,17 @@ struct
   in
 
     fun tryAcquireDevice () =
-      case Array.findi (fn workerId => workerId = notReserved) deviceReservation of
+      case
+        Array.findi (fn (_, workerId) => workerId = notReserved)
+          deviceReservation
+      of
         SOME (i, workerId) =>
           let
             val prevWorkerId =
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                 (notReserved, myWorkerId ())
           in
-            if prevWorkerId = notReserved then SOME Array.sub (deviceIds, i)
+            if prevWorkerId = notReserved then SOME (Array.sub (deviceIds, i))
             else tryAcquireDevice ()
           end
       | NONE => NONE
@@ -593,17 +596,14 @@ struct
       let
         val myId = myWorkerId ()
       in
-        case
-          Array.findi (fn (_, workerId) => workerId = SOME myId)
-            deviceReservation
-        of
+        case Array.findi (fn (_, workerId) => workerId = myId) deviceReservation of
           SOME (i, _) =>
             let
               val prevWorkerId =
                 MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                   (myId, notReserved)
             in
-              if prevWorkerId = SOME myId then
+              if prevWorkerId = myId then
                 ()
               else
                 die (fn _ =>
@@ -632,6 +632,14 @@ struct
 
     fun finishActiveChoice () =
       arrayUpdate (workerChoice, myWorkerId (), NONE)
+
+    fun currentDeviceId () =
+      case
+        Array.findi (fn (_, workerId) => workerId = myWorkerId ())
+          deviceReservation
+      of
+        SOME (i, _) => SOME (Array.sub (deviceIds, i))
+      | NONE => NONE
 
   end
   (* ========================================================================
@@ -905,7 +913,7 @@ struct
 
     fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
       let
-        val deviceId = tryAcquireDevice ()
+        val _ = tryAcquireDevice ()
         val _ = announceCurrentThreadPendingChoice ()
       in
         (* When we resume here, the gpu manager has already had a chance to
@@ -919,7 +927,7 @@ struct
             (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
 
             val deviceId =
-              case deviceId of
+              case currentDeviceId () of
                 SOME deviceId => deviceId
               | NONE =>
                   die (fn _ =>
