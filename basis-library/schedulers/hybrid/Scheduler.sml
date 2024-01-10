@@ -882,8 +882,7 @@ struct
     fun doGpuTask g deviceId =
       let
         val t0 = timeNowMicrosecondsSinceProgramStart ()
-        (* TODO : val result = g deviceId *)
-        val result = g ()
+        val result = g deviceId
         val t1 = timeNowMicrosecondsSinceProgramStart ()
       in
         (* print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n"); *)
