@@ -561,7 +561,7 @@ struct
     type device_identifier = string
 
     (* FIXME: read it from somewhere else *)
-    val deviceIds: device_identifier array = Array.fromList ["gpu0"]
+    val deviceIds: device_identifier array = Array.fromList ["#0", "#1"]
 
     (* 
     deviceReservation[i] = workerId if worker workerId has reserved device i
