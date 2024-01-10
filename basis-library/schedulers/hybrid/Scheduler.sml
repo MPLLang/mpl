@@ -564,30 +564,28 @@ struct
     val deviceIds: device_identifier array = Array.fromList ["gpu0"]
 
     (* 
-    The current implementation records a pair of (deviceId, Some workerId) if a
-    worker is holding the GPU device. 
-    Perhaps we should change the option type to a list of workerIds, enabling
-    support for multiple workers holding the same device.
+    deviceReservation[i] = workerId if worker workerId has reserved device i
+    deviceReservation[i] = -1 if device i is not reserved
     *)
-    val deviceReservation: (device_identifier * int option) array =
-      (Array.tabulate (Array.length deviceIds, fn i =>
-        (Array.sub (deviceIds, i), NONE)))
+
+    val notReserved = ~1
+
+    val deviceReservation: int array =
+      (Array.tabulate (Array.length deviceIds, fn i => notReserved))
 
     val workerChoice: Thread.t option array = (Array.tabulate (P, fn _ => NONE))
   in
 
     fun tryAcquireDevice () =
-      case
-        Array.findi (fn (_, (_, workerId)) => workerId = NONE)
-          deviceReservation
-      of
-        SOME (i, (deviceId, _)) =>
+      case Array.findi (fn workerId => workerId = notReserved) deviceReservation of
+        SOME (i, workerId) =>
           let
-            val (deviceId, prevWorkerId) =
+            val prevWorkerId =
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-                ((deviceId, NONE), (deviceId, SOME (myWorkerId ())))
+                (notReserved, myWorkerId ())
           in
-            if prevWorkerId = NONE then SOME deviceId else tryAcquireDevice ()
+            if prevWorkerId = notReserved then SOME Array.sub (deviceIds, i)
+            else tryAcquireDevice ()
           end
       | NONE => NONE
 
@@ -596,14 +594,14 @@ struct
         val myId = myWorkerId ()
       in
         case
-          Array.findi (fn (_, (_, workerId)) => workerId = SOME myId)
+          Array.findi (fn (_, workerId) => workerId = SOME myId)
             deviceReservation
         of
-          SOME (i, (deviceId, _)) =>
+          SOME (i, _) =>
             let
-              val (deviceId, prevWorkerId) =
+              val prevWorkerId =
                 MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-                  ((deviceId, SOME myId), (deviceId, NONE))
+                  (myId, notReserved)
             in
               if prevWorkerId = SOME myId then
                 ()
@@ -616,30 +614,24 @@ struct
       end
 
     fun isActiveChoice t =
-      Array.exists (fn t' => 
-      case t' of 
-      SOME t' => MLton.eq (t, t')
-      | NONE => false
-      ) workerChoice
+      Array.exists
+        (fn t' =>
+           case t' of
+             SOME t' => MLton.eq (t, t')
+           | NONE => false) workerChoice
 
     fun shouldSearchForChoices () =
-        case
-          Array.find (fn (_, workerId) => workerId = SOME (myWorkerId ()))
-            deviceReservation
-        of
-          SOME _ => true
-        | NONE => false
+      Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
 
     fun startActiveChoice task =
       case task of
-        Continuation (t, _) =>
-           arrayUpdate (workerChoice, myWorkerId (), SOME t)
+        Continuation (t, _) => arrayUpdate (workerChoice, myWorkerId (), SOME t)
       | _ =>
           die (fn _ =>
             "scheduler bug: startActiveChoice: expected Continuation(...)")
 
     fun finishActiveChoice () =
-       arrayUpdate (workerChoice, myWorkerId (), NONE)
+      arrayUpdate (workerChoice, myWorkerId (), NONE)
 
   end
   (* ========================================================================
