@@ -3,7 +3,7 @@ sig
   val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
   val parfor: int -> int * int -> (int -> unit) -> unit
 
-  val choice: {prefer_cpu: unit -> 'a, prefer_gpu: unit -> 'a} -> 'a
+  val choice: {prefer_cpu: unit -> 'a, prefer_gpu: string -> 'a} -> 'a
 
   val alloc: int -> 'a array
 
