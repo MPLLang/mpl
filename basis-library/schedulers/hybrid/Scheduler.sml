@@ -586,19 +586,39 @@ struct
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                 (notReserved, myWorkerId ())
           in
-            if prevWorkerId = notReserved then
-              let
-                val _ =
-                  dbgmsg (fn () => ("worker " ^ Int.toString (myWorkerId ())
-                  ^ " acquired device " ^ Int.toString i))
-              in
-                SOME (Array.sub (deviceIds, i))
-              end
-            else
-              tryAcquireDevice ()
+            if prevWorkerId = notReserved then SOME i else tryAcquireDevice ()
           end
       | NONE => NONE
 
+
+    (* 
+    Should be called by a choice thread after using a GPU device
+    the current worker steals the GPU device from the choice thread
+    (to be precise, from the worker that has initially acquired the device),
+    becomes the new owner of the device, and searches for new pending choices
+     *)
+    fun stealDevice deviceId =
+      let
+        val myId = myWorkerId ()
+        val deviceIdx =
+          case Array.findi (fn (_, id) => id = deviceId) deviceIds of
+            SOME (i, _) => i
+          | NONE => die (fn _ => "scheduler bug: device not found")
+
+        val stealFrom = Array.sub (deviceReservation, deviceIdx)
+        val prevWorkerId =
+          MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
+            (stealFrom, myId)
+      in
+        if stealFrom = prevWorkerId then ()
+        else die (fn _ => "device steal should never fail")
+      end
+
+
+    (*
+    Should be called by a scheduler thread whose worker has acquired a GPU device.
+    If there is no pending choice, the device is released
+    *)
     fun releaseDevice () =
       let
         val myId = myWorkerId ()
@@ -614,19 +634,10 @@ struct
                 ()
               else
                 die (fn _ =>
-                  "scheduler bug: trying to release not acquired device")
+                  "scheduler bug: trying to release device acquired by other worker")
             end
         | NONE =>
-            let
-              val _ =
-                dbgmsg (fn () => ("current device reservation 0: "
-                ^ Int.toString (Array.sub (deviceReservation, 0)) ^ ", 1: "
-                ^ Int.toString (Array.sub (deviceReservation, 1))))
-
-            in
-              die (fn _ =>
-                "scheduler bug: trying to release not acquired device")
-            end
+            die (fn _ => "scheduler bug: trying to release not acquired device")
       end
 
     fun shouldSearchForChoices () =
@@ -922,7 +933,7 @@ struct
           NONE => cpuTask ()
         | SOME deviceId =>
             let
-              val _ = dbgmsg (fn _ => "choice: gpu after send") 
+              (* val _ = dbgmsg (fn _ => "choice: gpu after send") *)
 
               val result = doGpuTask gpuTask deviceId
 
@@ -932,9 +943,7 @@ struct
               val thread = Thread.current ()
               val depth = HH.getDepth thread
               val selfTask = Continuation (thread, depth)
-
-              val _ = dbgmsg (fn _ => "before releasing device") 
-              val _ = releaseDevice ()
+              val _ = stealDevice deviceId
               val sendSucceeded =
                 (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
                 pushSide selfTask
@@ -1235,11 +1244,13 @@ struct
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
             SOME t => t
           | NONE =>
-              (if
-                 existsPendingChoice ()
-                 andalso Option.isSome (tryAcquireDevice ())
-               then findWork ()
-               else workerFindWork ())
+              ( releaseDevice ()
+              ; if
+                  existsPendingChoice ()
+                  andalso Option.isSome (tryAcquireDevice ())
+                then findWork ()
+                else workerFindWork ()
+              )
 
 
       (* ------------------------------------------------------------------- *)
