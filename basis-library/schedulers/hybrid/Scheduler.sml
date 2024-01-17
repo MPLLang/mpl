@@ -150,7 +150,7 @@ struct
    * DEBUGGING
    *)
 
-  val doDebugMsg = false
+  val doDebugMsg = true
 
   val printLock: Word32.word ref = ref 0w0
   val _ = MLton.Parallel.Deprecated.lockInit printLock
@@ -573,12 +573,6 @@ struct
     val deviceReservation: int array =
       (Array.tabulate (Array.length deviceIds, fn i => notReserved))
 
-    val workerChoiceLock = SpinLock.new ()
-    val workerChoice: Thread.t option array = (Array.tabulate (P, fn _ => NONE))
-    fun updateWorkerChoice (workerId, t) =
-      (SpinLock.lock workerChoiceLock;
-       Array.update (workerChoice, workerId, t);
-       SpinLock.unlock workerChoiceLock)
   in
 
     fun tryAcquireDevice () =
@@ -592,8 +586,16 @@ struct
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                 (notReserved, myWorkerId ())
           in
-            if prevWorkerId = notReserved then SOME (Array.sub (deviceIds, i))
-            else tryAcquireDevice ()
+            if prevWorkerId = notReserved then
+              let
+                val _ =
+                  dbgmsg (fn () => ("worker " ^ Int.toString (myWorkerId ())
+                  ^ " acquired device " ^ Int.toString i))
+              in
+                SOME (Array.sub (deviceIds, i))
+              end
+            else
+              tryAcquireDevice ()
           end
       | NONE => NONE
 
@@ -615,28 +617,20 @@ struct
                   "scheduler bug: trying to release not acquired device")
             end
         | NONE =>
-            die (fn _ => "scheduler bug: trying to release not acquired device")
-      end
+            let
+              val _ =
+                dbgmsg (fn () => ("current device reservation 0: "
+                ^ Int.toString (Array.sub (deviceReservation, 0)) ^ ", 1: "
+                ^ Int.toString (Array.sub (deviceReservation, 1))))
 
-    fun isActiveChoice t =
-      Array.exists
-        (fn t' =>
-           case t' of
-             SOME t' => MLton.eq (t, t')
-           | NONE => false) workerChoice
+            in
+              die (fn _ =>
+                "scheduler bug: trying to release not acquired device")
+            end
+      end
 
     fun shouldSearchForChoices () =
       Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
-
-    fun startActiveChoice task =
-      case task of
-        Continuation (t, _) => updateWorkerChoice (myWorkerId (), SOME t)
-      | _ =>
-          die (fn _ =>
-            "scheduler bug: startActiveChoice: expected Continuation(...)")
-
-    fun finishActiveChoice () =
-      updateWorkerChoice (myWorkerId (), NONE)
 
     fun currentDeviceId () =
       case
@@ -924,41 +918,36 @@ struct
          * to consider this choice point. Resuming on a cpu means that the
          * manager decided to return the task to the cpus.
          *)
-        if not (isActiveChoice (Thread.current ())) then
-          cpuTask ()
-        else
-          let
-            (* val _ = dbgmsg'' (fn _ => "choice: gpu after send") *)
+        case currentDeviceId () of
+          NONE => cpuTask ()
+        | SOME deviceId =>
+            let
+              val _ = dbgmsg (fn _ => "choice: gpu after send") 
 
-            val deviceId =
-              case currentDeviceId () of
-                SOME deviceId => deviceId
-              | NONE =>
-                  die (fn _ =>
-                    "scheduler bug: the worker executing an active choice is not holding a gpu device")
+              val result = doGpuTask gpuTask deviceId
 
-            val result = doGpuTask gpuTask deviceId
+              (* after finishing gpu task, we expect to run CPU code again, so try to
+               * send this task back to a CPU thread.
+               *)
+              val thread = Thread.current ()
+              val depth = HH.getDepth thread
+              val selfTask = Continuation (thread, depth)
 
-            (* after finishing gpu task, we expect to run CPU code again, so try to
-             * send this task back to a CPU thread.
-             *)
-            val thread = Thread.current ()
-            val depth = HH.getDepth thread
-            val selfTask = Continuation (thread, depth)
-            val _ = finishActiveChoice ()
-            val sendSucceeded =
-              (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
-              pushSide selfTask
-          in
-            if sendSucceeded then
-              ( (*dbgmsg'' (fn _ => "choice: send back succeeded");*)
-                returnToSched ())
-            else
-              die (fn _ => "scheduler: choice: send back failed\n");
+              val _ = dbgmsg (fn _ => "before releasing device") 
+              val _ = releaseDevice ()
+              val sendSucceeded =
+                (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
+                pushSide selfTask
+            in
+              if sendSucceeded then
+                ( (*dbgmsg'' (fn _ => "choice: send back succeeded");*)
+                  returnToSched ())
+              else
+                die (fn _ => "scheduler: choice: send back failed\n");
 
-            (* dbgmsg'' (fn _ => "choice: after send back"); *)
-            result
-          end
+              (* dbgmsg'' (fn _ => "choice: after send back"); *)
+              result
+            end
       end
   end
 
@@ -1244,7 +1233,7 @@ struct
             result
           end *)
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
-            SOME t => (startActiveChoice t; t)
+            SOME t => t
           | NONE =>
               (if
                  existsPendingChoice ()
