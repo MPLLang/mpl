@@ -573,7 +573,12 @@ struct
     val deviceReservation: int array =
       (Array.tabulate (Array.length deviceIds, fn i => notReserved))
 
+    val workerChoiceLock = SpinLock.new ()
     val workerChoice: Thread.t option array = (Array.tabulate (P, fn _ => NONE))
+    fun updateWorkerChoice (workerId, t) =
+      (SpinLock.lock workerChoiceLock;
+       Array.update (workerChoice, workerId, t);
+       SpinLock.unlock workerChoiceLock)
   in
 
     fun tryAcquireDevice () =
@@ -625,13 +630,13 @@ struct
 
     fun startActiveChoice task =
       case task of
-        Continuation (t, _) => arrayUpdate (workerChoice, myWorkerId (), SOME t)
+        Continuation (t, _) => updateWorkerChoice (myWorkerId (), SOME t)
       | _ =>
           die (fn _ =>
             "scheduler bug: startActiveChoice: expected Continuation(...)")
 
     fun finishActiveChoice () =
-      arrayUpdate (workerChoice, myWorkerId (), NONE)
+      updateWorkerChoice (myWorkerId (), NONE)
 
     fun currentDeviceId () =
       case
