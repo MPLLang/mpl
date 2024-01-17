@@ -592,10 +592,10 @@ struct
 
 
     (* 
-    Should be called by a choice thread after using a GPU device
-    the current worker steals the GPU device from the choice thread
-    (to be precise, from the worker that has initially acquired the device),
-    becomes the new owner of the device, and searches for new pending choices
+    Should be called by a choice thread after using a GPU device.
+    The current worker steals the GPU device from the choice thread (to be
+    precise, from the worker that has initially acquired the device), becomes
+    the new owner of the device, and searches for new pending choices
      *)
     fun stealDevice deviceId =
       let
@@ -617,7 +617,12 @@ struct
 
     (*
     Should be called by a scheduler thread whose worker has acquired a GPU device.
-    If there is no pending choice, the device is released
+    If there is no pending choice, the worker releases the device by calling
+    releaseDevice.
+    Note that when this function is called, the worker may no longer reserved
+    the device.  This could happen if another thread has completed the choice
+    initially executed by this worker and stole the device by calling
+    `stealDevice`.
     *)
     fun releaseDevice () =
       let
@@ -626,18 +631,13 @@ struct
         case Array.findi (fn (_, workerId) => workerId = myId) deviceReservation of
           SOME (i, _) =>
             let
-              val prevWorkerId =
+              val _ =
                 MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
                   (myId, notReserved)
             in
-              if prevWorkerId = myId then
-                ()
-              else
-                die (fn _ =>
-                  "scheduler bug: trying to release device acquired by other worker")
+              ()
             end
-        | NONE =>
-            die (fn _ => "scheduler bug: trying to release not acquired device")
+        | NONE => ()
       end
 
     fun shouldSearchForChoices () =
