@@ -596,8 +596,11 @@ struct
     The current worker steals the GPU device from the choice thread (to be
     precise, from the worker that has initially acquired the device), becomes
     the new owner of the device, and searches for new pending choices
+
+    Note that stealing may fail if the worker that initially acquired the
+    device has already released the device.
      *)
-    fun stealDevice device =
+    fun tryStealDevice device =
       let
         val myId = myWorkerId ()
         val deviceIdx =
@@ -606,25 +609,21 @@ struct
           | NONE => die (fn _ => "scheduler bug: device not found")
 
         val stealFrom = Array.sub (deviceReservation, deviceIdx)
-        val prevWorkerId =
-          MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
-            (stealFrom, myId)
       in
-        if stealFrom = prevWorkerId then ()
-        else die (fn _ => "device steal should never fail")
+        MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
+          (stealFrom, myId)
       end
 
 
     (*
     Should be called by a scheduler thread whose worker has acquired a GPU device.
     If there is no pending choice, the worker releases the device by calling
-    releaseDevice.
-    Note that when this function is called, the worker may no longer reserved
-    the device.  This could happen if another thread has completed the choice
-    initially executed by this worker and stole the device by calling
-    `stealDevice`.
+    tryReleaseDevice.
+
+    Note that releasing may fail if the worker that finished the GPU task
+    has already stolen the device.
     *)
-    fun releaseDevice () =
+    fun tryReleaseDevice () =
       let
         val myId = myWorkerId ()
       in
@@ -944,7 +943,7 @@ struct
               val thread = Thread.current ()
               val depth = HH.getDepth thread
               val selfTask = Continuation (thread, depth)
-              val _ = stealDevice device
+              val _ = tryStealDevice device
               val sendSucceeded =
                 (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
                 pushSide selfTask
@@ -1245,7 +1244,7 @@ struct
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
             SOME t => t
           | NONE =>
-              ( releaseDevice ()
+              ( tryReleaseDevice ()
               ; if
                   existsPendingChoice ()
                   andalso Option.isSome (tryAcquireDevice ())
