@@ -561,7 +561,7 @@ struct
     type device_identifier = string
 
     (* FIXME: read it from somewhere else *)
-    val deviceIds: device_identifier array = Array.fromList ["#0", "#1"]
+    val devices: device_identifier array = Array.fromList ["#0", "#1"]
 
     (* 
     deviceReservation[i] = workerId if worker workerId has reserved device i
@@ -571,7 +571,7 @@ struct
     val notReserved = ~1
 
     val deviceReservation: int array =
-      (Array.tabulate (Array.length deviceIds, fn i => notReserved))
+      (Array.tabulate (Array.length devices, fn i => notReserved))
 
   in
 
@@ -597,11 +597,11 @@ struct
     precise, from the worker that has initially acquired the device), becomes
     the new owner of the device, and searches for new pending choices
      *)
-    fun stealDevice deviceId =
+    fun stealDevice device =
       let
         val myId = myWorkerId ()
         val deviceIdx =
-          case Array.findi (fn (_, id) => id = deviceId) deviceIds of
+          case Array.findi (fn (_, d) => d = device) devices of
             SOME (i, _) => i
           | NONE => die (fn _ => "scheduler bug: device not found")
 
@@ -643,12 +643,13 @@ struct
     fun shouldSearchForChoices () =
       Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
 
-    fun currentDeviceId () =
+    (* returns the GPU device that the current worker is holding *)
+    fun currentWorkerDevice () =
       case
         Array.findi (fn (_, workerId) => workerId = myWorkerId ())
           deviceReservation
       of
-        SOME (i, _) => SOME (Array.sub (deviceIds, i))
+        SOME (i, _) => SOME (Array.sub  (devices, i))
       | NONE => NONE
 
   end
@@ -889,10 +890,10 @@ struct
     *)
 
 
-    fun doGpuTask g deviceId =
+    fun doGpuTask g device =
       let
         val t0 = timeNowMicrosecondsSinceProgramStart ()
-        val result = g deviceId
+        val result = g device
         val t1 = timeNowMicrosecondsSinceProgramStart ()
       in
         (* print ("gpu manager exec work elapsed: " ^ Int64.toString (t1-t0) ^ "us\n"); *)
@@ -929,13 +930,13 @@ struct
          * to consider this choice point. Resuming on a cpu means that the
          * manager decided to return the task to the cpus.
          *)
-        case currentDeviceId () of
+        case currentWorkerDevice () of
           NONE => cpuTask ()
-        | SOME deviceId =>
+        | SOME device =>
             let
               (* val _ = dbgmsg (fn _ => "choice: gpu after send") *)
 
-              val result = doGpuTask gpuTask deviceId
+              val result = doGpuTask gpuTask device
 
               (* after finishing gpu task, we expect to run CPU code again, so try to
                * send this task back to a CPU thread.
@@ -943,7 +944,7 @@ struct
               val thread = Thread.current ()
               val depth = HH.getDepth thread
               val selfTask = Continuation (thread, depth)
-              val _ = stealDevice deviceId
+              val _ = stealDevice device
               val sendSucceeded =
                 (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
                 pushSide selfTask
