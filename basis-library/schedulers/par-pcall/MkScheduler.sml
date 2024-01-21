@@ -763,6 +763,7 @@ struct
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
+        (doClearSuspects: Thread.t * int -> unit)
         (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, ...} : 'a joinpoint)
         (g: unit -> 'a)
         : 'a Result.t
@@ -794,7 +795,7 @@ struct
             ; Thread.atomicEnd ()
 
             (* TODO: PARALLEL CLEAR SUSPECTS??? *)
-            ; HH.clearSuspectsAtDepth (thread, newDepth)
+            ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
             ; let
@@ -839,7 +840,7 @@ struct
                           )
                   in
                     (* TODO: PARALLEL CLEAR SUSPECTS??? *)
-                    HH.clearSuspectsAtDepth (thread, newDepth);
+                    doClearSuspects (thread, newDepth);
                     if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     result
                   end
@@ -938,13 +939,160 @@ struct
       , MLton.Signal.Handler.inspectInterrupted
           (doIfArgIsNotSchedulerThread (heartbeatHandler false))
       )
+
+
+    (* =======================================================================
+     *)
+
+    
+    fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
+      let
+        fun f' () =
+          ( if currentSpareHeartbeats () < spawnCost then
+              ()
+            else
+              doPromoteNow ()
+          ; f ()
+          )
+        val f = f'
+
+        val (inject, project) = Universal.embed ()
+
+        fun leftSide () =
+          Result.result f
+
+        fun leftSideSequentialCont fres =
+          (Result.extractResult fres; g ())
+
+        fun leftSideParCont fres =
+          let
+            val _ = dbgmsg'' (fn _ => "simpleParFork: hello from left-side par continuation")
+            val _ = Thread.atomicBegin ()
+            val _ = assertAtomic "simpleParFork: leftSideParCont" 1
+            val jp = primGetData ()
+            val gres =
+              syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o g)
+          in
+            (Result.extractResult fres;
+             case project (Result.extractResult gres) of
+                SOME gres => gres
+              | _ => die (fn _ => "scheduler bug: simpleParFork: leftSideParCont: failed project right-side result"))
+          end
+
+        fun rightSide () =
+          let
+            val _ = assertAtomic "simpleParFork: pcallFork rightside begin" 1
+            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
+              primGetData ()
+            val () = DE.decheckSetTid tidRight
+
+            val thread = Thread.current ()
+            val depth = HH.getDepth thread
+            val _ = dbgmsg'' (fn _ => "simpleParFork: rightside begin at depth " ^ Int.toString depth)
+
+            (* val _ =
+              dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
+
+            (* val _ = addSpareHeartbeats 1 *)
+            (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
+            val _ = HH.forceLeftHeap(myWorkerId(), thread)
+            val _ = addSpareHeartbeats spareHeartbeatsGiven
+            val _ = assertAtomic "simpleParFork: pcallfork rightSide before execute" 1
+            val _ = Thread.atomicEnd()
+
+            val gr = Result.result (inject o g)
+
+            val _ = Thread.atomicBegin ()
+            val depth' = HH.getDepth (Thread.current ())
+            val _ =
+              if depth = depth' then ()
+              else die (fn _ => "simpleParFork: scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
+
+            val _ = dbgmsg'' (fn _ => "simpleParFork: rightside done! at depth " ^ Int.toString depth')
+            val _ = assertAtomic "simpleParFork: pcallFork rightside begin synchronize" 1
+          in
+            rightSideThread := SOME thread;
+            rightSideResult := SOME gr;
+
+            if decrementHitsZero incounter then
+              ( ()
+              ; dbgmsg'' (fn _ => "simpleParFork: rightside synchronize: become left")
+              ; setQueueDepth (myWorkerId ()) depth
+                (** Atomic 1 *)
+              ; Thread.atomicBegin ()
+
+                (** Atomic 2 *)
+
+                (** (When sibling is resumed, it needs to be atomic 1.
+                  * Switching threads is implicit atomicEnd(), so we need
+                  * to be at atomic2
+                  *)
+              ; assertAtomic "simpleParFork: pcallFork rightside switch-to-left" 2
+              ; threadSwitchEndAtomic leftSideThread
+              )
+            else
+              ( dbgmsg'' (fn _ => "simpleParFork: rightside synchronize: back to sched")
+              ; assertAtomic "simpleParFork: pcallFork rightside before returnToSched" 1
+              ; returnToSchedEndAtomic ()
+              )
+          end
+      in
+        pcall
+          ( leftSide
+          , ()
+          , leftSideSequentialCont
+          , leftSideParCont
+          , rightSide
+          , ()
+          )
+      end
+
+
+    and maybeParClearSuspectsAtDepth (t, d) =
+      if HH.numSuspectsAtDepth (t, d) <= 10000 then
+        HH.clearSuspectsAtDepth (t, d)
+      else
+        let
+          val cs = HH.takeClearSetAtDepth (t, d)
+          val count = HH.numChunksInClearSet cs
+          (* val _ = print ("maybeParClearSuspectsAtDepth: " ^ Int.toString count ^ " chunks\n") *)
+          val grainSize = 20
+          val numGrains = 1 + (count-1) div grainSize
+          val results = ArrayExtra.alloc numGrains
+          fun start i = i*grainSize
+          fun stop i = Int.min (grainSize + start i, count)
+
+          fun processLoop i j =
+            if j-i = 1 then
+              Array.update (results, i, HH.processClearSetGrain (cs, start i, stop i))
+            else
+              let
+                val mid = i + (j-i) div 2
+              in
+                simpleParFork
+                  (fn _ => processLoop i mid,
+                   fn _ => processLoop mid j)
+              end
+
+          fun commitLoop i =
+            if i >= numGrains then () else
+            ( HH.commitFinishedClearSetGrain (t, Array.sub (results, i))
+            ; commitLoop (i+1)
+            )
+        in
+          processLoop 0 numGrains;
+          commitLoop 0;
+          HH.deleteClearSet cs;
+          maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
+        end
+
   
     (* ===================================================================
      * fork definition
      *)
 
 
-    fun pcallFork (f: unit -> 'a, g: unit -> 'b) =
+    fun pcallFork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
       let
         val (inject, project) = Universal.embed ()
 
@@ -960,7 +1108,8 @@ struct
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "leftSideParCont" 1
             val jp = primGetData ()
-            val gres = syncEndAtomic jp (inject o g)
+            val gres =
+              syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o g)
           in
             (Result.extractResult fres,
              case project (Result.extractResult gres) of
@@ -1037,36 +1186,7 @@ struct
       end
 
 
-    (* fun eagerFork1 (f, g) =
-      case maybeSpawnFunc g of
-        SOME jp =>
-          let
-            val fres = Result.result f
-            val _ = Thread.atomicBegin ()
-            val gres = syncEndAtomic jp g
-          in
-            (Result.extractResult fres, Result.extractResult gres)
-          end
-
-      | NONE => (f (), g ()) *)
- 
-
-    fun eagerFork (f, g) =
-      let
-        fun f' () = ( doPromoteNow (); f () )
-      in
-        pcallFork (f', g)
-      end
-
-    
-    fun eagerHeuristicFork (f, g) =
-      if HH.getDepth (Thread.current ()) <= maxEagerForkDepth then
-        eagerFork (f, g)
-      else
-        pcallFork (f, g)
-
-    
-    fun greedyWorkAmortizedFork (f, g) =
+    fun greedyWorkAmortizedFork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
       let
         fun f' () =
           ( if currentSpareHeartbeats () < spawnCost then
