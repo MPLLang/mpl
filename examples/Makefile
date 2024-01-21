@@ -1,5 +1,5 @@
 MPL=../build/bin/mpl
-FLAGS=-default-type int64 -default-type word64 -mlb-path-var 'PICK_FJ greedy-work-amortized'
+FLAGS=-default-type int64 -default-type word64
 DBG_FLAGS=-debug true -debug-runtime true -keep g
 TRACE_FLAGS=-trace true -trace-runtime true
 NODETECT_FLAGS=-detect-entanglement false

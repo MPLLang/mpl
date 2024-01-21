@@ -1,6 +1,6 @@
 (* Author: Sam Westrick (swestric@cs.cmu.edu) *)
 
-functor MkScheduler(val forkStrategy: ForkStrategy.t) =
+functor MkScheduler() =
 struct
 
   val _ = print ("J DEBUGGING\n")
@@ -597,20 +597,13 @@ struct
         val _ = tryConsumeSpareHeartbeats spawnCost
         val currentSpare = currentSpareHeartbeats ()
         val halfSpare =
-          case forkStrategy of
-            ForkStrategy.GreedyWorkAmortized =>
-              let
-                val halfSpare = splitSpares currentSpare
-              in
-                ( tryConsumeSpareHeartbeats halfSpare
-                ; halfSpare
-                )
-              end
-
-          | _ =>
-              ( tryConsumeSpareHeartbeats currentSpare
-              ; 0w0
-              )
+          let
+            val halfSpare = splitSpares currentSpare
+          in
+            ( tryConsumeSpareHeartbeats halfSpare
+            ; halfSpare
+            )
+          end
 
 
         val jp =
@@ -888,21 +881,10 @@ struct
             i
 
         val numSpawned =
-          case forkStrategy of
-            ForkStrategy.GreedyWorkAmortized =>
-              if generateWealth andalso hadEnoughToSpawnBefore then
-                (incrementNumSkippedHeartbeats (); 0)
-              else
-                loop 0
-          
-          | ForkStrategy.NaivePCall =>
-              loop 0
-
-          | ForkStrategy.EagerHeuristic =>
-              if not generateWealth then
-                ( addSpareHeartbeats (Word32.toInt spawnCost); loop 0 )
-              else
-                loop 0
+          if generateWealth andalso hadEnoughToSpawnBefore then
+            (incrementNumSkippedHeartbeats (); 0)
+          else
+            loop 0
       in
         if generateWealth then incrementNumHeartbeats () else ();
 

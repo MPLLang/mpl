@@ -20,8 +20,6 @@ local
     structure SMLNJRandom = Random
   end
 
-  ForkStrategy.sml
-
   ../shh/CumulativePerProcTimer.sml
   ../shh/FORK_JOIN.sig
   ../shh/SimpleRandom.sml
@@ -36,9 +34,9 @@ local
     MkScheduler.sml
   end
 
-  Scheduler.$(PICK_FJ).sml
+  Scheduler.sml
   MkForkJoin.sml
-  ForkJoin.$(PICK_FJ).sml
+  ForkJoin.sml
 in
   structure ForkJoin
 end
