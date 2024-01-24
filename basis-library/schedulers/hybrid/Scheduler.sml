@@ -560,8 +560,9 @@ struct
   local
     type device_identifier = string
 
-    (* FIXME: read it from somewhere else *)
-    val devices: device_identifier array = Array.fromList ["#0", "#1"]
+    (* Use the command line argument to set GPU devices to use. For example,  -devices #0,#1 *)
+    val devices = Array.fromList (String.fields (fn c => c = #",")
+      (parseString "devices" ""))
 
     (* 
     deviceReservation[i] = workerId if worker workerId has reserved device i
@@ -596,7 +597,7 @@ struct
     The current worker steals the GPU device from the choice thread (to be
     precise, from the worker that has initially acquired the device), becomes
     the new owner of the device, and searches for new pending choices
-
+    
     Note that stealing may fail if the worker that initially acquired the
     device has already released the device.
      *)
@@ -619,7 +620,7 @@ struct
     Should be called by a scheduler thread whose worker has acquired a GPU device.
     If there is no pending choice, the worker releases the device by calling
     tryReleaseDevice.
-
+    
     Note that releasing may fail if the worker that finished the GPU task
     has already stolen the device.
     *)
@@ -648,7 +649,7 @@ struct
         Array.findi (fn (_, workerId) => workerId = myWorkerId ())
           deviceReservation
       of
-        SOME (i, _) => SOME (Array.sub  (devices, i))
+        SOME (i, _) => SOME (Array.sub (devices, i))
       | NONE => NONE
 
   end
