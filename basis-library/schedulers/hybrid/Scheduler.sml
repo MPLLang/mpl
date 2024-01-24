@@ -562,7 +562,7 @@ struct
 
     (* Use the command line argument to set GPU devices to use. For example,  -devices #0,#1 *)
     val devices = Array.fromList (String.fields (fn c => c = #",")
-      (CommandLineArgs.parseString "devices" ""))
+      (parseString "devices" ""))
 
     (* 
     deviceReservation[i] = workerId if worker workerId has reserved device i
