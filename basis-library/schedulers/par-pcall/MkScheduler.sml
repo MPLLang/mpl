@@ -54,8 +54,8 @@ struct
   (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
   (* val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1 *)
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 300
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 10)
+  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 30
+  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
   val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
   val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
 
