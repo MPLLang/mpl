@@ -216,6 +216,14 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (i == argc || (0 == strcmp (argv[i], "--")))
             die ("%s heartbeat-us missing argument.", atName);
           s->controls->heartbeatMicroseconds = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "heartbeat-tokens")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--")))
+            die ("%s heartbeat-tokens missing argument.", atName);
+          int toks = stringToInt (argv[i++]);
+          if (toks < 0)
+            die ("%s heartbeat-tokens argument must be non-negative.", atName);
+          s->controls->heartbeatTokens = (uint32_t)toks;
         } else if (0 == strcmp (arg, "heartbeat-relayer-threshold")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--")))
@@ -551,6 +559,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->controls->heartbeatStats = FALSE;
   s->controls->heartbeatMicroseconds = 500;
+  s->controls->heartbeatTokens = 30;
   s->controls->heartbeatRelayerThreshold = 16;
 
   /* Not arbitrary; should be at least the page size and must also respect the

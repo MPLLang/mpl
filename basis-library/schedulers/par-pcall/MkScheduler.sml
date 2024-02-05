@@ -54,7 +54,7 @@ struct
   (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
   (* val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1 *)
 
-  val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 30
+  (* val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 30 *)
   val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
   val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
   val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
@@ -69,6 +69,11 @@ struct
     _import "GC_getHeartbeatMicroseconds" runtime private: gcstate -> Word32.word;
   val heartbeatMicroseconds =
     LargeInt.fromInt (Word32.toInt (getHeartbeatMicroseconds (gcstate())))
+
+  val getWealthPerHeartbeat =
+    _import "GC_getHeartbeatTokens" runtime private: gcstate -> Word32.word;
+  val wealthPerHeartbeat =
+    Word32.toInt (getHeartbeatMicroseconds (gcstate()))
 
   val sendHeartbeatToOtherProc =
     _import "GC_sendHeartbeatToOtherProc" runtime private: gcstate * Word32.word -> unit;

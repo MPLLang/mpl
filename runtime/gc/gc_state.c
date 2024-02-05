@@ -86,6 +86,10 @@ uint32_t GC_getHeartbeatMicroseconds (GC_state s) {
   return (uint32_t)s->controls->heartbeatMicroseconds;
 }
 
+uint32_t GC_getHeartbeatTokens (GC_state s) {
+  return s->controls->heartbeatTokens;
+}
+
 // SAM_NOTE: TODO: remove this and replace with blocks statistics
 size_t GC_getMaxChunkPoolOccupancy (void) {
   return 0;

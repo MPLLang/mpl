@@ -260,7 +260,7 @@ uint32_t GC_currentSpareHeartbeats(GC_state s) {
 
 uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
   uint32_t current = s->spareHeartbeats;
-  s->spareHeartbeats = min(current+spares, 30);
+  s->spareHeartbeats = min(current+spares, s->controls->heartbeatTokens);
   return s->spareHeartbeats;
 }
 
