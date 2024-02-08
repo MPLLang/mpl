@@ -656,13 +656,12 @@ struct
       end
 
 
-(*
-    fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
+    fun doSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint =
       let
         val _ = Thread.atomicBegin ()
-        (* val _ = tryConsumeSpareHeartbeats 0w1 *)
         val thread = Thread.current ()
-        val gcj = spawnGC thread
+        val gcj =
+          if allowCGC then spawnGC thread else NONE
 
         val _ = assertAtomic "spawn after spawnGC" 1
 
@@ -671,9 +670,9 @@ struct
         val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
 
         (* We use a ref here instead of using rightSideThread directly.
-          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
-          * The thief will convert it into a Thread.t and give it a heap,
-          * and then write it into this slot. *)
+         * The rightSideThread is a Thread.p (it doesn't have a heap yet).
+         * The thief will convert it into a Thread.t and give it a heap,
+         * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
         val rightSideResult = ref (NONE: 'a Result.t option)
         val incounter = ref 2
@@ -690,7 +689,6 @@ struct
             val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
             val _ = addSpareHeartbeats (Word32.toInt halfSpare)
-            (* val _ = addSpareHeartbeats 1 *)
             val _ = Thread.atomicEnd()
 
             val gr = Result.result g
@@ -744,19 +742,17 @@ struct
           , gcj = gcj
           }
       end
-*)
 
-(*
-    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
+
+    fun maybeSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           NONE
         else
-          SOME (doSpawnFunc g)
+          SOME (doSpawnFunc {allowCGC=allowCGC} g)
       end
-*)
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
@@ -931,7 +927,8 @@ struct
     (* =======================================================================
      *)
 
-    
+
+(*    
     fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
       let
         fun f' () =
@@ -1033,9 +1030,24 @@ struct
           , ()
           )
       end
+*)
 
 
-    and maybeParClearSuspectsAtDepth (t, d) =
+    fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
+      case maybeSpawnFunc {allowCGC = false} g of
+        NONE => (f (); g ())
+      | SOME gj =>
+          let
+            val fr = Result.result f
+
+            val _ = Thread.atomicBegin ()
+            val gr = syncEndAtomic (fn _ => ()) gj g
+          in
+            (Result.extractResult fr; Result.extractResult gr)
+          end
+
+
+    fun maybeParClearSuspectsAtDepth (t, d) =
       if HH.numSuspectsAtDepth (t, d) <= 10000 then
         HH.clearSuspectsAtDepth (t, d)
       else
@@ -1174,7 +1186,24 @@ struct
 
 
     fun greedyWorkAmortizedFork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      let
+      if currentSpareHeartbeats () < spawnCost then
+        pcallFork (f, g)
+      else
+        case maybeSpawnFunc {allowCGC = true} g of
+          NONE => (f (), g ())
+        | SOME gj =>
+            let
+              val _ = tryConsumeSpareHeartbeats spawnCost
+              val _ = addEagerSpawns 1
+              val fr = Result.result f
+              val _ = Thread.atomicBegin ()
+              val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
+            in
+              (Result.extractResult fr, Result.extractResult gr)
+            end
+
+
+      (* let
         fun f' () =
           ( if currentSpareHeartbeats () < spawnCost then
               ()
@@ -1185,7 +1214,7 @@ struct
           )
       in
         pcallFork (f', g)
-      end
+      end *)
 
   end
 
