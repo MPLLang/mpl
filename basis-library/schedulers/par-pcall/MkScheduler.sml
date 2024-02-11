@@ -547,7 +547,7 @@ struct
       end
 
 
-    fun syncGC (GCJ {gcTaskData}) =
+    fun syncGC doClearSuspects (GCJ {gcTaskData}) =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
@@ -572,7 +572,9 @@ struct
         HH.promoteChunks thread;
         HH.setDepth (thread, newDepth);
         assertAtomic "syncGC done" 1;
-        Thread.atomicEnd ()
+        Thread.atomicEnd ();
+
+        doClearSuspects (thread, newDepth)
       end
 
 
@@ -842,7 +844,7 @@ struct
       in
         case gcj of
           NONE => ()
-        | SOME gcj => syncGC gcj;
+        | SOME gcj => syncGC doClearSuspects gcj;
 
         result
       end
@@ -1041,13 +1043,13 @@ struct
             val fr = Result.result f
 
             val _ = Thread.atomicBegin ()
-            val gr = syncEndAtomic (fn _ => ()) gj g
+            val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
           in
             (Result.extractResult fr; Result.extractResult gr)
           end
 
 
-    fun maybeParClearSuspectsAtDepth (t, d) =
+    and maybeParClearSuspectsAtDepth (t, d) =
       if HH.numSuspectsAtDepth (t, d) <= 10000 then
         HH.clearSuspectsAtDepth (t, d)
       else
