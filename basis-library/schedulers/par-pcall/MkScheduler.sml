@@ -267,10 +267,13 @@ struct
    * TASKS
    *)
 
+  (* In the case of NormalTask and NewThread, the Word64 is the decheck id that
+   * we should use for the chunks allocated for these tasks.
+   *)
   datatype task =
-    NormalTask of (unit -> unit) * int
+    NormalTask of (unit -> unit) * Word64.word * int
+  | NewThread of Thread.p * Word64.word * int
   | Continuation of Thread.t * int
-  | NewThread of Thread.p * int
   | GCTask of gctask_data
 
   (* ========================================================================
@@ -599,6 +602,7 @@ struct
         val rightSideResult = ref (NONE: Universal.t Result.t option)
         val incounter = ref 2
 
+        val tidParent = DE.decheckGetTid thread
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val _ = tryConsumeSpareHeartbeats spawnCost
@@ -627,7 +631,7 @@ struct
         val rightSideThread = primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* double check... hopefully correct, not off by one? *)
-        val _ = push (NewThread (rightSideThread, depth))
+        val _ = push (NewThread (rightSideThread, tidParent, depth))
         val _ = HH.setDepth (thread, depth + 1)
 
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
@@ -679,6 +683,7 @@ struct
         val rightSideResult = ref (NONE: 'a Result.t option)
         val incounter = ref 2
 
+        val tidParent = DE.decheckGetTid thread
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val currentSpare = currentSpareHeartbeats ()
@@ -687,9 +692,9 @@ struct
 
         fun g' () =
           let
-            val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
             val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
+            val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
             val _ = addSpareHeartbeats (Word32.toInt halfSpare)
             val _ = Thread.atomicEnd()
 
@@ -723,7 +728,7 @@ struct
           end
 
         (* double check... hopefully correct, not off by one? *)
-        val _ = push (NormalTask (g', depth))
+        val _ = push (NormalTask (g', tidParent, depth))
         val _ = HH.setDepth (thread, depth + 1)
 
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
@@ -1339,14 +1344,14 @@ struct
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
-          | NormalTask (taskFn, depth) =>
+          | NormalTask (taskFn, tidParent, depth) =>
               let
                 val taskThread = Thread.copy prototypeThread
               in
                 if depth >= 1 then () else
                   die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
                 Queue.setDepth myQueue (depth+1);
-                HH.moveNewThreadToDepth (taskThread, depth);
+                HH.moveNewThreadToDepth (taskThread, tidParent, depth);
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId taskFn;
                 IdleTimer.stop ();
@@ -1361,14 +1366,14 @@ struct
                 Queue.setDepth myQueue 1;
                 acquireWork ()
               end
-          | NewThread (thread, depth) =>
+          | NewThread (thread, tidParent, depth) =>
               let
                 val taskThread = Thread.copy thread
               in
                 if depth >= 1 then () else
                   die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
                 Queue.setDepth myQueue (depth+1);
-                HH.moveNewThreadToDepth (taskThread, depth);
+                HH.moveNewThreadToDepth (taskThread, tidParent, depth);
                 HH.setDepth (taskThread, depth+1);
                 (* setTaskBox myId t; *)
                 IdleTimer.stop ();

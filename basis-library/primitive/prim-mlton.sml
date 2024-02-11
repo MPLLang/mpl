@@ -432,7 +432,7 @@ structure Thread =
         *)
       val decheckMaxDepth = _import "GC_HH_decheckMaxDepth" runtime private: Word32.word ref -> bool;
 
-      val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word32.word -> unit;
+      val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word64.word * Word32.word -> unit;
       val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
    end
 

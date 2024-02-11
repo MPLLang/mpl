@@ -227,7 +227,7 @@ void GC_HH_deleteClearSet(GC_state s, pointer clearSet) {
   ES_deleteClearSet(s, (ES_clearSet)clearSet);
 }
 
-void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
+void GC_HH_moveNewThreadToDepth(pointer threadp, uint64_t tidParent, uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
@@ -247,6 +247,12 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
   assert(HM_getChunkOf(threadp) == HM_getChunkListFirstChunk(HM_HH_getChunkList(hh)));
   assert(HM_getChunkOf(objptrToPointer(thread->stack, NULL)) ==
          HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
+
+  assert(HM_getChunkOf(threadp)->decheckState.bits == DECHECK_BOGUS_BITS);
+  assert(HM_getChunkOf((pointer)thread->stack)->decheckState.bits == DECHECK_BOGUS_BITS);
+
+  HM_getChunkOf(threadp)->decheckState.bits = tidParent;
+  HM_getChunkOf((pointer)thread->stack)->decheckState.bits = tidParent;
 
   thread->currentDepth = depth;
   hh->depth = depth;

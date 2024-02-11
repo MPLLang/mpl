@@ -82,7 +82,7 @@ signature MLTON_THREAD =
           val updateBytesPinnedEntangledWatermark: unit -> unit
 
           (* "put a new thread in the hierarchy *)
-          val moveNewThreadToDepth : thread * int -> unit
+          val moveNewThreadToDepth : thread * Word64.word * int -> unit
 
           val checkFinishedCCReadyToJoin: unit -> bool
 
