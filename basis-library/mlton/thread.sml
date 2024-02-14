@@ -129,6 +129,9 @@ struct
     
   (* fun forkThread (t, jp) =
     Prim.forkThread (gcState (), t, jp) *)
+
+  fun joinIntoParentBeforeFastClone {thread, newDepth, tidLeft, tidRight} =
+    Prim.joinIntoParentBeforeFastClone (gcState (), thread, Word32.fromInt newDepth, tidLeft, tidRight)
 end
 
 structure Disentanglement =

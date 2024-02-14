@@ -90,6 +90,14 @@ signature MLTON_THREAD =
 
           (* second arg is joinpoint *)
           (* val forkThread: thread * 'a ref -> Basic.p *)
+
+          val joinIntoParentBeforeFastClone:
+            { thread: thread
+            , newDepth: int
+            , tidLeft: Word64.word
+            , tidRight: Word64.word
+            }
+            -> unit
         end
 
       (* disentanglement checking *)

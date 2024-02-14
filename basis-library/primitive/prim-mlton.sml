@@ -434,6 +434,10 @@ structure Thread =
 
       val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word64.word * Word32.word -> unit;
       val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
+
+      val joinIntoParentBeforeFastClone =
+        _import "GC_HH_joinIntoParentBeforeFastClone" runtime private:
+        GCState.t * thread * Word32.word * Word64.word * Word64.word -> unit;
    end
 
 structure Weak =

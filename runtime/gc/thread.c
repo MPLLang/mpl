@@ -259,6 +259,40 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint64_t tidParent, uint32_t de
 }
 
 
+void GC_HH_joinIntoParentBeforeFastClone(
+  GC_state s,
+  pointer threadp,
+  uint32_t newDepth,
+  uint64_t tidLeft,
+  uint64_t tidRight)
+{
+  enter(s);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(getThreadCurrent(s) == thread);
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(newDepth == thread->currentDepth-1);
+
+  HM_HH_promoteChunks(s, thread);
+  thread->currentDepth = newDepth;
+
+  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
+  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
+    thread->disentangledDepth = INT32_MAX;
+  }
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+
+  GC_HH_decheckJoin(s, tidLeft, tidRight);
+
+  leave(s);
+}
+
+
 uint32_t GC_currentSpareHeartbeats(GC_state s) {
   return s->spareHeartbeats;
 }

@@ -774,9 +774,13 @@ struct
            *)
           if popDiscard () then
             ( dbgmsg'' (fn _ => "popDiscard success at depth " ^ Int.toString depth)
-            ; HH.promoteChunks thread
-            ; HH.setDepth (thread, newDepth)
-            ; DE.decheckJoin (tidLeft, tidRight)
+
+            (* promote chunks into parent, update depth->newDepth, update
+             * decheck state by joining tidLeft and tidRight.
+             *)
+            ; HH.joinIntoParentBeforeFastClone
+                {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
+
             ; Thread.atomicEnd ()
 
             (* TODO: PARALLEL CLEAR SUSPECTS??? *)
