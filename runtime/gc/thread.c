@@ -293,6 +293,106 @@ void GC_HH_joinIntoParentBeforeFastClone(
 }
 
 
+void GC_HH_joinIntoParent(
+  GC_state s,
+  pointer threadp,
+  pointer rightSideThreadp,
+  uint32_t newDepth,
+  uint64_t tidLeft,
+  uint64_t tidRight)
+{
+  enter(s);
+
+  objptr threadop = pointerToObjptr(threadp, NULL);
+  objptr childop = pointerToObjptr(rightSideThreadp, NULL);
+  GC_thread thread = threadObjptrToStruct(s, threadop);
+  GC_thread child = threadObjptrToStruct(s, childop);
+
+  assert(getThreadCurrent(s) == thread);
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(newDepth == thread->currentDepth-1);
+
+  /* ======================================================================== */
+
+  size_t terminateCheckCounter = 0;
+  while (atomicLoadS32(&(child->currentProcNum)) >= 0) {
+    /* Spin while someone else is currently executing this thread. The
+     * termination checks happen rarely, and reset terminateCheckCounter to 0
+     * when they do. */
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+    if (terminateCheckCounter == 0) pthread_yield();
+  }
+
+#if ASSERT
+  assert(threadop != BOGUS_OBJPTR);
+  /* make sure thread is either mine or inactive */
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    if ((int32_t)i != s->procNumber)
+      assert(s->procStates[i].currentThread != threadop);
+  }
+
+  assert(childop != BOGUS_OBJPTR);
+  /* SAM_NOTE there is a race where the following check can raise
+   * a false alarm, if a worker delays to mark its current thread as
+   * BOGUS_OBJPTR after completing a thread and decrementing the incounter
+   * (in the scheduler). However, having the assert seems useful as a
+   * sanity check regardless.
+   *
+   * If this becomes a problem, we can either fix the incounter business
+   * (switch away before decrementing incounter) or just remove the sanity
+   * check and not worry about it.
+   */
+  // Make sure child is inactive
+  // for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+  //   assert(s->procStates[i].currentThread != childop);
+  // }
+#endif
+
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(child != NULL);
+  assert(child->hierarchicalHeap != NULL);
+
+  HM_HH_merge(s, thread, child);
+
+  /* ======================================================================== */
+
+  HM_HH_promoteChunks(s, thread);
+  thread->currentDepth = newDepth;
+
+  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
+  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
+    thread->disentangledDepth = INT32_MAX;
+  }
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+
+  GC_HH_decheckJoin(s, tidLeft, tidRight);
+
+
+  /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
+   * level? */
+  /* SAM_NOTE: It is important that this happens after the merge completes,
+   * because the stack may contain a pointer into the child's heap (we merge
+   * right after reading from the "right branch" result ref).
+   */
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, TRUE);
+
+  /* This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+
+  leave(s);
+}
+
+
+
 uint32_t GC_currentSpareHeartbeats(GC_state s) {
   return s->spareHeartbeats;
 }

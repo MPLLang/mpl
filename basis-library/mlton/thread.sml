@@ -132,6 +132,9 @@ struct
 
   fun joinIntoParentBeforeFastClone {thread, newDepth, tidLeft, tidRight} =
     Prim.joinIntoParentBeforeFastClone (gcState (), thread, Word32.fromInt newDepth, tidLeft, tidRight)
+
+  fun joinIntoParent {thread, rightSideThread, newDepth, tidLeft, tidRight} =
+    Prim.joinIntoParent (gcState (), thread, rightSideThread, Word32.fromInt newDepth, tidLeft, tidRight)
 end
 
 structure Disentanglement =

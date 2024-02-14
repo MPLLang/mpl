@@ -812,11 +812,23 @@ struct
               | SOME rightSideThread =>
                   let
                     val tidRight = DE.decheckGetTid rightSideThread
-                    val _ = HH.mergeThreads (thread, rightSideThread)
-                    val _ = HH.promoteChunks thread
-                    val _ = HH.setDepth (thread, newDepth)
-                    val _ = DE.decheckJoin (tidLeft, tidRight)
+
+                    (* merge the two threads, promote chunks into parent, 
+                     * update depth->newDepth, update the decheck state
+                     *)
+                    val _ = HH.joinIntoParent
+                      { thread = thread
+                      , rightSideThread = rightSideThread
+                      , newDepth = newDepth
+                      , tidLeft = tidLeft
+                      , tidRight = tidRight
+                      }
+
+                    (* SAM_NOTE: TODO: we really ought to make this part of
+                     * the HH.joinIntoParent call, above. Is that possible?
+                     *)
                     val _ = setQueueDepth (myWorkerId ()) newDepth
+
                     val result = 
                       case HM.refDerefNoBarrier rightSideResult of
                         NONE => die (fn _ => "scheduler bug: join failed: missing result")

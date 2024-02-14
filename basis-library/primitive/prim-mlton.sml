@@ -438,6 +438,10 @@ structure Thread =
       val joinIntoParentBeforeFastClone =
         _import "GC_HH_joinIntoParentBeforeFastClone" runtime private:
         GCState.t * thread * Word32.word * Word64.word * Word64.word -> unit;
+
+      val joinIntoParent =
+        _import "GC_HH_joinIntoParent" runtime private:
+        GCState.t * thread * thread * Word32.word * Word64.word * Word64.word -> unit;
    end
 
 structure Weak =

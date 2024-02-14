@@ -159,6 +159,7 @@ PRIVATE uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares);
 PRIVATE uint32_t GC_currentSpareHeartbeats(GC_state s);
 
 PRIVATE void GC_HH_joinIntoParentBeforeFastClone(GC_state s, pointer threadp, uint32_t newDepth, uint64_t tidLeft, uint64_t tidRight);
+PRIVATE void GC_HH_joinIntoParent(GC_state s, pointer threadp, pointer rightSideThreadp, uint32_t newDepth, uint64_t tidLeft, uint64_t tidRight);
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 

@@ -98,6 +98,15 @@ signature MLTON_THREAD =
             , tidRight: Word64.word
             }
             -> unit
+
+          val joinIntoParent:
+            { thread: thread
+            , rightSideThread: thread
+            , newDepth: int
+            , tidLeft: Word64.word
+            , tidRight: Word64.word
+            }
+            -> unit
         end
 
       (* disentanglement checking *)
