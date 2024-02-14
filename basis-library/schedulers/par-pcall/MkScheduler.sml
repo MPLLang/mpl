@@ -48,20 +48,7 @@ struct
       loop 1 0
     end
 
-  val maxEagerForkDepth = 1 + floorLog2 P
-
-  (* val maxEagerForkDepth = parseInt "sched-max-eager-fork-depth" 5 *)
-  (* val skipHeartbeatThreshold = parseInt "sched-skip-heartbeat-threshold" 10 *)
-  (* val numSpawnsPerHeartbeat = parseInt "sched-num-spawns-per-heartbeat" 1 *)
-
-  (* val wealthPerHeartbeat = parseInt "sched-wealth-per-heartbeat" 30 *)
   val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
-  val joinCost = Word32.fromInt (parseInt "sched-join-cost" 0)
-  val localJoinCost = Word32.fromInt (parseInt "sched-local-join-cost" 0)
-
-  (* val activatePar = parseFlag "activate-par" *)
-  (* val heartbeatMicroseconds =
-    LargeInt.fromInt (parseInt "heartbeat-us" 300) *)
 
   type gcstate = MLton.Pointer.t
   val gcstate = _prim "GC_state": unit -> gcstate;
@@ -790,9 +777,6 @@ struct
             ; HH.promoteChunks thread
             ; HH.setDepth (thread, newDepth)
             ; DE.decheckJoin (tidLeft, tidRight)
-            (* ; addSpareHeartbeats spareHeartbeatsGiven *)
-            ; tryConsumeSpareHeartbeats localJoinCost
-            (* ; tryConsumeSpareHeartbeats 0w1 *)
             ; Thread.atomicEnd ()
 
             (* TODO: PARALLEL CLEAR SUSPECTS??? *)
@@ -825,7 +809,6 @@ struct
                   let
                     val tidRight = DE.decheckGetTid rightSideThread
                     val _ = HH.mergeThreads (thread, rightSideThread)
-                    val _ = tryConsumeSpareHeartbeats joinCost
                     val _ = HH.promoteChunks thread
                     val _ = HH.setDepth (thread, newDepth)
                     val _ = DE.decheckJoin (tidLeft, tidRight)
@@ -933,111 +916,6 @@ struct
 
     (* =======================================================================
      *)
-
-
-(*    
-    fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
-      let
-        fun f' () =
-          ( if currentSpareHeartbeats () < spawnCost then
-              ()
-            else
-              doPromoteNow ()
-          ; f ()
-          )
-        val f = f'
-
-        val (inject, project) = Universal.embed ()
-
-        fun leftSide () =
-          Result.result f
-
-        fun leftSideSequentialCont fres =
-          (Result.extractResult fres; g ())
-
-        fun leftSideParCont fres =
-          let
-            val _ = dbgmsg'' (fn _ => "simpleParFork: hello from left-side par continuation")
-            val _ = Thread.atomicBegin ()
-            val _ = assertAtomic "simpleParFork: leftSideParCont" 1
-            val jp = primGetData ()
-            val gres =
-              syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o g)
-          in
-            (Result.extractResult fres;
-             case project (Result.extractResult gres) of
-                SOME gres => gres
-              | _ => die (fn _ => "scheduler bug: simpleParFork: leftSideParCont: failed project right-side result"))
-          end
-
-        fun rightSide () =
-          let
-            val _ = assertAtomic "simpleParFork: pcallFork rightside begin" 1
-            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
-              primGetData ()
-            val () = DE.decheckSetTid tidRight
-
-            val thread = Thread.current ()
-            val depth = HH.getDepth thread
-            val _ = dbgmsg'' (fn _ => "simpleParFork: rightside begin at depth " ^ Int.toString depth)
-
-            (* val _ =
-              dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
-
-            (* val _ = addSpareHeartbeats 1 *)
-            (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats spareHeartbeatsGiven
-            val _ = assertAtomic "simpleParFork: pcallfork rightSide before execute" 1
-            val _ = Thread.atomicEnd()
-
-            val gr = Result.result (inject o g)
-
-            val _ = Thread.atomicBegin ()
-            val depth' = HH.getDepth (Thread.current ())
-            val _ =
-              if depth = depth' then ()
-              else die (fn _ => "simpleParFork: scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
-
-            val _ = dbgmsg'' (fn _ => "simpleParFork: rightside done! at depth " ^ Int.toString depth')
-            val _ = assertAtomic "simpleParFork: pcallFork rightside begin synchronize" 1
-          in
-            rightSideThread := SOME thread;
-            rightSideResult := SOME gr;
-
-            if decrementHitsZero incounter then
-              ( ()
-              ; dbgmsg'' (fn _ => "simpleParFork: rightside synchronize: become left")
-              ; setQueueDepth (myWorkerId ()) depth
-                (** Atomic 1 *)
-              ; Thread.atomicBegin ()
-
-                (** Atomic 2 *)
-
-                (** (When sibling is resumed, it needs to be atomic 1.
-                  * Switching threads is implicit atomicEnd(), so we need
-                  * to be at atomic2
-                  *)
-              ; assertAtomic "simpleParFork: pcallFork rightside switch-to-left" 2
-              ; threadSwitchEndAtomic leftSideThread
-              )
-            else
-              ( dbgmsg'' (fn _ => "simpleParFork: rightside synchronize: back to sched")
-              ; assertAtomic "simpleParFork: pcallFork rightside before returnToSched" 1
-              ; returnToSchedEndAtomic ()
-              )
-          end
-      in
-        pcall
-          ( leftSide
-          , ()
-          , leftSideSequentialCont
-          , leftSideParCont
-          , rightSide
-          , ()
-          )
-      end
-*)
 
 
     fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
@@ -1208,20 +1086,6 @@ struct
             in
               (Result.extractResult fr, Result.extractResult gr)
             end
-
-
-      (* let
-        fun f' () =
-          ( if currentSpareHeartbeats () < spawnCost then
-              ()
-            else
-              doPromoteNow ()
-
-          ; f ()
-          )
-      in
-        pcallFork (f', g)
-      end *)
 
   end
 
