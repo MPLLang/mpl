@@ -75,12 +75,6 @@ static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrA
 static bool try_disentangle_object(objptr op, uint32_t opDepth) {
   if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
     bool successful_unpin = tryUnpinWithDepth(op, opDepth);
-    if (successful_unpin && ES_contains(NULL, op)) {
-      LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
-          "disentangling a suspect at depth %u",
-          opDepth);
-      return try_clear_suspect(op, opDepth);
-    }
     return successful_unpin;
   }
   return TRUE;
