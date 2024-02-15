@@ -57,6 +57,11 @@ struct
   val heartbeatMicroseconds =
     LargeInt.fromInt (Word32.toInt (getHeartbeatMicroseconds (gcstate())))
 
+  val getHeartbeatRelayerThreshold =
+    _import "GC_getHeartbeatRelayerThreshold" runtime private: gcstate -> Word32.word;
+  val relayerThreshold =
+    Word32.toInt (getHeartbeatRelayerThreshold (gcstate ()))
+
   val getWealthPerHeartbeat =
     _import "GC_getHeartbeatTokens" runtime private: gcstate -> Word32.word;
   val wealthPerHeartbeat =
@@ -927,19 +932,24 @@ struct
           if MLton.eq (arg, t) then ()
           else f arg
 
+
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
       * these to all processes
       *)
-    val _ = MLton.Signal.setHandler
-      ( MLton.Itimer.signal MLton.Itimer.Real
-      , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread (heartbeatHandler true))
-      )
+    val _ =
+      if P > relayerThreshold then () else
+        MLton.Signal.setHandler
+          ( MLton.Itimer.signal MLton.Itimer.Real
+          , MLton.Signal.Handler.inspectInterrupted
+              (doIfArgIsNotSchedulerThread (heartbeatHandler true))
+          )
+
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
       , MLton.Signal.Handler.inspectInterrupted
           (doIfArgIsNotSchedulerThread (heartbeatHandler true))
       )
+
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr2
       , MLton.Signal.Handler.inspectInterrupted
@@ -1349,9 +1359,10 @@ struct
 
 
   val _ =
-    MLton.Itimer.set (MLton.Itimer.Real,
-      { interval = Time.fromMicroseconds heartbeatMicroseconds
-      , value = Time.fromMicroseconds heartbeatMicroseconds
-      })
+    if P > relayerThreshold then () else
+      MLton.Itimer.set (MLton.Itimer.Real,
+        { interval = Time.fromMicroseconds heartbeatMicroseconds
+        , value = Time.fromMicroseconds heartbeatMicroseconds
+        })
 
 end

@@ -121,10 +121,13 @@ void GC_sendHeartbeatToSelf(GC_state s) {
 
 
 void broadcastHeartbeat(GC_state s) {
-  for (uint32_t p = 1;
+  uint32_t me = (uint32_t)Proc_processorNumber(s);
+
+  for (uint32_t p = 0;
        p < s->numberOfProcs && !GC_CheckForTerminationRequest(s);
        p++)
   {
+    if (p == me) continue;
     relaySignalTo(s, p, SIGUSR1);
   }
 }
@@ -158,11 +161,18 @@ void checkBroadcastHeartbeat(GC_state s, struct timespec *rem) {
 
 
 void relayerLoop(GC_state s) {
+  // struct timespec hiccup;
+  // hiccup.tv_sec = 0;
+  // hiccup.tv_nsec = 200000;
+
   while (TRUE) {
     GC_MayTerminateThread(s);
     struct timespec rem;
     checkBroadcastHeartbeat(s, &rem);
-    nanosleep(&rem, NULL);
+    // if (timespec_geq(&rem, &hiccup)) {
+    //   timespec_sub(&rem, &hiccup);
+    //   nanosleep(&rem, NULL);
+    // }
   }
 }
 
@@ -208,7 +218,7 @@ void GC_handler (int signum) {
   //   sigaddset (&s->signalsInfo.signalsPending, signum);
   // }
 
-  int me = Proc_processorNumber(s);
+  // int me = Proc_processorNumber(s);
 
   if (s->controls->heartbeatStats && (signum == SIGALRM || signum == SIGUSR1)) {
     struct timespec now;
@@ -220,16 +230,23 @@ void GC_handler (int signum) {
   }
 
   if (signum == SIGALRM) {
-    if (me != 0) {
-      relaySignalTo(s, 0, SIGALRM);
-    }
+    // if (me != 0) {
+    //   relaySignalTo(s, 0, SIGALRM);
+    // }
 
     bool existsRelayer =
       ((int)s->numberOfProcs > s->controls->heartbeatRelayerThreshold);
 
-    if (me == 0 && !existsRelayer) {
-      broadcastHeartbeat(s);
+    // if (me == 0 && !existsRelayer) {
+    //   broadcastHeartbeat(s);
+    // }
+
+    if (existsRelayer) {
+      printf("[GC_handler] ERROR: Should be impossible?\n");
+      exit(1);
     }
+
+    broadcastHeartbeat(s);
   }
 
   /* some old code below: this implements a relay tree, where each processor
