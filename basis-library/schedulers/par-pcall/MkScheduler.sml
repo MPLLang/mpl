@@ -179,7 +179,7 @@ struct
 
 
   datatype gc_joinpoint =
-    GCJ of {gcTaskData: gctask_data option}
+    GCJ of {gcTaskData: gctask_data option, tidRight: Word64.word}
     (** The fact that the gcTaskData is an option here is a questionable
       * hack... the data will always be SOME. But unwrapping it may affect
       * how many allocations occur when spawning a gc task, which in turn
@@ -527,17 +527,19 @@ struct
               NONE
             else
               let
+                val (tidLeft, tidRight) = DE.decheckFork ()
                 val _ = push gcTask
                 val _ = HH.setDepth (thread, depth + 1)
+                val _ = DE.decheckSetTid tidLeft
                 val _ = HH.forceLeftHeap(myWorkerId(), thread)
               in
-                SOME (GCJ {gcTaskData = gcTaskData})
+                SOME (GCJ {gcTaskData = gcTaskData, tidRight = tidRight})
               end
           end
       end
 
 
-    fun syncGC doClearSuspects (GCJ {gcTaskData}) =
+    fun syncGC doClearSuspects (GCJ {gcTaskData, tidRight}) =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
@@ -559,8 +561,23 @@ struct
           ; setQueueDepth (myWorkerId ()) newDepth
           );
 
-        HH.promoteChunks thread;
+        (* This can be reused here... the name isn't appropriate in this
+         * context, but the functionality is the same:
+         *   - promote chunks into parent
+         *   - update depth->newDepth
+         *   - update decheck state by joining tidLeft and tidRight.
+         *)
+        HH.joinIntoParentBeforeFastClone
+          { thread = thread
+          , newDepth = newDepth
+          , tidLeft = DE.decheckGetTid thread
+          , tidRight = tidRight
+          };
+
+        (* HH.promoteChunks thread;
         HH.setDepth (thread, newDepth);
+        DE.decheckJoin (DE.decheckGetTid thread, tidRight); *)
+
         assertAtomic "syncGC done" 1;
         Thread.atomicEnd ();
 
