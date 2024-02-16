@@ -1143,8 +1143,10 @@ HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {
 }
 
 pointer HM_HH_getFrontier(GC_thread thread) {
-  assert(blockOf(HM_getChunkFrontier(thread->currentChunk)) == (pointer)thread->currentChunk);
-  return HM_getChunkFrontier(thread->currentChunk);
+  pointer result = HM_getChunkFrontier(thread->currentChunk);
+  assert(inFirstBlockOfChunk(thread->currentChunk, result)
+         || HM_getChunkLimit(thread->currentChunk) == result);
+  return result;
 }
 
 pointer HM_HH_getLimit(GC_thread thread) {
