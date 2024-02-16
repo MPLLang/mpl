@@ -289,8 +289,6 @@ void foreachObjptrInSequenceSlice(
   }
 
   size_t bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
-  size_t dataBytes = numElements * bytesPerElement;
-  pointer last;
   if (0 == numObjptrs) {
     /* No objptrs to process. */
     return;

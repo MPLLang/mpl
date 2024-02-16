@@ -212,8 +212,9 @@ void Assignable_writeBarrier(
     }
     else if(dstHH->depth != 0) {
       s->cumulativeStatistics->numEntanglements++;
-      objptr newsrc = manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
 
+      LOCAL_USED_FOR_ASSERT objptr newsrc;
+      newsrc = manage_entangled (s, src, HM_getChunkOf(dstp)->decheckState);
       // this better be true... otherwise everything is going to explode
       assert(newsrc == src);
     }
