@@ -44,35 +44,6 @@ static inline bool is_suspect(objptr op)
 }
 
 
-
-bool try_clear_suspect(objptr op, uint32_t opDepth)
-{
-  pointer p = objptrToPointer(op, NULL);
-  
-  while (TRUE) {
-    GC_header header = getHeader(p);
-    assert(suspicious_header(header));
-    uint32_t unpinDepth = (header & UNPIN_DEPTH_MASK) >> UNPIN_DEPTH_SHIFT;
-
-    if (pinType(header) == PIN_ANY && unpinDepth < opDepth) {
-      return FALSE;
-    }
-
-    GC_header newHeader = header & ~(SUSPECT_MASK);
-    if (__sync_bool_compare_and_swap(getHeaderp(p), header, newHeader)) {
-      return TRUE;
-    }
-    else {
-      LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
-          "WARNING: Failed suspect clear due to intermediate change! Trying again.");
-    }
-  }
-}
-
-
-
-
-
 void clear_suspect(
     GC_state s,
     objptr *opp,

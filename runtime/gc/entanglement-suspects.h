@@ -41,8 +41,6 @@ HM_chunkList ES_append(GC_state s, HM_chunkList es1, HM_chunkList es2);
 
 void ES_clear(GC_state s, HM_HierarchicalHeap hh);
 
-bool try_clear_suspect(objptr op, uint32_t opDepth);
-
 // These functions allow us to clear a suspect set in parallel,
 // by integrating with the scheduler. The idea is...
 size_t ES_numSuspects(GC_state s, HM_HierarchicalHeap hh);
