@@ -157,7 +157,7 @@ struct
 
   fun ccBytesReclaimed () =
     C_UIntmax.toLargeInt
-    (sumAllProcs C_UIntmax.max getCCBytesReclaimedOfProc)
+    (sumAllProcs C_UIntmax.+ getCCBytesReclaimedOfProc)
 
 
   (* ======================================================================
