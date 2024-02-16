@@ -71,16 +71,6 @@ static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrA
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
 
 
-
-static bool try_disentangle_object(objptr op, uint32_t opDepth) {
-  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
-    bool successful_unpin = tryUnpinWithDepth(op, opDepth);
-    return successful_unpin;
-  }
-  return TRUE;
-}
-
-
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void *args);
 bool hhContainsChunk(HM_HierarchicalHeap hh, HM_chunk theChunk);
@@ -1382,9 +1372,12 @@ void markAndAdd(
     return;
   }
 
-  bool de_success = try_disentangle_object(op, opDepth);
-  if (!de_success) {
-    DIE("try_disentangle_object failed? should be impossible");
+  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
+    // This object should be unpinned. BUT, it's possible that concurrently
+    // it gets repinned (to a shallower unpin depth). 
+    //
+    // So, if this call returns false, no problem.
+    tryUnpinWithDepth(op, opDepth);
   }
 
   enum PinType pt = pinType(getHeader(p));
@@ -1392,7 +1385,7 @@ void markAndAdd(
   if (pt == PIN_DOWN)
   {
     // it is okay to not trace PIN_DOWN objects because the remembered set will have them
-    // and we will definitely trace; this relies on the failure of unpinning in try_disentangle_object.
+    // and we will definitely trace;
     // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
     // concurrently to LGC and LGC may miss them.
     return;
@@ -1933,10 +1926,15 @@ void forwardHHObjptr(
     return;
   }
   else
-  {    
-    bool de_success = try_disentangle_object(op, opDepth);
-    if (!de_success) {
-      DIE("try_disentangle_object failed? should be impossible");
+  {
+    assert(pinType(op) != PIN_ANY);
+
+    if (isPinned(op)) {
+      assert(unpinDepthOf(op) >= opDepth);
+      // This object should be unpinned
+      if (!tryUnpinWithDepth(op, opDepth)) {
+        DIE("impossible? unpin should always succeed here, because object is not reachable from entanglement sources");
+      }
     }
   }
 
