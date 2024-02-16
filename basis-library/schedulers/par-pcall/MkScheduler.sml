@@ -3,8 +3,6 @@
 functor MkScheduler() =
 struct
 
-  val _ = print ("J DEBUGGING\n")
-
   fun arraySub (a, i) = Array.sub (a, i)
   fun arrayUpdate (a, i, x) = Array.update (a, i, x)
   fun vectorSub (v, i) = Vector.sub (v, i)
