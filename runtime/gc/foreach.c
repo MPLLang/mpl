@@ -262,6 +262,68 @@ DONE:
   return p;
 }
 
+
+/* ========================================================================= */
+
+void foreachObjptrInSequenceSlice(
+  GC_state s,
+  pointer p,
+  GC_foreachObjptrClosure f,
+  uint64_t startIdx,
+  uint64_t stopIdx)
+{
+  GC_header header = getRacyHeader(p);
+  GC_objectTypeTag tag;
+  uint16_t numObjptrs;
+  uint16_t bytesNonObjptrs;
+  splitHeader(s, header, &tag, NULL, &bytesNonObjptrs, &numObjptrs);
+
+  if (SEQUENCE_TAG != tag) {
+    DIE("argument object is not a sequence");
+  }
+
+  GC_sequenceLength numElements = getSequenceLength(p);
+
+  if (startIdx > stopIdx || stopIdx > numElements) {
+    DIE("invalid index range");
+  }
+
+  size_t bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
+  size_t dataBytes = numElements * bytesPerElement;
+  pointer last;
+  if (0 == numObjptrs) {
+    /* No objptrs to process. */
+    return;
+  }
+
+  pointer start = p + (bytesPerElement * startIdx);
+  pointer stop = p + (bytesPerElement * stopIdx);
+
+  if (0 == bytesNonObjptrs) {
+    /* Sequence with only pointers. */
+    for (pointer cursor = start; cursor < stop; cursor += OBJPTR_SIZE) {
+      callIfIsObjptr(s, f, (objptr*)cursor);
+    }
+  } else {
+    /* Sequence with a mix of pointers and non-pointers. */
+    size_t bytesObjptrs = numObjptrs * OBJPTR_SIZE;
+
+    for (pointer cursor = start; cursor < stop; ) {
+      /* Skip the non-pointers. */
+      cursor += bytesNonObjptrs;
+      pointer next = cursor + bytesObjptrs;
+      /* For each internal pointer. */
+      for ( ; cursor < next; cursor += OBJPTR_SIZE) {
+        callIfIsObjptr(s, f, (objptr*)cursor);
+      }
+    }
+  }
+
+}
+
+/* ========================================================================= */
+
+
 /* foreachObjptrInRange (s, front, back, f, skipWeaks)
  *
  * Apply f to each pointer between front and *back, which should be a

@@ -45,6 +45,20 @@ static inline pointer foreachObjptrInObject (GC_state s, pointer p,
                                              GC_objptrPredicateClosure g,
                                              GC_foreachObjptrClosure f,
                                              bool skipWeaks);
+
+/* Similar to foreachObjptrInObject, except it only traces a slice of
+ * a sequence object, in the index range {i: startIdx <= i < stopIdx}.
+ * It will crash if called on a non-sequence object or if the indices are
+ * out of bounds.
+ */
+static inline void foreachObjptrInSequenceSlice(
+  GC_state s,
+  pointer p,
+  GC_foreachObjptrClosure f,
+  uint64_t startIdx,
+  uint64_t stopIdx
+);
+
 /* foreachObjptrInRange (s, front, back, f, skipWeaks)
  *
  * Apply f to each pointer between front and *back, which should be a

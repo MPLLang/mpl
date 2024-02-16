@@ -562,8 +562,7 @@ struct
           ; dbgmsg' (fn _ => "back from GC stuff")
           )
         else
-          ( clear()
-          ; setQueueDepth (myWorkerId ()) newDepth
+          ( setQueueDepth (myWorkerId ()) newDepth
           );
 
         (* This can be reused here... the name isn't appropriate in this
@@ -817,9 +816,7 @@ struct
               end
             )
           else
-            ( clear () (* this should be safe after popDiscard fails? *)
-
-            ; if decrementHitsZero incounter then
+            ( if decrementHitsZero incounter then
                 ()
               else
                 ( ()

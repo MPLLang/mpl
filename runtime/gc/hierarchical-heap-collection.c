@@ -643,14 +643,16 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 
   /* ======================================================================= */
 
-  /* forward contents of deque */
+  /* forward contents of deque, only for the range of the deque that is
+   * in-scope of this collection. */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  foreachObjptrInObject(s,
-                        objptrToPointer(s->wsQueue,
-                                        NULL),
-                        &trueObjptrPredicateClosure,
-                        &forwardHHObjptrClosure,
-                        FALSE);
+  foreachObjptrInSequenceSlice(
+    s,
+    objptrToPointer(s->wsQueue, NULL),
+    &forwardHHObjptrClosure,
+    minDepth,
+    originalLocalScope
+  );
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from deque",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
