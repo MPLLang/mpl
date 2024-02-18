@@ -35,6 +35,8 @@ void GC_startSignalHandler (GC_state s) {
    * s->atomicState to 0.
    */
   s->atomicState = 2;
+
+  Trace0(EVENT_HANDLER_ENTER);
 }
 
 void GC_finishSignalHandler (GC_state s) {
@@ -43,6 +45,8 @@ void GC_finishSignalHandler (GC_state s) {
              Proc_processorNumber (s));
   assert (s->atomicState == 1);
   s->signalsInfo.amInSignalHandler = FALSE;
+
+  Trace0(EVENT_HANDLER_LEAVE);
 }
 
 void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {

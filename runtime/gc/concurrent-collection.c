@@ -935,6 +935,7 @@ void CC_collectWithRoots(
   struct timespec startTime;
   struct timespec stopTime;
 
+  Trace0(EVENT_CGC_ENTER);
   timespec_now(&startTime);
 
   LOG(LM_CC_COLLECTION, LL_INFO,
@@ -1233,6 +1234,8 @@ void CC_collectWithRoots(
   if (outputNumObjectsMarked != NULL) {
     *outputNumObjectsMarked = lists.numObjectsMarked;
   }
+
+  Trace0(EVENT_CGC_LEAVE);
   
   return;
 }

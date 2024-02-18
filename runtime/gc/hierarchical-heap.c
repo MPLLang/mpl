@@ -324,8 +324,6 @@ void HM_HH_merge(
   assert(childThread->currentDepth == parentThread->currentDepth);
   assert(childThread->currentDepth >= 1);
 
-  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
-
   // free stack of joining heap
   CC_freeStack(s, HM_HH_getConcurrentPack(childHH));
 

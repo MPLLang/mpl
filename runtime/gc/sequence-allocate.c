@@ -142,10 +142,10 @@ pointer GC_sequenceAllocate (GC_state s,
 
   bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
 
-  Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
-         (EventInt)ensureBytesFree,
-         (EventInt)numElements,
-         (EventInt)bytesPerElement);
+  // Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
+  //        (EventInt)ensureBytesFree,
+  //        (EventInt)numElements,
+  //        (EventInt)bytesPerElement);
 
   /* Check for overflow when computing sequenceSize.
    */
@@ -217,7 +217,7 @@ pointer GC_sequenceAllocate (GC_state s,
 
   leave(s);
 
-  Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
+  // Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 
   return result;
 

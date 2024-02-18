@@ -281,8 +281,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START");
 
-  Trace0(EVENT_GC_ENTER);
-  TraceResetCopy();
+  Trace0(EVENT_LGC_ENTER);
 
   s->cumulativeStatistics->numHHLocalGCs++;
 
@@ -523,10 +522,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from stack",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* forward contents of thread (hence including stack) */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -540,10 +535,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from thread",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* forward thread itself */
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -553,10 +544,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   forwardHHObjptr(s, &(s->currentThread), s->currentThread, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ? "Copied thread from GC_state" : "Did not copy thread from GC_state");
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* =================================================================
    * forward contents of additional root during signal handler, if any
@@ -646,10 +633,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from deque",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -713,10 +696,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " stacks in copy-collection",
       forwardHHObjptrArgs.stacksCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* ===================================================================== */
 
@@ -1075,8 +1054,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
 
-  TraceResetCopy();
-  Trace0(EVENT_GC_LEAVE);
+  Trace0(EVENT_LGC_LEAVE);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");

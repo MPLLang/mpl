@@ -14,7 +14,7 @@
 
 void enter (GC_state s) {
 
-  Trace0(EVENT_RUNTIME_ENTER);
+  // Trace0(EVENT_RUNTIME_ENTER);
   GC_MayTerminateThread(s);
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
@@ -42,5 +42,5 @@ void leave (GC_state s) {
   assert(invariantForMutator(s, FALSE, TRUE));
   s->spareHeartbeats = getThreadCurrent(s)->spareHeartbeats;
   endAtomic (s);
-  Trace0(EVENT_RUNTIME_LEAVE);
+  // Trace0(EVENT_RUNTIME_LEAVE);
 }

@@ -98,5 +98,6 @@ typedef GC_state GCState_t;
 #include "gc/remembered-set.h"
 #include "gc/gap.h"
 // #include "gc/deferred-promote.h"
+#include "gc/tracing-hooks.h"
 
 #endif /* _MLTON_GC_H_ */

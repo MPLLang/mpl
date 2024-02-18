@@ -19,9 +19,9 @@ static const char *EventKindStrings[] = {
   [EVENT_LAUNCH]                = "LAUNCH",
   [EVENT_FINISH]                = "FINISH",
 
-  [EVENT_GC_ENTER]              = "GC_ENTER",
-  [EVENT_GC_LEAVE]              = "GC_LEAVE",
-  [EVENT_GC_ABORT]              = "GC_ABORT",
+  [EVENT_LGC_ENTER]             = "LGC_ENTER",
+  [EVENT_LGC_LEAVE]             = "LGC_LEAVE",
+  [EVENT_LGC_ABORT]             = "LGC_ABORT",
 
   [EVENT_RUNTIME_ENTER]         = "RUNTIME_ENTER",
   [EVENT_RUNTIME_LEAVE]         = "RUNTIME_LEAVE",
@@ -61,6 +61,22 @@ static const char *EventKindStrings[] = {
   [EVENT_MERGED_HEAP]           = "MERGED_HEAP",
 
   [EVENT_COPY]                  = "COPY",
+
+  [EVENT_SCHED_IDLE_ENTER]      = "SCHED_IDLE_ENTER",
+  [EVENT_SCHED_IDLE_LEAVE]      = "SCHED_IDLE_LEAVE",
+  [EVENT_SCHED_WORK_ENTER]      = "SCHED_WORK_ENTER",
+  [EVENT_SCHED_WORK_LEAVE]      = "SCHED_WORK_LEAVE",
+
+  [EVENT_HEARTBEAT_RECEIVED]    = "HEARTBEAT_RECEIVED",
+  [EVENT_HANDLER_ENTER]         = "HANDLER_ENTER",
+  [EVENT_HANDLER_LEAVE]         = "HANDLER_LEAVE",
+
+  [EVENT_SCHED_SPAWN]           = "SCHED_SPAWN",
+  [EVENT_SCHED_JOIN]            = "SCHED_JOIN",
+  [EVENT_SCHED_JOINFAST]        = "SCHED_JOINFAST",
+
+  [EVENT_CGC_ENTER]             = "CGC_ENTER",
+  [EVENT_CGC_LEAVE]             = "CGC_LEAVE"
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));
@@ -341,9 +357,9 @@ void printEventText(struct Event *event) {
   case EVENT_INIT:
   case EVENT_LAUNCH:
   case EVENT_FINISH:
-  case EVENT_GC_ENTER:
-  case EVENT_GC_LEAVE:
-  case EVENT_GC_ABORT:
+  case EVENT_LGC_ENTER:
+  case EVENT_LGC_LEAVE:
+  case EVENT_LGC_ABORT:
   case EVENT_RUNTIME_ENTER:
   case EVENT_RUNTIME_LEAVE:
   case EVENT_HALT_REQ:

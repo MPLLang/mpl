@@ -93,6 +93,15 @@ struct
   val currentSpareHeartbeats =
     (fn () => currentSpareHeartbeats (gcstate ()))
 
+
+  val traceSchedIdleEnter = _import "GC_Trace_schedIdleEnter" private: gcstate -> unit; o gcstate
+  val traceSchedIdleLeave = _import "GC_Trace_schedIdleLeave" private: gcstate -> unit; o gcstate
+  val traceSchedWorkEnter = _import "GC_Trace_schedWorkEnter" private: gcstate -> unit; o gcstate
+  val traceSchedWorkLeave = _import "GC_Trace_schedWorkLeave" private: gcstate -> unit; o gcstate
+  val traceSchedSpawn = _import "GC_Trace_schedSpawn" private: gcstate -> unit; o gcstate
+  val traceSchedJoin = _import "GC_Trace_schedJoin" private: gcstate -> unit; o gcstate
+  val traceSchedJoinFast = _import "GC_Trace_schedJoinFast" private: gcstate -> unit; o gcstate
+
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
 
@@ -644,6 +653,7 @@ struct
         val _ = recordForkDepth depth
 
         val _ = incrementNumSpawns ()
+        val _ = traceSchedSpawn ()
 
         val _ = DE.decheckSetTid tidLeft
         val _ = assertAtomic "spawn done" 1
@@ -741,6 +751,7 @@ struct
         val _ = recordForkDepth depth
 
         val _ = incrementNumSpawns ()
+        val _ = traceSchedSpawn ()
 
         val _ = DE.decheckSetTid tidLeft
         val _ = assertAtomic "spawn done" 1
@@ -800,6 +811,8 @@ struct
             ; HH.joinIntoParentBeforeFastClone
                 {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
 
+            ; traceSchedJoinFast ()
+
             ; Thread.atomicEnd ()
 
             (* TODO: PARALLEL CLEAR SUSPECTS??? *)
@@ -840,6 +853,8 @@ struct
                       , tidLeft = tidLeft
                       , tidRight = tidRight
                       }
+
+                    val _ = traceSchedJoin ()
 
                     (* SAM_NOTE: TODO: we really ought to make this part of
                      * the HH.joinIntoParent call, above. Is that possible?
@@ -1190,6 +1205,8 @@ struct
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
             (* ; print ("afterReturnToSched: found GC task\n") *)
+            ; traceSchedIdleLeave ()
+            ; traceSchedWorkEnter ()
             ; IdleTimer.stop ()
             ; WorkTimer.start ()
             ; HH.collectThreadRoot (thread, !hh)
@@ -1198,6 +1215,8 @@ struct
                 NONE =>
                   ( WorkTimer.stop ()
                   ; IdleTimer.start ()
+                  ; traceSchedWorkLeave ()
+                  ; traceSchedIdleEnter ()
                   )
               | SOME (Continuation (thread, _)) =>
                   ( ()
@@ -1208,6 +1227,8 @@ struct
                   ; threadSwitchEndAtomic thread
                   ; WorkTimer.stop ()
                   ; IdleTimer.start ()
+                  ; traceSchedWorkLeave ()
+                  ; traceSchedIdleEnter ()
                   ; afterReturnToSched ()
                   )
               | SOME _ =>
@@ -1222,11 +1243,15 @@ struct
           case task of
             GCTask (thread, hh) =>
               ( dbgmsg'' (fn _ => "starting GCTask")
+              ; traceSchedIdleLeave ()
+              ; traceSchedWorkEnter ()
               ; IdleTimer.stop ()
               ; WorkTimer.start ()
               ; HH.collectThreadRoot (thread, !hh)
               ; WorkTimer.stop ()
               ; IdleTimer.start ()
+              ; traceSchedWorkLeave ()
+              ; traceSchedIdleEnter ()
               ; acquireWork ()
               )
           | Continuation (thread, depth) =>
@@ -1234,6 +1259,8 @@ struct
               ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
+              ; traceSchedIdleLeave ()
+              ; traceSchedWorkEnter ()
               ; IdleTimer.stop ()
               ; WorkTimer.start ()
               ; Thread.atomicBegin ()
@@ -1242,6 +1269,8 @@ struct
               ; threadSwitchEndAtomic thread
               ; WorkTimer.stop ()
               ; IdleTimer.start ()
+              ; traceSchedWorkLeave ()
+              ; traceSchedIdleEnter ()
               ; afterReturnToSched ()
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
@@ -1256,6 +1285,8 @@ struct
                 HH.moveNewThreadToDepth (taskThread, tidParent, depth);
                 HH.setDepth (taskThread, depth+1);
                 setTaskBox myId taskFn;
+                traceSchedIdleLeave ();
+                traceSchedWorkEnter ();
                 IdleTimer.stop ();
                 WorkTimer.start ();
                 Thread.atomicBegin ();
@@ -1264,6 +1295,8 @@ struct
                 threadSwitchEndAtomic taskThread;
                 WorkTimer.stop ();
                 IdleTimer.start ();
+                traceSchedWorkLeave ();
+                traceSchedIdleEnter ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -1278,6 +1311,8 @@ struct
                 HH.moveNewThreadToDepth (taskThread, tidParent, depth);
                 HH.setDepth (taskThread, depth+1);
                 (* setTaskBox myId t; *)
+                traceSchedIdleLeave ();
+                traceSchedWorkEnter ();
                 IdleTimer.stop ();
                 WorkTimer.start ();
                 Thread.atomicBegin ();
@@ -1286,6 +1321,8 @@ struct
                 threadSwitchEndAtomic taskThread;
                 WorkTimer.stop ();
                 IdleTimer.start ();
+                traceSchedWorkLeave ();
+                traceSchedIdleEnter ();
                 afterReturnToSched ();
                 Queue.setDepth myQueue 1;
                 acquireWork ()
@@ -1304,6 +1341,7 @@ struct
     let
       val (_, acquireWork) = setupSchedLoop ()
     in
+      traceSchedIdleEnter ();
       IdleTimer.start ();
       acquireWork ();
       die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
@@ -1341,11 +1379,14 @@ struct
       let
         val (afterReturnToSched, acquireWork) = setupSchedLoop ()
       in
+        traceSchedWorkEnter ();
         WorkTimer.start ();
         Thread.atomicBegin ();
         threadSwitchEndAtomic originalThread;
         WorkTimer.stop ();
         IdleTimer.start ();
+        traceSchedWorkLeave ();
+        traceSchedIdleEnter ();
         afterReturnToSched ();
         setQueueDepth (myWorkerId ()) 1;
         acquireWork ();
