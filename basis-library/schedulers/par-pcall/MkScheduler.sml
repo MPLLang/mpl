@@ -98,6 +98,8 @@ struct
   val traceSchedIdleLeave = _import "GC_Trace_schedIdleLeave" private: gcstate -> unit; o gcstate
   val traceSchedWorkEnter = _import "GC_Trace_schedWorkEnter" private: gcstate -> unit; o gcstate
   val traceSchedWorkLeave = _import "GC_Trace_schedWorkLeave" private: gcstate -> unit; o gcstate
+  val traceSchedSleepEnter = _import "GC_Trace_schedSleepEnter" private: gcstate -> unit; o gcstate
+  val traceSchedSleepLeave = _import "GC_Trace_schedSleepLeave" private: gcstate -> unit; o gcstate
   val traceSchedSpawn = _import "GC_Trace_schedSpawn" private: gcstate -> unit; o gcstate
   val traceSchedJoin = _import "GC_Trace_schedJoin" private: gcstate -> unit; o gcstate
   val traceSchedJoinFast = _import "GC_Trace_schedJoinFast" private: gcstate -> unit; o gcstate
@@ -1180,7 +1182,9 @@ struct
           fun loop tries =
             if tries = P * 100 then
               ( IdleTimer.tick ()
+              ; traceSchedSleepEnter ()
               ; OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
+              ; traceSchedSleepLeave ()
               ; loop 0 )
             else
             let

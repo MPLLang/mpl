@@ -24,6 +24,14 @@ void GC_Trace_schedWorkLeave(ARG_USED_FOR_TRACING GC_state s) {
   Trace0(EVENT_SCHED_WORK_LEAVE);
 }
 
+void GC_Trace_schedSleepEnter(ARG_USED_FOR_TRACING GC_state s) {
+  Trace0(EVENT_SCHED_SLEEP_ENTER);
+}
+
+void GC_Trace_schedSleepLeave(ARG_USED_FOR_TRACING GC_state s) {
+  Trace0(EVENT_SCHED_SLEEP_LEAVE);
+}
+
 void GC_Trace_schedSpawn(ARG_USED_FOR_TRACING GC_state s) {
   Trace0(EVENT_SCHED_SPAWN);
 }

@@ -483,7 +483,9 @@ objptr manage_entangled(
       .unpinDepth = newUnpinDepth,
       .firstCall = !(current_pt == PIN_DOWN && current_ud == 1)
     };
+    Trace0(EVENT_MANAGE_ENTANGLED_ENTER);
     make_entangled(s, &ptr, ptr, (void*) &mea);
+    Trace0(EVENT_MANAGE_ENTANGLED_LEAVE);
   }
   else {
     if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {

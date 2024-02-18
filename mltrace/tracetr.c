@@ -76,7 +76,13 @@ static const char *EventKindStrings[] = {
   [EVENT_SCHED_JOINFAST]        = "SCHED_JOINFAST",
 
   [EVENT_CGC_ENTER]             = "CGC_ENTER",
-  [EVENT_CGC_LEAVE]             = "CGC_LEAVE"
+  [EVENT_CGC_LEAVE]             = "CGC_LEAVE",
+
+  [EVENT_MANAGE_ENTANGLED_ENTER] = "MANAGE_ENTANGLED_ENTER",
+  [EVENT_MANAGE_ENTANGLED_LEAVE] = "MANAGE_ENTANGLED_LEAVE",
+
+  [EVENT_SCHED_SLEEP_ENTER] = "SCHED_SLEEP_ENTER",
+  [EVENT_SCHED_SLEEP_LEAVE] = "SCHED_SLEEP_LEAVE",
 };
 
 void processFiles(size_t filecount, FILE **files, void (*func)(struct Event *));

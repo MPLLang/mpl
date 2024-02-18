@@ -16,6 +16,9 @@ PRIVATE void GC_Trace_schedIdleLeave(GC_state s);
 PRIVATE void GC_Trace_schedWorkEnter(GC_state s);
 PRIVATE void GC_Trace_schedWorkLeave(GC_state s);
 
+PRIVATE void GC_Trace_schedSleepEnter(GC_state s);
+PRIVATE void GC_Trace_schedSleepLeave(GC_state s);
+
 PRIVATE void GC_Trace_schedSpawn(GC_state s);
 PRIVATE void GC_Trace_schedJoin(GC_state s);
 PRIVATE void GC_Trace_schedJoinFast(GC_state s);

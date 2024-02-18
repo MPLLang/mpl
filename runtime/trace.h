@@ -75,7 +75,13 @@ enum EventKind {
   EVENT_SCHED_JOINFAST        = 43,
 
   EVENT_CGC_ENTER             = 44,
-  EVENT_CGC_LEAVE             = 45
+  EVENT_CGC_LEAVE             = 45,
+
+  EVENT_MANAGE_ENTANGLED_ENTER = 46,
+  EVENT_MANAGE_ENTANGLED_LEAVE = 47,
+
+  EVENT_SCHED_SLEEP_ENTER     = 48,
+  EVENT_SCHED_SLEEP_LEAVE     = 49
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)
