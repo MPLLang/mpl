@@ -1,11 +1,12 @@
 # MPL
 
-MaPLe (MPL) is an extension of the [MLton](http://mlton.org)
-compiler for Standard ML which implements support for
-nested (fork-join) parallelism. MPL generates executables with
-excellent multicore performance, utilizing a novel approach to
-memory management based on the theory of disentanglement
-[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)].
+MaPLe (MPL) is a parallel functional language with excellent multicore
+performance. The compiler is based on [MLton](http://mlton.org), and the
+language itself is essentially Standard ML with extensions for parallelism.
+MPL features provably efficient parallel garbage collection and scheduling
+based on disentanglement
+[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)]
+as well as provably efficient automatic granularity control [[7](#wfra24)].
 
 MPL is research software and is being actively developed.
 
@@ -19,36 +20,40 @@ You might also be interested in exploring
 
 ## References
 
-[<a name="rmab16">1</a>]
-[Hierarchical Memory Management for Parallel Programs](http://cs.iit.edu/~smuller/papers/icfp16-preprint.pdf).
-Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
-ICFP 2016.
-
-[<a name="gwraf18">2</a>]
-[Hierarchical Memory Management for Mutable State](http://www.cs.cmu.edu/~swestric/18/ppopp.pdf).
-Adrien Guatto, Sam Westrick, Ram Raghunathan, Umut Acar, and Matthew Fluet.
-PPoPP 2018.
-
-[<a name="wyfa20">3</a>]
-[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf).
-Sam Westrick, Rohan Yadav, Matthew Fluet, and Umut A. Acar.
-POPL 2020.
-
-[<a name="awa21">4</a>]
-[Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
-Jatin Arora, Sam Westrick, and Umut A. Acar.
-POPL 2021.
-
-[<a name="waa22">5</a>]
-[Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
-Sam Westrick, Jatin Arora, and Umut A. Acar.
-ICFP 2022.
+[<a name="wfra24">7</a>]
+[Automatic Parallelism Management](https://www.cs.cmu.edu/~swestric/24/popl24-par-manage.pdf).
+Sam Westrick, Matthew Fluet, Mike Rainey, and Umut A. Acar.
+POPL 2024.
 
 [<a name="awa23">6</a>]
 [Efficient Parallel Functional Programming with Effects](https://www.cs.cmu.edu/~swestric/23/epfpe.pdf).
 Jatin Arora, Sam Westrick, and Umut A. Acar.
 PLDI 2023.
 
+[<a name="waa22">5</a>]
+[Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
+Sam Westrick, Jatin Arora, and Umut A. Acar.
+ICFP 2022.
+
+[<a name="awa21">4</a>]
+[Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
+Jatin Arora, Sam Westrick, and Umut A. Acar.
+POPL 2021.
+
+[<a name="wyfa20">3</a>]
+[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf).
+Sam Westrick, Rohan Yadav, Matthew Fluet, and Umut A. Acar.
+POPL 2020.
+
+[<a name="gwraf18">2</a>]
+[Hierarchical Memory Management for Mutable State](http://www.cs.cmu.edu/~swestric/18/ppopp.pdf).
+Adrien Guatto, Sam Westrick, Ram Raghunathan, Umut Acar, and Matthew Fluet.
+PPoPP 2018.
+
+[<a name="rmab16">1</a>]
+[Hierarchical Memory Management for Parallel Programs](http://cs.iit.edu/~smuller/papers/icfp16-preprint.pdf).
+Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
+ICFP 2016.
 
 ## Docker
 
