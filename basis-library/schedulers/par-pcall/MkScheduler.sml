@@ -38,18 +38,11 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  fun floorLog2 x =
-    let
-      (* acc = 2^i *)
-      fun loop acc i = if 2*acc > x then i else loop (2*acc) (i+1)
-    in
-      loop 1 0
-    end
-
   val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
 
   type gcstate = MLton.Pointer.t
   val gcstate = _prim "GC_state": unit -> gcstate;
+
   val getHeartbeatMicroseconds =
     _import "GC_getHeartbeatMicroseconds" runtime private: gcstate -> Word32.word;
   val heartbeatMicroseconds =
@@ -63,17 +56,17 @@ struct
   val getWealthPerHeartbeat =
     _import "GC_getHeartbeatTokens" runtime private: gcstate -> Word32.word;
   val wealthPerHeartbeat =
-    Word32.toInt (getHeartbeatMicroseconds (gcstate()))
+    Word32.toInt (getWealthPerHeartbeat (gcstate()))
 
-  val sendHeartbeatToOtherProc =
+  (* val sendHeartbeatToOtherProc =
     _import "GC_sendHeartbeatToOtherProc" runtime private: gcstate * Word32.word -> unit;
   val sendHeartbeatToOtherProc =
-    (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p))
+    (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p)) *)
 
-  val sendHeartbeatToSelf =
+  (* val sendHeartbeatToSelf =
     _import "GC_sendHeartbeatToSelf" runtime private: gcstate -> unit;
   val sendHeartbeatToSelf =
-    (fn () => sendHeartbeatToSelf (gcstate ()))
+    (fn () => sendHeartbeatToSelf (gcstate ())) *)
 
 
   val tryConsumeSpareHeartbeats =
@@ -116,9 +109,7 @@ struct
     * 'd            (* parallel right-side argument *)
     -> 'c;
 
-  (* Matthew will implement. Make sure 'a is objptr. *)
   val primGetData = _prim "PCall_getData": unit -> 'a;
-  (* Replacement for setJoin primitive. *)
 
   (* Could add boolean to prim: indicator for
    *   findOldestPromotable     (promote at heartbeats)
@@ -126,12 +117,6 @@ struct
    *   findYoungestPromotable   (promote at pcalls -- youngest is the ONLY promotable)
    *)
   val primForkThreadAndSetData = _prim "PCall_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
-
-  (* val setSimpleSignalHandler = MLton.Thread.setSimpleSignalHandler *)
-  (* fun threadSwitch t =
-    ( Thread.atomicBegin ()
-    ; Thread.switchTo t
-    ) *)
 
   fun assertAtomic msg x =
     let
@@ -148,6 +133,7 @@ struct
     )
 
 
+(*
   fun doPromoteNow () =
     ( assertAtomic "start doPromoteNow" 0
     ; Thread.atomicBegin ()
@@ -157,7 +143,7 @@ struct
     (* ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat) *)
     ; assertAtomic "end doPromoteNow" 0
     )
-
+*)
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
@@ -179,15 +165,10 @@ struct
     | SOME m => depth < m
   end
 
-  val internalGCThresh = Real.toInt IEEEReal.TO_POSINF
-                          ((Math.log10(Real.fromInt P)) / (Math.log10 (2.0)))
 
-  (* val vcas = MLton.Parallel.arrayCompareAndSwap *)
-  (* fun cas (a, i) (old, new) = (vcas (a, i) (old, new) = old) *)
   fun faa (r, d) = MLton.Parallel.fetchAndAdd r d
   fun casRef r (old, new) =
     (MLton.Parallel.compareAndSwap r (old, new) = old)
-
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
@@ -587,10 +568,6 @@ struct
           , tidRight = tidRight
           };
 
-        (* HH.promoteChunks thread;
-        HH.setDepth (thread, newDepth);
-        DE.decheckJoin (DE.decheckGetTid thread, tidRight); *)
-
         assertAtomic "syncGC done" 1;
         Thread.atomicEnd ();
 
@@ -602,8 +579,6 @@ struct
     fun doSpawn (interruptedLeftThread: Thread.t) : unit =
       let
         val gcj = spawnGC interruptedLeftThread
-        (* val _ = tryConsumeSpareHeartbeats 0w1 *)
-
         val _ = assertAtomic "spawn after spawnGC" 1
 
         val thread = Thread.current ()
@@ -612,9 +587,9 @@ struct
         val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
 
         (* We use a ref here instead of using rightSideThread directly.
-          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
-          * The thief will convert it into a Thread.t and give it a heap,
-          * and then write it into this slot. *)
+         * The rightSideThread is a Thread.p (it doesn't have a heap yet).
+         * The thief will convert it into a Thread.t and give it a heap,
+         * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
         val rightSideResult = ref (NONE: Universal.t Result.t option)
         val incounter = ref 2
@@ -814,19 +789,12 @@ struct
                 {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
 
             ; traceSchedJoinFast ()
-
             ; Thread.atomicEnd ()
 
-            (* TODO: PARALLEL CLEAR SUSPECTS??? *)
             ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
-            ; let
-                val gr = Result.result g
-              in
-                (* (gr, DE.decheckGetTid thread) *)
-                gr
-              end
+            ; Result.result g
             )
           else
             ( if decrementHitsZero incounter then
@@ -873,7 +841,6 @@ struct
                           ; gr
                           )
                   in
-                    (* TODO: PARALLEL CLEAR SUSPECTS??? *)
                     doClearSuspects (thread, newDepth);
                     if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     result
@@ -1067,11 +1034,6 @@ struct
             val depth = HH.getDepth thread
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
-            (* val _ =
-              dbgmsg''' (fn _ => "depth " ^ Int.toString depth ^ " begin with " ^ Int.toString (Word32.toInt (currentSpareHeartbeats ())) ^ " spares") *)
-
-            (* val _ = addSpareHeartbeats 1 *)
-            (* val _ = addSpareHeartbeats (1 + takeSpares {depth=depth}) *)
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
             val _ = addSpareHeartbeats spareHeartbeatsGiven
             val _ = assertAtomic "pcallfork rightSide before execute" 1
