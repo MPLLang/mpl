@@ -47,6 +47,7 @@ PRIVATE uintptr_t Thread_returnToC() { return -1; }                     \
 static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
   uintptr_t nextBlock;                                                  \
   GC_state s = MLton_gcState();                                         \
+  /*printf("[%d] MLton_callFromC\n", s->procNumber);*/                      \
   if (DEBUG_CCODEGEN)                                                   \
     fprintf (stderr, "MLton_callFromC() starting\n");                   \
   s->callFromCOpArgsResPtr = localOpArgsResPtr;                         \
@@ -92,15 +93,27 @@ void MLton_threadFunc (void* arg) {                                     \
     /* Return to the saved world */                                     \
     nextBlock = getNextBlockFromStackTop (s);                           \
   }                                                                     \
-  /* Check to see whether or not we are the first thread */             \
+  /* Check to see whether or not we are the last thread; this assigns   \
+   * the "main" computation to the last thread, so that we can use the  \
+   * first thread as the signal relayer if necessary.                   \
+   */                                                                   \
   if (Proc_processorNumber (s) == 0) {                                  \
     Trace0(EVENT_LAUNCH);                                               \
     /* Trampoline */                                                    \
     MLton_trampoline (s, nextBlock, FALSE);                             \
   }                                                                     \
+  else if (s->numberOfProcs > s->controls->heartbeatRelayerThreshold    \
+           && s->numberOfProcs >= 2                                     \
+           && Proc_processorNumber(s) == s->numberOfProcs-1)            \
+  {                                                                     \
+    Proc_waitForInitialization(s);                                      \
+    HH_EBR_enterQuiescentState(s);                                      \
+    relayerLoop(s);                                                     \
+  }                                                                     \
   else {                                                                \
     Proc_waitForInitialization (s);                                     \
     Trace0(EVENT_LAUNCH);                                               \
+    /*printf("[%d] calling Parallel_run\n", s->procNumber);*/           \
     Parallel_run ();                                                    \
   }                                                                     \
   return 1;                                                             \

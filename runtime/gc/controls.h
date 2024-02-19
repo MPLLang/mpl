@@ -59,6 +59,10 @@ struct GC_controls {
   bool mayLoadWorld;
   bool mayProcessAtMLton;
   bool messages; /* Print a message at the start and end of each gc. */
+  bool heartbeatStats;
+  int heartbeatMicroseconds;
+  uint32_t heartbeatTokens; /* number of tokens generated per heartbeat */
+  int heartbeatRelayerThreshold;
   size_t allocChunkSize;
   size_t blockSize;
   size_t allocBlocksMinSize;

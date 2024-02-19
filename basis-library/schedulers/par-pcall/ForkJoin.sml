@@ -1,0 +1,1 @@
+structure ForkJoin = MkForkJoin (val fork = Scheduler.ForkJoin.greedyWorkAmortizedFork)

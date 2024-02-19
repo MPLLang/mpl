@@ -119,6 +119,11 @@ signature SSA_TREE =
                         test: Var.t}
              | Goto of {args: Var.t vector,
                         dst: Label.t}
+             | PCall of {args: Var.t vector,
+                         func: Func.t,
+                         cont: Label.t,
+                         parl: Label.t,
+                         parr: Label.t}
              (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)

@@ -7,12 +7,12 @@
  * See the file MLton-LICENSE for details.
  */
 
-#if ASSERT
-bool invariantForGC(__attribute__((unused)) GC_state s) {
-  WARN("Skipping GC invariants check while hierarchical heaps are used.");
-  return TRUE;
-}
-#endif
+// #if ASSERT
+// bool invariantForGC(__attribute__((unused)) GC_state s) {
+//   WARN("Skipping GC invariants check while hierarchical heaps are used.");
+//   return TRUE;
+// }
+// #endif
 
 bool invariantForMutatorFrontier (GC_state s) {
   GC_thread thread = getThreadCurrent(s);
@@ -76,7 +76,7 @@ bool invariantForMutator (GC_state s, bool frontier, bool stack) {
     assert (invariantForMutatorFrontier(s));
   if (stack)
     assert (invariantForMutatorStack(s));
-  assert (invariantForGC (s));
+  // assert (invariantForGC (s));
   return TRUE;
 }
 #endif

@@ -4,6 +4,7 @@
 
 val height = CommandLineArgs.parseInt "m" 200
 val width = CommandLineArgs.parseInt "n" 200
+val grain = CommandLineArgs.parseInt "grain" 256
 val f = CommandLineArgs.parseString "f" ""
 val scene_name = CommandLineArgs.parseString "s" "rgbbox"
 val scene = case scene_name of
@@ -19,7 +20,7 @@ val t1 = Time.now ()
 val _ = print ("Scene BVH construction in " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")
 
 val t0 = Time.now ()
-val result = Ray.render objs width height cam
+val result = Ray.render grain objs width height cam
 val t1 = Time.now ()
 
 val _ = print ("Rendering in " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s.\n")

@@ -38,7 +38,7 @@ struct
    * We also subtract 1 so that we can use index ranges of the form
    * [lo, hi) where 0 <= lo,hi < capacity
    *)
-  val capacityPow = 10 (* DO NOT CHANGE THIS WITHOUT ALSO CHANGING runtime/gc/... *)
+  val capacityPow = 6 (* DO NOT CHANGE THIS WITHOUT ALSO CHANGING runtime/gc/... *)
   val capacity = Word.toInt (Word.<< (0w1, Word.fromInt capacityPow)) - 1
 
   fun myWorkerId () =
@@ -191,6 +191,10 @@ struct
         in
           if oldTop = cas top (oldTop, newTop) then
             SOME (Option.valOf x, idx)
+            handle Option =>
+              ( print ("[" ^ Int.toString (myWorkerId()) ^ "] Queue.tryPopTop error at idx " ^ Int.toString idx ^ "\n")
+              ; raise Option
+              )
           else
             NONE
         end

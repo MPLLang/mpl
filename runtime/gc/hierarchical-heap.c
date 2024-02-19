@@ -324,13 +324,14 @@ void HM_HH_merge(
   assert(childThread->currentDepth == parentThread->currentDepth);
   assert(childThread->currentDepth >= 1);
 
-  Trace2(EVENT_MERGED_HEAP, (EventInt)parentHH, (EventInt)childHH);
-
   // free stack of joining heap
   CC_freeStack(s, HM_HH_getConcurrentPack(childHH));
 
   /* Merge levels. */
   parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
+
+  parentThread->spareHeartbeats += childThread->spareHeartbeats;
+  //parentThread->spareHeartbeats = min(parentThread->spareHeartbeats, 100);
 
   parentThread->bytesSurvivedLastCollection +=
     childThread->bytesSurvivedLastCollection;
@@ -509,6 +510,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->snapLeft = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->snapRight = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->stack = BOGUS_OBJPTR;
+  HM_HH_getConcurrentPack(hh)->additionalStack = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
@@ -645,21 +647,26 @@ void HM_HH_forceLeftHeap(
 {
   GC_state s = pthread_getspecific (gcstate_key);
   assert(processor < s->numberOfProcs);
-  GC_MayTerminateThread(s);
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
+  enter(s);
 
-  beginAtomic(s);
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
-  switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
-  HM_HH_updateValues(thread, s->frontier);
+#if 0
+  if (Proc_isInitialized(s) /*&& !s->signalsInfo.amInSignalHandler*/) {
+    // s->signalsInfo.amInSignalHandler = TRUE;
+    int64_t astackSize = CheckActivationStack();
+    if (astackSize > 0) {
+      LOG(LM_THREAD, LL_INFO,
+        "current activation stack size: %"PRId64,
+        astackSize);
+    }
+    // s->signalsInfo.amInSignalHandler = FALSE;
+  }
+#endif
 
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",
-        ((void*)(s->limit)),
+        ((void*)(s->limitPlusSlop)),
         ((void*)(s->frontier)));
   }
 
@@ -669,20 +676,16 @@ void HM_HH_forceLeftHeap(
     assert(0);
   }
 
-  s->frontier = HM_HH_getFrontier(thread);
-  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
+  s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   assert(invariantForMutatorFrontier (s));
   assert(invariantForMutatorStack (s));
-  endAtomic(s);
+  leave(s);
 }
 
 void HM_HH_forceNewChunk(GC_state s) {
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  assert(getThreadCurrent(s)->hierarchicalHeap != NULL);
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   if (!HM_HH_extend(s, getThreadCurrent(s), GC_HEAP_LIMIT_SLOP)) {
     DIE("Ran out of space for new chunk");
@@ -693,6 +696,7 @@ void HM_HH_forceNewChunk(GC_state s) {
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
   assert(invariantForMutatorFrontier(s));
   assert(invariantForMutatorStack(s));
+  leave(s);
 }
 
 void splitHeapForCC(GC_state s, GC_thread thread) {
@@ -901,10 +905,11 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
 }
 */
 
-objptr copyCurrentStack(GC_state s, GC_thread thread) {
-  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+objptr copyStackOfThread(GC_state s, GC_thread thread) {
+  HM_HierarchicalHeap hh = getThreadCurrent(s)->hierarchicalHeap;
+  GC_stack stackFrom = (GC_stack)objptrToPointer(thread->stack, NULL);
 
-  size_t reserved = getStackCurrent(s)->reserved;
+  size_t reserved = stackFrom->reserved;
   assert(isStackReservedAligned(s, reserved));
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
 
@@ -921,7 +926,7 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
   newChunk->levelHead = HM_HH_getUFNode(hh);
 
 #ifdef DETECT_ENTANGLEMENT
-  newChunk->decheckState = thread->decheckState;
+  newChunk->decheckState = getThreadCurrent(s)->decheckState;
 #else
   newChunk->decheckState = DECHECK_BOGUS_TID;
 #endif
@@ -937,13 +942,14 @@ objptr copyCurrentStack(GC_state s, GC_thread thread) {
     HM_HH_getChunkList(hh),
     newChunk,
     frontier + stackSize);
-  copyStack(s, getStackCurrent(s), stack);
+  copyStack(s, stackFrom, stack);
 
   return pointerToObjptr((pointer)stack, NULL);
 }
 
 pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
+  enter(s);
 
   /** Superfluous argument to function... */
 #if ASSERT
@@ -951,15 +957,22 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   assert(getThreadCurrent(s) == thread);
 #endif
 
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
+  /* SAM_NOTE: ensureHierarchicalHeapAssurances was tripping it's invariant
+   * for the mutator frontier, due to (limit-frontier)<bytesNeeded. But
+   * this runtime call doesn't need to ensure bytes free..
+   *
+   * TODO: ensureHierarchicalHeapAssurances should take a boolean, to indicate
+   * whether or not it should check that invariant...?
+   */
+  size_t bytesRequested =
+    max(GC_HEAP_LIMIT_SLOP, getThreadCurrent(s)->bytesNeeded);
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
 
+  leave(s);
   return (void*)(getThreadCurrent(s)->hierarchicalHeap);
 }
 
@@ -1032,14 +1045,12 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
 Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
+  enter(s);
+
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   // So, we should really get rid of the extra argument.
   assert(thread == getThreadCurrent(s));
-
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   CC_initStack(s, HM_HH_getConcurrentPack(hh));
@@ -1064,6 +1075,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
       lastSurvived,
       freshAlloc,
       size);
+
+    leave(s);
     return FALSE;
   }
 
@@ -1075,13 +1088,24 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   HM_HH_getConcurrentPack(hh)->snapLeft = pointerToObjptr(kl, NULL);
   HM_HH_getConcurrentPack(hh)->snapRight = pointerToObjptr(kr, NULL);
   HM_HH_getConcurrentPack(hh)->snapTemp = pointerToObjptr(k, NULL);
-  objptr snapstack = copyCurrentStack(s, thread);
+  objptr snapstack = copyStackOfThread(s, thread);
   HM_HH_getConcurrentPack(hh)->stack = snapstack;
+
+  objptr additionalStack = BOGUS_OBJPTR;
+  if (s->savedThreadDuringSignalHandler != BOGUS_OBJPTR) {
+    additionalStack = copyStackOfThread(s,
+      threadObjptrToStruct(s, s->savedThreadDuringSignalHandler));
+    HM_HH_getConcurrentPack(hh)->additionalStack = additionalStack;
+  }
 
 #if ASSERT
   HM_assertChunkListInvariants(HM_HH_getChunkList(hh));
   pointer snapstackp = objptrToPointer(snapstack, NULL);
   assert(listContainsChunk(HM_HH_getChunkList(hh), HM_getChunkOf(snapstackp)));
+  if (additionalStack != BOGUS_OBJPTR) {
+    assert(listContainsChunk(HM_HH_getChunkList(hh),
+      HM_getChunkOf(objptrToPointer(additionalStack, NULL))));
+  }
 #endif
 
   CC_clearStack(s, HM_HH_getConcurrentPack(hh));
@@ -1108,6 +1132,7 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     (void*)hh,
     HM_HH_getDepth(hh));
 
+  leave(s);
   return TRUE;
 }
 
@@ -1116,8 +1141,10 @@ HM_HierarchicalHeap HM_HH_getCurrent(GC_state s) {
 }
 
 pointer HM_HH_getFrontier(GC_thread thread) {
-  assert(blockOf(HM_getChunkFrontier(thread->currentChunk)) == (pointer)thread->currentChunk);
-  return HM_getChunkFrontier(thread->currentChunk);
+  pointer result = HM_getChunkFrontier(thread->currentChunk);
+  assert(inFirstBlockOfChunk(thread->currentChunk, result)
+         || HM_getChunkLimit(thread->currentChunk) == result);
+  return result;
 }
 
 pointer HM_HH_getLimit(GC_thread thread) {

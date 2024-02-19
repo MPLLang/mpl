@@ -863,6 +863,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           | Case _ => (Vector.new0 (), t)
           | Goto {dst, args} =>
                (Vector.new0 (), Goto {dst = dst, args = simplifyUsefulVars args})
+          | PCall {func, args, cont, parl, parr} =>
+               (Vector.new0 (),
+                PCall {func = func, cont = cont, parl = parl, parr = parr,
+                       args = simplifyUsefulVars args})
           | Raise xs => (Vector.new0 (), Raise (simplifyUsefulVars xs))
           | Return xs => (Vector.new0 (), Return (simplifyUsefulVars xs))
           | Runtime {prim, args, return} =>

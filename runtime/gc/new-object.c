@@ -101,6 +101,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
   res = newObject(s, GC_THREAD_HEADER, sizeofThread(s));
   thread = (GC_thread)(res + offsetofThread(s));
   /* a fresh thread is not currently being executed by any processor */
+  thread->spareHeartbeats = 0;
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;
@@ -165,9 +166,10 @@ GC_thread newThreadWithHeap(
   sChunk->mightContainMultipleObjects = FALSE;
 
 #ifdef DETECT_ENTANGLEMENT
-  decheck_tid_t decheckState =
-    (existsCurrentThread ?
-    getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
+  decheck_tid_t decheckState = DECHECK_BOGUS_TID;
+  // decheck_tid_t decheckState =
+  //   (existsCurrentThread ?
+  //   getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
 #else
   decheck_tid_t decheckState = DECHECK_BOGUS_TID;
 #endif
@@ -191,6 +193,7 @@ GC_thread newThreadWithHeap(
   stack->reserved = reserved;
   stack->used = 0;
 
+  thread->spareHeartbeats = 0;
   thread->currentProcNum = -1;
   thread->bytesNeeded = 0;
   thread->exnStack = BOGUS_EXN_STACK;

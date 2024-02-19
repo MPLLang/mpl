@@ -31,7 +31,7 @@ typedef struct ES_finishedClearSetGrain {
 
 
 bool ES_mark(__attribute__((unused)) GC_state s, objptr op);
-void ES_unmark(GC_state s, objptr op);
+void ES_unmark(GC_state s, objptr op, ES_clearArgs args);
 
 void ES_add(GC_state s, HM_chunkList es, objptr op);
 

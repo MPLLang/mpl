@@ -875,6 +875,11 @@ structure Transfer =
                   default: Label.t option} (* Must be nullary. *)
        | Goto of {dst: Label.t,
                   args: Var.t vector}
+       | PCall of {args: Var.t vector,
+                   func: Func.t,
+                   cont: Label.t,
+                   parl: Label.t,
+                   parr: Label.t}
        | Raise of Var.t vector
        | Return of Var.t vector
        | Runtime of {prim: Type.t Prim.t,
@@ -896,6 +901,10 @@ structure Transfer =
                    ; Cases.foreach (cases, label)
                    ; Option.app (default, label))
              | Goto {dst, args, ...} => (vars args; label dst)
+             | PCall {func = f, args, cont, parl, parr} =>
+                  (func f
+                   ; label cont; label parl; label parr
+                   ; vars args)
              | Raise xs => vars xs
              | Return xs => vars xs
              | Runtime {args, return, ...} =>
@@ -931,6 +940,12 @@ structure Transfer =
              | Goto {dst, args} =>
                   Goto {dst = fl dst,
                         args = fxs args}
+             | PCall {func, args, cont, parl, parr} =>
+                  PCall {func = func,
+                         args = fxs args,
+                         cont = fl cont,
+                         parl = fl parl,
+                         parr = fl parr}
              | Raise xs => Raise (fxs xs)
              | Return xs => Return (fxs xs)
              | Runtime {prim, args, return} =>
@@ -943,62 +958,68 @@ structure Transfer =
       (* quell unused warning *)
       val _ = replaceLabel
       fun replaceVar (t, f) = replaceLabelVar (t, fn l => l, f)
-
+         
       fun layout' (t, layoutVar) =
-            let
-               open Layout
+         let
+            open Layout
             fun layoutArgs xs = Vector.layout layoutVar xs
             fun layoutCase {test, cases, default} =
                let
-               fun doit (l, layout) =
-                  Vector.toListMap
+                  fun doit (l, layout) =
+                     Vector.toListMap
                   (l, fn (i, l) =>
                    seq [layout i, str " => ", Label.layout l])
-               datatype z = datatype Cases.t
+                  datatype z = datatype Cases.t
                   val (suffix, cases) =
-                  case cases of
+                     case cases of
                         Con l => (empty, doit (l, Con.layout))
                       | Word (size, l) => (str (WordSize.toString size),
                                            doit (l, fn w => (WordX.layout (w, {suffix = true}))))
-               val cases =
-                  case default of
-                     NONE => cases
-                   | SOME j =>
-                        cases @ [seq [str "_ => ", Label.layout j]]
-            in
+                  val cases =
+                     case default of
+                        NONE => cases
+                      | SOME j =>
+                           cases @ [seq [str "_ => ", Label.layout j]]
+               in
                   align [seq [str "case", suffix, str " ", layoutVar test, str " of"],
-                      indent (alignPrefix (cases, "| "), 2)]
-            end
-               fun layoutPrim {prim, args} =
+                         indent (alignPrefix (cases, "| "), 2)]
+               end
+            fun layoutPrim {prim, args} =
                seq [Prim.layoutFull (prim, Type.layout), str " ", layoutArgs args]
-            in
-               case t of
+         in
+            case t of
                Bug => str "bug"
-                | Call {func, args, return} =>
-                     let
-                        val call = seq [Func.layout func, str " ", layoutArgs args]
-                     in
-                        case return of
+             | Call {func, args, return} =>
+                  let
+                     val call = seq [Func.layout func, str " ", layoutArgs args]
+                  in
+                     case return of
                         Return.Dead => seq [str "call dead ", call]
-                         | Return.NonTail {cont, handler} =>
+                      | Return.NonTail {cont, handler} =>
                            seq [str "call ", Label.layout cont, str " ",
-                                   paren call,
-                                   str " handle _ => ",
-                                   case handler of
-                                      Handler.Caller => str "raise"
-                                    | Handler.Dead => str "dead"
-                                    | Handler.Handle l => Label.layout l]
+                                paren call,
+                                str " handle _ => ",
+                                case handler of
+                                   Handler.Caller => str "raise"
+                                 | Handler.Dead => str "dead"
+                                 | Handler.Handle l => Label.layout l]
                       | Return.Tail => seq [str "call tail ", call]
-                     end
+                  end
              | Case arg => layoutCase arg
-                | Goto {dst, args} =>
+             | Goto {dst, args} =>
                   seq [str "goto ", Label.layout dst, str " ", layoutArgs args]
-                | Raise xs => seq [str "raise ", layoutArgs xs]
-                | Return xs => seq [str "return ", layoutArgs xs]
-                | Runtime {prim, args, return} =>
+             | PCall {func, args, cont, parl, parr} =>
+                  seq [str "pcall ", Func.layout func,
+                       str " ", layoutArgs args, str " ",
+                       record [("cont", Label.layout cont),
+                               ("parl", Label.layout parl),
+                               ("parr", Label.layout parr)]]
+             | Raise xs => seq [str "raise ", layoutArgs xs]
+             | Return xs => seq [str "return ", layoutArgs xs]
+             | Runtime {prim, args, return} =>
                   seq [str "runtime ", Label.layout return, str " ",
                        paren (layoutPrim {prim = prim, args = args})]
-      end
+         end
       fun layout t = layout' (t, Var.layout)
 
       val parse =
@@ -1047,6 +1068,18 @@ structure Transfer =
               Label.parse >>= (fn dst =>
               parseArgs >>= (fn args =>
               pure {dst = dst, args = args}))),
+             PCall <$>
+             (kw "pcall" *>
+              Func.parse >>= (fn func =>
+              parseArgs >>= (fn args =>
+              cbrack (ffield ("cont", Label.parse) >>= (fn cont =>
+                      nfield ("parl", Label.parse) >>= (fn parl =>
+                      nfield ("parr", Label.parse) >>= (fn parr =>
+                      pure {func = func,
+                            args = args,
+                            cont = cont,
+                            parl = parl,
+                            parr = parr}))))))),
              Raise <$> (kw "raise" *> parseArgs),
              Return <$> (kw "return" *> parseArgs),
              Runtime <$>
@@ -1076,6 +1109,13 @@ structure Transfer =
           | (Goto {dst, args}, Goto {dst = dst', args = args'}) =>
                Label.equals (dst, dst') andalso
                varsEquals (args, args')
+          | (PCall {func, args, cont, parl, parr},
+             PCall {func = func', args = args', cont = cont', parl = parl', parr = parr'}) =>
+               Func.equals (func, func') andalso
+               varsEquals (args, args') andalso
+               Label.equals (cont, cont') andalso
+               Label.equals (parl, parl') andalso
+               Label.equals (parr, parr')
           | (Raise xs, Raise xs') => varsEquals (xs, xs')
           | (Return xs, Return xs') => varsEquals (xs, xs')
           | (Runtime {prim, args, return},
@@ -1095,6 +1135,8 @@ structure Transfer =
          fun hashVars (xs: Var.t vector, w: Word.t): Word.t =
             Hash.combine (w, Hash.vectorMap (xs, Var.hash))
          fun hash2 (w1: Word.t, w2: Word.t) = Hash.combine (w1, w2)
+         fun hash4 (w1: Word.t, w2: Word.t, w3: Word.t, w4: Word.t) =
+            Hash.combine (Hash.combine (w1, w2), Hash.combine (w3, w4))
       in
          val hash: t -> Word.t =
             fn Bug => bug
@@ -1112,6 +1154,12 @@ structure Transfer =
                           hash2 (Label.hash l, w)))
              | Goto {dst, args} =>
                   hashVars (args, Label.hash dst)
+             | PCall {func, args, cont, parl, parr} =>
+                  hashVars (args,
+                            hash4 (Func.hash func,
+                                   Label.hash cont,
+                                   Label.hash parl,
+                                   Label.hash parr))
              | Raise xs => hashVars (xs, raisee)
              | Return xs => hashVars (xs, return)
              | Runtime {args, return, ...} => hashVars (args, Label.hash return)
@@ -1462,6 +1510,10 @@ structure Function =
                                   ()
                                end
                           | Goto {dst, ...} => edge (dst, "", Solid)
+                          | PCall {cont, parl, parr, ...} =>
+                               (edge (cont, "Cont", Dotted)
+                                ; edge (parl, "ParL", Dotted)
+                                ; edge (parr, "ParR", Dotted))
                           | Raise _ => ()
                           | Return _ => ()
                           | Runtime {return, ...} => edge (return, "", Dotted)
@@ -1972,6 +2024,20 @@ structure Program =
                                              if is
                                                 then []
                                              else [EdgeOption.Style Dotted])))
+                                end
+                           | PCall {func, ...} =>
+                                let
+                                   val to = funcNode func
+                                   val {nontail, ...} = get to
+                                   val r = nontail
+                                in
+                                   if !r
+                                      then ()
+                                   else (r := true
+                                         ; (setEdgeOptions
+                                            (Graph.addEdge
+                                             (graph, {from = from, to = to}),
+                                             [])))
                                 end
                            | _ => ())
                       val _ = destroy ()

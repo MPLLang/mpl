@@ -154,6 +154,7 @@ fun checkScopes (program as
                   ()
                end
           | Goto {args, ...} => getVars args
+          | PCall {func, args, ...} => (getFunc func; getVars args)
           | Raise xs => getVars xs
           | Return xs => getVars xs
           | Runtime {args, ...} => getVars args

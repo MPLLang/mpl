@@ -39,7 +39,7 @@ PRIVATE void GC_HH_decheckFork(GC_state s, uint64_t *left, uint64_t *right);
 PRIVATE void GC_HH_decheckSetTid(GC_state s, uint64_t tid);
 PRIVATE uint64_t GC_HH_decheckGetTid(GC_state s, objptr thread);
 PRIVATE void GC_HH_decheckJoin(GC_state s, uint64_t t1, uint64_t t2);
-PRIVATE void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth);
+PRIVATE void GC_HH_copySyncDepthsFromThread(GC_state s, objptr fromThread, objptr toThread, uint32_t stealDepth);
 
 PRIVATE bool GC_HH_decheckMaxDepth(objptr resultRef);
 
@@ -51,7 +51,6 @@ void decheckInit(GC_state s);
 bool decheck(GC_state s, objptr ptr);
 bool decheckIsOrdered(GC_thread thread, decheck_tid_t t1);
 int lcaHeapDepth(decheck_tid_t t1, decheck_tid_t t2);
-bool disentangleObject(GC_state s, objptr op, uint32_t opDepth);
 objptr manage_entangled(GC_state s, objptr ptr, decheck_tid_t reader);
 void traverseAndCheck(GC_state s, objptr *opp ,objptr op, void *rawArgs);
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

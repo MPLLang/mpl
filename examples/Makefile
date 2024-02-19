@@ -22,13 +22,15 @@ PROGRAMS= \
 TRACE_PROGRAMS := $(addsuffix .trace,$(PROGRAMS))
 DBG_PROGRAMS := $(addsuffix .dbg,$(PROGRAMS))
 NODETECT_PROGRAMS := $(addsuffix .nodetect,$(PROGRAMS))
+DETECT_PROGRAMS := $(addsuffix .detect,$(PROGRAMS))
+DETECT_DBG_PROGRAMS := $(addsuffix .detect.dbg,$(PROGRAMS))
 SYSMPL_PROGRAMS := $(addsuffix .sysmpl,$(PROGRAMS))
 
 all: $(PROGRAMS)
 
 all-dbg: $(DBG_PROGRAMS)
 
-all-nodetect: $(DETECT_PROGRAMS)
+all-nodetect: $(NODETECT_PROGRAMS)
 
 all-sysmpl: $(SYSMPL_PROGRAMS)
 
@@ -51,6 +53,11 @@ $(NODETECT_PROGRAMS): %.nodetect: phony
 	@mkdir -p bin
 	$(MPL) $(FLAGS) $(NODETECT_FLAGS) -output bin/$*.nodetect src/$*/sources.mlb
 	@echo "successfully built bin/$*.nodetect"
+
+$(DETECT_DBG_PROGRAMS): %.detect.dbg: phony
+	@mkdir -p bin
+	$(MPL) $(FLAGS) $(DETECT_FLAGS) $(DBG_FLAGS) -output bin/$*.detect.dbg src/$*/sources.mlb
+	@echo "successfully built bin/$*.detect.dbg"
 
 $(SYSMPL_PROGRAMS): %.sysmpl: phony
 	@mkdir -p bin

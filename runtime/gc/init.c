@@ -208,6 +208,27 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
         } else if (0 == strcmp (arg, "debug-keep-free-blocks")) {
           i++;
           s->controls->debugKeepFreeBlocks = TRUE;
+        } else if (0 == strcmp (arg, "heartbeat-stats")) {
+          i++;
+          s->controls->heartbeatStats = TRUE;
+        } else if (0 == strcmp (arg, "heartbeat-us")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--")))
+            die ("%s heartbeat-us missing argument.", atName);
+          s->controls->heartbeatMicroseconds = stringToInt (argv[i++]);
+        } else if (0 == strcmp (arg, "heartbeat-tokens")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--")))
+            die ("%s heartbeat-tokens missing argument.", atName);
+          int toks = stringToInt (argv[i++]);
+          if (toks < 0)
+            die ("%s heartbeat-tokens argument must be non-negative.", atName);
+          s->controls->heartbeatTokens = (uint32_t)toks;
+        } else if (0 == strcmp (arg, "heartbeat-relayer-threshold")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--")))
+            die ("%s heartbeat-relayer-threshold missing argument.", atName);
+          s->controls->heartbeatRelayerThreshold = stringToInt (argv[i++]);
         } else if (0 == strcmp (arg, "load-world")) {
           unless (s->controls->mayLoadWorld)
             die ("May not load world.");
@@ -536,6 +557,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->blockUsageSampleInterval.tv_sec = 1;
   s->controls->blockUsageSampleInterval.tv_nsec = 0;
 
+  s->controls->heartbeatStats = FALSE;
+  s->controls->heartbeatMicroseconds = 500;
+  s->controls->heartbeatTokens = 30;
+  s->controls->heartbeatRelayerThreshold = 16;
+
   /* Not arbitrary; should be at least the page size and must also respect the
    * limit check coalescing amount in the compiler. */
   s->controls->blockSize = max(GC_pageSize(), 4096);
@@ -551,6 +577,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->globalCumulativeStatistics = newGlobalCumulativeStatistics();
   s->cumulativeStatistics = newCumulativeStatistics();
 
+  timespec_now(&(s->lastHeartbeatBroadcast));
+
   s->currentThread = BOGUS_OBJPTR;
   s->wsQueue = BOGUS_OBJPTR;
   s->wsQueueTop = BOGUS_OBJPTR;
@@ -563,6 +591,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->roots = NULL;
   s->rootsLength = 0;
   s->savedThread = BOGUS_OBJPTR;
+  s->savedThreadDuringSignalHandler = BOGUS_OBJPTR;
 
   initFixedSizeAllocator(getHHAllocator(s), sizeof(struct HM_HierarchicalHeap), BLOCK_FOR_HH_ALLOCATOR);
   initFixedSizeAllocator(getUFAllocator(s), sizeof(struct HM_UnionFindNode), BLOCK_FOR_UF_ALLOCATOR);
@@ -577,6 +606,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   sigemptyset (&s->signalsInfo.signalsPending);
   s->self = pthread_self();
   s->terminationLeader = INVALID_PROCESSOR_NUMBER;
+  s->terminationStatus = 1;
   s->sysvals.pageSize = GC_pageSize ();
   s->sysvals.physMem = GC_physMem ();
   s->weaks = NULL;
@@ -651,6 +681,9 @@ int GC_init (GC_state s, int argc, char **argv) {
       s->controls->superblockThreshold,
       s->controls->megablockThreshold);
 
+  unless (s->controls->heartbeatRelayerThreshold >= 1)
+    die ("heartbeat-relayer-threshold must be at least 1.");
+
   return res;
 }
 
@@ -705,12 +738,14 @@ void GC_duplicate (GC_state d, GC_state s) {
   d->hhEBR = s->hhEBR;
   d->hmEBR = s->hmEBR;
   d->nextChunkAllocSize = s->nextChunkAllocSize;
+  d->lastHeartbeatBroadcast = s->lastHeartbeatBroadcast;
   d->lastMajorStatistics = newLastMajorStatistics();
   d->numberOfProcs = s->numberOfProcs;
   d->numberDisentanglementChecks = 0;
   d->roots = NULL;
   d->rootsLength = 0;
   d->savedThread = BOGUS_OBJPTR;
+  d->savedThreadDuringSignalHandler = BOGUS_OBJPTR;
   d->signalHandlerThread = BOGUS_OBJPTR;
   d->signalsInfo.amInSignalHandler = FALSE;
   d->signalsInfo.gcSignalHandled = FALSE;
@@ -720,6 +755,7 @@ void GC_duplicate (GC_state d, GC_state s) {
   sigemptyset (&d->signalsInfo.signalsPending);
   d->self = s->self;
   d->terminationLeader = INVALID_PROCESSOR_NUMBER;
+  d->terminationStatus = 1;
   d->sysvals.pageSize = s->sysvals.pageSize;
   d->sysvals.physMem = s->sysvals.physMem;
   d->weaks = s->weaks;

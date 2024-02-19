@@ -9,7 +9,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-#define DEQUE_CAPACITY_BITS   10
+#define DEQUE_CAPACITY_BITS   6
 #define MAX_IDX               ((((uint64_t)1) << DEQUE_CAPACITY_BITS) - 1)
 #define UNPACK_TAG(topval)    ((topval) >> DEQUE_CAPACITY_BITS)
 #define UNPACK_IDX(topval)    ((topval) & MAX_IDX)

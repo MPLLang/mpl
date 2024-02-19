@@ -331,7 +331,6 @@ void HM_forwardHHObjptrsInChunkList(
   assert(start <= HM_getChunkFrontier(chunk));
 
   pointer p = start;
-  size_t i = 0;
 
   struct GC_foreachObjptrClosure forwardHHObjptrClosure =
     {.fun = forwardHHObjptrFunc, .env = forwardHHObjptrArgs};
@@ -351,18 +350,7 @@ void HM_forwardHHObjptrsInChunkList(
                                 &predicateClosure,
                                 &forwardHHObjptrClosure,
                                 FALSE);
-      if ((i++ % 1024) == 0) {
-        Trace3(EVENT_COPY,
-               (EventInt)forwardHHObjptrArgs->bytesCopied,
-               (EventInt)forwardHHObjptrArgs->objectsCopied,
-               (EventInt)forwardHHObjptrArgs->stacksCopied);
-      }
     }
-
-    Trace3(EVENT_COPY,
-           (EventInt)forwardHHObjptrArgs->bytesCopied,
-           (EventInt)forwardHHObjptrArgs->objectsCopied,
-           (EventInt)forwardHHObjptrArgs->stacksCopied);
 
     chunk = chunk->nextChunk;
     if (chunk != NULL) {

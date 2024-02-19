@@ -45,7 +45,7 @@ void tryUnpinOrKeepPinned(
     void *rawArgs);
 
 void LGC_markAndScan(GC_state s, HM_remembered remElem, void *rawArgs);
-void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
+// void unmark(GC_state s, objptr *opp, objptr op, void *rawArgs);
 
 void copySuspect(GC_state s, objptr *opp, objptr op, void *rawArghh);
 
@@ -69,6 +69,7 @@ static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrA
   return args->toSpace[depth];
 }
 // void scavengeChunkOfPinnedObject(GC_state s, objptr op, void* rawArgs);
+
 
 #if ASSERT
 void checkRememberedEntry(GC_state s, HM_remembered remElem, void *args);
@@ -280,8 +281,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "START");
 
-  Trace0(EVENT_GC_ENTER);
-  TraceResetCopy();
+  Trace0(EVENT_LGC_ENTER);
 
   s->cumulativeStatistics->numHHLocalGCs++;
 
@@ -522,10 +522,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from stack",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* forward contents of thread (hence including stack) */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
@@ -539,10 +535,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from thread",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* forward thread itself */
   LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -552,26 +544,95 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   forwardHHObjptr(s, &(s->currentThread), s->currentThread, &forwardHHObjptrArgs);
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       (1 == (forwardHHObjptrArgs.objectsCopied - oldObjectCopied)) ? "Copied thread from GC_state" : "Did not copy thread from GC_state");
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
-  /* forward contents of deque */
+  /* =================================================================
+   * forward contents of additional root during signal handler, if any
+   */
+  if (s->savedThreadDuringSignalHandler != BOGUS_OBJPTR) {
+    /* forward contents of stack */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        threadObjptrToStruct(s, s->savedThreadDuringSignalHandler)->stack,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    /* forward contents of thread (hence including stack) */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        s->savedThreadDuringSignalHandler,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    forwardHHObjptr(
+      s,
+      &(s->savedThreadDuringSignalHandler),
+      s->savedThreadDuringSignalHandler,
+      &forwardHHObjptrArgs
+    );
+  }
+
+  /* =======================================================================
+   * forward s->savedThread, if necessary
+   */
+
+  if (s->savedThread != BOGUS_OBJPTR) {
+    /* forward contents of stack */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        threadObjptrToStruct(s, s->savedThread)->stack,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    /* forward contents of thread (hence including stack) */
+    foreachObjptrInObject(
+      s,
+      objptrToPointer(
+        s->savedThread,
+        NULL
+      ),
+      &trueObjptrPredicateClosure,
+      &forwardHHObjptrClosure,
+      FALSE
+    );
+
+    forwardHHObjptr(
+      s,
+      &(s->savedThread),
+      s->savedThread,
+      &forwardHHObjptrArgs
+    );
+  }
+
+  /* ======================================================================= */
+
+  /* forward contents of deque, only for the range of the deque that is
+   * in-scope of this collection. */
   oldObjectCopied = forwardHHObjptrArgs.objectsCopied;
-  foreachObjptrInObject(s,
-                        objptrToPointer(s->wsQueue,
-                                        NULL),
-                        &trueObjptrPredicateClosure,
-                        &forwardHHObjptrClosure,
-                        FALSE);
+  foreachObjptrInSequenceSlice(
+    s,
+    objptrToPointer(s->wsQueue, NULL),
+    &forwardHHObjptrClosure,
+    minDepth,
+    originalLocalScope
+  );
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " objects from deque",
       forwardHHObjptrArgs.objectsCopied - oldObjectCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG, "END root copy");
 
@@ -635,10 +696,6 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "Copied %" PRIu64 " stacks in copy-collection",
       forwardHHObjptrArgs.stacksCopied);
-  Trace3(EVENT_COPY,
-         forwardHHObjptrArgs.bytesCopied,
-         forwardHHObjptrArgs.objectsCopied,
-         forwardHHObjptrArgs.stacksCopied);
 
   /* ===================================================================== */
 
@@ -997,8 +1054,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
   }
 
-  TraceResetCopy();
-  Trace0(EVENT_GC_LEAVE);
+  Trace0(EVENT_LGC_LEAVE);
 
   LOG(LM_HH_COLLECTION, LL_DEBUG,
       "END");
@@ -1294,13 +1350,20 @@ void markAndAdd(
     return;
   }
 
-  disentangleObject(s, op, opDepth);
+  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
+    // This object should be unpinned. BUT, it's possible that concurrently
+    // it gets repinned (to a shallower unpin depth). 
+    //
+    // So, if this call returns false, no problem.
+    tryUnpinWithDepth(op, opDepth);
+  }
+
   enum PinType pt = pinType(getHeader(p));
 
   if (pt == PIN_DOWN)
   {
     // it is okay to not trace PIN_DOWN objects because the remembered set will have them
-    // and we will definitely trace; this relies on the failure of unpinning in disentangleObject.
+    // and we will definitely trace;
     // it is dangerous to skip PIN_ANY objects here because the remSet entry for them might be created
     // concurrently to LGC and LGC may miss them.
     return;
@@ -1348,6 +1411,7 @@ void markAndAdd(
   return;
 }
 
+#if 0
 void unmarkAndAdd(
     GC_state s,
     __attribute__((unused)) objptr *opp,
@@ -1373,6 +1437,7 @@ void unmarkAndAdd(
     CC_workList_push(s, &(args->worklist), op);
   }
 }
+#endif
 
 void unmark(
     GC_state s,
@@ -1840,9 +1905,15 @@ void forwardHHObjptr(
   }
   else
   {
-    disentangleObject(s, op, opDepth);
-    // This object should have been previously unpinned
-    // unpinObject(op);
+    assert(pinType(op) != PIN_ANY);
+
+    if (isPinned(op)) {
+      assert(unpinDepthOf(op) >= opDepth);
+      // This object should be unpinned
+      if (!tryUnpinWithDepth(op, opDepth)) {
+        DIE("impossible? unpin should always succeed here, because object is not reachable from entanglement sources");
+      }
+    }
   }
 
   /* ========================================================================

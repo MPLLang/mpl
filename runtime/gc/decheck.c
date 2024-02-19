@@ -46,6 +46,11 @@ void decheckInit(GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   thread->decheckState.internal.path = 1;
   thread->decheckState.internal.depth = 0;
+
+  // LOG(LM_THREAD, LL_FORCE,
+  //   "thread %p got decheckState %lu",
+  //   (void*)thread,
+  //   thread->decheckState.bits);
 }
 #else
 inline void decheckInit(GC_state s) {
@@ -142,8 +147,8 @@ void GC_HH_decheckSetTid(GC_state s, uint64_t bits) {
   GC_thread thread = getThreadCurrent(s);
   thread->decheckState = tid;
 
-  setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
-  setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
+  // setStateIfBogus(HM_getChunkOf((pointer)thread), tid);
+  // setStateIfBogus(HM_getChunkOf((pointer)thread->stack), tid);
 
   decheckSetSyncDepth(thread, tree_depth(tid), dag_depth(tid));
 
@@ -478,7 +483,9 @@ objptr manage_entangled(
       .unpinDepth = newUnpinDepth,
       .firstCall = !(current_pt == PIN_DOWN && current_ud == 1)
     };
+    Trace0(EVENT_MANAGE_ENTANGLED_ENTER);
     make_entangled(s, &ptr, ptr, (void*) &mea);
+    Trace0(EVENT_MANAGE_ENTANGLED_LEAVE);
   }
   else {
     if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {
@@ -600,16 +607,16 @@ bool decheck(GC_state s, objptr ptr)
 
 
 #ifdef DETECT_ENTANGLEMENT
-void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth) {
+void GC_HH_copySyncDepthsFromThread(GC_state s, objptr fromThreadp, objptr toThreadp, uint32_t stealDepth) {
   if (stealDepth > DECHECK_DEPTHS_LEN) {
     DIE("attempted to copy sync depths up to %"PRIu32, stealDepth);
   }
 
-  GC_thread victim = threadObjptrToStruct(s, victimThread);
-  GC_thread current = getThreadCurrent(s);
+  GC_thread fromThread = threadObjptrToStruct(s, fromThreadp);
+  GC_thread toThread = threadObjptrToStruct(s, toThreadp);
 
-  uint32_t* from = &(victim->decheckSyncDepths[0]);
-  uint32_t* to = &(current->decheckSyncDepths[0]);
+  uint32_t* from = &(fromThread->decheckSyncDepths[0]);
+  uint32_t* to = &(toThread->decheckSyncDepths[0]);
 
   /* SAM_NOTE: TODO:
    *
@@ -627,25 +634,12 @@ void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t st
 }
 
 #else
-void GC_HH_copySyncDepthsFromThread(GC_state s, objptr victimThread, uint32_t stealDepth)
-{
+void GC_HH_copySyncDepthsFromThread(GC_state s, objptr fromThreadp, objptr toThreadp, uint32_t stealDepth) {
   (void)s;
-  (void)victimThread;
+  (void)fromThreadp;
+  (void)toThreadp;
   (void)stealDepth;
   return;
 }
 #endif
-
-// returns true if the object is unpinned.
-bool disentangleObject(GC_state s, objptr op, uint32_t opDepth) {
-  if (isPinned(op) && unpinDepthOf(op) >= opDepth) {
-    bool success = tryUnpinWithDepth(op, opDepth);
-    if (success && ES_contains(NULL, op)) {
-      ES_unmark(s, op);
-      return true;
-    }
-    return false;
-  }
-  return true;
-}
 

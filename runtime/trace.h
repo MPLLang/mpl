@@ -21,9 +21,9 @@ enum EventKind {
   EVENT_RUNTIME_ENTER         = 9,
   EVENT_RUNTIME_LEAVE         = 10,
 
-  EVENT_GC_ENTER              = 2,
-  EVENT_GC_LEAVE              = 3,
-  EVENT_GC_ABORT              = 11,
+  EVENT_LGC_ENTER             = 2,
+  EVENT_LGC_LEAVE             = 3,
+  EVENT_LGC_ABORT             = 11,
 
   EVENT_HEAP_OCCUPANCY        = 21,
 
@@ -60,6 +60,28 @@ enum EventKind {
   EVENT_MERGED_HEAP           = 32,
 
   EVENT_COPY                  = 33,
+
+  EVENT_SCHED_IDLE_ENTER      = 34,
+  EVENT_SCHED_IDLE_LEAVE      = 35,
+  EVENT_SCHED_WORK_ENTER      = 36,
+  EVENT_SCHED_WORK_LEAVE      = 37,
+
+  EVENT_HEARTBEAT_RECEIVED    = 38,
+  EVENT_HANDLER_ENTER         = 39,
+  EVENT_HANDLER_LEAVE         = 40,
+
+  EVENT_SCHED_SPAWN           = 41,
+  EVENT_SCHED_JOIN            = 42,
+  EVENT_SCHED_JOINFAST        = 43,
+
+  EVENT_CGC_ENTER             = 44,
+  EVENT_CGC_LEAVE             = 45,
+
+  EVENT_MANAGE_ENTANGLED_ENTER = 46,
+  EVENT_MANAGE_ENTANGLED_LEAVE = 47,
+
+  EVENT_SCHED_SLEEP_ENTER     = 48,
+  EVENT_SCHED_SLEEP_LEAVE     = 49
 };
 
 #define EventKindCount (sizeof EventKindStrings / sizeof *EventKindStrings)

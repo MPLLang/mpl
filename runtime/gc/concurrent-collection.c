@@ -532,6 +532,10 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
 
+  if (!isObjptr(op)) {
+    return;
+  }
+
   assert(isObjptr(op));
 
   bool saved = saveNoForward(s, p, rawArgs);
@@ -552,6 +556,10 @@ void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
   ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
   objptr op = *opp;
   pointer p = objptrToPointer(op, NULL);
+
+  if (!isObjptr(op)) {
+    return;
+  }
 
   assert(isObjptr(op));
 
@@ -927,6 +935,7 @@ void CC_collectWithRoots(
   struct timespec startTime;
   struct timespec stopTime;
 
+  Trace0(EVENT_CGC_ENTER);
   timespec_now(&startTime);
 
   LOG(LM_CC_COLLECTION, LL_INFO,
@@ -1003,6 +1012,7 @@ void CC_collectWithRoots(
   forceForward(s, &(cp->snapTemp), &lists);
   // forceForward(s, &(s->wsQueue), &lists);
   forceForward(s, &(cp->stack), &lists);
+  forceForward(s, &(cp->additionalStack), &lists);
 
   markLoop(s, &lists);
 
@@ -1062,6 +1072,7 @@ void CC_collectWithRoots(
   forceUnmark(s, &(cp->snapTemp), &lists);
   // forceUnmark(s, &(s->wsQueue), &lists);
   forceUnmark(s, &(cp->stack), &lists);
+  forceUnmark(s, &(cp->additionalStack), &lists);
 
   unmarkLoop(s, &lists);
 
@@ -1179,6 +1190,19 @@ void CC_collectWithRoots(
   info.freedType = CC_FREED_NORMAL_CHUNK;
   cp->stack = BOGUS_OBJPTR;
 
+  if (cp->additionalStack != BOGUS_OBJPTR) {
+    HM_chunk aStackChunk =
+      HM_getChunkOf(objptrToPointer(cp->additionalStack, NULL));
+    assert(!(aStackChunk->mightContainMultipleObjects));
+    assert(HM_HH_getChunkList(HM_getLevelHead(aStackChunk)) == origList);
+    assert(isChunkInList(aStackChunk, origList));
+    HM_unlinkChunk(origList, aStackChunk);
+    info.freedType = CC_FREED_STACK_CHUNK;
+    HM_freeChunkWithInfo(s, aStackChunk, &infoc, BLOCK_FOR_HEAP_CHUNK);
+    info.freedType = CC_FREED_NORMAL_CHUNK;
+    cp->additionalStack = BOGUS_OBJPTR;
+  }
+
 // #if ASSERT
 //   struct HM_foreachDownptrClosure checkRemEntryClosure =
 //     {.fun = checkRemEntry, .env = &lists};
@@ -1210,6 +1234,8 @@ void CC_collectWithRoots(
   if (outputNumObjectsMarked != NULL) {
     *outputNumObjectsMarked = lists.numObjectsMarked;
   }
+
+  Trace0(EVENT_CGC_LEAVE);
   
   return;
 }

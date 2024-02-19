@@ -165,13 +165,28 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
             val {argInfo, bodyInfo = b, ...} = labelInfo label
             val _ = Vector.foreach (args, fn (x, _) => setDefined (x, argInfo))
             fun goto l = LiveInfo.addEdge (b, #argInfo (labelInfo l))
-            (* Make sure that a cont's live vars includes variables live in its
-             * handler.
-             *)
             val _ =
                case kind of
                   Kind.Cont {handler, ...} =>
+                     (* Make sure that a cont's live vars includes variables
+                      * live in its handler.
+                      *)
                      Handler.foreachLabel (handler, goto)
+                | Kind.PCallReturn {cont, parl, parr} =>
+                     (* Make sure that a PCall cont's live vars includes
+                      * variables live in the parll and parr.
+                      *)
+                     let
+                        (* val _ = goto cont *)
+                        (* val _ = goto parl *)
+                        (* val _ = goto parr *)
+                        val _ =
+                           if Label.equals (label, cont)
+                              then (goto parl; goto parr)
+                              else ()
+                     in
+                        ()
+                     end
                 | _ => ()
             fun define (x: Var.t): unit = setDefined (x, b)
             fun use (x: Var.t): unit =

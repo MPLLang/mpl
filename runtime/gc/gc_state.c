@@ -43,6 +43,7 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   GC_stack stack;
 
   thread = getThreadCurrent (s);
+  s->spareHeartbeats = thread->spareHeartbeats;
   s->exnStack = thread->exnStack;
   stack = getStackCurrent (s);
   s->stackBottom = getStackBottom (s, stack);
@@ -79,6 +80,18 @@ void GC_setControlsRusageMeasureGC (GC_state s, Bool_t b) {
 
 uint32_t GC_getControlMaxCCDepth(GC_state s) {
   return (uint32_t)s->controls->hhConfig.maxCCDepth;
+}
+
+uint32_t GC_getHeartbeatMicroseconds (GC_state s) {
+  return (uint32_t)s->controls->heartbeatMicroseconds;
+}
+
+uint32_t GC_getHeartbeatTokens (GC_state s) {
+  return s->controls->heartbeatTokens;
+}
+
+uint32_t GC_getHeartbeatRelayerThreshold(GC_state s) {
+  return (uint32_t)s->controls->heartbeatRelayerThreshold;
 }
 
 // SAM_NOTE: TODO: remove this and replace with blocks statistics
@@ -304,6 +317,24 @@ float GC_approxRaceFactor(GC_state s)
   return count;
 }
 
+uintmax_t GC_maxStackFramesWalkedForHeartbeat(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count = max(count,
+      s->procStates[p].cumulativeStatistics->maxStackFramesWalkedForHeartbeat);
+  }
+  return count;
+}
+
+uintmax_t GC_maxStackSizeForHeartbeat(GC_state s) {
+  uintmax_t count = 0;
+  for (uint32_t p = 0; p < s->numberOfProcs; p++) {
+    count = max(count,
+      s->procStates[p].cumulativeStatistics->maxStackSizeForHeartbeat);
+  }
+  return count;
+}
+
 __attribute__((noreturn))
 void GC_setHashConsDuringGC(__attribute__((unused)) GC_state s, __attribute__((unused)) Bool_t b) {
   DIE("GC_setHashConsDuringGC unsupported");
@@ -315,6 +346,11 @@ size_t GC_getLastMajorStatisticsBytesLive (GC_state s) {
 
 pointer GC_getCallFromCHandlerThread (GC_state s) {
   pointer p = objptrToPointer (s->callFromCHandlerThread, NULL);
+
+  // printf("[%d] getCallFromCHandlerThread("FMTPTR")\n",
+  //   s->procNumber,
+  //   (uintptr_t)p);
+
   return p;
 }
 
@@ -322,6 +358,10 @@ void GC_setCallFromCHandlerThreads (GC_state s, pointer p) {
   assert(getSequenceLength (p) == s->numberOfProcs);
   for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
     s->procStates[proc].callFromCHandlerThread = ((objptr*)p)[proc];
+    // printf("[%d] setCallFromCHandlerThread %u: "FMTPTR"\n",
+    //   s->procNumber,
+    //   proc,
+    //   (uintptr_t)(((objptr*)p)[proc]));
   }
 }
 
@@ -340,6 +380,11 @@ pointer GC_getSavedThread (GC_state s) {
   assert(s->savedThread != BOGUS_OBJPTR);
   p = objptrToPointer (s->savedThread, NULL);
   s->savedThread = BOGUS_OBJPTR;
+
+  // printf("[%d] getSavedThread("FMTPTR")\n",
+  //   s->procNumber,
+  //   (uintptr_t)p);
+
   return p;
 }
 
@@ -347,6 +392,9 @@ void GC_setSavedThread (GC_state s, pointer p) {
   objptr op;
 
   assert(s->savedThread == BOGUS_OBJPTR);
+  // printf("[%d] setSavedThread("FMTPTR")\n",
+  //   s->procNumber,
+  //   (uintptr_t)p);
   op = pointerToObjptr (p, NULL);
   s->savedThread = op;
 }

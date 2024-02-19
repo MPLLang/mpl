@@ -30,6 +30,7 @@ typedef GC_state GCState_t;
 #include "gc/logger.h"
 #include "gc/sampler.h"
 #include "gc/block-allocator.h"
+#include "gc/time-histogram.h"
 
 #include "gc/tls-objects.h"
 #include "gc/align.h"
@@ -97,5 +98,6 @@ typedef GC_state GCState_t;
 #include "gc/remembered-set.h"
 #include "gc/gap.h"
 // #include "gc/deferred-promote.h"
+#include "gc/tracing-hooks.h"
 
 #endif /* _MLTON_GC_H_ */

@@ -142,10 +142,10 @@ pointer GC_sequenceAllocate (GC_state s,
 
   bytesPerElement = bytesNonObjptrs + (numObjptrs * OBJPTR_SIZE);
 
-  Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
-         (EventInt)ensureBytesFree,
-         (EventInt)numElements,
-         (EventInt)bytesPerElement);
+  // Trace3(EVENT_ARRAY_ALLOCATE_ENTER,
+  //        (EventInt)ensureBytesFree,
+  //        (EventInt)numElements,
+  //        (EventInt)bytesPerElement);
 
   /* Check for overflow when computing sequenceSize.
    */
@@ -173,11 +173,7 @@ pointer GC_sequenceAllocate (GC_state s,
       uintmaxToCommaString(sequenceSizeAligned),
       uintmaxToCommaString(ensureBytesFree));
 
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   if (sequenceSizeAligned < s->controls->blockSize / 2)
     frontier = allocateSmallSequence(s, sequenceSizeAligned, ensureBytesFree);
@@ -219,7 +215,9 @@ pointer GC_sequenceAllocate (GC_state s,
   assert(invariantForMutatorStack (s));
 #endif
 
-  Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
+  leave(s);
+
+  // Trace0(EVENT_ARRAY_ALLOCATE_LEAVE);
 
   return result;
 

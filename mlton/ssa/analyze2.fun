@@ -1,4 +1,4 @@
-(* Copyright (C) 2011,2017,2019 Matthew Fluet.
+(* Copyright (C) 2011,2017,2019,2022 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -121,7 +121,7 @@ fun 'a analyze
                   fun ensureSize (w, s) =
                      if WordSize.equals (s, WordX.size w)
                         then ()
-                     else Error.bug (concat ["Analyze.loopTransfer (case ",
+                     else Error.bug (concat ["Analyze2.loopTransfer (case ",
                                              WordX.toString (w, {suffix = true}),
                                              " must be size ",
                                              WordSize.toString s,
@@ -161,6 +161,28 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
+          | PCall {func, args, cont, parl, parr} =>
+               let
+                  val {args = formals, raises, returns} = funcInfo func
+                  val _ = coerces ("pcall args/formals", values args, formals)
+                  val _ =
+                     Option.app
+                     (raises, fn _ =>
+                      Error.bug "Analyze.loopTransfer (pcall raise mismatch)")
+                  val _ =
+                     Option.app
+                     (returns, fn vs =>
+                      (coerces ("pcall cont/returns", vs, labelValues cont)
+                       ; coerces ("pcall parl/returns", vs, labelValues parl)))
+                  val _ =
+                     if Vector.isEmpty (labelValues parr)
+                        then ()
+                     else Error.bug (concat ["Analyze.loopTransfer (pcall parr ",
+                                             Label.toString parr,
+                                             " must be nullary)"])
+               in
+                  ()
+               end
           | Raise xs =>
                (case shouldRaises of
                    NONE => Error.bug "Analyze2.loopTransfer (raise mismatch at Raise)"
@@ -313,6 +335,11 @@ fun 'a analyze
                          Transfer.foreachLabel (transfer, visit)
                       end
                 end
+
+             val _ =
+                if Vector.isEmpty (labelValues start)
+                   then ()
+                   else Error.bug (concat ["Analyze2.analyze (start ", Label.toString start, " must be nullary)"])
              val _ = visit start
           in
              ()

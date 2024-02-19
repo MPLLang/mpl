@@ -11,12 +11,22 @@
 
 static inline void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s);
 
+void relayerLoop(GC_state s);
+
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
 PRIVATE void GC_startSignalHandler (GC_state s);
 PRIVATE void GC_finishSignalHandler (GC_state s);
+
+PRIVATE void GC_sendHeartbeatToOtherProc(GC_state s, uint32_t target);
+
+/** Returns the HH that we abandoned. This should then be passed to
+  * GC_handlerLeaveHeapOfThread, to get back to it.
+  */
+PRIVATE pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp);
+PRIVATE void GC_handlerLeaveHeapOfThread(GC_state s, objptr threadp, pointer abandonedHH);
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

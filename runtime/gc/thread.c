@@ -83,10 +83,7 @@ void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
 
 void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_state s = pthread_getspecific(gcstate_key);
-
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   objptr threadop = pointerToObjptr(threadp, NULL);
   objptr childop = pointerToObjptr(childp, NULL);
@@ -140,28 +137,25 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
    * because the stack may contain a pointer into the child's heap (we merge
    * right after reading from the "right branch" result ref).
    */
-  beginAtomic(s);
   HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, TRUE);
-  endAtomic(s);
 
   /* This should be true, otherwise our call to
    * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
    */
   assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+  leave(s);
 }
 
-#pragma message "TODO: do I need to do runtime enter/leave here? what about other primitives?"
 void GC_HH_promoteChunks(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
-  getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
-  getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
-  assert(threadAndHeapOkay(s));
+  enter(s);
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
   HM_HH_promoteChunks(s, thread);
+  leave(s);
 }
 
 void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth) {
@@ -233,7 +227,7 @@ void GC_HH_deleteClearSet(GC_state s, pointer clearSet) {
   ES_deleteClearSet(s, (ES_clearSet)clearSet);
 }
 
-void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
+void GC_HH_moveNewThreadToDepth(pointer threadp, uint64_t tidParent, uint32_t depth) {
   GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
@@ -254,9 +248,279 @@ void GC_HH_moveNewThreadToDepth(pointer threadp, uint32_t depth) {
   assert(HM_getChunkOf(objptrToPointer(thread->stack, NULL)) ==
          HM_getChunkListLastChunk(HM_HH_getChunkList(hh)));
 
+  assert(HM_getChunkOf(threadp)->decheckState.bits == DECHECK_BOGUS_BITS);
+  assert(HM_getChunkOf((pointer)thread->stack)->decheckState.bits == DECHECK_BOGUS_BITS);
+
+  HM_getChunkOf(threadp)->decheckState.bits = tidParent;
+  HM_getChunkOf((pointer)thread->stack)->decheckState.bits = tidParent;
+
   thread->currentDepth = depth;
   hh->depth = depth;
 }
+
+
+void GC_HH_joinIntoParentBeforeFastClone(
+  GC_state s,
+  pointer threadp,
+  uint32_t newDepth,
+  uint64_t tidLeft,
+  uint64_t tidRight)
+{
+  enter(s);
+
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  assert(getThreadCurrent(s) == thread);
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(newDepth == thread->currentDepth-1);
+
+  HM_HH_promoteChunks(s, thread);
+  thread->currentDepth = newDepth;
+
+  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
+  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
+    thread->disentangledDepth = INT32_MAX;
+  }
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+
+  GC_HH_decheckJoin(s, tidLeft, tidRight);
+
+  leave(s);
+}
+
+
+void GC_HH_joinIntoParent(
+  GC_state s,
+  pointer threadp,
+  pointer rightSideThreadp,
+  uint32_t newDepth,
+  uint64_t tidLeft,
+  uint64_t tidRight)
+{
+  enter(s);
+
+  objptr threadop = pointerToObjptr(threadp, NULL);
+  objptr childop = pointerToObjptr(rightSideThreadp, NULL);
+  GC_thread thread = threadObjptrToStruct(s, threadop);
+  GC_thread child = threadObjptrToStruct(s, childop);
+
+  assert(getThreadCurrent(s) == thread);
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(newDepth == thread->currentDepth-1);
+
+  /* ======================================================================== */
+
+  size_t terminateCheckCounter = 0;
+  while (atomicLoadS32(&(child->currentProcNum)) >= 0) {
+    /* Spin while someone else is currently executing this thread. The
+     * termination checks happen rarely, and reset terminateCheckCounter to 0
+     * when they do. */
+    GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
+    if (terminateCheckCounter == 0) pthread_yield();
+  }
+
+#if ASSERT
+  assert(threadop != BOGUS_OBJPTR);
+  /* make sure thread is either mine or inactive */
+  for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+    if ((int32_t)i != s->procNumber)
+      assert(s->procStates[i].currentThread != threadop);
+  }
+
+  assert(childop != BOGUS_OBJPTR);
+  /* SAM_NOTE there is a race where the following check can raise
+   * a false alarm, if a worker delays to mark its current thread as
+   * BOGUS_OBJPTR after completing a thread and decrementing the incounter
+   * (in the scheduler). However, having the assert seems useful as a
+   * sanity check regardless.
+   *
+   * If this becomes a problem, we can either fix the incounter business
+   * (switch away before decrementing incounter) or just remove the sanity
+   * check and not worry about it.
+   */
+  // Make sure child is inactive
+  // for (uint32_t i = 0; i < s->numberOfProcs; i++) {
+  //   assert(s->procStates[i].currentThread != childop);
+  // }
+#endif
+
+  assert(thread != NULL);
+  assert(thread->hierarchicalHeap != NULL);
+  assert(child != NULL);
+  assert(child->hierarchicalHeap != NULL);
+
+  HM_HH_merge(s, thread, child);
+
+  /* ======================================================================== */
+
+  HM_HH_promoteChunks(s, thread);
+  thread->currentDepth = newDepth;
+
+  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
+  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
+    thread->disentangledDepth = INT32_MAX;
+  }
+
+  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
+   * control the "use ancestor chunk" optimization, a good sanity check. */
+  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
+  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
+
+  GC_HH_decheckJoin(s, tidLeft, tidRight);
+
+
+  /* SAM_NOTE: Why do we need to ensure here?? Is it just to ensure current
+   * level? */
+  /* SAM_NOTE: It is important that this happens after the merge completes,
+   * because the stack may contain a pointer into the child's heap (we merge
+   * right after reading from the "right branch" result ref).
+   */
+  HM_ensureHierarchicalHeapAssurances(s, false, GC_HEAP_LIMIT_SLOP, TRUE);
+
+  /* This should be true, otherwise our call to
+   * HM_ensureHierarchicalHeapAssurances() above was on the wrong heap!
+   */
+  assert(getHierarchicalHeapCurrent(s) == thread->hierarchicalHeap);
+
+
+  leave(s);
+}
+
+
+
+uint32_t GC_currentSpareHeartbeats(GC_state s) {
+  return s->spareHeartbeats;
+}
+
+
+uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
+  uint32_t current = s->spareHeartbeats;
+  s->spareHeartbeats = min(current+spares, s->controls->heartbeatTokens);
+  return s->spareHeartbeats;
+}
+
+
+Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
+  uint32_t spares = s->spareHeartbeats;
+  if (spares >= count) {
+    // LOG(LM_PARALLEL, LL_FORCE, "success (count = %u). new spares = %u", count, spares - count);
+    s->spareHeartbeats -= count;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+bool GC_HH_canForkThread(GC_state s, pointer threadp) {
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  // pointer pframe = findPromotableFrame(s, fromStack);
+  pointer pframe = findYoungestPromotableFrame(s, fromStack);
+  leave(s);
+  return NULL != pframe;
+}
+
+
+objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+
+  pointer pframe = findPromotableFrame(s, fromStack);
+  if (NULL == pframe) {
+    DIE("forkThread failed!");
+    leave(s);
+    return BOGUS_OBJPTR;
+  }
+
+#if ASSERT
+  GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
+  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
+  assert(fi->kind == PCALL_CONT_FRAME);
+#endif
+  GC_returnAddress parl_ret = *((GC_returnAddress*)(pframe - 2 * GC_RETURNADDRESS_SIZE));
+  GC_returnAddress parr_ret = *((GC_returnAddress*)(pframe - 3 * GC_RETURNADDRESS_SIZE));
+
+  // =========================================================================
+  // First, write dp (data pointer) onto the promotable frame
+  // =========================================================================
+
+  objptr dop = pointerToObjptr(dp, NULL);
+  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE)) = dop;
+
+  /* SAM_NOTE: VERY SUBTLE: the next line (which updates the pframe's return
+   * address) absolutely must happen before we call newThread. This is because
+   * newThread might trigger a GC, and we need to forward the dop. By updating
+   * pframe's return address, we inform the GC that the frame is a
+   * PCALL_PARL_FRAME, and the GC then knows that the dataslot pointer is live
+   * and will forward it appropriately. When we later copy this frame, all
+   * values in the frame have already been forwarded, and we get the new
+   * versions of those values in the new frame for free.
+   *
+   * It's possible we could work around this another way. For example, we
+   * could create additional roots in the gcstate, e.g. s->roots[0] = dop,
+   * and then handle these explicitly during GC, allowing us to read off the
+   * forwarded value s->roots[0] after GC completes.
+   * 
+   * I prefer this little hack over the alternative, because it is much easier,
+   * just subtle. Hence the hopefully informative comment :)
+   */
+
+  // left side: transition to PCALL_PARL_FRAME
+  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
+
+  // =========================================================================
+  // Next, copy the promotable frame
+  // =========================================================================
+
+  // SAM_NOTE: we need a decent amount of reserved space to make sure that
+  // the next call on this stack has enough space. Next call might be a
+  // non-tail, which might bump up to max frame size.
+  size_t newStackReserved = alignStackReserved(s, 2*s->maxFrameSize);
+
+  uint32_t newDepth = getThreadCurrent(s)->currentDepth;
+
+  assert (s->savedThread == BOGUS_OBJPTR);
+  s->savedThread = pointerToObjptr(threadp, NULL);
+  GC_thread copied = newThread (s, newStackReserved);
+  assert(s->savedThread == pointerToObjptr(threadp, NULL));
+  s->savedThread = BOGUS_OBJPTR;
+  objptr copiedp =
+    pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
+
+  GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
+  copyStackFrameToNewStack(s, pframe, fromStack, toStack);
+  pointer newFrame = getStackTop(s, toStack);
+
+  // right side: transition to PCALL_PARR_FRAME
+  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = parr_ret;
+
+  /* SAM_NOTE: would like to assert these, but jop may have already been
+   * forwarded above (calling newThread, above, might trigger a GC)
+   */
+  // assert(*(objptr*)(pframe - fi->size) == jop);
+  // assert(*(objptr*)(newFrame - fi->size) == jop);
+
+  // Is this right? Or are we missing one suspended depth because forkThread
+  // happens before the decheck fork? Might need to fix this by fusing decheck
+  // fork with this function.
+  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
+
+  // uint32_t spares = getThreadCurrent(s)->spareHeartbeats;
+  // uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
+  // copied->spareHeartbeats += half;
+  // getThreadCurrent(s)->spareHeartbeats -= half;
+
+  leave(s);
+  return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
+}
+
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
