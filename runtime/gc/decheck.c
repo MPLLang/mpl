@@ -329,18 +329,35 @@ void traverseAndCheck(
   GC_state s,
   __attribute__((unused)) objptr *opp,
   objptr op,
-  __attribute__((unused)) void *rawArgs)
+  void *rawArgs)
 {
+
   GC_header header = getHeader(objptrToPointer(op, NULL));
   pointer p = objptrToPointer (op, NULL);
   assert (pinType(header) == PIN_ANY);
   assert (!isFwdHeader(header));
-  if (isMutableH(s, header)) {
+
+  uint32_t requiredUnpinDepth = *(uint32_t*)rawArgs;
+  uint32_t actualUnpinDepth = unpinDepthOfH(header);
+  uint32_t currentDepth = HM_getObjptrDepth(op);
+
+  assert (actualUnpinDepth <= requiredUnpinDepth);
+
+  if (currentDepth <= requiredUnpinDepth) {
+    /* This object is an ancestor of the current thread, so the object is
+     * disentangled from the current thread's perspective. No futher checks
+     * are required. (If this object is mutable and has a down-pointer, it might
+     * be a suspect, but I don't need it to be a suspect for entanglement.)
+     */
+    return;
+  }
+  else if (isMutableH(s, header)) {
     assert (ES_contains(NULL, op));
   }
   else {
+    uint32_t requiredUnpinDepthForReachable = actualUnpinDepth;
     struct GC_foreachObjptrClosure echeckClosure =
-        {.fun = traverseAndCheck, .env = NULL};
+        {.fun = traverseAndCheck, .env = &requiredUnpinDepthForReachable};
     foreachObjptrInObject(s, p, &trueObjptrPredicateClosure, &echeckClosure, FALSE);
   }
 }
@@ -432,10 +449,12 @@ void make_entangled(
     assert(ES_contains(NULL, new_ptr));
   }
 
-  traverseAndCheck(s, &new_ptr, new_ptr, NULL);
+  uint32_t requiredUnpinDepth = mea->unpinDepth;
+  traverseAndCheck(s, &new_ptr, new_ptr, &requiredUnpinDepth);
 
   assert (!mutable || ES_contains(NULL, new_ptr));
 }
+
 
 objptr manage_entangled(
   GC_state s,
@@ -486,6 +505,9 @@ objptr manage_entangled(
     Trace0(EVENT_MANAGE_ENTANGLED_ENTER);
     make_entangled(s, &ptr, ptr, (void*) &mea);
     Trace0(EVENT_MANAGE_ENTANGLED_LEAVE);
+
+    uint32_t requiredUnpinDepth = newUnpinDepth;
+    traverseAndCheck(s, &ptr, ptr, &requiredUnpinDepth);
   }
   else {
     if (isMutableH(s, header) && !ES_contains(NULL, ptr)) {
@@ -493,11 +515,12 @@ objptr manage_entangled(
       ES_add(s, HM_HH_getSuspects(lcaHeap), ptr);
       assert(ES_contains(NULL, ptr));
     }
-    traverseAndCheck(s, &ptr, ptr, NULL);
+
+    uint32_t requiredUnpinDepth = unpinDepth;
+    traverseAndCheck(s, &ptr, ptr, &requiredUnpinDepth);
   }
 
 
-  traverseAndCheck(s, &ptr, ptr, NULL);
   return ptr;
   // GC_header header = getRacyHeader(objptrToPointer(ptr, NULL));
   // bool mutable = isMutableH(s, header);
