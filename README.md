@@ -21,7 +21,7 @@ Features:
     **hierarchical memory management** and **disentanglement**
     [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)].
   * Support for large memory sizes and large core counts. MPL efficiently
-    handles heap sizes of as much as 1TB, and scales to hundreds of cores.
+    handles heap sizes of as much as 1TB or more, and scales to hundreds of cores.
 
 MPL is being actively developed. If you are interested in contributing to
 the project, PRs are welcome!
