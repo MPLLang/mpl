@@ -1,14 +1,30 @@
-# MPL
+# MaPLe (MPL)
 
-MaPLe (MPL) is a parallel functional language with excellent multicore
-performance. The compiler is based on [MLton](http://mlton.org), and the
-language itself is essentially Standard ML with extensions for parallelism.
-MPL features provably efficient parallel garbage collection and scheduling
-based on disentanglement
-[[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)]
-as well as provably efficient automatic granularity control [[7](#wfra24)].
+MaPLe (MPL) is a functional language for provably efficient and safe multicore
+parallelism, developed at Carnegie Mellon University.
 
-MPL is research software and is being actively developed.
+Features:
+  * Support for the full Standard ML programming language, extended with
+    primitives for task-based parallelism as well as data-parallel computations.
+  * Whole-program compilation based on [MLton](http://www.mlton.org),
+    with aggressive optimizations to achieve performance competitive
+    with languages such as C/C++.
+  * Efficient memory representations, including untagged and unboxed native
+    integers (signed and unsigned), reals (32-bit and 64-bit floating point),
+    characters, and native arrays with unboxed elements.
+  * Simple and fast foreign-function calls into C, based on
+    [MLtonFFI](http://mlton.org/ForeignFunctionInterface).
+  * Efficient support for both regular and irregular fine-grained parallelism,
+    with provably efficient **automatic parallelism management** [[7](#wfra24)]
+    to control the overheads of task creation.
+  * Provably efficient parallel garbage collection based on
+    **hierarchical memory management** and **disentanglement**
+    [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)].
+  * Support for large memory sizes and large core counts. MPL efficiently
+    handles heap sizes of as much as 1TB, and scales to hundreds of cores.
+
+MPL is being actively developed. If you are interested in contributing to
+the project, PRs are welcome!
 
 If you are you interested in using MPL, consider checking
 out the [tutorial](https://github.com/MPLLang/mpl-tutorial).
@@ -55,9 +71,10 @@ PPoPP 2018.
 Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
 ICFP 2016.
 
-## Docker
+## Try It Out
 
-Try out MPL with Docker:
+If you want to quickly try out using MPL, you can download the Docker image and
+run one of the [examples](examples/).
 ```
 $ docker pull shwestrick/mpl
 $ docker run -it shwestrick/mpl /bin/bash
