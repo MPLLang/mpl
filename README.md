@@ -5,23 +5,24 @@ parallelism, developed at Carnegie Mellon University.
 
 Features:
   * Support for the full Standard ML programming language, extended with
-    primitives for task-based parallelism as well as data-parallel computations.
+    task-parallel and data-parallel primitives.
   * Whole-program compilation based on [MLton](http://www.mlton.org),
     with aggressive optimizations to achieve performance competitive
     with languages such as C/C++.
-  * Efficient memory representations, including untagged and unboxed native
-    integers (signed and unsigned), reals (32-bit and 64-bit floating point),
-    characters, and native arrays with unboxed elements.
+  * Efficient memory representations, including:
+      - Untagged and unboxed native integers and floating-point numbers.
+      - Flattened tuples and records.
+      - Native arrays with contiguous unboxed elements.
   * Simple and fast foreign-function calls into C, based on
     [MLtonFFI](http://mlton.org/ForeignFunctionInterface).
-  * Efficient support for both regular and irregular fine-grained parallelism,
+  * Support for both regular and irregular fine-grained parallelism,
     with provably efficient **automatic parallelism management** [[7](#wfra24)]
     to control the overheads of task creation.
   * Provably efficient parallel garbage collection based on
     **hierarchical memory management** and **disentanglement**
     [[1](#rmab16),[2](#gwraf18),[3](#wyfa20),[4](#awa21),[5](#waa22),[6](#awa23)].
-  * Support for large memory sizes and large core counts. MPL efficiently
-    handles heap sizes of as much as 1TB or more, and scales to hundreds of cores.
+  * Support for large core counts and large memory sizes. MPL scales to hundreds
+    of cores, and can efficiently handle heap sizes of as much as 1TB or more.
 
 MPL is being actively developed. If you are interested in contributing to
 the project, PRs are welcome!
@@ -294,8 +295,8 @@ The [`mpl-switch`](https://github.com/mpllang/mpl-switch) utility makes it
 easy to install multiple versions of MPL on the same system and switch
 between them. After setting up `mpl-switch`, you can install MPL as follows:
 ```
-$ mpl-switch install v0.4
-$ mpl-switch select v0.4
+$ mpl-switch install v0.5
+$ mpl-switch select v0.5
 ```
 
 You can use any commit hash or tag name from the MPL repo to pick a
