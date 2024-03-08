@@ -65,10 +65,6 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   // printf("%s %d\n", "setting thread depth to ", depth);
   // printf("%s %d\n", "HH depth = ", thread->hierarchicalHeap->depth);
 
-  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
-    thread->disentangledDepth = INT32_MAX;
-  }
-
   /* SAM_NOTE: not super relevant here, but if we do eventually decide to
    * control the "use ancestor chunk" optimization, a good sanity check. */
   assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
@@ -277,11 +273,6 @@ void GC_HH_joinIntoParentBeforeFastClone(
   HM_HH_promoteChunks(s, thread);
   thread->currentDepth = newDepth;
 
-  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
-  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
-    thread->disentangledDepth = INT32_MAX;
-  }
-
   /* SAM_NOTE: not super relevant here, but if we do eventually decide to
    * control the "use ancestor chunk" optimization, a good sanity check. */
   assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
@@ -360,11 +351,6 @@ void GC_HH_joinIntoParent(
 
   HM_HH_promoteChunks(s, thread);
   thread->currentDepth = newDepth;
-
-  /* SAM_NOTE: TODO: this stuff is no longer needed, or...? */
-  if (thread->currentDepth <= (uint32_t)thread->disentangledDepth) {
-    thread->disentangledDepth = INT32_MAX;
-  }
 
   /* SAM_NOTE: not super relevant here, but if we do eventually decide to
    * control the "use ancestor chunk" optimization, a good sanity check. */

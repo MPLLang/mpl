@@ -596,28 +596,6 @@ bool decheck(GC_state s, objptr ptr) {
       return true;
 
   return false;
-#if 0
-
-  /** set the chunk's disentangled depth. This synchronizes with GC, if there
-    * is GC happening by the owner of this chunk.
-    */
-  int32_t newDD = lcaHeapDepth(thread->decheckState, allocator);
-  assert(newDD >= 1);
-  while (TRUE) {
-    int32_t oldDD = atomicLoadS32(&(chunk->disentangledDepth));
-
-    /** Negative means it's frozen for GC. Wait until it's unfrozen... */
-    while (oldDD < 0) {
-      pthread_yield();
-      oldDD = atomicLoadS32(&(chunk->disentangledDepth));
-    }
-
-    /** And then attempt to update. */
-    if (newDD >= oldDD ||
-        __sync_bool_compare_and_swap(&(chunk->disentangledDepth), oldDD, newDD))
-      break;
-  }
-#endif
 }
 #else
 bool decheck(GC_state s, objptr ptr)

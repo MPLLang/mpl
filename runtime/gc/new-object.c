@@ -112,7 +112,6 @@ GC_thread newThread(GC_state s, size_t reserved) {
   thread->hierarchicalHeap = NULL;
   thread->currentChunk = NULL;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->disentangledDepth = INT32_MAX;
 
 #ifdef DETECT_ENTANGLEMENT
   thread->decheckState = DECHECK_BOGUS_TID;
@@ -204,7 +203,6 @@ GC_thread newThreadWithHeap(
   thread->hierarchicalHeap = hh;
   thread->currentChunk = tChunk;
   thread->stack = pointerToObjptr((pointer)stack, NULL);
-  thread->disentangledDepth = INT32_MAX;
 
 #ifdef DETECT_ENTANGLEMENT
   thread->decheckState = DECHECK_BOGUS_TID;
