@@ -1967,17 +1967,17 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                              * if its not set, then proceed with the value in optVar without any readBarrier
                                              * However, if its set, then we need to call the readBarrier
                                              *)
-                                            fun uint_operand n = Operand.word (WordX.fromInt (n, WordSize.shiftArg))
-                                            (* val shift = Operand.word (WordX.one WordSize.shiftArg) *)
-                                            val smask = 0wx40000000
-                                            val smaskint = Word.toInt smask
-                                            val smaskintInf = IntInf.fromInt smaskint
-                                            val mask = Operand.word (WordX.fromIntInf (smaskintInf, WordSize.shiftArg))
-                                            val (crs, ctag) =
-                                             Statement.andb (Offset {base = varOp(Base.object base),
-                                               offset = Runtime.headerOffset (),
-                                               ty = Type.objptrHeader ()}, mask)
-                                            val (crs2, ctag2) = Statement.rshift (ctag, uint_operand 30)
+                                            val mask = Operand.word
+                                              (WordX.fromIntInf (0x40000000, WordSize.objptrHeader ()))
+                                            val (crs, ctag) = Statement.andb
+                                              (Offset
+                                                 {base = varOp(Base.object base),
+                                                  offset = Runtime.headerOffset (),
+                                                  ty = Type.objptrHeader ()},
+                                               mask)
+                                            val (crs2, ctag2) = Statement.rshift
+                                              (ctag,
+                                               Operand.word (WordX.fromInt (30, WordSize.shiftArg)))
                                             val cont_block =
                                              newBlock {args = Vector.new1 finalDst,
                                                 kind = Kind.Jump,
