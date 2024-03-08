@@ -512,8 +512,6 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
-                  val bytesDisentangledDepth =
-                     Bits.toBytes (Type.width Type.word32)
                   val bytesDecheckState =
                      zeroIfNotDetectEntanglementRuntime
                         (Bits.toBytes (Type.width Type.word64))
@@ -541,7 +539,6 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
-                        bytesDisentangledDepth +
                         bytesDecheckState +
                         bytesDecheckSyncDepths +
                         bytesMinLocalCollectionDepth +
@@ -560,25 +557,25 @@ structure ObjectType =
                end
             val components =
                Vector.fromList (
-                  [Type.word32,
-                   Type.word32,
-                   Type.csize (),
-                   Type.exnStack (),
-                   Type.word32,
-                   Type.word32]
+                  [Type.word32,       (* spareHeartbeats *)
+                   Type.word32,       (* currentProcNum *)
+                   Type.csize (),     (* bytesNeeded *)
+                   Type.exnStack (),  (* exnStack *)
+                   Type.word32]       (* currentDepth *)
                   @
                   (if !Control.detectEntanglementRuntime then
-                     [Type.word64,
-                      Type.bits (Bytes.toBits bytesDecheckSyncDepths)]
+                     [Type.word64]
+                     @
+                     List.new (IntInf.toInt numDecheckSyncDepths, Type.word32)
                    else
                      [])
                   @
-                  [Type.word32,
-                   Type.csize (),
-                   Type.csize (),
-                   Type.cpointer (),
-                   Type.cpointer (),
-                   Type.stack ()]
+                  [Type.word32,       (* minLocalCollectionDepth *)
+                   Type.csize (),     (* bytesAllocatedSinceLastCollection *)
+                   Type.csize (),     (* bytesSurvivedLastCollection *)
+                   Type.cpointer (),  (* hierarchicalHeap *)
+                   Type.cpointer (),  (* currentChunk *)
+                   Type.stack ()]     (* stack *)
                )
             val components =
                Vector.map (components, fn ty => {elt = ty, isMutable = true})
