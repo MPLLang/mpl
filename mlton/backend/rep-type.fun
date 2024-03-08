@@ -568,8 +568,9 @@ structure ObjectType =
                    Type.word32]
                   @
                   (if !Control.detectEntanglementRuntime then
-                     [Type.word64,
-                      Type.bits (Bytes.toBits bytesDecheckSyncDepths)]
+                     [Type.word64]
+                     @
+                     List.new (IntInf.toInt numDecheckSyncDepths, Type.word32)
                    else
                      [])
                   @
