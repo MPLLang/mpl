@@ -132,8 +132,7 @@ GC_thread newThread(GC_state s, size_t reserved) {
 GC_thread newThreadWithHeap(
   GC_state s,
   size_t reserved,
-  uint32_t depth,
-  ARG_USED_FOR_DETECT_ENTANGLEMENT bool existsCurrentThread)
+  uint32_t depth)
 {
   size_t stackSize = sizeofStackWithMetaData(s, reserved);
   size_t threadSize = sizeofThread(s);
@@ -164,14 +163,7 @@ GC_thread newThreadWithHeap(
   sChunk->levelHead = HM_HH_getUFNode(hh);
   sChunk->mightContainMultipleObjects = FALSE;
 
-#ifdef DETECT_ENTANGLEMENT
   decheck_tid_t decheckState = DECHECK_BOGUS_TID;
-  // decheck_tid_t decheckState =
-  //   (existsCurrentThread ?
-  //   getThreadCurrent(s)->decheckState : DECHECK_BOGUS_TID);
-#else
-  decheck_tid_t decheckState = DECHECK_BOGUS_TID;
-#endif
 
   tChunk->decheckState = decheckState;
   sChunk->decheckState = decheckState;
