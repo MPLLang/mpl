@@ -1400,7 +1400,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
-       | PCall =>
+       | Spork =>
             (* spork : (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a -> 'c) -> 'c; *)
             threeTargs (fn (ta, tb, tc) =>
                            let val cont = arrow (unit, ta)
