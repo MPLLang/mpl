@@ -178,7 +178,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                         Rep.unifys (rs, labelArgs handler)))
                          | Return.Tail => (unifyReturns (); unifyRaises ())
                       end
-                 | PCall {func, args, cont, parl, ...} =>
+                 (*| PCall {func, args, cont, parl, ...} =>
                       let
                         val {args = funcArgs,
                              returns = funcReturns, ...} =
@@ -192,7 +192,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                         val _ = doit parl
                       in
                         ()
-                      end
+                      end*)
                  | Goto {dst, args} => coerces (args, labelArgs dst)
                  | Case {cases = Cases.Con cases, ...} =>
                       Vector.foreach
@@ -406,12 +406,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 | Goto {dst, args} =>
                      Goto {dst = dst,
                            args = flattens (args, labelArgs dst)}
-                | PCall {func, args, cont, parl, parr} =>
+                (*| PCall {func, args, cont, parl, parr} =>
                      PCall {func = func,
                             args = flattens (args, funcArgs func),
                             cont = cont,
                             parl = parl,
-                            parr = parr}
+                            parr = parr}*)
                 | Raise xs => Raise (flattens (xs, valOf raisesReps))
                 | Return xs => Return (flattens (xs, valOf returnsReps))
                 | _ => transfer
