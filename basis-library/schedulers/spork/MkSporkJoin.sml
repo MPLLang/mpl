@@ -36,8 +36,8 @@ struct
         loop (z, i, j)
       end
 
-  fun pareduce' (i, j, z, iter, merge) =
-      let fun loop (a, i, j) =
+  fun pareduce' (i: int, j: int, z: 'a, iter: int -> 'a, merge: 'a * 'a -> 'a) : 'a =
+      let fun loop (a: 'a, i: int, j: int) =
               if i >= j then
                 a
               else

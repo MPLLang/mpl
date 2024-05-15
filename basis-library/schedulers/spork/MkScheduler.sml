@@ -1000,12 +1000,11 @@ struct
         end
 
     fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      case maybeSpawnFunc {allowCGC = false} g of
+      case maybeSpawnFunc {allowCGC = true} g of
         NONE => (f (), g ())
       | SOME gj =>
           let
             val fr = Result.result f
-
             val _ = Thread.atomicBegin ()
             val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
           in
@@ -1020,8 +1019,10 @@ struct
 
     fun spork (cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
       let
+        (* TODO: perhaps batch these allocations together *)
         val (inject, project) = Universal.embed ()
 
+        (* TODO: talk with Matthew about the overheads associated with result wrappers *)
         fun cont' () = Result.result cont
 
         fun spwn' () =
@@ -1082,12 +1083,12 @@ struct
 
         fun sync' contr =
           let
-            val contr' = Result.extractResult contr
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "sync continuation" 1
             val jp = primGetData ()
             val spwnr = syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o spwn)
+            val contr' = Result.extractResult contr
             val spwnr' = case project (Result.extractResult spwnr) of
                              SOME r => r
                            | _ => die (fn _ => "scheduler bug: leftSideParCont: failed project right-side result")
