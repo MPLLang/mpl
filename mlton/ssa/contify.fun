@@ -274,7 +274,7 @@ structure InitReachCallersCallees =
                             addEdge {from = f_node,
                                      to = g_node}
                           end
-                       | Block.T {transfer = PCall {func = g, cont, parl, parr, ...}, ...}
+                       (*| Block.T {transfer = PCall {func = g, cont, parl, parr, ...}, ...}
                        => let
                              val callers = FuncData.callers' (getFuncData g)
                              val g_node = getFuncNode g
@@ -291,7 +291,7 @@ structure InitReachCallersCallees =
                           in
                              addEdge {from = f_node,
                                       to = g_node}
-                          end
+                          end*)
                        | _ => ())
                    end)
 
@@ -422,14 +422,14 @@ structure AnalyzeDom =
                                                          to = g_node}
                                         end
                                    else ()
-                              | Block.T {transfer = PCall {func = g, ...}, ...}
+                              (*| Block.T {transfer = PCall {func = g, ...}, ...}
                               => let
                                     val g_node = getFuncNode g
                                  in
                                     (* We can't contify functions that are PCall-ed. *)
                                     addEdge {from = Root,
                                              to = g_node}
-                                 end
+                                 end*)
                               | _ => ())
                        else (* {(Root, f) | not (Reach (f))} *)
                             addEdge {from = Root,
