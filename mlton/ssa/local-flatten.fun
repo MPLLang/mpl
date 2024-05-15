@@ -145,11 +145,10 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
                                        VarInfo.Arg i' => ArgInfo.<= (i', i)
                                      | VarInfo.None => ()
                                      | VarInfo.Tuple => ArgInfo.tuple i))
-                       | PCall {args, cont, parl, parr, ...} =>
-                            (forces args
-                             ; forceArgs cont
-                             ; forceArgs parl
-                             ; forceArgs parr)
+                       | Spork {spid, cont, spwn} =>
+                            (forceArgs cont; forceArgs spwn)
+                       | Spoin {spid, seq, sync} =>
+                            (forceArgs seq; forceArgs sync)
                        | Raise xs => forces xs
                        | Return xs => forces xs
                        | Runtime {args, return, ...} =>
