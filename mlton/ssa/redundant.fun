@@ -341,7 +341,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       | Goto {dst, args, ...} =>
                            Eqrel.refine {coarse = varEquiv args,
                                          fine = labelInfo dst}
-                      | PCall {func, args, cont, parl, ...} =>
+                      (*| PCall {func, args, cont, parl, ...} =>
                           let
                              val {arg = arg', return = return'} = funcInfo func
                              val _ = Eqrel.refine {coarse = varEquiv args,
@@ -352,7 +352,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                           in
                              doit cont
                              ; doit parl
-                          end
+                          end*)
                       | Return xs =>
                            Eqrel.refine {coarse = varEquiv xs,
                                          fine = valOf return}
@@ -521,14 +521,18 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                    args = loopVars (keepUseful 
                                                     (#argsRed (labelReds dst), 
                                                      args))}
-                        | PCall {func, args, cont, parl, parr} =>
+                        (*| PCall {func, args, cont, parl, parr} =>
                              PCall {func = func,
                                     args = loopVars (keepUseful
                                                      (#argsRed (funcReds func),
                                                       args)),
                                     cont = cont,
                                     parl = parl,
-                                    parr = parr}
+                                    parr = parr}*)
+                        | Spork {spid, cont, spwn} =>
+                             Spork {spid = spid, cont = cont, spwn = spwn}
+                        | Spoin {spid, seq, sync} =>
+                             Spoin {spid = spid, seq = seq, sync = sync}
                         | Raise xs => Raise (loopVars xs)
                         | Return xs =>
                              Return (loopVars
