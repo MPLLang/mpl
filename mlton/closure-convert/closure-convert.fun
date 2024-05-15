@@ -1199,11 +1199,11 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
-                        | Prim.PCall_forkThreadAndSetData =>
+                        | Prim.Spork_forkThreadAndSetData =>
                              let
                                 val t = varExpInfo (arg 0)
                                 val x = varExpInfo (arg 1)
-                                val v = Value.pcallDataValue (Vector.first targs)
+                                val v = Value.sporkDataValue (Vector.first targs)
                              in
                                 primApp (v1 (valueType v),
                                          v2 (convertVarInfo t,

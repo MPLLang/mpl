@@ -479,7 +479,24 @@ fun shrinkFunction {globals: Statement.t vector} =
                                  end
                            end
                      end
-                | PCall {args, cont, parl, parr, ...} =>
+                | Spork {spid, cont, spwn} =>
+                    (* COLIN_NOTE: TODO: perhaps we should check for
+                     * things like spork (ID, spoin (ID, b_seq, b_sync), b_spwn) and
+                     * replace them with just b_seq *)
+                     let
+                       val _ = incLabel cont
+                       val _ = incLabel spwn
+                     in
+                       normal ()
+                     end
+                | Spoin {spid, seq, sync} =>
+                     let
+                       val _ = incLabel seq
+                       val _ = incLabel sync
+                     in
+                       normal ()
+                     end
+                (*| PCall {args, cont, parl, parr, ...} =>
                      let
                         val _ = incVars args
                         val _ = incLabel cont
@@ -487,7 +504,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                         val _ = incLabel parr
                      in
                         normal ()
-                     end
+                     end*)
                 | Raise xs => rr (xs, LabelMeaning.Raise)
                 | Return xs => rr (xs, LabelMeaning.Return)
                 | Runtime {args, return, ...} =>
@@ -879,13 +896,24 @@ fun shrinkFunction {globals: Statement.t vector} =
                        test = test}
                    end
               | Goto {dst, args} => goto (dst, varInfos args)
-              | PCall {func, args, cont, parl, parr} =>
+              | Spork {spid, cont, spwn} =>
+                   (* COLIN_NOTE: see above TODO *)
+                   ([],
+                    Spork {spid = spid,
+                           cont = simplifyLabel cont,
+                           spwn = simplifyLabel spwn})
+              | Spoin {spid, seq, sync} =>
+                   ([],
+                    Spoin {spid = spid,
+                           seq = simplifyLabel seq,
+                           sync = simplifyLabel sync})
+              (*| PCall {func, args, cont, parl, parr} =>
                    ([],
                     PCall {func = func,
                            args = simplifyVars args,
                            cont = simplifyLabel cont,
                            parl = simplifyLabel parl,
-                           parr = simplifyLabel parr})
+                           parr = simplifyLabel parr})*)
               | Raise xs => ([], Raise (simplifyVars xs))
               | Return xs => ([], Return (simplifyVars xs))
               | Runtime {prim, args, return} =>
