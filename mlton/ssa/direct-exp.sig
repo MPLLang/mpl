@@ -78,6 +78,7 @@ signature DIRECT_EXP =
                         ty: Type.t} -> t
            val truee: t
            val tuple: {exps: t vector, ty: Type.t} -> t
+           val unit: t
            val var: Var.t * Type.t -> t
            val word: WordX.t -> t
         end

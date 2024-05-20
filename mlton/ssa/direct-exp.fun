@@ -131,6 +131,8 @@ in
    val falsee = make Con.falsee
 end
 
+val unit = Tuple {exps = Vector.new0 (), ty = Type.unit}
+
 fun eq (e1, e2, ty) =
    primApp {prim = Prim.MLton_eq,
             targs = Vector.new1 ty,

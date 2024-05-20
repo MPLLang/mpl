@@ -605,7 +605,25 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                in
                   ()
                end
-          | PCall {args, func, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
+               let
+                 val licont = labelInfo cont
+                 val lispwn = labelInfo spwn
+                 val () = visitLabelInfo licont
+                 val () = visitLabelInfo lispwn
+               in
+                 ()
+               end
+          | Spoin {spid, seq, sync} =>
+               let
+                 val liseq = labelInfo seq
+                 val lisync = labelInfo sync
+                 val () = visitLabelInfo liseq
+                 val () = visitLabelInfo lisync
+               in
+                 ()
+               end
+          (* | PCall {args, func, cont, parl, parr} =>
                let
                   val fi' = funcInfo func
                   val () = flowVarInfoTysVars (FuncInfo.args fi', args)
@@ -635,7 +653,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val () = visitFuncInfo fi'
                in
                   ()
-               end
+               end *)
           | Raise xs =>
                (FuncInfo.raisee fi
                 ; flowVarInfoTysVars (valOf (FuncInfo.raises fi), xs))
