@@ -1195,7 +1195,15 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                               fn (x, (y, _)) => if VarInfo.isUsed y
                                                    then SOME x
                                                 else NONE))}
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
+               Spork {spid = spid,
+                      cont = cont,
+                      spwn = spwn}
+          | Spoin {spid, seq, sync} =>
+               Spoin {spid = spid,
+                      seq = seq,
+                      sync = sync}
+          (*| PCall {func, args, cont, parl, parr} =>
                let
                   val fi' = funcInfo func
                   fun doit label =
@@ -1217,7 +1225,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                          cont = cont,
                          parl = parl,
                          parr = parr}
-               end
+               end*)
           | Raise xs =>
                Raise (Vector.keepAllMap2
                       (xs, valOf (FuncInfo.raises fi),
