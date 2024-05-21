@@ -374,19 +374,19 @@ fun closureConvert
                          (* spork: (unit -> 'a)*(unit -> 'b)*('a -> 'c)*('a -> 'c) -> 'c; *)
                          val _ = loopBind {var = contres,
                                            ty = ta,
-                                           exp = App {func = contres,
-                                                      arg = unitres}}
+                                           exp = App {func = cont,
+                                                      arg = SvarExp.mono unitres}}
                          val _ = loopBind {var = spwnres,
                                            ty = tb,
-                                           exp = App {func = spwnres,
-                                                      arg = unitres}}
+                                           exp = App {func = spwn,
+                                                      arg = SvarExp.mono unitres}}
                          val _ = loopBind {var = seqres,
                                            ty = tc,
-                                           exp = App {func = seqres,
+                                           exp = App {func = seq,
                                                       arg = SvarExp.mono contres}}
                          val _ = loopBind {var = syncres,
                                            ty = tc,
-                                           exp = App {func = syncres,
+                                           exp = App {func = sync,
                                                       arg = SvarExp.mono contres}}
                          val _ = Value.coerce {from = value seqres, to = result}
                          val _ = Value.coerce {from = value syncres, to = result}
@@ -1070,7 +1070,7 @@ fun closureConvert
                  val spwnres = Var.fromString "spwnres"
                  val seqres = Var.fromString "seqres"
                  val syncres = Var.fromString "syncres"
-                 val unitres_value = Value.fromType Type.unit
+                 val unitres_value = Value.fromType Stype.unit
                  val contres_value = Value.fromType ta
                  val spwnres_value = Value.fromType tb
                  val _ = setVarInfo
@@ -1080,7 +1080,7 @@ fun closureConvert
                              lambda = NONE,
                             replacement = ref unitres,
                             status = ref Status.init,
-                            value = unitres_value}
+                            value = unitres_value})
                  val _ = setVarInfo
                            (contres,
                             {frees = ref (ref []),
@@ -1121,7 +1121,7 @@ fun closureConvert
                      newScope
                        (Vector.new1 contres,
                         fn xs =>
-                           let val contres = first xs in
+                           let val contres = Vector.first xs in
                              (contres,
                               apply {func = seq,
                                      arg = SvarExp.mono contres,
@@ -1138,7 +1138,7 @@ fun closureConvert
                                                 body = Dexp.spoin
                                                          {spid = spid,
                                                           seq = seq,
-                                                          sync = syn,
+                                                          sync = sync,
                                                           ty = ty}},
                               spwn = spwn,
                               ty = ty}
