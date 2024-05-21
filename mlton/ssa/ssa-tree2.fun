@@ -875,11 +875,8 @@ structure Transfer =
                   default: Label.t option} (* Must be nullary. *)
        | Goto of {dst: Label.t,
                   args: Var.t vector}
-       | PCall of {args: Var.t vector,
-                   func: Func.t,
-                   cont: Label.t,
-                   parl: Label.t,
-                   parr: Label.t}
+       | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+       | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
        | Raise of Var.t vector
        | Return of Var.t vector
        | Runtime of {prim: Type.t Prim.t,
@@ -901,10 +898,12 @@ structure Transfer =
                    ; Cases.foreach (cases, label)
                    ; Option.app (default, label))
              | Goto {dst, args, ...} => (vars args; label dst)
-             | PCall {func = f, args, cont, parl, parr} =>
-                  (func f
-                   ; label cont; label parl; label parr
-                   ; vars args)
+             | Spork {spid, cont, spwn} =>
+                  (label cont;
+                   label spwn)
+             | Spoin {spid, seq, sync} =>
+                  (label seq;
+                   label sync)
              | Raise xs => vars xs
              | Return xs => vars xs
              | Runtime {args, return, ...} =>
@@ -940,12 +939,10 @@ structure Transfer =
              | Goto {dst, args} =>
                   Goto {dst = fl dst,
                         args = fxs args}
-             | PCall {func, args, cont, parl, parr} =>
-                  PCall {func = func,
-                         args = fxs args,
-                         cont = fl cont,
-                         parl = fl parl,
-                         parr = fl parr}
+             | Spork {spid, cont, spwn} =>
+                  Spork {spid = spid, cont = fl cont, spwn = fl spwn}
+             | Spoin {spid, seq, sync} =>
+                  Spoin {spid = spid, seq = fl seq, sync = fl sync}
              | Raise xs => Raise (fxs xs)
              | Return xs => Return (fxs xs)
              | Runtime {prim, args, return} =>
@@ -1008,12 +1005,14 @@ structure Transfer =
              | Case arg => layoutCase arg
              | Goto {dst, args} =>
                   seq [str "goto ", Label.layout dst, str " ", layoutArgs args]
-             | PCall {func, args, cont, parl, parr} =>
-                  seq [str "pcall ", Func.layout func,
-                       str " ", layoutArgs args, str " ",
-                       record [("cont", Label.layout cont),
-                               ("parl", Label.layout parl),
-                               ("parr", Label.layout parr)]]
+             | Spork {spid, cont, spwn} =>
+                  seq [str "spork ", record [("spid", Spid.layout spid),
+                                             ("cont", Label.layout cont),
+                                             ("spwn", Label.layout spwn)]]
+             | Spoin {spid, seq = bseq, sync = bsync} =>
+                  seq [str "spoin ", record [("spid", Spid.layout spid),
+                                             ("seq", Label.layout bseq),
+                                             ("sync", Label.layout bsync)]]
              | Raise xs => seq [str "raise ", layoutArgs xs]
              | Return xs => seq [str "return ", layoutArgs xs]
              | Runtime {prim, args, return} =>
@@ -1068,18 +1067,18 @@ structure Transfer =
               Label.parse >>= (fn dst =>
               parseArgs >>= (fn args =>
               pure {dst = dst, args = args}))),
-             PCall <$>
-             (kw "pcall" *>
-              Func.parse >>= (fn func =>
-              parseArgs >>= (fn args =>
-              cbrack (ffield ("cont", Label.parse) >>= (fn cont =>
-                      nfield ("parl", Label.parse) >>= (fn parl =>
-                      nfield ("parr", Label.parse) >>= (fn parr =>
-                      pure {func = func,
-                            args = args,
-                            cont = cont,
-                            parl = parl,
-                            parr = parr}))))))),
+             Spork <$>
+             (kw "spork" *>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
+                      nfield ("cont", Label.parse) >>= (fn cont =>
+                      nfield ("spwn", Label.parse) >>= (fn spwn =>
+                      pure {spid = spid, cont = cont, spwn = spwn}))))),
+             Spoin <$>
+             (kw "spoin" *>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
+                      nfield ("seq", Label.parse) >>= (fn seq =>
+                      nfield ("sync", Label.parse) >>= (fn sync =>
+                      pure {spid = spid, seq = seq, sync = sync}))))),
              Raise <$> (kw "raise" *> parseArgs),
              Return <$> (kw "return" *> parseArgs),
              Runtime <$>
@@ -1109,13 +1108,10 @@ structure Transfer =
           | (Goto {dst, args}, Goto {dst = dst', args = args'}) =>
                Label.equals (dst, dst') andalso
                varsEquals (args, args')
-          | (PCall {func, args, cont, parl, parr},
-             PCall {func = func', args = args', cont = cont', parl = parl', parr = parr'}) =>
-               Func.equals (func, func') andalso
-               varsEquals (args, args') andalso
-               Label.equals (cont, cont') andalso
-               Label.equals (parl, parl') andalso
-               Label.equals (parr, parr')
+          | (Spork {spid, cont, spwn}, Spork {spid = spid', cont = cont', spwn = spwn'}) =>
+            Spid.equals (spid, spid') andalso Label.equals (cont, cont') andalso Label.equals (spwn, spwn')
+          | (Spoin {spid, seq, sync}, Spoin {spid = spid', seq = seq', sync = sync'}) =>
+            Spid.equals (spid, spid') andalso Label.equals (seq, seq') andalso Label.equals (sync, sync')
           | (Raise xs, Raise xs') => varsEquals (xs, xs')
           | (Return xs, Return xs') => varsEquals (xs, xs')
           | (Runtime {prim, args, return},
@@ -1132,6 +1128,8 @@ structure Transfer =
          val bug = newHash ()
          val raisee = newHash ()
          val return = newHash ()
+         val spork = newHash ()
+         val spoin = newHash ()
          fun hashVars (xs: Var.t vector, w: Word.t): Word.t =
             Hash.combine (w, Hash.vectorMap (xs, Var.hash))
          fun hash2 (w1: Word.t, w2: Word.t) = Hash.combine (w1, w2)
@@ -1154,12 +1152,10 @@ structure Transfer =
                           hash2 (Label.hash l, w)))
              | Goto {dst, args} =>
                   hashVars (args, Label.hash dst)
-             | PCall {func, args, cont, parl, parr} =>
-                  hashVars (args,
-                            hash4 (Func.hash func,
-                                   Label.hash cont,
-                                   Label.hash parl,
-                                   Label.hash parr))
+             | Spork {spid, cont, spwn} =>
+                  hash4 (Spid.hash spid, Label.hash cont, Label.hash spwn, spork)
+             | Spoin {spid, seq, sync} =>
+                  hash4 (Spid.hash spid, Label.hash seq, Label.hash sync, spoin)
              | Raise xs => hashVars (xs, raisee)
              | Return xs => hashVars (xs, return)
              | Runtime {args, return, ...} => hashVars (args, Label.hash return)
@@ -1510,10 +1506,12 @@ structure Function =
                                   ()
                                end
                           | Goto {dst, ...} => edge (dst, "", Solid)
-                          | PCall {cont, parl, parr, ...} =>
-                               (edge (cont, "Cont", Dotted)
-                                ; edge (parl, "ParL", Dotted)
-                                ; edge (parr, "ParR", Dotted))
+                          | Spork {spid, cont, spwn} =>
+                               (edge (cont, "Cont", Dotted);
+                                edge (spwn, "Spwn", Dotted))
+                          | Spoin {spid, seq, sync} =>
+                               (edge (seq, "Seq", Dotted);
+                                edge (sync, "Sync", Dotted))
                           | Raise _ => ()
                           | Return _ => ()
                           | Runtime {return, ...} => edge (return, "", Dotted)
@@ -2024,20 +2022,6 @@ structure Program =
                                              if is
                                                 then []
                                              else [EdgeOption.Style Dotted])))
-                                end
-                           | PCall {func, ...} =>
-                                let
-                                   val to = funcNode func
-                                   val {nontail, ...} = get to
-                                   val r = nontail
-                                in
-                                   if !r
-                                      then ()
-                                   else (r := true
-                                         ; (setEdgeOptions
-                                            (Graph.addEdge
-                                             (graph, {from = from, to = to}),
-                                             [])))
                                 end
                            | _ => ())
                       val _ = destroy ()

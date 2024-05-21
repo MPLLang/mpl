@@ -37,6 +37,8 @@ local
    c-function.fun
    const.sig
    const.fun
+   spid.sig
+   spid.fun
    symbol.sig
    symbol.fun
    field.sig
@@ -109,6 +111,7 @@ in
    signature REAL_X
    signature RECORD
    signature SYMBOL
+   signature SPID
    signature TYCON
    signature TYCON_KIND
    signature TYPE_OPS

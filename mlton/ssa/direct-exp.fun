@@ -42,11 +42,11 @@ datatype t =
  | Let of {decs: {var: Var.t, exp: t} list,
            body: t}
  | Name of t * (Var.t -> t)
- | Spork of {spid: WordX.t,
+ | Spork of {spid: Spid.t,
              cont: t,
              spwn: t,
              ty: Type.t}
- | Spoin of {spid: WordX.t,
+ | Spoin of {spid: Spid.t,
              seq: t,
              sync: t,
              ty: Type.t}
@@ -200,12 +200,12 @@ in
                      layout body)
        | Name _ => str "Name"
        | Spork {spid, cont, spwn, ty} =>
-            align [seq [str "spork ", str (WordX.toString (spid, {suffix = true})), str ": ", Type.layout ty, str " of"],
+            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
                    indent
                      (align [seq [str "  cont => ", layout cont],
                              seq [str "| spwn => ", layout spwn]], 2)]
        | Spoin {spid, seq = bseq, sync = bsync, ty} =>
-            align [seq [str "spork ", str (WordX.toString (spid, {suffix = true})), str ": ", Type.layout ty, str " of"],
+            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
                    indent
                      (align [seq [str "  seq => ", layout bseq],
                              seq [str "| sync => ", layout bsync]], 2)]

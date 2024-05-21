@@ -40,6 +40,7 @@ signature ATOMS' =
       structure SortedRecord: RECORD
       structure SourceInfo: SOURCE_INFO
       structure SourceMaps: SOURCE_MAPS
+      structure Spid: SPID
       structure Symbol: SYMBOL
       structure Tycon: TYCON
       structure TyconKind: TYCON_KIND
@@ -112,6 +113,7 @@ signature ATOMS =
       sharing SourceInfo = Atoms.SourceInfo
       sharing SourceMaps = Atoms.SourceMaps
       sharing Symbol = Atoms.Symbol
+      sharing Spid = Atoms.Spid
       sharing Tycon = Atoms.Tycon
       sharing TyconKind = Atoms.TyconKind
       sharing Tyvar = Atoms.Tyvar

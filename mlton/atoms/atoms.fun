@@ -38,6 +38,7 @@ structure Atoms =
                                structure WordX = WordX
                                structure WordXVector = WordXVector)
 
+      structure Spid = Spid
       structure Symbol = Symbol ()
       structure Field = Field (structure Symbol = Symbol)
       structure Record = Record (val isSorted = false

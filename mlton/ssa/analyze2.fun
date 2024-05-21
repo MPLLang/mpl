@@ -161,7 +161,9 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} => ()
+          | Spoin {spid, seq, sync} => ()
+          (*| PCall {func, args, cont, parl, parr} =>
                let
                   val {args = formals, raises, returns} = funcInfo func
                   val _ = coerces ("pcall args/formals", values args, formals)
@@ -182,7 +184,7 @@ fun 'a analyze
                                              " must be nullary)"])
                in
                   ()
-               end
+               end*)
           | Raise xs =>
                (case shouldRaises of
                    NONE => Error.bug "Analyze2.loopTransfer (raise mismatch at Raise)"

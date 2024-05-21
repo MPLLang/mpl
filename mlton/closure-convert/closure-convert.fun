@@ -43,6 +43,7 @@ in
    structure Block = Block
    structure Datatype = Datatype
    structure Dexp = DirectExp
+   structure Spid = Spid
    structure Func = Func
    structure Function = Function
    structure SourceInfo = SourceInfo
@@ -1129,7 +1130,7 @@ fun closureConvert
                                      arg = SvarExp.mono contres,
                                      resultVal = v})
                            end)
-                 val spid = WordX.fromInt 0 (*TODO*)
+                 val spid = Spid.new ()
                  val exp = Dexp.spork
                              {spid = spid,
                               cont = Dexp.lett {decs = [{var = contres,
@@ -1144,7 +1145,7 @@ fun closureConvert
                in
                  (exp, ac)
                end
-             | SprimExp.PrimApp {prim = Prim.PCall, targs, args} =>
+             (*| SprimExp.PrimApp {prim = Prim.PCall, targs, args} =>
                   let
                      fun targ i = Vector.sub (targs, i)
                      val tb = targ 1
@@ -1275,7 +1276,7 @@ fun closureConvert
                                   parr = parr,
                                   ty = ty},
                       ac)
-                  end
+                  end*)
              | SprimExp.PrimApp {prim, targs, args} =>
                   let
                      val prim = Prim.map (prim, convertType)

@@ -557,8 +557,8 @@ structure Transfer =
                   default: Label.t option} (* Must be nullary. *)
        | Goto of {dst: Label.t,
                   args: Var.t vector}
-       | Spork of {spid: WordX.t, cont: Label.t, spwn: Label.t}
-       | Spoin of {spid: WordX.t, seq: Label.t, sync: Label.t}
+       | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+       | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
        | Raise of Var.t vector
        | Return of Var.t vector
        | Runtime of {prim: Type.t Prim.t,
@@ -696,11 +696,11 @@ structure Transfer =
              | Goto {dst, args} =>
                   seq [str "goto ", Label.layout dst, str " ", layoutArgs args]
              | Spork {spid, cont, spwn} =>
-                  seq [str "spork ", record [("spid", WordX.layout (spid, {suffix = true})),
+                  seq [str "spork ", record [("spid", Spid.layout spid),
                                              ("cont", Label.layout cont),
                                              ("spwn", Label.layout spwn)]]
              | Spoin {spid, seq = bseq, sync = bsync} =>
-                  seq [str "spoin ", record [("spid", WordX.layout (spid, {suffix = true})),
+                  seq [str "spoin ", record [("spid", Spid.layout spid),
                                              ("seq", Label.layout bseq),
                                              ("sync", Label.layout bsync)]]
              | Raise xs => seq [str "raise ", layoutArgs xs]
@@ -758,13 +758,13 @@ structure Transfer =
               pure {dst = dst, args = args}))),
              Spork <$>
              (kw "spork" *>
-              cbrack (ffield ("spid", WordX.parse) >>= (fn spid =>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
                       nfield ("cont", Label.parse) >>= (fn cont =>
                       nfield ("spwn", Label.parse) >>= (fn spwn =>
                       pure {spid = spid, cont = cont, spwn = spwn}))))),
              Spoin <$>
              (kw "spoin" *>
-              cbrack (ffield ("spid", WordX.parse) >>= (fn spid =>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
                       nfield ("seq", Label.parse) >>= (fn seq =>
                       nfield ("sync", Label.parse) >>= (fn sync =>
                       pure {spid = spid, seq = seq, sync = sync}))))),
@@ -798,9 +798,9 @@ structure Transfer =
                Label.equals (dst, dst') andalso
                varsEquals (args, args')
           | (Spork {spid, cont, spwn}, Spork {spid = spid', cont = cont', spwn = spwn'}) =>
-            WordX.equals (spid, spid') andalso Label.equals (cont, cont') andalso Label.equals (spwn, spwn')
+            Spid.equals (spid, spid') andalso Label.equals (cont, cont') andalso Label.equals (spwn, spwn')
           | (Spoin {spid, seq, sync}, Spoin {spid = spid', seq = seq', sync = sync'}) =>
-            WordX.equals (spid, spid') andalso Label.equals (seq, seq') andalso Label.equals (sync, sync')
+            Spid.equals (spid, spid') andalso Label.equals (seq, seq') andalso Label.equals (sync, sync')
           | (Raise xs, Raise xs') => varsEquals (xs, xs')
           | (Return xs, Return xs') => varsEquals (xs, xs')
           | (Runtime {prim, args, return},
@@ -842,9 +842,9 @@ structure Transfer =
              | Goto {dst, args} =>
                   hashVars (args, Label.hash dst)
              | Spork {spid, cont, spwn} =>
-                  hash4 (WordX.hash spid, Label.hash cont, Label.hash spwn, spork)
+                  hash4 (Spid.hash spid, Label.hash cont, Label.hash spwn, spork)
              | Spoin {spid, seq, sync} =>
-                  hash4 (WordX.hash spid, Label.hash seq, Label.hash sync, spoin)
+                  hash4 (Spid.hash spid, Label.hash seq, Label.hash sync, spoin)
              | Raise xs => hashVars (xs, raisee)
              | Return xs => hashVars (xs, return)
              | Runtime {args, return, ...} => hashVars (args, Label.hash return)

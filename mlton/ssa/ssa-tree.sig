@@ -124,8 +124,8 @@ signature SSA_TREE =
                          cont: Label.t,
                          parl: Label.t,
                          parr: Label.t}*)
-             | Spork of {spid: WordX.t, cont: Label.t, spwn: Label.t}
-             | Spoin of {spid: WordX.t, seq: Label.t, sync: Label.t}
+             | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+             | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
              (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)

@@ -26,6 +26,7 @@ signature PROD
 signature REAL_SIZE
 signature REAL_X
 signature RECORD
+signature SPID
 signature SYMBOL
 signature TYCON
 signature TYCON_KIND
@@ -44,6 +45,7 @@ functor Id
 functor GenericScheme
 functor HashType
 functor TypeOps
+structure Spid
 
 is
 
@@ -75,6 +77,8 @@ c-function.sig
 c-function.fun
 const.sig
 const.fun
+spid.sig
+spid.fun
 symbol.sig
 symbol.fun
 field.sig
