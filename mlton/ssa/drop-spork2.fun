@@ -19,21 +19,18 @@ fun dropSporkFunction f =
           let
             (* remove Prim.Spork_forkThreadAndSetData and Prim.Spork_getData *)
             val statements =
-                Vector.fromList
-                  (List.keepAll
-                     (List.tabulate (Vector.length statements,
-                                     (fn i => Vector.sub (statements, i))),
-                      fn Statement.Bind {exp, ty, var} =>
-                         case exp of
-                             Exp.PrimApp {args, prim} =>
-                                case prim of
-                                    (* once spork/spoin removed, these should never matter *)
-                                    Prim.Spork_forkThreadAndSetData => false
-                                  | Prim.Spork_getData => false
-                                  | _ => true
-                           | _ => true
-                      | _ => true
-                  ))
+                Vector.keepAll
+                  (statements,
+                   fn Statement.Bind {exp, ty, var} =>
+                      case exp of
+                          Exp.PrimApp {args, prim} =>
+                             case prim of
+                                 (* once spork/spoin removed, these should never matter *)
+                                 Prim.Spork_forkThreadAndSetData => false
+                               | Prim.Spork_getData => false
+                               | _ => true
+                        | _ => true
+                   | _ => true)
             (* Changes sporks and spoins into gotos of the sequential case *)
             val transfer =
                 case transfer of
