@@ -253,7 +253,7 @@ local
                  ("splitTypes", SplitTypes.transform),
                  ("useless", Useless.transform),
                  ("ssaAddProfile", Profile.addProfile),
-                 (* ("ssaDropPCall", DropPCall.transform), *)
+                 ("ssaDropSpork", DropSpork.transform),
                  ("ssaDropProfile", Profile.dropProfile),
                  ("ssaBreakCriticalEdges", fn p => S.breakCriticalEdges (p, {codeMotion = true})),
                  ("ssaEliminateDeadBlocks", S.eliminateDeadBlocks),

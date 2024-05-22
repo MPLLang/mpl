@@ -62,8 +62,8 @@ combine-conversions.fun
 constant-propagation.fun
 contify.fun
 deep-flatten.fun
-(* drop-pcall.fun *)
-(* drop-pcall2.fun *)
+drop-spork.fun
+drop-spork2.fun
 duplicate-globals.fun
 flatten.fun
 inline.sig
