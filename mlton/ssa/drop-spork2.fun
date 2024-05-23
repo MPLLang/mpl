@@ -27,7 +27,8 @@ fun dropSporkFunction f =
                              case prim of
                                  (* once spork/spoin removed, these should never matter *)
                                  Prim.Spork_forkThreadAndSetData => false
-                               | Prim.Spork_getData => false
+                               (* We will rely on dead code elim to clean up Spork_getData *)
+                               (*| Prim.Spork_getData => false*)
                                | _ => true
                         | _ => true
                    | _ => true)
