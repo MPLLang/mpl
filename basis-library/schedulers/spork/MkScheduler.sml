@@ -1041,7 +1041,7 @@ struct
             val _ = assertAtomic "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
-            val spwnr = Result.result (inject o spwn)
+            val spwnr = Result.result spwn
 
             val _ = Thread.atomicBegin ()
             val depth' = HH.getDepth (Thread.current ())
@@ -1081,12 +1081,12 @@ struct
         fun seq' contr =
             seq (Result.extractResult contr)
 
-        fun sync' contr =
+        fun sync' (contr, jp) =
           let
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = assertAtomic "sync continuation" 1
-            val jp = primGetData ()
+            (*val jp = primGetData ()*)
             val spwnr = syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o spwn)
             val contr' = Result.extractResult contr
             val spwnr' = case project (Result.extractResult spwnr) of
@@ -1099,11 +1099,10 @@ struct
         primSpork (cont', spwn', seq', sync')
       end
 
-
     fun greedyWorkAmortizedSpork (cont: unit -> 'a, spwn: unit -> 'b,
                                   seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
       if currentSpareHeartbeats () < spawnCost then
-        spork (cont, spwn, seq, sync)
+        spork' (cont, spwn, seq, sync)
       else
         case maybeSpawnFunc {allowCGC = true} spwn of
           NONE => seq (cont ())

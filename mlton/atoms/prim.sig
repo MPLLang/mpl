@@ -219,6 +219,7 @@ signature PRIM =
                             targs: 'a vector,
                             typeOps: {array: 'a -> 'a,
                                       arrow: 'a * 'a -> 'a,
+                                      tuple: 'a vector -> 'a,
                                       bool: 'a,
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,

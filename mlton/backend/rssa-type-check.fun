@@ -272,7 +272,8 @@ fun checkHandlers (Program.T {functions, ...}) =
                                 | Tail => true
                             end)
                       | Goto {dst, ...} => goto dst
-                      | PCall _ => assert ("pcall", true)
+                      (*| PCall _ => assert ("pcall", true)*)
+                      | Spork _ => assert ("spork", true)
                       | Raise _ => tail "raise"
                       | Return _ => tail "return"
                       | Switch s => Switch.foreachLabel (s, goto)
@@ -451,7 +452,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                                 | Kind.CReturn _ => chk true
                                 | Kind.Handler => chk true
                                 | Kind.Jump => chk false
-                                | Kind.PCallReturn _ => chk true
+                                | Kind.SporkReturn _ => chk false (*TODO: confirm true/false*)
+                                (*| Kind.PCallReturn _ => chk true*)
                             end
             end
       val {get = labelBlock: Label.t -> Block.t,
@@ -631,40 +633,47 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                    tailIsOk (raises, raises')
                    andalso tailIsOk (returns, returns'))
          end
-      fun pcallIsOk {args, func, cont, parl, parr} =
-         let
-            val pcallDataTy =
-               let
-                  val Block.T {args, ...} = labelBlock parl
-               in
-                  Vector.new1 (#2 (Vector.last args))
-               end
-            val {args = formals, returns = returns', ...} =
-               Function.dest (funcInfo func)
-            val rets = {cont = cont, parl = parl, parr = parr}
-            fun check (sel, returns') =
-               let
-                  val label = sel rets
-                  val Block.T {args = cArgs, kind = cKind, ...} =
-                     labelBlock label
-               in
-                  nonTailIsOk (cArgs, returns')
-                  andalso
-                  (case cKind of
-                      Kind.PCallReturn (rets' as {cont = cont', parl = parl', parr = parr'}) =>
-                         Label.equals (cont, cont')
-                         andalso Label.equals (parl, parl')
-                         andalso Label.equals (parr, parr')
-                         andalso Label.equals (label, sel rets')
-                    | _ => false)
-               end
-         in
-            Vector.equals (args, formals, fn (z, (_, t)) =>
-                           Type.isSubtype (Operand.ty z, t))
-            andalso check (#cont, returns')
-            andalso check (#parl, Option.map (returns', fn returns' => Vector.concat [returns', pcallDataTy]))
-            andalso check (#parr, SOME pcallDataTy)
-         end
+      
+      (* fun pcallIsOk {args, func, cont, parl, parr} = *)
+      (*    let *)
+      (*       val pcallDataTy = *)
+      (*          let *)
+      (*             val Block.T {args, ...} = labelBlock parl *)
+      (*          in *)
+      (*             Vector.new1 (#2 (Vector.last args)) *)
+      (*          end *)
+      (*       val {args = formals, returns = returns', ...} = *)
+      (*          Function.dest (funcInfo func) *)
+      (*       val rets = {cont = cont, parl = parl, parr = parr} *)
+      (*       fun check (sel, returns') = *)
+      (*          let *)
+      (*             val label = sel rets *)
+      (*             val Block.T {args = cArgs, kind = cKind, ...} = *)
+      (*                labelBlock label *)
+      (*          in *)
+      (*             nonTailIsOk (cArgs, returns') *)
+      (*             andalso *)
+      (*             (case cKind of *)
+      (*                 Kind.PCallReturn (rets' as {cont = cont', parl = parl', parr = parr'}) => *)
+      (*                    Label.equals (cont, cont') *)
+      (*                    andalso Label.equals (parl, parl') *)
+      (*                    andalso Label.equals (parr, parr') *)
+      (*                    andalso Label.equals (label, sel rets') *)
+      (*               | _ => false) *)
+      (*          end *)
+      (*    in *)
+      (*       Vector.equals (args, formals, fn (z, (_, t)) => *)
+      (*                      Type.isSubtype (Operand.ty z, t)) *)
+      (*       andalso check (#cont, returns') *)
+      (*       andalso check (#parl, Option.map (returns', fn returns' => Vector.concat [returns', pcallDataTy])) *)
+      (*       andalso check (#parr, SOME pcallDataTy) *)
+      (*    end *)
+
+      fun sporkIsOk {spid, cont, spwn} =
+          true (* TODO *)
+
+      fun spoinIsOk {spid, seq, sync} =
+          true (* TODO *)
 
       fun checkFunction f =
          let
@@ -718,7 +727,11 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                         (checkOperands args
                          ; gotoOk {args = Vector.map (args, Operand.ty),
                                    dst = dst})
-                   | PCall {args, func, cont, parl, parr} =>
+                   | Spork x =>
+                        sporkIsOk x
+                   | Spoin x =>
+                        spoinIsOk x
+                   (*| PCall {args, func, cont, parl, parr} =>
                         let
                            val _ = checkOperands args
                         in
@@ -727,7 +740,7 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                                       cont = cont,
                                       parl = parl,
                                       parr = parr}
-                        end
+                        end*)
                    | Raise zs =>
                         (checkOperands zs
                          ; (case raises of
@@ -782,7 +795,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                               end
                          | Handler => true
                          | Jump => true
-                         | PCallReturn _ => true
+                         | SporkReturn _ => true
+                         (* | PCallReturn _ => true *)
                      end
                   val _ = check' (kind, "kind", kindOk, Kind.layout)
                   val _ =

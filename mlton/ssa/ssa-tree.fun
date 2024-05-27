@@ -246,6 +246,7 @@ structure Type =
                  targs = targs,
                  typeOps = {array = array,
                             arrow = fn _ => raise BadPrimApp,
+                            tuple = tuple,
                             bool = bool,
                             cpointer = cpointer,
                             equals = equals,

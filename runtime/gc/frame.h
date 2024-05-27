@@ -32,6 +32,7 @@
  * into sourceSeqs; see sources.h.
  */
 typedef const uint16_t *GC_frameOffsets;
+//typedef const TODO_t *GC_sporkNest;
 
 typedef enum {
   CONT_FRAME,
@@ -46,6 +47,7 @@ typedef enum {
 typedef const struct GC_frameInfo {
   const GC_frameKind kind;
   const GC_frameOffsets offsets;
+  //const GC_sporkNest nest;
   const uint16_t size;
   const GC_sourceSeqIndex sourceSeqIndex;
 } *GC_frameInfo;

@@ -799,7 +799,8 @@ fun limitCheckCoalesce (f: Function.t, maxAlloc, tyconTy) =
                                         Operand.Const _ => false
                                       | _ => true))
                         | _ => false)
-                 | PCallReturn _ => true
+                 | SporkReturn _ => true
+                 (* | PCallReturn _ => true *)
           in
              b orelse isBigAlloc
           end)

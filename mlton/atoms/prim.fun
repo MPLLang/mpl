@@ -1190,6 +1190,7 @@ fun 'a checkApp (prim: 'a t,
                   targs: 'a vector,
                   typeOps = {array: 'a -> 'a,
                              arrow: 'a * 'a -> 'a,
+                             tuple: 'a vector -> 'a,
                              bool: 'a,
                              cpointer: 'a,
                              equals: 'a * 'a -> bool,
@@ -1252,7 +1253,10 @@ fun 'a checkApp (prim: 'a t,
          andalso done (f (targ 0))
       fun threeTargs f =
           3 = Vector.length targs
-          andalso done (f (targ 0, targ 2, targ 2))
+          andalso done (f (targ 0, targ 1, targ 2))
+      fun fourTargs f =
+          4 = Vector.length targs
+          andalso done (f (targ 0, targ 1, targ 2, targ 3))
       fun fiveTargs f =
          5 = Vector.length targs
          andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4))
@@ -1405,8 +1409,10 @@ fun 'a checkApp (prim: 'a t,
             threeTargs (fn (ta, tb, tc) =>
                            let val cont = arrow (unit, ta)
                                val spwn = arrow (unit, tb)
+                               (* val spwn = arrow (td, tb) *)
                                val seq = arrow (ta, tc)
                                val sync = arrow (ta, tc)
+                               (* val sync = arrow (tuple (Vector.new2 (ta, td)), tc) *)
                            in
                              (fourArgs (cont, spwn, seq, sync), tc)
                            end)
@@ -1524,6 +1530,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
       val one = Vector.new1
       (*val five = Vector.new5*)
       val three = Vector.new3
+      val four = Vector.new4
       fun arg i = Vector.sub (args, i)
       datatype z = datatype t
    in

@@ -172,21 +172,33 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                       * live in its handler.
                       *)
                      Handler.foreachLabel (handler, goto)
-                | Kind.PCallReturn {cont, parl, parr} =>
-                     (* Make sure that a PCall cont's live vars includes
-                      * variables live in the parll and parr.
+                | Kind.SporkReturn {cont, spwn} =>
+                     (* Make sure that a Spork cont's live vars
+                      * includes those live in spwn
                       *)
                      let
-                        (* val _ = goto cont *)
-                        (* val _ = goto parl *)
-                        (* val _ = goto parr *)
                         val _ =
                            if Label.equals (label, cont)
-                              then (goto parl; goto parr)
+                              then goto spwn
                               else ()
                      in
                         ()
                      end
+                (* | Kind.PCallReturn {cont, parl, parr} => *)
+                (*      (* Make sure that a PCall cont's live vars includes *)
+                (*       * variables live in the parll and parr. *)
+                (*       *) *)
+                (*      let *)
+                (*         (* val _ = goto cont *) *)
+                (*         (* val _ = goto parl *) *)
+                (*         (* val _ = goto parr *) *)
+                (*         val _ = *)
+                (*            if Label.equals (label, cont) *)
+                (*               then (goto parl; goto parr) *)
+                (*               else () *)
+                (*      in *)
+                (*         () *)
+                (*      end *)
                 | _ => ()
             fun define (x: Var.t): unit = setDefined (x, b)
             fun use (x: Var.t): unit =

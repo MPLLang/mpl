@@ -11,7 +11,8 @@ open S
 
 structure BounceVars = BounceVars (S)
 structure CollectStatics = CollectStatics (S)
-structure DropPCall = DropPCall (S)
+(* structure DropPCall = DropPCall (S) *)
+structure DropSpork = DropSpork (S)
 structure ImplementHandlers = ImplementHandlers (S)
 structure ImplementProfiling = ImplementProfiling (S)
 structure InsertChecks = InsertChecks (S)
@@ -32,7 +33,8 @@ val rssaPasses =
    (* must be before implementHandlers *)
    {name = "bounceVars", doit = BounceVars.transform, execute = true} ::
    {name = "implementHandlers", doit = ImplementHandlers.transform, execute = true} ::
-   {name = "rssaDropPCall", doit = DropPCall.transform, execute = false} ::
+   (* {name = "rssaDropPCall", doit = DropPCall.transform, execute = false} :: *)
+   {name = "rssaDropSpork", doit = DropSpork.transform, execute = false} ::
    {name = "rssaShrink3", doit = S.shrink, execute = true} ::
    {name = "implementProfiling", doit = ImplementProfiling.transform, execute = true} ::
    {name = "rssaOrderFunctions", doit = Program.orderFunctions, execute = true} ::

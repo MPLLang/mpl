@@ -58,7 +58,7 @@ rssa-restore.fun
 rssa-transform.sig
 bounce-vars.fun
 collect-statics.fun
-drop-pcall.fun
+drop-spork.fun
 implement-handlers.fun
 implement-profiling.fun
 insert-checks.fun

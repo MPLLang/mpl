@@ -331,6 +331,7 @@ structure Type =
                     targs = targs,
                     typeOps = {array = array1,
                                arrow = fn _ => raise BadPrimApp,
+                               tuple = fn xs => tuple (Prod.make (Vector.map (xs, fn a => {elt = a, isMutable = false}))),
                                bool = bool,
                                cpointer = cpointer,
                                equals = equals,
