@@ -225,7 +225,8 @@ local
          List.concat [[Datatype primitiveDatatypes],
                       List.map
                       (primitiveExcons, fn c =>
-                       Exception {con = c, arg = NONE})]
+                       Exception {con = c, arg = NONE,
+                                  elab = CoreML.ExnDecElab.Gen})]
       end
 
 in

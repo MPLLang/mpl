@@ -166,7 +166,8 @@ datatype dec =
                 tycon: Tycon.t,
                 tyvars: Tyvar.t vector} vector
  | Exception of {arg: Type.t option,
-                 con: Con.t}
+                 con: Con.t,
+                 elab: ExnDecElab.t}
  | Fun of {decs: {lambda: lambda,
                   var: Var.t} vector,
            tyvars: unit -> Tyvar.t vector}
@@ -248,8 +249,11 @@ in
                         align
                         (separateLeft (Vector.toListMap (cons, layoutConArg),
                                        "| "))]))]
-       | Exception ca =>
-            seq [str "exception ", layoutConArg ca]
+       | Exception {con, arg, elab} =>
+            seq [str "exception ",
+                 ExnDecElab.layout elab,
+                 str " ",
+                 layoutConArg {con = con, arg = arg}]
        | Fun {decs, tyvars, ...} => layoutFuns (tyvars, decs)
        | Val {rvbs, tyvars, vbs, ...} =>
             align [layoutFuns (tyvars, rvbs),

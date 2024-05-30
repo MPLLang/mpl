@@ -15,6 +15,7 @@ open S
 local
    open Control.Elaborate
 in
+   val exnDecElab = fn () => current exnDecElab
    val nonexhaustiveBind = fn () => current nonexhaustiveBind
    val nonexhaustiveExnBind = fn () => current nonexhaustiveExnBind
    val nonexhaustiveExnMatch = fn () => current nonexhaustiveExnMatch
@@ -137,6 +138,7 @@ in
    structure Convention = CFunction.Convention
    structure Cdec = Dec
    structure Cexp = Exp
+   structure ExnDecElab = ExnDecElab
    structure Ffi = Ffi
    structure IntSize = IntSize
    structure Lambda = Lambda
@@ -2336,10 +2338,17 @@ fun elaborateDec (d, {env = E, nest}) =
                                                      end
                                             val scheme = Scheme.fromType ty
                                             val _ = Env.extendExn (E, exn, exn', scheme)
+                                            val elab =
+                                               case exnDecElab () of
+                                                  Control.Elaborate.ExnDecElab.App =>
+                                                     ExnDecElab.App
+                                                | Control.Elaborate.ExnDecElab.Gen =>
+                                                     ExnDecElab.Gen
                                          in
                                             Decs.add (decs,
                                                       Cdec.Exception {arg = arg,
-                                                                      con = exn'})
+                                                                      con = exn',
+                                                                      elab = elab})
                                          end
                              in
                                 decs

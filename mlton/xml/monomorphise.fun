@@ -408,14 +408,15 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
                                       lambda = lambda}
                                   end))})))
                 end
-           | Xdec.Exception {con, arg} =>
+           | Xdec.Exception {con, arg, elab} =>
                 let
                    val con' = Con.new con
                    val _ = setCon (con, fn _ => con')
                 in
                    fn () =>
                    [Sdec.Exception {con = con',
-                                    arg = monoTypeOpt arg}]
+                                    arg = monoTypeOpt arg,
+                                    elab = elab}]
                 end) arg
       (*------------------------------------*)
       (*     main code for monomorphise     *)

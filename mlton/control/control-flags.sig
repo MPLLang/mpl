@@ -134,6 +134,12 @@ signature CONTROL_FLAGS =
                      Default
                    | Ignore
                end
+            structure ExnDecElab :
+               sig
+                  datatype t = App | Gen
+                  val toString: t -> string
+               end
+
             structure ResolveScope :
                sig
                   datatype t =
@@ -154,6 +160,7 @@ signature CONTROL_FLAGS =
             val allowRedefineSpecialIds: (bool,bool) t
             val allowSpecifySpecialIds: (bool,bool) t
             val deadCode: (bool,bool) t
+            val exnDecElab: (ExnDecElab.t,ExnDecElab.t) t
             val forceUsed: (unit,bool) t
             val ffiStr: (string,string option) t
             val nonexhaustiveBind: (DiagEIW.t,DiagEIW.t) t

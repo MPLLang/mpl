@@ -284,7 +284,8 @@ fun typeCheck (program as Program.T {datatypes, body}): unit =
             val check = fn (t, t') => check (t, t', fn () => Dec.layout d)
          in
             case d of
-               Exception c => setCon (c, Vector.new0 (), Type.exn)
+               Exception {arg, con, ...} =>
+                  setCon ({arg = arg, con = con}, Vector.new0 (), Type.exn)
              | Fun {tyvars, decs} =>
                   (bindTyvars tyvars
                    ; (Vector.foreach
