@@ -1,4 +1,4 @@
-## Copyright (C) 2010-2013,2018,2019-2022 Matthew Fluet.
+## Copyright (C) 2010-2013,2018,2019-2022,2024 Matthew Fluet.
  # Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  #    Jagannathan, and Stephen Weeks.
  # Copyright (C) 1997-2000 NEC Research Institute.
@@ -19,6 +19,13 @@ CROSS_PREFIX := $(TARGET)-
 endif
 
 EXE :=
+
+# Building the runtime for a target platform requires executing target-platform
+# executables (eg., `gen/gen-types` to determine the sizes of C types).
+# When cross compiling, it may be possible/necessary to emulate/execute the
+# target-platform executable on the host platform (e.g., Wasmtime to execute
+# WebAssembly programs).
+EMULATE :=
 
 MDVARIANTS := OPT DBG TRACE DETECT DBGDETECT TRACEDETECT
 PIVARIANTS := DPI NPI PIC PIE
@@ -120,6 +127,16 @@ endif
 
 ifeq ($(TARGET_OS), cygwin)
 EXE := .exe
+endif
+
+ifeq ($(TARGET_OS), wasi)
+EMULATE := wasmtime
+XCPPFLAGS += -D_WASI_EMULATED_SIGNAL \
+             -D_WASI_EMULATED_PROCESS_CLOCKS \
+             -D_WASI_EMULATED_GETPID
+XLDFLAGS += -lwasi-emulated-signal \
+            -lwasi-emulated-process-clocks \
+            -lwasi-emulated-getpid
 endif
 
 ifeq ($(TARGET_OS), mingw)
@@ -251,11 +268,11 @@ ml-types.h: gen/ml-types.h
 	$(CP) $< $@
 
 gen/ml-types.h: gen/gen-types$(EXE)
-	./gen/gen-types$(EXE) ml-types.h > gen/ml-types.h
+	$(EMULATE) ./gen/gen-types$(EXE) ml-types.h > gen/ml-types.h
 gen/c-types.h: gen/gen-types$(EXE)
-	./gen/gen-types$(EXE) c-types.h > gen/c-types.h
+	$(EMULATE) ./gen/gen-types$(EXE) c-types.h > gen/c-types.h
 gen/c-types.sml: gen/gen-types$(EXE)
-	./gen/gen-types$(EXE) c-types.sml > gen/c-types.sml
+	$(EMULATE) ./gen/gen-types$(EXE) c-types.sml > gen/c-types.sml
 
 ifneq ($(MAKECMDGOALS),clean)
 -include gen/gen-types.d
@@ -274,7 +291,7 @@ gen/$(1): gen/gen-basis-ffi.sml gen/basis-ffi.def
 	touch gen/$(1)
 else
 gen/$(1): gen/gen-basis-ffi$(EXE) gen/basis-ffi.def
-	./gen/gen-basis-ffi$(EXE) $(1) < gen/basis-ffi.def > gen/$(1)
+	$(EMULATE) ./gen/gen-basis-ffi$(EXE) $(1) < gen/basis-ffi.def > gen/$(1)
 	$(CAT) gen/gen-basis-ffi.sml gen/basis-ffi.def gen/$(1) | $(SHA1DGST) > gen/$(1).chk
 endif
 endef
@@ -319,7 +336,7 @@ gdtoa/README: gdtoa.tgz gdtoa.may_alias-unions.patch gdtoa.rename-public-fns.pat
 	@touch $@
 
 gdtoa/arith.h: gdtoa/arithchk$(EXE)
-	./gdtoa/arithchk$(EXE) > gdtoa/arith.h
+	$(EMULATE) ./gdtoa/arithchk$(EXE) > gdtoa/arith.h
 
 gdtoa/arithchk.c: gdtoa/README
 	@touch $@
@@ -331,7 +348,7 @@ ifneq ($(MAKECMDGOALS),clean)
 endif
 
 gdtoa/gd_qnan.h: gdtoa/qnan$(EXE)
-	./gdtoa/qnan$(EXE) > gdtoa/gd_qnan.h
+	$(EMULATE) ./gdtoa/qnan$(EXE) > gdtoa/gd_qnan.h
 
 gdtoa/qnan.c: gdtoa/README
 	@touch $@
@@ -360,7 +377,7 @@ $(eval $(call A_TEMPLATE,mlton,MLTON))
 ### gen/constants ###
 
 gen/constants: gen/gen-constants$(EXE)
-	./gen/gen-constants > gen/constants
+	$(EMULATE) ./gen/gen-constants > gen/constants
 
 ifneq ($(MAKECMDGOALS),clean)
 -include gen/gen-constants.d

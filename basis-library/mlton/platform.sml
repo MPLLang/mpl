@@ -36,6 +36,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
              | ARM64
              | HPPA
              | IA64
+             | LoongArch64
              | m68k
              | MIPS
              | PowerPC
@@ -43,6 +44,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
              | RISCV
              | S390
              | Sparc
+             | Wasm32
              | X86
 
             val all =
@@ -52,6 +54,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                (ARM64, "ARM64")::
                (HPPA, "HPPA")::
                (IA64, "IA64")::
+               (LoongArch64,"LoongArch64")::
                (m68k, "m68k")::
                (MIPS, "MIPS")::
                (PowerPC, "PowerPC")::
@@ -59,6 +62,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                (RISCV, "RISCV")::
                (S390, "S390")::
                (Sparc, "Sparc")::
+               (Wasm32, "Wasm32")::
                (X86, "X86")::
                nil
 
@@ -73,6 +77,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                 | "arm64" => ARM64
                 | "hppa" => HPPA
                 | "ia64" => IA64
+                | "loongarch64" => LoongArch64
                 | "m68k" => m68k
                 | "mips" => MIPS
                 | "powerpc" => PowerPC
@@ -80,6 +85,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                 | "riscv" => RISCV
                 | "s390" => S390
                 | "sparc" => Sparc
+                | "wasm32" => Wasm32
                 | "x86" => X86
                 | _ => raise Fail "strange MLton_Platform_Arch_host"
          end
@@ -125,6 +131,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
              | NetBSD
              | OpenBSD
              | Solaris
+             | WASI
 
             val all =
                (AIX, "AIX")::
@@ -138,6 +145,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                (NetBSD, "NetBSD")::
                (OpenBSD, "OpenBSD")::
                (Solaris, "Solaris")::
+               (WASI, "WASI")::
                nil
 
             val (fromString, toString) = fromString_toString all
@@ -156,6 +164,7 @@ structure MLtonPlatform: MLTON_PLATFORM =
                 | "netbsd" => NetBSD
                 | "openbsd" => OpenBSD
                 | "solaris" => Solaris
+                | "wasi" => WASI
                 | _ => raise Fail "strange MLton_Platform_OS_host"
          end
    end
