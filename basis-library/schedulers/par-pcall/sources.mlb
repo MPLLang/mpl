@@ -26,7 +26,11 @@ local
   ../shh/queue/DequeABP.sml
   (*Stack.sml*)
   ../shh/Result.sml
-  Universal.sml
+  ann
+     "exnDecElab app"
+  in
+     Universal.sml
+  end
   ann
     "allowFFI true"
     "allowPrim true"
