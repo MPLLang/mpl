@@ -524,13 +524,6 @@ structure ObjectType =
              *)
             val numDecheckSyncDepths = 32
 
-            val bytesDecheckSyncDepths =
-               zeroIfNotDetectEntanglementRuntime (
-                  Bytes.fromIntInf (IntInf.*
-                    (numDecheckSyncDepths,
-                     Bytes.toIntInf (Bits.toBytes (Type.width Type.word32))))
-               )
-
             val padding =
                let
                   val align =
@@ -549,11 +542,17 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
-                  val bytesDecheckState =
-                     zeroIfNotDetectEntanglementRuntime
-                        (Bits.toBytes (Type.width Type.word64))
                   val bytesMinLocalCollectionDepth =
                      Bits.toBytes (Type.width Type.word32)
+                  val bytesDecheckState =
+                     zeroIfNotDetectEntanglementRuntime
+                     (Bits.toBytes (Type.width Type.word64))
+                  val bytesDecheckSyncDepths =
+                     zeroIfNotDetectEntanglementRuntime
+                     (Bytes.fromIntInf
+                      (IntInf.*
+                       (numDecheckSyncDepths,
+                        Bytes.toIntInf (Bits.toBytes (Type.width Type.word32)))))
                   val bytesAllocatedSinceLastCollection =
                      Bits.toBytes (Control.Target.Size.csize ())
                   val bytesSurvivedLastCollection =
@@ -576,9 +575,9 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesMinLocalCollectionDepth +
                         bytesDecheckState +
                         bytesDecheckSyncDepths +
-                        bytesMinLocalCollectionDepth +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
@@ -598,7 +597,8 @@ structure ObjectType =
                    Type.word32,       (* currentProcNum *)
                    Type.csize (),     (* bytesNeeded *)
                    Type.exnStack (),  (* exnStack *)
-                   Type.word32]       (* currentDepth *)
+                   Type.word32,       (* currentDepth *)
+                   Type.word32]       (* minLocalCollectionDepth *)
                   @
                   (if !Control.detectEntanglementRuntime then
                      [Type.word64]
@@ -607,8 +607,7 @@ structure ObjectType =
                    else
                      [])
                   @
-                  [Type.word32,       (* minLocalCollectionDepth *)
-                   Type.csize (),     (* bytesAllocatedSinceLastCollection *)
+                  [Type.csize (),     (* bytesAllocatedSinceLastCollection *)
                    Type.csize (),     (* bytesSurvivedLastCollection *)
                    Type.cpointer (),  (* hierarchicalHeap *)
                    Type.cpointer (),  (* currentChunk *)
