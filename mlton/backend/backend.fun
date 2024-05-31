@@ -977,26 +977,44 @@ fun toMachine (rssa: Rssa.Program.t) =
                              | R.Kind.Handler =>
                                   (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, size)
                              | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
-                             | R.Kind.PCallReturn {cont, parl, parr} =>
+                             | R.Kind.SporkReturn {cont, spwn} =>
                                   let
                                      val kind =
                                         if Label.equals (label, cont)
-                                           then M.FrameInfo.Kind.PCALL_CONT_FRAME
-                                        else if Label.equals (label, parl)
-                                           then M.FrameInfo.Kind.PCALL_PARL_FRAME
-                                        else if Label.equals (label, parr)
-                                           then M.FrameInfo.Kind.PCALL_PARR_FRAME
-                                        else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn"
+                                           then M.FrameInfo.Kind.CONT_FRAME
+                                        else if Label.equals (label, spwn)
+                                           then M.FrameInfo.Kind.SPORK_SPWN_FRAME
+                                        else Error.bug "Backend.genFunc.setFrameInfo: SporkReturn"
                                      (* The size is that of the cont *)
                                      val size = #size (labelRegInfo cont)
-                                     (* The PCall DataPtr slot is also live. *)
+                                     (* The Spork DataPtr slot is also live. *)
                                      val offsets =
-                                        if Label.equals (label, parl) orelse Label.equals (label, parr)
+                                        if Label.equals (label, spwn)
                                            then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
                                            else offsets
                                   in
                                      (true, kind, offsets, size)
                                   end
+                             (* | R.Kind.PCallReturn {cont, parl, parr} => *)
+                             (*      let *)
+                             (*         val kind = *)
+                             (*            if Label.equals (label, cont) *)
+                             (*               then M.FrameInfo.Kind.PCALL_CONT_FRAME *)
+                             (*            else if Label.equals (label, parl) *)
+                             (*               then M.FrameInfo.Kind.PCALL_PARL_FRAME *)
+                             (*            else if Label.equals (label, parr) *)
+                             (*               then M.FrameInfo.Kind.PCALL_PARR_FRAME *)
+                             (*            else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn" *)
+                             (*         (* The size is that of the cont *) *)
+                             (*         val size = #size (labelRegInfo cont) *)
+                             (*         (* The PCall DataPtr slot is also live. *) *)
+                             (*         val offsets = *)
+                             (*            if Label.equals (label, parl) orelse Label.equals (label, parr) *)
+                             (*               then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))] *)
+                             (*               else offsets *)
+                             (*      in *)
+                             (*         (true, kind, offsets, size) *)
+                             (*      end *)
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
@@ -1094,31 +1112,61 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
-                   | R.Transfer.PCall {func, args, cont, parl, parr} =>
+                   | R.Transfer.Spork {spid, cont, spwn} =>
                         let
                            val {liveNoFormals = contLive, size = frameSize, ...} =
                               labelRegInfo cont
-                           val dsts =
-                              paramStackOffsets
-                              (args, R.Operand.ty, frameSize)
-                           val setupArgs =
-                              parallelMove
-                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
-                               srcs = translateOperands args}
-                           val live =
-                              Vector.concat [operandsLive contLive,
-                                             Vector.map (dsts, Live.StackOffset)]
+                           val live = operandsLive contLive
                            val transfer =
-                              M.Transfer.PCall
-                              {label = funcToLabel func,
+                              M.Transfer.Spork
+                              {spid = spid,
                                live = live,
                                cont = cont,
-                               parl = parl,
-                               parr = parr,
+                               spwn = spwn,
                                size = frameSize}
                         in
-                           (setupArgs, transfer)
+                           simple transfer
                         end
+                   | R.Transfer.Spoin {spid, seq, sync} =>
+                        let
+                           val {liveNoFormals = seqLive, size = frameSize, ...} =
+                              labelRegInfo seq
+                           val live = operandsLive seqLive
+                           val transfer =
+                              M.Transfer.Spoin
+                              {spid = spid,
+                               live = live,
+                               seq = seq,
+                               sync = sync,
+                               size = frameSize}
+                        in
+                           simple transfer
+                        end
+                   (* | R.Transfer.PCall {func, args, cont, parl, parr} => *)
+                   (*      let *)
+                   (*         val {liveNoFormals = contLive, size = frameSize, ...} = *)
+                   (*            labelRegInfo cont *)
+                   (*         val dsts = *)
+                   (*            paramStackOffsets *)
+                   (*            (args, R.Operand.ty, frameSize) *)
+                   (*         val setupArgs = *)
+                   (*            parallelMove *)
+                   (*            {dsts = Vector.map (dsts, M.Operand.StackOffset), *)
+                   (*             srcs = translateOperands args} *)
+                   (*         val live = *)
+                   (*            Vector.concat [operandsLive contLive, *)
+                   (*                           Vector.map (dsts, Live.StackOffset)] *)
+                   (*         val transfer = *)
+                   (*            M.Transfer.PCall *)
+                   (*            {label = funcToLabel func, *)
+                   (*             live = live, *)
+                   (*             cont = cont, *)
+                   (*             parl = parl, *)
+                   (*             parr = parr, *)
+                   (*             size = frameSize} *)
+                   (*      in *)
+                   (*         (setupArgs, transfer) *)
+                   (*      end *)
                    | R.Transfer.Raise srcs =>
                         let
                            val handlerStackTop =
@@ -1200,30 +1248,30 @@ fun toMachine (rssa: Rssa.Program.t) =
                          liveNoFormals,
                          parallelMove {dsts = dsts', srcs = srcs'})
                      end
-                  fun doPCallHandler size =
+                  fun doSporkHandler size =
                      let
-                        val (args, pcallDataArg) = Vector.splitLast args
+                        val (args, sporkDataArg) = Vector.splitLast args
                         val srcs = paramStackOffsets (args, #2, size)
-                        val pcallDataOffset =
+                        val sporkDataOffset =
                            Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
-                        val pcallDataSrc =
-                           StackOffset.T {offset = pcallDataOffset,
-                                          ty = #2 pcallDataArg,
+                        val sporkDataSrc =
+                           StackOffset.T {offset = sporkDataOffset,
+                                          ty = #2 sporkDataArg,
                                           volatile = false}
 
                         val (dsts', srcs') =
                            Vector.unzip
                            (Vector.keepAllMap2
-                            (Vector.concat [args, Vector.new1 pcallDataArg],
-                             Vector.concat [srcs, Vector.new1 pcallDataSrc],
+                            (Vector.concat [args, Vector.new1 sporkDataArg],
+                             Vector.concat [srcs, Vector.new1 sporkDataSrc],
                              fn ((dst, _), src) =>
                              case varOperandOpt dst of
                                 NONE => NONE
                               | SOME dst => SOME (dst, M.Operand.StackOffset src)))
                      in
-                        (M.Kind.PCallReturn {args = Vector.map (srcs, Live.StackOffset),
+                        (M.Kind.SporkReturn {args = Vector.map (srcs, Live.StackOffset),
                                              frameInfo = valOf (frameInfo label)},
-                         Vector.concat [liveNoFormals, Vector.new1 (M.Operand.StackOffset pcallDataSrc)],
+                         Vector.concat [liveNoFormals, Vector.new1 (M.Operand.StackOffset sporkDataSrc)],
                          parallelMove {dsts = dsts', srcs = srcs'})
                      end
                   val (kind, live, pre) =
@@ -1247,10 +1295,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                      | R.Kind.PCallReturn {cont, parl, parr} =>
+                      | R.Kind.SporkReturn {cont, spwn} =>
                            if Label.equals (label, cont)
-                              then doContHandler M.Kind.PCallReturn
-                              else doPCallHandler (#size (labelRegInfo cont))
+                              then doContHandler M.Kind.SporkReturn
+                              else doSporkHandler (#size (labelRegInfo cont))
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in

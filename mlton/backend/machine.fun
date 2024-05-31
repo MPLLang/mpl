@@ -613,12 +613,22 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
-       | PCall of {label: Label.t,
+       | Spork of {spid: Spid.t,
                    live: Live.t vector,
                    cont: Label.t,
-                   parl: Label.t,
-                   parr: Label.t,
+                   spwn: Label.t,
                    size: Bytes.t}
+       | Spoin of {spid: Spid.t,
+                   live: Live.t vector,
+                   seq: Label.t,
+                   sync: Label.t,
+                   size: Bytes.t}
+       (* | PCall of {label: Label.t, *)
+       (*             live: Live.t vector, *)
+       (*             cont: Label.t, *)
+       (*             parl: Label.t, *)
+       (*             parr: Label.t, *)
+       (*             size: Bytes.t} *)
        | Goto of Label.t
        | Raise of {raisesTo: Label.t list}
        | Return of {returnsTo: Label.t list}
@@ -651,14 +661,28 @@ structure Transfer =
                                          ("size", Bytes.layout size)])
                                 return)]]
              | Goto l => seq [str "Goto ", Label.layout l]
-             | PCall {label, live, cont, parl, parr, size} =>
-                  seq [str "PCall ",
-                       record [("label", Label.layout label),
+             | Spork {spid, live, cont, spwn, size} =>
+                  seq [str "Spork ",
+                       record [("spid", Spid.layout spid),
                                ("live", Vector.layout Live.layout live),
                                ("cont", Label.layout cont),
-                               ("parl", Label.layout parl),
-                               ("parr", Label.layout parr),
+                               ("spwn", Label.layout spwn),
                                ("size", Bytes.layout size)]]
+             | Spoin {spid, live, seq = bseq, sync, size} =>
+                  seq [str "Spoin ",
+                       record [("spid", Spid.layout spid),
+                               ("live", Vector.layout Live.layout live),
+                               ("seq", Label.layout bseq),
+                               ("sync", Label.layout sync),
+                               ("size", Bytes.layout size)]]
+             (* | PCall {label, live, cont, parl, parr, size} => *)
+             (*      seq [str "PCall ", *)
+             (*           record [("label", Label.layout label), *)
+             (*                   ("live", Vector.layout Live.layout live), *)
+             (*                   ("cont", Label.layout cont), *)
+             (*                   ("parl", Label.layout parl), *)
+             (*                   ("parr", Label.layout parr), *)
+             (*                   ("size", Bytes.layout size)]] *)
              | Raise {raisesTo} =>
                   seq [str "Raise ",
                        record [("raisesTo", List.layout Label.layout raisesTo)]]
@@ -718,18 +742,20 @@ structure FrameInfo =
              | CRETURN_FRAME
              | FUNC_FRAME
              | HANDLER_FRAME
-             | PCALL_CONT_FRAME
-             | PCALL_PARL_FRAME
-             | PCALL_PARR_FRAME
+             | SPORK_SPWN_FRAME
+             (* | PCALL_CONT_FRAME *)
+             (* | PCALL_PARL_FRAME *)
+             (* | PCALL_PARR_FRAME *)
             fun equals (k1, k2) =
                case (k1, k2) of
                   (CONT_FRAME, CONT_FRAME) => true
                 | (CRETURN_FRAME, CRETURN_FRAME) => true
                 | (FUNC_FRAME, FUNC_FRAME) => true
                 | (HANDLER_FRAME, HANDLER_FRAME) => true
-                | (PCALL_CONT_FRAME, PCALL_CONT_FRAME) => true
-                | (PCALL_PARL_FRAME, PCALL_PARL_FRAME) => true
-                | (PCALL_PARR_FRAME, PCALL_PARR_FRAME) => true
+                | (SPORK_SPWN_FRAME, SPORK_SPWN_FRAME) => true
+                (* | (PCALL_CONT_FRAME, PCALL_CONT_FRAME) => true *)
+                (* | (PCALL_PARL_FRAME, PCALL_PARL_FRAME) => true *)
+                (* | (PCALL_PARR_FRAME, PCALL_PARR_FRAME) => true *)
                 | _ => false
             local
                val newHash = Random.word
@@ -737,9 +763,10 @@ structure FrameInfo =
                val creturn = newHash ()
                val func = newHash ()
                val handler = newHash ()
-               val pcall_cont = newHash ()
-               val pcall_parl = newHash ()
-               val pcall_parr = newHash ()
+               val spork_spwn = newHash ()
+               (* val pcall_cont = newHash () *)
+               (* val pcall_parl = newHash () *)
+               (* val pcall_parr = newHash () *)
             in
                fun hash k =
                   case k of
@@ -747,9 +774,10 @@ structure FrameInfo =
                    | CRETURN_FRAME => creturn
                    | FUNC_FRAME => func
                    | HANDLER_FRAME => handler
-                   | PCALL_CONT_FRAME => pcall_cont
-                   | PCALL_PARL_FRAME => pcall_parl
-                   | PCALL_PARR_FRAME => pcall_parr
+                   | SPORK_SPWN_FRAME => spork_spwn
+                   (* | PCALL_CONT_FRAME => pcall_cont *)
+                   (* | PCALL_PARL_FRAME => pcall_parl *)
+                   (* | PCALL_PARR_FRAME => pcall_parr *)
             end
             fun toString k =
                case k of
@@ -757,9 +785,10 @@ structure FrameInfo =
                 | CRETURN_FRAME => "CRETURN_FRAME"
                 | FUNC_FRAME => "FUNC_FRAME"
                 | HANDLER_FRAME => "HANDLER_FRAME"
-                | PCALL_CONT_FRAME => "PCALL_CONT_FRAME"
-                | PCALL_PARL_FRAME => "PCALL_PARL_FRAME"
-                | PCALL_PARR_FRAME => "PCALL_PARR_FRAME"
+                | SPORK_SPWN_FRAME => "SPORK_SPWN_FRAME"
+                (* | PCALL_CONT_FRAME => "PCALL_CONT_FRAME" *)
+                (* | PCALL_PARL_FRAME => "PCALL_PARL_FRAME" *)
+                (* | PCALL_PARR_FRAME => "PCALL_PARR_FRAME" *)
             val layout = Layout.str o toString
          end
 
@@ -820,8 +849,10 @@ structure Kind =
        | Handler of {args: Live.t vector,
                      frameInfo: FrameInfo.t}
        | Jump
-       | PCallReturn of {args: Live.t vector,
+       | SporkReturn of {args: Live.t vector,
                          frameInfo: FrameInfo.t}
+       (* | PCallReturn of {args: Live.t vector, *)
+       (*                   frameInfo: FrameInfo.t} *)
 
       fun layout k =
          let
@@ -847,10 +878,14 @@ structure Kind =
                        record [("args", Vector.layout Live.layout args),
                                ("frameInfo", FrameInfo.layout frameInfo)]]
              | Jump => str "Jump"
-             | PCallReturn {args, frameInfo} =>
-                  seq [str "PCallReturn ",
+             | SporkReturn {args, frameInfo} =>
+                  seq [str "SporkReturn ",
                        record [("args", Vector.layout Live.layout args),
                                ("frameInfo", FrameInfo.layout frameInfo)]]
+             (* | PCallReturn {args, frameInfo} => *)
+             (*      seq [str "PCallReturn ", *)
+             (*           record [("args", Vector.layout Live.layout args), *)
+             (*                   ("frameInfo", FrameInfo.layout frameInfo)]] *)
          end
 
       fun isEntry (k: t): bool =
@@ -859,7 +894,8 @@ structure Kind =
           | CReturn {func, ...} => CFunction.maySwitchThreadsTo func
           | Func _ => true
           | Handler _ => true
-          | PCallReturn _ => true
+          | SporkReturn _ => true
+          (* | PCallReturn _ => true *)
           | _ => false
 
       val frameInfoOpt =
@@ -868,7 +904,8 @@ structure Kind =
           | Func {frameInfo, ...} => SOME frameInfo
           | Handler {frameInfo, ...} => SOME frameInfo
           | Jump => NONE
-          | PCallReturn {frameInfo, ...} => SOME frameInfo
+          | SporkReturn {frameInfo, ...} => SOME frameInfo
+          (* | PCallReturn {frameInfo, ...} => SOME frameInfo *)
    end
 
 structure Block =
@@ -1316,8 +1353,10 @@ structure Program =
                                               | Kind.Handler {frameInfo, ...} =>
                                                    doit frameInfo
                                               | Kind.Jump => true
-                                              | Kind.PCallReturn {frameInfo, ...} =>
+                                              | Kind.SporkReturn {frameInfo, ...} =>
                                                    doit frameInfo
+                                              (* | Kind.PCallReturn {frameInfo, ...} => *)
+                                              (*      doit frameInfo *)
                                           end)
                       | SequenceOffset {base, index, offset, scale, ty, volatile = _} =>
                            (checkOperand (base, alloc)
@@ -1448,7 +1487,15 @@ structure Program =
                                        Alloc.defineLive (alloc, z)))
                         else NONE
                    | Jump => SOME alloc
-                   | PCallReturn {args, frameInfo} =>
+                   | SporkReturn {args, frameInfo} =>
+                        if frame' (frameInfo, true, fn kind =>
+                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.SPORK_SPWN_FRAME))
+                           andalso slotsAreInFrame frameInfo
+                           then SOME (Vector.fold
+                                      (args, alloc, fn (z, alloc) =>
+                                       Alloc.defineLive (alloc, z)))
+                        else NONE
+                   (*| PCallReturn {args, frameInfo} =>
                         if frame' (frameInfo, true, fn kind =>
                                    FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_CONT_FRAME)
                                    orelse
@@ -1459,7 +1506,7 @@ structure Program =
                            then SOME (Vector.fold
                                       (args, alloc, fn (z, alloc) =>
                                        Alloc.defineLive (alloc, z)))
-                        else NONE
+                        else NONE*)
                end
             fun checkStatement (s: Statement.t, alloc: Alloc.t)
                : Alloc.t option =
@@ -1638,109 +1685,222 @@ structure Program =
                end
 
 
-            fun removePCallDataSlot (size, live: Live.t vector) =
-               let
-                  val pcallDataOffset =
-                     Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
-               in
-                  Vector.keepAll
-                  (live, fn l =>
-                   case l of
-                      Live.StackOffset (StackOffset.T {offset, ...}) =>
-                         not (Bytes.equals (offset, pcallDataOffset))
-                    | _ => true)
-               end
-            fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, pcallDataSlot: bool) =
-               let
-                  val Block.T {kind, live, ...} = labelBlock label
-                  val live =
-                     if pcallDataSlot
-                        then removePCallDataSlot (size, live)
-                        else live
-               in
-                  if liveIsOk (live, alloc)
-                     then
-                        (case kind of
-                            Kind.PCallReturn {args, frameInfo, ...} =>
-                               (if Bytes.equals (FrameInfo.size frameInfo, size)
-                                   then
-                                      SOME
-                                      (live,
-                                       SOME
-                                       (Vector.map
-                                        (args, fn z =>
-                                         case z of
-                                            Live.StackOffset s =>
-                                               Live.StackOffset
-                                               (StackOffset.shift (s, size))
-                                          | _ => z)))
-                                   else NONE)
-                          | _ => NONE)
-                     else NONE
-               end
-            fun pcallIsOk {alloc: Alloc.t,
-                           dst: Label.t,
-                           live: Live.t vector,
-                           cont: Label.t,
-                           parl: Label.t,
-                           parr: Label.t,
-                           size: Bytes.t} =
-               let
-                  val (contLive, contReturns) =
-                     Err.check'
-                     ("cont",
-                      fn () => checkPCallReturn (cont, size, alloc, false),
-                      fn () => Label.layout cont)
-                  val (parlLive, parlReturns) =
-                     Err.check'
-                     ("parl",
-                      fn () => checkPCallReturn (parl, size, alloc, true),
-                      fn () => Label.layout parl)
-                  val (parrLive, parrReturns) =
-                     Err.check'
-                     ("parr",
-                      fn () => checkPCallReturn (parr, size, alloc, true),
-                      fn () => Label.layout parr)
-                  val () =
-                     Err.check
-                     ("parlLive - {pcallDataSlot} <= contLive",
-                      fn () => liveSubset (parlLive, contLive),
-                      fn () => Layout.tuple [Label.layout parl, Label.layout cont])
-                  val () =
-                     Err.check
-                     ("parrLive - {pcallDataSlot} <= contLive",
-                      fn () => liveSubset (parrLive, contLive),
-                      fn () => Layout.tuple [Label.layout parr, Label.layout cont])
-                  val () =
-                     Err.check
-                     ("contReturns == parlReturns",
-                      fn () => Option.equals (contReturns, parlReturns, fn (xs, ys) =>
-                                              Vector.equals (xs, ys, Live.equals)),
-                      fn () => Layout.tuple [Label.layout cont, Label.layout parl])
-                  val () =
-                     Err.check
-                     ("parrReturns == SOME #[]",
-                      fn () => Option.equals (parrReturns, SOME (Vector.new0 ()), fn (xs, ys) =>
-                                              Vector.equals (xs, ys, Live.equals)),
-                      fn () => Label.layout parr)
-                  val b = labelBlock dst
-                  val alloc =
-                     Alloc.T
-                     (Vector.fold
-                      (live, [], fn (z, ac) =>
-                       case z of
-                          Live.StackOffset (StackOffset.T {offset, ty, volatile}) =>
-                             if Bytes.< (offset, size)
-                                then ac
-                             else (Live.StackOffset
-                                   (StackOffset.T
-                                    {offset = Bytes.- (offset, size),
-                                     ty = ty,
-                                     volatile = volatile})) :: ac
-                        | _ => ac))
-               in
-                  goto (b, NONE, contReturns, alloc)
-               end
+            (* fun removePCallDataSlot (size, live: Live.t vector) = *)
+            (*    let *)
+            (*       val pcallDataOffset = *)
+            (*          Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ())) *)
+            (*    in *)
+            (*       Vector.keepAll *)
+            (*       (live, fn l => *)
+            (*        case l of *)
+            (*           Live.StackOffset (StackOffset.T {offset, ...}) => *)
+            (*              not (Bytes.equals (offset, pcallDataOffset)) *)
+            (*         | _ => true) *)
+            (*    end *)
+            (* fun checkPCallReturn (label: Label.t, size: Bytes.t, alloc: Alloc.t, pcallDataSlot: bool) = *)
+            (*    let *)
+            (*       val Block.T {kind, live, ...} = labelBlock label *)
+            (*       val live = *)
+            (*          if pcallDataSlot *)
+            (*             then removePCallDataSlot (size, live) *)
+            (*             else live *)
+            (*    in *)
+            (*       if liveIsOk (live, alloc) *)
+            (*          then *)
+            (*             (case kind of *)
+            (*                 Kind.PCallReturn {args, frameInfo, ...} => *)
+            (*                    (if Bytes.equals (FrameInfo.size frameInfo, size) *)
+            (*                        then *)
+            (*                           SOME *)
+            (*                           (live, *)
+            (*                            SOME *)
+            (*                            (Vector.map *)
+            (*                             (args, fn z => *)
+            (*                              case z of *)
+            (*                                 Live.StackOffset s => *)
+            (*                                    Live.StackOffset *)
+            (*                                    (StackOffset.shift (s, size)) *)
+            (*                               | _ => z))) *)
+            (*                        else NONE) *)
+            (*               | _ => NONE) *)
+            (*          else NONE *)
+            (*    end *)
+
+            (* fun checkSporkReturn (label: Label.t, size: Bytes.t, *)
+            (*                       alloc: Alloc.t, sporkDataSlot: bool) = *)
+            (*     let val Block.T {kind, live, ...} = labelBlock label *)
+            (*         val live = if sporkDataSlot then removeSporkDataSlot (size, live) else live *)
+            (*     in *)
+            (*       if liveIsOk (live, alloc) then *)
+            (*         TODO *)
+            (*       else *)
+            (*         NONE *)
+
+            (* fun checkSpoinReturn (label: Label.t, size: Bytes.t, *)
+            (*                       alloc: Alloc.t, sporkDataSlot: bool) = *)
+            (*     TODO *)
+
+            (* (* TODO: how to handle nesting? Slots, etc. *) *)
+            (* fun sporkIsOk {alloc: Alloc.t, *)
+            (*                spid: Spid.t, *)
+            (*                live: Live.t vector, *)
+            (*                cont: Label.t, *)
+            (*                spwn: Label.t, *)
+            (*                size: Bytes.t} : bool = *)
+            (*     let fun checkRetCont () = checkSporkReturn (cont, size, alloc, false) *)
+            (*         fun checkRetSpwn () = checkSporkReturn (spwn, size, alloc, true) *)
+
+            (*         fun contLout () = Label.layout cont *)
+            (*         fun spwnLout () = Label.layout spwn *)
+            (*         fun liveLout () = Layout.tuple [Label.layout spwn, Label.layout cont] *)
+
+            (*         val contEmsg = "cont" *)
+            (*         val spwnEmsg = "spwn" *)
+            (*         val liveEmsg = "spwnLive - {sporkDataSlot} <= contLive" *)
+            (*         val spwnEmptyEmsg = "spwnReturns == SOME #[]" *)
+
+            (*         val (contLive, contRets) = Err.check' (contEmsg, checkRetCont, contLout) *)
+            (*         val (spwnLive, spwnRets) = Err.check' (spwnEmsg, checkRetSpwn, spwnLout) *)
+
+            (*         fun checkLive () = liveSubset (spwnLive, contLive) *)
+            (*         fun checkSpwnEmpty () = *)
+            (*             case spwnReturns of *)
+            (*                 NONE => false *)
+            (*               | SOME rs => Vector.isEmpty rs *)
+
+            (*         val () = Err.check  (liveEmsg, checkLive, liveLout) *)
+            (*         val () = Err.check (spwnEmptyEmsg, checkSpwnEmpty, spwnLout) *)
+            (*         val b = labelBlock TODO (used to be the pcall function label?) *)
+            (*         val alloc = *)
+            (*            Alloc.T *)
+            (*            (Vector.fold *)
+            (*             (live, [], fn (z, ac) => *)
+            (*              case z of *)
+            (*                 Live.StackOffset (StackOffset.T {offset, ty, volatile}) => *)
+            (*                    if Bytes.< (offset, size) *)
+            (*                       then ac *)
+            (*                    else (Live.StackOffset *)
+            (*                          (StackOffset.T *)
+            (*                           {offset = Bytes.- (offset, size), *)
+            (*                            ty = ty, *)
+            (*                            volatile = volatile})) :: ac *)
+            (*               | _ => ac)) *)
+            (*     in *)
+            (*       goto (b, NONE, contReturns, alloc) *)
+            (*     end *)
+
+            (* fun spoinIsOk {alloc: Alloc.t, *)
+            (*                spid: Spid.t, *)
+            (*                live: Live.t vector, *)
+            (*                seq: Label.t, *)
+            (*                sync: Label.t, *)
+            (*                size: Bytes.t} : bool = *)
+            (*     let fun checkRetSeq  () = checkSpoinReturn (seq, size, alloc, false) *)
+            (*         fun checkRetSync () = checkSpoinReturn (sync, size, alloc, true) *)
+
+            (*         fun seqLout () = Label.layout seq *)
+            (*         fun syncLout () = Label.layout sync *)
+            (*         fun liveLout () = Layout.tuple [Label.layout sync, Label.layout seq] *)
+
+            (*         val seqEmsg = "seq" *)
+            (*         val syncEmsg = "sync" *)
+            (*         val liveEmsg = "syncLive - {spoinDataSlot} <= seqLive" *)
+            (*         val seqNeqSyncEmsg = "syncReturns == SOME #[]" *)
+
+            (*         val (seqLive, seqRets) = Err.check' (seqEmsg, checkRetSeq, seqLout) *)
+            (*         val (syncLive, syncRets) = Err.check' (syncEmsg, checkRetSync, syncLout) *)
+
+            (*         fun checkLive () = liveSubset (syncLive, seqLive) *)
+            (*         fun checkSeqSyncRetsEqual () = *)
+            (*             Option.equals (seqReturns, *)
+            (*                            syncReturns, *)
+            (*                            fn (xs, ys) => *)
+            (*                               Vector.equals (xs, ys, Live.equals)) *)
+
+            (*         val () = Err.check  (liveEmsg, checkLive, liveLout) *)
+            (*         val () = Err.check (seqNeqSyncEmsg, checkSeqSyncRetsEqual, liveOut) *)
+            (*         val b = labelBlock TODO (used to be the pcall function label?) *)
+            (*         val alloc = *)
+            (*            Alloc.T *)
+            (*            (Vector.fold *)
+            (*             (live, [], fn (z, ac) => *)
+            (*              case z of *)
+            (*                 Live.StackOffset (StackOffset.T {offset, ty, volatile}) => *)
+            (*                    if Bytes.< (offset, size) *)
+            (*                       then ac *)
+            (*                    else (Live.StackOffset *)
+            (*                          (StackOffset.T *)
+            (*                           {offset = Bytes.- (offset, size), *)
+            (*                            ty = ty, *)
+            (*                            volatile = volatile})) :: ac *)
+            (*               | _ => ac)) *)
+            (*     in *)
+            (*       goto (b, NONE, seqReturns, alloc) *)
+            (*     end *)
+
+            (* fun pcallIsOk {alloc: Alloc.t, *)
+            (*                dst: Label.t, *)
+            (*                live: Live.t vector, *)
+            (*                cont: Label.t, *)
+            (*                parl: Label.t, *)
+            (*                parr: Label.t, *)
+            (*                size: Bytes.t} : bool = *)
+            (*    let *)
+            (*       val (contLive, contReturns) = *)
+            (*          Err.check' *)
+            (*          ("cont", *)
+            (*           fn () => checkPCallReturn (cont, size, alloc, false), *)
+            (*           fn () => Label.layout cont) *)
+            (*       val (parlLive, parlReturns) = *)
+            (*          Err.check' *)
+            (*          ("parl", *)
+            (*           fn () => checkPCallReturn (parl, size, alloc, true), *)
+            (*           fn () => Label.layout parl) *)
+            (*       val (parrLive, parrReturns) = *)
+            (*          Err.check' *)
+            (*          ("parr", *)
+            (*           fn () => checkPCallReturn (parr, size, alloc, true), *)
+            (*           fn () => Label.layout parr) *)
+            (*       val () = *)
+            (*          Err.check *)
+            (*          ("parlLive - {pcallDataSlot} <= contLive", *)
+            (*           fn () => liveSubset (parlLive, contLive), *)
+            (*           fn () => Layout.tuple [Label.layout parl, Label.layout cont]) *)
+            (*       val () = *)
+            (*          Err.check *)
+            (*          ("parrLive - {pcallDataSlot} <= contLive", *)
+            (*           fn () => liveSubset (parrLive, contLive), *)
+            (*           fn () => Layout.tuple [Label.layout parr, Label.layout cont]) *)
+            (*       val () = *)
+            (*          Err.check *)
+            (*          ("contReturns == parlReturns", *)
+            (*           fn () => Option.equals (contReturns, parlReturns, fn (xs, ys) => *)
+            (*                                   Vector.equals (xs, ys, Live.equals)), *)
+            (*           fn () => Layout.tuple [Label.layout cont, Label.layout parl]) *)
+            (*       val () = *)
+            (*          Err.check *)
+            (*          ("parrReturns == SOME #[]", *)
+            (*           fn () => Option.equals (parrReturns, SOME (Vector.new0 ()), fn (xs, ys) => *)
+            (*                                   Vector.equals (xs, ys, Live.equals)), *)
+            (*           fn () => Label.layout parr) *)
+            (*       val b = labelBlock dst *)
+            (*       val alloc = *)
+            (*          Alloc.T *)
+            (*          (Vector.fold *)
+            (*           (live, [], fn (z, ac) => *)
+            (*            case z of *)
+            (*               Live.StackOffset (StackOffset.T {offset, ty, volatile}) => *)
+            (*                  if Bytes.< (offset, size) *)
+            (*                     then ac *)
+            (*                  else (Live.StackOffset *)
+            (*                        (StackOffset.T *)
+            (*                         {offset = Bytes.- (offset, size), *)
+            (*                          ty = ty, *)
+            (*                          volatile = volatile})) :: ac *)
+            (*             | _ => ac)) *)
+            (*    in *)
+            (*       goto (b, NONE, contReturns, alloc) *)
+            (*    end *)
 
             fun transferOk
                (t: Transfer.t,
@@ -1798,7 +1958,23 @@ structure Program =
                                   return = return,
                                   returns = returns}
                    | Goto l => jump l
-                   | PCall {label, live, cont, parl, parr, size} =>
+                   | Spork {spid, live, cont, spwn, size} =>
+                        liveIsOk (live, alloc)
+                        (* andalso *)
+                        (* sporkIsOk {alloc = alloc, *)
+                        (*            spid = spid, *)
+                        (*            cont = cont, *)
+                        (*            spwn = spwn, *)
+                        (*            size = size} *)
+                   | Spoin {spid, live, seq, sync, size} =>
+                        liveIsOk (live, alloc)
+                        (* andalso *)
+                        (* spoinIsOk {alloc = alloc, *)
+                        (*            spid = spid, *)
+                        (*            seq = seq, *)
+                        (*            sync = sync, *)
+                        (*            size = size} *)
+                   (*| PCall {label, live, cont, parl, parr, size} =>
                         liveIsOk (live, alloc)
                         andalso
                         pcallIsOk {alloc = alloc,
@@ -1807,7 +1983,7 @@ structure Program =
                                    cont = cont,
                                    parl = parl,
                                    parr = parr,
-                                   size = size}
+                                   size = size}*)
                    | Raise _ =>
                         (case raises of
                             NONE => false

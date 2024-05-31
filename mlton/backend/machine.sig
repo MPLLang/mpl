@@ -185,12 +185,22 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
-             | PCall of {label: Label.t, (* must be kind Func *)
+             | Spork of {spid: Spid.t,
+                         live: Live.t vector,
+                         cont: Label.t,
+                         spwn: Label.t,
+                         size: Bytes.t}
+             | Spoin of {spid: Spid.t,
+                         live: Live.t vector,
+                         seq: Label.t,
+                         sync: Label.t,
+                         size: Bytes.t}
+             (*| PCall of {label: Label.t, (* must be kind Func *)
                          live: Live.t vector,
                          cont: Label.t, (* must be kind PCallReturn *)
                          parl: Label.t, (* must be kind PCallReturn *)
                          parr: Label.t, (* must be kind PCallReturn *)
-                         size: Bytes.t}
+                         size: Bytes.t}*)
              | Raise of {raisesTo: Label.t list}
              | Return of {returnsTo: Label.t list}
              | Switch of Switch.t
@@ -220,9 +230,10 @@ signature MACHINE =
                    | CRETURN_FRAME
                    | FUNC_FRAME
                    | HANDLER_FRAME
-                   | PCALL_CONT_FRAME
-                   | PCALL_PARL_FRAME
-                   | PCALL_PARR_FRAME
+                   | SPORK_SPWN_FRAME
+                   (* | PCALL_CONT_FRAME *)
+                   (* | PCALL_PARL_FRAME *)
+                   (* | PCALL_PARR_FRAME *)
                   val equals: t * t -> bool
                   val hash: t -> word
                   val layout: t -> Layout.t
@@ -259,8 +270,10 @@ signature MACHINE =
              | Handler of {args: Live.t vector,
                            frameInfo: FrameInfo.t}
              | Jump
-             | PCallReturn of {args: Live.t vector,
+             | SporkReturn of {args: Live.t vector,
                                frameInfo: FrameInfo.t}
+             (* | PCallReturn of {args: Live.t vector, *)
+             (*                   frameInfo: FrameInfo.t} *)
 
             val isEntry: t -> bool
             val frameInfoOpt: t -> FrameInfo.t option
