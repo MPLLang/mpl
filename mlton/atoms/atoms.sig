@@ -24,6 +24,7 @@ signature ATOMS' =
       structure CharSize: CHAR_SIZE
       structure Con: CON
       structure Const: CONST
+      structure ExnDecElab: EXN_DEC_ELAB
       structure Ffi: FFI
       structure Field: FIELD
       structure Func: FUNC
@@ -95,6 +96,7 @@ signature ATOMS =
       sharing Cases = Atoms.Cases
       sharing Con = Atoms.Con
       sharing Const = Atoms.Const
+      sharing ExnDecElab = Atoms.ExnDecElab
       sharing Ffi = Atoms.Ffi
       sharing Field = Atoms.Field
       sharing Func = Atoms.Func

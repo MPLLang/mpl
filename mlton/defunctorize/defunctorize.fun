@@ -744,9 +744,10 @@ fun defunctorize (CoreML.Program.T {decs}) =
          in
             case d of
                Datatype _ => e
-             | Exception {arg, con} =>
+             | Exception {arg, con, elab} =>
                   prefix (Xdec.Exception {arg = Option.map (arg, loopTy),
-                                          con = con})
+                                          con = con,
+                                          elab = elab})
              | Fun {decs, tyvars} =>
                   prefix (Xdec.Fun {decs = processLambdas decs,
                                     tyvars = tyvars ()})

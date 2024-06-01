@@ -110,7 +110,8 @@ signature XML_TREE =
 
             datatype t =
                Exception of {arg: Type.t option,
-                             con: Con.t}
+                             con: Con.t,
+                             elab: ExnDecElab.t}
              | Fun of {decs: {lambda: Lambda.t,
                               ty: Type.t,
                               var: Var.t} vector,

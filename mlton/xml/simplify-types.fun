@@ -196,9 +196,10 @@ fun simplifyTypes (I.Program.T {body, datatypes}) =
                   targs = fixConTargs (con, targs)}
       fun fixDec (d: I.Dec.t): O.Dec.t =
          case d of
-            I.Dec.Exception {arg, con} =>
+            I.Dec.Exception {arg, con, elab} =>
                O.Dec.Exception {arg = Option.map (arg, fixType),
-                                con = con}
+                                con = con,
+                                elab = elab}
           | I.Dec.Fun {decs, tyvars} =>
                let
                   val decs =

@@ -163,7 +163,8 @@ signature CORE_ML =
                             tycon: Tycon.t,
                             tyvars: Tyvar.t vector} vector
              | Exception of {arg: Type.t option,
-                             con: Con.t}
+                             con: Con.t,
+                             elab: ExnDecElab.t}
              | Fun of {decs: {lambda: Lambda.t,
                               var: Var.t} vector,
                        tyvars: unit -> Tyvar.t vector}

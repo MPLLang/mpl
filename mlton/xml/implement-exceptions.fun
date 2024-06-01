@@ -183,7 +183,8 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                 sumTycon = sumTycon,
                 sumType = sumType}
             end
-      val {get = exconInfo: Con.t -> {refVar: Var.t,
+      val {get = exconInfo: Con.t -> {nonceVar: Var.t,
+                                      nonceTy: Type.t,
                                       make: VarExp.t option -> Dexp.t} option,
            set = setExconInfo, destroy} =
          Property.destGetSetOnce (Con.plist, Property.initConst NONE)
@@ -225,44 +226,51 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                         {var = var,
                                          ty = ty,
                                          lambda = loopLambda lambda})}]
-          | Exception {con, arg} =>
+          | Exception {con, arg, elab} =>
                let
                   open Dexp
-                  val r = Var.newString "exnRef"
-                  val uniq = monoVar (r, Type.unitRef)
+                  val nonceVar = Var.newString "exnNonce"
+                  val (nonceTy, nonceDec) =
+                     case elab of
+                        ExnDecElab.App =>
+                           (Type.unit,
+                            vall {var = nonceVar, exp = unit ()})
+                      | ExnDecElab.Gen =>
+                           (Type.unitRef,
+                            vall {var = nonceVar, exp = reff (unit ())})
+                  val nonce = monoVar (nonceVar, nonceTy)
                   fun conApp arg =
                      injectSum (Dexp.conApp {con = con,
                                              targs = Vector.new0 (),
                                              ty = sumType,
                                              arg = SOME arg})
-                  val (arg, decs, make) =
+                  val (arg, make) =
                      case arg of
                         NONE =>
-                           (* If the exception is not value carrying, then go
-                            * ahead and make it now.
+                           (* If the exception is not value carrying,
+                            * then go ahead and make it now.
                             *)
                            let
-                              val exn = Var.newNoname ()
-                           in (Type.unitRef,
-                               Dexp.vall {var = exn, exp = conApp uniq},
-                               fn NONE => monoVar (exn, Type.exn)
+                              val exn = Var.newString (Con.originalName con)
+                           in
+                              (nonceTy,
+                               fn NONE => conApp nonce
                                 | _ => Error.bug "ImplementExceptions: nullary excon applied to arg")
                            end
                       | SOME t =>
                            let
-                              val tupleType =
-                                 Type.tuple (Vector.new2 (Type.unitRef, t))
-                           in (tupleType,
-                               [],
+                              val tupleType = Type.tuple (Vector.new2 (nonceTy, t))
+                           in
+                              (tupleType,
                                fn SOME x => (conApp o tuple)
-                                            {exps = Vector.new2
-                                                    (uniq, varExp (x, t)),
+                                            {exps = Vector.new2 (nonce, varExp (x, t)),
                                              ty = tupleType}
                                 | _ => Error.bug "ImplmentExceptions: unary excon not applied to arg")
                            end
-               in setExconInfo (con, SOME {refVar = r, make = make})
+               in
+                  setExconInfo (con, SOME {nonceVar = nonceVar, nonceTy = nonceTy, make = make})
                   ; List.push (exnValCons, {con = con, arg = arg})
-                  ; vall {var = r, exp = reff (unit ())} @ decs
+                  ; nonceDec
                end
           | _ => Error.bug "ImplementExceptions: saw unexpected dec") arg
       and loopMonoVal {var, ty, exp} : Dec.t list =
@@ -330,15 +338,16 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                           (Vector.map
                                            (cases, fn (Pat.T {con, arg, ...}, e) =>
                                             let
-                                               val refVar = Var.newNoname ()
+                                               val {nonceVar, nonceTy, ...} = 
+                                                  valOf (exconInfo con)
+                                               val testVar = Var.newNoname ()
                                                val body =
                                                   iff {test =
                                                        equal
                                                        (monoVar
-                                                        (refVar, Type.unitRef),
+                                                        (testVar, nonceTy),
                                                         monoVar
-                                                        (#refVar (valOf (exconInfo con)),
-                                                         Type.unitRef)),
+                                                        (nonceVar, nonceTy)),
                                                        ty = ty,
                                                        thenn = (fromExp
                                                                 (loop e, ty)),
@@ -349,22 +358,24 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                                     targs = Vector.new0 (),
                                                     arg = SOME arg},
                                                    body)
-                                            in case arg of
-                                               NONE => make ((refVar, Type.unitRef), body)
-                                             | SOME (x, t) =>
-                                                  let
-                                                     val tuple =
-                                                        (Var.newNoname (),
-                                                         Type.tuple (Vector.new2
-                                                                     (Type.unitRef, t)))
-                                                  in
-                                                     make (tuple,
-                                                           detupleBind
-                                                           {tuple = monoVar tuple,
-                                                            components =
-                                                            Vector.new2 (refVar, x),
-                                                            body = body})
-                                                  end
+                                            in
+                                               case arg of
+                                                  NONE =>
+                                                     make ((testVar, nonceTy), body)
+                                                | SOME (x, t) =>
+                                                     let
+                                                        val tuple =
+                                                           (Var.newNoname (),
+                                                            Type.tuple (Vector.new2
+                                                                        (nonceTy, t)))
+                                                     in
+                                                        make (tuple,
+                                                              detupleBind
+                                                              {tuple = monoVar tuple,
+                                                               components =
+                                                               Vector.new2 (testVar, x),
+                                                               body = body})
+                                                     end
                                             end))}})
                                     end
                               end

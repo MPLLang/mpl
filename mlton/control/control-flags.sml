@@ -356,6 +356,20 @@ structure Elaborate =
                 | Ignore => "ignore"
          end
 
+      structure ExnDecElab =
+         struct
+            datatype t = App | Gen
+
+            val fromString: string -> t option =
+               fn "app" => SOME App
+                | "gen" => SOME Gen
+                | _ => NONE
+
+            val toString: t -> string =
+               fn App => "app"
+                | Gen => "gen"
+         end
+
       structure ResolveScope =
          struct
             datatype t =
@@ -658,6 +672,19 @@ structure Elaborate =
          val (deadCode, ac) =
             makeBool ({name = "deadCode",
                        default = false, expert = true}, ac)
+         val (exnDecElab, ac) =
+            make ({choices = SOME [ExnDecElab.App, ExnDecElab.Gen],
+                   default = ExnDecElab.Gen,
+                   expert = true,
+                   toString = ExnDecElab.toString,
+                   name = "exnDecElab",
+                   newCur = fn (_,ede) => ede,
+                   newDef = fn (_,ede) => ede,
+                   parseArgs = fn args' =>
+                               case args' of
+                                  [arg'] => ExnDecElab.fromString arg'
+                                | _ => NONE},
+                  ac)
          val (forceUsed, ac) =
             make ({choices = NONE,
                    default = false,
