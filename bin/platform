@@ -109,6 +109,9 @@ parisc*)
 ia64*)
         HOST_ARCH=ia64
 ;;
+loongarch64*)
+        HOST_ARCH=loongarch64
+;;
 m68k*)
         HOST_ARCH=m68k
 ;;
@@ -117,7 +120,7 @@ mips*)
         HOST_ARCH=mips
 ;;
 powerpc64*)
-	HOST_ARCH=powerpc64
+        HOST_ARCH=powerpc64
 ;;
 ppc64*)
         HOST_ARCH=powerpc64

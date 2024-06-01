@@ -192,6 +192,6 @@ PRIVATE void GC_setGCSignalHandled (GC_state s, Bool_t b);
 PRIVATE Bool_t GC_getGCSignalPending (GC_state s);
 PRIVATE void GC_setGCSignalPending (GC_state s, Bool_t b);
 
-PRIVATE GC_state MLton_gcState ();
+PRIVATE GC_state MLton_gcState (void);
 
 #endif /* GC_STATE_H_ */

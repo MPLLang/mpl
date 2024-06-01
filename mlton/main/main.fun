@@ -1,4 +1,4 @@
-(* Copyright (C) 2010-2011,2013-2022 Matthew Fluet.
+(* Copyright (C) 2010-2011,2013-2022,2024 Matthew Fluet.
  * Copyright (C) 1999-2009 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -183,6 +183,7 @@ fun defaultAlignIs8 () =
        | HPPA => true
        | IA64 => true
        | MIPS => true
+       | PowerPC64 => true
        | Sparc => true
        | S390 => true
        | _ => false
@@ -248,7 +249,7 @@ fun makeOptions {usage} =
        (Expert, "bounce-rssa-usage-cutoff", "<n>",
         "Maximum variable use count to consider",
         Int (fn i => bounceRssaUsageCutoff := (if i < 0 then NONE else SOME i))),
-       (Expert, "cc", " <cc>", "set C compiler",
+       (Normal, "cc", " <cc>", "executable for C compiler",
         SpaceString
         (fn s => cc := String.tokens (s, Char.isSpace))),
        (Normal, "cc-opt", " <opt>", "pass option to C compiler",
@@ -576,7 +577,7 @@ fun makeOptions {usage} =
        (Expert, "link-opt-quote", " <opt>", "pass (quoted) option to linker",
         SpaceString
         (fn s => List.push (linkOpts, {opt = s, pred = OptPred.Yes}))),
-       (Expert, "llvm-as", " <llvm-as>", "path to llvm .ll -> .bc assembler",
+       (Normal, "llvm-as", " <llvm-as>", "executable for llvm .ll -> .bc assembler",
         SpaceString (fn s => llvm_as := s)),
        (Normal, "llvm-as-opt", " <opt>", "pass option to llvm assembler",
         (SpaceString o tokenizeOpt)
@@ -593,7 +594,7 @@ fun makeOptions {usage} =
                        | NONE => usage (concat ["invalid -llvm-aamd flag: ", s])))),
        (Expert, "llvm-cc10", " {false|true}", "use llvm 'cc10' for interchunk transfers",
         boolRef llvmCC10),
-       (Expert, "llvm-llc", " <llc>", "path to llvm .bc -> .o compiler",
+       (Normal, "llvm-llc", " <llc>", "executable for llvm .bc -> .o system compiler",
         SpaceString (fn s => llvm_llc := s)),
        (Normal, "llvm-llc-opt", " <opt>", "pass option to llvm compiler",
         (SpaceString o tokenizeOpt)
@@ -601,7 +602,7 @@ fun makeOptions {usage} =
        (Expert, "llvm-llc-opt-quote", " <opt>", "pass (quoted) option to llvm compiler",
         SpaceString
         (fn s => List.push (llvm_llcOpts, {opt = s, pred = OptPred.Yes}))),
-       (Expert, "llvm-opt", " <llvm-as>", "path to llvm .bc -> .bc optimizer",
+       (Normal, "llvm-opt", " <opt>", "executable for llvm .bc -> .bc optimizer",
         SpaceString (fn s => llvm_opt := s)),
        (Normal, "llvm-opt-opt", " <opt>", "pass option to llvm optimizer",
         (SpaceString o tokenizeOpt)
@@ -1255,7 +1256,8 @@ fun commandLine (_: string, args: string list): unit =
                       | MinGW => true
                       | NetBSD => true
                       | OpenBSD => true
-                      | Solaris => true)
+                      | Solaris => true
+                      | WASI => false)
                     then ()
                     else usage (concat ["can't use -profile time on ",
                                         MLton.Platform.OS.toString targetOS])
