@@ -67,6 +67,7 @@ datatype 'a t =
  | Exn_setExtendExtra (* implement exceptions *)
  | GC_collect (* to rssa (as runtime C fn) *)
  | GC_state (* to rssa (as operand) *)
+ | Heartbeat_tokens (* to rssa (as operand) *)
  | IntInf_add (* to rssa (as runtime C fn) *)
  | IntInf_andb (* to rssa (as runtime C fn) *)
  | IntInf_arshift (* to rssa (as runtime C fn) *)
@@ -262,6 +263,7 @@ fun toString (n: 'a t): string =
        | Exn_setExtendExtra => "Exn_setExtendExtra"
        | GC_collect => "GC_collect"
        | GC_state => "GC_state"
+       | Heartbeat_tokens => "Heartbeat_tokens"
        | IntInf_add => "IntInf_add"
        | IntInf_andb => "IntInf_andb"
        | IntInf_arshift => "IntInf_arshift"
@@ -425,6 +427,7 @@ val equals: 'a t * 'a t -> bool =
     | (Exn_setExtendExtra, Exn_setExtendExtra) => true
     | (GC_collect, GC_collect) => true
     | (GC_state, GC_state) => true
+    | (Heartbeat_tokens, Heartbeat_tokens) => true
     | (IntInf_add, IntInf_add) => true
     | (IntInf_andb, IntInf_andb) => true
     | (IntInf_arshift, IntInf_arshift) => true
@@ -609,6 +612,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Exn_setExtendExtra => Exn_setExtendExtra
     | GC_collect => GC_collect
     | GC_state => GC_state
+    | Heartbeat_tokens => Heartbeat_tokens
     | IntInf_add => IntInf_add
     | IntInf_andb => IntInf_andb
     | IntInf_arshift => IntInf_arshift
@@ -819,6 +823,7 @@ val kind: 'a t -> Kind.t =
        | Exn_setExtendExtra => SideEffect
        | GC_collect => SideEffect
        | GC_state => DependsOnState
+       | Heartbeat_tokens => DependsOnState (* SAM_NOTE: check? *)
        | IntInf_add => Functional
        | IntInf_andb => Functional
        | IntInf_arshift => Functional
@@ -1029,6 +1034,7 @@ in
        Exn_setExtendExtra,
        GC_collect,
        GC_state,
+       Heartbeat_tokens,
        IntInf_add,
        IntInf_andb,
        IntInf_arshift,
@@ -1364,6 +1370,7 @@ fun 'a checkApp (prim: 'a t,
        | Exn_setExtendExtra => oneTarg (fn t => (oneArg (arrow (t, t)), unit))
        | GC_collect => noTargs (fn () => (noArgs, unit))
        | GC_state => noTargs (fn () => (noArgs, cpointer))
+       | Heartbeat_tokens => noTargs (fn () => (noArgs, word32))
        | IntInf_add => intInfBinary ()
        | IntInf_andb => intInfBinary ()
        | IntInf_arshift => intInfShift ()

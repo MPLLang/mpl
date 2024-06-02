@@ -21,6 +21,7 @@ structure GCField =
        | Limit
        | LimitPlusSlop
        | SignalIsPending
+       | SpareHeartbeatTokens
        | StackBottom
        | StackLimit
        | StackTop
@@ -40,6 +41,7 @@ structure GCField =
              | Limit => make "limit"
              | LimitPlusSlop => make "limitPlusSlop"
              | SignalIsPending => make "signalsInfo.signalIsPending"
+             | SpareHeartbeatTokens => make "spareHeartbeatTokens"
              | StackBottom => make "stackBottom"
              | StackLimit => make "stackLimit"
              | StackTop => make "stackTop"
@@ -53,6 +55,7 @@ structure GCField =
           | Limit => "Limit"
           | LimitPlusSlop => "LimitPlusSlop"
           | SignalIsPending => "SignalIsPending"
+          | SpareHeartbeatTokens => "SpareHeartbeatTokens"
           | StackBottom => "StackBottom"
           | StackLimit => "StackLimit"
           | StackTop => "StackTop"

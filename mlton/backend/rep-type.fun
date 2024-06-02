@@ -728,6 +728,7 @@ fun ofGCField (f: GCField.t): t =
        | Limit => cpointer ()
        | LimitPlusSlop => cpointer ()
        | SignalIsPending => word32
+       | SpareHeartbeatTokens => word32
        | StackBottom => cpointer ()
        | StackLimit => cpointer ()
        | StackTop => cpointer ()

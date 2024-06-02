@@ -63,6 +63,7 @@ int main (__attribute__ ((unused)) int argc,
   MkGCFieldOffset (limit);
   MkGCFieldOffset (limitPlusSlop);
   MkGCFieldOffset (signalsInfo.signalIsPending);
+  MkGCFieldOffset (spareHeartbeatTokens);
   MkGCFieldOffset (sourceMaps.curSourceSeqIndex);
   MkGCFieldOffset (stackBottom);
   MkGCFieldOffset (stackLimit);

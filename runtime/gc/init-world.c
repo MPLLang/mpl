@@ -126,7 +126,7 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
   GC_thread thread =
     newThreadWithHeap(s, sizeofStackInitialReserved(s), depth);
 
-  s->spareHeartbeats = thread->spareHeartbeats;
+  s->spareHeartbeatTokens = thread->spareHeartbeatTokens;
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
