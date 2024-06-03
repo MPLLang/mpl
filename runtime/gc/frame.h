@@ -9,6 +9,10 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
+typedef uintptr_t GC_returnAddress;
+#define GC_RETURNADDRESS_SIZE sizeof(GC_returnAddress)
+#define FMTRA "0x%016"PRIxPTR
+
 /*
  * The "... reserved bytes ..." of a stack object constitute a linear
  * sequence of frames.  For the purposes of garbage collection and
@@ -52,10 +56,6 @@ typedef const struct GC_frameInfo {
 typedef uint32_t GC_frameIndex;
 #define PRIFI PRIu32
 #define FMTFI "%"PRIFI
-
-typedef uintptr_t GC_returnAddress;
-#define GC_RETURNADDRESS_SIZE sizeof(GC_returnAddress)
-#define FMTRA "0x%016"PRIxPTR
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
