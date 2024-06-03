@@ -55,6 +55,7 @@ structure AllocateVariables = AllocateVariables (structure Machine = Machine
                                                  structure Rssa = Rssa)
 structure Chunkify = Chunkify (Rssa)
 structure ParallelMove = ParallelMove ()
+structure SporkNesting = SporkNesting (Rssa)
 
 structure VarOperand =
    struct
@@ -845,6 +846,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                case raises of
                   NONE => NONE
                 | SOME _ => SOME (Vector.new0 ())
+            val spidNesting = (* : (Spid.t -> int) =*)
+                SporkNesting.nesting f
             fun newVarInfo (x, ty: Type.t) =
                let
                   val operand =
@@ -1119,7 +1122,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                            val live = operandsLive contLive
                            val transfer =
                               M.Transfer.Spork
-                              {spid = spid,
+                              {nesting = spidNesting spid,
+                               spid = spid,
                                live = live,
                                cont = cont,
                                spwn = spwn,
@@ -1134,7 +1138,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                            val live = operandsLive seqLive
                            val transfer =
                               M.Transfer.Spoin
-                              {spid = spid,
+                              {nesting = spidNesting spid,
+                               spid = spid,
                                live = live,
                                seq = seq,
                                sync = sync,

@@ -613,12 +613,14 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
-       | Spork of {spid: Spid.t,
+       | Spork of {nesting: int,
+                   spid: Spid.t,
                    live: Live.t vector,
                    cont: Label.t,
                    spwn: Label.t,
                    size: Bytes.t}
-       | Spoin of {spid: Spid.t,
+       | Spoin of {nesting: int,
+                   spid: Spid.t,
                    live: Live.t vector,
                    seq: Label.t,
                    sync: Label.t,
@@ -661,16 +663,18 @@ structure Transfer =
                                          ("size", Bytes.layout size)])
                                 return)]]
              | Goto l => seq [str "Goto ", Label.layout l]
-             | Spork {spid, live, cont, spwn, size} =>
+             | Spork {nesting, spid, live, cont, spwn, size} =>
                   seq [str "Spork ",
-                       record [("spid", Spid.layout spid),
+                       record [("nesting", Int.layout nesting),
+                               ("spid", Spid.layout spid),
                                ("live", Vector.layout Live.layout live),
                                ("cont", Label.layout cont),
                                ("spwn", Label.layout spwn),
                                ("size", Bytes.layout size)]]
-             | Spoin {spid, live, seq = bseq, sync, size} =>
+             | Spoin {nesting, spid, live, seq = bseq, sync, size} =>
                   seq [str "Spoin ",
-                       record [("spid", Spid.layout spid),
+                       record [("nesting", Int.layout nesting),
+                               ("spid", Spid.layout spid),
                                ("live", Vector.layout Live.layout live),
                                ("seq", Label.layout bseq),
                                ("sync", Label.layout sync),
@@ -1958,7 +1962,7 @@ structure Program =
                                   return = return,
                                   returns = returns}
                    | Goto l => jump l
-                   | Spork {spid, live, cont, spwn, size} =>
+                   | Spork {nesting, spid, live, cont, spwn, size} =>
                         liveIsOk (live, alloc)
                         (* andalso *)
                         (* sporkIsOk {alloc = alloc, *)
@@ -1966,7 +1970,7 @@ structure Program =
                         (*            cont = cont, *)
                         (*            spwn = spwn, *)
                         (*            size = size} *)
-                   | Spoin {spid, live, seq, sync, size} =>
+                   | Spoin {nesting, spid, live, seq, sync, size} =>
                         liveIsOk (live, alloc)
                         (* andalso *)
                         (* spoinIsOk {alloc = alloc, *)

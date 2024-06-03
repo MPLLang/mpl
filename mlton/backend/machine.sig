@@ -185,12 +185,14 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
-             | Spork of {spid: Spid.t,
+             | Spork of {nesting: int,
+                         spid: Spid.t,
                          live: Live.t vector,
                          cont: Label.t,
                          spwn: Label.t,
                          size: Bytes.t}
-             | Spoin of {spid: Spid.t,
+             | Spoin of {nesting: int,
+                         spid: Spid.t,
                          live: Live.t vector,
                          seq: Label.t,
                          sync: Label.t,

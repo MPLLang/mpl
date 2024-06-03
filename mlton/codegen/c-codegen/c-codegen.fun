@@ -1389,7 +1389,11 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         (Option.app (return, fn {return, size, ...} => push (return, size))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
-                   | PCall {label, cont, parl, parr, size, ...} =>
+                   | Spork {spid, live, cont, spwn, size} =>
+                        TODO
+                   | Spoin {spid, live, seq, sync, size} =>
+                        TODO
+                   (*| PCall {label, cont, parl, parr, size, ...} =>
                         let
                            val _ =
                               outputStatement
@@ -1410,7 +1414,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         in
                            push (cont, size)
                            ; jump label
-                        end
+                        end*)
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2
@@ -1652,7 +1656,8 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
-                      | Kind.PCallReturn {frameInfo, ...} => pop frameInfo
+                      | Kind.SporkReturn {cont, spwn} => ()
+                      (* | Kind.PCallReturn {frameInfo, ...} => pop frameInfo *)
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements
@@ -1678,7 +1683,10 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
-                            | PCall _ => ()
+                            | Spork {cont, spwn, ...} => (visit cont; visit spwn)
+                            | Spoin {seq, sync, ...} => (visit seq; visit sync)
+                            (* TODO: should spork visit spwn? *)
+                            (*| PCall _ => ()*)
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>
