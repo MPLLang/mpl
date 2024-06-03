@@ -554,105 +554,113 @@ struct
 
 
   (* ========================================================================
-   * FORK JOIN
+   * DEVICES AND DEVICE IDENTIFIERS
    *)
 
-  local
-    type device_identifier = string
 
-    (* Use the command line argument to set GPU devices to use. For example,  -devices #0,#1 *)
-    val devices = Array.fromList (String.fields (fn c => c = #",")
-      (parseString "devices" ""))
+  type device_identifier = string
 
-    (* 
-    deviceReservation[i] = workerId if worker workerId has reserved device i
-    deviceReservation[i] = -1 if device i is not reserved
+  (* Use the command line argument to set GPU devices to use. For example,  -devices #0,#1 *)
+  val devices = Array.fromList (String.fields (fn c => c = #",")
+    (parseString "devices" ""))
+
+  (* 
+  deviceReservation[i] = workerId if worker workerId has reserved device i
+  deviceReservation[i] = -1 if device i is not reserved
+  *)
+
+  val notReserved = ~1
+
+  val deviceReservation: int array =
+    (Array.tabulate (Array.length devices, fn i => notReserved))
+
+  fun tryAcquireDeviceIdx () : int option =
+    case
+      Array.findi (fn (_, workerId) => workerId = notReserved)
+        deviceReservation
+    of
+      SOME (i, workerId) =>
+        let
+          val prevWorkerId =
+            MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
+              (notReserved, myWorkerId ())
+        in
+          if prevWorkerId = notReserved then
+            ( print ("worker " ^ Int.toString (myWorkerId ()) ^ " acquired " ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
+            ; SOME i
+            )
+          else
+            tryAcquireDeviceIdx ()
+        end
+    | NONE => NONE
+
+  (* 
+  Should be called by a choice thread after using a GPU device.
+  The current worker steals the GPU device from the choice thread (to be
+  precise, from the worker that has initially acquired the device), becomes
+  the new owner of the device, and searches for new pending choices
+  
+  Note that stealing may fail if the worker that initially acquired the
+  device has already released the device.
     *)
+  fun tryStealDeviceIdx deviceIdx : unit =
+    let
+      val myId = myWorkerId ()
+      val stealFrom = Array.sub (deviceReservation, deviceIdx)
 
-    val notReserved = ~1
+      val success =
+        (stealFrom <> myId) andalso
+        stealFrom =
+          MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
+            (stealFrom, myId)
+    in
+      if success then
+        print ("worker " ^ Int.toString myId ^ " stole " ^ Int.toString deviceIdx ^ ":" ^ Array.sub (devices, deviceIdx) ^ " from worker " ^ Int.toString stealFrom ^ "\n")
+      else
+        ()
+    end
 
-    val deviceReservation: int array =
-      (Array.tabulate (Array.length devices, fn i => notReserved))
 
-  in
-
-    fun tryAcquireDevice () =
-      case
-        Array.findi (fn (_, workerId) => workerId = notReserved)
-          deviceReservation
-      of
-        SOME (i, workerId) =>
+  (*
+  Should be called by a scheduler thread whose worker has acquired a GPU device.
+  If there is no pending choice, the worker releases the device by calling
+  tryReleaseDeviceIdx.
+  
+  Note that releasing may fail if the worker that finished the GPU task
+  has already stolen the device.
+  *)
+  fun tryReleaseDeviceIdx () =
+    let
+      val myId = myWorkerId ()
+    in
+      case Array.findi (fn (_, workerId) => workerId = myId) deviceReservation of
+        SOME (i, _) =>
           let
-            val prevWorkerId =
+            val old =
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-                (notReserved, myWorkerId ())
+                (myId, notReserved)
           in
-            if prevWorkerId = notReserved then SOME i else tryAcquireDevice ()
-          end
-      | NONE => NONE
-
-
-    (* 
-    Should be called by a choice thread after using a GPU device.
-    The current worker steals the GPU device from the choice thread (to be
-    precise, from the worker that has initially acquired the device), becomes
-    the new owner of the device, and searches for new pending choices
-    
-    Note that stealing may fail if the worker that initially acquired the
-    device has already released the device.
-     *)
-    fun tryStealDevice device =
-      let
-        val myId = myWorkerId ()
-        val deviceIdx =
-          case Array.findi (fn (_, d) => d = device) devices of
-            SOME (i, _) => i
-          | NONE => die (fn _ => "scheduler bug: device not found")
-
-        val stealFrom = Array.sub (deviceReservation, deviceIdx)
-      in
-        MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
-          (stealFrom, myId)
-      end
-
-
-    (*
-    Should be called by a scheduler thread whose worker has acquired a GPU device.
-    If there is no pending choice, the worker releases the device by calling
-    tryReleaseDevice.
-    
-    Note that releasing may fail if the worker that finished the GPU task
-    has already stolen the device.
-    *)
-    fun tryReleaseDevice () =
-      let
-        val myId = myWorkerId ()
-      in
-        case Array.findi (fn (_, workerId) => workerId = myId) deviceReservation of
-          SOME (i, _) =>
-            let
-              val _ =
-                MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-                  (myId, notReserved)
-            in
+            if old = myId then
+              print ("worker " ^ Int.toString myId ^ " released " ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
+            else
               ()
-            end
-        | NONE => ()
-      end
+          end
+      | NONE => ()
+    end
 
-    fun shouldSearchForChoices () =
-      Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
+  fun shouldSearchForChoices () =
+    Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
 
-    (* returns the GPU device that the current worker is holding *)
-    fun currentWorkerDevice () =
-      case
-        Array.findi (fn (_, workerId) => workerId = myWorkerId ())
-          deviceReservation
-      of
-        SOME (i, _) => SOME (Array.sub (devices, i))
-      | NONE => NONE
+  (* returns the GPU device that the current worker is holding *)
+  fun currentWorkerDeviceIdx () =
+    case
+      Array.findi (fn (_, workerId) => workerId = myWorkerId ())
+        deviceReservation
+    of
+      SOME (i, _) => SOME i
+    | NONE => NONE
 
-  end
+
   (* ========================================================================
    * FORK JOIN
    *)
@@ -923,20 +931,20 @@ struct
 
     fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
       let
-        val _ = tryAcquireDevice ()
+        val _ = tryAcquireDeviceIdx ()
         val _ = announceCurrentThreadPendingChoice ()
       in
         (* When we resume here, the gpu manager has already had a chance to
          * to consider this choice point. Resuming on a cpu means that the
          * manager decided to return the task to the cpus.
          *)
-        case currentWorkerDevice () of
+        case currentWorkerDeviceIdx () of
           NONE => cpuTask ()
-        | SOME device =>
+        | SOME deviceIdx =>
             let
               (* val _ = dbgmsg (fn _ => "choice: gpu after send") *)
 
-              val result = doGpuTask gpuTask device
+              val result = doGpuTask gpuTask (Array.sub (devices, deviceIdx))
 
               (* after finishing gpu task, we expect to run CPU code again, so try to
                * send this task back to a CPU thread.
@@ -944,7 +952,7 @@ struct
               val thread = Thread.current ()
               val depth = HH.getDepth thread
               val selfTask = Continuation (thread, depth)
-              val _ = tryStealDevice device
+              val _ = tryStealDeviceIdx deviceIdx
               val sendSucceeded =
                 (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
                 pushSide selfTask
@@ -1245,10 +1253,10 @@ struct
           case gpuManager_tryFindWorkLoop_policy_minDepth () of
             SOME t => t
           | NONE =>
-              ( tryReleaseDevice ()
+              ( tryReleaseDeviceIdx ()
               ; if
                   existsPendingChoice ()
-                  andalso Option.isSome (tryAcquireDevice ())
+                  andalso Option.isSome (tryAcquireDeviceIdx ())
                 then findWork ()
                 else workerFindWork ()
               )
