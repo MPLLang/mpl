@@ -378,24 +378,18 @@ void GC_HH_joinIntoParent(
 }
 
 
-
-uint32_t GC_currentSpareHeartbeats(GC_state s) {
-  return s->spareHeartbeats;
-}
-
-
 uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares) {
-  uint32_t current = s->spareHeartbeats;
-  s->spareHeartbeats = min(current+spares, s->controls->heartbeatTokens);
-  return s->spareHeartbeats;
+  uint32_t current = s->spareHeartbeatTokens;
+  s->spareHeartbeatTokens = min(current+spares, s->controls->heartbeatTokens);
+  return s->spareHeartbeatTokens;
 }
 
 
 Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
-  uint32_t spares = s->spareHeartbeats;
+  uint32_t spares = s->spareHeartbeatTokens;
   if (spares >= count) {
     // LOG(LM_PARALLEL, LL_FORCE, "success (count = %u). new spares = %u", count, spares - count);
-    s->spareHeartbeats -= count;
+    s->spareHeartbeatTokens -= count;
     return TRUE;
   }
   return FALSE;
@@ -498,10 +492,10 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   // fork with this function.
   GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
 
-  // uint32_t spares = getThreadCurrent(s)->spareHeartbeats;
+  // uint32_t spares = getThreadCurrent(s)->spareHeartbeatTokens;
   // uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
-  // copied->spareHeartbeats += half;
-  // getThreadCurrent(s)->spareHeartbeats -= half;
+  // copied->spareHeartbeatTokens += half;
+  // getThreadCurrent(s)->spareHeartbeatTokens -= half;
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);

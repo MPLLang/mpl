@@ -1615,6 +1615,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                      func = (CFunction.gc
                                              {maySwitchThreads = handlesSignals})}
                                | Prim.GC_state => move GCState
+                               | Prim.Heartbeat_tokens => move (Runtime GCField.SpareHeartbeatTokens)
                                | Prim.IntInf_add =>
                                     simpleCCallWithGCState (CFunction.intInfBinary prim)
                                | Prim.IntInf_andb =>

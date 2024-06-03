@@ -290,7 +290,7 @@ pointer GC_handlerEnterHeapOfThread(GC_state s, objptr threadp) {
   HM_HierarchicalHeap abandonedHH = getThreadCurrent(s)->hierarchicalHeap;
 
   // copy thread details to current thread
-  getThreadCurrent(s)->spareHeartbeats = target->spareHeartbeats;
+  getThreadCurrent(s)->spareHeartbeatTokens = target->spareHeartbeatTokens;
   getThreadCurrent(s)->currentDepth = target->currentDepth;
   getThreadCurrent(s)->currentChunk = target->currentChunk;
   getThreadCurrent(s)->hierarchicalHeap = target->hierarchicalHeap;
@@ -353,7 +353,7 @@ void GC_handlerLeaveHeapOfThread(
   assert(target->currentProcNum == -1);
   assert(s->savedThreadDuringSignalHandler == threadp);
 
-  target->spareHeartbeats = getThreadCurrent(s)->spareHeartbeats;
+  target->spareHeartbeatTokens = getThreadCurrent(s)->spareHeartbeatTokens;
   target->currentDepth = getThreadCurrent(s)->currentDepth;
   target->currentChunk = getThreadCurrent(s)->currentChunk;
   target->hierarchicalHeap = getThreadCurrent(s)->hierarchicalHeap;
@@ -380,7 +380,7 @@ void GC_handlerLeaveHeapOfThread(
   HM_HierarchicalHeap originalHH = (HM_HierarchicalHeap)abandonedHH;
   assert(HM_HH_getDepth(originalHH) == 0);
 
-  getThreadCurrent(s)->spareHeartbeats = 0;
+  getThreadCurrent(s)->spareHeartbeatTokens = 0;
   getThreadCurrent(s)->currentDepth = 0;
   getThreadCurrent(s)->hierarchicalHeap = originalHH;
   getThreadCurrent(s)->bytesAllocatedSinceLastCollection = 0;

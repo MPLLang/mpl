@@ -19,7 +19,7 @@ void enter (GC_state s) {
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  getThreadCurrent(s)->spareHeartbeats = s->spareHeartbeats;
+  getThreadCurrent(s)->spareHeartbeatTokens = s->spareHeartbeatTokens;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
   HH_EBR_leaveQuiescentState(s);
   HM_EBR_leaveQuiescentState(s);
@@ -40,7 +40,7 @@ void leave (GC_state s) {
    * for functions that don't ensureBytesFree.
    */
   assert(invariantForMutator(s, FALSE, TRUE));
-  s->spareHeartbeats = getThreadCurrent(s)->spareHeartbeats;
+  s->spareHeartbeatTokens = getThreadCurrent(s)->spareHeartbeatTokens;
   endAtomic (s);
   // Trace0(EVENT_RUNTIME_LEAVE);
 }
