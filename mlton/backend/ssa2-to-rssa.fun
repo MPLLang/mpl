@@ -1145,6 +1145,9 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                  ([],
                   Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
                end
+          | S.Transfer.Spoin {spid, seq, sync} =>
+               (* TODO: do we need a genSpoinReturns? *)
+               ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync})
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
           | S.Transfer.Runtime {args, prim, return} =>

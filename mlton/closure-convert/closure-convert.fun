@@ -355,13 +355,16 @@ fun closureConvert
                         end
                    | Lambda l => set (loopLambda (l, var))
                    | PrimApp {prim = Prim.Spork, targs, args} =>
-                     (* spork: (unit -> 'a) * ('d -> 'b) * ('a -> 'c) * ('a*'d -> 'c) -> 'c *)
-                     let val targslist = List.tabulate (Vector.length targs,
-                                                        fn i => Vector.sub (targs, i))
-                         val argslist = List.tabulate (Vector.length args,
-                                                       fn i => Vector.sub (args, i))
-                         val [ta, tb, tc, td] = targslist
-                         val [cont, spwn, seq, sync] = argslist
+                     (* spork: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a -> 'c) -> 'c *)
+                     let fun targ i = Vector.sub (targs, i)
+                         fun arg i = Vector.sub (args, i)
+                         val ta = targ 0
+                         val tb = targ 1
+                         val tc = targ 2
+                         val cont = arg 0
+                         val spwn = arg 1
+                         val seq = arg 2
+                         val sync = arg 3
                          val unitres = Var.newString "unitres"
                          val contres = Var.newString "contres"
                          val spwnres = Var.newString "spwnres"
@@ -369,9 +372,9 @@ fun closureConvert
                          val syncres = Var.newString "syncres"
                          (* val datares = Var.newString "datares" *)
                          val result = new ()
-                         val getdata = PrimApp {prim = Prim.Spork_getData,
+                         (*val getdata = PrimApp {prim = Prim.Spork_getData,
                                                 targs = Vector.new1 td,
-                                                args = Vector.new0 ()}
+                                                args = Vector.new0 ()}*)
                          fun mkunit () = Tuple (Vector.new0 ())
                          (* val _ = loopBind {var = datares, *)
                          (*                   ty = td, *)
@@ -1065,14 +1068,17 @@ fun closureConvert
                          ac)
                   end
              | SprimExp.PrimApp {prim = Prim.Spork, targs, args} =>
-              (* spork: (unit -> 'a) * ('d -> 'b) * ('a -> 'c) * ('a*'d -> 'c) -> 'c *)
+              (* spork: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a -> 'c) -> 'c *)
                let
-                 val targslist = List.tabulate (Vector.length targs,
-                                                fn i => Vector.sub (targs, i))
-                 val argslist = List.tabulate (Vector.length args,
-                                               fn i => Vector.sub (args, i))
-                 val [ta, tb, tc, td] = targslist
-                 val [cont, spwn, seq, sync] = argslist
+                 fun targ i = Vector.sub (targs, i)
+                 fun arg i = Vector.sub (args, i)
+                 val ta = targ 0
+                 val tb = targ 1
+                 val tc = targ 2
+                 val cont = arg 0
+                 val spwn = arg 1
+                 val seq = arg 2
+                 val sync = arg 3
                  val unitres = Var.fromString "unitres"
                  val contres = Var.fromString "contres"
                  val spwnres = Var.fromString "spwnres"

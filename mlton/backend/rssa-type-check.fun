@@ -274,6 +274,7 @@ fun checkHandlers (Program.T {functions, ...}) =
                       | Goto {dst, ...} => goto dst
                       (*| PCall _ => assert ("pcall", true)*)
                       | Spork _ => assert ("spork", true)
+                      | Spoin _ => assert ("spoin", true)
                       | Raise _ => tail "raise"
                       | Return _ => tail "return"
                       | Switch s => Switch.foreachLabel (s, goto)

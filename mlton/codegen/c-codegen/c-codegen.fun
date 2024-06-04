@@ -1389,10 +1389,27 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         (Option.app (return, fn {return, size, ...} => push (return, size))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
-                   | Spork {spid, live, cont, spwn, size} =>
-                        TODO
-                   | Spoin {spid, live, seq, sync, size} =>
-                        TODO
+                   | Spork {nesting, spid, live, cont, spwn, size} =>
+                        (* TODO *)
+                        gotoLabel (cont, {tab = true})
+                   | Spoin {nesting, spid, live, seq, sync, size} =>
+                        let val boolsize = Bits.toBytes (WordSize.bits WordSize.bool)
+                            val opnd = Operand.stackOffset
+                                         {offset = Bytes.- (size, Bytes.* (boolsize, LargeInt.fromInt nesting)),
+                                          ty = Type.bool,
+                                          volatile = false} (* TODO: should this be volatile? *)
+                            fun bnz (lnz, lz) =
+                                (print "\tif ("
+                                ; print (operandToString opnd)
+                                ; print ") goto "
+                                ; print (Label.toString lnz)
+                                ; print "; else goto "
+                                ; print (Label.toString lz)
+                                ; print ";\n")
+                        in
+                          (* TODO: reset promoted slot to false in sync case *)
+                          gotoLabel (seq, {tab = true})
+                        end
                    (*| PCall {label, cont, parl, parr, size, ...} =>
                         let
                            val _ =
@@ -1656,7 +1673,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
-                      | Kind.SporkReturn {cont, spwn} => ()
+                      | Kind.SporkReturn {frameInfo, ...} => ()
                       (* | Kind.PCallReturn {frameInfo, ...} => pop frameInfo *)
                   val _ =
                      if !Control.codegenFuseOpAndChk

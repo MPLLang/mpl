@@ -24,12 +24,12 @@ fun dropSporkFunction f =
                    fn Statement.T {exp, ty, var} =>
                       case exp of
                           Exp.PrimApp {args, prim, targs} =>
-                             case prim of
+                             (case prim of
                                  (* once spork/spoin removed, these should never matter *)
                                  Prim.Spork_forkThreadAndSetData => false
                                (* We will rely on dead code elim to clean up Spork_getData *)
                                (*| Prim.Spork_getData => false*)
-                               | _ => true
+                               | _ => true)
                         | _ => true)
             (* Changes sporks and spoins into gotos of the sequential case *)
             val transfer =
