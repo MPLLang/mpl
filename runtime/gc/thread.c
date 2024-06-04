@@ -419,13 +419,14 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
     return BOGUS_OBJPTR;
   }
 
-#if ASSERT
   GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
+#if ASSERT
   assert(fi->kind == PCALL_CONT_FRAME);
+  assert(fi->pcallInfo != NULL);
 #endif
-  GC_returnAddress parl_ret = *((GC_returnAddress*)(pframe - 2 * GC_RETURNADDRESS_SIZE));
-  GC_returnAddress parr_ret = *((GC_returnAddress*)(pframe - 3 * GC_RETURNADDRESS_SIZE));
+  GC_returnAddress parl_ret = fi->pcallInfo->parl;
+  GC_returnAddress parr_ret = fi->pcallInfo->parr;
 
   // =========================================================================
   // First, write dp (data pointer) onto the promotable frame

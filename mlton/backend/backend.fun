@@ -215,6 +215,16 @@ fun toMachine (rssa: Rssa.Program.t) =
               in
                  fo
               end))
+         val pcallInfos: M.PCallInfo.t list ref = ref []
+         val nextPCallInfo = Counter.generator 0
+         fun getPCallInfo {parl, parr} =
+            let
+               val index = nextPCallInfo ()
+               val pra = M.PCallInfo.new {index = index, parl = parl, parr = parr}
+               val _ = List.push (pcallInfos, pra)
+            in
+               pra
+            end
       in
          fun allFrameInfo chunks =
             let
@@ -254,20 +264,25 @@ fun toMachine (rssa: Rssa.Program.t) =
                                 Vector.foreachi
                                 (frameInfos, fn (i, fi) =>
                                  M.FrameInfo.setIndex (fi, i))
-            in
+                          in
                              frameInfos
-            end
+                          end
                      else frameInfos
             in
-               (frameInfos, frameOffsets)
+               (frameInfos, frameOffsets,
+                Vector.fromListRev (!pcallInfos))
             end
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
-                                   offsets: Bytes.t list,
+                           offsets: Bytes.t list,
+                           pcallInfo: {parl: Label.t, parr: Label.t} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
                val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
+               val pcallInfo =
+                  Option.map (pcallInfo, fn {parl, parr} =>
+                              getPCallInfo {parl = parl, parr = parr})
                fun new () =
                   let
                      val index = nextFrameInfo ()
@@ -276,6 +291,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                         {frameOffsets = frameOffsets,
                          index = index,
                          kind = kind,
+                         pcallInfo = pcallInfo,
                          size = size,
                          sourceSeqIndex = sourceSeqIndex}
                      val _ = List.push (frameInfos, frameInfo)
@@ -966,26 +982,27 @@ fun toMachine (rssa: Rssa.Program.t) =
                                     | _ => ac)
                             else
                                []
-                         val (entry, kind, offsets, size) =
+                         val (entry, kind, offsets, pcallInfo, size) =
                             case kind of
                                R.Kind.Cont _ =>
-                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, size)
+                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, NONE, size)
                              | R.Kind.CReturn {func} =>
                                   (CFunction.maySwitchThreadsTo func,
                                    M.FrameInfo.Kind.CRETURN_FRAME,
-                                   offsets, size)
+                                   offsets, NONE, size)
                              | R.Kind.Handler =>
-                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, size)
+                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, NONE, size)
                              | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
                              | R.Kind.PCallReturn {cont, parl, parr} =>
                                   let
-                                     val kind =
+                                     val (kind, pcallInfo) =
                                         if Label.equals (label, cont)
-                                           then M.FrameInfo.Kind.PCALL_CONT_FRAME
+                                           then (M.FrameInfo.Kind.PCALL_CONT_FRAME,
+                                                 SOME {parl = parl, parr = parr})
                                         else if Label.equals (label, parl)
-                                           then M.FrameInfo.Kind.PCALL_PARL_FRAME
+                                           then (M.FrameInfo.Kind.PCALL_PARL_FRAME, NONE)
                                         else if Label.equals (label, parr)
-                                           then M.FrameInfo.Kind.PCALL_PARR_FRAME
+                                           then (M.FrameInfo.Kind.PCALL_PARR_FRAME, NONE)
                                         else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn"
                                      (* The size is that of the cont *)
                                      val size = #size (labelRegInfo cont)
@@ -995,12 +1012,13 @@ fun toMachine (rssa: Rssa.Program.t) =
                                            then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
                                            else offsets
                                   in
-                                     (true, kind, offsets, size)
+                                     (true, kind, offsets, pcallInfo, size)
                                   end
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
                                           offsets = offsets,
+                                          pcallInfo = pcallInfo,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1271,6 +1289,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                      getFrameInfo {entry = true,
                                    kind = M.FrameInfo.Kind.FUNC_FRAME,
                                    offsets = [],
+                                   pcallInfo = NONE,
                                    size = Bytes.zero,
                                    sourceSeqIndex = NONE}
                   val srcs =
@@ -1358,7 +1377,7 @@ fun toMachine (rssa: Rssa.Program.t) =
        *)
       val _ = List.foreach (chunks, fn M.Chunk.T {blocks, ...} =>
                             Vector.foreach (blocks, Label.clear o M.Block.label))
-      val (frameInfos, frameOffsets) = allFrameInfo chunks
+      val (frameInfos, frameOffsets, pcallInfos) = allFrameInfo chunks
       val maxFrameSize: Bytes.t =
          List.fold
          (chunks, Bytes.zero, fn (M.Chunk.T {blocks, ...}, max) =>
@@ -1404,6 +1423,7 @@ fun toMachine (rssa: Rssa.Program.t) =
           main = main,
           maxFrameSize = maxFrameSize,
           objectTypes = objectTypes,
+          pcallInfos = pcallInfos,
           sourceMaps = sourceMaps,
           staticHeaps = finishStaticHeaps ()}
    in
