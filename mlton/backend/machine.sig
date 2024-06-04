@@ -211,6 +211,19 @@ signature MACHINE =
             val offsets: t -> Bytes.t vector
          end
 
+      structure PCallInfo:
+         sig
+            type t
+
+            val equals: t * t -> bool
+            val hash: t -> word
+            val index: t -> int
+            val layout: t -> Layout.t
+            val new: {index: int, parl: Label.t, parr: Label.t} -> t
+            val parl: t -> Label.t
+            val parr: t -> Label.t
+         end
+
       structure FrameInfo:
          sig
             structure Kind:
@@ -240,7 +253,9 @@ signature MACHINE =
                       index: int,
                       kind: Kind.t,
                       size: Bytes.t,
+                      pcallInfo: PCallInfo.t option,
                       sourceSeqIndex: int option} -> t
+            val pcallInfo: t -> PCallInfo.t option
             val offsets: t -> Bytes.t vector
             val setIndex: t * int -> unit
             val size: t -> Bytes.t
@@ -309,6 +324,7 @@ signature MACHINE =
                             label: Label.t},
                      maxFrameSize: Bytes.t,
                      objectTypes: Type.ObjectType.t vector,
+                     pcallInfos: PCallInfo.t vector,
                      sourceMaps: SourceMaps.t option,
                      staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 

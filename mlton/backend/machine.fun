@@ -709,6 +709,42 @@ structure FrameOffsets =
          Hash.combine (Word.fromInt index, Hash.vectorMap (offsets, Bytes.hash))
    end
 
+structure PCallInfo =
+   struct
+      datatype t = T of {index: int,
+                         parl: Label.t,
+                         parr: Label.t}
+
+      local
+         fun make f (T r) = f r
+      in
+         val index = make #index
+         val parl = make #parl
+         val parr = make #parr
+      end
+
+      fun new {index, parl, parr} =
+         T {index = index, parl = parl, parr = parr}
+
+      fun equals (pra1, pra2) =
+         Int.equals (index pra1, index pra2)
+         andalso Label.equals (parl pra1, parl pra2)
+         andalso Label.equals (parr pra1, parr pra2)
+
+      fun layout (T {index, parl, parr}) =
+         let
+            open Layout
+         in
+            record [("index", Int.layout index),
+                    ("parl", Label.layout parl),
+                    ("parr", Label.layout parr)]
+         end
+
+      fun hash (T {index, parl, parr}) =
+         Hash.combine (Word.fromInt index,
+         Hash.combine (Label.hash parl, Label.hash parr))
+   end
+
 structure FrameInfo =
    struct
       structure Kind =
@@ -766,6 +802,7 @@ structure FrameInfo =
       datatype t = T of {frameOffsets: FrameOffsets.t,
                          index: int ref,
                          kind: Kind.t,
+                         pcallInfo: PCallInfo.t option,
                          size: Bytes.t,
                          sourceSeqIndex: int option}
 
@@ -775,6 +812,7 @@ structure FrameInfo =
          val frameOffsets = make #frameOffsets
          val indexRef = make #index
          val kind = make #kind
+         val pcallInfo = make #pcallInfo
          val size = make #size
          val sourceSeqIndex = make #sourceSeqIndex
       end
@@ -782,10 +820,11 @@ structure FrameInfo =
       fun setIndex (fi, i) = indexRef fi := i
       val offsets = FrameOffsets.offsets o frameOffsets
 
-      fun new {frameOffsets, index, kind, size, sourceSeqIndex} =
+      fun new {frameOffsets, index, kind, pcallInfo, size, sourceSeqIndex} =
          T {frameOffsets = frameOffsets,
             index = ref index,
             kind = kind,
+            pcallInfo = pcallInfo,
             size = size,
             sourceSeqIndex = sourceSeqIndex}
 
@@ -793,16 +832,21 @@ structure FrameInfo =
          FrameOffsets.equals (frameOffsets fi1, frameOffsets fi2)
          andalso Ref.equals (indexRef fi1, indexRef fi2)
          andalso Kind.equals (kind fi1, kind fi2)
+         andalso Option.equals (pcallInfo fi1,
+                                pcallInfo fi2,
+                                PCallInfo.equals)
          andalso Bytes.equals (size fi1, size fi2)
          andalso Option.equals (sourceSeqIndex fi1, sourceSeqIndex fi2, Int.equals)
 
-      fun layout (T {frameOffsets, index, kind, size, sourceSeqIndex}) =
+      fun layout (T {frameOffsets, index, kind, pcallInfo, size, sourceSeqIndex}) =
          let
             open Layout
          in
             record [("frameOffsets", FrameOffsets.layout frameOffsets),
                     ("index", Ref.layout Int.layout index),
                     ("kind", Kind.layout kind),
+                    ("pcallInfo",
+                     Option.layout PCallInfo.layout pcallInfo),
                     ("size", Bytes.layout size),
                     ("sourceSeqIndex", Option.layout Int.layout sourceSeqIndex)]
          end
@@ -973,6 +1017,7 @@ structure Program =
                                 label: Label.t},
                          maxFrameSize: Bytes.t,
                          objectTypes: ObjectType.t vector,
+                         pcallInfos: PCallInfo.t vector,
                          sourceMaps: SourceMaps.t option,
                          staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 
@@ -981,7 +1026,7 @@ structure Program =
 
       fun layouts (T {chunks, frameInfos, frameOffsets, handlesSignals,
                       main = {label, ...},
-                      maxFrameSize, objectTypes, sourceMaps, staticHeaps, ...},
+                      maxFrameSize, pcallInfos, objectTypes, sourceMaps, staticHeaps, ...},
                    output': Layout.t -> unit) =
          let
             open Layout
@@ -992,6 +1037,7 @@ structure Program =
                      ("main", Label.layout label),
                      ("maxFrameSize", Bytes.layout maxFrameSize),
                      ("frameOffsets", Vector.layout FrameOffsets.layout frameOffsets),
+                     ("pcallInfos", Vector.layout PCallInfo.layout pcallInfos),
                      ("frameInfos", Vector.layout FrameInfo.layout frameInfos)])
             ; Option.app (sourceMaps, fn pi =>
                           (output (str "\nSourceMaps:")
@@ -1036,6 +1082,7 @@ structure Program =
 
       fun shuffle (T {chunks, frameInfos, frameOffsets, globals,
                       handlesSignals, main, maxFrameSize,
+                      pcallInfos,
                       objectTypes, sourceMaps, staticHeaps}) =
          let
             fun shuffle v =
@@ -1064,6 +1111,7 @@ structure Program =
                main = main,
                maxFrameSize = maxFrameSize,
                objectTypes = objectTypes,
+               pcallInfos = pcallInfos,
                sourceMaps = sourceMaps,
                staticHeaps = staticHeaps}
          end
@@ -1104,7 +1152,8 @@ structure Program =
 
       fun typeCheck (program as
                      T {chunks, frameInfos, frameOffsets, globals = {objptrs, reals, ...},
-                        maxFrameSize, objectTypes, sourceMaps, staticHeaps, ...}) =
+                        maxFrameSize, pcallInfos, objectTypes, sourceMaps,
+                        staticHeaps, ...}) =
          let
             val _ =
                Err.check
@@ -1139,6 +1188,24 @@ structure Program =
                         end
             val _ =
                Vector.foreachi
+               (pcallInfos, fn (i, pra) =>
+                let
+                   val index = PCallInfo.index pra
+                in
+                   Err.check ("pcallInfos",
+                              fn () => Int.equals (i, index),
+                              fn () => PCallInfo.layout pra)
+                end)
+            fun checkPCallInfo pra =
+               let
+                  val index = PCallInfo.index pra
+               in
+                  PCallInfo.equals
+                  (Vector.sub (pcallInfos, index), pra)
+                  handle Subscript => false
+               end
+            val _ =
+               Vector.foreachi
                (frameInfos, fn (i, fi) =>
                 let
                    val index = FrameInfo.index fi
@@ -1151,6 +1218,13 @@ structure Program =
                               andalso checkFrameOffsets frameOffsets
                               andalso Bytes.<= (size, maxFrameSize)
                               andalso Bytes.<= (size, Runtime.maxFrameSize)
+                              andalso (case (FrameInfo.kind fi,
+                                             FrameInfo.pcallInfo fi) of
+                                          (FrameInfo.Kind.PCALL_CONT_FRAME, SOME pra) =>
+                                             checkPCallInfo pra
+                                        | (FrameInfo.Kind.PCALL_CONT_FRAME, NONE) => false
+                                        | (_, SOME _) => false
+                                        | (_, NONE) => true)
                               andalso (Bytes.isAligned
                                        (size,
                                         {alignment = (case !Control.align of
