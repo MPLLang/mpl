@@ -1371,7 +1371,7 @@ fun transform (program: Program.t): Program.t =
                 | Prim.Array_toArray => arrayToArray (arg 0)
                 | Prim.Array_toVector => arrayToVector (arg 0)
                 | Prim.Array_update _ => sequenceUpd arraySequence
-                | Prim.PCall_forkThreadAndSetData =>
+                | Prim.PCall_forkThreadAndSetData _ =>
                      let
                         val x = arg 1
                      in

@@ -200,7 +200,7 @@ structure CFunction =
 
       (* CHECK; thread as objptr *)
       val pcallForkThreadAndSetData = fn ty =>
-         T {args = Vector.new3 (Type.gcState (), Type.thread (), ty),
+         T {args = Vector.new4 (Type.gcState (), Type.bool, Type.thread (), ty),
             convention = Cdecl,
             inline = false,
             kind = Kind.Runtime {bytesNeeded = NONE,
@@ -214,7 +214,7 @@ structure CFunction =
             prototype = let
                            open CType
                         in
-                           (Vector.new3 (CPointer, CPointer, Objptr), SOME CPointer)
+                           (Vector.new4 (CPointer, CType.bool, CPointer, Objptr), SOME CPointer)
                         end,
             return = Type.thread (),
             symbolScope = Private,
@@ -1713,9 +1713,14 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
-                               | Prim.PCall_forkThreadAndSetData =>
-                                    simpleCCallWithGCState
-                                    (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))
+                               | Prim.PCall_forkThreadAndSetData {youngest} =>
+                                    ccall
+                                    {args = (Vector.new4
+                                             (GCState,
+                                              Operand.bool youngest,
+                                              a 0,
+                                              a 1)),
+                                     func = (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))}
                                | Prim.PCall_getData => none ()
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;

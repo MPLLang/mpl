@@ -104,7 +104,7 @@ signature PRIM =
        | MLton_size (* to rssa (as runtime C fn) *)
        | MLton_touch (* to rssa (as nop) or backend (as nop) *)
        | PCall (* closure convert *)
-       | PCall_forkThreadAndSetData (* to rssa (as runtime C fn) *)
+       | PCall_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
        | PCall_getData (* backend *)
        | Real_Math_acos of RealSize.t (* codegen *)
        | Real_Math_asin of RealSize.t (* codegen *)

@@ -189,7 +189,7 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                | Prim.Array_toArray => Vector.sub (args, 0)
                | Prim.Array_toVector => Vector.sub (args, 0)
                | Prim.Array_update _ => updatePrim TypeInfo.Array args
-               | Prim.PCall_forkThreadAndSetData =>
+               | Prim.PCall_forkThreadAndSetData _ =>
                   let
                      val ty = Vector.first targs
                      val x = Vector.sub (args, 1)

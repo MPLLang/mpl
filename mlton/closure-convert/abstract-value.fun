@@ -505,7 +505,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | Prim.PCall_forkThreadAndSetData =>
+       | Prim.PCall_forkThreadAndSetData _ =>
             let val (_, arg) = twoArgs ()
             in coerce {from = arg, to = pcallDataValue (ty arg)}
                ; result ()

@@ -407,12 +407,27 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
 }
 
 
-objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
+objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, pointer dp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
-  pointer pframe = findPromotableFrame(s, fromStack);
+  pointer pframe =
+    (youngestOptimization ?
+      findYoungestPromotableFrame(s, fromStack) :
+      findPromotableFrame(s, fromStack));
+
+  /* Note that the promotion policy is _always_ oldest-first, regardless of the
+   * `youngestOptimization` flag. The following assertion checks that we haven't
+   * violated this. It's valid to use `youngestOptimization=TRUE` as only in the
+   * case where we know that the youngest and oldest frames happen to coincide.
+   * The scheduler figures this out: if we have a spare heartbeat token at the
+   * moment that we execute a pcall, then we know that no other ancestor frames
+   * in the stack are promotable (otherwise the spare token would have been
+   * spent to promote them).
+   */
+  assert(findPromotableFrame(s, fromStack) == pframe);
+
   if (NULL == pframe) {
     DIE("forkThread failed!");
     leave(s);
