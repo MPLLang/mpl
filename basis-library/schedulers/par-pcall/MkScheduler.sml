@@ -170,8 +170,8 @@ struct
     faa (x, ~1) = 1
 
 
-  datatype gc_joinpoint =
-    GCJ of {gcTaskData: gctask_data option, tidRight: Word64.word}
+  (* datatype gc_joinpoint =
+    GCJ of {gcTaskData: gctask_data option, tidRight: Word64.word} *)
     (** The fact that the gcTaskData is an option here is a questionable
       * hack... the data will always be SOME. But unwrapping it may affect
       * how many allocations occur when spawning a gc task, which in turn
@@ -186,7 +186,7 @@ struct
       , incounter: int ref
       , tidRight: Word64.word
       , spareHeartbeatsGiven: int
-      , gcj: gc_joinpoint option
+      (* , gcj: gc_joinpoint option *)
       }
 
 
@@ -489,6 +489,38 @@ struct
   structure ForkJoin =
   struct
 
+    fun trySpawnGC interruptedThread : bool =
+      let
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+      in
+        if depth > maxCCDepth then
+          false
+        else
+          let
+            val heapId = ref (HH.getRoot thread)
+            val gcTaskTuple = (interruptedThread, heapId)
+            val gcTaskData = SOME gcTaskTuple
+            val gcTask = GCTask gcTaskTuple
+            val cont_arr1 = ref NONE
+            val cont_arr2 = ref NONE
+            val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+
+            (** The above could trigger a local GC and invalidate the hh
+              * identifier... :'(  ???????
+              *)
+            val _ = heapId := HH.getRoot thread
+          in
+            if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
+              false
+            else
+              ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+              ; true
+              )
+          end
+      end
+
+(*
     fun spawnGC interruptedThread : gc_joinpoint option =
       let
         val thread = Thread.current ()
@@ -570,12 +602,12 @@ struct
 
         doClearSuspects (thread, newDepth)
       end
-
+*)
 
     (* runs in signal handler *)
     fun doSpawn (interruptedLeftThread: Thread.t) : unit =
       let
-        val gcj = spawnGC interruptedLeftThread
+        (* val gcj = spawnGC interruptedLeftThread *)
         val _ = assertAtomic "spawn after spawnGC" 1
 
         val thread = Thread.current ()
@@ -613,7 +645,7 @@ struct
             , incounter = incounter
             , tidRight = tidRight
             , spareHeartbeatsGiven = Word32.toInt halfSpare
-            , gcj = gcj
+            (* , gcj = gcj *)
             }
 
         (* this sets the join for both threads (left and right) *)
@@ -656,8 +688,8 @@ struct
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
-        val gcj =
-          if allowCGC then spawnGC thread else NONE
+        (* val gcj =
+          if allowCGC then spawnGC thread else NONE *)
 
         val _ = assertAtomic "spawn after spawnGC" 1
 
@@ -737,7 +769,7 @@ struct
           , incounter = incounter
           , tidRight = tidRight
           , spareHeartbeatsGiven = Word32.toInt halfSpare
-          , gcj = gcj
+          (* , gcj = gcj *)
           }
       end
 
@@ -756,7 +788,7 @@ struct
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
         (doClearSuspects: Thread.t * int -> unit)
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, ...} : 'a joinpoint)
+        (J {rightSideThread, rightSideResult, incounter, tidRight, (*gcj,*) spareHeartbeatsGiven, ...} : 'a joinpoint)
         (g: unit -> 'a)
         : 'a Result.t
       =
@@ -844,9 +876,9 @@ struct
                   end
             )
       in
-        case gcj of
+        (* case gcj of
           NONE => ()
-        | SOME gcj => syncGC doClearSuspects gcj;
+        | SOME gcj => syncGC doClearSuspects gcj; *)
 
         result
       end
@@ -876,28 +908,49 @@ struct
             (addSpareHeartbeats wealthPerHeartbeat; ())
           else ()
 
-        fun loop i =
-          if
-            currentSpareHeartbeatTokens () >= spawnCost
-            andalso maybeSpawn thread
-          then
-            loop (i+1)
-          else
-            i
-
-        val numSpawned =
-          if generateWealth andalso hadEnoughToSpawnBefore then
-            (incrementNumSkippedHeartbeats (); 0)
-          else
-            loop 0
+        val schedThread = getSchedThread ()
       in
-        if generateWealth then incrementNumHeartbeats () else ();
+        if Option.isSome schedThread andalso trySpawnGC thread then
+          (* If we successfully spawned a CGC, then we need to immediately 
+           * switch back to our scheduler thread to start working on the
+           * CGC. 
+           *
+           * To preserve invariants, we'll empty out all our tokens.
+           * (Invariant of signal handler is: if tokens are leftover,
+           * then no promotable frames in the call-stack. Here we're spawning
+           * a CGC and haven't looked at the stack at all...)
+           *
+           * TODO: figure out if there's a way to keep our tokens but still
+           * preserve invariants...
+           *)
+          ( tryConsumeSpareHeartbeats (currentSpareHeartbeatTokens ())
+          ; Option.valOf (getSchedThread ())
+          )
+        else
+          let
+            fun loop i =
+              if
+                currentSpareHeartbeatTokens () >= spawnCost
+                andalso maybeSpawn thread
+              then
+                loop (i+1)
+              else
+                i
 
-        if (not generateWealth) andalso numSpawned > 0
-        then addEagerSpawns numSpawned
-        else ();
+            val numSpawned =
+              if generateWealth andalso hadEnoughToSpawnBefore then
+                (incrementNumSkippedHeartbeats (); 0)
+              else
+                loop 0
+          in
+            if generateWealth then incrementNumHeartbeats () else ();
 
-        thread
+            if (not generateWealth) andalso numSpawned > 0
+            then addEagerSpawns numSpawned
+            else ();
+
+            thread
+          end
       end
 
     (* fun handler msg =
@@ -1169,7 +1222,9 @@ struct
         | SOME (thread, hh) =>
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
+            ; push (Continuation (thread, HH.getDepth thread))
             (* ; print ("afterReturnToSched: found GC task\n") *)
+            (* ; print ("found GC task; atomicState = " ^ Int.toString (Word32.toInt (Thread.atomicState ())) ^ "\n") *)
             ; traceSchedIdleLeave ()
             ; traceSchedWorkEnter ()
             ; IdleTimer.stop ()
@@ -1186,9 +1241,9 @@ struct
               | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg'' (fn _ => "resume task thread")
+                  (* ; Thread.atomicBegin () *)
                   ; Thread.atomicBegin ()
-                  ; Thread.atomicBegin ()
-                  ; assertAtomic "afterReturnToSched before thread switch" 2
+                  ; assertAtomic "afterReturnToSched before thread switch" 1
                   ; threadSwitchEndAtomic thread
                   ; WorkTimer.stop ()
                   ; IdleTimer.start ()
@@ -1228,9 +1283,9 @@ struct
               ; traceSchedWorkEnter ()
               ; IdleTimer.stop ()
               ; WorkTimer.start ()
+              (* ; Thread.atomicBegin () *)
               ; Thread.atomicBegin ()
-              ; Thread.atomicBegin ()
-              ; assertAtomic "acquireWork before thread switch" 2
+              ; assertAtomic "acquireWork before thread switch" 1
               ; threadSwitchEndAtomic thread
               ; WorkTimer.stop ()
               ; IdleTimer.start ()
