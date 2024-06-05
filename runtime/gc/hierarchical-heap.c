@@ -513,7 +513,6 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   HM_HH_getConcurrentPack(hh)->additionalStack = BOGUS_OBJPTR;
   HM_HH_getConcurrentPack(hh)->ccstate = CC_UNREG;
   HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection = 0;
-  HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection = 0;
 
   // hh->representative = NULL;
   hh->ufNode = uf;
@@ -800,14 +799,12 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
       HM_HierarchicalHeap next = completed->subHeapCompletedCC;
       
       /* consider using max instead of addition */
-      HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
-        HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
+      // HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=
+      //   HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection;
       
-      /*
       HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection =
         max(HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection,
             HM_HH_getConcurrentPack(completed)->bytesSurvivedLastCollection);
-      */
 
       CC_freeStack(s, HM_HH_getConcurrentPack(completed));
       linkInto(s, hh, completed);
@@ -847,9 +844,6 @@ bool checkPolicyforRoot(
     return FALSE;
   }
 
-  HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
-    HM_getChunkListSize(HM_HH_getChunkList(hh));
-
   size_t chainLen = 0;
   for (HM_HierarchicalHeap cursor = hh->subHeapForCC;
        NULL != cursor;
@@ -863,21 +857,22 @@ bool checkPolicyforRoot(
   size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
   
   /* consider removing this: */
-  for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
-       NULL != cursor;
-       cursor = cursor->subHeapCompletedCC)
-  {
-    bytesSurvived +=
-      HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
-  }
+  // for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
+  //      NULL != cursor;
+  //      cursor = cursor->subHeapCompletedCC)
+  // {
+  //   bytesSurvived +=
+  //     HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
+  // }
 
   if((s->controls->hhConfig.ccThresholdRatio * bytesSurvived) >
-      (HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection)
-    || bytesSurvived == 0) {
+      HM_getChunkListSize(HM_HH_getChunkList(hh)))
+  {
     // if (!HM_HH_getConcurrentPack(hh)->shouldCollect) {
       // HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection/=2;
     // }
-    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=4;
+
+    // HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=4;
     return FALSE;
   }
   return TRUE;
@@ -1043,6 +1038,39 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
 // =============================================================================
 
+Bool HM_HH_mergeCompletedAndCheckCGCPolicy(GC_state s) {
+  enter(s);
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+  mergeCompletedCCs(s, hh);
+
+#if ASSERT
+  assert(thread->hierarchicalHeap == hh);
+  if (NULL == thread->hierarchicalHeap->subHeapForCC)
+    assert(NULL == thread->hierarchicalHeap->subHeapCompletedCC);
+#endif  
+
+  if (!checkPolicyforRoot(s, thread)) {
+    HM_HierarchicalHeap heap = thread->hierarchicalHeap;
+    uint32_t depth = heap->depth;
+    size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
+    // size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
+    size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
+    LOG(LM_CC_COLLECTION, LL_DEBUG,
+      "skipping at depth %u. last-survived: %zu size: %zu",
+      depth,
+      lastSurvived,
+      size);
+
+    leave(s);
+    return FALSE;
+  }
+
+  leave(s);
+  return TRUE;
+}
+
+
 Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
   enter(s);
@@ -1067,13 +1095,12 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     HM_HierarchicalHeap heap = thread->hierarchicalHeap;
     uint32_t depth = heap->depth;
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
-    size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
+    // size_t freshAlloc = heap->concurrentPack.bytesAllocatedSinceLastCollection;
     size_t size = HM_getChunkListSize(HM_HH_getChunkList(heap));
     LOG(LM_CC_COLLECTION, LL_DEBUG,
-      "skipping at depth %u. last-survived: %zu new-alloc: %zu size: %zu",
+      "skipping at depth %u. last-survived: %zu size: %zu",
       depth,
       lastSurvived,
-      freshAlloc,
       size);
 
     leave(s);

@@ -373,6 +373,9 @@ structure Thread =
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
         'a ref * 'b ref * 'c ref * thread -> bool;
+      val mergeCompletedAndCheckCGCPolicy =
+        _import "HM_HH_mergeCompletedAndCheckCGCPolicy" runtime private:
+        GCState.t -> bool;
       val cancelCC =
         _import "HM_HH_cancelCC" runtime private:
         GCState.t * thread * Word64.word -> unit;

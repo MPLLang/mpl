@@ -496,6 +496,8 @@ struct
       in
         if depth > maxCCDepth then
           false
+        else if not (HH.mergeCompletedAndCheckCGCPolicy ()) then
+          false
         else
           let
             val heapId = ref (HH.getRoot thread)

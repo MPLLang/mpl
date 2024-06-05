@@ -56,7 +56,6 @@ typedef struct ConcurrentPackage {
 
   /** For deciding when to collect. Could be cleaned up.
     */
-  size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
 
   /** To avoid races with other processor adding to the remset (writebarrier or

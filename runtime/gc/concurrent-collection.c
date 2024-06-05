@@ -1136,7 +1136,6 @@ void CC_collectWithRoots(
                           + HM_getChunkListUsedSize(origList);
 
   cp->bytesSurvivedLastCollection = bytesSaved;
-  cp->bytesAllocatedSinceLastCollection = 0;
 
   struct HM_chunkList _deleteList;
   HM_chunkList deleteList = &(_deleteList);
