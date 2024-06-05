@@ -895,17 +895,19 @@ struct
 
         if (not generateWealth) andalso numSpawned > 0
         then addEagerSpawns numSpawned
-        else ()
+        else ();
+
+        thread
       end
 
     (* fun handler msg =
       MLton.Signal.Handler.inspectInterrupted heartbeatHandler *)
 
-    fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
+    fun doIfArgIsNotSchedulerThread (f: Thread.t -> Thread.t) (arg: Thread.t) =
       case getSchedThread () of
-        NONE => ()
+        NONE => arg
       | SOME t =>
-          if MLton.eq (arg, t) then ()
+          if MLton.eq (arg, t) then arg
           else f arg
 
 

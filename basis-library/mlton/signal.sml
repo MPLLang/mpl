@@ -97,7 +97,7 @@ structure Handler =
          Default
        (* | Handler of MLtonThread.Runnable.t -> MLtonThread.Runnable.t *)
        (* | Handler of unit -> unit *)
-       | Handler of MLtonThread.Basic.t -> unit
+       | Handler of MLtonThread.Basic.t -> MLtonThread.Basic.t
        | Ignore
        | InvalidSignal
    end
@@ -198,8 +198,8 @@ structure Handler =
                 val () = Prim.resetPending (GCState.gcState ())
                 val () = Mask.setBlocked mask
               in
-                (* List.foldl (fn (f, t) => f t) t fs *)
-                List.app (fn f => f t) fs
+                List.foldl (fn (f, t) => f t) t fs
+                (* List.app (fn f => f t) fs *)
               end
 
             
@@ -225,7 +225,7 @@ structure Handler =
 
                   | _ => loop f count (i+1)
               in
-                case loop (fn t => ()) 0 0 of
+                case loop (fn t => t) 0 0 of
                   (f, 1) =>
                     (* fast path succeeds if we find just a single handler that
                      * needs to be run.
@@ -248,7 +248,7 @@ structure Handler =
 
       fun handler _ = raise Fail "Signal.Handler.handler not supported"
 
-      fun simple (f: unit -> unit) = handler_ (fn t => f ())
+      fun simple (f: unit -> unit) = handler_ (fn t => (f (); t))
 
       fun inspectInterrupted f = handler_ f
    end
