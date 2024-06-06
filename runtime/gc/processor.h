@@ -3,7 +3,7 @@
 #ifndef PROCESSOR_H_
 #define PROCESSOR_H_
 
-#if (defined (MLTON_GC_INTERNAL_FUNCS))
+#if (defined (MLTON_GC_INTERNAL_BASIS))
 /*************/
 /* Interface */
 /*************/
@@ -15,6 +15,6 @@ void Proc_waitForInitialization (GC_state s);
 void Proc_signalInitialization (GC_state s);
 bool Proc_isInitialized (GC_state s);
 
-#endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
+#endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 
 #endif /* PROCESSOR_H_ */

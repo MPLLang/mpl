@@ -121,3 +121,8 @@ static inline void set_cpu_affinity(int cpu) {
   if ((errno = pthread_setaffinity_np(thread, sizeof cpuset, &cpuset)) != 0)
     perror("Could not set affinity");
 }
+
+static inline int getrusage_thread(struct rusage *rusage) {
+        getrusage(RUSAGE_THREAD, rusage);
+}
+

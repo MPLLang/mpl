@@ -18,7 +18,7 @@ void switchToThread(GC_state s, objptr op) {
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    if (terminateCheckCounter == 0) pthread_yield();
+    if (terminateCheckCounter == 0) sched_yield();
     // Sanity check: don't get deadlocked by self
     assert(otherProcNum != s->procNumber);
     otherProcNum = atomicLoadS32(&(thread->currentProcNum));

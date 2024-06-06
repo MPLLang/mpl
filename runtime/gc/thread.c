@@ -92,7 +92,7 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    if (terminateCheckCounter == 0) pthread_yield();
+    if (terminateCheckCounter == 0) sched_yield();
   }
 
 #if ASSERT
@@ -312,7 +312,7 @@ void GC_HH_joinIntoParent(
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
-    if (terminateCheckCounter == 0) pthread_yield();
+    if (terminateCheckCounter == 0) sched_yield();
   }
 
 #if ASSERT

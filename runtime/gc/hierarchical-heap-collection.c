@@ -449,7 +449,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
 
   if (needGCTime(s))
   {
-    startTiming(RUSAGE_THREAD, &ru_start);
+    startTiming(&ru_start);
   }
 
   timespec_now(&startTime);
@@ -995,13 +995,13 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   {
     if (detailedGCTime(s))
     {
-      stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
+      stopTiming(&ru_start, &s->cumulativeStatistics->ru_gcHHLocal);
     }
     /*
      * RAM_NOTE: small extra here since I recompute delta, but probably not a
      * big deal...
      */
-    stopTiming(RUSAGE_THREAD, &ru_start, &s->cumulativeStatistics->ru_gc);
+    stopTiming(&ru_start, &s->cumulativeStatistics->ru_gc);
   }
 
   Trace0(EVENT_LGC_LEAVE);
