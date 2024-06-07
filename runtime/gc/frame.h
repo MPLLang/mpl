@@ -31,8 +31,8 @@ typedef uintptr_t GC_returnAddress;
  * recording the size of the array) whose elements record byte offsets
  * from the bottom of the frame at which live heap pointers are
  * located.  The size field indicates the size of the frame, including
- * space for the return address.  The pcallInfo field indicates the
- * alternate return addresses of a PCALL_CONT_FRAME.  The
+ * space for the return address.  The sporkInfo field indicates the
+ * alternate return address of a SPORK_SPWN_FRAME.  The
  * sourceSeqIndex field indicates the sequence of source names
  * corresponding to the frame as an index into sourceSeqs; see
  * sources.h.
@@ -51,9 +51,6 @@ typedef enum {
   CRETURN_FRAME,
   FUNC_FRAME,
   HANDLER_FRAME,
-  PCALL_CONT_FRAME,
-  PCALL_PARL_FRAME,
-  PCALL_PARR_FRAME,
 } GC_frameKind;
 
 typedef const struct GC_frameInfo {

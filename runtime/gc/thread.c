@@ -422,18 +422,18 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
 #if ASSERT
-  assert(fi->kind == PCALL_CONT_FRAME);
-  assert(fi->pcallInfo != NULL);
+  //assert(fi->kind == PCALL_CONT_FRAME);
+  assert(fi->sporkInfo != NULL);
 #endif
-  GC_returnAddress parl_ret = fi->pcallInfo->parl;
-  GC_returnAddress parr_ret = fi->pcallInfo->parr;
+  GC_nestingDepth nesting = fi->sporkInfo->nesting;
+  GC_returnAddress spwn_ret = fi->sporkInfo->spwn;
 
   // =========================================================================
   // First, write dp (data pointer) onto the promotable frame
   // =========================================================================
 
   objptr dop = pointerToObjptr(dp, NULL);
-  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE)) = dop;
+  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE * (nesting + 1))) = dop;
 
   /* SAM_NOTE: VERY SUBTLE: the next line (which updates the pframe's return
    * address) absolutely must happen before we call newThread. This is because
@@ -454,7 +454,7 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
    */
 
   // left side: transition to PCALL_PARL_FRAME
-  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
+  //*(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
 
   // =========================================================================
   // Next, copy the promotable frame
@@ -464,6 +464,7 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   // the next call on this stack has enough space. Next call might be a
   // non-tail, which might bump up to max frame size.
   size_t newStackReserved = alignStackReserved(s, 2*s->maxFrameSize);
+  // TODO: do we actually need to multiply by 2?
 
   uint32_t newDepth = getThreadCurrent(s)->currentDepth;
 
@@ -479,8 +480,8 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
-  // right side: transition to PCALL_PARR_FRAME
-  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = parr_ret;
+  // right side: transition to SPORK_SPWN_FRAME
+  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = spwn_ret;
 
   /* SAM_NOTE: would like to assert these, but jop may have already been
    * forwarded above (calling newThread, above, might trigger a GC)

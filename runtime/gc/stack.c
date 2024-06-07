@@ -247,10 +247,22 @@ void copyStackFrameToNewStack (
 
   GC_returnAddress ret = *((GC_returnAddress*)(frame - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-  assert(fi->kind == PCALL_PARL_FRAME);
+  //assert(fi->kind == PCALL_PARL_FRAME);
   pointer frameBottom = frame - fi->size;
   GC_memcpy(frameBottom, getStackBottom(s, to), fi->size);
   to->used = fi->size;
+}
+
+bool frameIsPromotable(pointer cursor, GC_frameInfo fi) {
+    if (fi->sporkInfo) {
+        for (GC_nestingDepth nest = 0; nest < fi->sporkInfo->nesting; ++nest) {
+            objptr p = *((objptr*) (cursor + OBJPTR_SIZE * nest));
+            if (isObjptr(p)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 pointer findPromotableFrame (GC_state s, GC_stack stack) {
@@ -264,33 +276,18 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
         thisStackSize);
 
   size_t numFrames = 0;
-  size_t numCFrames = 0;
-  size_t numLFrames = 0;
-  size_t numRFrames = 0;
 
-  pointer oldestCFrame = NULL;
+  pointer oldestPromotableFrame = NULL;
 
+  // TODO: why do we search from top down, instead of bottom up?
   pointer cursor = top;
   while (cursor > bottom) {
     numFrames++;
     
     GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
     GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-
-    switch (fi->kind) {
-      case PCALL_CONT_FRAME: {
-        numCFrames++;
-        oldestCFrame = cursor;
-        break;
-      }
-      case PCALL_PARL_FRAME:
-        numLFrames++;
-        break;
-      case PCALL_PARR_FRAME:
-        numRFrames++;
-        break;
-      default:
-        break;
+    if (frameIsPromotable(cursor, fi)) {
+        oldestPromotableFrame = cursor;
     }
 
     cursor = cursor - fi->size;
@@ -300,17 +297,9 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
         numFrames);
 
-  // LOG(LM_PARALLEL, LL_FORCE,
-  //   "frames %zu, cont %zu, parl %zu, parr %zu",
-  //   numFrames,
-  //   numCFrames,
-  //   numLFrames,
-  //   numRFrames
-  // );
-
-  if (oldestCFrame == NULL) {
-    return NULL;
-  }
+  //if (oldestPromotableFrame == NULL) {
+  //  return NULL;
+  //}
 
   // GC_returnAddress orig =
   //   *((GC_returnAddress*)(oldestWaitingCFrame - GC_RETURNADDRESS_SIZE));
@@ -325,7 +314,7 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
   //   left,
   //   right);
 
-  return oldestCFrame;
+  return oldestPromotableFrame;
 }
 
 
@@ -339,29 +328,19 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackSizeForHeartbeat,
         thisStackSize);
 
-  pointer youngestCFrame = NULL;
+  pointer youngestPromotableFrame = NULL;
 
   size_t numFrames = 0;
 
   pointer cursor = top;
-  while (cursor > bottom && youngestCFrame == NULL) {
+  while (cursor > bottom && youngestPromotableFrame == NULL) {
     numFrames++;
 
     GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
     GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-
-    switch (fi->kind) {
-      case PCALL_CONT_FRAME: {
-        youngestCFrame = cursor;
-        break;
-      }
-      case PCALL_PARL_FRAME:
-        break;
-      case PCALL_PARR_FRAME:
-        break;
-      default:
-        break;
-    }
+    if (frameIsPromotable(cursor, fi)) {
+        youngestPromotableFrame = cursor;
+    }    
 
     cursor = cursor - fi->size;
   }
@@ -370,9 +349,5 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
         numFrames);
 
-  if (youngestCFrame == NULL) {
-    return NULL;
-  }
-
-  return youngestCFrame;
+  return youngestPromotableFrame;
 }
