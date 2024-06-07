@@ -1364,4 +1364,14 @@ struct
         , value = Time.fromMicroseconds heartbeatMicroseconds
         })
 
+
+  (* This might look silly, but don't remove it! See here:
+   *   https://github.com/MPLLang/mpl/issues/190
+   * We have to ensure that there is always at least one use of PCall_getData
+   * in the program, otherwise the data argument of PCall_forkThreadAndSetData
+   * will be optimized away, causing the compiler to crash because it doesn't
+   * know how to pass a useless argument to the corresponding runtime func.
+   *)
+  val ((), ()) = ForkJoin.pcallFork (fn () => (), fn () => ())
+
 end
