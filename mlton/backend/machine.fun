@@ -740,7 +740,7 @@ structure FrameOffsets =
 structure SporkInfo =
    struct
       datatype t = T of {index: int,
-                         nesting: int
+                         nesting: int,
                          spwn: Label.t}
 
       local
@@ -751,8 +751,8 @@ structure SporkInfo =
          val spwn = make #spwn
       end
 
-      fun new {index, parl, parr} =
-         T {index = index, parl = parl, parr = parr}
+      fun new {index, nesting, spwn} =
+         T {index = index, nesting = nesting, spwn = spwn}
 
       fun equals (s1, s2) =
          Int.equals (index s1, index s2)

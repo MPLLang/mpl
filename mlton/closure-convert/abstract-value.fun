@@ -510,7 +510,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = sporkDataValue (ty arg)}
                ; result ()
             end
-       | Prim.Spork_getData => sporkDataValue resultTy
+       | Prim.Spork_getData _ => sporkDataValue resultTy
        | Prim.Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of

@@ -38,7 +38,7 @@ structure Atoms =
                                structure WordX = WordX
                                structure WordXVector = WordXVector)
 
-      structure Spid = Spid
+      structure Spid = Spid ()
       structure Symbol = Symbol ()
       structure Field = Field (structure Symbol = Symbol)
       structure Record = Record (val isSorted = false
@@ -79,6 +79,7 @@ structure Atoms =
                              structure Con = Con
                              structure Const = Const
                              structure RealSize = RealSize
+                             structure Spid = Spid
                              structure WordSize = WordSize)
 
       structure ExnDecElab = ExnDecElab ()

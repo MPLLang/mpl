@@ -321,6 +321,7 @@ structure Type =
                        typeOps = {deArray = deSequence1,
                                   deArrow = fn _ => raise BadPrimApp,
                                   deRef = deRef1,
+                                  deTuple = fn _ => raise BadPrimApp,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
                in

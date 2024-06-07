@@ -197,7 +197,7 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                      TypeInfo.coerce (x, sporkDataValue ty)
                      ; TypeInfo.fromType resultType
                   end
-               | Prim.Spork_getData => sporkDataValue resultType
+               | Prim.Spork_getData _ => sporkDataValue resultType
                | Prim.Ref_ref => refPrim TypeInfo.Ref args
                | Prim.Ref_deref _ => derefPrim args
                | Prim.Ref_assign _ => assignPrim TypeInfo.Ref args
@@ -300,6 +300,7 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
                          typeOps = {deArray = Type.deArray,
                                     deArrow = fn _ => Error.bug "SplitTypes.transform.loopExp: deArrow primApp",
                                     deRef = Type.deRef,
+                                    deTuple = Type.deTuple,
                                     deVector = Type.deVector,
                                     deWeak = Type.deWeak}})
                      val newPrim =

@@ -1,4 +1,4 @@
-structure Spid : SPID =
+functor Spid () : SPID =
 struct
   type t = int;
 
@@ -21,8 +21,10 @@ struct
           Parse.pure a))
   end
 
+  val toString = Int.toString
+
   val layout : t -> Layout.t =
-      Layout.str o Int.toString
+      Layout.str o toString
 
   local
     val hashSeed : Word.t = Random.word ()

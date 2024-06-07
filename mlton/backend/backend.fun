@@ -276,14 +276,12 @@ fun toMachine (rssa: Rssa.Program.t) =
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
                            offsets: Bytes.t list,
-                           sporkInfo: {parl: Label.t, parr: Label.t} option,
+                           sporkInfo: {nesting: int, spwn: Label.t} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
                val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
-               val sporkInfo =
-                  Option.map (sporkInfo, fn {parl, parr} =>
-                              getSporkInfo {parl = parl, parr = parr})
+               val sporkInfo = Option.map (sporkInfo, getSporkInfo)
                fun new () =
                   let
                      val index = nextFrameInfo ()
@@ -1317,7 +1315,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                      | R.Kind.SporkReturn {cont, spwn} =>
+                      | R.Kind.SporkReturn {spid, cont, spwn} =>
                            if Label.equals (label, cont)
                               then doContHandler M.Kind.SporkReturn
                               else doSporkHandler (#size (labelRegInfo cont))

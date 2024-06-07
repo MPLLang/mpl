@@ -250,7 +250,7 @@ fun outputDeclarations
     print: string -> unit,
     program = (Program.T
                {chunks, frameInfos, frameOffsets, globals, maxFrameSize,
-                objectTypes, pcallInfos, sourceMaps, staticHeaps, ...}),
+                objectTypes, sporkInfos, sourceMaps, staticHeaps, ...}),
     rest: unit -> unit
     }: unit =
    let
@@ -691,14 +691,14 @@ fun outputDeclarations
                          FrameOffsets.offsets fo,
                          fn (_, offset) => C.bytes offset))
           ; Vector.foreachi
-            (pcallInfos, fn (i, pra) =>
-             prints ["const struct GC_pcallInfo ",
-                     "pcallInfo",
+            (sporkInfos, fn (i, pra) =>
+             prints ["const struct GC_sporkInfo ",
+                     "sporkInfo",
                      C.int i,
                      " = {",
-                     labelIndexAsString (PCallInfo.parl pra, {pretty = true}),
+                     C.int (SporkInfo.nesting pra),
                      ",",
-                     labelIndexAsString (PCallInfo.parr pra, {pretty = true}),
+                     labelIndexAsString (SporkInfo.spwn pra, {pretty = true}),
                      "};\n"])
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
@@ -706,10 +706,10 @@ fun outputDeclarations
                           concat ["{",
                                   FrameInfo.Kind.toString (FrameInfo.kind fi),
                                   ", frameOffsets", C.int (FrameOffsets.index (FrameInfo.frameOffsets fi)),
-                                  ", ", case FrameInfo.pcallInfo fi of
+                                  ", ", case FrameInfo.sporkInfo fi of
                                            NONE => C.null
-                                         | SOME pra => concat ["&pcallInfo",
-                                                               C.int (PCallInfo.index pra)],
+                                         | SOME pra => concat ["&sporkInfo",
+                                                               C.int (SporkInfo.index pra)],
                                   ", ", C.bytes (FrameInfo.size fi),
                                   ", ", (case FrameInfo.sourceSeqIndex fi of
                                             NONE => C.int 0

@@ -497,6 +497,7 @@ fun allocate {function = f: Rssa.Function.t,
                end
 
       (* Do a DFS of the control-flow graph. *)
+      (* TODO: keep track of max frame size with a Bytes.t ref *)
       val () =
          Function.dfs
          (f, fn R.Block.T {args, label, kind, statements, ...} =>

@@ -1,3 +1,7 @@
+signature SPID_STRUCTS =
+   sig
+   end
+
 signature SPID =
 sig
   type t
@@ -5,5 +9,6 @@ sig
   val equals: t * t -> bool
   val parse: t Parse.t
   val layout: t -> Layout.t
+  val toString: t -> string
   val hash: t -> Word.t
 end

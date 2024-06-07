@@ -544,11 +544,9 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                  val cont = newLabel0 (cont, h, k)
                  val spwn = newLabel0 (spwn, h, k)
                in
-                 loops (Vector.new0 (), h,
-                        fn args(*=nil*) =>
-                           {statements = [],
-                            transfer = Transfer.Spork
-                                         {spid = spid, cont = cont, spwn = spwn}})
+                 {statements = [],
+                  transfer = Transfer.Spork
+                               {spid = spid, cont = cont, spwn = spwn}}
                end
           | Spoin {spid, seq, sync, ty} =>
                let
@@ -556,11 +554,9 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                  val seq = newLabel0 (seq, h, k)
                  val sync = newLabel0 (sync, h, k)
                in
-                 loops (Vector.new0 (), h,
-                        fn args(*=nil*) =>
-                           {statements = [],
-                            transfer = Transfer.Spoin
-                                         {spid = spid, seq = seq, sync = sync}})
+                 {statements = [],
+                  transfer = Transfer.Spoin
+                               {spid = spid, seq = seq, sync = sync}}
                end
           (*| PCall {func, args, carg, cont, larg, parl, parr, ty} =>
                let

@@ -24,7 +24,7 @@ fun dropSporkFunction f =
                       if Label.equals (label, cont)
                          then Kind.Cont {handler = Handler.Dead}
                          else Kind.Jump*)
-                   Kind.SporkReturn {cont, spwn} =>
+                   Kind.SporkReturn {spid, cont, spwn} =>
                       Kind.Jump
                       (*if Label.equals (label, cont)
                          then Kind.Jump

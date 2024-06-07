@@ -548,9 +548,10 @@ structure Kind =
                        record [("func", CFunction.layout (func, Type.layout))]]
              | Handler => str "Handler"
              | Jump => str "Jump"
-             | SporkReturn {cont, spwn} =>
+             | SporkReturn {spid, cont, spwn} =>
                   seq [str "SporkReturn ",
-                       record [("cont", Label.layout cont),
+                       record [("spid", Spid.layout spid),
+                               ("cont", Label.layout cont),
                                ("spwn", Label.layout spwn)]]
              (* | PCallReturn {cont, parl, parr} => *)
              (*      seq [str "PCallReturn ", *)

@@ -233,7 +233,7 @@ signature MACHINE =
             val layout: t -> Layout.t
             val new: {index: int, nesting: int, spwn: Label.t} -> t
             val spwn: t -> Label.t
-            val nesting: int
+            val nesting: t -> int
          end
 
       structure FrameInfo:
@@ -266,9 +266,9 @@ signature MACHINE =
                       index: int,
                       kind: Kind.t,
                       size: Bytes.t,
-                      pcallInfo: PCallInfo.t option,
+                      sporkInfo: SporkInfo.t option,
                       sourceSeqIndex: int option} -> t
-            val pcallInfo: t -> PCallInfo.t option
+            val sporkInfo: t -> SporkInfo.t option
             val offsets: t -> Bytes.t vector
             val setIndex: t * int -> unit
             val size: t -> Bytes.t
@@ -339,7 +339,7 @@ signature MACHINE =
                             label: Label.t},
                      maxFrameSize: Bytes.t,
                      objectTypes: Type.ObjectType.t vector,
-                     pcallInfos: PCallInfo.t vector,
+                     sporkInfos: SporkInfo.t vector,
                      sourceMaps: SourceMaps.t option,
                      staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 

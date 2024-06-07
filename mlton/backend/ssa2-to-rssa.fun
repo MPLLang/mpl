@@ -818,7 +818,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                        case stmt of
                           S.Statement.Bind {var, ty,
                                             exp = S.Exp.PrimApp
-                                                  {prim = Prim.Spork_getData, ...}} =>
+                                                  {prim = Prim.Spork_getData _, ...}} =>
                              let
                                 val l =
                                    case l of
@@ -885,7 +885,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
                               handler: Label.t option ref,
-                              sporkReturn: ({cont: Label.t,
+                              sporkReturn: ({spid : Spid.t,
+                                             cont: Label.t,
                                              spwn: Label.t} * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
@@ -1008,12 +1009,13 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          Trace.trace2 ("SsaToRssa.labelCont",
                        Label.layout, Handler.layout, Label.layout)
          labelCont
-      fun genSporkReturns (rets as {cont, spwn}): {cont: Label.t, spwn: Label.t} =
+      fun genSporkReturns (rets as {spid, cont, spwn}): {cont: Label.t, spwn: Label.t} =
          let
             fun lkup sporkReturn =
-               List.peek (!sporkReturn, fn ({cont = cont', spwn = spwn'}, _) =>
-                          Label.equals (cont, cont') andalso
-                          Label.equals (spwn, spwn'))
+               List.peek (!sporkReturn, fn ({spid = spid', cont = cont', spwn = spwn'}, _) =>
+                                           Spid.equals (spid, spid') andalso
+                                           Label.equals (cont, cont') andalso
+                                           Label.equals (spwn, spwn'))
             val {sporkReturn = contSporkReturn, ...} = labelInfo cont
             val {sporkReturn = spwnSporkReturn, ...} = labelInfo spwn
          in
@@ -1027,11 +1029,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                      val spwnSporkDataArg = sporkDataArg spwn
                      val (spwn', mks) = eta'' (spwn, Vector.new1 spwnSporkDataArg)
                      val _ = List.push (spwnSporkReturn, (rets, spwn'))
-                     val rets' = {cont = cont', spwn = spwn'}
+                     val rets' = {spid = spid, cont = cont', spwn = spwn'}
                      val _ = mkc (Kind.SporkReturn rets')
                      val _ = mks (Kind.SporkReturn rets')
                   in
-                     rets'
+                     {cont = cont', spwn = spwn'}
                   end
              | _ => Error.bug "Ssa2ToRssa.genSporkReturns"
          end
@@ -1141,9 +1143,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           (*                          parr = parr}) *)
           (*      end *)
           | S.Transfer.Spork {spid, cont, spwn} =>
-               let val {cont, spwn} = genSporkReturns {cont = cont, spwn = spwn} in
-                 ([],
-                  Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
+            (* Record the spork nesting info for each rssa fun:
+             * spid.t vector vector
+             * have a spid.t vector for each nesting depth
+             * In allocate-vars, need to know for each block
+             * which sporks its nested under, so we can also
+             * know that spork's spwn live vars are live there too
+             *)
+               let val {cont, spwn} = genSporkReturns {spid = spid, cont = cont, spwn = spwn} in
+                 ([], Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
                end
           | S.Transfer.Spoin {spid, seq, sync} =>
                (* TODO: do we need a genSpoinReturns? *)
@@ -1753,7 +1761,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | Prim.Spork_forkThreadAndSetData =>
                                     simpleCCallWithGCState
                                     (CFunction.sporkForkThreadAndSetData (Operand.ty (a 1)))
-                               | Prim.Spork_getData => none ()
+                               | Prim.Spork_getData _ => none ()
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)

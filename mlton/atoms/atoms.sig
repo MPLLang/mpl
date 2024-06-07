@@ -67,6 +67,7 @@ signature ATOMS' =
          = Tycon.RealSize
       sharing RealX = Const.RealX
       sharing SourceInfo = ProfileExp.SourceInfo
+      sharing Spid = Prim.Spid
       sharing TyconKind = Tycon.Kind
       sharing WordSize = Cases.WordSize = CType.WordSize = Prim.WordSize
          = Tycon.WordSize = WordX.WordSize
