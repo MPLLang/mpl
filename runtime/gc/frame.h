@@ -1,4 +1,4 @@
-/* Copyright (C) 2019 Matthew Fluet.
+/* Copyright (C) 2019,2023 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -8,6 +8,10 @@
  */
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
+
+typedef uintptr_t GC_returnAddress;
+#define GC_RETURNADDRESS_SIZE sizeof(GC_returnAddress)
+#define FMTRA "0x%016"PRIxPTR
 
 /*
  * The "... reserved bytes ..." of a stack object constitute a linear
@@ -27,12 +31,20 @@
  * recording the size of the array) whose elements record byte offsets
  * from the bottom of the frame at which live heap pointers are
  * located.  The size field indicates the size of the frame, including
- * space for the return address.  The sourceSeqIndex field indicates
- * the sequence of source names corresponding to the frame as an index
- * into sourceSeqs; see sources.h.
+ * space for the return address.  The pcallInfo field indicates the
+ * alternate return addresses of a PCALL_CONT_FRAME.  The
+ * sourceSeqIndex field indicates the sequence of source names
+ * corresponding to the frame as an index into sourceSeqs; see
+ * sources.h.
  */
 typedef const uint16_t *GC_frameOffsets;
 //typedef const TODO_t *GC_sporkNest;
+typedef uint32_t GC_nestingDepth;
+
+typedef const struct GC_sporkInfo {
+  GC_nestingDepth nesting;
+  GC_returnAddress spwn;
+} *GC_sporkInfo;
 
 typedef enum {
   CONT_FRAME,
@@ -47,17 +59,13 @@ typedef enum {
 typedef const struct GC_frameInfo {
   const GC_frameKind kind;
   const GC_frameOffsets offsets;
-  //const GC_sporkNest nest;
+  const GC_sporkInfo sporkInfo;
   const uint16_t size;
   const GC_sourceSeqIndex sourceSeqIndex;
 } *GC_frameInfo;
 typedef uint32_t GC_frameIndex;
 #define PRIFI PRIu32
 #define FMTFI "%"PRIFI
-
-typedef uintptr_t GC_returnAddress;
-#define GC_RETURNADDRESS_SIZE sizeof(GC_returnAddress)
-#define FMTRA "0x%016"PRIxPTR
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 

@@ -201,7 +201,8 @@ and primExp =
   | Var of VarExp.t
 and dec =
    Exception of {arg: Type.t option,
-                 con: Con.t}
+                 con: Con.t,
+                 elab: ExnDecElab.t}
   | Fun of {decs: {lambda: lambda,
                    ty: Type.t,
                    var: Var.t} vector,
@@ -229,8 +230,11 @@ in
             | SOME t => seq [str " of ", Type.layout t]]
    fun layoutDec d =
       case d of
-         Exception ca =>
-            seq [str "exception ", layoutConArg ca]
+         Exception {arg, con, elab} =>
+            seq [str "exception ",
+                 ExnDecElab.layout elab,
+                 str " ",
+                 layoutConArg {arg = arg, con = con}]
        | Fun {decs, tyvars} =>
             align (Vector.toListMapi
                    (decs, fn (i, {lambda, ty, var}) =>
@@ -343,7 +347,10 @@ in
    fun parseDec () =
       mlSpaces *> any
       [Exception <$>
-       (kw "exception" *> parseConArg),
+       (kw "exception" *>
+        ExnDecElab.parse >>= (fn elab =>
+        parseConArg >>= (fn {arg, con} =>
+        pure {arg = arg, con = con, elab = elab}))),
        Fun <$>
        (kw "fun" *>
         parseTyvars >>= (fn tyvars =>

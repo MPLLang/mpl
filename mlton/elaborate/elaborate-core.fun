@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2012,2015,2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009-2012,2015,2017,2019-2020,2024 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -15,6 +15,7 @@ open S
 local
    open Control.Elaborate
 in
+   val exnDecElab = fn () => current exnDecElab
    val nonexhaustiveBind = fn () => current nonexhaustiveBind
    val nonexhaustiveExnBind = fn () => current nonexhaustiveExnBind
    val nonexhaustiveExnMatch = fn () => current nonexhaustiveExnMatch
@@ -137,6 +138,7 @@ in
    structure Convention = CFunction.Convention
    structure Cdec = Dec
    structure Cexp = Exp
+   structure ExnDecElab = ExnDecElab
    structure Ffi = Ffi
    structure IntSize = IntSize
    structure Lambda = Lambda
@@ -384,7 +386,7 @@ fun 'a elabConst (c: Aconst.t,
             NONE => Tycon.bogus
           | SOME c => c
    in
-      case Aconst.node c of
+      case Aconst.value c of
          Aconst.Bool b => if b then t else f
        | Aconst.Char ch =>
             delay
@@ -438,11 +440,11 @@ fun 'a elabConst (c: Aconst.t,
                            (WordXVector.tabulate
                             ({elementSize = ws}, Vector.length v, fn i =>
                              let
-                                val ch = Vector.sub (v, i)
+                                val {char = ch, yytext} = Vector.sub (v, i)
                              in
                                 if CharSize.isInRange (cs, ch)
                                    then WordX.fromIntInf (ch, ws)
-                                   else (List.push (bigs, ch)
+                                   else (List.push (bigs, yytext)
                                          ; WordX.zero ws)
                              end))
                         val () =
@@ -452,15 +454,16 @@ fun 'a elabConst (c: Aconst.t,
                                    (Aconst.region c,
                                     seq [str "string constant with ",
                                          str (case !bigs of
-                                                 [_] => "character "
-                                               | _ => "characters "),
-                                         str "too large for type: ",
+                                                 [_] => "character"
+                                               | _ => "characters"),
+                                         str " too large for type: ",
                                          seq (Layout.separate
                                               (List.revMap
-                                               (!bigs, fn ch =>
-                                                Aconst.layout (Aconst.makeRegion (Aconst.Char ch, Region.bogus))),
+                                               (!bigs, fn yytext =>
+                                                seq [str "#\"", str yytext, str "\""]),
                                                ", "))],
-                                    seq [str "type: ", layoutPrettyType ty])
+                                    align [seq [str "type: ", layoutPrettyType ty],
+                                           seq [str "in: ", Aconst.layout c]])
                      in
                         wv
                      end))
@@ -712,7 +715,7 @@ val elaboratePat:
                    Cpat.wild (Type.new ())
              in
                 case Apat.node p of
-                   Apat.App (c, p) =>
+                   Apat.App {con = c, arg = p, ...} =>
                       (case Env.lookupLongcon (E, c) of
                           NONE => dontCare ()
                         | SOME (con, s) =>
@@ -1812,7 +1815,12 @@ fun export {attributes: ImportExportAttribute.t list,
          Aexp.longvid (Longvid.short
                        (Vid.fromSymbol (Symbol.fromString name, region)))
       fun int (i: int): Aexp.t =
-         Aexp.const (Aconst.makeRegion (Aconst.Int (IntInf.fromInt i), region))
+         let
+            val node = Aconst.Node {value = Aconst.Int (IntInf.fromInt i),
+                                    yytext = Int.toString i}
+         in
+            Aexp.const (Aconst.makeRegion (node, region))
+         end
       val f = Var.fromSymbol (Symbol.fromString "f", region)
       val p = Var.fromSymbol (Symbol.fromString "p", region)
    in
@@ -2336,10 +2344,17 @@ fun elaborateDec (d, {env = E, nest}) =
                                                      end
                                             val scheme = Scheme.fromType ty
                                             val _ = Env.extendExn (E, exn, exn', scheme)
+                                            val elab =
+                                               case exnDecElab () of
+                                                  Control.Elaborate.ExnDecElab.App =>
+                                                     ExnDecElab.App
+                                                | Control.Elaborate.ExnDecElab.Gen =>
+                                                     ExnDecElab.Gen
                                          in
                                             Decs.add (decs,
                                                       Cdec.Exception {arg = arg,
-                                                                      con = exn'})
+                                                                      con = exn',
+                                                                      elab = elab})
                                          end
                              in
                                 decs
@@ -3103,7 +3118,7 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.node e, Type.bool)
                    end
-              | Aexp.App (ef, ea) =>
+              | Aexp.App {func = ef, arg = ea, ...} =>
                    let
                       val cef = elab ef
                       val cea = elab ea

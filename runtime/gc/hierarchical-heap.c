@@ -330,8 +330,8 @@ void HM_HH_merge(
   /* Merge levels. */
   parentThread->hierarchicalHeap = HM_HH_zip(s, parentHH, childHH);
 
-  parentThread->spareHeartbeats += childThread->spareHeartbeats;
-  //parentThread->spareHeartbeats = min(parentThread->spareHeartbeats, 100);
+  parentThread->spareHeartbeatTokens += childThread->spareHeartbeatTokens;
+  //parentThread->spareHeartbeatTokens = min(parentThread->spareHeartbeatTokens, 100);
 
   parentThread->bytesSurvivedLastCollection +=
     childThread->bytesSurvivedLastCollection;

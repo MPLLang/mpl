@@ -27,6 +27,7 @@ structure C =
    struct
       val truee = "TRUE"
       val falsee = "FALSE"
+      val null = "NULL"
 
       fun bool b = if b then truee else falsee
 
@@ -248,11 +249,43 @@ fun outputDeclarations
     includes: string list,
     print: string -> unit,
     program = (Program.T
-               {frameInfos, frameOffsets, globals, maxFrameSize,
-                objectTypes, sourceMaps, staticHeaps, ...}),
+               {chunks, frameInfos, frameOffsets, globals, maxFrameSize,
+                objectTypes, pcallInfos, sourceMaps, staticHeaps, ...}),
     rest: unit -> unit
     }: unit =
    let
+      val {get = labelInfo: Label.t -> {index: int option},
+           set = setLabelInfo, ...} =
+         Property.getSetOnce
+         (Label.plist, Property.initRaise ("CCodeGen.labelInfo", Label.layout))
+      val _ =
+         List.foreach
+         (chunks, fn Chunk.T {blocks, ...} =>
+          Vector.foreach
+          (blocks, fn block as Block.T {kind, label, ...} =>
+           let
+              val index =
+                 case Kind.frameInfoOpt kind of
+                    NONE => NONE
+                  | SOME fi =>
+                       let
+                          val index = FrameInfo.index fi
+                       in
+                          SOME index
+                       end
+           in
+              setLabelInfo (label, {index = index})
+           end))
+      val labelIndex = valOf o #index o labelInfo
+      fun labelIndexAsString (l, {pretty}) =
+         let
+            val s = C.int (labelIndex l)
+         in
+            if pretty
+               then concat ["/* ", Label.toString l, " */ ", s]
+               else s
+         end
+
       fun prints ss = List.foreach (ss, print)
       fun declareExports () =
          Ffi.declareExports {print = print}
@@ -657,12 +690,26 @@ fun outputDeclarations
                          {firstElemLen = true, oneline = true},
                          FrameOffsets.offsets fo,
                          fn (_, offset) => C.bytes offset))
+          ; Vector.foreachi
+            (pcallInfos, fn (i, pra) =>
+             prints ["const struct GC_pcallInfo ",
+                     "pcallInfo",
+                     C.int i,
+                     " = {",
+                     labelIndexAsString (PCallInfo.parl pra, {pretty = true}),
+                     ",",
+                     labelIndexAsString (PCallInfo.parr pra, {pretty = true}),
+                     "};\n"])
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
                           frameInfos, fn (_, fi) =>
-                       concat ["{",
+                          concat ["{",
                                   FrameInfo.Kind.toString (FrameInfo.kind fi),
                                   ", frameOffsets", C.int (FrameOffsets.index (FrameInfo.frameOffsets fi)),
+                                  ", ", case FrameInfo.pcallInfo fi of
+                                           NONE => C.null
+                                         | SOME pra => concat ["&pcallInfo",
+                                                               C.int (PCallInfo.index pra)],
                                   ", ", C.bytes (FrameInfo.size fi),
                                   ", ", (case FrameInfo.sourceSeqIndex fi of
                                             NONE => C.int 0
@@ -1390,14 +1437,14 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
                    | Spork {nesting, spid, live, cont, spwn, size} =>
-                        (* TODO *)
+                        (* TODO: push? Or do something here? *)
                         gotoLabel (cont, {tab = true})
                    | Spoin {nesting, spid, live, seq, sync, size} =>
                         let val boolsize = Bits.toBytes (WordSize.bits WordSize.bool)
                             val opnd = Operand.stackOffset
                                          {offset = Bytes.- (size, Bytes.* (boolsize, LargeInt.fromInt nesting)),
                                           ty = Type.bool,
-                                          volatile = false} (* TODO: should this be volatile? *)
+                                          volatile = false}
                             fun bnz (lnz, lz) =
                                 (print "\tif ("
                                 ; print (operandToString opnd)
@@ -1410,28 +1457,6 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                           (* TODO: reset promoted slot to false in sync case *)
                           gotoLabel (seq, {tab = true})
                         end
-                   (*| PCall {label, cont, parl, parr, size, ...} =>
-                        let
-                           val _ =
-                              outputStatement
-                              (Statement.Move
-                               {dst = Operand.stackOffset
-                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 3)),
-                                       ty = Type.label parr,
-                                       volatile = false},
-                                 src = Operand.Label parr})
-                           val _ =
-                              outputStatement
-                              (Statement.Move
-                               {dst = Operand.stackOffset
-                                      {offset = Bytes.- (size, Bytes.* (Runtime.labelSize (), 2)),
-                                       ty = Type.label parl,
-                                       volatile = false},
-                                src = Operand.Label parl})
-                        in
-                           push (cont, size)
-                           ; jump label
-                        end*)
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2

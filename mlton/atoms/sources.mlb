@@ -72,6 +72,8 @@ local
    cases.fun
    prim.sig
    prim.fun
+   exn-dec-elab.sig
+   exn-dec-elab.fun
    prod.sig
    prod.fun
    handler.sig
@@ -99,6 +101,7 @@ in
    signature CONST
    signature C_FUNCTION
    signature C_TYPE
+   signature EXN_DEC_ELAB
    signature HASH_TYPE
    signature ID
    signature INT_SIZE

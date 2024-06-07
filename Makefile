@@ -178,15 +178,20 @@ runtime:
 		$(MKDIR) "$(INC)/$$d";					\
 		$(CP) "$(SRC)/runtime/$$d/"*.h "$(INC)/$$d";		\
 	done
+	echo "EXE=\"$(EXE)\""                       > "$(LIB)/targets/$(TARGET)/vars"
+	echo "CC=\"$(CC)\""                        >> "$(LIB)/targets/$(TARGET)/vars"
+	echo "GMP_INC_DIR=\"$(WITH_GMP_INC_DIR)\"" >> "$(LIB)/targets/$(TARGET)/vars"
+	echo "GMP_LIB_DIR=\"$(WITH_GMP_LIB_DIR)\"" >> "$(LIB)/targets/$(TARGET)/vars"
+
+.PHONY: install-runtime
+install-runtime:
+	$(MKDIR) "$(TLIB)/targets/$(TARGET)"
+	$(CP) "$(LIB)/targets/$(TARGET)" "$(TLIB)/targets/"
 
 .PHONY: script
 script:
 	$(SED) \
 		-e "s;^LIB_REL_BIN=.*;LIB_REL_BIN=\"$(LIB_REL_BIN)\";" \
-		-e "s;^EXE=.*;EXE=\"$(EXE)\";" \
-		-e "s;^CC=.*;CC=\"$(CC)\";" \
-		-e "s;^GMP_INC_DIR=.*;GMP_INC_DIR=\"$(WITH_GMP_INC_DIR)\";" \
-		-e "s;^GMP_LIB_DIR=.*;GMP_LIB_DIR=\"$(WITH_GMP_LIB_DIR)\";" \
 		-e 's/mlton-compile/$(MLTON_OUTPUT)/' \
 		-e "s;^    SMLNJ=.*;    SMLNJ=\"$(SMLNJ)\";" \
 		< "$(SRC)/bin/mlton-script" > "$(BIN)/$(MLTON)"
@@ -338,7 +343,7 @@ bootstrap-polyml:
 	$(MAKE) polyml-mlton
 	$(RM) "$(BIN)/$(MLTON)"
 	$(MAKE) OLD_MLTON="$(BIN)/$(MLTON).polyml" all
-	$(RM) "$(LIB)/$(MLTON)-polyml$(EXE)"
+	$(RM) "$(LIB)/$(MLTON_OUTPUT)-polyml$(EXE)"
 	$(RM) "$(BIN)/$(MLTON).polyml"
 
 .PHONY: polyml-mlton
@@ -367,7 +372,7 @@ bootstrap-mlkit:
 	$(MAKE) mlkit-mlton
 	$(RM) "$(BIN)/$(MLTON)"
 	$(MAKE) OLD_MLTON="$(BIN)/$(MLTON).mlkit" all
-	$(RM) "$(LIB)/$(MLTON)-mlkit$(EXE)"
+	$(RM) "$(LIB)/$(MLTON_OUTPUT)-mlkit$(EXE)"
 	$(RM) "$(BIN)/$(MLTON).mlkit"
 
 .PHONY: mlkit-mlton

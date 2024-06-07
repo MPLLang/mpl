@@ -81,6 +81,8 @@ structure Atoms =
                              structure RealSize = RealSize
                              structure WordSize = WordSize)
 
+      structure ExnDecElab = ExnDecElab ()
+
       structure Prod = Prod ()
       structure Handler = Handler (structure Label = Label)
       structure Return = Return (structure Label = Label

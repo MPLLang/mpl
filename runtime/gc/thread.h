@@ -41,7 +41,7 @@
 typedef struct GC_thread {
 
   /* unspent heartbeats */
-  uint32_t spareHeartbeats;
+  uint32_t spareHeartbeatTokens;
 
   int32_t currentProcNum; /* the worker currently executing this thread */
   size_t bytesNeeded;
@@ -51,12 +51,12 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  uint32_t minLocalCollectionDepth;
+
 #ifdef DETECT_ENTANGLEMENT
   decheck_tid_t decheckState;
   uint32_t decheckSyncDepths[DECHECK_DEPTHS_LEN];
 #endif
-
-  uint32_t minLocalCollectionDepth;
 
   size_t bytesAllocatedSinceLastCollection;
   size_t bytesSurvivedLastCollection;
@@ -73,14 +73,14 @@ typedef struct GC_thread {
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
-                    sizeof(uint32_t) + // spareHeartbeats
+                    sizeof(uint32_t) + // spareHeartbeatTokens
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(ptrdiff_t) +  // exnStack
                     sizeof(uint32_t) + // currentDepth
+                    sizeof(uint32_t) + // minLocalCollectionDepth
                     sizeof(decheck_tid_t) + // disentanglement checker state
                     DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
-                    sizeof(uint32_t) + // minLocalCollectionDepth
                     sizeof(size_t) +  // bytesAllocatedSinceLastCollection
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
@@ -91,7 +91,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
 
 COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(struct GC_thread) ==
-                    sizeof(uint32_t) + // spareHeartbeats
+                    sizeof(uint32_t) + // spareHeartbeatTokens
                     sizeof(int32_t) +  // currentProcNum
                     sizeof(size_t) +  // bytesNeeded
                     sizeof(ptrdiff_t) +  // exnStack
@@ -148,8 +148,6 @@ PRIVATE Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count);
 
 // returns new count
 PRIVATE uint32_t GC_addSpareHeartbeats(GC_state s, uint32_t spares);
-
-PRIVATE uint32_t GC_currentSpareHeartbeats(GC_state s);
 
 PRIVATE void GC_HH_joinIntoParentBeforeFastClone(GC_state s, pointer threadp, uint32_t newDepth, uint64_t tidLeft, uint64_t tidRight);
 PRIVATE void GC_HH_joinIntoParent(GC_state s, pointer threadp, pointer rightSideThreadp, uint32_t newDepth, uint64_t tidLeft, uint64_t tidRight);

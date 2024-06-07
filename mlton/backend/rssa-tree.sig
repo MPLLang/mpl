@@ -151,7 +151,7 @@ signature RSSA_TREE =
              | Handler
              | Jump
              (*| PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t}*)
-             | SporkReturn of {(* spid: Spid.t, *) cont: Label.t, spwn: Label.t}
+             | SporkReturn of {spid: Spid.t, cont: Label.t, spwn: Label.t}
              (* TODO: could consider inserting spork nest info here *)
              (* | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t} *)
 

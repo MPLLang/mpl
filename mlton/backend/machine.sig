@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2014,2019-2022 Matthew Fluet.
+(* Copyright (C) 2009,2014,2019-2023 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -223,6 +223,19 @@ signature MACHINE =
             val offsets: t -> Bytes.t vector
          end
 
+      structure SporkInfo:
+         sig
+            type t
+
+            val equals: t * t -> bool
+            val hash: t -> word
+            val index: t -> int
+            val layout: t -> Layout.t
+            val new: {index: int, nesting: int, spwn: Label.t} -> t
+            val spwn: t -> Label.t
+            val nesting: int
+         end
+
       structure FrameInfo:
          sig
             structure Kind:
@@ -253,7 +266,9 @@ signature MACHINE =
                       index: int,
                       kind: Kind.t,
                       size: Bytes.t,
+                      pcallInfo: PCallInfo.t option,
                       sourceSeqIndex: int option} -> t
+            val pcallInfo: t -> PCallInfo.t option
             val offsets: t -> Bytes.t vector
             val setIndex: t * int -> unit
             val size: t -> Bytes.t
@@ -324,6 +339,7 @@ signature MACHINE =
                             label: Label.t},
                      maxFrameSize: Bytes.t,
                      objectTypes: Type.ObjectType.t vector,
+                     pcallInfos: PCallInfo.t vector,
                      sourceMaps: SourceMaps.t option,
                      staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 

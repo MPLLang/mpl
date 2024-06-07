@@ -100,6 +100,8 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #include "platform/openbsd.h"
 #elif (defined (__sun__))
 #include "platform/solaris.h"
+#elif (defined (__wasi__))
+#include "platform/wasi.h"
 #else
 #error unknown platform os
 #endif
@@ -132,6 +134,10 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #include "platform/sparc.h"
 #elif (defined (__i386__))
 #include "platform/x86.h"
+#elif (defined (__loongarch64))
+#include "platform/loongarch64.h"
+#elif (defined (__wasm32))
+#include "platform/wasm32.h"
 #else
 #error unknown platform arch
 #endif

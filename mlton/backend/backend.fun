@@ -1,4 +1,4 @@
-(* Copyright (C) 2009,2013-2014,2017,2019-2022 Matthew Fluet.
+(* Copyright (C) 2009,2013-2014,2017,2019-2023 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -216,6 +216,16 @@ fun toMachine (rssa: Rssa.Program.t) =
               in
                  fo
               end))
+         val sporkInfos: M.SporkInfo.t list ref = ref []
+         val nextSporkInfo = Counter.generator 0
+         fun getSporkInfo {nesting, spwn} =
+            let
+               val index = nextSporkInfo ()
+               val pra = M.SporkInfo.new {index = index, nesting = nesting, spwn = spwn}
+               val _ = List.push (sporkInfos, pra)
+            in
+               pra
+            end
       in
          fun allFrameInfo chunks =
             let
@@ -255,20 +265,25 @@ fun toMachine (rssa: Rssa.Program.t) =
                                 Vector.foreachi
                                 (frameInfos, fn (i, fi) =>
                                  M.FrameInfo.setIndex (fi, i))
-            in
+                          in
                              frameInfos
-            end
+                          end
                      else frameInfos
             in
-               (frameInfos, frameOffsets)
+               (frameInfos, frameOffsets,
+                Vector.fromListRev (!sporkInfos))
             end
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
-                                   offsets: Bytes.t list,
+                           offsets: Bytes.t list,
+                           sporkInfo: {parl: Label.t, parr: Label.t} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
                val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
+               val sporkInfo =
+                  Option.map (sporkInfo, fn {parl, parr} =>
+                              getSporkInfo {parl = parl, parr = parr})
                fun new () =
                   let
                      val index = nextFrameInfo ()
@@ -277,6 +292,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                         {frameOffsets = frameOffsets,
                          index = index,
                          kind = kind,
+                         sporkInfo = sporkInfo,
                          size = size,
                          sourceSeqIndex = sourceSeqIndex}
                      val _ = List.push (frameInfos, frameInfo)
@@ -969,24 +985,24 @@ fun toMachine (rssa: Rssa.Program.t) =
                                     | _ => ac)
                             else
                                []
-                         val (entry, kind, offsets, size) =
+                         val (entry, kind, offsets, sporkInfo, size) =
                             case kind of
                                R.Kind.Cont _ =>
-                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, size)
+                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, NONE, size)
                              | R.Kind.CReturn {func} =>
                                   (CFunction.maySwitchThreadsTo func,
                                    M.FrameInfo.Kind.CRETURN_FRAME,
-                                   offsets, size)
+                                   offsets, NONE, size)
                              | R.Kind.Handler =>
-                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, size)
+                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, NONE, size)
                              | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
-                             | R.Kind.SporkReturn {cont, spwn} =>
+                             | R.Kind.SporkReturn {spid, cont, spwn} =>
                                   let
-                                     val kind =
+                                     val (kind, sporkInfo) =
                                         if Label.equals (label, cont)
-                                           then M.FrameInfo.Kind.CONT_FRAME
+                                           then (M.FrameInfo.Kind.CONT_FRAME, SOME {nesting = spidNesting spid, spwn = spwn})
                                         else if Label.equals (label, spwn)
-                                           then M.FrameInfo.Kind.SPORK_SPWN_FRAME
+                                           then (M.FrameInfo.Kind.SPORK_SPWN_FRAME, NONE)
                                         else Error.bug "Backend.genFunc.setFrameInfo: SporkReturn"
                                      (* The size is that of the cont *)
                                      val size = #size (labelRegInfo cont)
@@ -996,7 +1012,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                                            then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
                                            else offsets
                                   in
-                                     (true, kind, offsets, size)
+                                     (true, kind, offsets, sporkInfo, size)
                                   end
                              (* | R.Kind.PCallReturn {cont, parl, parr} => *)
                              (*      let *)
@@ -1022,6 +1038,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                             getFrameInfo {entry = entry,
                                           kind = kind,
                                           offsets = offsets,
+                                          sporkInfo = sporkInfo,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1324,6 +1341,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                      getFrameInfo {entry = true,
                                    kind = M.FrameInfo.Kind.FUNC_FRAME,
                                    offsets = [],
+                                   sporkInfo = NONE,
                                    size = Bytes.zero,
                                    sourceSeqIndex = NONE}
                   val srcs =
@@ -1411,7 +1429,7 @@ fun toMachine (rssa: Rssa.Program.t) =
        *)
       val _ = List.foreach (chunks, fn M.Chunk.T {blocks, ...} =>
                             Vector.foreach (blocks, Label.clear o M.Block.label))
-      val (frameInfos, frameOffsets) = allFrameInfo chunks
+      val (frameInfos, frameOffsets, sporkInfos) = allFrameInfo chunks
       val maxFrameSize: Bytes.t =
          List.fold
          (chunks, Bytes.zero, fn (M.Chunk.T {blocks, ...}, max) =>
@@ -1457,6 +1475,7 @@ fun toMachine (rssa: Rssa.Program.t) =
           main = main,
           maxFrameSize = maxFrameSize,
           objectTypes = objectTypes,
+          sporkInfos = sporkInfos,
           sourceMaps = sourceMaps,
           staticHeaps = finishStaticHeaps ()}
    in

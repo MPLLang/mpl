@@ -528,7 +528,7 @@ structure Kind =
        | Handler
        | Jump
        (* | PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t} *)
-       | SporkReturn of {(* spid: Spid.t, *) cont: Label.t, spwn: Label.t}
+       | SporkReturn of {spid: Spid.t, cont: Label.t, spwn: Label.t}
 
       fun isJump k =
          case k of

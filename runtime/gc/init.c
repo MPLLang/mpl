@@ -616,7 +616,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   /* RAM_NOTE: Why is this not found in the Spoonhower copy? */
   initIntInf (s);
-  initSignalStack (s);
+  initSignalStack ();
   s->worldFile = NULL;
 
   L_setFile(stderr);

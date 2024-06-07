@@ -25,6 +25,7 @@ signature RUNTIME =
              | Limit (* frontier + heapSize - LIMIT_SLOP *)
              | LimitPlusSlop (* frontier + heapSize *)
              | SignalIsPending
+             | SpareHeartbeatTokens
              | StackBottom
              | StackLimit (* Must have StackTop <= StackLimit *)
              | StackTop (* Points at the next available byte on the stack. *)

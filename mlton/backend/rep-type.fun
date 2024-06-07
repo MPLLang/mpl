@@ -1,4 +1,4 @@
-(* Copyright (C) 2009-2010,2014,2016-2017,2019-2020 Matthew Fluet.
+(* Copyright (C) 2009-2010,2014,2016-2017,2019-2020,2023 Matthew Fluet.
  * Copyright (C) 2004-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -442,33 +442,70 @@ structure ObjectType =
 
       fun isOk (t: t): bool =
          let
-            fun componentsOk components =
+            val objAlign =
+               case !Control.align of
+                  Control.Align4 => Bits.inWord32
+                | Control.Align8 => Bits.inWord64
+            fun componentsOk (components, isSequence) =
                Exn.withEscape
                (fn escape =>
-                ((ignore o Prod.fold)
-                 (components, false, fn (ty, hasObjptr) =>
-                  if Bits.isPrim (Type.width ty)
-                     then if Type.isObjptr ty
-                             then true
-                             else if hasObjptr
-                                     then escape false
-                                     else false
-                     else escape false)
-                 ; true))
+                let
+                   val escape = fn () =>
+                      let
+                         val _ = escape false
+                      in
+                         raise Fail "RepType.ObjectType.isOk.componentsOk.escape"
+                      end
+                   val (size, maxComponentAlign, _) =
+                      Prod.fold
+                      (components, (Bits.zero, Bits.zero, false),
+                       fn (ty, (offset, maxComponentAlign, hasObjptr)) =>
+                       let
+                          val componentWidth = Type.width ty
+                          val _ =
+                             if Bits.isPrim componentWidth
+                                then ()
+                                else escape ()
+                          val componentAlign =
+                             Bits.min (componentWidth, objAlign)
+                          val _ =
+                             if Bits.isZero componentAlign
+                                orelse Bits.isAligned (offset, {alignment = componentAlign})
+                                then ()
+                                else escape ()
+                          val offset =
+                             Bits.+ (offset, componentWidth)
+                          val maxComponentAlign =
+                             Bits.max (componentAlign, maxComponentAlign)
+                          val hasObjptr =
+                             if Type.isObjptr ty
+                                then true
+                                else if hasObjptr
+                                        then escape ()
+                                        else false
+                       in
+                          (offset, maxComponentAlign, hasObjptr)
+                       end)
+                   fun sequenceOk () =
+                      Bits.isZero maxComponentAlign
+                      orelse Bits.isAligned (size, {alignment = maxComponentAlign})
+                   fun normalOk () =
+                      let
+                         val normalMetaDataSize =
+                            Bytes.toBits (Runtime.normalMetaDataSize ())
+                      in
+                         Bits.isAligned (Bits.+ (size, normalMetaDataSize),
+                                         {alignment = objAlign})
+                      end
+                in
+                   if isSequence
+                      then sequenceOk ()
+                      else normalOk ()
+                end)
          in
             case t of
-               Normal {components, ...} =>
-                  componentsOk components
-                  andalso
-                  let
-                     val b = Prod.fold (components, Type.width (Type.objptrHeader ()),
-                                        fn (ty, b) => Bits.+ (b, Type.width ty))
-                  in
-                     case !Control.align of
-                        Control.Align4 => Bits.isWord32Aligned b
-                      | Control.Align8 => Bits.isWord64Aligned b
-                  end
-             | Sequence {components, ...} => componentsOk components
+               Normal {components, ...} => componentsOk (components, false)
+             | Sequence {components, ...} => componentsOk (components, true)
              | Stack => true
              | Weak to => Option.fold (to, true, fn (t,_) => Type.isObjptr t)
          end
@@ -486,13 +523,6 @@ structure ObjectType =
              * #define DECHECK_DEPTHS_LEN 32
              *)
             val numDecheckSyncDepths = 32
-
-            val bytesDecheckSyncDepths =
-               zeroIfNotDetectEntanglementRuntime (
-                  Bytes.fromIntInf (IntInf.*
-                    (numDecheckSyncDepths,
-                     Bytes.toIntInf (Bits.toBytes (Type.width Type.word32))))
-               )
 
             val padding =
                let
@@ -512,11 +542,17 @@ structure ObjectType =
                      Bits.toBytes (Type.width (Type.exnStack ()))
                   val bytesCurrentDepth =
                      Bits.toBytes (Type.width Type.word32)
-                  val bytesDecheckState =
-                     zeroIfNotDetectEntanglementRuntime
-                        (Bits.toBytes (Type.width Type.word64))
                   val bytesMinLocalCollectionDepth =
                      Bits.toBytes (Type.width Type.word32)
+                  val bytesDecheckState =
+                     zeroIfNotDetectEntanglementRuntime
+                     (Bits.toBytes (Type.width Type.word64))
+                  val bytesDecheckSyncDepths =
+                     zeroIfNotDetectEntanglementRuntime
+                     (Bytes.fromIntInf
+                      (IntInf.*
+                       (numDecheckSyncDepths,
+                        Bytes.toIntInf (Bits.toBytes (Type.width Type.word32)))))
                   val bytesAllocatedSinceLastCollection =
                      Bits.toBytes (Control.Target.Size.csize ())
                   val bytesSurvivedLastCollection =
@@ -539,9 +575,9 @@ structure ObjectType =
                         bytesBytesNeeded +
                         bytesExnStack +
                         bytesCurrentDepth +
+                        bytesMinLocalCollectionDepth +
                         bytesDecheckState +
                         bytesDecheckSyncDepths +
-                        bytesMinLocalCollectionDepth +
                         bytesAllocatedSinceLastCollection +
                         bytesSurvivedLastCollection +
                         bytesHierarchicalHeap +
@@ -561,7 +597,8 @@ structure ObjectType =
                    Type.word32,       (* currentProcNum *)
                    Type.csize (),     (* bytesNeeded *)
                    Type.exnStack (),  (* exnStack *)
-                   Type.word32]       (* currentDepth *)
+                   Type.word32,       (* currentDepth *)
+                   Type.word32]       (* minLocalCollectionDepth *)
                   @
                   (if !Control.detectEntanglementRuntime then
                      [Type.word64]
@@ -570,8 +607,7 @@ structure ObjectType =
                    else
                      [])
                   @
-                  [Type.word32,       (* minLocalCollectionDepth *)
-                   Type.csize (),     (* bytesAllocatedSinceLastCollection *)
+                  [Type.csize (),     (* bytesAllocatedSinceLastCollection *)
                    Type.csize (),     (* bytesSurvivedLastCollection *)
                    Type.cpointer (),  (* hierarchicalHeap *)
                    Type.cpointer (),  (* currentChunk *)
@@ -692,6 +728,7 @@ fun ofGCField (f: GCField.t): t =
        | Limit => cpointer ()
        | LimitPlusSlop => cpointer ()
        | SignalIsPending => word32
+       | SpareHeartbeatTokens => word32
        | StackBottom => cpointer ()
        | StackLimit => cpointer ()
        | StackTop => cpointer ()
