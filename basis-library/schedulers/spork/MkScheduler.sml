@@ -997,7 +997,7 @@ struct
           maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
         end
 
-    fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
+    (*fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
       case maybeSpawnFunc {allowCGC = true} g of
         NONE => (f (), g ())
       | SOME gj =>
@@ -1007,7 +1007,7 @@ struct
             val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
           in
             (Result.extractResult fr, Result.extractResult gr)
-          end
+          end*)
 
   
     (* ===================================================================
@@ -1114,6 +1114,9 @@ struct
             in
               sync (Result.extractResult fr, Result.extractResult gr)
             end
+
+    fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
+      greedyWorkAmortizedSpork (f, g, (fn (a) => (a, g ())), (fn (a, b) => (a, b)))
 
   end
 

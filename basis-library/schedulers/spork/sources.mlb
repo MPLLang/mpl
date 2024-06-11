@@ -22,11 +22,16 @@ local
 
   ../shh/CumulativePerProcTimer.sml
   SPORK_JOIN.sig
+  FORK_JOIN.sig
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
   (*Stack.sml*)
   ../shh/Result.sml
+  ann
+     "exnDecElab app"
+  in
   Universal.sml
+  end
   ann
     "allowFFI true"
     "allowPrim true"
@@ -36,7 +41,10 @@ local
 
   Scheduler.sml
   MkSporkJoin.sml
+  MkForkJoin.sml
   SporkJoin.sml
+  ForkJoin.sml
 in
+  structure ForkJoin
   structure SporkJoin
 end

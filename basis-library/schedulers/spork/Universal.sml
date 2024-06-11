@@ -8,12 +8,12 @@ struct
 
   fun 'a embed () =
     let
-      exception E of 'a
+      exception UnivTag of 'a
       fun project (e: t): 'a option =
         case e of
-          E a => SOME a
+          UnivTag a => SOME a
         | _ => NONE
     in
-      (E, project)
+      (UnivTag, project)
     end
 end
