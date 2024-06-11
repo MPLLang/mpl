@@ -416,12 +416,16 @@ fun closureConvert
                                            ty = tc,
                                            exp = App {func = seq,
                                                       arg = SvarExp.mono contres}}
+                         val _ = Value.coerce {from = value seqres, to = result}
+                         val _ = loopBind {var = contres_data,
+                                           ty = Stype.tuple (Vector.new2 (tar, td)),
+                                           exp = Tuple (Vector.new2
+                                                        (SvarExp.mono contres,
+                                                         SvarExp.mono data))}
                          val _ = loopBind {var = syncres,
                                            ty = tc,
                                            exp = App {func = sync,
                                                       arg = SvarExp.mono contres_data}}
-                         (* TODO: should this actually be commented out? vvv *)
-                         (*val _ = Value.coerce {from = value seqres, to = result}*)
                          val _ = Value.coerce {from = value syncres, to = result}
                      in
                        ()
