@@ -885,9 +885,12 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
                               handler: Label.t option ref,
-                              sporkReturn: ({spid : Spid.t,
+                              sporkReturn: ({spid: Spid.t,
                                              cont: Label.t,
-                                             spwn: Label.t} * Label.t) list ref}),
+                                             spwn: Label.t} * Label.t) list ref,
+                              spoinReturn: ({spid: Spid.t,
+                                             seq: Label.t,
+                                             sync: Label.t} * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("label info", Label.layout))
@@ -1037,6 +1040,34 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                   end
              | _ => Error.bug "Ssa2ToRssa.genSporkReturns"
          end
+
+      fun genSpoinReturns (rets as {spid, seq, sync}): {seq: Label.t, sync: Label.t} =
+         let
+            fun lkup spoinReturn =
+               List.peek (!spoinReturn,
+                          fn ({spid = spid', ...}, _) => Spid.equals (spid, spid'))
+            val {spoinReturn = seqSpoinReturn, ...} = labelInfo seq
+            val {spoinReturn = syncSpoinReturn, ...} = labelInfo sync
+         in
+            case (lkup seqSpoinReturn, lkup syncSpoinReturn) of
+               (SOME (_, seq), SOME (_, sync)) =>
+                  {seq = seq, sync = sync}
+             | (NONE, NONE) =>
+                  let
+                     val (seq', mkseq) = eta' seq
+                     val _ = List.push (seqSpoinReturn, (rets, seq'))
+                     val syncSpoinDataArg = sporkDataArg sync
+                     val (sync', mksync) = eta'' (sync, Vector.new1 syncSpoinDataArg)
+                     val _ = List.push (syncSpoinReturn, (rets, sync'))
+                     val rets' = {spid = spid, seq = seq', sync = sync'}
+                     val _ = mkseq Kind.Jump
+                     val _ = mksync Kind.Jump
+                  in
+                     {seq = seq', sync = sync'}
+                  end
+             | _ => Error.bug "Ssa2ToRssa.genSpoinReturns"
+         end
+
       (* fun genPCallReturns (rets as {cont, parl, parr}): {cont: Label.t, parl: Label.t, parr: Label.t} = *)
       (*    let *)
       (*       fun lkup pcallReturn = *)
@@ -1154,8 +1185,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                  ([], Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
                end
           | S.Transfer.Spoin {spid, seq, sync} =>
-               (* TODO: do we need a genSpoinReturns? *)
-               ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync})
+               (* ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync}) *)
+               let val {seq, sync} = genSpoinReturns {spid = spid, seq = seq, sync = sync} in
+                 ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync})
+               end
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
           | S.Transfer.Runtime {args, prim, return} =>
@@ -2104,7 +2137,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                 setLabelInfo (label, {args = args,
                                       cont = ref [],
                                       handler = ref NONE,
-                                      sporkReturn = ref []}))
+                                      sporkReturn = ref [],
+                                      spoinReturn = ref []}))
             val blocks = Vector.map (blocks, translateBlock)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
             val _ = extraBlocks := []
