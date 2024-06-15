@@ -15,6 +15,7 @@ sig
   val nesting: Function.t -> (Spid.t -> int)
 end
 
+(* TODO: perhaps don't use dominator trees, but instead more general control-flow analysis *)
 functor SporkNesting (S : SPORK_NESTING_STRUCTS): SPORK_NESTING =
 struct
   open S
