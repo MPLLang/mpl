@@ -1112,7 +1112,7 @@ fun closureConvert
                  val spwnarg = arg 3
                  val seq = arg 4
                  val sync = arg 5
-                 val spid = Spid.new ()
+                 val spid = Spid.newNoname ()
                  val {contres, data, spwnarg_data, spwnres, seqres, contres_data, syncres} =
                     valOf (! (#sporkInfo info))
 

@@ -38,7 +38,6 @@ structure Atoms =
                                structure WordX = WordX
                                structure WordXVector = WordXVector)
 
-      structure Spid = Spid ()
       structure Symbol = Symbol ()
       structure Field = Field (structure Symbol = Symbol)
       structure Record = Record (val isSorted = false
@@ -66,6 +65,11 @@ structure Atoms =
          struct
             open Func
             fun newNoname () = newString "L"
+         end
+      structure Spid =
+         struct
+            open Var
+            fun newNoname () = newString "SP"
          end
 
       structure Ffi = Ffi (structure CFunction = CFunction

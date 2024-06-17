@@ -46,7 +46,6 @@ functor Id
 functor GenericScheme
 functor HashType
 functor TypeOps
-structure Spid
 
 is
 
@@ -78,8 +77,6 @@ c-function.sig
 c-function.fun
 const.sig
 const.fun
-spid.sig
-spid.fun
 symbol.sig
 symbol.fun
 field.sig
@@ -107,6 +104,7 @@ var.sig
 var.fun
 func.sig
 label.sig
+spid.sig
 ffi.sig
 ffi.fun
 cases.sig
