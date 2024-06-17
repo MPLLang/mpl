@@ -383,6 +383,150 @@ fun checkProf (Program.T {functions, ...}): unit =
 
 val checkProf = Control.trace (Control.Detail, "checkProf") checkProf
 
+structure Function =
+   struct
+      open Function
+
+      fun checkSpork (f: t): unit =
+         let
+            val {blocks, start, ...} = dest f
+            val {get = labelInfo, rem, set = setLabelInfo, ...} =
+               Property.getSetOnce
+               (Label.plist,
+                Property.initRaise ("Ssa.TypeCheck.checkSpork.info", Label.layout))
+            val _ = Vector.foreach (blocks, fn b as Block.T {label, ...} =>
+                                    setLabelInfo (label,
+                                                  {block = b,
+                                                   sporkInfo = ref NONE}))
+            fun goto (l: Label.t, sporkData: Spid.t option, sporkNest: Spid.t list) =
+               let
+                  fun bug (msg: string): 'a =
+                     let
+                        val _ =
+                           Vector.foreach
+                           (blocks, fn Block.T {label, ...} =>
+                            let
+                               val {sporkInfo, ...} = labelInfo label
+                               open Layout
+                            in
+                               outputl
+                               (seq [Label.layout label,
+                                     str " ",
+                                     record [("sporkInfo",
+                                              Option.layout
+                                              (fn {sporkData, sporkNest} =>
+                                               record [("sporkData",
+                                                        Option.layout
+                                                        Spid.layout
+                                                        sporkData),
+                                                       ("sporkNest",
+                                                        List.layout
+                                                        Spid.layout
+                                                        sporkNest)])
+                                              (!sporkInfo))]],
+                                Out.error)
+                            end)
+                     in
+                        Error.bug
+                        (concat ["Ssa.TypeCheck.checkSpork: bug found in ", Label.toString l,
+                                 ": ", msg])
+                     end
+                  val {block, sporkInfo} = labelInfo l
+               in
+                  case (!sporkInfo) of
+                     NONE =>
+                        let
+                           val _ = sporkInfo := SOME {sporkData = sporkData, sporkNest = sporkNest}
+                           val Block.T {statements, transfer, ...} = block
+                           val sporkData =
+                              Vector.fold
+                              (statements, sporkData, fn (stmt, sporkData) =>
+                               case stmt of
+                                  Bind {exp = PrimApp {prim = Prim.Spork_getData spid, ...}, ...} =>
+                                     (case sporkData of
+                                         NONE => bug "empty sporkData at Spork_getData"
+                                       | SOME spid' =>
+                                            if Spid.equals (spid, spid')
+                                               then NONE
+                                               else bug "mismatched sporkData at Spork_getData")
+                                | _ => sporkData)
+                           val _ =
+                              if (case transfer of
+                                     Call {return, ...} =>
+                                        let
+                                           datatype z = datatype Return.t
+                                        in
+                                           case return of
+                                              Dead => false
+                                            | NonTail {handler, ...} =>
+                                                 let
+                                                    datatype z = datatype Handler.t
+                                                 in
+                                                    case handler of
+                                                       Dead => false
+                                                     | Handle _ => false
+                                                     | Caller => true
+                                                 end
+                                            | Tail => true
+                                        end
+                                   | Raise _ => true
+                                   | Return _ => true
+                                   | _ => false)
+                                 then let
+                                         val _ = (case sporkData of
+                                                     NONE => ()
+                                                   | _ => bug "nonempty sporkData when leaving function")
+                                         val _ = (case sporkNest of
+                                                     [] => ()
+                                                   | _ => bug "nonempty sporkNest when leaving function")
+                                      in
+                                         ()
+                                      end
+                                 else ()
+                        in
+                           case transfer of
+                              Spork {spid, cont, spwn} =>
+                                 (case sporkData of
+                                     NONE => (goto (cont, NONE, spid::sporkNest)
+                                              ; goto (spwn, SOME spid, []))
+                                   | _ => bug "nonempty sporkData at Spork")
+                            | Spoin {spid, seq, sync} =>
+                                 (case (sporkData, sporkNest) of
+                                     (SOME _, _) => bug "nonempty sporkData at Spoin"
+                                   | (_, []) => bug "empty sporkNest at Spoin"
+                                   | (NONE, spid'::sporkNest') =>
+                                        if Spid.equals (spid, spid')
+                                           then (goto (seq, NONE, sporkNest')
+                                                 ; goto (sync, SOME spid', sporkNest'))
+                                           else bug "mismatched sporkNest at Spoin")
+                            | _ =>
+                                 Transfer.foreachLabel
+                                 (transfer, fn l => goto (l, sporkData, sporkNest))
+                        end
+                   | SOME {sporkData = sporkData', sporkNest = sporkNest'} =>
+                        let
+                           val _ = if Option.equals (sporkData, sporkData', Spid.equals)
+                                      then ()
+                                      else bug "mismatched block: sporkData"
+                           val _ = if List.equals (sporkNest, sporkNest', Spid.equals)
+                                      then ()
+                                      else bug "mismatched block: sporkNest"
+                        in
+                           ()
+                        end
+               end
+            val _ = goto (start, NONE, [])
+            val _ = Vector.foreach (blocks, fn Block.T {label, ...} => rem label)
+         in
+            ()
+         end
+   end
+
+fun checkSpork (Program.T {functions, ...}): unit =
+   List.foreach (functions, fn f => Function.checkSpork f)
+
+val checkSpork = Control.trace (Control.Detail, "checkSpork") checkSpork
+
 fun typeCheck (program as Program.T {datatypes, ...}): unit =
    let
       val _ = checkScopes program
@@ -557,6 +701,7 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
                   update = update,
                   useFromTypeOnBinds = true}
       val _ = Program.clear program
+      val _ = checkSpork program
    in
       ()
    end
