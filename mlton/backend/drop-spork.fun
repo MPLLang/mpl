@@ -20,15 +20,8 @@ fun dropSporkFunction f =
           let
              val kind =
                 case kind of
-                   (*Kind.PCallReturn {cont, ...} =>
-                      if Label.equals (label, cont)
-                         then Kind.Cont {handler = Handler.Dead}
-                         else Kind.Jump*)
-                   Kind.SporkReturn {spid, cont, spwn} =>
-                      Kind.Jump
-                      (*if Label.equals (label, cont)
-                         then Kind.Jump
-                         else Kind.Jump*)
+                   Kind.SporkSpwn _ => Kind.Jump
+                 | Kind.SpoinSync _ => Kind.Jump
                  | _ => kind
              val transfer =
                 case transfer of
@@ -38,11 +31,6 @@ fun dropSporkFunction f =
                  | Transfer.Spoin {spid, seq, sync} =>
                       Transfer.Goto {args = Vector.new0 (),
                                      dst = seq}
-                   (* Transfer.PCall {func, args, cont, ...} => *)
-                   (*    Transfer.Call {func = func, *)
-                   (*                   args = args, *)
-                   (*                   return = Return.NonTail {cont = cont, *)
-                   (*                                            handler = Handler.Dead}} *)
                  | _ => transfer
           in
              Block.T {args = args,

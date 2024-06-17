@@ -150,10 +150,8 @@ signature RSSA_TREE =
              | CReturn of {func: Type.t CFunction.t}
              | Handler
              | Jump
-             (*| PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t}*)
-             | SporkReturn of {spid: Spid.t, cont: Label.t, spwn: Label.t}
-             (* TODO: could consider inserting spork nest info here *)
-             (* | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t} *)
+             | SporkSpwn of {spid: Spid.t}
+             | SpoinSync of {spid: Spid.t}
 
             datatype frameStyle = None | OffsetsAndSize | SizeOnly
             val frameStyle: t -> frameStyle

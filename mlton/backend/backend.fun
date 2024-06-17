@@ -994,44 +994,17 @@ fun toMachine (rssa: Rssa.Program.t) =
                              | R.Kind.Handler =>
                                   (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, NONE, size)
                              | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
-                             | R.Kind.SporkReturn {spid, cont, spwn} =>
+                             | R.Kind.SporkSpwn {spid} =>
                                   let
                                      val (kind, sporkInfo) =
-                                        if Label.equals (label, cont)
-                                           then (M.FrameInfo.Kind.CONT_FRAME, SOME {nesting = spidNesting spid, spwn = spwn})
-                                        else if Label.equals (label, spwn)
-                                           then (M.FrameInfo.Kind.SPORK_SPWN_FRAME, NONE)
-                                        else Error.bug "Backend.genFunc.setFrameInfo: SporkReturn"
-                                     (* The size is that of the cont *)
-                                     val size = #size (labelRegInfo cont)
+                                        (M.FrameInfo.Kind.SPORK_SPWN_FRAME, NONE)
+                                     (* MTF_TODO: FIXME *)
                                      (* The Spork DataPtr slot is also live. *)
-                                     val offsets =
-                                        if Label.equals (label, spwn)
-                                           then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
-                                           else offsets
+                                     val offsets = offsets
                                   in
                                      (true, kind, offsets, sporkInfo, size)
                                   end
-                             (* | R.Kind.PCallReturn {cont, parl, parr} => *)
-                             (*      let *)
-                             (*         val kind = *)
-                             (*            if Label.equals (label, cont) *)
-                             (*               then M.FrameInfo.Kind.PCALL_CONT_FRAME *)
-                             (*            else if Label.equals (label, parl) *)
-                             (*               then M.FrameInfo.Kind.PCALL_PARL_FRAME *)
-                             (*            else if Label.equals (label, parr) *)
-                             (*               then M.FrameInfo.Kind.PCALL_PARR_FRAME *)
-                             (*            else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn" *)
-                             (*         (* The size is that of the cont *) *)
-                             (*         val size = #size (labelRegInfo cont) *)
-                             (*         (* The PCall DataPtr slot is also live. *) *)
-                             (*         val offsets = *)
-                             (*            if Label.equals (label, parl) orelse Label.equals (label, parr) *)
-                             (*               then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))] *)
-                             (*               else offsets *)
-                             (*      in *)
-                             (*         (true, kind, offsets, size) *)
-                             (*      end *)
+                             | R.Kind.SpoinSync _ => Error.bug "Backend.genFunc.setFrameInfo: SpoinSync"
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
@@ -1268,10 +1241,11 @@ fun toMachine (rssa: Rssa.Program.t) =
                          liveNoFormals,
                          parallelMove {dsts = dsts', srcs = srcs'})
                      end
-                  fun doSporkHandler size =
+                  fun doSporkHandler () =
                      let
                         val (args, sporkDataArg) = Vector.splitLast args
                         val srcs = paramStackOffsets (args, #2, size)
+                        (* MTF_TODO: FIXME *)
                         val sporkDataOffset =
                            Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
                         val sporkDataSrc =
@@ -1292,7 +1266,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                         (M.Kind.SporkReturn {args = Vector.map (srcs, Live.StackOffset),
                                              frameInfo = valOf (frameInfo label)},
                          Vector.concat [liveNoFormals, Vector.new1 (M.Operand.StackOffset sporkDataSrc)],
-                         parallelMove {dsts = dsts', srcs = srcs'})
+                         Vector.concat [parallelMove {dsts = dsts', srcs = srcs'},
+                                        Vector.new0 ()])
                      end
                   val (kind, live, pre) =
                      case kind of
@@ -1315,10 +1290,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                      | R.Kind.SporkReturn {spid, cont, spwn} =>
-                           if Label.equals (label, cont)
-                              then doContHandler M.Kind.SporkReturn
-                              else doSporkHandler (#size (labelRegInfo cont))
+                      | R.Kind.SporkSpwn {spid} => doSporkHandler ()
+                      | R.Kind.SpoinSync {spid} => (M.Kind.Jump, live, Vector.new0 ())
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
                in

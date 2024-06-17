@@ -834,12 +834,12 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                         | _ => ())
                    val doit =
                       case transfer of
-                         S.Transfer.Spork {spid, cont, spwn} =>
+                         S.Transfer.Spork {spwn, ...} =>
                             (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
                              if Label.equals (label, spwn)
                                 then loop (dt, SOME spwn)
                              else loop (dt, l))
-                       | S.Transfer.Spoin {spid, seq, sync} =>
+                       | S.Transfer.Spoin {sync, ...} =>
                             (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
                              if Label.equals (label, sync)
                                 then loop (dt, SOME sync)
@@ -885,12 +885,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
                               handler: Label.t option ref,
-                              sporkReturn: ({spid: Spid.t,
-                                             cont: Label.t,
-                                             spwn: Label.t} * Label.t) list ref,
-                              spoinReturn: ({spid: Spid.t,
-                                             seq: Label.t,
-                                             sync: Label.t} * Label.t) list ref}),
+                              sporkLabel: (Spid.t * Label.t) list ref,
+                              spoinLabel: (Spid.t * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("label info", Label.layout))
@@ -1012,95 +1008,52 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          Trace.trace2 ("SsaToRssa.labelCont",
                        Label.layout, Handler.layout, Label.layout)
          labelCont
-      fun genSporkReturns (rets as {spid, cont, spwn}): {cont: Label.t, spwn: Label.t} =
+      fun genSporkLabels {spid, cont, spwn}: {cont: Label.t, spwn: Label.t} =
          let
-            fun lkup sporkReturn =
-               List.peek (!sporkReturn, fn ({spid = spid', cont = cont', spwn = spwn'}, _) =>
-                                           Spid.equals (spid, spid') andalso
-                                           Label.equals (cont, cont') andalso
-                                           Label.equals (spwn, spwn'))
-            val {sporkReturn = contSporkReturn, ...} = labelInfo cont
-            val {sporkReturn = spwnSporkReturn, ...} = labelInfo spwn
+            fun lkup sporkLabel =
+               List.peek (!sporkLabel, fn (spid', _) => Spid.equals (spid, spid'))
+            val {sporkLabel = contSporkLabel, ...} = labelInfo cont
+            val {sporkLabel = spwnSporkLabel, ...} = labelInfo spwn
          in
-            case (lkup contSporkReturn, lkup spwnSporkReturn) of
+            case (lkup contSporkLabel, lkup spwnSporkLabel) of
                (SOME (_, cont), SOME (_, spwn)) =>
                   {cont = cont, spwn = spwn}
              | (NONE, NONE) =>
                   let
-                     val (cont', mkc) = eta' cont
-                     val _ = List.push (contSporkReturn, (rets, cont'))
+                     val cont' = eta (cont, Kind.Jump)
+                     val _ = List.push (contSporkLabel, (spid, cont'))
                      val spwnSporkDataArg = sporkDataArg spwn
-                     val (spwn', mks) = eta'' (spwn, Vector.new1 spwnSporkDataArg)
-                     val _ = List.push (spwnSporkReturn, (rets, spwn'))
-                     val rets' = {spid = spid, cont = cont', spwn = spwn'}
-                     val _ = mkc (Kind.SporkReturn rets')
-                     val _ = mks (Kind.SporkReturn rets')
+                     val (spwn', mkspwn) = eta'' (spwn, Vector.new1 spwnSporkDataArg)
+                     val _ = mkspwn (Kind.SporkSpwn {spid = spid})
+                     val _ = List.push (spwnSporkLabel, (spid, spwn'))
                   in
                      {cont = cont', spwn = spwn'}
                   end
-             | _ => Error.bug "Ssa2ToRssa.genSporkReturns"
+             | _ => Error.bug "Ssa2ToRssa.genSporkLabels"
          end
-
-      fun genSpoinReturns (rets as {spid, seq, sync}): {seq: Label.t, sync: Label.t} =
+      fun genSpoinLabels {spid, seq, sync}: {seq: Label.t, sync: Label.t} =
          let
-            fun lkup spoinReturn =
-               List.peek (!spoinReturn,
-                          fn ({spid = spid', ...}, _) => Spid.equals (spid, spid'))
-            val {spoinReturn = seqSpoinReturn, ...} = labelInfo seq
-            val {spoinReturn = syncSpoinReturn, ...} = labelInfo sync
+            fun lkup spoinLabel =
+               List.peek (!spoinLabel, fn (spid', _) => Spid.equals (spid, spid'))
+            val {spoinLabel = seqSpoinLabel, ...} = labelInfo seq
+            val {spoinLabel = syncSpoinLabel, ...} = labelInfo sync
          in
-            case (lkup seqSpoinReturn, lkup syncSpoinReturn) of
+            case (lkup seqSpoinLabel, lkup syncSpoinLabel) of
                (SOME (_, seq), SOME (_, sync)) =>
                   {seq = seq, sync = sync}
              | (NONE, NONE) =>
                   let
-                     val (seq', mkseq) = eta' seq
-                     val _ = List.push (seqSpoinReturn, (rets, seq'))
+                     val seq' = eta (seq, Kind.Jump)
+                     val _ = List.push (seqSpoinLabel, (spid, seq'))
                      val syncSpoinDataArg = sporkDataArg sync
                      val (sync', mksync) = eta'' (sync, Vector.new1 syncSpoinDataArg)
-                     val _ = List.push (syncSpoinReturn, (rets, sync'))
-                     val rets' = {spid = spid, seq = seq', sync = sync'}
-                     val _ = mkseq Kind.Jump
-                     val _ = mksync Kind.Jump
+                     val _ = mksync (Kind.SpoinSync {spid = spid})
+                     val _ = List.push (syncSpoinLabel, (spid, sync'))
                   in
                      {seq = seq', sync = sync'}
                   end
-             | _ => Error.bug "Ssa2ToRssa.genSpoinReturns"
+             | _ => Error.bug "Ssa2ToRssa.genSpoinLabels"
          end
-
-      (* fun genPCallReturns (rets as {cont, parl, parr}): {cont: Label.t, parl: Label.t, parr: Label.t} = *)
-      (*    let *)
-      (*       fun lkup pcallReturn = *)
-      (*          List.peek (!pcallReturn, fn ({cont = cont', parl = parl', parr = parr'}, _) => *)
-      (*                     Label.equals (cont, cont') andalso *)
-      (*                     Label.equals (parl, parl') andalso *)
-      (*                     Label.equals (parr, parr')) *)
-      (*       val {pcallReturn = contPCallReturn, ...} = labelInfo cont *)
-      (*       val {pcallReturn = parlPCallReturn, ...} = labelInfo parl *)
-      (*       val {pcallReturn = parrPCallReturn, ...} = labelInfo parr *)
-      (*    in *)
-      (*       case (lkup contPCallReturn, lkup parlPCallReturn, lkup parrPCallReturn) of *)
-      (*          (SOME (_, cont), SOME (_, parl), SOME (_, parr)) => *)
-      (*             {cont = cont, parl = parl, parr = parr} *)
-      (*        | (NONE, NONE, NONE) => *)
-      (*             let *)
-      (*                val (cont', mkc) = eta' cont *)
-      (*                val _ = List.push (contPCallReturn, (rets, cont')) *)
-      (*                val parlPCallDataArg = pcallDataArg parl *)
-      (*                val (parl', mkl) = eta'' (parl, Vector.new1 parlPCallDataArg) *)
-      (*                val _ = List.push (parlPCallReturn, (rets, parl')) *)
-      (*                val parrPCallDataArg = pcallDataArg parr *)
-      (*                val (parr', mkr) = eta'' (parr, Vector.new1 parrPCallDataArg) *)
-      (*                val _ = List.push (parrPCallReturn, (rets, parr')) *)
-      (*                val rets' = {cont = cont', parl = parl', parr = parr'} *)
-      (*                val _ = mkc (Kind.PCallReturn rets') *)
-      (*                val _ = mkl (Kind.PCallReturn rets') *)
-      (*                val _ = mkr (Kind.PCallReturn rets') *)
-      (*             in *)
-      (*                rets' *)
-      (*             end *)
-      (*        | _ => Error.bug "Ssa2ToRssa.genPCallReturns" *)
-      (*    end *)
       fun vos (xs: Var.t vector) =
          Vector.keepAllMap (xs, fn x =>
                             Option.map (toRtype (varType x), fn _ =>
@@ -1161,18 +1114,6 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           | S.Transfer.Case r => translateCase r
           | S.Transfer.Goto {dst, args} =>
                ([], Transfer.Goto {dst = dst, args = vos args})
-          (* | S.Transfer.PCall {args, func, cont, parl, parr} => *)
-          (*      let *)
-          (*         val {cont, parl, parr} = *)
-          (*            genPCallReturns {cont = cont, parl = parl, parr = parr} *)
-          (*      in *)
-          (*         ([], *)
-          (*          Transfer.PCall {args = vos args, *)
-          (*                          func = func, *)
-          (*                          cont = cont, *)
-          (*                          parl = parl, *)
-          (*                          parr = parr}) *)
-          (*      end *)
           | S.Transfer.Spork {spid, cont, spwn} =>
             (* Record the spork nesting info for each rssa fun:
              * spid.t vector vector
@@ -1181,12 +1122,11 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
              * which sporks its nested under, so we can also
              * know that spork's spwn live vars are live there too
              *)
-               let val {cont, spwn} = genSporkReturns {spid = spid, cont = cont, spwn = spwn} in
+               let val {cont, spwn} = genSporkLabels {spid = spid, cont = cont, spwn = spwn} in
                  ([], Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
                end
           | S.Transfer.Spoin {spid, seq, sync} =>
-               (* ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync}) *)
-               let val {seq, sync} = genSpoinReturns {spid = spid, seq = seq, sync = sync} in
+               let val {seq, sync} = genSpoinLabels {spid = spid, seq = seq, sync = sync} in
                  ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync})
                end
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
@@ -2137,8 +2077,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                 setLabelInfo (label, {args = args,
                                       cont = ref [],
                                       handler = ref NONE,
-                                      sporkReturn = ref [],
-                                      spoinReturn = ref []}))
+                                      sporkLabel = ref [],
+                                      spoinLabel = ref []}))
             val blocks = Vector.map (blocks, translateBlock)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
             val _ = extraBlocks := []

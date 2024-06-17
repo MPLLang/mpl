@@ -453,8 +453,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                                 | Kind.CReturn _ => chk true
                                 | Kind.Handler => chk true
                                 | Kind.Jump => chk false
-                                | Kind.SporkReturn _ => chk false (*TODO: confirm true/false*)
-                                (*| Kind.PCallReturn _ => chk true*)
+                                | Kind.SporkSpwn _ => chk true
+                                | Kind.SpoinSync _ => chk false
                             end
             end
       val {get = labelBlock: Label.t -> Block.t,
@@ -796,8 +796,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                               end
                          | Handler => true
                          | Jump => true
-                         | SporkReturn _ => true
-                         (* | PCallReturn _ => true *)
+                         | SporkSpwn _ => true
+                         | SpoinSync _ => true
                      end
                   val _ = check' (kind, "kind", kindOk, Kind.layout)
                   val _ =

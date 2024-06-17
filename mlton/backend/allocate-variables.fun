@@ -572,9 +572,8 @@ fun allocate {function = f: Rssa.Function.t,
                         | SOME {handlerOffset, ...} =>
                              Bytes.+ (handlerOffset, Runtime.labelSize ()))
                  | Kind.Jump => mkSize Bytes.zero
-                 | Kind.SporkReturn _ =>
-                   mkSize (Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
-                   (* TODO *)
+                 | Kind.SporkSpwn _ => mkSize (Runtime.labelSize ())
+                 | Kind.SpoinSync _ => mkSize Bytes.zero
              val _ =
                 if Bytes.isAligned (size, {alignment = (case !Control.align of
                                                            Control.Align4 => Bytes.inWord32

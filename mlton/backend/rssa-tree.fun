@@ -527,8 +527,8 @@ structure Kind =
        | CReturn of {func: Type.t CFunction.t}
        | Handler
        | Jump
-       (* | PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t} *)
-       | SporkReturn of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+       | SporkSpwn of {spid: Spid.t} (* Like a Cont *)
+       | SpoinSync of {spid: Spid.t} (* Like a Jump *)
 
       fun isJump k =
          case k of
@@ -548,16 +548,12 @@ structure Kind =
                        record [("func", CFunction.layout (func, Type.layout))]]
              | Handler => str "Handler"
              | Jump => str "Jump"
-             | SporkReturn {spid, cont, spwn} =>
-                  seq [str "SporkReturn ",
-                       record [("spid", Spid.layout spid),
-                               ("cont", Label.layout cont),
-                               ("spwn", Label.layout spwn)]]
-             (* | PCallReturn {cont, parl, parr} => *)
-             (*      seq [str "PCallReturn ", *)
-             (*           record [("cont", Label.layout cont), *)
-             (*                   ("parl", Label.layout parl), *)
-             (*                   ("parr", Label.layout parr)]] *)
+             | SporkSpwn {spid} =>
+                  seq [str "SporkSpwn ",
+                       record [("spid", Spid.layout spid)]]
+             | SpoinSync {spid} =>
+                  seq [str "SpoinSync ",
+                       record [("spid", Spid.layout spid)]]
          end
 
       datatype frameStyle = None | OffsetsAndSize | SizeOnly
@@ -570,10 +566,10 @@ structure Kind =
                else if !Control.profile = Control.ProfileNone
                        then None
                     else SizeOnly
-          (* | PCallReturn _ => OffsetsAndSize *)
-          | SporkReturn _ => OffsetsAndSize (* TODO: confirm this is correct *)
           | Handler => SizeOnly
           | Jump => None
+          | SporkSpwn {spid} => OffsetsAndSize
+          | SpoinSync {spid} => None
    end
 
 local

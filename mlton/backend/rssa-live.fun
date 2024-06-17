@@ -157,6 +157,9 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
        *)
       val head = LiveInfo.new "main"
       val _ = Vector.foreach (args, fn (x, _) => setDefined (x, head))
+      (* MTF_TODO: Make sure that a `Spork`'s `spwn` live vars
+       * are included in all blocks in the "body" of the `Spork`.
+       *)
       val _ =
          Vector.foreach
          (blocks,
@@ -172,39 +175,6 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
                       * live in its handler.
                       *)
                      Handler.foreachLabel (handler, goto)
-                | Kind.SporkReturn {spid, cont, spwn} =>
-                     (* Make sure that a Spork cont's live vars
-                      * includes those live in spwn
-                      *)
-                     (* TODO: don't do the goto below...
-                      * Instead, map from spid to spwn label of that spork
-                      * Also map from each block label to its spork nesting.
-                      * Then include each of those sporks' spwn live vars in
-                      * the live vars of the block
-                      *)
-                     let
-                        val _ =
-                           if Label.equals (label, cont)
-                              then goto spwn
-                              else ()
-                     in
-                        ()
-                     end
-                (* | Kind.PCallReturn {cont, parl, parr} => *)
-                (*      (* Make sure that a PCall cont's live vars includes *)
-                (*       * variables live in the parll and parr. *)
-                (*       *) *)
-                (*      let *)
-                (*         (* val _ = goto cont *) *)
-                (*         (* val _ = goto parl *) *)
-                (*         (* val _ = goto parr *) *)
-                (*         val _ = *)
-                (*            if Label.equals (label, cont) *)
-                (*               then (goto parl; goto parr) *)
-                (*               else () *)
-                (*      in *)
-                (*         () *)
-                (*      end *)
                 | _ => ()
             fun define (x: Var.t): unit = setDefined (x, b)
             fun use (x: Var.t): unit =
