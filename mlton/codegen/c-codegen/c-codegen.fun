@@ -1442,7 +1442,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                    | Spoin {nesting, spid, live, seq, sync, size} =>
                         let val boolsize = Bits.toBytes (WordSize.bits WordSize.bool)
                             val opnd = Operand.stackOffset
-                                         {offset = Bytes.- (size, Bytes.* (boolsize, LargeInt.fromInt nesting)),
+                                         {offset = Bytes.- (size, Bytes.* (boolsize, IntInf.fromInt nesting)),
                                           ty = Type.bool,
                                           volatile = false}
                             fun bnz (lnz, lz) =
