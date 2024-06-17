@@ -1257,15 +1257,6 @@ fun 'a checkApp (prim: 'a t,
       fun oneTarg f =
          1 = Vector.length targs
          andalso done (f (targ 0))
-      fun threeTargs f =
-          3 = Vector.length targs
-          andalso done (f (targ 0, targ 1, targ 2))
-      fun fourTargs f =
-          4 = Vector.length targs
-          andalso done (f (targ 0, targ 1, targ 2, targ 3))
-      fun fiveTargs f =
-         5 = Vector.length targs
-         andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4))
       fun sixTargs f =
          6 = Vector.length targs
          andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4, targ 5))
@@ -1538,9 +1529,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                                        deWeak: 'a -> 'a}}) =
    let
       val one = Vector.new1
-      val three = Vector.new3
-      val four = Vector.new4
-      val five = Vector.new5
       val six = Vector.new6
       fun arg i = Vector.sub (args, i)
       datatype z = datatype t

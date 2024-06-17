@@ -15,7 +15,6 @@ signature CHAR_SIZE
 signature CONST
 signature C_FUNCTION
 signature C_TYPE
-signature EXN_DEC_ELAB
 signature HASH_TYPE
 signature ID
 signature INT_SIZE
@@ -27,7 +26,6 @@ signature PROD
 signature REAL_SIZE
 signature REAL_X
 signature RECORD
-signature SPID
 signature SYMBOL
 signature TYCON
 signature TYCON_KIND

@@ -154,8 +154,8 @@ fun checkScopes (program as
                   ()
                end
           | Goto {args, ...} => getVars args
-          | Spork {spid, cont, spwn} => () (* COLIN_NOTE: TODO: check each spork dominates its spoin, vice versa *)
-          | Spoin {spid, seq, sync} => () (* COLIN_NOTE: TODO: check each spork dominates its spoin, vice versa *)
+          | Spork _ => ()
+          | Spoin _ => ()
           (*| PCall {func, args, ...} => (getFunc func; getVars args)*)
           | Raise xs => getVars xs
           | Return xs => getVars xs

@@ -161,7 +161,7 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
-          | Spork {spid, cont, spwn} =>
+          | Spork {cont, spwn, ...} =>
                let
                   fun ensureNullary j =
                      if Vector.isEmpty (labelValues j)
@@ -172,7 +172,7 @@ fun 'a analyze
                in
                   (ensureNullary cont; ensureNullary spwn)
                end
-          | Spoin {spid, seq, sync} =>
+          | Spoin {seq, sync, ...} =>
                let
                   fun ensureNullary j =
                      if Vector.isEmpty (labelValues j)

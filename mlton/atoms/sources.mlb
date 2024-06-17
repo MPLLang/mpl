@@ -100,7 +100,6 @@ in
    signature CONST
    signature C_FUNCTION
    signature C_TYPE
-   signature EXN_DEC_ELAB
    signature HASH_TYPE
    signature ID
    signature INT_SIZE
@@ -113,7 +112,6 @@ in
    signature REAL_X
    signature RECORD
    signature SYMBOL
-   signature SPID
    signature TYCON
    signature TYCON_KIND
    signature TYPE_OPS

@@ -366,7 +366,6 @@ fun closureConvert
                      (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                      let fun targ i = Vector.sub (targs, i)
                          fun arg i = Vector.sub (args, i)
-                         val taa = targ 0
                          val tar = targ 1
                          val tba = targ 2
                          val tbr = targ 3
@@ -667,7 +666,6 @@ fun closureConvert
             Value.Lambdas l => lambdasInfo l
           | _ => Error.bug "ClosureConvert.valueLambdasInfo: non-lambda"
       val varLambdasInfo = valueLambdasInfo o value
-      val varExpLambdasInfo = varLambdasInfo o SvarExp.var
       val emptyTypes = Vector.new0 ()
       val datatypes =
          Vector.map
@@ -1098,14 +1096,7 @@ fun closureConvert
              | SprimExp.PrimApp {prim = Prim.Spork, targs, args} =>
                (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'bb * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                let
-                 fun targ i = Vector.sub (targs, i)
                  fun arg i = Vector.sub (args, i)
-                 val taa = targ 0
-                 val tar = targ 1
-                 val tba = targ 2
-                 val tbr = targ 3
-                 val td = targ 4
-                 val tc = targ 5
                  val cont = arg 0
                  val contarg = arg 1
                  val spwn = arg 2
@@ -1113,7 +1104,7 @@ fun closureConvert
                  val seq = arg 4
                  val sync = arg 5
                  val spid = Spid.newNoname ()
-                 val {contres, data, spwnarg_data, spwnres, seqres, contres_data, syncres} =
+                 val {contres, data, spwnarg_data, spwnres, contres_data, ...} =
                     valOf (! (#sporkInfo info))
 
                  val {value = contres_value, ...} = varInfo contres
