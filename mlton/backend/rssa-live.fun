@@ -76,7 +76,8 @@ structure LiveInfo =
 val traceConsider = 
    Trace.trace ("Live.consider", LiveInfo.layout, Bool.layout)
 
-fun live (function, {shouldConsider: Var.t -> bool}) =
+fun live (function, {extraEdges: Block.t -> Label.t list,
+                     shouldConsider: Var.t -> bool}) =
    let
       val shouldConsider =
          Trace.trace ("Live.shouldConsider", Var.layout, Bool.layout)
@@ -157,25 +158,15 @@ fun live (function, {shouldConsider: Var.t -> bool}) =
        *)
       val head = LiveInfo.new "main"
       val _ = Vector.foreach (args, fn (x, _) => setDefined (x, head))
-      (* MTF_TODO: Make sure that a `Spork`'s `spwn` live vars
-       * are included in all blocks in the "body" of the `Spork`.
-       *)
       val _ =
          Vector.foreach
          (blocks,
-          fn Block.T {args, kind, label, statements, transfer, ...} =>
+          fn block as Block.T {args, kind, label, statements, transfer, ...} =>
           let
             val {argInfo, bodyInfo = b, ...} = labelInfo label
             val _ = Vector.foreach (args, fn (x, _) => setDefined (x, argInfo))
             fun goto l = LiveInfo.addEdge (b, #argInfo (labelInfo l))
-            val _ =
-               case kind of
-                  Kind.Cont {handler, ...} =>
-                     (* Make sure that a cont's live vars includes variables
-                      * live in its handler.
-                      *)
-                     Handler.foreachLabel (handler, goto)
-                | _ => ()
+            val _ = List.map (extraEdges block, goto)
             fun define (x: Var.t): unit = setDefined (x, b)
             fun use (x: Var.t): unit =
                if shouldConsider x

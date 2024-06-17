@@ -102,7 +102,8 @@ fun transform p =
       fun transformFunc func =
          let
             val {args, blocks, name, raises, returns, start} = Function.dest func
-            val liveInfo = Live.live (func, {shouldConsider = fn _ => true})
+            val liveInfo = Live.live (func, {extraEdges = fn _ => [],
+                                             shouldConsider = fn _ => true})
             fun beginNoFormals label = #beginNoFormals ((#labelLive liveInfo) label)
 
             val {loops, ...} = DirectedGraph.LoopForest.dest

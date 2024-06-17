@@ -19,7 +19,8 @@ signature RSSA_LIVE =
       structure Live:
          sig
             val live:
-               Function.t * {shouldConsider: Var.t -> bool}
+               Function.t * {extraEdges: Block.t -> Label.t list,
+                             shouldConsider: Var.t -> bool}
                -> {labelLive:
                    Label.t -> {(* live at beginning of block. *)
                                begin: Var.t vector,
