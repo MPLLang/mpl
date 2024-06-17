@@ -21,6 +21,11 @@ signature ALLOCATE_VARIABLES =
       val allocate:
          {function: Rssa.Function.t,
           paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t, ty: Rssa.Type.t, volatile: bool} vector,
+          sporkNesting: {maxSporkNestLength: int,
+                         spidInfo: Rssa.Spid.t -> {index: int,
+                                                   spwn: Rssa.Label.t},
+                         sporkDataTy: Rssa.Type.t option,
+                         sporkNest: Rssa.Label.t -> Rssa.Spid.t vector},
           varInfo: Rssa.Var.t -> {
                                   (* If (isSome operand) then a stack slot or
                                    * temporary needs to be allocated for the

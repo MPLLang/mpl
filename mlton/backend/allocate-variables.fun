@@ -17,11 +17,15 @@ structure R = Rssa
 local
    open Rssa
 in
+   structure Block = Block
+   structure CFunction = CFunction
    structure Func = Func
    structure Function = Function
    structure Kind = Kind
+   structure Handler = Handler
    structure Label = Label
    structure Live = Live
+   structure Spid = Spid
    structure Type = Type
    structure Var = Var
 end
@@ -292,6 +296,11 @@ structure Info =
 
 fun allocate {function = f: Rssa.Function.t,
               paramOffsets,
+              sporkNesting = {maxSporkNestLength: int,
+                              spidInfo: Spid.t -> {index: int,
+                                                   spwn: Label.t},
+                              sporkDataTy: Type.t option,
+                              sporkNest: Label.t -> Spid.t vector},
               varInfo: Var.t -> {operand: Machine.Operand.t option ref option,
                                  ty: Type.t}} =
    let
@@ -317,6 +326,40 @@ fun allocate {function = f: Rssa.Function.t,
                              in seq [str "Function allocs for ",
                                      Func.layout (Function.name f)]
                              end)
+      fun extraEdges (Block.T {label, kind, ...}) =
+         let
+            val sporkNest = fn l =>
+               Vector.toListMap (sporkNest l, #spwn o spidInfo)
+         in
+            case kind of
+               Kind.Cont {handler, ...} =>
+                  let
+                     (* Make sure that a cont's live vars
+                      * include variables live in any spwn
+                      * of any spork in which it is nested.
+                      *)
+                     val extra = sporkNest label
+                     (* Make sure that a cont's live vars
+                      * includes variables live in its handler.
+                      *)
+                     val extra = Handler.foldLabel (handler, extra, op::)
+                  in
+                     extra
+                  end
+             | Kind.CReturn {func, ...} =>
+                  if CFunction.mayGC func
+                     then let
+                             (* Make sure that a mayGC creturn's live vars
+                              * include variables live in any spwn
+                              * of any spork in which it is nested.
+                              *)
+                             val extra = sporkNest label
+                          in
+                             extra
+                          end
+                     else []
+             | _ => []
+         end
       fun extraEdges (Block.T {label, kind, ...}) =
          let
             val sporkNest = fn l =>

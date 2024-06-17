@@ -860,8 +860,6 @@ fun toMachine (rssa: Rssa.Program.t) =
                case raises of
                   NONE => NONE
                 | SOME _ => SOME (Vector.new0 ())
-            val spidNesting = (* : (Spid.t -> int) =*)
-                SporkNesting.nesting f
             fun newVarInfo (x, ty: Type.t) =
                let
                   val operand =
@@ -938,6 +936,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                 in
                    fn () => ()
                 end)
+            val sporkNesting as {maxSporkNestLength, spidInfo, sporkDataTy, sporkNest} =
+               SporkNesting.nesting f
             (* Allocate stack slots. *)
             local
                val varInfo =
@@ -959,6 +959,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                   in
                      AllocateVariables.allocate {function = f,
                                                  paramOffsets = paramOffsets,
+                                                 sporkNesting = sporkNesting,
                                                  varInfo = varInfo}
                   end
             end
@@ -1110,7 +1111,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            val live = operandsLive contLive
                            val transfer =
                               M.Transfer.Spork
-                              {nesting = spidNesting spid,
+                              {nesting = #index (spidInfo spid),
                                spid = spid,
                                live = live,
                                cont = cont,
@@ -1126,7 +1127,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            val live = operandsLive seqLive
                            val transfer =
                               M.Transfer.Spoin
-                              {nesting = spidNesting spid,
+                              {nesting = #index (spidInfo spid),
                                spid = spid,
                                live = live,
                                seq = seq,
