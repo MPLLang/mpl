@@ -1106,6 +1106,11 @@ structure Transfer =
               pure {prim = prim, args = args, return = return})))]
          end
 
+      fun clear t =
+         case t of
+            Spork {spid, ...} => Spid.clear spid
+          | _ => ()
+
       fun varsEquals (xs, xs') = Vector.equals (xs, xs', Var.equals)
 
       fun equals (e: t, e': t): bool =
@@ -1250,10 +1255,11 @@ structure Block =
                    transfer = transfer})))))
          end
 
-      fun clear (T {label, args, statements, ...}) =
+      fun clear (T {label, args, statements, transfer, ...}) =
          (Label.clear label
           ; Vector.foreach (args, Var.clear o #1)
-          ; Vector.foreach (statements, Statement.clear))
+          ; Vector.foreach (statements, Statement.clear)
+          ; Transfer.clear transfer)
    end
 
 structure Datatype =
