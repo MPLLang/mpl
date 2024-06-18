@@ -50,6 +50,7 @@ fun checkScopes (program as
 
       val (bindTycon, getTycon, getTycon', _) = make' (Tycon.layout, Tycon.plist)
       val (bindCon, getCon, _) = make (Con.layout, Con.plist)
+      val (bindSpid, getSpid, unbindSpid) = make (Spid.layout, Spid.plist)
       val (bindVar, getVar, getVar', unbindVar) = make' (Var.layout, Var.plist)
       fun getVars xs = Vector.foreach (xs, getVar)
       val (bindFunc, getFunc, _) = make (Func.layout, Func.plist)
@@ -102,7 +103,11 @@ fun checkScopes (program as
                   Const _ => ()
                 | Inject {sum, variant, ...} => (getTycon sum; getVar variant)
                 | Object {args, con, ...} => (Option.app (con, getCon); getVars args)
-                | PrimApp {args, ...} => getVars args
+                | PrimApp {args, prim, ...} =>
+                     (getVars args
+                      ; (case prim of
+                            Prim.Spork_getData spid => getSpid spid
+                          | _ => ()))
                 | Select {base, ...} => Base.foreach (base, getVar)
                 | Sequence {args} => Vector.foreach (args, getVars)
                 | Var x => getVar x
@@ -179,9 +184,8 @@ fun checkScopes (program as
                   ()
                end
           | Goto {args, ...} => getVars args
-          (*| PCall {func, args, ...} => (getFunc func; getVars args)*)
-          | Spork _ => ()
-          | Spoin _ => ()
+          | Spork {spid, ...} => bindSpid spid
+          | Spoin {spid, ...} => getSpid spid
           | Raise xs => getVars xs
           | Return xs => getVars xs
           | Runtime {args, ...} => getVars args
@@ -203,6 +207,9 @@ fun checkScopes (program as
                            ; loopTransfer transfer)
                           handle exn => Error.reraiseSuffix (exn, concat [" in ", Label.toString label])
                   val _ = Vector.foreach (children, loop)
+                  val _ = case transfer of
+                             Spork {spid, ...} => unbindSpid spid
+                           | _ => ()
                   val _ = Vector.foreach
                           (statements, fn s =>
                            Statement.foreachDef (s, unbindVar o #1))

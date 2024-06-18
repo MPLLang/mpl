@@ -49,6 +49,7 @@ fun checkScopes (program as
 
       val (bindTycon, getTycon, getTycon', _) = make' (Tycon.layout, Tycon.plist)
       val (bindCon, getCon, _) = make (Con.layout, Con.plist)
+      val (bindSpid, getSpid, unbindSpid) = make (Spid.layout, Spid.plist)
       val (bindVar, getVar, getVar', unbindVar) = make' (Var.layout, Var.plist)
       fun getVars xs = Vector.foreach (xs, getVar)
       val (bindLabel, getLabel, unbindLabel) = make (Label.layout, Label.plist)
@@ -86,7 +87,12 @@ fun checkScopes (program as
                case exp of
                   ConApp {con, args, ...} => (getCon con ; getVars args)
                 | Const _ => ()
-                | PrimApp {args, targs, ...} => (loopTypes targs; getVars args)
+                | PrimApp {args, targs, prim, ...} =>
+                     (loopTypes targs
+                      ; getVars args
+                      ; (case prim of
+                            Prim.Spork_getData spid => getSpid spid
+                          | _ => ()))
                 | Profile _ => ()
                 | Select {tuple, ...} => getVar tuple
                 | Tuple xs => getVars xs
@@ -154,8 +160,8 @@ fun checkScopes (program as
                   ()
                end
           | Goto {args, ...} => getVars args
-          | Spork _ => ()
-          | Spoin _ => ()
+          | Spork {spid, ...} => bindSpid spid
+          | Spoin {spid, ...} => getSpid spid
           (*| PCall {func, args, ...} => (getFunc func; getVars args)*)
           | Raise xs => getVars xs
           | Return xs => getVars xs
@@ -178,6 +184,9 @@ fun checkScopes (program as
                            ; loopTransfer transfer)
                           handle exn => Error.reraiseSuffix (exn, concat [" in ", Label.toString label])
                   val _ = Vector.foreach (children, loop)
+                  val _ = (case transfer of
+                              Spork {spid, ...} => unbindSpid spid
+                            | _ => ())
                   val _ = Vector.foreach
                           (statements, fn s =>
                            Option.app (Statement.var s, unbindVar))
