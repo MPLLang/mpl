@@ -341,6 +341,7 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
                 | _ => set (x, Defined)
          in (bind, reference, unbind)
          end
+      val (bindSpid, getSpid, unbindSpid) = make (Spid.layout, Spid.plist)
       val (bindVar, getVar, unbindVar) = make (Var.layout, Var.plist)
       val bindVar =
          Trace.trace2
@@ -362,9 +363,10 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
       fun loopFunc (f: Function.t, isMain: bool): unit =
          let
             val bindVar = fn x => bindVar (x, isMain)
-            val {args, blocks, ...} = Function.dest f
+            val {args, blocks, start, ...} = Function.dest f
             val _ = Vector.foreach (args, bindVar o #1)
             val _ = Vector.foreach (blocks, bindLabel o Block.label)
+            val _ = getLabel start
             val _ =
                Vector.foreach
                (blocks, fn Block.T {transfer, ...} =>
@@ -382,12 +384,19 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
                       Vector.foreach
                       (statements, fn s => loopStmt (s, isMain))
                    val _ = Transfer.foreachUse (transfer, getVar)
+                   val _ = (case transfer of
+                               Transfer.Spork {spid, ...} => bindSpid (spid, false)
+                             | Transfer.Spoin {spid, ...} => getSpid spid
+                             | _ => ())
                 in
                    fn () =>
                    if isMain
                       then ()
                    else
                       let
+                         val _ = (case transfer of
+                                     Transfer.Spork {spid, ...} => unbindSpid spid
+                                   | _ => ())
                          val _ =
                             Vector.foreach
                             (statements, fn s =>
@@ -504,7 +513,6 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
       val _ = List.foreach (functions, checkFunction)
    in ()
    end
-  
 
 val checkSpork = Control.trace (Control.Detail, "checkSpork") checkSpork
 
