@@ -364,6 +364,11 @@ structure Transfer =
        | Return of Operand.t vector
        | Switch of Switch.t
 
+      fun clear t=
+         case t of
+            Spork {spid, ...} => Spid.clear spid
+          | _ => ()
+
       fun layout t =
          let
             open Layout
@@ -600,10 +605,11 @@ structure Block =
          val label = make #label
       end
 
-      fun clear (T {args, label, statements, ...}) =
+      fun clear (T {args, label, statements, transfer, ...}) =
          (Vector.foreach (args, Var.clear o #1)
           ; Label.clear label
-          ; Vector.foreach (statements, Statement.clear))
+          ; Vector.foreach (statements, Statement.clear)
+          ; Transfer.clear transfer)
 
       fun layout (T {args, kind, label, statements, transfer, ...}) =
          let
