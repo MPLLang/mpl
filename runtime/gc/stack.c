@@ -255,12 +255,12 @@ void copyStackFrameToNewStack (
 
 bool frameIsPromotable(pointer cursor, GC_frameInfo fi) {
     if (fi->sporkInfo) {
-        for (GC_nestingDepth nest = 0; nest < fi->sporkInfo->nesting; ++nest) {
-            objptr p = *((objptr*) (cursor + OBJPTR_SIZE * nest));
-            if (isObjptr(p)) {
-                return true;
-            }
+      for (uintptr_t i = 0 ; i < fi->sporkInfo[0] ; i++) {
+        objptr p = *((objptr*) (cursor - fi->size + OBJPTR_SIZE * i));
+        if (!isObjptr(p)) {
+          return true;
         }
+      }
     }
     return false;
 }

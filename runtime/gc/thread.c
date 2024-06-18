@@ -422,39 +422,24 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
 #if ASSERT
-  //assert(fi->kind == PCALL_CONT_FRAME);
   assert(fi->sporkInfo != NULL);
 #endif
-  GC_nestingDepth nesting = fi->sporkInfo->nesting;
-  GC_returnAddress spwn_ret = fi->sporkInfo->spwn;
+  GC_returnAddress spwn_ret = 0;
+  uintptr_t spwn_idx;
+  for (spwn_idx = 0 ; spwn_idx < fi->sporkInfo[0] ; spwn_idx++) {
+    objptr p = *((objptr*) (pframe - fi->size + OBJPTR_SIZE * spwn_idx));
+    if (!isObjptr(p)) {
+      spwn_ret = fi->sporkInfo[spwn_idx + 1];
+      break;
+    }
+  }
 
   // =========================================================================
   // First, write dp (data pointer) onto the promotable frame
   // =========================================================================
 
   objptr dop = pointerToObjptr(dp, NULL);
-  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE * (nesting + 1))) = dop;
-
-  /* SAM_NOTE: VERY SUBTLE: the next line (which updates the pframe's return
-   * address) absolutely must happen before we call newThread. This is because
-   * newThread might trigger a GC, and we need to forward the dop. By updating
-   * pframe's return address, we inform the GC that the frame is a
-   * PCALL_PARL_FRAME, and the GC then knows that the dataslot pointer is live
-   * and will forward it appropriately. When we later copy this frame, all
-   * values in the frame have already been forwarded, and we get the new
-   * versions of those values in the new frame for free.
-   *
-   * It's possible we could work around this another way. For example, we
-   * could create additional roots in the gcstate, e.g. s->roots[0] = dop,
-   * and then handle these explicitly during GC, allowing us to read off the
-   * forwarded value s->roots[0] after GC completes.
-   * 
-   * I prefer this little hack over the alternative, because it is much easier,
-   * just subtle. Hence the hopefully informative comment :)
-   */
-
-  // left side: transition to PCALL_PARL_FRAME
-  //*(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
+  *((objptr*)(pframe - fi->size + OBJPTR_SIZE * spwn_idx)) = dop;
 
   // =========================================================================
   // Next, copy the promotable frame
@@ -480,8 +465,12 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
-  // right side: transition to SPORK_SPWN_FRAME
+  // Transition new frame to SPORK_SPWN_FRAME
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = spwn_ret;
+  // Invalidate other spork data slots of new frame.
+  for (uintptr_t i = 0 ; i < spwn_idx ; i++) {
+    *((objptr*) (newFrame - fi->size + OBJPTR_SIZE * i)) = BOGUS_OBJPTR;
+  }
 
   /* SAM_NOTE: would like to assert these, but jop may have already been
    * forwarded above (calling newThread, above, might trigger a GC)
