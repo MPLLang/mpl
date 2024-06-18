@@ -295,7 +295,7 @@ structure Info =
 (* ------------------------------------------------- *)
 
 fun allocate {function = f: Rssa.Function.t,
-              paramOffsets,
+              paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t, ty: Rssa.Type.t, volatile: bool} vector,
               sporkNesting = {maxSporkNestLength: int,
                               spidInfo: Spid.t -> {index: int,
                                                    spwn: Label.t},
@@ -483,41 +483,30 @@ fun allocate {function = f: Rssa.Function.t,
           R.Label.layout, Info.layout, Unit.layout)
          setLabelInfo
 
-      (* Allocate stacks slots and/or temporaries for the formals.
-       * Don't use `allocateVar`, because a stack formal
-       * should use the stack slot of the incoming actual.
+      (* Allocate stack slots (at bottom of frame) for sporkData;
+       * require `maxSporkNestLength` slots for the function.
        *)
-      val () =
-         let
-            val temps = Allocation.Temporaries.empty ()
-         in
-            Vector.foreach2
-            (args, paramOffsets args, fn ((x, ty), so) =>
-             let
-                val oper =
-                   case ! (place x) of
-                      Stack => Operand.StackOffset (StackOffset.T so)
-                    | Temporary => Operand.Temporary (Allocation.Temporaries.get (temps, ty))
-                val () = removePlace x
-                val () = valOf (#operand (varInfo x)) := SOME oper
-             in
-                ()
-             end)
-         end
-      (* Also, create a stack allocation that includes all incoming actuals;
-       * if link, handler label, and handler args stack slots are required,
-       * then they will be allocated against this stack.
+      val (sporkDataStack, sporkDataStackSlots) =
+         Int.fold (0, maxSporkNestLength, (Allocation.Stack.new [], []),
+                   fn (_, (stack, slots)) =>
+                   let
+                      val sporkDataTy = valOf sporkDataTy
+                      val (stack, {offset}) = Allocation.Stack.get (stack, sporkDataTy)
+                   in
+                      (stack,
+                       StackOffset.T {offset = offset,
+                                      ty = sporkDataTy,
+                                      volatile = false} :: slots)
+                   end)
+      (* Next, allocate stack slots for link, handler label, and handler args,
+       * if required.
        *)
-      val stack =
-         Allocation.Stack.new (Vector.toListMap (paramOffsets args, StackOffset.T))
-      val handlersInfo =
+      val (handlersInfo, handlersStackSlots) =
          case !handlersArgs of
-            [] => NONE
+            [] => (NONE, [])
           | handlersArgs =>
                let
-                  (* Choose fixed and permanently allocated stack slots
-                   * that do not conflict with incoming actuals.
-                   *)
+                  val stack = sporkDataStack
                   val (stack, {offset = linkOffset, ...}) =
                      Allocation.Stack.get (stack, Type.exnStack ())
                   val handlerTy = Type.label (Label.newNoname ())
@@ -547,11 +536,33 @@ fun allocate {function = f: Rssa.Function.t,
                           ("linkOffset", Bytes.layout linkOffset)]
                       end)
                in
-                  SOME {handlerArgsOffset = handlerArgsOffset,
-                        handlerArgsSize = handlerArgsSize,
-                        handlerOffset = handlerOffset,
-                        linkOffset = linkOffset}
+                  (SOME {handlerArgsOffset = handlerArgsOffset,
+                         handlerArgsSize = handlerArgsSize,
+                         handlerOffset = handlerOffset,
+                         linkOffset = linkOffset},
+                   StackOffset.T {offset = linkOffset,
+                                  ty = Type.exnStack (),
+                                  volatile = false}
+                   :: StackOffset.T {offset = handlerOffset,
+                                     ty = Type.label (Label.newNoname ()),
+                                     volatile = false}
+                   :: (if Bytes.> (handlerArgsSize, Bytes.zero)
+                          then [StackOffset.T {offset = handlerArgsOffset,
+                                               ty = Type.bits (Bytes.toBits handlerArgsSize),
+                                               volatile = false}]
+                          else []))
                end
+      val fixedStackSlots = sporkDataStackSlots @ handlersStackSlots
+
+      (* Allocate stacks slots and/or temporaries for the formals.
+       *)
+      val () =
+         let
+            val a = Allocation.new (fixedStackSlots, [])
+         in
+            Vector.foreach
+            (args, fn (x, _) => allocateVar (x, a))
+         end
 
       (* Do a DFS of the control-flow graph. *)
       (* TODO: keep track of max frame size with a Bytes.t ref *)
@@ -563,6 +574,18 @@ fun allocate {function = f: Rssa.Function.t,
                   handler = handlerLive,
                   link = linkLive} = labelLive label
              val () = remLabelLive label
+             fun addSDS (ops: Operand.t vector): Operand.t vector =
+                let
+                   val extra =
+                      case kind of
+                         Kind.SporkSpwn {spid} => [List.nth (sporkDataStackSlots, #index (spidInfo spid))]
+                       | Kind.SpoinSync _ => List.firstN (sporkDataStackSlots, Vector.length (sporkNest label) + 1)
+                       | _ => List.firstN (sporkDataStackSlots, Vector.length (sporkNest label))
+                   val extra =
+                      Vector.fromListMap (extra, Operand.StackOffset)
+                in
+                   Vector.concat [extra, ops]
+                end
              fun addHS (ops: Operand.t vector): Operand.t vector =
                 case handlersInfo of
                    NONE => ops
@@ -591,27 +614,11 @@ fun allocate {function = f: Rssa.Function.t,
              val liveNoFormals = getOperands beginNoFormals
              val (stackInit, temporariesInit) =
                 Vector.fold
-                (liveNoFormals, ([],[]), fn (oper, (stack, temporaries)) =>
+                (liveNoFormals, (fixedStackSlots,[]), fn (oper, (stack, temporaries)) =>
                  case oper of
                     Operand.StackOffset s => (s::stack, temporaries)
                   | Operand.Temporary t => (stack, t::temporaries)
                   | _ => (stack, temporaries))
-             val stackInit =
-                case handlersInfo of
-                   NONE => stackInit
-                 | SOME {handlerArgsOffset, handlerArgsSize, handlerOffset, linkOffset, ...} =>
-                      StackOffset.T {offset = linkOffset,
-                                     ty = Type.exnStack (),
-                                     volatile = false}
-                      :: StackOffset.T {offset = handlerOffset,
-                                        ty = Type.label (Label.newNoname ()),
-                                        volatile = false}
-                      :: (if (Bytes.> (handlerArgsSize, Bytes.zero))
-                             then StackOffset.T {offset = handlerArgsOffset,
-                                                 ty = Type.bits (Bytes.toBits handlerArgsSize),
-                                                 volatile = false}
-                                  :: stackInit
-                             else stackInit)
              val a = Allocation.new (stackInit, temporariesInit)
              fun mkSize extra =
                 Bytes.align
@@ -654,8 +661,8 @@ fun allocate {function = f: Rssa.Function.t,
                 Vector.foreach (statements, fn statement =>
                                 R.Statement.foreachDef (statement, one))
              val _ =
-                setLabelInfo (label, {live = addHS live,
-                                      liveNoFormals = addHS liveNoFormals,
+                setLabelInfo (label, {live = addSDS (addHS live),
+                                      liveNoFormals = addSDS (addHS liveNoFormals),
                                       size = size})
           in
              fn () => ()
