@@ -315,7 +315,7 @@ structure Exp =
              | Var x => v x
          end
 
-      fun replaceVar (e, fx) =
+      fun replaceVarSpid (e, fx, fs) =
          let
             fun fxs xs = Vector.map (xs, fx)
          in
@@ -323,13 +323,17 @@ structure Exp =
                ConApp {con, args} => ConApp {con = con, args = fxs args}
              | Const _ => e
              | PrimApp {prim, targs, args} =>
-                  PrimApp {prim = prim, targs = targs, args = fxs args}
+                  PrimApp {prim = Prim.replaceSpid (prim, fs),
+                           targs = targs,
+                           args = fxs args}
              | Profile _ => e
              | Select {tuple, offset} =>
                   Select {tuple = fx tuple, offset = offset}
              | Tuple xs => Tuple (fxs xs)
              | Var x => Var (fx x)
          end
+
+      fun replaceVar (e, fx) = replaceVarSpid (e, fx, fn s => s)
 
       fun layout' (e, layoutVar) =
          let
@@ -578,7 +582,7 @@ structure Transfer =
           | Return xs => 1 + Vector.length xs
           | Runtime {args, ...} => 1 + Vector.length args
 
-      fun foreachFuncLabelVar (t, func: Func.t -> unit, label: Label.t -> unit, var) =
+      fun foreachFuncLabelVarSpid (t, func: Func.t -> unit, label: Label.t -> unit, var, spid) =
          let
             fun vars xs = Vector.foreach (xs, var)
          in
@@ -593,12 +597,14 @@ structure Transfer =
                    ; Cases.foreach (cases, label)
                    ; Option.app (default, label))
              | Goto {dst, args, ...} => (vars args; label dst)
-             | Spork {spid, cont, spwn} =>
-                  (label cont;
-                   label spwn)
-             | Spoin {spid, seq, sync} =>
-                  (label seq;
-                   label sync)
+             | Spork {spid = s, cont, spwn} =>
+                  (spid s
+                   ; label cont
+                   ; label spwn)
+             | Spoin {spid = s, seq, sync} =>
+                  (spid s
+                   ; label seq
+                   ; label sync)
              | Raise xs => vars xs
              | Return xs => vars xs
              | Runtime {args, return, ...} =>
@@ -607,15 +613,18 @@ structure Transfer =
          end
 
       fun foreachFunc (t, func) =
-         foreachFuncLabelVar (t, func, fn _ => (), fn _ => ())
+         foreachFuncLabelVarSpid (t, func, fn _ => (), fn _ => (), fn _ => ())
 
       fun foreachLabelVar (t, label, var) =
-         foreachFuncLabelVar (t, fn _ => (), label, var)
+         foreachFuncLabelVarSpid (t, fn _ => (), label, var, fn _ => ())
 
       fun foreachLabel (t, j) = foreachLabelVar (t, j, fn _ => ())
       fun foreachVar (t, v) = foreachLabelVar (t, fn _ => (), v)
 
-      fun replaceLabelVar (t, fl, fx) =
+      fun foreachSpid (t, s) =
+         foreachFuncLabelVarSpid (t, fn _ => (), fn _ => (), fn _ => (), s)
+
+      fun replaceLabelVarSpid (t, fl, fx, fs) =
          let
             fun fxs xs = Vector.map (xs, fx)
          in
@@ -633,9 +642,9 @@ structure Transfer =
                   Goto {dst = fl dst,
                         args = fxs args}
              | Spork {spid, cont, spwn} =>
-                  Spork {spid = spid, cont = fl cont, spwn = fl spwn}
+                  Spork {spid = fs spid, cont = fl cont, spwn = fl spwn}
              | Spoin {spid, seq, sync} =>
-                  Spoin {spid = spid, seq = fl seq, sync = fl sync}
+                  Spoin {spid = fs spid, seq = fl seq, sync = fl sync}
              | Raise xs => Raise (fxs xs)
              | Return xs => Return (fxs xs)
              | Runtime {prim, args, return} =>
@@ -643,6 +652,8 @@ structure Transfer =
                            args = fxs args,
                            return = fl return}
          end
+
+      fun replaceLabelVar (t, fl, fx) = replaceLabelVarSpid (t, fl, fx, fn s => s)
 
       fun replaceLabel (t, f) = replaceLabelVar (t, f, fn x => x)
       fun replaceVar (t, f) = replaceLabelVar (t, fn l => l, f)
@@ -1509,20 +1520,24 @@ structure Function =
                   make (Var.new, Var.plist)
                val (bindLabel, lookupLabel, destroyLabel) =
                   make (Label.new, Label.plist)
+               val (bindSpid, lookupSpid, destroySpid) =
+                  make (Spid.new, Spid.plist)
             end
             val {args, blocks, mayInline, name, raises, returns, start, ...} =
                dest f
             val args = Vector.map (args, fn (x, ty) => (bindVar x, ty))
+            val bindSpid = ignore o bindSpid
             val bindLabel = ignore o bindLabel
             val bindVar = ignore o bindVar
             val _ =
                Vector.foreach
-               (blocks, fn Block.T {label, args, statements, ...} =>
+               (blocks, fn Block.T {label, args, statements, transfer, ...} =>
                 (bindLabel label
                  ; Vector.foreach (args, fn (x, _) => bindVar x)
                  ; Vector.foreach (statements,
                                    fn Statement.T {var, ...} =>
-                                   Option.app (var, bindVar))))
+                                   Option.app (var, bindVar))
+                 ; Transfer.foreachSpid (transfer, bindSpid)))
             val blocks =
                Vector.map
                (blocks, fn Block.T {label, args, statements, transfer} =>
@@ -1535,13 +1550,14 @@ structure Function =
                                        Statement.T
                                        {var = Option.map (var, lookupVar),
                                         ty = ty,
-                                        exp = Exp.replaceVar
-                                              (exp, lookupVar)}),
-                         transfer = Transfer.replaceLabelVar
-                                    (transfer, lookupLabel, lookupVar)})
+                                        exp = Exp.replaceVarSpid
+                                              (exp, lookupVar, lookupSpid)}),
+                         transfer = Transfer.replaceLabelVarSpid
+                                    (transfer, lookupLabel, lookupVar, lookupSpid)})
             val start = lookupLabel start
             val _ = destroyVar ()
             val _ = destroyLabel ()
+            val _ = destroySpid ()
          in
             new {args = args,
                  blocks = blocks,

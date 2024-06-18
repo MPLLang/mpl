@@ -729,6 +729,11 @@ val map: 'a t * ('a -> 'b) -> 'b t =
 
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
 
+fun replaceSpid (p, f) =
+   case p of
+      Spork_getData spid => Spork_getData (f spid)
+    | _ => p
+
 fun cpointerGet ctype =
    let datatype z = datatype CType.t
    in

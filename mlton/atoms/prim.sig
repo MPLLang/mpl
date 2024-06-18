@@ -264,5 +264,6 @@ signature PRIM =
       val maySideEffect: 'a t -> bool
       val parse: unit -> 'a t Parse.t
       val parseFull: 'a Parse.t -> 'a t Parse.t
+      val replaceSpid: 'a t * (Spid.t -> Spid.t) -> 'a t
       val toString: 'a t -> string
    end
