@@ -185,24 +185,9 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
-             | Spork of {nesting: int,
-                         spid: Spid.t,
-                         live: Live.t vector,
+             | Spork of {spid: Spid.t,
                          cont: Label.t,
-                         spwn: Label.t,
-                         size: Bytes.t}
-             | Spoin of {nesting: int,
-                         spid: Spid.t,
-                         live: Live.t vector,
-                         seq: Label.t,
-                         sync: Label.t,
-                         size: Bytes.t}
-             (*| PCall of {label: Label.t, (* must be kind Func *)
-                         live: Live.t vector,
-                         cont: Label.t, (* must be kind PCallReturn *)
-                         parl: Label.t, (* must be kind PCallReturn *)
-                         parr: Label.t, (* must be kind PCallReturn *)
-                         size: Bytes.t}*)
+                         spwn: Label.t}
              | Raise of {raisesTo: Label.t list}
              | Return of {returnsTo: Label.t list}
              | Switch of Switch.t
@@ -231,9 +216,8 @@ signature MACHINE =
             val hash: t -> word
             val index: t -> int
             val layout: t -> Layout.t
-            val new: {index: int, nesting: int, spwn: Label.t} -> t
-            val spwn: t -> Label.t
-            val nesting: t -> int
+            val new: {index: int, spwns: Label.t vector} -> t
+            val spwns: t -> Label.t vector
          end
 
       structure FrameInfo:
@@ -246,9 +230,6 @@ signature MACHINE =
                    | FUNC_FRAME
                    | HANDLER_FRAME
                    | SPORK_SPWN_FRAME
-                   (* | PCALL_CONT_FRAME *)
-                   (* | PCALL_PARL_FRAME *)
-                   (* | PCALL_PARR_FRAME *)
                   val equals: t * t -> bool
                   val hash: t -> word
                   val layout: t -> Layout.t
@@ -287,10 +268,7 @@ signature MACHINE =
              | Handler of {args: Live.t vector,
                            frameInfo: FrameInfo.t}
              | Jump
-             | SporkReturn of {args: Live.t vector,
-                               frameInfo: FrameInfo.t}
-             (* | PCallReturn of {args: Live.t vector, *)
-             (*                   frameInfo: FrameInfo.t} *)
+             | SporkSpwn of {frameInfo: FrameInfo.t}
 
             val isEntry: t -> bool
             val frameInfoOpt: t -> FrameInfo.t option

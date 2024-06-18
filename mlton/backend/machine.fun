@@ -613,24 +613,9 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
-       | Spork of {nesting: int,
-                   spid: Spid.t,
-                   live: Live.t vector,
+       | Spork of {spid: Spid.t,
                    cont: Label.t,
-                   spwn: Label.t,
-                   size: Bytes.t}
-       | Spoin of {nesting: int,
-                   spid: Spid.t,
-                   live: Live.t vector,
-                   seq: Label.t,
-                   sync: Label.t,
-                   size: Bytes.t}
-       (* | PCall of {label: Label.t, *)
-       (*             live: Live.t vector, *)
-       (*             cont: Label.t, *)
-       (*             parl: Label.t, *)
-       (*             parr: Label.t, *)
-       (*             size: Bytes.t} *)
+                   spwn: Label.t}
        | Goto of Label.t
        | Raise of {raisesTo: Label.t list}
        | Return of {returnsTo: Label.t list}
@@ -663,30 +648,11 @@ structure Transfer =
                                          ("size", Bytes.layout size)])
                                 return)]]
              | Goto l => seq [str "Goto ", Label.layout l]
-             | Spork {nesting, spid, live, cont, spwn, size} =>
+             | Spork {spid, cont, spwn} =>
                   seq [str "Spork ",
-                       record [("nesting", Int.layout nesting),
-                               ("spid", Spid.layout spid),
-                               ("live", Vector.layout Live.layout live),
+                       record [("spid", Spid.layout spid),
                                ("cont", Label.layout cont),
-                               ("spwn", Label.layout spwn),
-                               ("size", Bytes.layout size)]]
-             | Spoin {nesting, spid, live, seq = bseq, sync, size} =>
-                  seq [str "Spoin ",
-                       record [("nesting", Int.layout nesting),
-                               ("spid", Spid.layout spid),
-                               ("live", Vector.layout Live.layout live),
-                               ("seq", Label.layout bseq),
-                               ("sync", Label.layout sync),
-                               ("size", Bytes.layout size)]]
-             (* | PCall {label, live, cont, parl, parr, size} => *)
-             (*      seq [str "PCall ", *)
-             (*           record [("label", Label.layout label), *)
-             (*                   ("live", Vector.layout Live.layout live), *)
-             (*                   ("cont", Label.layout cont), *)
-             (*                   ("parl", Label.layout parl), *)
-             (*                   ("parr", Label.layout parr), *)
-             (*                   ("size", Bytes.layout size)]] *)
+                               ("spwn", Label.layout spwn)]]
              | Raise {raisesTo} =>
                   seq [str "Raise ",
                        record [("raisesTo", List.layout Label.layout raisesTo)]]
@@ -740,37 +706,32 @@ structure FrameOffsets =
 structure SporkInfo =
    struct
       datatype t = T of {index: int,
-                         nesting: int,
-                         spwn: Label.t}
+                         spwns: Label.t vector}
 
       local
          fun make f (T r) = f r
       in
          val index = make #index
-         val nesting = make #nesting
-         val spwn = make #spwn
+         val spwns = make #spwns
       end
 
-      fun new {index, nesting, spwn} =
-         T {index = index, nesting = nesting, spwn = spwn}
+      fun new {index, spwns} =
+         T {index = index, spwns = spwns}
 
       fun equals (s1, s2) =
          Int.equals (index s1, index s2)
-         andalso Int.equals (nesting s1, nesting s2)
-         andalso Label.equals (spwn s1, spwn s2)
+         andalso Vector.equals (spwns s1, spwns s2, Label.equals)
 
-      fun layout (T {index, nesting, spwn}) =
+      fun layout (T {index, spwns}) =
          let
             open Layout
          in
             record [("index", Int.layout index),
-                    ("nesting", Int.layout nesting),
-                    ("spwn", Label.layout spwn)]
+                    ("spwns", Vector.layout Label.layout spwns)]
          end
 
-      fun hash (T {index, nesting, spwn}) =
-         Hash.combine (Word.fromInt index,
-         Hash.combine (Word.fromInt nesting, Label.hash spwn))
+      fun hash (T {index, spwns}) =
+         Hash.combine (Word.fromInt index, Hash.vectorMap (spwns, Label.hash))
    end
 
 structure FrameInfo =
@@ -783,9 +744,6 @@ structure FrameInfo =
              | FUNC_FRAME
              | HANDLER_FRAME
              | SPORK_SPWN_FRAME
-             (* | PCALL_CONT_FRAME *)
-             (* | PCALL_PARL_FRAME *)
-             (* | PCALL_PARR_FRAME *)
             fun equals (k1, k2) =
                case (k1, k2) of
                   (CONT_FRAME, CONT_FRAME) => true
@@ -793,9 +751,6 @@ structure FrameInfo =
                 | (FUNC_FRAME, FUNC_FRAME) => true
                 | (HANDLER_FRAME, HANDLER_FRAME) => true
                 | (SPORK_SPWN_FRAME, SPORK_SPWN_FRAME) => true
-                (* | (PCALL_CONT_FRAME, PCALL_CONT_FRAME) => true *)
-                (* | (PCALL_PARL_FRAME, PCALL_PARL_FRAME) => true *)
-                (* | (PCALL_PARR_FRAME, PCALL_PARR_FRAME) => true *)
                 | _ => false
             local
                val newHash = Random.word
@@ -804,9 +759,6 @@ structure FrameInfo =
                val func = newHash ()
                val handler = newHash ()
                val spork_spwn = newHash ()
-               (* val pcall_cont = newHash () *)
-               (* val pcall_parl = newHash () *)
-               (* val pcall_parr = newHash () *)
             in
                fun hash k =
                   case k of
@@ -815,9 +767,6 @@ structure FrameInfo =
                    | FUNC_FRAME => func
                    | HANDLER_FRAME => handler
                    | SPORK_SPWN_FRAME => spork_spwn
-                   (* | PCALL_CONT_FRAME => pcall_cont *)
-                   (* | PCALL_PARL_FRAME => pcall_parl *)
-                   (* | PCALL_PARR_FRAME => pcall_parr *)
             end
             fun toString k =
                case k of
@@ -826,18 +775,15 @@ structure FrameInfo =
                 | FUNC_FRAME => "FUNC_FRAME"
                 | HANDLER_FRAME => "HANDLER_FRAME"
                 | SPORK_SPWN_FRAME => "SPORK_SPWN_FRAME"
-                (* | PCALL_CONT_FRAME => "PCALL_CONT_FRAME" *)
-                (* | PCALL_PARL_FRAME => "PCALL_PARL_FRAME" *)
-                (* | PCALL_PARR_FRAME => "PCALL_PARR_FRAME" *)
             val layout = Layout.str o toString
          end
 
       datatype t = T of {frameOffsets: FrameOffsets.t,
                          index: int ref,
                          kind: Kind.t,
-                         sporkInfo: SporkInfo.t option,
                          size: Bytes.t,
-                         sourceSeqIndex: int option}
+                         sourceSeqIndex: int option,
+                         sporkInfo: SporkInfo.t option}
 
       local
          fun make f (T r) = f r
@@ -845,21 +791,21 @@ structure FrameInfo =
          val frameOffsets = make #frameOffsets
          val indexRef = make #index
          val kind = make #kind
-         val sporkInfo = make #sporkInfo
          val size = make #size
          val sourceSeqIndex = make #sourceSeqIndex
+         val sporkInfo = make #sporkInfo
       end
       val index = ! o indexRef
       fun setIndex (fi, i) = indexRef fi := i
       val offsets = FrameOffsets.offsets o frameOffsets
 
-      fun new {frameOffsets, index, kind, sporkInfo, size, sourceSeqIndex} =
+      fun new {frameOffsets, index, kind, size, sourceSeqIndex, sporkInfo} =
          T {frameOffsets = frameOffsets,
             index = ref index,
             kind = kind,
-            sporkInfo = sporkInfo,
             size = size,
-            sourceSeqIndex = sourceSeqIndex}
+            sourceSeqIndex = sourceSeqIndex,
+            sporkInfo = sporkInfo}
 
       fun equals (fi1, fi2) =
          FrameOffsets.equals (frameOffsets fi1, frameOffsets fi2)
@@ -870,18 +816,18 @@ structure FrameInfo =
                                 SporkInfo.equals)
          andalso Bytes.equals (size fi1, size fi2)
          andalso Option.equals (sourceSeqIndex fi1, sourceSeqIndex fi2, Int.equals)
+         andalso Option.equals (sporkInfo fi1, sporkInfo fi2, SporkInfo.equals)
 
-      fun layout (T {frameOffsets, index, kind, sporkInfo, size, sourceSeqIndex}) =
+      fun layout (T {frameOffsets, index, kind, size, sourceSeqIndex, sporkInfo}) =
          let
             open Layout
          in
             record [("frameOffsets", FrameOffsets.layout frameOffsets),
                     ("index", Ref.layout Int.layout index),
                     ("kind", Kind.layout kind),
-                    ("sporkInfo",
-                     Option.layout SporkInfo.layout sporkInfo),
                     ("size", Bytes.layout size),
-                    ("sourceSeqIndex", Option.layout Int.layout sourceSeqIndex)]
+                    ("sourceSeqIndex", Option.layout Int.layout sourceSeqIndex),
+                    ("sporkInfo", Option.layout SporkInfo.layout sporkInfo)]
          end
    end
 
@@ -897,10 +843,7 @@ structure Kind =
        | Handler of {args: Live.t vector,
                      frameInfo: FrameInfo.t}
        | Jump
-       | SporkReturn of {args: Live.t vector,
-                         frameInfo: FrameInfo.t}
-       (* | PCallReturn of {args: Live.t vector, *)
-       (*                   frameInfo: FrameInfo.t} *)
+       | SporkSpwn of {frameInfo: FrameInfo.t}
 
       fun layout k =
          let
@@ -926,14 +869,9 @@ structure Kind =
                        record [("args", Vector.layout Live.layout args),
                                ("frameInfo", FrameInfo.layout frameInfo)]]
              | Jump => str "Jump"
-             | SporkReturn {args, frameInfo} =>
-                  seq [str "SporkReturn ",
-                       record [("args", Vector.layout Live.layout args),
-                               ("frameInfo", FrameInfo.layout frameInfo)]]
-             (* | PCallReturn {args, frameInfo} => *)
-             (*      seq [str "PCallReturn ", *)
-             (*           record [("args", Vector.layout Live.layout args), *)
-             (*                   ("frameInfo", FrameInfo.layout frameInfo)]] *)
+             | SporkSpwn {frameInfo} =>
+                  seq [str "SporkSpwn ",
+                       record [("frameInfo", FrameInfo.layout frameInfo)]]
          end
 
       fun isEntry (k: t): bool =
@@ -942,8 +880,7 @@ structure Kind =
           | CReturn {func, ...} => CFunction.maySwitchThreadsTo func
           | Func _ => true
           | Handler _ => true
-          | SporkReturn _ => true
-          (* | PCallReturn _ => true *)
+          | SporkSpwn _ => true
           | _ => false
 
       val frameInfoOpt =
@@ -952,8 +889,7 @@ structure Kind =
           | Func {frameInfo, ...} => SOME frameInfo
           | Handler {frameInfo, ...} => SOME frameInfo
           | Jump => NONE
-          | SporkReturn {frameInfo, ...} => SOME frameInfo
-          (* | PCallReturn {frameInfo, ...} => SOME frameInfo *)
+          | SporkSpwn {frameInfo, ...} => SOME frameInfo
    end
 
 structure Block =
@@ -1253,18 +1189,18 @@ structure Program =
                    val frameOffsets = FrameInfo.frameOffsets fi
                    val size = FrameInfo.size fi
                 in
-                Err.check
+                   Err.check
                    ("frameInfos",
                     fn () => (Int.equals (i, index)
                               andalso checkFrameOffsets frameOffsets
                               andalso Bytes.<= (size, maxFrameSize)
                               andalso Bytes.<= (size, Runtime.maxFrameSize)
-                              andalso (case (FrameInfo.kind fi,
-                                             FrameInfo.sporkInfo fi) of
-                                          (FrameInfo.Kind.SPORK_SPWN_FRAME, SOME pra) =>
-                                             true (* checkPCallInfo pra*) (* TODO: checkSporkInfo *)
-                                        | (_, SOME _) => false
-                                        | (_, NONE) => true)
+                              andalso (case (FrameInfo.kind fi, FrameInfo.sporkInfo fi) of
+                                          (FrameInfo.Kind.FUNC_FRAME, NONE) => true
+                                        | (FrameInfo.Kind.FUNC_FRAME, SOME _) => false
+                                        | (FrameInfo.Kind.SPORK_SPWN_FRAME, NONE) => true
+                                        | (FrameInfo.Kind.SPORK_SPWN_FRAME, SOME _) => false
+                                        | _ => true)
                               andalso (Bytes.isAligned
                                        (size,
                                         {alignment = (case !Control.align of
@@ -1430,10 +1366,8 @@ structure Program =
                                               | Kind.Handler {frameInfo, ...} =>
                                                    doit frameInfo
                                               | Kind.Jump => true
-                                              | Kind.SporkReturn {frameInfo, ...} =>
+                                              | Kind.SporkSpwn {frameInfo, ...} =>
                                                    doit frameInfo
-                                              (* | Kind.PCallReturn {frameInfo, ...} => *)
-                                              (*      doit frameInfo *)
                                           end)
                       | SequenceOffset {base, index, offset, scale, ty, volatile = _} =>
                            (checkOperand (base, alloc)
@@ -1564,26 +1498,12 @@ structure Program =
                                        Alloc.defineLive (alloc, z)))
                         else NONE
                    | Jump => SOME alloc
-                   | SporkReturn {args, frameInfo} =>
+                   | SporkSpwn {frameInfo} =>
                         if frame' (frameInfo, true, fn kind =>
                                    FrameInfo.Kind.equals (kind, FrameInfo.Kind.SPORK_SPWN_FRAME))
                            andalso slotsAreInFrame frameInfo
-                           then SOME (Vector.fold
-                                      (args, alloc, fn (z, alloc) =>
-                                       Alloc.defineLive (alloc, z)))
+                           then SOME alloc
                         else NONE
-                   (*| PCallReturn {args, frameInfo} =>
-                        if frame' (frameInfo, true, fn kind =>
-                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_CONT_FRAME)
-                                   orelse
-                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARL_FRAME)
-                                   orelse
-                                   FrameInfo.Kind.equals (kind, FrameInfo.Kind.PCALL_PARR_FRAME))
-                           andalso slotsAreInFrame frameInfo
-                           then SOME (Vector.fold
-                                      (args, alloc, fn (z, alloc) =>
-                                       Alloc.defineLive (alloc, z)))
-                        else NONE*)
                end
             fun checkStatement (s: Statement.t, alloc: Alloc.t)
                : Alloc.t option =
@@ -1813,10 +1733,6 @@ structure Program =
             (*       else *)
             (*         NONE *)
 
-            (* fun checkSpoinReturn (label: Label.t, size: Bytes.t, *)
-            (*                       alloc: Alloc.t, sporkDataSlot: bool) = *)
-            (*     TODO *)
-
             (* (* TODO: how to handle nesting? Slots, etc. *) *)
             (* fun sporkIsOk {alloc: Alloc.t, *)
             (*                spid: Spid.t, *)
@@ -2035,32 +1951,15 @@ structure Program =
                                   return = return,
                                   returns = returns}
                    | Goto l => jump l
-                   | Spork {nesting, spid, live, cont, spwn, size} =>
-                        liveIsOk (live, alloc)
+                   | Spork {spid, cont, spwn} =>
+                        true
+                        (* liveIsOk (live, alloc) *)
                         (* andalso *)
                         (* sporkIsOk {alloc = alloc, *)
                         (*            spid = spid, *)
                         (*            cont = cont, *)
                         (*            spwn = spwn, *)
                         (*            size = size} *)
-                   | Spoin {nesting, spid, live, seq, sync, size} =>
-                        liveIsOk (live, alloc)
-                        (* andalso *)
-                        (* spoinIsOk {alloc = alloc, *)
-                        (*            spid = spid, *)
-                        (*            seq = seq, *)
-                        (*            sync = sync, *)
-                        (*            size = size} *)
-                   (*| PCall {label, live, cont, parl, parr, size} =>
-                        liveIsOk (live, alloc)
-                        andalso
-                        pcallIsOk {alloc = alloc,
-                                   dst = label,
-                                   live = live,
-                                   cont = cont,
-                                   parl = parl,
-                                   parr = parr,
-                                   size = size}*)
                    | Raise _ =>
                         (case raises of
                             NONE => false
