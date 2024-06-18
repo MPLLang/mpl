@@ -1700,7 +1700,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
-                            | Spork {cont, spwn, ...} => (visit cont; visit spwn)
+                            | Spork {cont, spwn, ...} => visit cont
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>
