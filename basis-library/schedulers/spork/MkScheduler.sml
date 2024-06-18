@@ -83,11 +83,7 @@ struct
     (fn i => Word32.toInt (addSpareHeartbeats (gcstate (), Word32.fromInt i)))
 
   
-  val currentSpareHeartbeats =
-    _import "GC_currentSpareHeartbeats" private: gcstate -> Word32.word;
-  val currentSpareHeartbeats =
-    (fn () => currentSpareHeartbeats (gcstate ()))
-
+  val currentSpareHeartbeatTokens = _prim "Heartbeat_tokens": unit -> Word32.word;
 
   val traceSchedIdleEnter = _import "GC_Trace_schedIdleEnter" private: gcstate -> unit; o gcstate
   val traceSchedIdleLeave = _import "GC_Trace_schedIdleLeave" private: gcstate -> unit; o gcstate
@@ -603,7 +599,7 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val _ = tryConsumeSpareHeartbeats spawnCost
-        val currentSpare = currentSpareHeartbeats ()
+        val currentSpare = currentSpareHeartbeatTokens ()
         val halfSpare =
           let
             val halfSpare = splitSpares currentSpare
@@ -684,7 +680,7 @@ struct
         val tidParent = DE.decheckGetTid thread
         val (tidLeft, tidRight) = DE.decheckFork ()
 
-        val currentSpare = currentSpareHeartbeats ()
+        val currentSpare = currentSpareHeartbeatTokens ()
         val halfSpare = splitSpares currentSpare
         val _ = tryConsumeSpareHeartbeats halfSpare
 
@@ -877,7 +873,7 @@ struct
          *)
 
         val hadEnoughToSpawnBefore =
-          (currentSpareHeartbeats () >= spawnCost)
+          (currentSpareHeartbeatTokens () >= spawnCost)
 
         val _ =
           if generateWealth then
@@ -886,7 +882,7 @@ struct
 
         fun loop i =
           if
-            currentSpareHeartbeats () >= spawnCost
+            currentSpareHeartbeatTokens () >= spawnCost
             andalso maybeSpawn thread
           then
             loop (i+1)
@@ -1099,7 +1095,7 @@ struct
 
     fun greedyWorkAmortizedSpork (cont: unit -> 'a, spwn: unit -> 'b,
                                   seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-      if currentSpareHeartbeats () < spawnCost then
+      if currentSpareHeartbeatTokens () < spawnCost then
         spork (cont, spwn, seq, sync)
       else
         case maybeSpawnFunc {allowCGC = true} spwn of
@@ -1116,7 +1112,7 @@ struct
             end
 
     fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      greedyWorkAmortizedSpork (f, g, (fn (a) => (a, g ())), (fn (a, b) => (a, b)))
+      spork (f, g, fn a => (a, g ()), fn (a, b) => (a, b))
 
   end
 
