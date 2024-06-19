@@ -545,9 +545,12 @@ struct
         if i >= P then
           false
         else
-          case peekPendingChoice i of
-            SOME _ => true
-          | NONE => loop (i + 1)
+          let
+            val {pendingChoices, ...} = vectorSub (workerLocalData, i)
+          in
+            if ConcurrentBinaryHeap.size pendingChoices > 0 then true
+            else loop (i + 1)
+          end
     in
       loop 0
     end
@@ -564,29 +567,47 @@ struct
   val devices = Array.fromList (String.fields (fn c => c = #",")
     (parseString "devices" ""))
 
+  val _ = print ("NUM DEVICES " ^ Int.toString (Array.length devices) ^ "\n")
+
   (* 
   deviceReservation[i] = workerId if worker workerId has reserved device i
   deviceReservation[i] = -1 if device i is not reserved
+  deviceReservation[i] = -2 if device i is currently being used for an active choice
   *)
 
-  val notReserved = ~1
+  val DEVICE_NOT_RESERVED = ~1
+  val DEVICE_IN_USE = ~2
 
   val deviceReservation: int array =
-    (Array.tabulate (Array.length devices, fn i => notReserved))
+    (Array.tabulate (Array.length devices, fn i => DEVICE_NOT_RESERVED))
+
+  fun existsUnreservedDevice () =
+    Array.exists (fn x => x = DEVICE_NOT_RESERVED) deviceReservation
+
+  fun markDeviceIdxInUse i =
+    ( if Array.sub (deviceReservation, i) <> myWorkerId () then
+        die (fn _ =>
+          "scheduler bug: markDeviceInUse but I don't have it reserved")
+      else
+        ()
+    ; Array.update (deviceReservation, i, DEVICE_IN_USE)
+    )
 
   fun tryAcquireDeviceIdx () : int option =
     case
-      Array.findi (fn (_, workerId) => workerId = notReserved)
+      Array.findi (fn (_, workerId) => workerId = DEVICE_NOT_RESERVED)
         deviceReservation
     of
       SOME (i, workerId) =>
         let
           val prevWorkerId =
             MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-              (notReserved, myWorkerId ())
+              (DEVICE_NOT_RESERVED, myWorkerId ())
         in
-          if prevWorkerId = notReserved then
-            ( print ("worker " ^ Int.toString (myWorkerId ()) ^ " acquired " ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
+          if prevWorkerId = DEVICE_NOT_RESERVED then
+            ( print
+                ("worker " ^ Int.toString (myWorkerId ()) ^ " acquired "
+                 ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
             ; SOME i
             )
           else
@@ -594,41 +615,44 @@ struct
         end
     | NONE => NONE
 
-  (* 
-  Should be called by a choice thread after using a GPU device.
-  The current worker steals the GPU device from the choice thread (to be
-  precise, from the worker that has initially acquired the device), becomes
-  the new owner of the device, and searches for new pending choices
-  
-  Note that stealing may fail if the worker that initially acquired the
-  device has already released the device.
-    *)
-  fun tryStealDeviceIdx deviceIdx : unit =
+  (* Immediately before completing a gpu branch of a choice, the current worker
+   * will "reacquire" the device, making it responsible for finding work for
+   * that device. (The worker then returns to scheduler code which inspects
+   * currently pending choices, etc.)
+   *
+   * Note that as long as a gpu branch is active for a particular device, the
+   * device will be marked DEVICE_IN_USE.
+   *)
+  fun reacquireDeviceIdx deviceIdx : unit =
     let
       val myId = myWorkerId ()
-      val stealFrom = Array.sub (deviceReservation, deviceIdx)
-
-      val success =
-        (stealFrom <> myId) andalso
-        stealFrom =
-          MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
-            (stealFrom, myId)
+      val status = Array.sub (deviceReservation, deviceIdx)
     in
-      if success then
-        print ("worker " ^ Int.toString myId ^ " stole " ^ Int.toString deviceIdx ^ ":" ^ Array.sub (devices, deviceIdx) ^ " from worker " ^ Int.toString stealFrom ^ "\n")
+      if
+        status <> DEVICE_IN_USE
+      then
+        die (fn _ =>
+          "reacquireDeviceIdx but device is not marked currently in use")
+      else if
+        DEVICE_IN_USE
+        =
+        MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
+          (DEVICE_IN_USE, myId)
+      then
+        print
+          ("worker " ^ Int.toString (myWorkerId ()) ^ " reacquired "
+           ^ Int.toString deviceIdx ^ ":" ^ Array.sub (devices, deviceIdx)
+           ^ "\n")
       else
-        ()
+        die (fn _ => "reacquireDeviceIdx failed")
     end
 
-
-  (*
-  Should be called by a scheduler thread whose worker has acquired a GPU device.
-  If there is no pending choice, the worker releases the device by calling
-  tryReleaseDeviceIdx.
-  
-  Note that releasing may fail if the worker that finished the GPU task
-  has already stolen the device.
-  *)
+  (* If a worker currently has reserved a device, then that worker is
+   * responsible for selecting a pending choice to map onto the device. If no
+   * pending choices are available, then the device should be "released"
+   * (marking it as unreserved) and the worker is then free to go back to
+   * stealing CPU work.
+   *)
   fun tryReleaseDeviceIdx () =
     let
       val myId = myWorkerId ()
@@ -638,27 +662,31 @@ struct
           let
             val old =
               MLton.Parallel.arrayCompareAndSwap (deviceReservation, i)
-                (myId, notReserved)
+                (myId, DEVICE_NOT_RESERVED)
           in
             if old = myId then
-              print ("worker " ^ Int.toString myId ^ " released " ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
+              print
+                ("worker " ^ Int.toString myId ^ " released " ^ Int.toString i
+                 ^ ":" ^ Array.sub (devices, i) ^ "\n")
             else
               ()
           end
       | NONE => ()
     end
 
-  fun shouldSearchForChoices () =
-    Array.exists (fn workerId => workerId = myWorkerId ()) deviceReservation
 
   (* returns the GPU device that the current worker is holding *)
   fun currentWorkerDeviceIdx () =
-    case
-      Array.findi (fn (_, workerId) => workerId = myWorkerId ())
-        deviceReservation
-    of
-      SOME (i, _) => SOME i
-    | NONE => NONE
+    let
+      val me = myWorkerId ()
+    in
+      case Array.findi (fn (_, workerId) => workerId = me) deviceReservation of
+        SOME (i, _) => SOME i
+      | NONE => NONE
+    end
+
+  fun shouldSearchForChoices () =
+    Option.isSome (currentWorkerDeviceIdx ())
 
 
   (* ========================================================================
@@ -944,7 +972,9 @@ struct
             let
               (* val _ = dbgmsg (fn _ => "choice: gpu after send") *)
 
+              val _ = markDeviceIdxInUse deviceIdx
               val result = doGpuTask gpuTask (Array.sub (devices, deviceIdx))
+              val _ = reacquireDeviceIdx deviceIdx
 
               (* after finishing gpu task, we expect to run CPU code again, so try to
                * send this task back to a CPU thread.
@@ -952,7 +982,6 @@ struct
               val thread = Thread.current ()
               val depth = HH.getDepth thread
               val selfTask = Continuation (thread, depth)
-              val _ = tryStealDeviceIdx deviceIdx
               val sendSucceeded =
                 (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
                 pushSide selfTask
@@ -1008,41 +1037,57 @@ struct
         SMLNJRandom.randRange (0, P - 1) myRand
 
 
-      fun gpuManager_tryFindWorkLoop_policy_minDepth () =
+      val gpuManager_policy_minDepth_dummy = (~1, valOf Int.maxInt, NONE)
+
+
+      fun gpuManager_policy_minDepth_check (bestFriend, bestDepth, holding)
+        friend =
+        case peekPendingChoice friend of
+          SOME (Continuation (_, d)) =>
+            if d >= bestDepth then
+              (bestFriend, bestDepth, holding)
+            else
+              (case tryStealPendingChoice friend of
+                 SOME (holding' as Continuation (_, d')) =>
+                   if d' >= bestDepth then
+                     ( tryPushPendingChoice friend holding'
+                     ; (bestFriend, bestDepth, holding)
+                     )
+                   else
+                     ( Option.app
+                         (fn t => (tryPushPendingChoice bestFriend t; ()))
+                         holding
+                     ; (friend, d', SOME holding')
+                     )
+
+               | _ => (bestFriend, bestDepth, holding))
+
+        | _ => (bestFriend, bestDepth, holding)
+
+
+      fun gpuManager_tryFindWorkLoop_policy_minDepth'
+        (bestFriend, bestDepth, holding) =
         let
-          fun check (bestFriend, bestDepth, holding) friend =
-            case peekPendingChoice friend of
-              SOME (Continuation (_, d)) =>
-                if d >= bestDepth then
-                  (bestFriend, bestDepth, holding)
-                else
-                  (case tryStealPendingChoice friend of
-                     SOME (holding' as Continuation (_, d')) =>
-                       if d' >= bestDepth then
-                         ( tryPushPendingChoice friend holding'
-                         ; (bestFriend, bestDepth, holding)
-                         )
-                       else
-                         ( Option.app
-                             (fn t => (tryPushPendingChoice bestFriend t; ()))
-                             holding
-                         ; (friend, d', SOME holding')
-                         )
-
-                   | _ => (bestFriend, bestDepth, holding))
-
-            | _ => (bestFriend, bestDepth, holding)
-
-
           fun loop xxx i =
-            if i >= P then xxx else loop (check xxx i) (i + 1)
+            (*if i >= 10*P then xxx else*)
+            if i >= P then
+              xxx
+            else
+              let (*val friend = randomId ()*) val friend = i
+              in loop (gpuManager_policy_minDepth_check xxx friend) (i + 1)
+              end
 
-          val (_, _, holding) = loop (~1, valOf Int.maxInt, NONE) 0
+          val (_, _, holding) = loop (bestFriend, bestDepth, holding) 0
         in
           case holding of
             SOME t => SOME t
           | NONE => NONE
         end
+
+
+      fun gpuManager_tryFindWorkLoop_policy_minDepth () =
+        gpuManager_tryFindWorkLoop_policy_minDepth'
+          gpuManager_policy_minDepth_dummy
 
       (*
             fun gpuManagerFindWorkLoop_policy_randomSteal tries =
@@ -1106,7 +1151,7 @@ struct
           fun loopStealAny count (numPendingSeen, bestFriend, bestDepth) =
             if
               bestFriend >= 0
-              andalso (numPendingSeen >= 2 orelse count >= P * 10)
+              andalso (numPendingSeen >= 5 orelse count >= P * 100)
             then
               case tryKeepPendingChoice bestFriend of
                 SOME (t as Continuation (_, d)) =>
@@ -1119,7 +1164,7 @@ struct
               | _ => loopStealAny count (0, ~1, ~1)
 
             else if
-              count >= P * 10
+              count >= P * 100
             then
               (hiccup (); loopStealAny 0 (0, ~1, ~1))
 
@@ -1128,16 +1173,13 @@ struct
                 (* including self, to make sure we consider our own pending
                  * choices *)
                 val friend = randomId ()
-
-                (* only look at side for everyone else *)
-                val sideResult =
-                  if friend = myId then NONE else tryStealSide friend
               in
-                case sideResult of
+                case trySteal friend of
                   SOME task => task
                 | NONE =>
 
-                    case trySteal friend of
+                    (* only look at side for everyone else *)
+                    case (if friend = myId then NONE else tryStealSide friend) of
                       SOME task => task
                     | NONE =>
 
@@ -1148,7 +1190,16 @@ struct
 
                           case peekBotPendingChoice friend of
                             SOME (Continuation (_, d)) =>
-                              if d > bestDepth then
+                              if Option.isSome (tryAcquireDeviceIdx ()) then
+                                case
+                                  gpuManager_tryFindWorkLoop_policy_minDepth'
+                                    (gpuManager_policy_minDepth_check
+                                       gpuManager_policy_minDepth_dummy friend)
+                                of
+                                  NONE =>
+                                    (hiccup (); loopStealAny 0 (0, ~1, ~1))
+                                | SOME task => task
+                              else if d > bestDepth then
                                 loopStealAny (count + 1)
                                   (numPendingSeen + 1, friend, d)
                               else
@@ -1179,7 +1230,7 @@ struct
             end
         *)
         in
-          case tryPopSide myId of
+          case tryStealSide myId of
             SOME task => task
           | NONE =>
               (* loopPrioritizeNonChoiceBeforeChoice 0 *)
