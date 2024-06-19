@@ -1543,7 +1543,9 @@ structure Function =
                  ; Vector.foreach (statements,
                                    fn Statement.T {var, ...} =>
                                    Option.app (var, bindVar))
-                 ; Transfer.foreachSpid (transfer, bindSpid)))
+                 ; (case transfer of
+                       Transfer.Spork {spid, ...} => bindSpid spid
+                     | _ => ())))
             val blocks =
                Vector.map
                (blocks, fn Block.T {label, args, statements, transfer} =>

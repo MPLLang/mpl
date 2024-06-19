@@ -933,9 +933,6 @@ structure Transfer =
       fun foreachLabel (t, j) = foreachLabelVar (t, j, fn _ => ())
       fun foreachVar (t, v) = foreachLabelVar (t, fn _ => (), v)
 
-      fun foreachSpid (t, s) =
-         foreachFuncLabelVarSpid (t, fn _ => (), fn _ => (), fn _ => (), s)
-
       fun replaceLabelVarSpid (t, fl, fx, fs) =
          let
             fun fxs xs = Vector.map (xs, fx)
@@ -1808,7 +1805,9 @@ structure Function =
                  ; Vector.foreach (args, fn (x, _) => bindVar x)
                  ; Vector.foreach (statements, fn s =>
                                    Statement.foreachDef (s, bindVar o #1))
-                 ; Transfer.foreachSpid (transfer, bindSpid)))
+                 ; (case transfer of
+                       Transfer.Spork {spid, ...} => bindSpid spid
+                     | _ => ())))
             val blocks =
                Vector.map
                (blocks, fn Block.T {label, args, statements, transfer} =>
