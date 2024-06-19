@@ -498,6 +498,7 @@ fun allocate {function = f: Rssa.Function.t,
                                       ty = sporkDataTy,
                                       volatile = false} :: slots)
                    end)
+      val sporkDataStackSlots = List.rev sporkDataStackSlots
       (* Next, allocate stack slots for link, handler label, and handler args,
        * if required.
        *)
