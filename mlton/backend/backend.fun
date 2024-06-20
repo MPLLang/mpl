@@ -1154,7 +1154,11 @@ fun toMachine (rssa: Rssa.Program.t) =
                             M.Transfer.Goto dst)
                         end
                    | R.Transfer.Spork {spid, cont, spwn} =>
-                        simple (M.Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
+                        simple (M.Transfer.Spork
+                                {spid = spid,
+                                 data = sporkDataStackOffset (#index (spidInfo spid)),
+                                 cont = cont,
+                                 spwn = spwn})
                    | R.Transfer.Spoin {spid, seq, sync} =>
                         let
                            val sporkDataOperand = sporkDataOperand (#index (spidInfo spid))
@@ -1297,7 +1301,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
                       | R.Kind.SporkSpwn {spid} =>
-                           doSporkSpoin (spid, M.Kind.SporkSpwn {frameInfo = valOf (frameInfo label)})
+                           doSporkSpoin
+                           (spid,
+                            M.Kind.SporkSpwn {spid = spid,
+                                              frameInfo = valOf (frameInfo label)})
                       | R.Kind.SpoinSync {spid} =>
                            doSporkSpoin (spid, M.Kind.Jump)
                   val statements =

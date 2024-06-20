@@ -186,6 +186,7 @@ signature MACHINE =
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
              | Spork of {spid: Spid.t,
+                         data: StackOffset.t,
                          cont: Label.t,
                          spwn: Label.t}
              | Raise of {raisesTo: Label.t list}
@@ -268,7 +269,8 @@ signature MACHINE =
              | Handler of {args: Live.t vector,
                            frameInfo: FrameInfo.t}
              | Jump
-             | SporkSpwn of {frameInfo: FrameInfo.t}
+             | SporkSpwn of {spid: Spid.t,
+                             frameInfo: FrameInfo.t}
 
             val isEntry: t -> bool
             val frameInfoOpt: t -> FrameInfo.t option
