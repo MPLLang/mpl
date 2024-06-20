@@ -1134,7 +1134,7 @@ fun closureConvert
                                    resultVal = spwnres_value}
                  val spwn =
                     case raiseTy of
-                       NONE => cont
+                       NONE => spwn
                      | SOME raiseTy =>
                           Dexp.handlee
                           {try = spwn,
