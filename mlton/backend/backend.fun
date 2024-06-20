@@ -811,7 +811,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                     "backend thought control shouldn't reach here"))),
           func = Type.BuiltInCFunction.bug (),
           return = NONE}
-      val {get = labelInfo: Label.t -> {args: (Var.t * Type.t) vector},
+      val {get = labelInfo: Label.t -> {args: (Var.t * Type.t) vector,
+                                        inSpwn: bool},
            set = setLabelInfo, ...} =
          Property.getSetOnce
          (Label.plist, Property.initRaise ("labelInfo", Label.layout))
@@ -906,11 +907,18 @@ fun toMachine (rssa: Rssa.Program.t) =
             fun newVarInfos xts = Vector.foreach (xts, newVarInfo)
             (* Set the constant operands, labelInfo, and varInfo. *)
             val _ = newVarInfos args
+            val inSpwn = ref false
             val _ =
                Rssa.Function.dfs
-               (f, fn R.Block.T {args, label, statements, ...} =>
+               (f, fn R.Block.T {args, kind, label, statements, ...} =>
                 let
-                   val _ = setLabelInfo (label, {args = args})
+                   val (inSpwn, resetInSpwn) =
+                      case kind of
+                         R.Kind.SporkSpwn _ =>
+                            (inSpwn := true
+                             ; (true, fn () => inSpwn := false))
+                       | _ => (!inSpwn, fn () => ())
+                   val _ = setLabelInfo (label, {args = args, inSpwn = inSpwn})
                    val _ = newVarInfos args
                    val _ =
                       Vector.foreach
@@ -952,7 +960,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            | _ => normal ()
                        end)
                 in
-                   fn () => ()
+                   resetInSpwn
                 end)
             val sporkNesting as {maxSporkNestLength, spidInfo, sporkDataTy, sporkNest} =
                SporkNesting.nesting f
@@ -1309,6 +1317,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                            doSporkSpoin (spid, M.Kind.Jump)
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
+                  val (returnLives, raiseLives) =
+                     if #inSpwn (labelInfo label)
+                        then (NONE, NONE)
+                        else (returnLives, raiseLives)
                in
                   Chunk.newBlock (labelChunk label,
                                   {kind = kind,

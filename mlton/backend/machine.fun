@@ -1781,8 +1781,7 @@ structure Program =
                                         Spid.equals (spid, s)
                                    | _ => false)
                                  andalso
-                                 (* MTF_TODO: Should be `goto (b, NONE, NONE, alloc)` *)
-                                 goto (b, raises, returns, alloc)
+                                 goto (b, NONE, NONE, alloc)
                               end
                            val checkSpwn =
                               fn () =>

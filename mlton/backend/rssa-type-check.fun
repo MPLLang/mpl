@@ -426,7 +426,7 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
    let
       fun checkFunction (f: Function.t): unit =
          let
-            val {name, start, blocks, ...} = Function.dest f
+            val {start, blocks, ...} = Function.dest f
             val {get = labelInfo, rem, set = setLabelInfo, ...} =
                Property.getSetOnce
                (Label.plist,
@@ -435,7 +435,9 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
                                     setLabelInfo (Block.label b,
                                                   {block = b,
                                                    sporkInfo = ref NONE}))
-            fun goto (l: Label.t, sporkNest: Spid.t list) =
+            fun goto (l: Label.t,
+                      inSpwn: bool,
+                      sporkNest: Spid.t list) =
                let
                   fun bug (msg: string): 'a =
                      Error.bug
@@ -446,57 +448,67 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
                   case (!sporkInfo) of
                      NONE =>
                         let
-                           val _ = sporkInfo := SOME {sporkNest = sporkNest}
+                           val _ = sporkInfo := SOME {inSpwn = inSpwn, sporkNest = sporkNest}
                            val Block.T {transfer, ...} = block
-                           val _ =
-                              if (case transfer of
-                                     Transfer.Call {return, ...} =>
-                                        let
-                                           datatype z = datatype Return.t
-                                        in
-                                           case return of
-                                              Dead => false
-                                            | NonTail {handler, ...} =>
-                                                 let
-                                                    datatype z = datatype Handler.t
-                                                 in
-                                                    case handler of
-                                                       Dead => false
-                                                     | Handle _ => false
-                                                     | Caller => true
-                                                 end
-                                            | Tail => true
-                                        end
-                                   | Transfer.Raise _ => true
-                                   | Transfer.Return _ => true
-                                   | _ => false)
-                                 then let
-                                         val _ = (case sporkNest of
-                                                     [] => ()
-                                                   | _ => bug "nonempty sporkNest when leaving function")
-                                      in
-                                         ()
-                                      end
-                                 else ()
+                           fun simple l = goto (l, inSpwn, sporkNest)
+                           fun checkLeave () =
+                              let
+                                 val _ =
+                                    if inSpwn
+                                       then bug "may not leave function within Spork/spwn"
+                                       else ()
+                                 val _ =
+                                    case sporkNest of
+                                       [] => ()
+                                     | _ => bug "nonempty sporkNest when leaving function"
+                              in
+                                 ()
+                              end
+                           datatype z = datatype Transfer.t
                         in
                            case transfer of
-                              Transfer.Spork {spid, cont, spwn} =>
-                                 (goto (cont, spid::sporkNest)
-                                  ; goto (spwn, []))
-                            | Transfer.Spoin {spid, seq, sync} =>
-                                 (case sporkNest of
-                                     [] => bug "empty sporkNest at Spoin"
-                                   | spid'::sporkNest' =>
+                              Call {return, ...} =>
+                                 let
+                                    datatype z = datatype Return.t
+                                 in
+                                    case return of
+                                       Dead => ()
+                                     | NonTail {handler, cont, ...} =>
+                                          let
+                                             datatype z = datatype Handler.t
+                                          in
+                                             simple cont
+                                             ; (case handler of
+                                                   Dead => ()
+                                                 | Handle hndl => simple hndl
+                                                 | Caller => checkLeave ())
+                                          end
+                                     | Tail => checkLeave ()
+                                 end
+                            | Raise _ => checkLeave ()
+                            | Return _ => checkLeave ()
+                            | Spork {spid, cont, spwn} =>
+                                 (case (inSpwn, sporkNest) of
+                                     (true, _) => bug "may not Spork within Spork/spwn"
+                                   | (false, sporkNest) =>
+                                        (goto (cont, false, spid::sporkNest)
+                                         ; goto (spwn, true, [])))
+                            | Spoin {spid, seq, sync} =>
+                                 (case (inSpwn, sporkNest) of
+                                     (true, _) => bug "may not Spoin within Spork/spwn"
+                                   | (false, []) => bug "empty sporkNest at Spoin"
+                                   | (false, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
-                                           then (goto (seq, sporkNest')
-                                                 ; goto (sync, sporkNest'))
+                                           then (goto (seq, false, sporkNest')
+                                                 ; goto (sync, false, sporkNest'))
                                            else bug "mismatched sporkNest at Spoin")
-                            | _ =>
-                                 Transfer.foreachLabel
-                                 (transfer, fn l => goto (l, sporkNest))
+                            | _ => Transfer.foreachLabel (transfer, simple)
                         end
-                   | SOME {sporkNest = sporkNest'} =>
+                   | SOME {inSpwn = inSpwn', sporkNest = sporkNest'} =>
                         let
+                           val _ = if Bool.equals (inSpwn, inSpwn')
+                                      then ()
+                                      else bug "mismatched block: inSpwn"
                            val _ = if List.equals (sporkNest, sporkNest', Spid.equals)
                                       then ()
                                       else bug "mismatched block: sporkNest"
@@ -504,7 +516,7 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
                            ()
                         end
                end
-            val _ = goto (start, [])
+            val _ = goto (start, false, [])
             val _ = Vector.foreach (blocks, fn Block.T {label, ...} => rem label)
          in
             ()

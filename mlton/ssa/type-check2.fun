@@ -404,7 +404,10 @@ structure Function =
                                     setLabelInfo (label,
                                                   {block = b,
                                                    sporkInfo = ref NONE}))
-            fun goto (l: Label.t, sporkData: Spid.t option, sporkNest: Spid.t list) =
+            fun goto (l: Label.t,
+                      inSpwn: bool,
+                      sporkData: Spid.t option,
+                      sporkNest: Spid.t list) =
                let
                   fun bug (msg: string): 'a =
                      let
@@ -420,8 +423,11 @@ structure Function =
                                      str " ",
                                      record [("sporkInfo",
                                               Option.layout
-                                              (fn {sporkData, sporkNest} =>
-                                               record [("sporkData",
+                                              (fn {inSpwn, sporkData, sporkNest} =>
+                                               record [("inSpwn",
+                                                        Bool.layout
+                                                        inSpwn),
+                                                        ("sporkData",
                                                         Option.layout
                                                         Spid.layout
                                                         sporkData),
@@ -442,7 +448,7 @@ structure Function =
                   case (!sporkInfo) of
                      NONE =>
                         let
-                           val _ = sporkInfo := SOME {sporkData = sporkData, sporkNest = sporkNest}
+                           val _ = sporkInfo := SOME {inSpwn = inSpwn, sporkData = sporkData, sporkNest = sporkNest}
                            val Block.T {statements, transfer, ...} = block
                            val sporkData =
                               Vector.fold
@@ -456,61 +462,70 @@ structure Function =
                                                then NONE
                                                else bug "mismatched sporkData at Spork_getData")
                                 | _ => sporkData)
-                           val _ =
-                              if (case transfer of
-                                     Call {return, ...} =>
-                                        let
-                                           datatype z = datatype Return.t
-                                        in
-                                           case return of
-                                              Dead => false
-                                            | NonTail {handler, ...} =>
-                                                 let
-                                                    datatype z = datatype Handler.t
-                                                 in
-                                                    case handler of
-                                                       Dead => false
-                                                     | Handle _ => false
-                                                     | Caller => true
-                                                 end
-                                            | Tail => true
-                                        end
-                                   | Raise _ => true
-                                   | Return _ => true
-                                   | _ => false)
-                                 then let
-                                         val _ = (case sporkData of
-                                                     NONE => ()
-                                                   | _ => bug "nonempty sporkData when leaving function")
-                                         val _ = (case sporkNest of
-                                                     [] => ()
-                                                   | _ => bug "nonempty sporkNest when leaving function")
-                                      in
-                                         ()
-                                      end
-                                 else ()
+                           fun simple l = goto (l, inSpwn, sporkData, sporkNest)
+                           fun checkLeave () =
+                              let
+                                 val _ =
+                                    if inSpwn
+                                       then bug "may not leave function within Spork/spwn"
+                                       else ()
+                                 val _ =
+                                    case sporkData of
+                                       NONE => ()
+                                     | _ => bug "nonempty sporkData when leaving function"
+                                 val _ =
+                                    case sporkNest of
+                                       [] => ()
+                                     | _ => bug "nonempty sporkNest when leaving function"
+                              in
+                                 ()
+                              end
                         in
                            case transfer of
-                              Spork {spid, cont, spwn} =>
-                                 (case sporkData of
-                                     NONE => (goto (cont, NONE, spid::sporkNest)
-                                              ; goto (spwn, SOME spid, []))
-                                   | _ => bug "nonempty sporkData at Spork")
+                              Call {return, ...} =>
+                                 let
+                                    datatype z = datatype Return.t
+                                 in
+                                    case return of
+                                       Dead => ()
+                                     | NonTail {cont, handler, ...} =>
+                                          let
+                                             datatype z = datatype Handler.t
+                                          in
+                                             simple cont
+                                             ; (case handler of
+                                                   Dead => ()
+                                                 | Handle hndl => simple hndl
+                                                 | Caller => checkLeave ())
+                                          end
+                                     | Tail => checkLeave ()
+                                 end
+                            | Raise _ => checkLeave ()
+                            | Return _ => checkLeave ()
+                            | Spork {spid, cont, spwn} =>
+                                 (case (inSpwn, sporkData, sporkNest) of
+                                     (true, _, _) => bug "may not Spork within Spork/spwn"
+                                   | (false, SOME _, _) => bug "nonempty sporkData at Spork"
+                                   | (false, NONE, sporkNest) =>
+                                        (goto (cont, false, NONE, spid::sporkNest)
+                                         ; goto (spwn, true, SOME spid, [])))
                             | Spoin {spid, seq, sync} =>
-                                 (case (sporkData, sporkNest) of
-                                     (SOME _, _) => bug "nonempty sporkData at Spoin"
-                                   | (_, []) => bug "empty sporkNest at Spoin"
-                                   | (NONE, spid'::sporkNest') =>
+                                 (case (inSpwn, sporkData, sporkNest) of
+                                     (true, _, _) => bug "may not Spoin within Spork/spwn"
+                                   | (false, SOME _, _) => bug "nonempty sporkData at Spoin"
+                                   | (false, NONE, []) => bug "empty sporkNest at Spoin"
+                                   | (false, NONE, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
-                                           then (goto (seq, NONE, sporkNest')
-                                                 ; goto (sync, SOME spid', sporkNest'))
+                                           then (goto (seq, false, NONE, sporkNest')
+                                                 ; goto (sync, false, SOME spid', sporkNest'))
                                            else bug "mismatched sporkNest at Spoin")
-                            | _ =>
-                                 Transfer.foreachLabel
-                                 (transfer, fn l => goto (l, sporkData, sporkNest))
+                            | _ => Transfer.foreachLabel (transfer, simple)
                         end
-                   | SOME {sporkData = sporkData', sporkNest = sporkNest'} =>
+                   | SOME {inSpwn = inSpwn', sporkData = sporkData', sporkNest = sporkNest'} =>
                         let
+                           val _ = if Bool.equals (inSpwn, inSpwn')
+                                      then ()
+                                      else bug "mismatched block: inSpwn"
                            val _ = if Option.equals (sporkData, sporkData', Spid.equals)
                                       then ()
                                       else bug "mismatched block: sporkData"
@@ -521,7 +536,7 @@ structure Function =
                            ()
                         end
                end
-            val _ = goto (start, NONE, [])
+            val _ = goto (start, false, NONE, [])
             val _ = Vector.foreach (blocks, fn Block.T {label, ...} => rem label)
          in
             ()
