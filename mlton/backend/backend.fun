@@ -221,27 +221,33 @@ fun toMachine (rssa: Rssa.Program.t) =
             val next = Counter.generator 0
             val table =
                let
-                  fun equals (spwns1, spwns2) =
+                  fun equals ((offset1, spwns1),
+                              (offset2, spwns2)) =
+                     Bytes.equals (offset1, offset2)
+                     andalso
                      Vector.equals (spwns1, spwns2, Label.equals)
-                  fun hash spwns =
-                     Hash.vectorMap (spwns, Label.hash)
+                  fun hash (offset, spwns) =
+                     Hash.combine (Bytes.hash offset,
+                                   Hash.vectorMap (spwns, Label.hash))
                in
                   HashTable.new {equals = equals,
                                  hash = hash}
                end
          in
-            fun getSporkInfo {spwns} =
+            fun getSporkInfo {offset, spwns} =
                let
                   fun new () =
                      let
                         val index = next ()
-                        val spi = M.SporkInfo.new {index = index, spwns = spwns}
+                        val spi = M.SporkInfo.new {index = index,
+                                                   offset = offset,
+                                                   spwns = spwns}
                         val _ = List.push (sporkInfos, spi)
                      in
                         spi
                      end
                in
-                  HashTable.lookupOrInsert (table, spwns, new)
+                  HashTable.lookupOrInsert (table, (offset, spwns), new)
                end
          end
       in
@@ -294,7 +300,7 @@ fun toMachine (rssa: Rssa.Program.t) =
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
                            offsets: Bytes.t list,
-                           sporkInfo: {spwns: Label.t vector} option,
+                           sporkInfo: {offset: Bytes.t, spwns: Label.t vector} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
@@ -964,23 +970,6 @@ fun toMachine (rssa: Rssa.Program.t) =
                 end)
             val sporkNesting as {maxSporkNestLength, spidInfo, sporkDataTy, sporkNest} =
                SporkNesting.nesting f
-            fun sporkDataStackOffset index =
-               let
-                  val sporkDataTy = valOf sporkDataTy
-                  val offset = Bytes.* (Type.bytes sporkDataTy, IntInf.fromInt index)
-               in
-                  StackOffset.T {offset = offset,
-                                 ty = sporkDataTy,
-                                 volatile = false}
-               end
-            fun sporkDataOperand index =
-               M.Operand.StackOffset (sporkDataStackOffset index)
-            fun bogusSporkDataOperand () =
-               let
-                  val sporkDataTy = valOf sporkDataTy
-               in
-                  M.Operand.Cast (M.Operand.word (Type.bogusWord sporkDataTy), sporkDataTy)
-               end
             (* Allocate stack slots. *)
             local
                val varInfo =
@@ -995,7 +984,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                       ty = ty}
                   end
             in
-               val {handlersInfo, labelInfo = labelRegInfo, ...} =
+               val {handlersInfo, labelInfo = labelRegInfo, sporkInfo, ...} =
                   let
                      val paramOffsets = fn args =>
                         paramOffsets (args, fn (_, ty) => ty, fn so => so)
@@ -1006,6 +995,27 @@ fun toMachine (rssa: Rssa.Program.t) =
                                                  varInfo = varInfo}
                   end
             end
+            val sporkDataOffset = #sporkDataOffset sporkInfo
+            fun sporkDataStackOffset index =
+               let
+                  val sporkDataTy = valOf sporkDataTy
+                  val offset = Bytes.+ (sporkDataOffset,
+                                        Bytes.* (Type.bytes sporkDataTy,
+                                                 IntInf.fromInt index))
+               in
+                  StackOffset.T {offset = offset,
+                                 ty = sporkDataTy,
+                                 volatile = false}
+               end
+            fun sporkDataOperand index =
+               M.Operand.StackOffset (sporkDataStackOffset index)
+            fun bogusSporkDataOperand () =
+               let
+                  val sporkDataTy = valOf sporkDataTy
+               in
+                  M.Operand.Cast (M.Operand.word (Type.bogusWord sporkDataTy), sporkDataTy)
+               end
+
             val sporkFrameSize =
                Vector.fold
                (blocks, Bytes.zero, fn (R.Block.T {label, kind, ...}, sporkFrameSize) =>
@@ -1059,7 +1069,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                                   Error.bug "Backend.genFunc.setFrameInfo: SpoinSync"
                          val sporkInfo =
                             if sporkNestNonEmpty
-                               then SOME {spwns = Vector.map (sporkNest, #spwn o spidInfo)}
+                               then SOME {offset = sporkDataOffset,
+                                          spwns = Vector.map (sporkNest, #spwn o spidInfo)}
                                else NONE
                          val frameInfo =
                             getFrameInfo {entry = entry,

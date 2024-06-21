@@ -692,7 +692,8 @@ fun allocate {function = f: Rssa.Function.t,
       {handlersInfo = Option.map (handlersInfo, fn {handlerOffset, linkOffset, ...} =>
                                   {handlerOffset = handlerOffset,
                                    linkOffset = linkOffset}),
-       labelInfo = labelInfo}
+       labelInfo = labelInfo,
+       sporkInfo = {sporkDataOffset = Bytes.zero}}
    end
 
 val allocate = 

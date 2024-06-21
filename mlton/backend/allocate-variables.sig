@@ -48,5 +48,9 @@ signature ALLOCATE_VARIABLES =
                                *)
                               liveNoFormals: Machine.Operand.t vector,
                               (* Size of frame including return address. *)
-                              size: Bytes.t}}
+                              size: Bytes.t},
+             (* If sporks are used, sporkInfo gives the stack offset
+              * where the sporkData should be stored.
+              *)
+             sporkInfo: {sporkDataOffset: Bytes.t}}
    end

@@ -426,10 +426,10 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
 #endif
   GC_returnAddress spwn_ret = 0;
   uintptr_t spwn_idx;
-  for (spwn_idx = 0 ; spwn_idx < fi->sporkInfo[0] ; spwn_idx++) {
-    objptr p = *((objptr*) (pframe - fi->size + OBJPTR_SIZE * spwn_idx));
+  for (spwn_idx = 0 ; spwn_idx < fi->sporkInfo->nest ; spwn_idx++) {
+    objptr p = *((objptr*) (pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spwn_idx));
     if (!isObjptr(p)) {
-      spwn_ret = fi->sporkInfo[spwn_idx + 1];
+      spwn_ret = fi->sporkInfo->spwns[spwn_idx];
       break;
     }
   }
@@ -439,7 +439,7 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   // =========================================================================
 
   objptr dop = pointerToObjptr(dp, NULL);
-  *((objptr*)(pframe - fi->size + OBJPTR_SIZE * spwn_idx)) = dop;
+  *((objptr*)(pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spwn_idx)) = dop;
 
   // =========================================================================
   // Next, copy the promotable frame
@@ -469,7 +469,7 @@ objptr GC_HH_forkThread(GC_state s, pointer threadp, pointer dp) {
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = spwn_ret;
   // Invalidate other spork data slots of new frame.
   for (uintptr_t i = 0 ; i < spwn_idx ; i++) {
-    *((objptr*) (newFrame - fi->size + OBJPTR_SIZE * i)) = BOGUS_OBJPTR;
+    *((objptr*) (newFrame - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * i)) = BOGUS_OBJPTR;
   }
 
   /* SAM_NOTE: would like to assert these, but jop may have already been

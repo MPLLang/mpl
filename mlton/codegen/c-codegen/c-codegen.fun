@@ -692,10 +692,16 @@ fun outputDeclarations
                          fn (_, offset) => C.bytes offset))
           ; Vector.foreachi
             (sporkInfos, fn (i, spi) =>
-             declareArray ("const GC_returnAddress", concat ["sporkInfo", C.int i],
-                           {firstElemLen = true, oneline = true},
-                           SporkInfo.spwns spi,
-                           fn (_, l) => labelIndexAsString (l, {pretty = true})))
+             (declareArray ("const GC_returnAddress", concat ["sporkSpwns", C.int i],
+                            {firstElemLen = false, oneline = true},
+                            SporkInfo.spwns spi,
+                            fn (_, l) => labelIndexAsString (l, {pretty = true}))
+              ; print (concat
+                       ["static const struct GC_sporkInfo sporkInfo",
+                        C.int i, " = ", "{",
+                        C.int (Vector.length (SporkInfo.spwns spi)), ", ",
+                        C.bytes (SporkInfo.offset spi), ", ",
+                        "sporkSpwns", C.int i, "};\n"])))
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
                           frameInfos, fn (_, fi) =>
@@ -708,7 +714,7 @@ fun outputDeclarations
                                           | SOME ssi => C.int ssi),
                                   ", ", case FrameInfo.sporkInfo fi of
                                            NONE => C.null
-                                         | SOME spi => concat ["sporkInfo",
+                                         | SOME spi => concat ["&sporkInfo",
                                                                C.int (SporkInfo.index spi)],
                                   "}"]))
       fun declareAtMLtons () =

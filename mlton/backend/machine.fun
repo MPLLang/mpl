@@ -708,32 +708,38 @@ structure FrameOffsets =
 structure SporkInfo =
    struct
       datatype t = T of {index: int,
+                         offset: Bytes.t,
                          spwns: Label.t vector}
 
       local
          fun make f (T r) = f r
       in
          val index = make #index
+         val offset = make #offset
          val spwns = make #spwns
       end
 
-      fun new {index, spwns} =
-         T {index = index, spwns = spwns}
+      fun new {index, offset, spwns} =
+         T {index = index, offset = offset, spwns = spwns}
 
       fun equals (s1, s2) =
          Int.equals (index s1, index s2)
+         andalso Bytes.equals (offset s1, offset s2)
          andalso Vector.equals (spwns s1, spwns s2, Label.equals)
 
-      fun layout (T {index, spwns}) =
+      fun layout (T {index, offset, spwns}) =
          let
             open Layout
          in
             record [("index", Int.layout index),
+                    ("offset", Bytes.layout offset),
                     ("spwns", Vector.layout Label.layout spwns)]
          end
 
-      fun hash (T {index, spwns}) =
-         Hash.combine (Word.fromInt index, Hash.vectorMap (spwns, Label.hash))
+      fun hash (T {index, offset, spwns}) =
+         Hash.combine (Word.fromInt index,
+         Hash.combine (Bytes.hash offset,
+                       Hash.vectorMap (spwns, Label.hash)))
    end
 
 structure FrameInfo =

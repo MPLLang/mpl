@@ -217,7 +217,10 @@ signature MACHINE =
             val hash: t -> word
             val index: t -> int
             val layout: t -> Layout.t
-            val new: {index: int, spwns: Label.t vector} -> t
+            val new: {index: int,
+                      offset: Bytes.t,
+                      spwns: Label.t vector} -> t
+            val offset: t -> Bytes.t
             val spwns: t -> Label.t vector
          end
 

@@ -31,16 +31,23 @@ typedef uintptr_t GC_returnAddress;
  * recording the size of the array) whose elements record byte offsets
  * from the bottom of the frame at which live heap pointers are
  * located.  The size field indicates the size of the frame, including
- * space for the return address.  The sporkInfo field points to an array
- * (the zeroeth element recording the size of the array) whose elements
- * record the alternate return addresses of nested `spork`s.  The
- * sourceSeqIndex field indicates the sequence of source names
- * corresponding to the frame as an index into sourceSeqs; see
- * sources.h.
+ * space for the return address.  The sporkInfo field points to a struct
+ * with a `nest` (indicating the spork nesting depth), an `offset`
+ * (indicating the offset in the frame at which the spork data slots
+ * begin) and a `spwns` pointer to an array (of `nest` size) whose
+ * elements record the alternate return addresses of nested `spork`s.
+ * The sourceSeqIndex field indicates the sequence of source names
+ * corresponding to the frame as an index into sourceSeqs;
+ * see sources.h.
  */
 typedef const uint16_t *GC_frameOffsets;
 
-typedef const GC_returnAddress *GC_sporkInfo;
+typedef const GC_returnAddress *GC_sporkSpwns;
+typedef const struct GC_sporkInfo {
+  const uint32_t nest;
+  const uint32_t offset;
+  const GC_sporkSpwns spwns;
+} *GC_sporkInfo;
 
 typedef enum {
   CONT_FRAME,
