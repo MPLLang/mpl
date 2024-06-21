@@ -102,8 +102,20 @@ fun transform p =
       fun transformFunc func =
          let
             val {args, blocks, name, raises, returns, start} = Function.dest func
-            val liveInfo = Live.live (func, {extraEdges = fn _ => [],
-                                             shouldConsider = fn _ => true})
+            val liveInfo =
+               let
+                  fun extraEdges (Block.T {kind, ...}) =
+                     case kind of
+                        Kind.Cont {handler, ...} =>
+                           (* Make sure that a cont's live vars
+                            * includes variables live in its handler.
+                            *)
+                           Handler.foldLabel (handler, [], op::)
+                      | _ => []
+               in
+                  Live.live (func, {extraEdges = extraEdges,
+                                    shouldConsider = fn _ => true})
+               end
             fun beginNoFormals label = #beginNoFormals ((#labelLive liveInfo) label)
 
             val {loops, ...} = DirectedGraph.LoopForest.dest
