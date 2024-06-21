@@ -360,19 +360,6 @@ fun allocate {function = f: Rssa.Function.t,
                      else []
              | _ => []
          end
-      fun extraEdges (Block.T {label, kind, ...}) =
-         let
-            val sporkNest = fn l =>
-               Vector.toListMap (sporkNest l, #spwn o spidInfo)
-         in
-            case kind of
-               Kind.Cont {handler, ...} =>
-                  (* Make sure that a cont's live vars
-                   * includes variables live in its handler.
-                   *)
-                  Handler.foldLabel (handler, [], op::)
-             | _ => []
-         end
       val {labelLive, remLabelLive} =
          Live.live (f, {extraEdges = extraEdges,
                         shouldConsider = isSome o #operand o varInfo})
