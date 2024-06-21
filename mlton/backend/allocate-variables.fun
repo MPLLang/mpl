@@ -470,31 +470,40 @@ fun allocate {function = f: Rssa.Function.t,
           R.Label.layout, Info.layout, Unit.layout)
          setLabelInfo
 
-      (* Allocate stack slots (at bottom of frame) for sporkData;
-       * require `maxSporkNestLength` slots for the function.
-       *)
-      val (sporkDataStack, sporkDataStackSlots) =
-         Int.fold (0, maxSporkNestLength, (Allocation.Stack.new [], []),
-                   fn (_, (stack, slots)) =>
-                   let
-                      val sporkDataTy = valOf sporkDataTy
-                      val (stack, {offset}) = Allocation.Stack.get (stack, sporkDataTy)
-                   in
-                      (stack,
-                       StackOffset.T {offset = offset,
-                                      ty = sporkDataTy,
-                                      volatile = false} :: slots)
-                   end)
-      val sporkDataStackSlots = List.rev sporkDataStackSlots
-      (* Next, allocate stack slots for link, handler label, and handler args,
+      (* Create a stack allocation that includes all incoming actuals *)
+      val argStackSlots = Vector.toListMap (paramOffsets args, StackOffset.T)
+      (* Allocate stack slots for sporkData after incoming actuals. *)
+      val (sporkDataOffset, sporkDataStackSlots) =
+         if maxSporkNestLength > 0
+            then let
+                    val sporkDataTy = valOf sporkDataTy
+                    val stack = Allocation.Stack.new argStackSlots
+                    val offset = Type.align (sporkDataTy, Allocation.Stack.size stack)
+                 in
+                    (offset,
+                     List.tabulate
+                     (maxSporkNestLength, fn index =>
+                      let
+                         val offset =
+                            Bytes.+ (offset,
+                                     Bytes.* (Type.bytes sporkDataTy,
+                                              IntInf.fromInt index))
+                      in
+                         StackOffset.T {offset = offset,
+                                        ty = sporkDataTy,
+                                        volatile = false}
+                      end))
+                 end
+            else (Bytes.zero, [])
+      (* Allocate stack slots for link, handler label, and handler args,
        * if required.
        *)
-      val (handlersInfo, handlersStackSlots) =
+      val (handlersInfo, handlerStackSlots) =
          case !handlersArgs of
             [] => (NONE, [])
           | handlersArgs =>
                let
-                  val stack = sporkDataStack
+                  val stack = Allocation.Stack.new (argStackSlots @ sporkDataStackSlots)
                   val (stack, {offset = linkOffset, ...}) =
                      Allocation.Stack.get (stack, Type.exnStack ())
                   val handlerTy = Type.label (Label.newNoname ())
@@ -540,16 +549,28 @@ fun allocate {function = f: Rssa.Function.t,
                                                volatile = false}]
                           else []))
                end
-      val fixedStackSlots = sporkDataStackSlots @ handlersStackSlots
+      val fixedStackSlots = sporkDataStackSlots @ handlerStackSlots
 
       (* Allocate stacks slots and/or temporaries for the formals.
+       * Don't use `allocateVar`, because a stack formal
+       * should use the stack slot of the incoming actual.
        *)
       val () =
          let
-            val a = Allocation.new (fixedStackSlots, [])
+            val temps = Allocation.Temporaries.empty ()
          in
-            Vector.foreach
-            (args, fn (x, _) => allocateVar (x, a))
+            Vector.foreach2
+            (args, paramOffsets args, fn ((x, ty), so) =>
+             let
+                val oper =
+                   case ! (place x) of
+                      Stack => Operand.StackOffset (StackOffset.T so)
+                    | Temporary => Operand.Temporary (Allocation.Temporaries.get (temps, ty))
+                val () = removePlace x
+                val () = valOf (#operand (varInfo x)) := SOME oper
+             in
+                ()
+             end)
          end
 
       (* Do a DFS of the control-flow graph. *)
@@ -693,7 +714,7 @@ fun allocate {function = f: Rssa.Function.t,
                                   {handlerOffset = handlerOffset,
                                    linkOffset = linkOffset}),
        labelInfo = labelInfo,
-       sporkInfo = {sporkDataOffset = Bytes.zero}}
+       sporkInfo = {sporkDataOffset = sporkDataOffset}}
    end
 
 val allocate = 
