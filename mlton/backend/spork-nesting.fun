@@ -45,7 +45,7 @@ struct
                 val {sporkNest, ...} = labelInfo l
                 val () = remLabelInfo l
              in
-                Vector.fromList (valOf (!sporkNest))
+                Vector.fromListRev (valOf (!sporkNest))
              end))
         val {get = spidInfo, set = setSpidInfo, rem = remSpidInfo, ...} =
            Property.getSetOnce
