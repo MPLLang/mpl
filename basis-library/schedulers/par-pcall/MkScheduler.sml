@@ -38,7 +38,8 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
+  (* val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1) *)
+  val spawnCost = 0w1: Word32.word
 
   type gcstate = MLton.Pointer.t
   val gcstate = _prim "GC_state": unit -> gcstate;
@@ -123,12 +124,13 @@ struct
       else die (fn _ => "scheduler bug: " ^ msg ^ ": atomic " ^ Int.toString ass ^ " but expected " ^ Int.toString x)
     end
 
-  fun threadSwitchEndAtomic t =
+  (* fun threadSwitchEndAtomic t =
     ( if Thread.atomicState () <> 0w0 then ()
       else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
     ; Thread.switchTo t
-    )
+    ) *)
 
+  val threadSwitchEndAtomic = Thread.switchTo
 
 (*
   fun doPromoteNow () =
@@ -990,6 +992,21 @@ struct
         end
 
   
+    val sched_package_data = ref
+      { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
+      , maybeSpawnFunc = maybeSpawnFunc
+      , setQueueDepth = setQueueDepth
+      , returnToSchedEndAtomic = returnToSchedEndAtomic
+      , tryConsumeSpareHeartbeats = tryConsumeSpareHeartbeats
+      , addEagerSpawns = addEagerSpawns
+      , assertAtomic = assertAtomic
+      , error = (fn s => die (fn _ => s)) : string -> unit
+      }
+
+    fun sched_package () = !sched_package_data
+
+    exception SchedulerError
+
     (* ===================================================================
      * fork definition
      *)
@@ -1009,31 +1026,29 @@ struct
           let
             val _ = dbgmsg'' (fn _ => "hello from left-side par continuation")
             val _ = Thread.atomicBegin ()
-            val _ = assertAtomic "leftSideParCont" 1
+            val _ = #assertAtomic (sched_package ()) "leftSideParCont" 1
             val jp = primGetData ()
-            val gres =
-              syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o g)
+            val gres = #syncEndAtomic (sched_package ()) jp (inject o g)
           in
             (Result.extractResult fres,
              case project (Result.extractResult gres) of
                 SOME gres => gres
-              | _ => die (fn _ => "scheduler bug: leftSideParCont: failed project right-side result"))
+              | _ => (#error (sched_package ()) "scheduler bug: leftSideParCont: failed project right-side result"; raise SchedulerError))
           end
 
         fun rightSide () =
           let
-            val _ = assertAtomic "pcallFork rightside begin" 1
-            val J {leftSideThread, rightSideThread, rightSideResult, tidRight, incounter, spareHeartbeatsGiven, ...} =
-              primGetData ()
-            val () = DE.decheckSetTid tidRight
+            val _ = #assertAtomic (sched_package ()) "pcallFork rightside begin" 1
+            val J jp = primGetData ()
+            val () = DE.decheckSetTid (#tidRight jp)
 
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats spareHeartbeatsGiven
-            val _ = assertAtomic "pcallfork rightSide before execute" 1
+            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
+            val _ = #assertAtomic (sched_package ()) "pcallfork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
             val gr = Result.result (inject o g)
@@ -1042,18 +1057,17 @@ struct
             val depth' = HH.getDepth (Thread.current ())
             val _ =
               if depth = depth' then ()
-              else die (fn _ => "scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
-
+              else #error (sched_package ()) "scheduler bug: rightide depth mismatch"
             val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
-            val _ = assertAtomic "pcallFork rightside begin synchronize" 1
+            val _ = #assertAtomic (sched_package ()) "pcallFork rightside begin synchronize" 1
           in
-            rightSideThread := SOME thread;
-            rightSideResult := SOME gr;
+            #rightSideThread jp := SOME thread;
+            #rightSideResult jp := SOME gr;
 
-            if decrementHitsZero incounter then
+            if decrementHitsZero (#incounter jp) then
               ( ()
               ; dbgmsg'' (fn _ => "rightside synchronize: become left")
-              ; setQueueDepth (myWorkerId ()) depth
+              ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
                 (** Atomic 1 *)
               ; Thread.atomicBegin ()
 
@@ -1063,13 +1077,13 @@ struct
                   * Switching threads is implicit atomicEnd(), so we need
                   * to be at atomic2
                   *)
-              ; assertAtomic "pcallFork rightside switch-to-left" 2
-              ; threadSwitchEndAtomic leftSideThread
+              ; #assertAtomic (sched_package ()) "pcallFork rightside switch-to-left" 2
+              ; threadSwitchEndAtomic (#leftSideThread jp)
               )
             else
               ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
-              ; assertAtomic "pcallFork rightside before returnToSched" 1
-              ; returnToSchedEndAtomic ()
+              ; #assertAtomic (sched_package ()) "pcallFork rightside before returnToSched" 1
+              ; #returnToSchedEndAtomic (sched_package ()) ()
               )
           end
       in
@@ -1088,18 +1102,25 @@ struct
       if currentSpareHeartbeatTokens () < spawnCost then
         pcallFork (f, g)
       else
-        case maybeSpawnFunc {allowCGC = true} g of
-          NONE => (f (), g ())
-        | SOME gj =>
-            let
-              val _ = tryConsumeSpareHeartbeats spawnCost
-              val _ = addEagerSpawns 1
-              val fr = Result.result f
-              val _ = Thread.atomicBegin ()
-              val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
-            in
-              (Result.extractResult fr, Result.extractResult gr)
-            end
+        let
+          val (inject, project) = Universal.embed ()
+        in
+          case #maybeSpawnFunc (sched_package ()) {allowCGC = true} (inject o g) of
+            NONE => (f (), g ())
+          | SOME gj =>
+              let
+                val _ = #tryConsumeSpareHeartbeats (sched_package ()) spawnCost
+                val _ = #addEagerSpawns (sched_package ()) 1
+                val fr = Result.result f
+                val _ = Thread.atomicBegin ()
+                val gr = #syncEndAtomic (sched_package ()) gj (inject o g)
+              in
+                (Result.extractResult fr,
+                 case project (Result.extractResult gr) of
+                    SOME gr => gr
+                  | _ => (#error (sched_package ()) "scheduler bug: greedyWorkAmortizedFork: failed project right-side result"; raise SchedulerError))
+              end
+        end
 
   end
 
