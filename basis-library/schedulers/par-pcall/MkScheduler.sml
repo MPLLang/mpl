@@ -59,22 +59,10 @@ struct
   val wealthPerHeartbeat =
     Word32.toInt (getWealthPerHeartbeat (gcstate()))
 
-  (* val sendHeartbeatToOtherProc =
-    _import "GC_sendHeartbeatToOtherProc" runtime private: gcstate * Word32.word -> unit;
-  val sendHeartbeatToOtherProc =
-    (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p)) *)
-
-  (* val sendHeartbeatToSelf =
-    _import "GC_sendHeartbeatToSelf" runtime private: gcstate -> unit;
-  val sendHeartbeatToSelf =
-    (fn () => sendHeartbeatToSelf (gcstate ())) *)
-
-
   val tryConsumeSpareHeartbeats =
     _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
   val tryConsumeSpareHeartbeats =
     (fn w => tryConsumeSpareHeartbeats (gcstate (), w))
-
   
   val addSpareHeartbeats =
     _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
@@ -109,12 +97,8 @@ struct
 
   val primGetData = _prim "PCall_getData": unit -> 'a;
 
-  (* Could add boolean to prim: indicator for
-   *   findOldestPromotable     (promote at heartbeats)
-   *   vs
-   *   findYoungestPromotable   (promote at pcalls -- youngest is the ONLY promotable)
-   *)
   val primForkThreadAndSetData = _prim "PCall_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
+  val primForkThreadAndSetData_youngest = _prim "PCall_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
 
   fun assertAtomic msg x =
     let
@@ -124,25 +108,7 @@ struct
       else die (fn _ => "scheduler bug: " ^ msg ^ ": atomic " ^ Int.toString ass ^ " but expected " ^ Int.toString x)
     end
 
-  (* fun threadSwitchEndAtomic t =
-    ( if Thread.atomicState () <> 0w0 then ()
-      else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
-    ; Thread.switchTo t
-    ) *)
-
   val threadSwitchEndAtomic = Thread.switchTo
-
-(*
-  fun doPromoteNow () =
-    ( assertAtomic "start doPromoteNow" 0
-    ; Thread.atomicBegin ()
-    ; sendHeartbeatToSelf ()
-    (* a hack to make signal handler happen now *)
-    ; threadSwitchEndAtomic (Thread.current ())
-    (* ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat) *)
-    ; assertAtomic "end doPromoteNow" 0
-    )
-*)
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
@@ -575,7 +541,7 @@ struct
 
 
     (* runs in signal handler *)
-    fun doSpawn (interruptedLeftThread: Thread.t) : unit =
+    fun doSpawn {youngestOptimization: bool} (interruptedLeftThread: Thread.t) : unit =
       let
         val gcj = spawnGC interruptedLeftThread
         val _ = assertAtomic "spawn after spawnGC" 1
@@ -619,7 +585,11 @@ struct
             }
 
         (* this sets the join for both threads (left and right) *)
-        val rightSideThread = primForkThreadAndSetData (interruptedLeftThread, jp)
+        val rightSideThread =
+          if youngestOptimization then
+            primForkThreadAndSetData_youngest (interruptedLeftThread, jp)
+          else
+            primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
@@ -639,7 +609,7 @@ struct
 
 
     (* runs in signal handler *)
-    fun maybeSpawn (interruptedLeftThread: Thread.t) : bool =
+    fun maybeSpawn youngestOptimization (interruptedLeftThread: Thread.t) : bool =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -648,7 +618,7 @@ struct
         else if not (HH.canForkThread interruptedLeftThread) then
           false
         else
-          ( doSpawn interruptedLeftThread
+          ( doSpawn youngestOptimization interruptedLeftThread
           ; true
           )
       end
@@ -857,51 +827,31 @@ struct
      * handler fn definitions
      *)
 
-    fun heartbeatHandler generateWealth (thread: Thread.t) =
+    fun heartbeatHandler (thread: Thread.t) =
       let
-        (* generateWealth = true: this is a heartbeat
-         * generateWealth = false: this is a pcall check
-         *
-         * at heartbeat, if we had at least one excess token already, then
-         * no need to walk the stack -- no pcall frames exist.
-         *
-         * at a pcall check, it should be possible to not walk the whole
-         * stack. there should be exactly one pcall frame at the top of the
-         * stack.
-         *)
-
         val hadEnoughToSpawnBefore =
           (currentSpareHeartbeatTokens () >= spawnCost)
 
-        val _ =
-          if generateWealth then
-            (addSpareHeartbeats wealthPerHeartbeat; ())
-          else ()
+        val _ = addSpareHeartbeats wealthPerHeartbeat
 
         fun loop i =
           if
             currentSpareHeartbeatTokens () >= spawnCost
-            andalso maybeSpawn thread
+            andalso maybeSpawn {youngestOptimization = false} thread
           then
             loop (i+1)
           else
             i
 
         val numSpawned =
-          if generateWealth andalso hadEnoughToSpawnBefore then
+          if hadEnoughToSpawnBefore then
             (incrementNumSkippedHeartbeats (); 0)
           else
             loop 0
       in
-        if generateWealth then incrementNumHeartbeats () else ();
-
-        if (not generateWealth) andalso numSpawned > 0
-        then addEagerSpawns numSpawned
-        else ()
+        incrementNumHeartbeats ()
       end
 
-    (* fun handler msg =
-      MLton.Signal.Handler.inspectInterrupted heartbeatHandler *)
 
     fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
       case getSchedThread () of
@@ -919,19 +869,13 @@ struct
         MLton.Signal.setHandler
           ( MLton.Itimer.signal MLton.Itimer.Real
           , MLton.Signal.Handler.inspectInterrupted
-              (doIfArgIsNotSchedulerThread (heartbeatHandler true))
+              (doIfArgIsNotSchedulerThread heartbeatHandler)
           )
 
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
       , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread (heartbeatHandler true))
-      )
-
-    val _ = MLton.Signal.setHandler
-      ( Posix.Signal.usr2
-      , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread (heartbeatHandler false))
+          (doIfArgIsNotSchedulerThread heartbeatHandler)
       )
 
 
@@ -994,7 +938,7 @@ struct
   
     val sched_package_data = ref
       { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
-      , maybeSpawnFunc = maybeSpawnFunc
+      , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
       , tryConsumeSpareHeartbeats = tryConsumeSpareHeartbeats
@@ -1099,28 +1043,27 @@ struct
 
 
     fun greedyWorkAmortizedFork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      if currentSpareHeartbeatTokens () < spawnCost then
-        pcallFork (f, g)
-      else
-        let
-          val (inject, project) = Universal.embed ()
-        in
-          case #maybeSpawnFunc (sched_package ()) {allowCGC = true} (inject o g) of
-            NONE => (f (), g ())
-          | SOME gj =>
-              let
-                val _ = #tryConsumeSpareHeartbeats (sched_package ()) spawnCost
-                val _ = #addEagerSpawns (sched_package ()) 1
-                val fr = Result.result f
-                val _ = Thread.atomicBegin ()
-                val gr = #syncEndAtomic (sched_package ()) gj (inject o g)
-              in
-                (Result.extractResult fr,
-                 case project (Result.extractResult gr) of
-                    SOME gr => gr
-                  | _ => (#error (sched_package ()) "scheduler bug: greedyWorkAmortizedFork: failed project right-side result"; raise SchedulerError))
-              end
-        end
+      let
+        fun f' () =
+          ( if currentSpareHeartbeatTokens () < spawnCost then
+              ()
+            else
+              ( Thread.atomicBegin ()
+              ; if
+                  currentSpareHeartbeatTokens () >= spawnCost andalso
+                  #maybeSpawn (sched_package ()) {youngestOptimization = true} (Thread.current ())
+                then
+                  #addEagerSpawns (sched_package ()) 1
+                else
+                  ()
+              ; Thread.atomicEnd ()
+              )
+
+          ; f ()
+          )
+      in
+        pcallFork (f', g)
+      end
 
   end
 
