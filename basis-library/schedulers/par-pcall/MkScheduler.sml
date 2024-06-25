@@ -209,6 +209,14 @@ struct
   fun dbgmsg'' _ = ()
   (* fun dbgmsg'' m = dbgmsg''' m *)
 
+  fun assertTokenInvariants thread msg =
+    if
+      currentSpareHeartbeatTokens () >= spawnCost andalso
+      HH.canForkThread thread
+    then
+      die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: can fork but have tokens")
+    else
+      ()
 
   (* ========================================================================
    * TASKS
@@ -628,6 +636,8 @@ struct
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
+        val _ = assertTokenInvariants thread "doSpawnFunc"
+
         val gcj =
           if allowCGC then spawnGC thread else NONE
 
@@ -848,6 +858,8 @@ struct
             (incrementNumSkippedHeartbeats (); 0)
           else
             loop 0
+
+        val _ = assertTokenInvariants thread "heartbeatHandler"
       in
         incrementNumHeartbeats ()
       end
