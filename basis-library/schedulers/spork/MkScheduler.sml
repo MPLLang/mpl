@@ -40,7 +40,8 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1)
+  (* val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1) *)
+  val spawnCost = 0w1: Word32.word
 
   type gcstate = MLton.Pointer.t
   val gcstate = _prim "GC_state": unit -> gcstate;
@@ -60,23 +61,11 @@ struct
   val wealthPerHeartbeat =
     Word32.toInt (getWealthPerHeartbeat (gcstate()))
 
-  (* val sendHeartbeatToOtherProc =
-    _import "GC_sendHeartbeatToOtherProc" runtime private: gcstate * Word32.word -> unit;
-  val sendHeartbeatToOtherProc =
-    (fn p => sendHeartbeatToOtherProc (gcstate (), Word32.fromInt p)) *)
-
-  (* val sendHeartbeatToSelf =
-    _import "GC_sendHeartbeatToSelf" runtime private: gcstate -> unit;
-  val sendHeartbeatToSelf =
-    (fn () => sendHeartbeatToSelf (gcstate ())) *)
-
-
   val tryConsumeSpareHeartbeats =
     _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
   val tryConsumeSpareHeartbeats =
     (fn w => tryConsumeSpareHeartbeats (gcstate (), w))
 
-  
   val addSpareHeartbeats =
     _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
   val addSpareHeartbeats =
@@ -110,14 +99,8 @@ struct
   val primSpork = fn (cont, spwn, seq, sync) =>
                      primSpork (cont, (), spwn, (), seq, sync)
 
-  (*val primGetData = _prim "spork_getData": unit -> 'a;*)
-
-  (* Could add boolean to prim: indicator for
-   *   findOldestPromotable     (promote at heartbeats)
-   *   vs
-   *   findYoungestPromotable   (promote at sporks -- youngest is the ONLY promotable)
-   *)
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
+  val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
 
   fun assertAtomic msg x =
     let
@@ -127,24 +110,7 @@ struct
       else die (fn _ => "scheduler bug: " ^ msg ^ ": atomic " ^ Int.toString ass ^ " but expected " ^ Int.toString x)
     end
 
-  fun threadSwitchEndAtomic t =
-    ( if Thread.atomicState () <> 0w0 then ()
-      else die (fn _ => "scheduler bug: threadSwitchEndAtomic while non-atomic")
-    ; Thread.switchTo t
-    )
-
-
-(*
-  fun doPromoteNow () =
-    ( assertAtomic "start doPromoteNow" 0
-    ; Thread.atomicBegin ()
-    ; sendHeartbeatToSelf ()
-    (* a hack to make signal handler happen now *)
-    ; threadSwitchEndAtomic (Thread.current ())
-    (* ; tryConsumeSpareHeartbeats (Word32.fromInt wealthPerHeartbeat) *)
-    ; assertAtomic "end doPromoteNow" 0
-    )
-*)
+  val threadSwitchEndAtomic = Thread.switchTo
 
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
@@ -245,6 +211,14 @@ struct
   fun dbgmsg'' _ = ()
   (* fun dbgmsg'' m = dbgmsg''' m *)
 
+  fun assertTokenInvariants thread msg =
+    if
+      currentSpareHeartbeatTokens () >= spawnCost andalso
+      HH.canForkThread thread
+    then
+      die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: can fork but have tokens")
+    else
+      ()
 
   (* ========================================================================
    * TASKS
@@ -577,7 +551,7 @@ struct
 
 
     (* runs in signal handler *)
-    fun doSpawn (interruptedLeftThread: Thread.t) : unit =
+    fun doSpawn {youngestOptimization: bool} (interruptedLeftThread: Thread.t) : unit =
       let
         val gcj = spawnGC interruptedLeftThread
         val _ = assertAtomic "spawn after spawnGC" 1
@@ -621,7 +595,11 @@ struct
             }
 
         (* this sets the join for both threads (left and right) *)
-        val rightSideThread = primForkThreadAndSetData (interruptedLeftThread, jp)
+        val rightSideThread =
+          if youngestOptimization then
+            primForkThreadAndSetData_youngest (interruptedLeftThread, jp)
+          else
+            primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
@@ -641,7 +619,7 @@ struct
 
 
     (* runs in signal handler *)
-    fun maybeSpawn (interruptedLeftThread: Thread.t) : bool =
+    fun maybeSpawn youngestOptimization (interruptedLeftThread: Thread.t) : bool =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -650,7 +628,7 @@ struct
         else if not (HH.canForkThread interruptedLeftThread) then
           false
         else
-          ( doSpawn interruptedLeftThread
+          ( doSpawn youngestOptimization interruptedLeftThread
           ; true
           )
       end
@@ -660,6 +638,8 @@ struct
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
+        val _ = assertTokenInvariants thread "doSpawnFunc"
+
         val gcj =
           if allowCGC then spawnGC thread else NONE
 
@@ -859,51 +839,33 @@ struct
      * handler fn definitions
      *)
 
-    fun heartbeatHandler generateWealth (thread: Thread.t) =
+    fun heartbeatHandler (thread: Thread.t) =
       let
-        (* generateWealth = true: this is a heartbeat
-         * generateWealth = false: this is a spork check
-         *
-         * at heartbeat, if we had at least one excess token already, then
-         * no need to walk the stack -- no spork frames exist.
-         *
-         * at a spork check, it should be possible to not walk the whole
-         * stack. there should be exactly one spork frame at the top of the
-         * stack.
-         *)
-
         val hadEnoughToSpawnBefore =
           (currentSpareHeartbeatTokens () >= spawnCost)
 
-        val _ =
-          if generateWealth then
-            (addSpareHeartbeats wealthPerHeartbeat; ())
-          else ()
+        val _ = addSpareHeartbeats wealthPerHeartbeat
 
         fun loop i =
           if
             currentSpareHeartbeatTokens () >= spawnCost
-            andalso maybeSpawn thread
+            andalso maybeSpawn {youngestOptimization = false} thread
           then
             loop (i+1)
           else
             i
 
         val numSpawned =
-          if generateWealth andalso hadEnoughToSpawnBefore then
+          if hadEnoughToSpawnBefore then
             (incrementNumSkippedHeartbeats (); 0)
           else
             loop 0
-      in
-        if generateWealth then incrementNumHeartbeats () else ();
 
-        if (not generateWealth) andalso numSpawned > 0
-        then addEagerSpawns numSpawned
-        else ()
+        val _ = assertTokenInvariants thread "heartbeatHandler"
+      in
+        incrementNumHeartbeats ()
       end
 
-    (* fun handler msg =
-      MLton.Signal.Handler.inspectInterrupted heartbeatHandler *)
 
     fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
       case getSchedThread () of
@@ -921,19 +883,13 @@ struct
         MLton.Signal.setHandler
           ( MLton.Itimer.signal MLton.Itimer.Real
           , MLton.Signal.Handler.inspectInterrupted
-              (doIfArgIsNotSchedulerThread (heartbeatHandler true))
+              (doIfArgIsNotSchedulerThread heartbeatHandler)
           )
 
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
       , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread (heartbeatHandler true))
-      )
-
-    val _ = MLton.Signal.setHandler
-      ( Posix.Signal.usr2
-      , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread (heartbeatHandler false))
+          (doIfArgIsNotSchedulerThread heartbeatHandler)
       )
 
 
@@ -968,8 +924,7 @@ struct
           fun start i = i*grainSize
           fun stop i = Int.min (grainSize + start i, count)
 
-          (* TODO: can we make this a spork loop? *)
-          fun processLoop (i : int) (j : int) : unit =
+          fun processLoop i j =
             if j-i = 1 then
               Array.update (results, i, HH.processClearSetGrain (cs, start i, stop i))
             else
@@ -993,19 +948,22 @@ struct
           maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
         end
 
-    (*fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      case maybeSpawnFunc {allowCGC = true} g of
-        NONE => (f (), g ())
-      | SOME gj =>
-          let
-            val fr = Result.result f
-            val _ = Thread.atomicBegin ()
-            val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
-          in
-            (Result.extractResult fr, Result.extractResult gr)
-          end*)
-
   
+    val sched_package_data = ref
+      { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
+      , maybeSpawn = maybeSpawn
+      , setQueueDepth = setQueueDepth
+      , returnToSchedEndAtomic = returnToSchedEndAtomic
+      , tryConsumeSpareHeartbeats = tryConsumeSpareHeartbeats
+      , addEagerSpawns = addEagerSpawns
+      , assertAtomic = assertAtomic
+      , error = (fn s => die (fn _ => s)) : string -> unit
+      }
+
+    fun sched_package () = !sched_package_data
+
+    exception SchedulerError
+
     (* ===================================================================
      * spork definition
      *)
@@ -1013,26 +971,23 @@ struct
 
     fun spork (cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
       let
-        (* TODO: perhaps batch these allocations together *)
         val (inject, project) = Universal.embed ()
 
         (* TODO: talk with Matthew about the overheads associated with result wrappers *)
         fun cont' () = Result.result cont
 
-        fun spwn' ((), jp) =
+        fun spwn' ((), J jp) =
           let
-            val _ = assertAtomic "spork rightside begin" 1
-            val J {leftSideThread, rightSideThread, rightSideResult,
-                   tidRight, incounter, spareHeartbeatsGiven, ...} = jp
-            val () = DE.decheckSetTid tidRight
+            val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
+            val () = DE.decheckSetTid (#tidRight jp)
 
             val thread = Thread.current ()
             val depth = HH.getDepth thread
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats spareHeartbeatsGiven
-            val _ = assertAtomic "spork rightSide before execute" 1
+            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
+            val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
             val spwnr = Result.result (inject o spwn)
@@ -1041,18 +996,17 @@ struct
             val depth' = HH.getDepth (Thread.current ())
             val _ =
               if depth = depth' then ()
-              else die (fn _ => "scheduler bug: depth mismatch: rightside began at depth " ^ Int.toString depth ^ " and ended at " ^ Int.toString depth')
-
+              else #error (sched_package ()) "scheduler bug: rightide depth mismatch"
             val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
-            val _ = assertAtomic "spork rightside begin synchronize" 1
+            val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
           in
-            rightSideThread := SOME thread;
-            rightSideResult := SOME spwnr;
+            #rightSideThread jp := SOME thread;
+            #rightSideResult jp := SOME spwnr;
 
-            if decrementHitsZero incounter then
+            if decrementHitsZero (#incounter jp) then
               ( ()
               ; dbgmsg'' (fn _ => "rightside synchronize: become left")
-              ; setQueueDepth (myWorkerId ()) depth
+              ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
                 (** Atomic 1 *)
               ; Thread.atomicBegin ()
 
@@ -1062,30 +1016,30 @@ struct
                   * Switching threads is implicit atomicEnd(), so we need
                   * to be at atomic2
                   *)
-              ; assertAtomic "spork rightside switch-to-left" 2
-              ; threadSwitchEndAtomic leftSideThread
+              ; #assertAtomic (sched_package ()) "spork rightside switch-to-left" 2
+              ; threadSwitchEndAtomic (#leftSideThread jp)
               )
             else
               ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
-              ; assertAtomic "spork rightside before returnToSched" 1
-              ; returnToSchedEndAtomic ()
+              ; #assertAtomic (sched_package ()) "spork rightside before returnToSched" 1
+              ; #returnToSchedEndAtomic (sched_package ()) ()
               )
           end
 
         fun seq' contr =
-            seq (Result.extractResult contr)
+          seq (Result.extractResult contr)
 
         fun sync' (contr, jp) =
           let
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
-            val _ = assertAtomic "sync continuation" 1
-            (*val jp = primGetData ()*)
-            val spwnr = syncEndAtomic maybeParClearSuspectsAtDepth jp (inject o spwn)
+            val _ = #assertAtomic (sched_package ()) "sync continuation" 1
+            val spwnr = #syncEndAtomic (sched_package ()) jp (inject o spwn)
             val contr' = Result.extractResult contr
-            val spwnr' = case project (Result.extractResult spwnr) of
-                             SOME r => r
-                           | _ => die (fn _ => "scheduler bug: leftSideParCont: failed project right-side result")
+            val spwnr' =
+              case project (Result.extractResult spwnr) of
+                SOME r => r
+              | _ => (#error (sched_package ()) "scheduler bug: spork sync: failed project right-side result"; raise SchedulerError)
           in
             sync (contr', spwnr')
           end
@@ -1093,26 +1047,19 @@ struct
         primSpork (cont', spwn', seq', sync')
       end
 
-    fun greedyWorkAmortizedSpork (cont: unit -> 'a, spwn: unit -> 'b,
-                                  seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-      if currentSpareHeartbeatTokens () < spawnCost then
-        spork (cont, spwn, seq, sync)
-      else
-        case maybeSpawnFunc {allowCGC = true} spwn of
-          NONE => seq (cont ())
-        | SOME gj =>
-            let
-              val _ = tryConsumeSpareHeartbeats spawnCost
-              val _ = addEagerSpawns 1
-              val fr = Result.result cont
-              val _ = Thread.atomicBegin ()
-              val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj spwn
-            in
-              sync (Result.extractResult fr, Result.extractResult gr)
-            end
+    fun noTokens () = currentSpareHeartbeatTokens () < spawnCost
 
-    fun fork (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      spork (f, g, fn a => (a, g ()), fn (a, b) => (a, b))
+    fun tryPromoteNow yo =
+      ( Thread.atomicBegin ()
+      ; if
+          not (noTokens ()) andalso
+          #maybeSpawn (sched_package ()) yo (Thread.current ())
+        then
+          #addEagerSpawns (sched_package ()) 1
+        else
+          ()
+      ; Thread.atomicEnd ()
+      )
 
   end
 
@@ -1376,5 +1323,15 @@ struct
         { interval = Time.fromMicroseconds heartbeatMicroseconds
         , value = Time.fromMicroseconds heartbeatMicroseconds
         })
+
+
+  (* This might look silly, but don't remove it! See here:
+   *   https://github.com/MPLLang/mpl/issues/190
+   * We have to ensure that there is always at least one use of PCall_getData
+   * in the program, otherwise the data argument of spork_forkThreadAndSetData
+   * will be optimized away, causing the compiler to crash because it doesn't
+   * know how to pass a useless argument to the corresponding runtime func.
+   *)
+  val () = SporkJoin.spork (fn () => (), fn () => (), fn _ => (), fn _ => ())
 
 end

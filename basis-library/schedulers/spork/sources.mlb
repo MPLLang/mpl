@@ -41,7 +41,7 @@ local
 
   Scheduler.sml
   MkSporkJoin.sml
-  MkForkJoin.sml
+  (* MkForkJoin.sml *)
   SporkJoin.sml
   ForkJoin.sml
 in

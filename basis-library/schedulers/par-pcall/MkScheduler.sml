@@ -839,8 +839,6 @@ struct
 
     fun heartbeatHandler (thread: Thread.t) =
       let
-        val _ = assertTokenInvariants thread "heartbeatHandler"
-
         val hadEnoughToSpawnBefore =
           (currentSpareHeartbeatTokens () >= spawnCost)
 
@@ -860,6 +858,8 @@ struct
             (incrementNumSkippedHeartbeats (); 0)
           else
             loop 0
+
+        val _ = assertTokenInvariants thread "heartbeatHandler"
       in
         incrementNumHeartbeats ()
       end

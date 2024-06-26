@@ -1,2 +1,5 @@
-structure SporkJoin = MkSporkJoin (val spork = Scheduler.SporkJoin.greedyWorkAmortizedSpork
-                                   val fork = Scheduler.SporkJoin.fork)
+structure SporkJoin =
+  MkSporkJoin
+    (val spork = Scheduler.SporkJoin.spork
+     val tryPromoteNow = Scheduler.SporkJoin.tryPromoteNow
+     val noTokens = Scheduler.SporkJoin.noTokens)

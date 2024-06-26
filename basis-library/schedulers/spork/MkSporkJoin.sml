@@ -1,6 +1,7 @@
 functor MkSporkJoin
   (val spork: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
-   val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b) :>
+   val tryPromoteNow: {youngestOptimization: bool} -> unit
+   val noTokens: unit -> bool) :>
 sig
   include SPORK_JOIN
   val numSpawnsSoFar: unit -> int
@@ -10,11 +11,82 @@ sig
   val numStealsSoFar: unit -> int
 end =
 struct
-  val spork = spork
-  val fork = fork
-  val eager_par = fork
+  fun for (i, j) f =
+    if i >= j then () else (f i; for (i + 1, j) f)
 
-  fun for (i, j) f = if i >= j then () else (f i; for (i+1, j) f)
+  val basicSpork = spork
+
+  fun spork (cont: unit -> 'a, spwn: unit -> 'b,
+             seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
+    let
+      fun cont' () =
+        ( if noTokens () then
+            ()
+          else
+            tryPromoteNow {youngestOptimization = true}
+        ; cont ()
+        )
+    in
+      basicSpork (cont', spwn, seq, sync)
+    end
+
+  fun par (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
+    let
+      fun f' () =
+        ( if noTokens () then
+            ()
+          else
+            tryPromoteNow {youngestOptimization = true}
+        ; f ()
+        )
+    in
+      basicSpork (f', g, fn a => (a, g ()), fn (a, b) => (a, b))
+    end
+
+  val fork = par
+
+  (* ======================================================================= *)
+
+  fun parfor (lo, hi) f =
+    if lo >= hi then
+      ()
+    else if lo+1 = hi then
+      f lo
+    else if noTokens () then
+      parfor_sporked (lo, hi) f
+    else
+      parfor_split (lo, hi) f
+
+  and parfor_sporked (lo, hi) f =
+    let
+      (* Small optimization: do two loop iterations back-to-back to further
+        * amortize overheads as much as possible.·
+        *)
+      val lo' = lo+2
+      fun body () = (f lo; f (lo+1))
+      fun seq () = parfor (lo', hi) f
+      fun spwn () = parfor (lo', hi) f
+      fun sync ((), ()) = ()
+    in
+      spork (body, spwn, seq, sync)
+    end
+
+  and parfor_split (lo, hi) f =
+    let
+      val mid = lo + (hi-lo) div 2
+      fun left () = parfor (lo, mid) f
+      fun right () = parfor (mid, hi) f
+    in
+      par (left, right);
+      ()
+    end
+
+  fun parfor' _ (lo, hi) f = parfor (lo, hi) f
+  val parfor = parfor'
+
+  (* ======================================================================= *)
+
+
 
   fun pareduce (i: int, j: int, z: 'a, step: int * 'a -> 'a, merge: 'a * 'a -> 'a) : 'a =
       let fun loop (a: 'a, i: int, j: int) : 'a =
@@ -26,7 +98,7 @@ struct
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
                                 fun right_half () = loop (z, mid, j)
-                                val (al, ar) = eager_par (left_half, right_half)
+                                val (al, ar) = par (left_half, right_half)
                             in
                               merge (al, ar)
                             end,
@@ -46,7 +118,7 @@ struct
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
                                 fun right_half () = loop (z, mid, j)
-                                val (al, ar) = eager_par (left_half, right_half)
+                                val (al, ar) = par (left_half, right_half)
                             in
                               merge (a, merge (al, ar))
                             end,
@@ -162,15 +234,15 @@ struct
         loop (i, i, j', z)
       end
 
-  fun parfor grain (i, j) f =
+  fun parfor_grained grain (i, j) f =
     if j - i <= grain then
       for (i, j) f
     else
       let
         val mid = i + (j-i) div 2
       in
-        par (fn _ => parfor grain (i, mid) f,
-             fn _ => parfor grain (mid, j) f)
+        par (fn _ => parfor_grained grain (i, mid) f,
+             fn _ => parfor_grained grain (mid, j) f)
         ; ()
       end
 
@@ -179,7 +251,7 @@ struct
       val a = ArrayExtra.Raw.alloc n
       val _ =
         if ArrayExtra.Raw.uninitIsNop a then ()
-        else parfor 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
+        else parfor_grained 10000 (0, n) (fn i => ArrayExtra.Raw.unsafeUninit (a, i))
     in
       ArrayExtra.Raw.unsafeToArray a
     end
