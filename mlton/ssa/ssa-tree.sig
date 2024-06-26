@@ -119,11 +119,13 @@ signature SSA_TREE =
                         test: Var.t}
              | Goto of {args: Var.t vector,
                         dst: Label.t}
-             | PCall of {args: Var.t vector,
+             (*| PCall of {args: Var.t vector,
                          func: Func.t,
                          cont: Label.t,
                          parl: Label.t,
-                         parr: Label.t}
+                         parr: Label.t}*)
+             | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+             | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
              (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)

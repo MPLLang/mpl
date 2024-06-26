@@ -214,6 +214,7 @@ fun checkPrimApp {args, prim, result, targs}: bool =
                    targs = targs,
                    typeOps = {array = array,
                               arrow = arrow,
+                              tuple = tuple,
                               bool = bool,
                               cpointer = cpointer,
                               equals = equals,

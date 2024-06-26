@@ -14,6 +14,7 @@ signature PRIM_STRUCTS =
       structure Con: CON
       structure Const: CONST
       structure RealSize: REAL_SIZE
+      structure Spid: SPID
       structure WordSize: WORD_SIZE
       sharing RealSize = Const.RealX.RealSize
       sharing WordSize = Const.WordX.WordSize
@@ -103,9 +104,9 @@ signature PRIM =
        | MLton_share (* to rssa (as nop or runtime C fn) *)
        | MLton_size (* to rssa (as runtime C fn) *)
        | MLton_touch (* to rssa (as nop) or backend (as nop) *)
-       | PCall (* closure convert *)
-       | PCall_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
-       | PCall_getData (* backend *)
+       | Spork (* closure convert *)
+       | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
+       | Spork_getData of Spid.t (* backend *)
        | Real_Math_acos of RealSize.t (* codegen *)
        | Real_Math_asin of RealSize.t (* codegen *)
        | Real_Math_atan of RealSize.t (* codegen *)
@@ -220,6 +221,7 @@ signature PRIM =
                             targs: 'a vector,
                             typeOps: {array: 'a -> 'a,
                                       arrow: 'a * 'a -> 'a,
+                                      tuple: 'a vector -> 'a,
                                       bool: 'a,
                                       cpointer: 'a,
                                       equals: 'a * 'a -> bool,
@@ -240,6 +242,7 @@ signature PRIM =
                                 typeOps: {deArray: 'b -> 'b,
                                           deArrow: 'b -> 'b * 'b,
                                           deRef: 'b -> 'b,
+                                          deTuple: 'b -> 'b vector,
                                           deVector: 'b -> 'b,
                                           deWeak: 'b -> 'b}} -> 'b vector
       val fromString: string -> 'a t option
@@ -261,5 +264,6 @@ signature PRIM =
       val maySideEffect: 'a t -> bool
       val parse: unit -> 'a t Parse.t
       val parseFull: 'a Parse.t -> 'a t Parse.t
+      val replaceSpid: 'a t * (Spid.t -> Spid.t) -> 'a t
       val toString: 'a t -> string
    end

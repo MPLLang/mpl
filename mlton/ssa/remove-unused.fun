@@ -605,7 +605,25 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                in
                   ()
                end
-          | PCall {args, func, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
+               let
+                 val licont = labelInfo cont
+                 val lispwn = labelInfo spwn
+                 val () = visitLabelInfo licont
+                 val () = visitLabelInfo lispwn
+               in
+                 ()
+               end
+          | Spoin {spid, seq, sync} =>
+               let
+                 val liseq = labelInfo seq
+                 val lisync = labelInfo sync
+                 val () = visitLabelInfo liseq
+                 val () = visitLabelInfo lisync
+               in
+                 ()
+               end
+          (* | PCall {args, func, cont, parl, parr} =>
                let
                   val fi' = funcInfo func
                   val () = flowVarInfoTysVars (FuncInfo.args fi', args)
@@ -635,7 +653,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val () = visitFuncInfo fi'
                in
                   ()
-               end
+               end *)
           | Raise xs =>
                (FuncInfo.raisee fi
                 ; flowVarInfoTysVars (valOf (FuncInfo.raises fi), xs))
@@ -1177,7 +1195,15 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                               fn (x, (y, _)) => if VarInfo.isUsed y
                                                    then SOME x
                                                 else NONE))}
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
+               Spork {spid = spid,
+                      cont = cont,
+                      spwn = spwn}
+          | Spoin {spid, seq, sync} =>
+               Spoin {spid = spid,
+                      seq = seq,
+                      sync = sync}
+          (*| PCall {func, args, cont, parl, parr} =>
                let
                   val fi' = funcInfo func
                   fun doit label =
@@ -1199,7 +1225,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                          cont = cont,
                          parl = parl,
                          parr = parr}
-               end
+               end*)
           | Raise xs =>
                Raise (Vector.keepAllMap2
                       (xs, valOf (FuncInfo.raises fi),

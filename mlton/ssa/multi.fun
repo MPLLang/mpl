@@ -213,7 +213,12 @@ fun multi (p as Program.T {functions, main, ...})
                                      (FuncInfo.threadCopyCurrent fi)))
                               else ()
                           end
-                      | PCall {func = g, ...}
+                      (*| Spork {spid, cont, spwn} =>
+                           TODO
+                      | Spoin {spid, seq, sync} =>
+                           TODO*)
+                      (* TODO: should spork/spoin trigger multi? *)
+                      (*| PCall {func = g, ...}
                        => let
                             val gi = funcInfo g
                           in
@@ -229,7 +234,7 @@ fun multi (p as Program.T {functions, main, ...})
                                      ThreadCopyCurrent.force
                                      (FuncInfo.threadCopyCurrent fi)))
                               else ()
-                          end
+                          end*)
                       | Runtime {prim, ...}
                       => if usesThreadsOrConts
                             andalso

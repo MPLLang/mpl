@@ -66,6 +66,11 @@ structure Atoms =
             open Func
             fun newNoname () = newString "L"
          end
+      structure Spid =
+         struct
+            open Var
+            fun newNoname () = newString "SP"
+         end
 
       structure Ffi = Ffi (structure CFunction = CFunction
                            structure CType = CType)
@@ -78,6 +83,7 @@ structure Atoms =
                              structure Con = Con
                              structure Const = Const
                              structure RealSize = RealSize
+                             structure Spid = Spid
                              structure WordSize = WordSize)
 
       structure ExnDecElab = ExnDecElab ()

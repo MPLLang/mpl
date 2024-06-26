@@ -15,7 +15,6 @@ signature CHAR_SIZE
 signature CONST
 signature C_FUNCTION
 signature C_TYPE
-signature EXN_DEC_ELAB
 signature HASH_TYPE
 signature ID
 signature INT_SIZE
@@ -103,6 +102,7 @@ var.sig
 var.fun
 func.sig
 label.sig
+spid.sig
 ffi.sig
 ffi.fun
 cases.sig

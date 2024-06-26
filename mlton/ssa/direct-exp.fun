@@ -42,13 +42,13 @@ datatype t =
  | Let of {decs: {var: Var.t, exp: t} list,
            body: t}
  | Name of t * (Var.t -> t)
- | PCall of {func: Func.t,
-             args: t vector,
-             carg: Var.t * Type.t,
+ | Spork of {spid: Spid.t,
              cont: t,
-             larg: Var.t * Type.t,
-             parl: t,
-             parr: t,
+             spwn: t,
+             ty: Type.t}
+ | Spoin of {spid: Spid.t,
+             seq: t,
+             sync: t,
              ty: Type.t}
  | PrimApp of {prim: Type.t Prim.t,
                targs: Type.t vector,
@@ -92,7 +92,8 @@ val detupleBind = DetupleBind
 val handlee = Handle
 val lett = Let
 val name = Name
-val pcall = PCall
+val spork = Spork
+val spoin = Spoin
 val profile = Profile
 val raisee = Raise
 val select = Select
@@ -129,6 +130,8 @@ in
    val truee = make Con.truee
    val falsee = make Con.falsee
 end
+
+val unit = Tuple {exps = Vector.new0 (), ty = Type.unit}
 
 fun eq (e1, e2, ty) =
    primApp {prim = Prim.MLton_eq,
@@ -196,17 +199,16 @@ in
                              seq [Var.layout var, str " = ", layout exp])),
                      layout body)
        | Name _ => str "Name"
-       | PCall {func, args, carg, cont, larg, parl, parr, ...} =>
-            align [seq [str "pcall ",
-                        Func.layout func, str " ", layouts args,
-                        str " of"],
+       | Spork {spid, cont, spwn, ty} =>
+            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
                    indent
-                   (align [seq [str "  cont ", Var.layout (#1 carg), str " => ",
-                                layout cont],
-                           seq [str "| parl ", Var.layout (#1 larg), str " => ",
-                                layout parl],
-                           seq [str "| parr () => ",
-                                layout parr]], 2)]
+                     (align [seq [str "  cont => ", layout cont],
+                             seq [str "| spwn => ", layout spwn]], 2)]
+       | Spoin {spid, seq = bseq, sync = bsync, ty} =>
+            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
+                   indent
+                     (align [seq [str "  seq => ", layout bseq],
+                             seq [str "| sync => ", layout bsync]], 2)]
        | PrimApp {args, prim, targs, ty} =>
             seq [Prim.layoutFull (prim, Type.layout),
                  Layout.list (Vector.toListMap (targs, Type.layout)),
@@ -536,7 +538,27 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                   each decs
                end
           | Name (e, f) => loopf (e, h, fn (x, _) => loop (f x, h, k))
-          | PCall {func, args, carg, cont, larg, parl, parr, ty} =>
+          | Spork {spid, cont, spwn, ty} =>
+               let
+                 val k = Cont.goto (reify (k, ty))
+                 val cont = newLabel0 (cont, h, k)
+                 val spwn = newLabel0 (spwn, h, k)
+               in
+                 {statements = [],
+                  transfer = Transfer.Spork
+                               {spid = spid, cont = cont, spwn = spwn}}
+               end
+          | Spoin {spid, seq, sync, ty} =>
+               let
+                 val k = Cont.goto (reify (k, ty))
+                 val seq = newLabel0 (seq, h, k)
+                 val sync = newLabel0 (sync, h, k)
+               in
+                 {statements = [],
+                  transfer = Transfer.Spoin
+                               {spid = spid, seq = seq, sync = sync}}
+               end
+          (*| PCall {func, args, carg, cont, larg, parl, parr, ty} =>
                let
                   val k = Cont.goto (reify (k, ty))
                   val cont = newLabel (Vector.new1 carg, cont, h, k)
@@ -552,7 +574,7 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                                  cont = cont,
                                  parl = parl,
                                  parr = parr})})
-               end
+               end*)
           | PrimApp {prim, targs, args, ty} =>
                loops
                (args, h, fn xs =>

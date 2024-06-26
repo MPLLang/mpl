@@ -967,6 +967,7 @@ fun transform (program: Program.t): Program.t =
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = fn _ => Error.bug "Useless.doitPrim: deArrow",
                                                  deRef = Type.deRef,
+                                                 deTuple = Type.deTuple,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}}))})
                end
@@ -1442,7 +1443,11 @@ fun transform (program: Program.t): Program.t =
                end
           | Goto {dst, args} =>
                ([], Goto {dst = dst, args = keepUseful (args, label dst)})
-          | PCall {func = f, args, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
+               ([], Spork {spid = spid, cont = cont, spwn = spwn})
+          | Spoin {spid, seq, sync} =>
+               ([], Spoin {spid = spid, seq = seq, sync = sync})
+          (*| PCall {func = f, args, cont, parl, parr} =>
                let
                   val {args = fargs, returns = freturns, ...} = func f
                   fun bug () =
@@ -1486,7 +1491,7 @@ fun transform (program: Program.t): Program.t =
                           cont = cont,
                           parl = parl,
                           parr = parr})
-               end
+               end*)
           | Raise xs => ([], Raise (keepUseful (xs, valOf raises)))
           | Return xs => ([], Return (keepUseful (xs, valOf returns)))
           | Runtime {prim, args, return} =>

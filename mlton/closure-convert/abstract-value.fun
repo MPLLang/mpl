@@ -388,7 +388,7 @@ open Dest
 val {get = serialValue: Type.t -> t, ...} =
    Property.get (Type.plist, Property.initFun fromType)
 
-val {get = pcallDataValue: Type.t -> t, ...} =
+val {get = sporkDataValue: Type.t -> t, ...} =
    Property.get (Type.plist, Property.initFun fromType)
 
 fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
@@ -505,12 +505,12 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | Prim.PCall_forkThreadAndSetData _ =>
+       | Prim.Spork_forkThreadAndSetData _ =>
             let val (_, arg) = twoArgs ()
-            in coerce {from = arg, to = pcallDataValue (ty arg)}
+            in coerce {from = arg, to = sporkDataValue (ty arg)}
                ; result ()
             end
-       | Prim.PCall_getData => pcallDataValue resultTy
+       | Prim.Spork_getData _ => sporkDataValue resultTy
        | Prim.Ref_assign _ =>
             let val (r, x) = twoArgs ()
             in (case dest r of

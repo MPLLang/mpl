@@ -782,6 +782,16 @@ fun limitCheckCoalesce (f: Function.t, maxAlloc, tyconTy) =
              val Block.T {kind, transfer, ...} = Vector.sub (blocks, i)
              datatype z = datatype Kind.t
              val isBigAlloc = BytesAllocated.isBig (Transfer.bytesAllocated transfer)
+             fun jump () =
+                case transfer of
+                   Transfer.CCall {args, func, ...} =>
+                      (case CFunction.bytesNeeded func of
+                          NONE => true
+                        | SOME i =>
+                             (case Vector.sub (args, i) of
+                                 Operand.Const _ => false
+                               | _ => true))
+                 | _ => false
              val b =
                 case kind of
                    Cont _ => true
@@ -789,17 +799,9 @@ fun limitCheckCoalesce (f: Function.t, maxAlloc, tyconTy) =
                       CFunction.mayGC func
                       andalso not (Option.isSome (CFunction.ensuresBytesFree func))
                  | Handler => true
-                 | Jump =>
-                      (case transfer of
-                          Transfer.CCall {args, func, ...} =>
-                             (case CFunction.bytesNeeded func of
-                                 NONE => true
-                               | SOME i =>
-                                    (case Vector.sub (args, i) of
-                                        Operand.Const _ => false
-                                      | _ => true))
-                        | _ => false)
-                 | PCallReturn _ => true
+                 | Jump => jump ()
+                 | SporkSpwn _ => true
+                 | SpoinSync _ => jump ()
           in
              b orelse isBigAlloc
           end)

@@ -77,9 +77,13 @@ struct
                     Transfer.Case {cases=cases, default=default, test=freshenIfGlobal test}
                | Transfer.Goto {args, dst} =>
                     Transfer.Goto {args=freshenVec args, dst=dst}
-               | Transfer.PCall {args, func, cont, parl, parr} =>
+               | Transfer.Spork {spid, cont, spwn} =>
+                    Transfer.Spork {spid = spid, cont = cont, spwn = spwn}
+               | Transfer.Spoin {spid, seq, sync} =>
+                    Transfer.Spoin {spid = spid, seq = seq, sync = sync}
+               (*| Transfer.PCall {args, func, cont, parl, parr} =>
                     Transfer.PCall {args=freshenVec args, func=func,
-                                    cont=cont, parl=parl, parr=parr}
+                                    cont=cont, parl=parl, parr=parr}*)
                | Transfer.Raise vs =>
                     Transfer.Raise (freshenVec vs)
                | Transfer.Return vs =>

@@ -1412,6 +1412,7 @@ fun primApp {args, prim, result: Type.t} =
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = Type.deArrow,
                                                  deRef = Type.deRef,
+                                                 deTuple = Type.deTuple,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}})
    in

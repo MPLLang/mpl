@@ -149,7 +149,29 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {cont, spwn, ...} =>
+               let
+                  fun ensureNullary j =
+                     if Vector.isEmpty (labelValues j)
+                        then ()
+                        else Error.bug (concat ["Analyze.loopTransfer (spork ",
+                                                Label.toString j,
+                                                " must be nullary)"])
+               in
+                  (ensureNullary cont; ensureNullary spwn)
+               end
+          | Spoin {seq, sync, ...} =>
+               let
+                  fun ensureNullary j =
+                     if Vector.isEmpty (labelValues j)
+                        then ()
+                        else Error.bug (concat ["Analyze.loopTransfer (spoin ",
+                                                Label.toString j,
+                                                " must be nullary)"])
+               in
+                  (ensureNullary seq; ensureNullary sync)
+               end
+          (*| PCall {func, args, cont, parl, parr} =>
                let
                   val {args = formals, raises, returns} = funcInfo func
                   val _ = coerces ("pcall args/formals", values args, formals)
@@ -170,7 +192,7 @@ fun 'a analyze
                                              " must be nullary)"])
                in
                   ()
-               end
+               end*)
           | Raise xs =>
                (case shouldRaises of
                    NONE => Error.bug "Analyze.loopTransfer (raise mismatch at Raise)"

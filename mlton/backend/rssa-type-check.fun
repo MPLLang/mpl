@@ -272,7 +272,8 @@ fun checkHandlers (Program.T {functions, ...}) =
                                 | Tail => true
                             end)
                       | Goto {dst, ...} => goto dst
-                      | PCall _ => assert ("pcall", true)
+                      | Spork {cont, spwn, ...} => (goto cont; goto spwn)
+                      | Spoin {seq, sync, ...} => (goto seq; goto sync)
                       | Raise _ => tail "raise"
                       | Return _ => tail "return"
                       | Switch s => Switch.foreachLabel (s, goto)
@@ -340,6 +341,7 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
                 | _ => set (x, Defined)
          in (bind, reference, unbind)
          end
+      val (bindSpid, getSpid, unbindSpid) = make (Spid.layout, Spid.plist)
       val (bindVar, getVar, unbindVar) = make (Var.layout, Var.plist)
       val bindVar =
          Trace.trace2
@@ -361,9 +363,10 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
       fun loopFunc (f: Function.t, isMain: bool): unit =
          let
             val bindVar = fn x => bindVar (x, isMain)
-            val {args, blocks, ...} = Function.dest f
+            val {args, blocks, start, ...} = Function.dest f
             val _ = Vector.foreach (args, bindVar o #1)
             val _ = Vector.foreach (blocks, bindLabel o Block.label)
+            val _ = getLabel start
             val _ =
                Vector.foreach
                (blocks, fn Block.T {transfer, ...} =>
@@ -381,12 +384,19 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
                       Vector.foreach
                       (statements, fn s => loopStmt (s, isMain))
                    val _ = Transfer.foreachUse (transfer, getVar)
+                   val _ = (case transfer of
+                               Transfer.Spork {spid, ...} => bindSpid (spid, false)
+                             | Transfer.Spoin {spid, ...} => getSpid spid
+                             | _ => ())
                 in
                    fn () =>
                    if isMain
                       then ()
                    else
                       let
+                         val _ = (case transfer of
+                                     Transfer.Spork {spid, ...} => unbindSpid spid
+                                   | _ => ())
                          val _ =
                             Vector.foreach
                             (statements, fn s =>
@@ -411,6 +421,112 @@ fun checkScopes (program as Program.T {functions, main, statics, ...}): unit =
    end
 
 val checkScopes = Control.trace (Control.Detail, "checkScopes") checkScopes
+
+fun checkSpork (program as Program.T {functions, main, ...}): unit =
+   let
+      fun checkFunction (f: Function.t): unit =
+         let
+            val {start, blocks, ...} = Function.dest f
+            val {get = labelInfo, rem, set = setLabelInfo, ...} =
+               Property.getSetOnce
+               (Label.plist,
+                Property.initRaise ("Rssa.TypeCheck.checkSpork.info", Label.layout))
+            val _ = Vector.foreach (blocks, fn b =>
+                                    setLabelInfo (Block.label b,
+                                                  {block = b,
+                                                   sporkInfo = ref NONE}))
+            fun goto (l: Label.t,
+                      inSpwn: bool,
+                      sporkNest: Spid.t list) =
+               let
+                  fun bug (msg: string): 'a =
+                     Error.bug
+                     (concat ["Rssa.TypeCheck.checkSpork: bug found in ", Label.toString l,
+                              ": ", msg])
+                  val {block, sporkInfo} = labelInfo l
+               in
+                  case (!sporkInfo) of
+                     NONE =>
+                        let
+                           val _ = sporkInfo := SOME {inSpwn = inSpwn, sporkNest = sporkNest}
+                           val Block.T {transfer, ...} = block
+                           fun simple l = goto (l, inSpwn, sporkNest)
+                           fun checkLeave () =
+                              let
+                                 val _ =
+                                    if inSpwn
+                                       then bug "may not leave function within Spork/spwn"
+                                       else ()
+                                 val _ =
+                                    case sporkNest of
+                                       [] => ()
+                                     | _ => bug "nonempty sporkNest when leaving function"
+                              in
+                                 ()
+                              end
+                           datatype z = datatype Transfer.t
+                        in
+                           case transfer of
+                              Call {return, ...} =>
+                                 let
+                                    datatype z = datatype Return.t
+                                 in
+                                    case return of
+                                       Dead => ()
+                                     | NonTail {handler, cont, ...} =>
+                                          let
+                                             datatype z = datatype Handler.t
+                                          in
+                                             simple cont
+                                             ; (case handler of
+                                                   Dead => ()
+                                                 | Handle hndl => simple hndl
+                                                 | Caller => checkLeave ())
+                                          end
+                                     | Tail => checkLeave ()
+                                 end
+                            | Raise _ => checkLeave ()
+                            | Return _ => checkLeave ()
+                            | Spork {spid, cont, spwn} =>
+                                 (case (inSpwn, sporkNest) of
+                                     (true, _) => bug "may not Spork within Spork/spwn"
+                                   | (false, sporkNest) =>
+                                        (goto (cont, false, spid::sporkNest)
+                                         ; goto (spwn, true, [])))
+                            | Spoin {spid, seq, sync} =>
+                                 (case (inSpwn, sporkNest) of
+                                     (true, _) => bug "may not Spoin within Spork/spwn"
+                                   | (false, []) => bug "empty sporkNest at Spoin"
+                                   | (false, spid'::sporkNest') =>
+                                        if Spid.equals (spid, spid')
+                                           then (goto (seq, false, sporkNest')
+                                                 ; goto (sync, false, sporkNest'))
+                                           else bug "mismatched sporkNest at Spoin")
+                            | _ => Transfer.foreachLabel (transfer, simple)
+                        end
+                   | SOME {inSpwn = inSpwn', sporkNest = sporkNest'} =>
+                        let
+                           val _ = if Bool.equals (inSpwn, inSpwn')
+                                      then ()
+                                      else bug "mismatched block: inSpwn"
+                           val _ = if List.equals (sporkNest, sporkNest', Spid.equals)
+                                      then ()
+                                      else bug "mismatched block: sporkNest"
+                        in
+                           ()
+                        end
+               end
+            val _ = goto (start, false, [])
+            val _ = Vector.foreach (blocks, fn Block.T {label, ...} => rem label)
+         in
+            ()
+         end
+      val _ = checkFunction main
+      val _ = List.foreach (functions, checkFunction)
+   in ()
+   end
+
+val checkSpork = Control.trace (Control.Detail, "checkSpork") checkSpork
 
 fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, statics, ...}) =
    let
@@ -451,7 +567,8 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                                 | Kind.CReturn _ => chk true
                                 | Kind.Handler => chk true
                                 | Kind.Jump => chk false
-                                | Kind.PCallReturn _ => chk true
+                                | Kind.SporkSpwn _ => chk true
+                                | Kind.SpoinSync _ => chk false
                             end
             end
       val {get = labelBlock: Label.t -> Block.t,
@@ -631,39 +748,29 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                    tailIsOk (raises, raises')
                    andalso tailIsOk (returns, returns'))
          end
-      fun pcallIsOk {args, func, cont, parl, parr} =
+
+      fun sporkIsOk {spid, cont, spwn} =
+         gotoOk {args = Vector.new0 (), dst = cont}
+         andalso
          let
-            val pcallDataTy =
-               let
-                  val Block.T {args, ...} = labelBlock parl
-               in
-                  Vector.new1 (#2 (Vector.last args))
-               end
-            val {args = formals, returns = returns', ...} =
-               Function.dest (funcInfo func)
-            val rets = {cont = cont, parl = parl, parr = parr}
-            fun check (sel, returns') =
-               let
-                  val label = sel rets
-                  val Block.T {args = cArgs, kind = cKind, ...} =
-                     labelBlock label
-               in
-                  nonTailIsOk (cArgs, returns')
-                  andalso
-                  (case cKind of
-                      Kind.PCallReturn (rets' as {cont = cont', parl = parl', parr = parr'}) =>
-                         Label.equals (cont, cont')
-                         andalso Label.equals (parl, parl')
-                         andalso Label.equals (parr, parr')
-                         andalso Label.equals (label, sel rets')
-                    | _ => false)
-               end
+            val Block.T {kind, ...} = labelBlock spwn
          in
-            Vector.equals (args, formals, fn (z, (_, t)) =>
-                           Type.isSubtype (Operand.ty z, t))
-            andalso check (#cont, returns')
-            andalso check (#parl, Option.map (returns', fn returns' => Vector.concat [returns', pcallDataTy]))
-            andalso check (#parr, SOME pcallDataTy)
+            case kind of
+               Kind.SporkSpwn {spid = spid'} =>
+                  Spid.equals (spid, spid')
+             | _ => false
+         end
+
+      fun spoinIsOk {spid, seq, sync} =
+         gotoOk {args = Vector.new0 (), dst = seq}
+         andalso
+         let
+            val Block.T {kind, ...} = labelBlock sync
+         in
+            case kind of
+               Kind.SpoinSync {spid = spid'} =>
+                  Spid.equals (spid, spid')
+             | _ => false
          end
 
       fun checkFunction f =
@@ -718,16 +825,10 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                         (checkOperands args
                          ; gotoOk {args = Vector.map (args, Operand.ty),
                                    dst = dst})
-                   | PCall {args, func, cont, parl, parr} =>
-                        let
-                           val _ = checkOperands args
-                        in
-                           pcallIsOk {args = args,
-                                      func = func,
-                                      cont = cont,
-                                      parl = parl,
-                                      parr = parr}
-                        end
+                   | Spork x =>
+                        sporkIsOk x
+                   | Spoin x =>
+                        spoinIsOk x
                    | Raise zs =>
                         (checkOperands zs
                          ; (case raises of
@@ -782,7 +883,14 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
                               end
                          | Handler => true
                          | Jump => true
-                         | PCallReturn _ => true
+                         | SporkSpwn _ =>
+                              1 = Vector.length args
+                              andalso
+                              Type.isObjptr (#2 (Vector.first args))
+                         | SpoinSync _ =>
+                              1 = Vector.length args
+                              andalso
+                              Type.isObjptr (#2 (Vector.first args))
                      end
                   val _ = check' (kind, "kind", kindOk, Kind.layout)
                   val _ =
@@ -832,6 +940,7 @@ fun typeCheck (p as Program.T {functions, main, objectTypes, profileInfo, static
       val _ = if !handlersImplemented
                  then checkHandlers p
                  else ()
+      val _ = checkSpork p
    in
       ()
    end handle Err.E e => (Layout.outputl (Err.layout e, Out.error)

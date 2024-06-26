@@ -199,7 +199,7 @@ structure CFunction =
           target = Direct "GC_readBarrier"}
 
       (* CHECK; thread as objptr *)
-      val pcallForkThreadAndSetData = fn ty =>
+      val sporkForkThreadAndSetData = fn ty =>
          T {args = Vector.new4 (Type.gcState (), Type.bool, Type.thread (), ty),
             convention = Cdecl,
             inline = false,
@@ -800,10 +800,10 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
              end)
       end
 
-      val {get = pcallDataArg: Label.t -> Var.t * S.Type.t,
-           set = setPCallDataArg, ...} =
+      val {get = sporkDataArg: Label.t -> Var.t * S.Type.t,
+           set = setSporkDataArg, ...} =
          Property.getSetOnce (Label.plist,
-                              Property.initRaise ("pcallDataArg", Label.layout))
+                              Property.initRaise ("sporkDataArg", Label.layout))
       val () =
          List.foreach
          (functions, fn f =>
@@ -818,28 +818,31 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                        case stmt of
                           S.Statement.Bind {var, ty,
                                             exp = S.Exp.PrimApp
-                                                  {prim = Prim.PCall_getData, ...}} =>
+                                                  {prim = Prim.Spork_getData _, ...}} =>
                              let
                                 val l =
                                    case l of
-                                      NONE => Error.bug "Ssa2ToRssa.setPCallDataArg: PCall_getData not dominated by PCall"
+                                      NONE => Error.bug "Ssa2ToRssa.setSporkDataArg: Spork_getData not dominated by Spork"
                                     | SOME l => l
                                 val var =
                                    case var of
                                       NONE => Var.newNoname ()
                                     | SOME var => var
                              in
-                                setPCallDataArg (l, (var, ty))
+                                setSporkDataArg (l, (var, ty))
                              end
                         | _ => ())
                    val doit =
                       case transfer of
-                         S.Transfer.PCall {parl, parr, ...} =>
+                         S.Transfer.Spork {spwn, ...} =>
                             (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
-                             if Label.equals (label, parl)
-                                then loop (dt, SOME parl)
-                             else if Label.equals (label, parr)
-                                then loop (dt, SOME parr)
+                             if Label.equals (label, spwn)
+                                then loop (dt, SOME spwn)
+                             else loop (dt, l))
+                       | S.Transfer.Spoin {sync, ...} =>
+                            (fn dt as Tree.T (S.Block.T {label, ...}, _) =>
+                             if Label.equals (label, sync)
+                                then loop (dt, SOME sync)
                              else loop (dt, l))
                        | _ => (fn dt => loop (dt, l))
                 in
@@ -882,9 +885,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                              {args: (Var.t * S.Type.t) vector,
                               cont: (Handler.t * Label.t) list ref,
                               handler: Label.t option ref,
-                              pcallReturn: ({cont: Label.t,
-                                             parl: Label.t,
-                                             parr: Label.t} * Label.t) list ref}),
+                              sporkLabel: (Spid.t * Label.t) list ref,
+                              spoinLabel: (Spid.t * Label.t) list ref}),
            set = setLabelInfo, ...} =
          Property.getSetOnce (Label.plist,
                               Property.initRaise ("label info", Label.layout))
@@ -1006,38 +1008,51 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
          Trace.trace2 ("SsaToRssa.labelCont",
                        Label.layout, Handler.layout, Label.layout)
          labelCont
-      fun genPCallReturns (rets as {cont, parl, parr}): {cont: Label.t, parl: Label.t, parr: Label.t} =
+      fun genSporkLabels {spid, cont, spwn}: {cont: Label.t, spwn: Label.t} =
          let
-            fun lkup pcallReturn =
-               List.peek (!pcallReturn, fn ({cont = cont', parl = parl', parr = parr'}, _) =>
-                          Label.equals (cont, cont') andalso
-                          Label.equals (parl, parl') andalso
-                          Label.equals (parr, parr'))
-            val {pcallReturn = contPCallReturn, ...} = labelInfo cont
-            val {pcallReturn = parlPCallReturn, ...} = labelInfo parl
-            val {pcallReturn = parrPCallReturn, ...} = labelInfo parr
+            fun lkup sporkLabel =
+               List.peek (!sporkLabel, fn (spid', _) => Spid.equals (spid, spid'))
+            val {sporkLabel = contSporkLabel, ...} = labelInfo cont
+            val {sporkLabel = spwnSporkLabel, ...} = labelInfo spwn
          in
-            case (lkup contPCallReturn, lkup parlPCallReturn, lkup parrPCallReturn) of
-               (SOME (_, cont), SOME (_, parl), SOME (_, parr)) =>
-                  {cont = cont, parl = parl, parr = parr}
-             | (NONE, NONE, NONE) =>
+            case (lkup contSporkLabel, lkup spwnSporkLabel) of
+               (SOME (_, cont), SOME (_, spwn)) =>
+                  {cont = cont, spwn = spwn}
+             | (NONE, NONE) =>
                   let
-                     val (cont', mkc) = eta' cont
-                     val _ = List.push (contPCallReturn, (rets, cont'))
-                     val parlPCallDataArg = pcallDataArg parl
-                     val (parl', mkl) = eta'' (parl, Vector.new1 parlPCallDataArg)
-                     val _ = List.push (parlPCallReturn, (rets, parl'))
-                     val parrPCallDataArg = pcallDataArg parr
-                     val (parr', mkr) = eta'' (parr, Vector.new1 parrPCallDataArg)
-                     val _ = List.push (parrPCallReturn, (rets, parr'))
-                     val rets' = {cont = cont', parl = parl', parr = parr'}
-                     val _ = mkc (Kind.PCallReturn rets')
-                     val _ = mkl (Kind.PCallReturn rets')
-                     val _ = mkr (Kind.PCallReturn rets')
+                     val cont' = eta (cont, Kind.Jump)
+                     val _ = List.push (contSporkLabel, (spid, cont'))
+                     val spwnSporkDataArg = sporkDataArg spwn
+                     val (spwn', mkspwn) = eta'' (spwn, Vector.new1 spwnSporkDataArg)
+                     val _ = mkspwn (Kind.SporkSpwn {spid = spid})
+                     val _ = List.push (spwnSporkLabel, (spid, spwn'))
                   in
-                     rets'
+                     {cont = cont', spwn = spwn'}
                   end
-             | _ => Error.bug "Ssa2ToRssa.genPCallReturns"
+             | _ => Error.bug "Ssa2ToRssa.genSporkLabels"
+         end
+      fun genSpoinLabels {spid, seq, sync}: {seq: Label.t, sync: Label.t} =
+         let
+            fun lkup spoinLabel =
+               List.peek (!spoinLabel, fn (spid', _) => Spid.equals (spid, spid'))
+            val {spoinLabel = seqSpoinLabel, ...} = labelInfo seq
+            val {spoinLabel = syncSpoinLabel, ...} = labelInfo sync
+         in
+            case (lkup seqSpoinLabel, lkup syncSpoinLabel) of
+               (SOME (_, seq), SOME (_, sync)) =>
+                  {seq = seq, sync = sync}
+             | (NONE, NONE) =>
+                  let
+                     val seq' = eta (seq, Kind.Jump)
+                     val _ = List.push (seqSpoinLabel, (spid, seq'))
+                     val syncSpoinDataArg = sporkDataArg sync
+                     val (sync', mksync) = eta'' (sync, Vector.new1 syncSpoinDataArg)
+                     val _ = mksync (Kind.SpoinSync {spid = spid})
+                     val _ = List.push (syncSpoinLabel, (spid, sync'))
+                  in
+                     {seq = seq', sync = sync'}
+                  end
+             | _ => Error.bug "Ssa2ToRssa.genSpoinLabels"
          end
       fun vos (xs: Var.t vector) =
          Vector.keepAllMap (xs, fn x =>
@@ -1099,17 +1114,20 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
           | S.Transfer.Case r => translateCase r
           | S.Transfer.Goto {dst, args} =>
                ([], Transfer.Goto {dst = dst, args = vos args})
-          | S.Transfer.PCall {args, func, cont, parl, parr} =>
-               let
-                  val {cont, parl, parr} =
-                     genPCallReturns {cont = cont, parl = parl, parr = parr}
-               in
-                  ([],
-                   Transfer.PCall {args = vos args,
-                                   func = func,
-                                   cont = cont,
-                                   parl = parl,
-                                   parr = parr})
+          | S.Transfer.Spork {spid, cont, spwn} =>
+            (* Record the spork nesting info for each rssa fun:
+             * spid.t vector vector
+             * have a spid.t vector for each nesting depth
+             * In allocate-vars, need to know for each block
+             * which sporks its nested under, so we can also
+             * know that spork's spwn live vars are live there too
+             *)
+               let val {cont, spwn} = genSporkLabels {spid = spid, cont = cont, spwn = spwn} in
+                 ([], Transfer.Spork {spid = spid, cont = cont, spwn = spwn})
+               end
+          | S.Transfer.Spoin {spid, seq, sync} =>
+               let val {seq, sync} = genSpoinLabels {spid = spid, seq = seq, sync = sync} in
+                 ([], Transfer.Spoin {spid = spid, seq = seq, sync = sync})
                end
           | S.Transfer.Raise xs => ([], Transfer.Raise (vos xs))
           | S.Transfer.Return xs => ([], Transfer.Return (vos xs))
@@ -1713,15 +1731,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                           then primApp (prim, Vector.new1 (varOp a))
                                           else none ()
                                     end
-                               | Prim.PCall_forkThreadAndSetData {youngest} =>
+                               | Prim.Spork_forkThreadAndSetData {youngest} =>
                                     ccall
                                     {args = (Vector.new4
                                              (GCState,
                                               Operand.bool youngest,
                                               a 0,
                                               a 1)),
-                                     func = (CFunction.pcallForkThreadAndSetData (Operand.ty (a 1)))}
-                               | Prim.PCall_getData => none ()
+                                     func = (CFunction.sporkForkThreadAndSetData (Operand.ty (a 1)))}
+                               | Prim.Spork_getData _ => none ()
                                | Prim.Thread_atomicBegin =>
                                     (* gcState.atomicState++;
                                      * if (gcState.signalsInfo.signalIsPending)
@@ -2064,7 +2082,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                 setLabelInfo (label, {args = args,
                                       cont = ref [],
                                       handler = ref NONE,
-                                      pcallReturn = ref []}))
+                                      sporkLabel = ref [],
+                                      spoinLabel = ref []}))
             val blocks = Vector.map (blocks, translateBlock)
             val blocks = Vector.concat [Vector.fromList (!extraBlocks), blocks]
             val _ = extraBlocks := []

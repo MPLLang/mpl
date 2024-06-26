@@ -250,7 +250,7 @@ fun outputDeclarations
     print: string -> unit,
     program = (Program.T
                {chunks, frameInfos, frameOffsets, globals, maxFrameSize,
-                objectTypes, pcallInfos, sourceMaps, staticHeaps, ...}),
+                objectTypes, sporkInfos, sourceMaps, staticHeaps, ...}),
     rest: unit -> unit
     }: unit =
    let
@@ -691,29 +691,31 @@ fun outputDeclarations
                          FrameOffsets.offsets fo,
                          fn (_, offset) => C.bytes offset))
           ; Vector.foreachi
-            (pcallInfos, fn (i, pra) =>
-             prints ["const struct GC_pcallInfo ",
-                     "pcallInfo",
-                     C.int i,
-                     " = {",
-                     labelIndexAsString (PCallInfo.parl pra, {pretty = true}),
-                     ",",
-                     labelIndexAsString (PCallInfo.parr pra, {pretty = true}),
-                     "};\n"])
+            (sporkInfos, fn (i, spi) =>
+             (declareArray ("const GC_returnAddress", concat ["sporkSpwns", C.int i],
+                            {firstElemLen = false, oneline = true},
+                            SporkInfo.spwns spi,
+                            fn (_, l) => labelIndexAsString (l, {pretty = true}))
+              ; print (concat
+                       ["static const struct GC_sporkInfo sporkInfo",
+                        C.int i, " = ", "{",
+                        C.int (Vector.length (SporkInfo.spwns spi)), ", ",
+                        C.bytes (SporkInfo.offset spi), ", ",
+                        "sporkSpwns", C.int i, "};\n"])))
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
                           frameInfos, fn (_, fi) =>
                           concat ["{",
                                   FrameInfo.Kind.toString (FrameInfo.kind fi),
                                   ", frameOffsets", C.int (FrameOffsets.index (FrameInfo.frameOffsets fi)),
-                                  ", ", case FrameInfo.pcallInfo fi of
-                                           NONE => C.null
-                                         | SOME pra => concat ["&pcallInfo",
-                                                               C.int (PCallInfo.index pra)],
                                   ", ", C.bytes (FrameInfo.size fi),
                                   ", ", (case FrameInfo.sourceSeqIndex fi of
                                             NONE => C.int 0
                                           | SOME ssi => C.int ssi),
+                                  ", ", case FrameInfo.sporkInfo fi of
+                                           NONE => C.null
+                                         | SOME spi => concat ["&sporkInfo",
+                                                               C.int (SporkInfo.index spi)],
                                   "}"]))
       fun declareAtMLtons () =
          declareArray ("char *", "atMLtons",
@@ -1436,9 +1438,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                         (Option.app (return, fn {return, size, ...} => push (return, size))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
-                   | PCall {label, cont, parl, parr, size, ...} =>
-                        (push (cont, size)
-                         ; jump label)
+                   | Spork {cont, ...} => gotoLabel (cont, {tab = true})
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2
@@ -1680,7 +1680,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
-                      | Kind.PCallReturn {frameInfo, ...} => pop frameInfo
+                      | Kind.SporkSpwn {frameInfo, ...} => pop frameInfo
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements
@@ -1706,7 +1706,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
-                            | PCall _ => ()
+                            | Spork {cont, spwn, ...} => visit cont
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>
