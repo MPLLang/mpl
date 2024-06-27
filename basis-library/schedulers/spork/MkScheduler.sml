@@ -841,6 +841,12 @@ struct
 
     fun heartbeatHandler (thread: Thread.t) =
       let
+        (* NOTE: we can't assert the token invariants here! We can only do
+         * so after the heartbeatHandler finishes. It's possible for the
+         * token invariants to be briefly violated, in which case the
+         * handler restores them.
+         *)
+
         val hadEnoughToSpawnBefore =
           (currentSpareHeartbeatTokens () >= spawnCost)
 
@@ -855,13 +861,17 @@ struct
           else
             i
 
-        val numSpawned =
-          if hadEnoughToSpawnBefore then
-            (incrementNumSkippedHeartbeats (); 0)
-          else
-            loop 0
+        val numSpawned = loop 0
 
         val _ = assertTokenInvariants thread "heartbeatHandler"
+        val _ =
+          (* If the hearbeat handler intervenes immediately before the eager
+           * check at each `par`, then there should be exactly one spawn.
+           *)
+          if hadEnoughToSpawnBefore andalso numSpawned > 1 then
+            die (fn _ => "scheduler bug: more than one eager fork was missed")
+          else
+            ()
       in
         incrementNumHeartbeats ()
       end
