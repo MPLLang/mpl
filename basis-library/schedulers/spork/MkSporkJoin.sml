@@ -48,38 +48,40 @@ struct
   (* ======================================================================= *)
 
   fun parfor (lo, hi) f =
+    if noTokens () then
+      parfor_spork_one_body (lo, hi) f
+    else
+      parfor_split (lo, hi) f
+
+  and parfor_spork_one_body (lo, hi) f =
+    if lo >= hi then
+      ()
+    else
+      let
+        val lo' = lo+1
+        fun body () = f lo
+
+        fun seq () = parfor_spork_one_body (lo', hi) f
+        fun spwn () = parfor (lo', hi) f
+        fun sync ((), ()) = ()
+      in
+        spork (body, spwn, seq, sync)
+      end
+
+  and parfor_split (lo, hi) f =
     if lo >= hi then
       ()
     else if lo+1 = hi then
       f lo
-    else if noTokens () then
-      parfor_sporked (lo, hi) f
     else
-      parfor_split (lo, hi) f
-
-  and parfor_sporked (lo, hi) f =
-    let
-      (* Small optimization: do two loop iterations back-to-back to further
-        * amortize overheads as much as possible.·
-        *)
-      val lo' = lo+2
-      fun body () = (f lo; f (lo+1))
-      fun seq () = parfor (lo', hi) f
-      fun spwn () = parfor (lo', hi) f
-      fun sync ((), ()) = ()
-    in
-      spork (body, spwn, seq, sync)
-    end
-
-  and parfor_split (lo, hi) f =
-    let
-      val mid = lo + (hi-lo) div 2
-      fun left () = parfor (lo, mid) f
-      fun right () = parfor (mid, hi) f
-    in
-      par (left, right);
-      ()
-    end
+      let
+        val mid = lo + (hi-lo) div 2
+        fun left () = parfor (lo, mid) f
+        fun right () = parfor (mid, hi) f
+      in
+        par (left, right);
+        ()
+      end
 
   fun parfor' _ (lo, hi) f = parfor (lo, hi) f
   val parfor = parfor'
