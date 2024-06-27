@@ -210,13 +210,19 @@ struct
   (* fun dbgmsg'' m = dbgmsg''' m *)
 
   fun assertTokenInvariants thread msg =
-    if
-      currentSpareHeartbeatTokens () >= spawnCost andalso
-      HH.canForkThread thread
-    then
-      die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: can fork but have tokens")
-    else
-      ()
+    let
+      val depth = HH.getDepth (Thread.current ())
+      val notOkay =
+        depth < Queue.capacity
+        andalso depthOkayForDECheck depth
+        andalso currentSpareHeartbeatTokens () >= spawnCost
+        andalso HH.canForkThread thread
+    in
+      if notOkay then
+        die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: thread at depth " ^ Int.toString depth ^ " can fork but has tokens")
+      else
+        ()
+    end
 
   (* ========================================================================
    * TASKS
