@@ -247,7 +247,7 @@ void copyStackFrameToNewStack (
 
   GC_returnAddress ret = *((GC_returnAddress*)(frame - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-  assert(fi->kind == PCALL_PARL_FRAME);
+  assert(fi->kind == PCALL_CONT_FRAME);
   pointer frameBottom = frame - fi->size;
   GC_memcpy(frameBottom, getStackBottom(s, to), fi->size);
   to->used = fi->size;

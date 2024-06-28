@@ -114,7 +114,7 @@ datatype 'a t =
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
  | PCall (* closure convert *)
- | PCall_forkThreadAndSetData (* to rssa (as runtime C fn) *)
+ | PCall_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | PCall_getData (* backend *)
  | Real_Math_acos of RealSize.t (* codegen *)
  | Real_Math_asin of RealSize.t (* codegen *)
@@ -295,7 +295,8 @@ fun toString (n: 'a t): string =
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
        | PCall => "PCall"
-       | PCall_forkThreadAndSetData => "PCall_forkThreadAndSetData"
+       | PCall_forkThreadAndSetData {youngest=false} => "PCall_forkThreadAndSetData"
+       | PCall_forkThreadAndSetData {youngest=true} => "PCall_forkThreadAndSetData_youngest"
        | PCall_getData => "PCall_getData"
        | Real_Math_acos s => real (s, "Math_acos")
        | Real_Math_asin s => real (s, "Math_asin")
@@ -459,7 +460,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
     | (PCall, PCall) => true
-    | (PCall_forkThreadAndSetData, PCall_forkThreadAndSetData) => true
+    | (PCall_forkThreadAndSetData ws1, PCall_forkThreadAndSetData ws2) => ws1 = ws2
     | (PCall_getData, PCall_getData) => true
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
     | (Real_Math_asin s, Real_Math_asin s') => RealSize.equals (s, s')
@@ -644,7 +645,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
     | PCall => PCall
-    | PCall_forkThreadAndSetData => PCall_forkThreadAndSetData
+    | PCall_forkThreadAndSetData z => PCall_forkThreadAndSetData z
     | PCall_getData => PCall_getData
     | Real_Math_acos z => Real_Math_acos z
     | Real_Math_asin z => Real_Math_asin z
@@ -855,7 +856,7 @@ val kind: 'a t -> Kind.t =
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
        | PCall => SideEffect
-       | PCall_forkThreadAndSetData => SideEffect
+       | PCall_forkThreadAndSetData _ => SideEffect
        | PCall_getData => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_asin _ => DependsOnState (* depends on rounding mode *)
@@ -1066,7 +1067,8 @@ in
        MLton_size,
        MLton_touch,
        PCall,
-       PCall_forkThreadAndSetData,
+       PCall_forkThreadAndSetData {youngest=true},
+       PCall_forkThreadAndSetData {youngest=false},
        PCall_getData,
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
@@ -1417,7 +1419,7 @@ fun 'a checkApp (prim: 'a t,
                        in
                           (sixArgs (func,farg,cont,parl,parr,rarg), tc)
                        end)
-       | PCall_forkThreadAndSetData => oneTarg (fn t => (twoArgs (thread, t), thread))
+       | PCall_forkThreadAndSetData _ => oneTarg (fn t => (twoArgs (thread, t), thread))
        | PCall_getData => oneTarg (fn t => (noArgs, t))
        | Real_Math_acos s => realUnary s
        | Real_Math_asin s => realUnary s
@@ -1566,7 +1568,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                   #2 (deArrow (arg 2)),
                   #1 (deArrow (arg 4)),
                   #2 (deArrow (arg 4)))
-       | PCall_forkThreadAndSetData => one (arg 1)
+       | PCall_forkThreadAndSetData _ => one (arg 1)
        | PCall_getData => one result
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))

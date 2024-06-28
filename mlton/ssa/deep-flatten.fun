@@ -766,7 +766,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
              | Prim.MLton_equal => equal ()
              | Prim.MLton_size => dontFlatten ()
              | Prim.MLton_share => dontFlatten ()
-             | Prim.PCall_forkThreadAndSetData =>
+             | Prim.PCall_forkThreadAndSetData _ =>
                   let
                      val x = Vector.sub (args, 1)
                      val _ = Value.dontFlatten x

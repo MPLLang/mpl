@@ -568,6 +568,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     );
   }
 
+  if (s->savedAdditionalRoot != BOGUS_OBJPTR) {
+    forwardHHObjptr(
+      s,
+      &(s->savedAdditionalRoot),
+      s->savedAdditionalRoot,
+      &forwardHHObjptrArgs
+    );
+  }
+
   /* ======================================================================= */
 
   /* forward contents of deque, only for the range of the deque that is
