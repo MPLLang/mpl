@@ -409,6 +409,41 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
 
 objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, pointer dp) {
   enter(s);
+
+  /* ========================================================================
+   * (1) Allocate a new thread. This might trigger a GC, so we have to be
+   * careful with threadp and dp.
+   * ========================================================================
+   */
+
+  // SAM_NOTE: we need a decent amount of reserved space to make sure that
+  // the next call on this stack has enough space. Next call might be a
+  // non-tail, which might bump up to max frame size.
+  size_t newStackReserved = alignStackReserved(s, 2*s->maxFrameSize);
+  uint32_t newDepth = getThreadCurrent(s)->currentDepth;
+  objptr dop = pointerToObjptr(dp, NULL);
+  dp = NULL; // we don't need dp anymore; we'll only use dop
+
+  assert (s->savedThread == BOGUS_OBJPTR);
+  assert (s->savedAdditionalRoot == BOGUS_OBJPTR);
+  s->savedThread = pointerToObjptr(threadp, NULL);
+  s->savedAdditionalRoot = dop;
+  GC_thread copied = newThread(s, newStackReserved);
+  assert(s->savedThread == pointerToObjptr(threadp, NULL));
+  assert(s->savedAdditionalRoot != BOGUS_OBJPTR);
+  dop = s->savedAdditionalRoot;
+  s->savedThread = BOGUS_OBJPTR;
+  s->savedAdditionalRoot = BOGUS_OBJPTR;
+  objptr copiedp =
+    pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
+
+  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
+
+  /* ========================================================================
+   * (2) Find the promotable frame.
+   * ========================================================================
+   */
+
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
@@ -434,6 +469,23 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
     return BOGUS_OBJPTR;
   }
 
+  /* ========================================================================
+   * (3) Populate the data slot and then copy the frame. Note that the
+   * populated data slot gets copied to the new stack.
+   * ========================================================================
+   */
+
+  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE)) = dop;
+
+  GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
+  copyStackFrameToNewStack(s, pframe, fromStack, toStack);
+  pointer newFrame = getStackTop(s, toStack);
+
+  /* ========================================================================
+   * (4) Look up the PCall info and swing the returns of the two frames
+   * ========================================================================
+   */
+
   GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
   GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
 #if ASSERT
@@ -443,75 +495,32 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   GC_returnAddress parl_ret = fi->pcallInfo->parl;
   GC_returnAddress parr_ret = fi->pcallInfo->parr;
 
-  // =========================================================================
-  // First, write dp (data pointer) onto the promotable frame
-  // =========================================================================
-
-  objptr dop = pointerToObjptr(dp, NULL);
-  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE)) = dop;
-
-  /* SAM_NOTE: VERY SUBTLE: the next line (which updates the pframe's return
-   * address) absolutely must happen before we call newThread. This is because
-   * newThread might trigger a GC, and we need to forward the dop. By updating
-   * pframe's return address, we inform the GC that the frame is a
-   * PCALL_PARL_FRAME, and the GC then knows that the dataslot pointer is live
-   * and will forward it appropriately. When we later copy this frame, all
-   * values in the frame have already been forwarded, and we get the new
-   * versions of those values in the new frame for free.
-   *
-   * It's possible we could work around this another way. For example, we
-   * could create additional roots in the gcstate, e.g. s->roots[0] = dop,
-   * and then handle these explicitly during GC, allowing us to read off the
-   * forwarded value s->roots[0] after GC completes.
-   * 
-   * I prefer this little hack over the alternative, because it is much easier,
-   * just subtle. Hence the hopefully informative comment :)
-   */
-
-  // left side: transition to PCALL_PARL_FRAME
   *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
-
-  // =========================================================================
-  // Next, copy the promotable frame
-  // =========================================================================
-
-  // SAM_NOTE: we need a decent amount of reserved space to make sure that
-  // the next call on this stack has enough space. Next call might be a
-  // non-tail, which might bump up to max frame size.
-  size_t newStackReserved = alignStackReserved(s, 2*s->maxFrameSize);
-
-  uint32_t newDepth = getThreadCurrent(s)->currentDepth;
-
-  assert (s->savedThread == BOGUS_OBJPTR);
-  s->savedThread = pointerToObjptr(threadp, NULL);
-  GC_thread copied = newThread (s, newStackReserved);
-  assert(s->savedThread == pointerToObjptr(threadp, NULL));
-  s->savedThread = BOGUS_OBJPTR;
-  objptr copiedp =
-    pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
-
-  GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
-  copyStackFrameToNewStack(s, pframe, fromStack, toStack);
-  pointer newFrame = getStackTop(s, toStack);
-
-  // right side: transition to PCALL_PARR_FRAME
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = parr_ret;
 
-  /* SAM_NOTE: would like to assert these, but jop may have already been
-   * forwarded above (calling newThread, above, might trigger a GC)
+  /* ========================================================================
+   * (Sanity check) Confirming that the data slots are in the right place
+   * ========================================================================
    */
-  // assert(*(objptr*)(pframe - fi->size) == jop);
-  // assert(*(objptr*)(newFrame - fi->size) == jop);
 
-  // Is this right? Or are we missing one suspended depth because forkThread
-  // happens before the decheck fork? Might need to fix this by fusing decheck
-  // fork with this function.
-  GC_HH_copySyncDepthsFromThread(s, getThreadCurrentObjptr(s), copiedp, newDepth);
-
-  // uint32_t spares = getThreadCurrent(s)->spareHeartbeatTokens;
-  // uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
-  // copied->spareHeartbeatTokens += half;
-  // getThreadCurrent(s)->spareHeartbeatTokens -= half;
+#if ASSERT
+  GC_frameInfo fil = getFrameInfoFromReturnAddress(s, parl_ret);
+  GC_frameOffsets foffl = fil->offsets;
+  assert(
+    ((pframe - fil->size) + foffl[foffl[0]])
+    ==
+    pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE
+  );
+  GC_frameInfo fir = getFrameInfoFromReturnAddress(s, parr_ret);
+  GC_frameOffsets foffr = fir->offsets;
+  assert(
+    ((pframe - fir->size) + foffr[foffr[0]])
+    ==
+    pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE
+  );
+  assert(fi->size == fil->size);
+  assert(fi->size == fir->size);
+#endif
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
