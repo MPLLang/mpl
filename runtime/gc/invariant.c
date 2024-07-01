@@ -23,15 +23,6 @@ bool invariantForMutatorFrontier (GC_state s) {
       && (TRUE == HM_getChunkOf(s->frontier)->mightContainMultipleObjects);
 }
 
-#if ASSERT
-bool strongInvariantForMutatorFrontier (GC_state s) {
-  GC_thread thread = getThreadCurrent(s);
-  return (thread->bytesNeeded <= (size_t)(s->limitPlusSlop - s->frontier))
-      && inSameBlock(s->frontier, s->limitPlusSlop-1)
-      && ((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC;
-}
-#endif
-
 bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
   return (getStackTop (s, stack)

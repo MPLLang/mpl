@@ -619,14 +619,21 @@ void HM_updateChunkFrontier(HM_chunk chunk, pointer frontier) {
 #if ASSERT
 void HM_assertChunkListInvariants(HM_chunkList chunkList) {
   // return;
-  size_t size = 0;
-  size_t usedSize = 0;
+
+  /* SAM_NOTE: TODO: checking {size,usedSize} is disabled here because some
+   * chunklists track sizes while others do not. (See 50cd7dd and related
+   * commits.) It would be a good idea to distinguish these with separate
+   * types, and then we can do precise invariants for both. 
+   */
+
+  // size_t size = 0;
+  // size_t usedSize = 0;
   HM_chunk chunk = chunkList->firstChunk;
   while (NULL != chunk) {
     assert(HM_getChunkStart(chunk) <= chunk->frontier);
     assert(chunk->frontier <= chunk->limit);
-    size += HM_getChunkSize(chunk);
-    usedSize += HM_getChunkUsedSize(chunk);
+    // size += HM_getChunkSize(chunk);
+    // usedSize += HM_getChunkUsedSize(chunk);
     if (chunk->nextChunk == NULL) {
       break;
     }

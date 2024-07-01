@@ -4,6 +4,9 @@
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
+#if (defined (MAX))
+#undef MAX
+#endif
 #define MAX(A,B) (((A) > (B)) ? (A) : (B))
 
 // static const size_t MINIMUM_CAPACITY = 10;
