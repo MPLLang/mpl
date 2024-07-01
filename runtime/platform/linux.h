@@ -123,6 +123,6 @@ static inline void set_cpu_affinity(int cpu) {
 }
 
 static inline int getrusage_thread(struct rusage *rusage) {
-        getrusage(RUSAGE_THREAD, rusage);
+  return getrusage(RUSAGE_THREAD, rusage);
 }
 
