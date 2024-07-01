@@ -277,8 +277,12 @@ unsupported, including (but not limited to):
 
 ### Requirements
 
-MPL has only been tested on Linux with x86-64. The following software is
-required.
+MPL has primarily been tested on Linux with x86-64. Preliminary support for
+Mac has been implemented but not yet thoroughly tested. If you are installing
+on Mac, you'll need to install manually from source (not through `mpl-switch`).
+Instructions are below.
+
+The following software is required.
  * [GCC](http://gcc.gnu.org)
  * [GMP](http://gmplib.org) (GNU Multiple Precision arithmetic library)
  * [GNU Make](http://savannah.gnu.org/projects/make), [GNU Bash](http://www.gnu.org/software/bash/)
@@ -289,7 +293,7 @@ required.
    - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
  * (If using [`mpl-switch`](https://github.com/mpllang/mpl-switch)): Python 3, and `git`.
 
-### Installation with `mpl-switch`
+### Installation with `mpl-switch` (Linux only)
 
 The [`mpl-switch`](https://github.com/mpllang/mpl-switch) utility makes it
 easy to install multiple versions of MPL on the same system and switch
@@ -307,22 +311,40 @@ see what versions of MPL are currently installed, do:
 $ mpl-switch list
 ```
 
-### Manual Instructions
+### Manual Instructions (Linux)
 
-Alternatively, you can manually build `mpl` by cloning this repo and then
-performing the following.
+You can manually build `mpl` by cloning this repo and then performing the following.
 
 **Build the executable**. This produces an executable at `build/bin/mpl`:
 ```
 $ make
 ```
 
-**Put it where you want it**. After building, MPL can then be installed to
-`/usr/local`:
-```
-$ make install
-```
-or to a custom directory with the `PREFIX` option:
+**Put it where you want it**. After building, MPL can then be installed
+to a custom directory with the `PREFIX` option:
 ```
 $ make PREFIX=/opt/mpl install
+```
+
+**Note**: At the moment, we do not recommend doing `make install` without
+setting `PREFIX=...`, because this can clobber an existing installation of
+[`MLton`](https://github.com/mlton/mlton). (See issue [#170](https://github.com/MPLLang/mpl/issues/170).)
+
+### Manual Instructions (Mac)
+
+You can manually build `mpl` by cloning this repo and then performing the following.
+
+**Make sure you have GNU `make` and `gmp` installed**. You can install these
+with [Homebrew](https://brew.sh/) as follows. You'll also need all the other
+dependencies as well, listed above (e.g., `mlton`).
+```
+$ brew install make
+$ brew install gmp
+```
+
+**Build the executable**. Make sure you are using GNU make, which should be
+available as `gmake` after doing `brew install make` above. We also need to
+tell the Makefile about where `gmp` is installed.
+```
+$ gmake WITH_GMP_DIR=$(brew --prefix gmp)
 ```
