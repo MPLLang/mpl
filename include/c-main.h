@@ -13,6 +13,8 @@
 #include "common-main.h"
 #include "c-common.h"
 
+void Parallel_run (void);
+
 PRIVATE C_Pthread_Key_t gcstate_key;
 
 PRIVATE GC_state MLton_gcState() {
@@ -70,7 +72,7 @@ static void MLton_callFromC (CPointer localOpArgsResPtr) {              \
 }
 
 #define MLtonThreadFunc(ml)                                             \
-void MLton_threadFunc (void* arg) {                                     \
+void *MLton_threadFunc (void* arg) {                                    \
   uintptr_t nextBlock;                                                  \
   GC_state s = (GC_state)arg;                                           \
                                                                         \
@@ -116,7 +118,7 @@ void MLton_threadFunc (void* arg) {                                     \
     /*printf("[%d] calling Parallel_run\n", s->procNumber);*/           \
     Parallel_run ();                                                    \
   }                                                                     \
-  return 1;                                                             \
+  return (void *)1;                                                     \
 }
 
 #define MLtonMain(al, mg, mfs, mmc, pk, ps, ml)                         \

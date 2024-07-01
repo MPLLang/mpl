@@ -11,11 +11,11 @@
 
 static inline void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s);
 
-void relayerLoop(GC_state s);
-
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
+
+void relayerLoop(GC_state s);
 
 PRIVATE void GC_startSignalHandler (GC_state s);
 PRIVATE void GC_finishSignalHandler (GC_state s);

@@ -19,8 +19,8 @@ static inline void rusageMultiply (struct rusage *ru1,
                                    size_t factor,
                                    struct rusage *ru);
 static inline uintmax_t rusageTime (struct rusage *ru);
-static inline void startTiming (int who, struct rusage *ru_start);
-static uintmax_t stopTiming (int who, struct rusage *ru_start, struct rusage *ru_gc);
+static inline void startTiming (struct rusage *ru_start);
+static uintmax_t stopTiming (struct rusage *ru_start, struct rusage *ru_gc);
 
 void timespec_now(struct timespec *x);
 /* compute dst = dst - x. requires that dst >= x. */

@@ -26,7 +26,7 @@ void GC_TerminateThread(GC_state s) {
   while (TRUE) {
     uint32_t status = atomicLoadU32(statusp);
     while (status != 1) {
-      pthread_yield();
+      sched_yield();
       status = atomicLoadU32(statusp);
     }
     bool success = __sync_bool_compare_and_swap(statusp, 1, 0);

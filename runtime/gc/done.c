@@ -82,7 +82,11 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   uintmax_t critTime;
   uintmax_t bspTime;
 
+#ifdef __MACH__
+  getrusage_thread (&ru_total);
+#else
   getrusage (RUSAGE_THREAD, &ru_total);
+#endif
   totalTime = rusageTime (&ru_total);
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
   syncTime = rusageTime (&cumulativeStatistics->ru_sync);
@@ -166,7 +170,11 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
   struct rusage ru_total;
   uintmax_t totalTime;
 
+#ifdef __MACH__
+  getrusage_thread (&ru_total);
+#else
   getrusage (RUSAGE_THREAD, &ru_total);
+#endif
   totalTime = rusageTime (&ru_total);
 
   fprintf(out, "{ ");

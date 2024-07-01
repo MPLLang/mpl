@@ -88,15 +88,15 @@ uintmax_t rusageTime (struct rusage *ru) {
   return result;
 }
 
-void startTiming (int who, struct rusage *ru_start) {
-  getrusage (who, ru_start);
+void startTiming (struct rusage *ru_start) {
+  getrusage_thread (ru_start);
 }
 
 /* Accumulate and return time as number of milliseconds. */
-uintmax_t stopTiming (int who, struct rusage *ru_start, struct rusage *ru_acc) {
+uintmax_t stopTiming (struct rusage *ru_start, struct rusage *ru_acc) {
   struct rusage ru_finish, ru_total;
 
-  getrusage (who, &ru_finish);
+  getrusage_thread (&ru_finish);
   rusageMinusMax (&ru_finish, ru_start, &ru_total);
   rusagePlusMax (ru_acc, &ru_total, ru_acc);
   return rusageTime (&ru_total);

@@ -51,3 +51,5 @@
 
 /* for Posix_ProcEnv_environ */
 #define environ *_NSGetEnviron()
+
+int getrusage_thread(struct rusage *rusage);
