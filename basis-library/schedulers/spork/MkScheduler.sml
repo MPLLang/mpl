@@ -747,8 +747,7 @@ struct
     fun syncEndAtomic
         (doClearSuspects: Thread.t * int -> unit)
         (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, ...} : 'a joinpoint)
-        (g: unit -> 'a)
-        : 'a Result.t
+        : 'a Result.t option
       =
       let
         val _ = assertAtomic "syncEndAtomic begin" 1
@@ -781,7 +780,7 @@ struct
             ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
-            ; Result.result g
+            ; NONE
             )
           else
             ( if decrementHitsZero incounter then
@@ -830,14 +829,13 @@ struct
                   in
                     doClearSuspects (thread, newDepth);
                     if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
-                    result
+                    SOME result
                   end
             )
+        val _ = case gcj of
+                    NONE => ()
+                  | SOME gcj => syncGC doClearSuspects gcj;
       in
-        case gcj of
-          NONE => ()
-        | SOME gcj => syncGC doClearSuspects gcj;
-
         result
       end
 
@@ -919,11 +917,13 @@ struct
       | SOME gj =>
           let
             val fr = Result.result f
-
             val _ = Thread.atomicBegin ()
-            val gr = syncEndAtomic maybeParClearSuspectsAtDepth gj g
+            val gro = syncEndAtomic maybeParClearSuspectsAtDepth gj
           in
-            (Result.extractResult fr; Result.extractResult gr)
+            Result.extractResult fr;
+            case gro of
+                NONE => g ()
+              | SOME gr => Result.extractResult gr
           end
 
     and maybeParClearSuspectsAtDepth (t, d) =
@@ -1050,14 +1050,19 @@ struct
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = #assertAtomic (sched_package ()) "sync continuation" 1
-            val spwnr = #syncEndAtomic (sched_package ()) jp (inject o spwn)
+            val spwnrOpt = #syncEndAtomic (sched_package ()) jp
             val contr' = Result.extractResult contr
-            val spwnr' =
-              case project (Result.extractResult spwnr) of
-                SOME r => r
-              | _ => (#error (sched_package ()) "scheduler bug: spork sync: failed project right-side result"; raise SchedulerError)
           in
-            sync (contr', spwnr')
+            case spwnrOpt of
+                (* spwn was unstolen: actually, use seq continuation here! *)
+                NONE => seq contr'
+              (* spwn was stolen and synced in syncEndAtomic *)
+              | SOME spwnr =>
+                case project (Result.extractResult spwnr) of
+                    SOME r => sync (contr', r)
+                  | NONE => (#error (sched_package ())
+                                    "scheduler bug: spork sync: failed project right-side result";
+                             raise SchedulerError)
           end
       in
         primSpork (cont', spwn', seq', sync')
@@ -1343,7 +1348,7 @@ struct
 
   (* This might look silly, but don't remove it! See here:
    *   https://github.com/MPLLang/mpl/issues/190
-   * We have to ensure that there is always at least one use of PCall_getData
+   * We have to ensure that there is always at least one use of spork_getData
    * in the program, otherwise the data argument of spork_forkThreadAndSetData
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.

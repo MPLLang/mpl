@@ -92,17 +92,19 @@ struct
 
   fun pareduce (i: int, j: int, z: 'a, step: int * 'a -> 'a, merge: 'a * 'a -> 'a) : 'a =
       let fun loop (a: 'a, i: int, j: int) : 'a =
-              if i >= j then
-                a
+              if i + 1 >= j then
+                if i >= j then (* all iterations done *)
+                  a
+                else (* last iteration *)
+                  step (i, a)
               else
                 spork
                   (fn () => step (i, a),
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
                                 fun right_half () = loop (z, mid, j)
-                                val (al, ar) = par (left_half, right_half)
                             in
-                              merge (al, ar)
+                              merge (par (left_half, right_half))
                             end,
                   fn (a') => loop (a', i + 1, j),
                   merge)
@@ -112,17 +114,19 @@ struct
 
   fun pareduce' (i: int, j: int, z: 'a, iter: int -> 'a, merge: 'a * 'a -> 'a) : 'a =
       let fun loop (a: 'a, i: int, j: int) =
-              if i >= j then
-                a
+              if i + 1 >= j then
+                if i >= j then (* all iterations done *)
+                  a
+                else (* last iteration *)
+                  merge (a, iter i)
               else
                 spork
                   (fn () => merge (a, iter i),
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
                                 fun right_half () = loop (z, mid, j)
-                                val (al, ar) = par (left_half, right_half)
                             in
-                              merge (a, merge (al, ar))
+                              merge (par (left_half, right_half))
                             end,
                    fn (a') => loop (a', i + 1, j),
                    merge)
@@ -203,31 +207,32 @@ struct
           val j' = j
 
           fun loop (start: int, i: int, stop: int, a : 'a) : 'a =
-              if i >= j then
-                a
+              if i + 1 >= Int.min (j, stop) then
+                if i >= Int.min (j, stop) then
+                  a
+                else
+                  merge (a, iter i)
               else
                 let fun getMid (i: int) : int = computeMid (start, i, stop)
+                    val mid = getMid i
                     val j = Int.min (j, stop)
                     fun firstHalfLoop (i: int, a : 'a) : 'a =
-                        if i >= j then
-                          a
+                        if i + 1 >= mid then
+                          if i >= mid then
+                            a
+                          else
+                            merge (a, iter i)
                         else
                           let fun body () : 'a = merge (a, iter i)
-                              fun seq (a) : 'a = firstHalfLoop (i + 1, a)
-                              fun spwn () : 'a = loop (start, i + 1, getMid (i + 1), z)
+                              fun seq (a) : 'a = firstHalfLoop (i + 1, z)
+                              fun spwn () : 'a = loop (start, i + 1, mid, z)
                               val sync : 'a * 'a -> 'a = merge
                           in
                             spork (body, spwn, seq, sync)
                           end
-                    fun firstHalf () : 'a = firstHalfLoop (i, a)
-                    fun secondHalf (a : 'a) : 'a =
-                        let val mid = getMid i in
-                          loop (mid, mid, stop, a)
-                        end
-
-                    fun body () : 'a = firstHalf ()
-                    val seq : 'a -> 'a = secondHalf
-                    fun spwn () : 'a = secondHalf z
+                    fun body () : 'a = firstHalfLoop (i, a)
+                    fun seq (a) : 'a = loop (mid, mid, stop, a)
+                    fun spwn () : 'a = loop (mid, mid, stop, z)
                     val sync : 'a * 'a -> 'a = merge
                 in
                   spork (body, spwn, seq, sync)

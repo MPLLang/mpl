@@ -482,17 +482,17 @@ structure Function =
                             | Return _ => checkLeave ()
                             | Spork {spid, cont, spwn} =>
                                  (case (inSpwn, sporkData, sporkNest) of
-                                     (true, _, _) => bug "may not Spork within Spork/spwn"
-                                   | (false, SOME _, _) => bug "nonempty sporkData at Spork"
-                                   | (false, NONE, sporkNest) =>
+                                     (*(true, _, _) => bug "may not Spork within Spork/spwn"*)
+                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spork"
+                                   | ((*false*) _, NONE, sporkNest) =>
                                         (goto (cont, false, NONE, spid::sporkNest)
                                          ; goto (spwn, true, SOME spid, [])))
                             | Spoin {spid, seq, sync} =>
                                  (case (inSpwn, sporkData, sporkNest) of
-                                     (true, _, _) => bug "may not Spoin within Spork/spwn"
-                                   | (false, SOME _, _) => bug "nonempty sporkData at Spoin"
-                                   | (false, NONE, []) => bug "empty sporkNest at Spoin"
-                                   | (false, NONE, spid'::sporkNest') =>
+                                     (*(true, _, _) => bug "may not Spoin within Spork/spwn"*)
+                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spoin"
+                                   | ((*false*) _, NONE, []) => bug "empty sporkNest at Spoin"
+                                   | ((*false*) _, NONE, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
                                            then (goto (seq, false, NONE, sporkNest')
                                                  ; goto (sync, false, SOME spid', sporkNest'))
@@ -501,9 +501,9 @@ structure Function =
                         end
                    | SOME {inSpwn = inSpwn', sporkData = sporkData', sporkNest = sporkNest'} =>
                         let
-                           val _ = if Bool.equals (inSpwn, inSpwn')
+                           (*val _ = if Bool.equals (inSpwn, inSpwn')
                                       then ()
-                                      else bug "mismatched block: inSpwn"
+                                      else bug "mismatched block: inSpwn"*)
                            val _ = if Option.equals (sporkData, sporkData', Spid.equals)
                                       then ()
                                       else bug "mismatched block: sporkData"

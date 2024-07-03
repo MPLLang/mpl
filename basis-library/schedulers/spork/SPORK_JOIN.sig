@@ -8,6 +8,7 @@ sig
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val pareduce: int * int * 'a * (int * 'a -> 'a) * ('a * 'a -> 'a) -> 'a
   val pareduce': int * int * 'a * (int -> 'a) * ('a * 'a -> 'a) -> 'a
+  val pareduce'': int * int * 'a * (int -> 'a) * ('a * 'a -> 'a) -> 'a
   val alloc: int -> 'a array
 
   val idleTimeSoFar: unit -> Time.time

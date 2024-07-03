@@ -489,15 +489,15 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
                             | Return _ => checkLeave ()
                             | Spork {spid, cont, spwn} =>
                                  (case (inSpwn, sporkNest) of
-                                     (true, _) => bug "may not Spork within Spork/spwn"
-                                   | (false, sporkNest) =>
+                                     (* (true, _) => bug "may not Spork within Spork/spwn" *)
+                                     ((*false*) _, sporkNest) =>
                                         (goto (cont, false, spid::sporkNest)
                                          ; goto (spwn, true, [])))
                             | Spoin {spid, seq, sync} =>
                                  (case (inSpwn, sporkNest) of
-                                     (true, _) => bug "may not Spoin within Spork/spwn"
-                                   | (false, []) => bug "empty sporkNest at Spoin"
-                                   | (false, spid'::sporkNest') =>
+                                     (* (true, _) => bug "may not Spoin within Spork/spwn" *)
+                                     ((*false*) _, []) => bug "empty sporkNest at Spoin"
+                                   | ((*false*) _, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
                                            then (goto (seq, false, sporkNest')
                                                  ; goto (sync, false, sporkNest'))
@@ -506,9 +506,9 @@ fun checkSpork (program as Program.T {functions, main, ...}): unit =
                         end
                    | SOME {inSpwn = inSpwn', sporkNest = sporkNest'} =>
                         let
-                           val _ = if Bool.equals (inSpwn, inSpwn')
-                                      then ()
-                                      else bug "mismatched block: inSpwn"
+                           (* val _ = if Bool.equals (inSpwn, inSpwn') *)
+                           (*            then () *)
+                           (*            else bug "mismatched block: inSpwn" *)
                            val _ = if List.equals (sporkNest, sporkNest', Spid.equals)
                                       then ()
                                       else bug "mismatched block: sporkNest"
