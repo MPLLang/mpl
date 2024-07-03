@@ -780,6 +780,8 @@ struct
             ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
+            ; addSpareHeartbeats spareHeartbeatsGiven
+
             ; NONE
             )
           else
