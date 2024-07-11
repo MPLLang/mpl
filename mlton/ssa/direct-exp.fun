@@ -205,7 +205,7 @@ in
                      (align [seq [str "  cont => ", layout cont],
                              seq [str "| spwn => ", layout spwn]], 2)]
        | Spoin {spid, seq = bseq, sync = bsync, ty} =>
-            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
+            align [seq [str "spoin ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
                    indent
                      (align [seq [str "  seq => ", layout bseq],
                              seq [str "| sync => ", layout bsync]], 2)]
