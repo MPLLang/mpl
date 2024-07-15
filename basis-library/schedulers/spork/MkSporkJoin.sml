@@ -187,35 +187,14 @@ struct
       end
 
   fun pareduce'' (i: int, j: int, z: 'a, iter: int -> 'a, merge : 'a * 'a -> 'a) : 'a =
-      let (*fun exp_ceil_log n =
-              (* Computes 2^ceil(log(n)),
-                 i.e. rounds n up to the nearest power of 2 *)
-              let fun h m =
-                      if m >= n then m else h (m + m)
-              in h 1 end
-          fun computeMid (start: int, i: int, stop: int) : int =
-              let val mid = Int.div (start + stop, 2) in
-                if mid < i then
-                  computeMid (mid, i, stop)
-                else
-                  mid
-              end
-          val j' = i + exp_ceil_log (j - i)*)
-
-          fun computeMid (start: int, i: int, stop: int) : int =
-              Int.div (stop + i, 2)
-          val j' = j
-
-          fun loop (start: int, i: int, stop: int, a : 'a) : 'a =
-              if i + 1 >= Int.min (j, stop) then
-                if i >= Int.min (j, stop) then
+      let fun loop (i: int, stop: int, a : 'a) : 'a =
+              if i + 1 >= stop then
+                if i >= stop then
                   a
                 else
                   merge (a, iter i)
               else
-                let fun getMid (i: int) : int = computeMid (start, i, stop)
-                    val mid = getMid i
-                    val j = Int.min (j, stop)
+                let val mid = (i + stop) div 2
                     fun firstHalfLoop (i: int, a : 'a) : 'a =
                         if i + 1 >= mid then
                           if i >= mid then
@@ -223,22 +202,22 @@ struct
                           else
                             merge (a, iter i)
                         else
-                          let fun body () : 'a = merge (a, iter i)
-                              fun seq (a) : 'a = firstHalfLoop (i + 1, z)
-                              fun spwn () : 'a = loop (start, i + 1, mid, z)
-                              val sync : 'a * 'a -> 'a = merge
+                          let fun body2 () : 'a = merge (a, iter i)
+                              fun seq2 (a) : 'a = firstHalfLoop (i + 1, a)
+                              fun spwn2 () : 'a = loop (i + 1, mid, z)
+                              val sync2 : 'a * 'a -> 'a = merge
                           in
-                            spork (body, spwn, seq, sync)
+                            spork (body2, spwn2, seq2, sync2)
                           end
                     fun body () : 'a = firstHalfLoop (i, a)
-                    fun seq (a) : 'a = loop (mid, mid, stop, a)
-                    fun spwn () : 'a = loop (mid, mid, stop, z)
+                    fun seq (a) : 'a = loop (mid, stop, a)
+                    fun spwn () : 'a = loop (mid, stop, z)
                     val sync : 'a * 'a -> 'a = merge
                 in
                   spork (body, spwn, seq, sync)
                 end
       in
-        loop (i, i, j', z)
+        loop (i, j, z)
       end
 
   fun parfor_grained grain (i, j) f =
