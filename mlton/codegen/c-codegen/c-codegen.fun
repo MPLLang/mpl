@@ -696,11 +696,16 @@ fun outputDeclarations
                             {firstElemLen = false, oneline = true},
                             SporkInfo.spwns spi,
                             fn (_, l) => labelIndexAsString (l, {pretty = true}))
+              ; declareArray ("const uint32_t", concat ["sporkTokenPolicies", C.int i],
+                              {firstElemLen = false, oneline = true},
+                              SporkInfo.tokenPolicies spi,
+                              fn (_, p) => Word32.toString p)
               ; print (concat
                        ["static const struct GC_sporkInfo sporkInfo",
                         C.int i, " = ", "{",
                         C.int (Vector.length (SporkInfo.spwns spi)), ", ",
                         C.bytes (SporkInfo.offset spi), ", ",
+                        "sporkTokenPolicies", C.int i, ", ",
                         "sporkSpwns", C.int i, "};\n"])))
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},

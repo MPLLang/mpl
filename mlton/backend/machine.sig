@@ -219,8 +219,10 @@ signature MACHINE =
             val layout: t -> Layout.t
             val new: {index: int,
                       offset: Bytes.t,
+                      tokenPolicies: Word32.word vector,
                       spwns: Label.t vector} -> t
             val offset: t -> Bytes.t
+            val tokenPolicies: t -> Word32.word vector
             val spwns: t -> Label.t vector
          end
 

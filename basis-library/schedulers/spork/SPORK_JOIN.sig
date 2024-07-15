@@ -4,7 +4,9 @@ sig
   val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b 
 
   val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
-  val spork: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+  val sporkFair: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+  val sporkKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+  val sporkGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val pareduce: int * int * 'a * (int * 'a -> 'a) * ('a * 'a -> 'a) -> 'a
   val pareduce': int * int * 'a * (int -> 'a) * ('a * 'a -> 'a) -> 'a

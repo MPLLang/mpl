@@ -1,5 +1,7 @@
 functor MkSporkJoin
-  (val spork: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+  (val sporkFair: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+   val sporkGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
+   val sporkKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
    val tryPromoteNow: {youngestOptimization: bool} -> unit
    val noTokens: unit -> bool) :>
 sig
@@ -11,37 +13,16 @@ sig
   val numStealsSoFar: unit -> int
 end =
 struct
+
+  val sporkFair = sporkFair
+  val sporkGive = sporkGive
+  val sporkKeep = sporkKeep
+  
   fun for (i, j) f =
     if i >= j then () else (f i; for (i + 1, j) f)
 
-  val basicSpork = spork
-
-  fun spork (cont: unit -> 'a, spwn: unit -> 'b,
-             seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-    let
-      fun cont' () =
-        ( if noTokens () then
-            ()
-          else
-            tryPromoteNow {youngestOptimization = true}
-        ; cont ()
-        )
-    in
-      basicSpork (cont', spwn, seq, sync)
-    end
-
   fun par (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-    let
-      fun f' () =
-        ( if noTokens () then
-            ()
-          else
-            tryPromoteNow {youngestOptimization = true}
-        ; f ()
-        )
-    in
-      basicSpork (f', g, fn a => (a, g ()), fn (a, b) => (a, b))
-    end
+    sporkFair (f, g, fn a => (a, g ()), fn (a, b) => (a, b))
 
   val fork = par
 
@@ -65,7 +46,7 @@ struct
         fun spwn () = parfor (lo', hi) f
         fun sync ((), ()) = ()
       in
-        spork (body, spwn, seq, sync)
+        sporkGive (body, spwn, seq, sync)
       end
 
   and parfor_split (lo, hi) f =
@@ -98,7 +79,7 @@ struct
                 else (* last iteration *)
                   step (i, a)
               else
-                spork
+                sporkGive
                   (fn () => step (i, a),
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
@@ -120,7 +101,7 @@ struct
                 else (* last iteration *)
                   merge (a, iter i)
               else
-                spork
+                sporkGive
                   (fn () => merge (a, iter i),
                    fn () => let val mid = (i + j) div 2
                                 fun left_half () = loop (z, i + 1, mid)
@@ -135,7 +116,7 @@ struct
       end
 
   fun par (f: unit -> 'a, g: unit -> 'b) : 'a * 'b =
-      spork (f, g, fn (a) => (a, g ()), fn (ab) => ab)
+      sporkFair (f, g, fn (a) => (a, g ()), fn (ab) => ab)
 
   fun parfor'' (i: int, j: int, iter: int -> unit) : unit =
       let (*fun exp_ceil_log n =
@@ -172,7 +153,7 @@ struct
                               fun spwn _ = loop (start, i + 1, getMid (i + 1))
                               fun sync _ = ()
                           in
-                            spork (body, seq, spwn, sync)
+                            sporkGive (body, seq, spwn, sync)
                           end
                     fun firstHalf () : unit = innerLoop i
                     fun secondHalf () : unit =
@@ -207,14 +188,14 @@ struct
                               fun spwn2 () : 'a = loop (i + 1, mid, z)
                               val sync2 : 'a * 'a -> 'a = merge
                           in
-                            spork (body2, spwn2, seq2, sync2)
+                            sporkGive (body2, spwn2, seq2, sync2)
                           end
                     fun body () : 'a = firstHalfLoop (i, a)
                     fun seq (a) : 'a = loop (mid, stop, a)
                     fun spwn () : 'a = loop (mid, stop, z)
                     val sync : 'a * 'a -> 'a = merge
                 in
-                  spork (body, spwn, seq, sync)
+                  sporkFair (body, spwn, seq, sync)
                 end
       in
         loop (i, j, z)

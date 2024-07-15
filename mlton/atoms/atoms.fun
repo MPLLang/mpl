@@ -66,9 +66,9 @@ structure Atoms =
             open Func
             fun newNoname () = newString "L"
          end
-      structure Spid =
+      structure Spid : SPID =
          struct
-            open Var
+            open Spid
             fun newNoname () = newString "SP"
          end
 

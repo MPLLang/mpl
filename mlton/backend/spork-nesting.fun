@@ -15,6 +15,7 @@ sig
 
 val nesting: Function.t -> {maxSporkNestLength: int,
                             spidInfo: Spid.t -> {index: int,
+                                                 tokenPolicy: Word32.word,
                                                  spwn: Label.t},
                             sporkDataTy: Type.t option,
                             sporkNest: Label.t -> Spid.t vector}
@@ -26,6 +27,7 @@ struct
 
   fun nesting (f: Function.t) : {maxSporkNestLength: int,
                                  spidInfo: Spid.t -> {index: int,
+                                                      tokenPolicy: Word32.word,
                                                       spwn: Label.t},
                                  sporkDataTy: Type.t option,
                                  sporkNest: Label.t -> Spid.t vector} =
@@ -79,6 +81,7 @@ struct
                           case transfer of
                              Transfer.Spork {spid, cont, spwn} =>
                                 (setSpidInfo (spid, {index = sporkNestLength,
+                                                     tokenPolicy = Spid.getTokenSplitPolicy spid,
                                                      spwn = spwn})
                                  ; goto (cont, spid::sporkNest)
                                  ; goto (spwn, []))
