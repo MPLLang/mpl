@@ -23,6 +23,7 @@ signature ALLOCATE_VARIABLES =
           paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t, ty: Rssa.Type.t, volatile: bool} vector,
           sporkNesting: {maxSporkNestLength: int,
                          spidInfo: Rssa.Spid.t -> {index: int,
+                                                   tokenPolicy: Word32.word,
                                                    spwn: Rssa.Label.t},
                          sporkDataTy: Rssa.Type.t option,
                          sporkNest: Rssa.Label.t -> Rssa.Spid.t vector},

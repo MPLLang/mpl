@@ -47,6 +47,9 @@ Bool GC_HH_checkFinishedCCReadyToJoin(__attribute__((unused)) GC_state s) {
 }
 #endif
 
+const GC_tokenPolicy TOKEN_POLICY_FAIR = 0; // split evenly
+const GC_tokenPolicy TOKEN_POLICY_KEEP = 1; // keep all
+const GC_tokenPolicy TOKEN_POLICY_GIVE = 2; // give all
 
 Word32 GC_HH_getDepth(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
@@ -395,7 +398,6 @@ Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
   return FALSE;
 }
 
-
 bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
@@ -405,7 +407,6 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   leave(s);
   return NULL != pframe;
 }
-
 
 objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, pointer dp) {
   enter(s);
@@ -440,11 +441,13 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   assert(fi->sporkInfo != NULL);
 #endif
   GC_returnAddress spwn_ret = 0;
+  GC_tokenPolicy token_policy;
   uintptr_t spwn_idx;
   for (spwn_idx = 0 ; spwn_idx < fi->sporkInfo->nest ; spwn_idx++) {
     objptr p = *((objptr*) (pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spwn_idx));
     if (!isObjptr(p)) {
       spwn_ret = fi->sporkInfo->spwns[spwn_idx];
+      token_policy = fi->sporkInfo->tokenPolicies[spwn_idx];
       break;
     }
   }
@@ -502,6 +505,24 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   // uint32_t half = (spares == 0) ? 0 : min(spares-1, spares >> 1);
   // copied->spareHeartbeatTokens += half;
   // getThreadCurrent(s)->spareHeartbeatTokens -= half;
+
+  uint32_t spares = s->spareHeartbeatTokens;
+  uint32_t give_tokens = 0;
+  if (token_policy == TOKEN_POLICY_FAIR) {
+      give_tokens = spares >> 1;
+  } else if (token_policy == TOKEN_POLICY_GIVE) {
+      give_tokens = spares;
+  } else if (token_policy == TOKEN_POLICY_KEEP) {
+      give_tokens = 0;
+  } else {
+    char msg[100];
+    snprintf(msg, 100, "unknown token policy %u", token_policy);
+    DIE(msg);
+    leave(s);
+    return BOGUS_OBJPTR;
+  }
+  s->spareHeartbeatTokens -= give_tokens;
+  copied->spareHeartbeatTokens += give_tokens;
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);

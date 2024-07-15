@@ -709,6 +709,7 @@ structure SporkInfo =
    struct
       datatype t = T of {index: int,
                          offset: Bytes.t,
+                         tokenPolicies: Word32.word vector,
                          spwns: Label.t vector}
 
       local
@@ -716,30 +717,34 @@ structure SporkInfo =
       in
          val index = make #index
          val offset = make #offset
+         val tokenPolicies = make #tokenPolicies
          val spwns = make #spwns
       end
 
-      fun new {index, offset, spwns} =
-         T {index = index, offset = offset, spwns = spwns}
+      fun new {index, offset, tokenPolicies, spwns} =
+         T {index = index, offset = offset, tokenPolicies = tokenPolicies, spwns = spwns}
 
       fun equals (s1, s2) =
          Int.equals (index s1, index s2)
          andalso Bytes.equals (offset s1, offset s2)
+         andalso Vector.equals (tokenPolicies s1, tokenPolicies s2, op=)
          andalso Vector.equals (spwns s1, spwns s2, Label.equals)
 
-      fun layout (T {index, offset, spwns}) =
+      fun layout (T {index, offset, tokenPolicies, spwns}) =
          let
             open Layout
          in
             record [("index", Int.layout index),
                     ("offset", Bytes.layout offset),
+                    ("tokenPolicies", Vector.layout Word.layout tokenPolicies),
                     ("spwns", Vector.layout Label.layout spwns)]
          end
 
-      fun hash (T {index, offset, spwns}) =
+      fun hash (T {index, offset, tokenPolicies, spwns}) =
          Hash.combine (Word.fromInt index,
          Hash.combine (Bytes.hash offset,
-                       Hash.vectorMap (spwns, Label.hash)))
+         Hash.combine (Hash.vectorMap (tokenPolicies, fn p => p),
+                       Hash.vectorMap (spwns, Label.hash))))
    end
 
 structure FrameInfo =

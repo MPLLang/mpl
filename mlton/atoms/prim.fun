@@ -113,7 +113,7 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
- | Spork (* closure convert *)
+ | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | Spork_getData of Spid.t (* backend *)
  | Real_Math_acos of RealSize.t (* codegen *)
@@ -294,7 +294,9 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
-       | Spork => "spork"
+       | Spork {tokenSplitPolicy=0w0} => "spork_fair"
+       | Spork {tokenSplitPolicy=0w1} => "spork_keep"
+       | Spork {tokenSplitPolicy=0w2} => "spork_give"
        | Spork_forkThreadAndSetData {youngest=false} => "spork_forkThreadAndSetData"
        | Spork_forkThreadAndSetData {youngest=true} => "spork_forkThreadAndSetData_youngest"
        | Spork_getData spid => concat ["spork_getData<", Spid.toString spid, ">"]
@@ -459,7 +461,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
-    | (Spork, Spork) => true
+    | (Spork {tokenSplitPolicy = tsp1}, Spork {tokenSplitPolicy = tsp2}) => tsp1 = tsp2
     | (Spork_forkThreadAndSetData yo1, Spork_forkThreadAndSetData yo2) => yo1 = yo2
     | (Spork_getData spid, Spork_getData spid') => Spid.equals (spid, spid')
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
@@ -644,7 +646,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
-    | Spork => Spork
+    | Spork tsp => Spork tsp
     | Spork_forkThreadAndSetData z => Spork_forkThreadAndSetData z
     | Spork_getData spid => Spork_getData spid
     | Real_Math_acos z => Real_Math_acos z
@@ -860,7 +862,7 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
-       | Spork => SideEffect
+       | Spork _ => SideEffect
        | Spork_forkThreadAndSetData _ => SideEffect
        | Spork_getData _ => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
@@ -1071,7 +1073,9 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       Spork,
+       Spork {tokenSplitPolicy = 0w0},
+       Spork {tokenSplitPolicy = 0w1},
+       Spork {tokenSplitPolicy = 0w2},
        Spork_forkThreadAndSetData {youngest=true},
        Spork_forkThreadAndSetData {youngest=false},
        (*Spork_getData,*)
@@ -1412,7 +1416,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
-       | Spork =>
+       | Spork _ =>
             (* spork : ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c; *)
             sixTargs (fn (taa, tar, tba, tbr, td, tc) =>
                        let
@@ -1566,7 +1570,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       | Spork =>
+       | Spork _ =>
             (* spork : ('aa -> 'ar) * 'aa * ('ba -> 'br) * 'ba * ('ar -> 'c) * ('ar -> 'c) -> 'c; *)
             let
                val (taa, tar) = deArrow (arg 0)

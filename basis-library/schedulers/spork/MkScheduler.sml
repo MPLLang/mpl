@@ -59,7 +59,7 @@ struct
   val getWealthPerHeartbeat =
     _import "GC_getHeartbeatTokens" runtime private: gcstate -> Word32.word;
   val wealthPerHeartbeat =
-    Word32.toInt (getWealthPerHeartbeat (gcstate()))
+    getWealthPerHeartbeat (gcstate()): Word32.word
 
   val tryConsumeSpareHeartbeats =
     _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
@@ -69,8 +69,7 @@ struct
   val addSpareHeartbeats =
     _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
   val addSpareHeartbeats =
-    (fn i => Word32.toInt (addSpareHeartbeats (gcstate (), Word32.fromInt i)))
-
+    (fn w => addSpareHeartbeats (gcstate (), w)): Word32.word -> Word32.word
   
   val currentSpareHeartbeatTokens = _prim "Heartbeat_tokens": unit -> Word32.word;
 
@@ -87,8 +86,8 @@ struct
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
   
-  val primSpork =
-      _prim "spork"
+  val primSporkFair =
+      _prim "spork_fair"
         : ('aa -> 'ar)	(* cont *)
         * 'aa
         * ('ba * 'd -> 'br)	(* spwn *)
@@ -96,8 +95,30 @@ struct
         * ('ar -> 'c)	(* seq  *)
         * ('ar * 'd -> 'c)	(* sync *)
         -> 'c;
-  val primSpork = fn (cont, spwn, seq, sync) =>
-                     primSpork (cont, (), spwn, (), seq, sync)
+  val primSporkKeep =
+      _prim "spork_keep"
+        : ('aa -> 'ar)	(* cont *)
+        * 'aa
+        * ('ba * 'd -> 'br)	(* spwn *)
+        * 'ba
+        * ('ar -> 'c)	(* seq  *)
+        * ('ar * 'd -> 'c)	(* sync *)
+        -> 'c;
+  val primSporkGive =
+      _prim "spork_give"
+        : ('aa -> 'ar)	(* cont *)
+        * 'aa
+        * ('ba * 'd -> 'br)	(* spwn *)
+        * 'ba
+        * ('ar -> 'c)	(* seq  *)
+        * ('ar * 'd -> 'c)	(* sync *)
+        -> 'c;
+  val primSporkFair = fn (cont, spwn, seq, sync) =>
+                         primSporkFair (cont, (), spwn, (), seq, sync)
+  val primSporkKeep = fn (cont, spwn, seq, sync) =>
+                         primSporkKeep (cont, (), spwn, (), seq, sync)
+  val primSporkGive = fn (cont, spwn, seq, sync) =>
+                         primSporkGive (cont, (), spwn, (), seq, sync)
 
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
@@ -139,7 +160,6 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-
   datatype gc_joinpoint =
     GCJ of {gcTaskData: gctask_data option, tidRight: Word64.word}
     (** The fact that the gcTaskData is an option here is a questionable
@@ -155,7 +175,7 @@ struct
       , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
-      , spareHeartbeatsGiven: int
+      , spareHeartbeatsGiven: Word32.word ref
       , gcj: gc_joinpoint option
       }
 
@@ -331,13 +351,6 @@ struct
         ; arrayUpdate (maxForkDepths, p, d)
         )
     end
-
-  (** ========================================================================
-    * SPARE HEARTBEATS
-    *)
-
-  fun splitSpares w =
-    Word32.>> (w, 0w1)
 
   (* ========================================================================
    * CHILD TASK PROTOTYPE THREAD
@@ -555,7 +568,6 @@ struct
         doClearSuspects (thread, newDepth)
       end
 
-
     (* runs in signal handler *)
     fun doSpawn {youngestOptimization: bool} (interruptedLeftThread: Thread.t) : unit =
       let
@@ -579,24 +591,16 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val _ = tryConsumeSpareHeartbeats spawnCost
-        val currentSpare = currentSpareHeartbeatTokens ()
-        val halfSpare =
-          let
-            val halfSpare = splitSpares currentSpare
-          in
-            ( tryConsumeSpareHeartbeats halfSpare
-            ; halfSpare
-            )
-          end
 
-
+        val spareBefore = currentSpareHeartbeatTokens ()
+        val spareHB = ref 0w0
         val jp =
           J { leftSideThread = interruptedLeftThread
             , rightSideThread = rightSideThreadSlot
             , rightSideResult = rightSideResult
             , incounter = incounter
             , tidRight = tidRight
-            , spareHeartbeatsGiven = Word32.toInt halfSpare
+            , spareHeartbeatsGiven = spareHB
             , gcj = gcj
             }
 
@@ -606,6 +610,9 @@ struct
             primForkThreadAndSetData_youngest (interruptedLeftThread, jp)
           else
             primForkThreadAndSetData (interruptedLeftThread, jp)
+
+        (* determine how many heartbeats given to rhs from difference vs before *)
+        val _ = spareHB := currentSpareHeartbeatTokens () - spareBefore
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
@@ -667,7 +674,7 @@ struct
         val (tidLeft, tidRight) = DE.decheckFork ()
 
         val currentSpare = currentSpareHeartbeatTokens ()
-        val halfSpare = splitSpares currentSpare
+        val halfSpare = Word32.>> (currentSpare, 0w1)
         val _ = tryConsumeSpareHeartbeats halfSpare
 
         fun g' () =
@@ -675,7 +682,7 @@ struct
             val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
             val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
-            val _ = addSpareHeartbeats (Word32.toInt halfSpare)
+            val _ = addSpareHeartbeats halfSpare
             val _ = Thread.atomicEnd()
 
             val gr = Result.result g
@@ -726,7 +733,7 @@ struct
           , rightSideResult = rightSideResult
           , incounter = incounter
           , tidRight = tidRight
-          , spareHeartbeatsGiven = Word32.toInt halfSpare
+          , spareHeartbeatsGiven = ref halfSpare
           , gcj = gcj
           }
       end
@@ -780,7 +787,7 @@ struct
             ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
-            ; addSpareHeartbeats spareHeartbeatsGiven
+            ; addSpareHeartbeats (!spareHeartbeatsGiven)
 
             ; NONE
             )
@@ -986,8 +993,7 @@ struct
      * spork definition
      *)
 
-
-    fun spork (cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
+    fun spork (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
       let
         val (inject, project) = Universal.embed ()
 
@@ -1004,7 +1010,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
+            (* val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp)) *)
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
@@ -1083,6 +1089,20 @@ struct
           ()
       ; Thread.atomicEnd ()
       )
+
+    fun tryPromoteFirst (cont: unit -> 'a) : unit -> 'a =
+        fn () => ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
+                  cont ())
+
+    fun sporkFair (cont, spwn, seq, sync) =
+        spork (primSporkFair, tryPromoteFirst cont, spwn, seq, sync)
+
+    fun sporkKeep (cont, spwn, seq, sync) =
+        spork (primSporkKeep, tryPromoteFirst cont, spwn, seq, sync)
+
+    fun sporkGive (cont, spwn, seq, sync) =
+        spork (primSporkGive, tryPromoteFirst cont, spwn, seq, sync)
+
 
   end
 
@@ -1355,6 +1375,6 @@ struct
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.
    *)
-  val () = SporkJoin.spork (fn () => (), fn () => (), fn _ => (), fn _ => ())
+  val () = SporkJoin.sporkFair (fn () => (), fn () => (), fn _ => (), fn _ => ())
 
 end

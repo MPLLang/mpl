@@ -221,33 +221,37 @@ fun toMachine (rssa: Rssa.Program.t) =
             val next = Counter.generator 0
             val table =
                let
-                  fun equals ((offset1, spwns1),
-                              (offset2, spwns2)) =
+                  fun equals ((offset1, tokenPolicies1, spwns1),
+                              (offset2, tokenPolicies2, spwns2)) =
                      Bytes.equals (offset1, offset2)
                      andalso
+                     Vector.equals (tokenPolicies1, tokenPolicies2, op=)
+                     andalso
                      Vector.equals (spwns1, spwns2, Label.equals)
-                  fun hash (offset, spwns) =
+                  fun hash (offset, tokenPolicies, spwns) =
                      Hash.combine (Bytes.hash offset,
-                                   Hash.vectorMap (spwns, Label.hash))
+                                   Hash.combine(Hash.vectorMap (tokenPolicies, fn p => p),
+                                                Hash.vectorMap (spwns, Label.hash)))
                in
                   HashTable.new {equals = equals,
                                  hash = hash}
                end
          in
-            fun getSporkInfo {offset, spwns} =
+            fun getSporkInfo {offset, tokenPolicies, spwns} =
                let
                   fun new () =
                      let
                         val index = next ()
                         val spi = M.SporkInfo.new {index = index,
                                                    offset = offset,
+                                                   tokenPolicies = tokenPolicies,
                                                    spwns = spwns}
                         val _ = List.push (sporkInfos, spi)
                      in
                         spi
                      end
                in
-                  HashTable.lookupOrInsert (table, (offset, spwns), new)
+                  HashTable.lookupOrInsert (table, (offset, tokenPolicies, spwns), new)
                end
          end
       in
@@ -300,7 +304,7 @@ fun toMachine (rssa: Rssa.Program.t) =
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
                            offsets: Bytes.t list,
-                           sporkInfo: {offset: Bytes.t, spwns: Label.t vector} option,
+                           sporkInfo: {offset: Bytes.t, tokenPolicies: Word32.word vector, spwns: Label.t vector} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
@@ -1070,6 +1074,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                          val sporkInfo =
                             if sporkNestNonEmpty
                                then SOME {offset = sporkDataOffset,
+                                          tokenPolicies = Vector.map (sporkNest, #tokenPolicy o spidInfo),
                                           spwns = Vector.map (sporkNest, #spwn o spidInfo)}
                                else NONE
                          val frameInfo =

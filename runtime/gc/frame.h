@@ -42,10 +42,15 @@ typedef uintptr_t GC_returnAddress;
  */
 typedef const uint16_t *GC_frameOffsets;
 
+// How to split up tokens at promotion
+typedef uint32_t GC_tokenPolicy;
+
 typedef const GC_returnAddress *GC_sporkSpwns;
+typedef const GC_tokenPolicy *GC_tokenPolicies;
 typedef const struct GC_sporkInfo {
   const uint32_t nest;
   const uint32_t offset;
+  const GC_tokenPolicies tokenPolicies;
   const GC_sporkSpwns spwns;
 } *GC_sporkInfo;
 

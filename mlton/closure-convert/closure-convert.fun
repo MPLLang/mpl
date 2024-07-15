@@ -362,7 +362,7 @@ fun closureConvert
                            ; Value.coerce {from = loopExp handler, to = result}
                         end
                    | Lambda l => set (loopLambda (l, var))
-                   | PrimApp {prim = Prim.Spork, targs, args} =>
+                   | PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
                      (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                      let fun targ i = Vector.sub (targs, i)
                          fun arg i = Vector.sub (args, i)
@@ -1093,7 +1093,7 @@ fun closureConvert
                                       args = Vector.new1 (lambdaInfoTuple info)},
                          ac)
                   end
-             | SprimExp.PrimApp {prim = Prim.Spork, targs, args} =>
+             | SprimExp.PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
                (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'bb * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                let
                  fun arg i = Vector.sub (args, i)
@@ -1104,6 +1104,7 @@ fun closureConvert
                  val seq = arg 4
                  val sync = arg 5
                  val spid = Spid.newNoname ()
+                 val _ = Spid.setTokenSplitPolicy (spid, tokenSplitPolicy)
                  val {contres, data, spwnarg_data, spwnres, contres_data, ...} =
                     valOf (! (#sporkInfo info))
 
