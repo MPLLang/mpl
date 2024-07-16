@@ -297,6 +297,7 @@ fun toString (n: 'a t): string =
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
        | Spork {tokenSplitPolicy=0w2} => "spork_give"
+       | Spork {tokenSplitPolicy=pol} => Error.bug ("unknown spork tokensplitpolicy " ^ Word32.toString pol)
        | Spork_forkThreadAndSetData {youngest=false} => "spork_forkThreadAndSetData"
        | Spork_forkThreadAndSetData {youngest=true} => "spork_forkThreadAndSetData_youngest"
        | Spork_getData spid => concat ["spork_getData<", Spid.toString spid, ">"]
