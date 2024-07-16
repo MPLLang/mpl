@@ -515,9 +515,7 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   } else if (token_policy == TOKEN_POLICY_KEEP) {
       give_tokens = 0;
   } else {
-    char msg[100];
-    snprintf(msg, 100, "unknown token policy %u", token_policy);
-    DIE(msg);
+    DIE("unknown token policy %u", token_policy);
     leave(s);
     return BOGUS_OBJPTR;
   }
