@@ -398,25 +398,99 @@ Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
   return FALSE;
 }
 
+bool GC_HH_findNextPromotableFrame(GC_state s, bool youngest, pointer threadp) {
+  /* Note that the promotion policy is _always_ oldest-first, regardless of the
+   * `youngestOptimization` flag. The following assertion checks that we haven't
+   * violated this. It's valid to use `youngestOptimization=TRUE` as only in the
+   * case where we know that the youngest and oldest frames happen to coincide.
+   * The scheduler figures this out: if we have a spare heartbeat token at the
+   * moment that we execute a pcall, then we know that no other ancestor frames
+   * in the stack are promotable (otherwise the spare token would have been
+   * spent to promote them).
+   */
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  pointer pframe = youngest ? findYoungestPromotableFrame(s, fromStack)
+                            : findPromotableFrame(s, fromStack);
+  thread->nextPromotionFrame = pframe;
+  //printf("For thread = %p, setting nextPromotionFrame = %p\n", threadp, pframe);
+  leave(s);
+  return NULL != pframe;
+}
+
+uintptr_t GC_HH_getFrameInfoSporkIdx(GC_frameInfo fi, pointer pframe) {
+  for (uintptr_t spork_idx = 0 ; spork_idx < fi->sporkInfo->nest ; spork_idx++) {
+    objptr p = *((objptr*) (pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spork_idx));
+    if (!isObjptr(p)) {
+      return spork_idx;
+    }
+  }
+  return -1;
+}
+
+GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s, pointer threadp) {
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  pointer pframe = thread->nextPromotionFrame;
+  //printf("getNextPromotionTokenPolicy threadp = %p, nextPromotionFrame = %p\n", threadp, pframe);
+  if (pframe == NULL) {
+    DIE("GC_HH_getNextPromotionTokenPolicy failed!");
+    leave(s);
+    return -1;
+  }
+  GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
+  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
+#if ASSERT
+  assert(fi->sporkInfo != NULL);
+#endif
+  uintptr_t spork_idx = GC_HH_getFrameInfoSporkIdx(fi, pframe);
+  GC_tokenPolicy token_policy = fi->sporkInfo->tokenPolicies[spork_idx];
+  leave(s);
+  //printf("Done with getNextPromotionTokenPolicy: %u\n", token_policy);
+  return token_policy;
+}
+
 bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
+  //printf("canForkThread threadp = %p\n", threadp);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
   // pointer pframe = findPromotableFrame(s, fromStack);
   pointer pframe = findYoungestPromotableFrame(s, fromStack);
+  //pointer pframe = thread->nextPromotionFrame;
+  //if (pframe == NULL) {
+  //    GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  //    pframe = findYoungestPromotableFrame(s, fromStack);
+  //}
   leave(s);
+  //printf("canForkThread return => %p\n", pframe);
   return NULL != pframe;
 }
 
 objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, pointer dp) {
   enter(s);
+  //printf("forkThread threadp = %p\n", threadp);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
+  //pointer pframe = thread->nextPromotionFrame;
+  //printf("forkThread nextPromotionFrame = %p\n", pframe);
+  //thread->nextPromotionFrame = NULL;
+
+//  pointer pframe2 =
   pointer pframe =
     (youngestOptimization ?
       findYoungestPromotableFrame(s, fromStack) :
       findPromotableFrame(s, fromStack));
+
+  /*if (pframe != pframe2) {
+      DIE("forkthread %p pframes not equal: %p != %p", threadp, pframe, pframe2);
+      leave(s);
+      return BOGUS_OBJPTR;
+  } else {
+      printf("forkthread threadp = %p, pframe = %p\n", threadp, pframe);
+  }*/
 
   /* Note that the promotion policy is _always_ oldest-first, regardless of the
    * `youngestOptimization` flag. The following assertion checks that we haven't
@@ -427,7 +501,7 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
    * in the stack are promotable (otherwise the spare token would have been
    * spent to promote them).
    */
-  assert(findPromotableFrame(s, fromStack) == pframe);
+  /*assert(findPromotableFrame(s, fromStack) == pframe);*/
 
   if (NULL == pframe) {
     DIE("forkThread failed!");
@@ -440,24 +514,16 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
 #if ASSERT
   assert(fi->sporkInfo != NULL);
 #endif
-  GC_returnAddress spwn_ret = 0;
-  GC_tokenPolicy token_policy;
-  uintptr_t spwn_idx;
-  for (spwn_idx = 0 ; spwn_idx < fi->sporkInfo->nest ; spwn_idx++) {
-    objptr p = *((objptr*) (pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spwn_idx));
-    if (!isObjptr(p)) {
-      spwn_ret = fi->sporkInfo->spwns[spwn_idx];
-      token_policy = fi->sporkInfo->tokenPolicies[spwn_idx];
-      break;
-    }
-  }
+  uintptr_t spork_idx = GC_HH_getFrameInfoSporkIdx(fi, pframe);
+  GC_returnAddress spwn_ret = fi->sporkInfo->spwns[spork_idx];
+  GC_tokenPolicy token_policy = fi->sporkInfo->tokenPolicies[spork_idx];
 
   // =========================================================================
   // First, write dp (data pointer) onto the promotable frame
   // =========================================================================
 
   objptr dop = pointerToObjptr(dp, NULL);
-  *((objptr*)(pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spwn_idx)) = dop;
+  *((objptr*)(pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spork_idx)) = dop;
 
   // =========================================================================
   // Next, copy the promotable frame
@@ -486,7 +552,7 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   // Transition new frame to SPORK_SPWN_FRAME
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = spwn_ret;
   // Invalidate other spork data slots of new frame.
-  for (uintptr_t i = 0 ; i < spwn_idx ; i++) {
+  for (uintptr_t i = 0 ; i < spork_idx ; i++) {
     *((objptr*) (newFrame - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * i)) = BOGUS_OBJPTR;
   }
 
@@ -520,9 +586,12 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
     return BOGUS_OBJPTR;
   }
   s->spareHeartbeatTokens -= give_tokens;
+  getThreadCurrent(s)->spareHeartbeatTokens -= give_tokens;
+  
   copied->spareHeartbeatTokens += give_tokens;
 
   leave(s);
+  //printf("end forkThread threadp = %p\n", threadp);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
 }
 

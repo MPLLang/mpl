@@ -64,7 +64,7 @@ struct
   val tryConsumeSpareHeartbeats =
     _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
   val tryConsumeSpareHeartbeats =
-    (fn w => tryConsumeSpareHeartbeats (gcstate (), w))
+    (fn w => if tryConsumeSpareHeartbeats (gcstate (), w) then () else die (fn _ => "tried to consume " ^ Word32.toString w ^ " tokens, but didn't have enough"))
 
   val addSpareHeartbeats =
     _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
@@ -72,6 +72,11 @@ struct
     (fn w => addSpareHeartbeats (gcstate (), w)): Word32.word -> Word32.word
   
   val currentSpareHeartbeatTokens = _prim "Heartbeat_tokens": unit -> Word32.word;
+
+  datatype TokenPolicy =
+      TokenPolicyFair (* 0w0 *)
+    | TokenPolicyKeep (* 0w1 *)
+    | TokenPolicyGive (* 0w2 *)
 
   val traceSchedIdleEnter = _import "GC_Trace_schedIdleEnter" private: gcstate -> unit; o gcstate
   val traceSchedIdleLeave = _import "GC_Trace_schedIdleLeave" private: gcstate -> unit; o gcstate
@@ -85,6 +90,15 @@ struct
 
   structure Queue = DequeABP (*ArrayQueue*)
   structure Thread = MLton.Thread.Basic
+
+  val nextPromotionTokenPolicy =
+    _import "GC_HH_getNextPromotionTokenPolicy" runtime private: gcstate * Thread.t -> Word32.word;
+  val nextPromotionTokenPolicy =
+    (fn thr => case nextPromotionTokenPolicy (gcstate (), thr) of
+                   0w0 => TokenPolicyFair
+                 | 0w1 => TokenPolicyKeep
+                 | 0w2 => TokenPolicyGive
+                 | w => die (fn _ => "Unknown token policy " ^ Word32.toString w))
   
   val primSporkFair =
       _prim "spork_fair"
@@ -122,6 +136,13 @@ struct
 
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
+
+  val findNextPromotableFrame =
+    _import "GC_HH_findNextPromotableFrame" runtime private: gcstate * bool * Thread.t -> bool;
+  val findNextPromotableFrame =
+      (fn ({youngestOptimization}, p) =>
+          findNextPromotableFrame (gcstate (), youngestOptimization, p))
+      : {youngestOptimization: bool} * Thread.t -> bool;
 
   fun assertAtomic msg x =
     let
@@ -592,6 +613,11 @@ struct
 
         val _ = tryConsumeSpareHeartbeats spawnCost
 
+        (* val giveTokens = case nextPromotionTokenPolicy interruptedLeftThread of *)
+        (*                      TokenPolicyFair => Word32.>> (currentSpareHeartbeatTokens (), 0w1) *)
+        (*                    | TokenPolicyKeep => 0w0 *)
+        (*                    | TokenPolicyGive => currentSpareHeartbeatTokens () *)
+        (* val _ = tryConsumeSpareHeartbeats giveTokens *)
         val spareBefore = currentSpareHeartbeatTokens ()
         val spareHB = ref 0w0
         val jp =
@@ -612,7 +638,7 @@ struct
             primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* determine how many heartbeats given to rhs from difference vs before *)
-        val _ = spareHB := currentSpareHeartbeatTokens () - spareBefore
+        val _ = spareHB := spareBefore - currentSpareHeartbeatTokens ()
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
@@ -638,7 +664,7 @@ struct
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           false
-        else if not (HH.canForkThread interruptedLeftThread) then
+        else if not (findNextPromotableFrame (youngestOptimization, interruptedLeftThread)) then
           false
         else
           ( doSpawn youngestOptimization interruptedLeftThread
@@ -787,7 +813,7 @@ struct
             ; doClearSuspects (thread, newDepth)
             ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
 
-            ; addSpareHeartbeats (!spareHeartbeatsGiven)
+            (* ; addSpareHeartbeats (!spareHeartbeatsGiven) *)
 
             ; NONE
             )
@@ -1010,7 +1036,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            (* val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp)) *)
+            val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp))
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
@@ -1020,7 +1046,7 @@ struct
             val depth' = HH.getDepth (Thread.current ())
             val _ =
               if depth = depth' then ()
-              else #error (sched_package ()) "scheduler bug: rightide depth mismatch"
+              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
             val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
             val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
           in
