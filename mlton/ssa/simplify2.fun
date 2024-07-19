@@ -56,7 +56,6 @@ local
                 ("removeUnused", RemoveUnused2.transform2),
                 ("zone", Zone.transform2),
                 ("ssa2AddProfile", Profile2.addProfile),
-                (* ("ssa2DropPCall", DropPCall2.transform2), *)
                 ("ssa2DropProfile", Profile2.dropProfile),
                 ("ssa2EliminateDeadBlocks", S.eliminateDeadBlocks),
                 ("ssa2OrderFunctions", S.orderFunctions),

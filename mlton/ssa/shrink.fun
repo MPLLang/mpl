@@ -496,15 +496,6 @@ fun shrinkFunction {globals: Statement.t vector} =
                      in
                        normal ()
                      end
-                (*| PCall {args, cont, parl, parr, ...} =>
-                     let
-                        val _ = incVars args
-                        val _ = incLabel cont
-                        val _ = incLabel parl
-                        val _ = incLabel parr
-                     in
-                        normal ()
-                     end*)
                 | Raise xs => rr (xs, LabelMeaning.Raise)
                 | Return xs => rr (xs, LabelMeaning.Return)
                 | Runtime {args, return, ...} =>
@@ -907,13 +898,6 @@ fun shrinkFunction {globals: Statement.t vector} =
                     Spoin {spid = spid,
                            seq = simplifyLabel seq,
                            sync = simplifyLabel sync})
-              (*| PCall {func, args, cont, parl, parr} =>
-                   ([],
-                    PCall {func = func,
-                           args = simplifyVars args,
-                           cont = simplifyLabel cont,
-                           parl = simplifyLabel parl,
-                           parr = simplifyLabel parr})*)
               | Raise xs => ([], Raise (simplifyVars xs))
               | Return xs => ([], Return (simplifyVars xs))
               | Runtime {prim, args, return} =>
