@@ -481,18 +481,16 @@ structure Function =
                             | Raise _ => checkLeave ()
                             | Return _ => checkLeave ()
                             | Spork {spid, cont, spwn} =>
-                                 (case (inSpwn, sporkData, sporkNest) of
-                                     (*(true, _, _) => bug "may not Spork within Spork/spwn"*)
-                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spork"
-                                   | ((*false*) _, NONE, sporkNest) =>
+                                 (case (sporkData, sporkNest) of
+                                     (SOME _, _) => bug "nonempty sporkData at Spork"
+                                   | (NONE, sporkNest) =>
                                         (goto (cont, inSpwn, NONE, spid::sporkNest)
                                          ; goto (spwn, inSpwn + 1, SOME spid, [])))
                             | Spoin {spid, seq, sync} =>
-                                 (case (inSpwn, sporkData, sporkNest) of
-                                     (*(true, _, _) => bug "may not Spoin within Spork/spwn"*)
-                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spoin"
-                                   | ((*false*) _, NONE, []) => bug "empty sporkNest at Spoin"
-                                   | ((*false*) _, NONE, spid'::sporkNest') =>
+                                 (case (sporkData, sporkNest) of
+                                     (SOME _, _) => bug "nonempty sporkData at Spoin"
+                                   | (NONE, []) => bug "empty sporkNest at Spoin"
+                                   | (NONE, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
                                            then (goto (seq, inSpwn, NONE, sporkNest')
                                                  ; goto (sync, inSpwn, SOME spid', sporkNest'))

@@ -405,7 +405,7 @@ structure Function =
                                                   {block = b,
                                                    sporkInfo = ref NONE}))
             fun goto (l: Label.t,
-                      inSpwn: bool,
+                      inSpwn: int,
                       sporkData: Spid.t option,
                       sporkNest: Spid.t list) =
                let
@@ -425,7 +425,7 @@ structure Function =
                                               Option.layout
                                               (fn {inSpwn, sporkData, sporkNest} =>
                                                record [("inSpwn",
-                                                        Bool.layout
+                                                        Int.layout
                                                         inSpwn),
                                                         ("sporkData",
                                                         Option.layout
@@ -466,7 +466,7 @@ structure Function =
                            fun checkLeave () =
                               let
                                  val _ =
-                                    if inSpwn
+                                    if inSpwn > 0
                                        then bug "may not leave function within Spork/spwn"
                                        else ()
                                  val _ =
@@ -503,29 +503,27 @@ structure Function =
                             | Raise _ => checkLeave ()
                             | Return _ => checkLeave ()
                             | Spork {spid, cont, spwn} =>
-                                 (case (inSpwn, sporkData, sporkNest) of
-                                     (* (true, _, _) => bug "may not Spork within Spork/spwn" *)
-                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spork"
-                                   | ((*false*) _, NONE, sporkNest) =>
-                                        (goto (cont, false, NONE, spid::sporkNest)
-                                         ; goto (spwn, true, SOME spid, [])))
+                                 (case (sporkData, sporkNest) of
+                                     (SOME _, _) => bug "nonempty sporkData at Spork"
+                                   | (NONE, sporkNest) =>
+                                        (goto (cont, inSpwn, NONE, spid::sporkNest)
+                                         ; goto (spwn, inSpwn + 1, SOME spid, [])))
                             | Spoin {spid, seq, sync} =>
-                                 (case (inSpwn, sporkData, sporkNest) of
-                                     (* (true, _, _) => bug "may not Spoin within Spork/spwn" *)
-                                     ((*false*) _, SOME _, _) => bug "nonempty sporkData at Spoin"
-                                   | ((*false*) _, NONE, []) => bug "empty sporkNest at Spoin"
-                                   | ((*false*) _, NONE, spid'::sporkNest') =>
+                                 (case (sporkData, sporkNest) of
+                                     (SOME _, _) => bug "nonempty sporkData at Spoin"
+                                   | (NONE, []) => bug "empty sporkNest at Spoin"
+                                   | (NONE, spid'::sporkNest') =>
                                         if Spid.equals (spid, spid')
-                                           then (goto (seq, false, NONE, sporkNest')
-                                                 ; goto (sync, false, SOME spid', sporkNest'))
+                                           then (goto (seq, inSpwn, NONE, sporkNest')
+                                                 ; goto (sync, inSpwn, SOME spid', sporkNest'))
                                            else bug "mismatched sporkNest at Spoin")
                             | _ => Transfer.foreachLabel (transfer, simple)
                         end
                    | SOME {inSpwn = inSpwn', sporkData = sporkData', sporkNest = sporkNest'} =>
                         let
-                           (* val _ = if Bool.equals (inSpwn, inSpwn') *)
-                           (*            then () *)
-                           (*            else bug "mismatched block: inSpwn" *)
+                           val _ = if Int.equals (inSpwn, inSpwn')
+                                      then ()
+                                      else bug "mismatched block: inSpwn"
                            val _ = if Option.equals (sporkData, sporkData', Spid.equals)
                                       then ()
                                       else bug "mismatched block: sporkData"
@@ -536,7 +534,7 @@ structure Function =
                            ()
                         end
                end
-            val _ = goto (start, false, NONE, [])
+            val _ = goto (start, 0, NONE, [])
             val _ = Vector.foreach (blocks, fn Block.T {label, ...} => rem label)
          in
             ()
