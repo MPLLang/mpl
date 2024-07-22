@@ -289,6 +289,8 @@ struct
   val numHeartbeats = Array.array (P, 0)
   val numSkippedHeartbeats = Array.array (P, 0)
   val numSteals = Array.array (P, 0)
+  val numSlowJoins = Array.array (P, 0)
+  val numFastJoins = Array.array (P, 0)
 
   fun incrementNumSpawns () =
     let
@@ -330,6 +332,24 @@ struct
       arrayUpdate (numSteals, p, c+1)
     end
 
+  fun incrementNumSlowJoins () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numSlowJoins, p)
+    in
+      arrayUpdate (numSlowJoins, p, c+1)
+      (* MLton.Parallel.arrayFetchAndAdd (numSlowJoins, p) 1 *)
+    end
+
+  fun incrementNumFastJoins () =
+    let
+      val p = myWorkerId ()
+      val c = arraySub (numFastJoins, p)
+    in
+      (* MLton.Parallel.arrayFetchAndAdd (numFastJoins, p) 1 *)
+      arrayUpdate (numFastJoins, p, c+1)
+    end
+
   fun numSpawnsSoFar () =
     Array.foldl op+ 0 numSpawns
 
@@ -344,6 +364,12 @@ struct
 
   fun numStealsSoFar () =
     Array.foldl op+ 0 numSteals
+
+  fun numSlowJoinsSoFar () =
+    Array.foldl op+ 0 numSlowJoins
+
+  fun numFastJoinsSoFar () =
+    Array.foldl op+ 0 numFastJoins
 
   (** ========================================================================
     * TIMERS
@@ -799,24 +825,21 @@ struct
            * appropriately.)
            *)
           if popDiscard () then
-            ( dbgmsg'' (fn _ => "popDiscard success at depth " ^ Int.toString depth)
-
-            (* promote chunks into parent, update depth->newDepth, update
-             * decheck state by joining tidLeft and tidRight.
-             *)
-            ; HH.joinIntoParentBeforeFastClone
-                {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
-
-            ; traceSchedJoinFast ()
-            ; Thread.atomicEnd ()
-
-            ; doClearSuspects (thread, newDepth)
-            ; if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
-
-            (* ; addSpareHeartbeats (!spareHeartbeatsGiven) *)
-
-            ; NONE
-            )
+            let val _ = dbgmsg'' (fn _ => "popDiscard success at depth " ^ Int.toString depth)
+                (* promote chunks into parent, update depth->newDepth, update
+                 * decheck state by joining tidLeft and tidRight.
+                 *)
+                val _ = HH.joinIntoParentBeforeFastClone
+                          {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
+                val _ = traceSchedJoinFast ()
+                val _ = Thread.atomicEnd ()
+                val _ = doClearSuspects (thread, newDepth)
+                val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
+                val _ = addSpareHeartbeats (!spareHeartbeatsGiven)
+                val _ = incrementNumFastJoins ()
+            in
+              NONE
+            end
           else
             ( if decrementHitsZero incounter then
                 ()
@@ -844,6 +867,8 @@ struct
                       , tidLeft = tidLeft
                       , tidRight = tidRight
                       }
+
+                    val _ = incrementNumSlowJoins ()
 
                     val _ = traceSchedJoin ()
 
@@ -1036,7 +1061,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp))
+            (* val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp)) *)
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
