@@ -92,13 +92,13 @@ struct
   structure Thread = MLton.Thread.Basic
 
   val nextPromotionTokenPolicy =
-    _import "GC_HH_getNextPromotionTokenPolicy" runtime private: gcstate * Thread.t -> Word32.word;
+    _import "GC_HH_getNextPromotionTokenPolicy" runtime private: gcstate -> Word32.word;
   val nextPromotionTokenPolicy =
-    (fn thr => case nextPromotionTokenPolicy (gcstate (), thr) of
-                   0w0 => TokenPolicyFair
-                 | 0w1 => TokenPolicyKeep
-                 | 0w2 => TokenPolicyGive
-                 | w => die (fn _ => "Unknown token policy " ^ Word32.toString w))
+    (fn () => case nextPromotionTokenPolicy (gcstate ()) of
+                  0w0 => TokenPolicyFair
+                | 0w1 => TokenPolicyKeep
+                | 0w2 => TokenPolicyGive
+                | w => die (fn _ => "Unknown token policy " ^ Word32.toString w))
   
   val primSporkFair =
       _prim "spork_fair"
@@ -196,7 +196,7 @@ struct
       , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
-      , spareHeartbeatsGiven: Word32.word ref
+      , spareHeartbeatsGiven: Word32.word
       , gcj: gc_joinpoint option
       }
 
@@ -639,20 +639,20 @@ struct
 
         val _ = tryConsumeSpareHeartbeats spawnCost
 
-        (* val giveTokens = case nextPromotionTokenPolicy interruptedLeftThread of *)
-        (*                      TokenPolicyFair => Word32.>> (currentSpareHeartbeatTokens (), 0w1) *)
-        (*                    | TokenPolicyKeep => 0w0 *)
-        (*                    | TokenPolicyGive => currentSpareHeartbeatTokens () *)
-        (* val _ = tryConsumeSpareHeartbeats giveTokens *)
-        val spareBefore = currentSpareHeartbeatTokens ()
-        val spareHB = ref 0w0
+        val giveTokens = case nextPromotionTokenPolicy () of
+                             TokenPolicyFair => Word32.>> (currentSpareHeartbeatTokens (), 0w1)
+                           | TokenPolicyKeep => 0w0
+                           | TokenPolicyGive => currentSpareHeartbeatTokens ()
+        val _ = tryConsumeSpareHeartbeats giveTokens
+        (* val spareBefore = currentSpareHeartbeatTokens () *)
+        (* val spareHB = ref 0w0 *)
         val jp =
           J { leftSideThread = interruptedLeftThread
             , rightSideThread = rightSideThreadSlot
             , rightSideResult = rightSideResult
             , incounter = incounter
             , tidRight = tidRight
-            , spareHeartbeatsGiven = spareHB
+            , spareHeartbeatsGiven = giveTokens
             , gcj = gcj
             }
 
@@ -664,7 +664,7 @@ struct
             primForkThreadAndSetData (interruptedLeftThread, jp)
 
         (* determine how many heartbeats given to rhs from difference vs before *)
-        val _ = spareHB := spareBefore - currentSpareHeartbeatTokens ()
+        (* val _ = spareHB := spareBefore - currentSpareHeartbeatTokens () *)
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
@@ -785,7 +785,7 @@ struct
           , rightSideResult = rightSideResult
           , incounter = incounter
           , tidRight = tidRight
-          , spareHeartbeatsGiven = ref halfSpare
+          , spareHeartbeatsGiven = halfSpare
           , gcj = gcj
           }
       end
@@ -835,7 +835,7 @@ struct
                 val _ = Thread.atomicEnd ()
                 val _ = doClearSuspects (thread, newDepth)
                 val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
-                val _ = addSpareHeartbeats (!spareHeartbeatsGiven)
+                val _ = addSpareHeartbeats spareHeartbeatsGiven
                 val _ = incrementNumFastJoins ()
             in
               NONE
@@ -1061,7 +1061,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            (* val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp)) *)
+            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
@@ -1154,7 +1154,7 @@ struct
     fun sporkGive (cont, spwn, seq, sync) =
         spork (primSporkGive, tryPromoteFirst cont, spwn, seq, sync)
 
-    fun sporkSam (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b option -> 'c) : 'c =
+    fun sporkSam (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
       let
         val (inject, project) = Universal.embed ()
 
@@ -1171,7 +1171,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            (* val _ = addSpareHeartbeats (!(#spareHeartbeatsGiven jp)) *)
+            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
@@ -1223,12 +1223,12 @@ struct
             val contr' = Result.extractResult contr
           in
             case spwnrOpt of
-                (* spwn was unstolen: actually, use seq continuation here! *)
-                NONE => sync (contr', NONE)
+              (* spwn was unstolen *)
+                NONE => unstolen contr'
               (* spwn was stolen and synced in syncEndAtomic *)
               | SOME spwnr =>
                 case project (Result.extractResult spwnr) of
-                    SOME r => sync (contr', SOME r)
+                    SOME r => sync (contr', r)
                   | NONE => (#error (sched_package ())
                                     "scheduler bug: spork sync: failed project right-side result";
                              raise SchedulerError)
@@ -1237,14 +1237,14 @@ struct
         primSpork (cont', spwn', seq', sync')
       end
 
-    fun sporkSamFair (cont, spwn, seq, sync) =
-        sporkSam (primSporkFair, tryPromoteFirst cont, spwn, seq, sync)
+    fun sporkSamFair (cont, spwn, seq, sync, unstolen) =
+        sporkSam (primSporkFair, tryPromoteFirst cont, spwn, seq, sync, unstolen)
 
-    fun sporkSamKeep (cont, spwn, seq, sync) =
-        sporkSam (primSporkKeep, tryPromoteFirst cont, spwn, seq, sync)
+    fun sporkSamKeep (cont, spwn, seq, sync, unstolen) =
+        sporkSam (primSporkKeep, tryPromoteFirst cont, spwn, seq, sync, unstolen)
 
-    fun sporkSamGive (cont, spwn, seq, sync) =
-        sporkSam (primSporkGive, tryPromoteFirst cont, spwn, seq, sync)
+    fun sporkSamGive (cont, spwn, seq, sync, unstolen) =
+        sporkSam (primSporkGive, tryPromoteFirst cont, spwn, seq, sync, unstolen)
 
   end
 

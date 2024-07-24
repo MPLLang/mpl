@@ -65,13 +65,11 @@ struct
               let val i' = i + grain
                   fun body () = seqfor (i, i')
                   fun spwn () = eagers (i', j)
-                  fun seq (()) = iterCheck (i', j)
-                  fun sync ((), uo) =
-                      case uo of
-                          NONE => eagers (i', j)
-                        | SOME () => ()
+                  fun seq () = iterCheck (i', j)
+                  fun sync ((), ()) = ()
+                  fun unstolen () = eagers (i', j)
               in
-                sporkSamGive (body, spwn, seq, sync)
+                sporkSamGive (body, spwn, seq, sync, unstolen)
               end
       in
         eagers (i, j)
@@ -97,14 +95,13 @@ struct
                 iter b (i, j)
           and iter (b: 'a) (i: word, j: word): 'a =
               let val i' = i + grain
+                  fun unstolen b' = eagers b' (i', j)
                   fun body () = reduce (i, i') b step
-                  fun spwn () = eagers z (i', j)
-                  fun seq (b') = iterCheck b' (i', j)
-                  fun sync (b', ob) = case ob of
-                                          NONE => eagers b' (i', j)
-                                        | SOME b'' => merge (b', b'')
+                  fun spwn () = unstolen z
+                  fun seq b' = iterCheck b' (i', j)
+                  val sync = merge
               in
-                sporkSamGive (body, spwn, seq, sync)
+                sporkSamGive (body, spwn, seq, sync, unstolen)
               end
       in
         eagers z (i, j)
@@ -180,21 +177,17 @@ struct
                 if i' >= j then
                   seqred (a, i, j)
                 else
-                  let fun body (): 'a = seqred (a, i, i')
-                      fun spwn (): 'a =
-                          let val mid = midpoint (i', j)
-                              fun left_half () = loop z (i', mid)
-                              fun right_half () = loop z (mid, j)
-                          in
-                            merge (par (left_half, right_half))
+                  let fun unstolen b =
+                          let val mid = midpoint (i', j) in
+                            merge (par (fn () => loop b (i', mid),
+                                        fn () => loop z (mid, j)))
                           end
+                      fun body (): 'a = seqred (a, i, i')
+                      fun spwn (): 'a = unstolen z
                       fun seq (a'): 'a = loop a' (i', j)
-                      fun sync (a: 'a, ao: 'a option): 'a =
-                          case ao of
-                              NONE => spwn ()
-                            | SOME a' => merge (a, a')
+                      val sync = merge
                   in
-                    sporkSamGive (body, spwn, seq, sync)
+                    sporkSamGive (body, spwn, seq, sync, unstolen)
                   end
               end
       in
@@ -216,13 +209,11 @@ struct
                                  fn () => loop (mid, j));
                             ()
                           end
-                      fun seq (()): unit = loop (i', j)
-                      fun sync ((), so: unit option): unit =
-                          case so of
-                              NONE => spwn ()
-                            | SOME () => ()
+                      fun seq (): unit = loop (i', j)
+                      fun sync ((), ()): unit = ()
+                      fun unstolen () = spwn ()
                   in
-                    sporkSamGive (body, spwn, seq, sync); ()
+                    sporkSamGive (body, spwn, seq, sync, unstolen)
                   end
               end
       in
@@ -264,7 +255,7 @@ struct
                           else
                             let fun body () = seqfor (i, i')
                                 fun spwn () = loop (i', j)
-                                fun seq (()) = innerLoop (i', j)
+                                fun seq () = innerLoop (i', j)
                                 fun sync ((), ()) = ()
                             in
                               sporkGive (body, seq, spwn, sync)

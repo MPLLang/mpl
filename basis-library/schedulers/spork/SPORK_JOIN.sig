@@ -6,9 +6,9 @@ sig
   val sporkFair: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
   val sporkKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
   val sporkGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) -> 'c
-  val sporkSamFair: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b option -> 'c) -> 'c
-  val sporkSamKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b option -> 'c) -> 'c
-  val sporkSamGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b option -> 'c) -> 'c
+  val sporkSamFair: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) * ('a -> 'c) -> 'c
+  val sporkSamKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) * ('a -> 'c) -> 'c
+  val sporkSamGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) * ('a -> 'c) -> 'c
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val parfor_sam: int -> (int * int) -> (int -> unit) -> unit
   val pareduce: int -> (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a

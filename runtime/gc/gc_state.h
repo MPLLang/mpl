@@ -83,6 +83,7 @@ struct GC_state {
                                           * signal handler (the thread that
                                           * was interrupted)
                                           */
+  ptrdiff_t savedPromotionFrame; /* saved frame to promote */
   int (*saveGlobals)(FILE *f); /* saves the globals to the file. */
   bool saveWorldStatus; /* */
   objptr signalHandlerThread; /* Handler for signals (in heap). */
@@ -174,6 +175,8 @@ PRIVATE pointer GC_getCurrentThread (GC_state s);
 
 PRIVATE pointer GC_getSavedThread (GC_state s);
 PRIVATE void GC_setSavedThread (GC_state s, pointer p);
+PRIVATE void GC_setSavedPromotionFrame (GC_state s, pointer pframe);
+PRIVATE pointer GC_getSavedPromotionFrame (GC_state s);
 PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 
 PRIVATE void GC_registerQueue(uint32_t processor, pointer queuePointer);

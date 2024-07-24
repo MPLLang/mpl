@@ -67,7 +67,6 @@ typedef struct GC_thread {
   HM_chunk currentChunk;
 
   objptr stack;
-  pointer nextPromotionFrame;
 } __attribute__ ((packed)) *GC_thread;
 
 #ifdef DETECT_ENTANGLEMENT
@@ -86,8 +85,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(void*) +   // currentCheck
-                    sizeof(objptr) +  // stack
-                    sizeof(pointer)); // nextPromotionFrame
+                    sizeof(objptr));  // stack
 
 #else
 
@@ -103,8 +101,7 @@ COMPILE_TIME_ASSERT(GC_thread__packed,
                     sizeof(size_t) +  // bytesSurvivedLastCollection
                     sizeof(void*) +   // hierarchicalHeap
                     sizeof(void*) +   // currentCheck
-                    sizeof(objptr) +  // stack
-                    sizeof(pointer)); // nextPromotionFrame
+                    sizeof(objptr));  // stack
 
 #endif // DETECT_ENTANGLEMENT
 
@@ -131,7 +128,7 @@ PRIVATE bool GC_HH_findNextPromotableFrame(GC_state s, bool youngest, pointer th
 
 // returns the token split policy for the promotion about to happen
 // this function assumes GC_HH_findNextPromotableFrame has been called already (and atomically)
-PRIVATE GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s, pointer threadp);
+PRIVATE GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s);
 
 // forkThread should only be called if canForkThread returns true
 // (and without resuming the thread in between)

@@ -399,6 +399,26 @@ void GC_setSavedThread (GC_state s, pointer p) {
   s->savedThread = op;
 }
 
+void GC_setSavedPromotionFrame(GC_state s, pointer pframe) {
+  if (pframe == NULL) {
+    //printf("setSavedPromotionFrame NULL\n");
+    s->savedPromotionFrame = 0;
+  } else {
+    //printf("setSavedPromotionFrame, pframe = %p, s->stackBottom = %p, s->savedPromotionFrame = %p\n", pframe, s->stackBottom, (ptrdiff_t) (pframe - s->stackBottom));
+    s->savedPromotionFrame = (ptrdiff_t) (pframe - s->stackBottom);
+  }
+}
+
+pointer GC_getSavedPromotionFrame(GC_state s) {
+  if (s->savedPromotionFrame) {
+    //printf("getSavedPromotionFrame, s->savedPromotionFrame = %p, s->stackBottom = %p, pframe = %p\n", s->savedPromotionFrame, s->stackBottom, (pointer) (s->savedPromotionFrame + s->stackBottom));
+    return (pointer) (s->savedPromotionFrame + s->stackBottom);
+  } else {
+    //printf("getSavedPromotionFrame NULL\n");
+    return NULL;
+  }
+}
+
 void GC_setSignalHandlerThreads (GC_state s, pointer p) {
   assert(getSequenceLength (p) == s->numberOfProcs);
   for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
