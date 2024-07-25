@@ -41,43 +41,127 @@ struct
   val fork = par
 
   (* ======================================================================= *)
-
-  fun wparfor (grain: word) (i: word, j: word) (f: word -> unit): unit =
-      let fun seqfor (i, j) =
-              for (i, j) f
-          fun eagers (i, j) =
+  fun wparfor (grain: word) (i: word, j: word) (step: word -> unit): unit =
+      let fun seqfor (i: word, j: word): unit =
+              for (i, j) step
+          fun splitCheckBoundsTokens (i: word, j: word): unit =
               if grain >= j - i then
                 seqfor (i, j)
-              else if Scheduler.SporkJoin.noTokens () then
+              else
+                splitCheckTokens (i, j)
+          and splitCheckBounds (i: word, j: word): unit =
+              if grain >= j - i then
+                seqfor (i, j)
+              else
+                split (i, j)
+          and splitCheckTokens (i: word, j: word): unit =
+              if Scheduler.SporkJoin.noTokens () then
                 iter (i, j)
               else
-                let val mid = midpoint (i, j) in
-                  par (fn () => eagers (i, mid),
-                       fn () => eagers (mid, j));
-                  ()
+                split (i, j)
+          and split (i: word, j: word): unit =
+              let val mid = midpoint (i, j) in
+                  ignore (par (fn () => splitCheckBoundsTokens (i, mid),
+                               fn () => splitCheckBoundsTokens (mid, j)))
                 end
-          and iterCheck (i, j) =
+          and iterCheckBounds (i: word, j: word): unit =
               if grain >= j - i then
                 seqfor (i, j)
               else
                 iter (i, j)
-          and iter (i, j) =
+          and iter (i: word, j: word): unit =
               let val i' = i + grain
-                  fun body () = seqfor (i, i')
-                  fun spwn () = eagers (i', j)
-                  fun seq () = iterCheck (i', j)
+                  fun unstolen () = splitCheckBounds (i', j)
+                  fun body () = for (i, i') step
+                  fun spwn () = unstolen ()
+                  fun seq () = iterCheckBounds (i', j)
                   fun sync ((), ()) = ()
-                  fun unstolen () = eagers (i', j)
               in
                 sporkSamGive (body, spwn, seq, sync, unstolen)
               end
       in
-        eagers (i, j)
+        splitCheckBoundsTokens (i, j)
       end
+
+  (* fun wparfor (grain: word) (i: word, j: word) (f: word -> unit): unit = *)
+  (*     let fun seqfor (i, j) = *)
+  (*             for (i, j) f *)
+  (*         fun eagers (i, j) = *)
+  (*             if grain >= j - i then *)
+  (*               seqfor (i, j) *)
+  (*             else if Scheduler.SporkJoin.noTokens () then *)
+  (*               iter (i, j) *)
+  (*             else *)
+  (*               let val mid = midpoint (i, j) in *)
+  (*                 par (fn () => eagers (i, mid), *)
+  (*                      fn () => eagers (mid, j)); *)
+  (*                 () *)
+  (*               end *)
+  (*         and iterCheck (i, j) = *)
+  (*             if grain >= j - i then *)
+  (*               seqfor (i, j) *)
+  (*             else *)
+  (*               iter (i, j) *)
+  (*         and iter (i, j) = *)
+  (*             let val i' = i + grain *)
+  (*                 fun body () = seqfor (i, i') *)
+  (*                 fun spwn () = eagers (i', j) *)
+  (*                 fun seq () = iterCheck (i', j) *)
+  (*                 fun sync ((), ()) = () *)
+  (*                 fun unstolen () = eagers (i', j) *)
+  (*             in *)
+  (*               sporkSamGive (body, spwn, seq, sync, unstolen) *)
+  (*             end *)
+  (*     in *)
+  (*       eagers (i, j) *)
+  (*     end *)
 
   fun wpareduce (grain: word) (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun seqred (b: 'a) (i: word, j: word) =
               reduce (i, j) b step
+          fun splitCheckBoundsTokens (b: 'a) (i: word, j: word): 'a =
+              if grain >= j - i then
+                seqred b (i, j)
+              else
+                splitCheckTokens b (i, j)
+          and splitCheckBounds (b: 'a) (i: word, j: word): 'a =
+              if grain >= j - i then
+                seqred b (i, j)
+              else
+                split b (i, j)
+          and splitCheckTokens (b: 'a) (i: word, j: word): 'a =
+              if Scheduler.SporkJoin.noTokens () then
+                iter b (i, j)
+              else
+                split b (i, j)
+          and split (b: 'a) (i: word, j: word): 'a =
+              let val mid = midpoint (i, j) in
+                  merge (par (fn () => splitCheckBoundsTokens b (i, mid),
+                              fn () => splitCheckBoundsTokens z (mid, j)))
+                end
+          and iterCheckBounds (b: 'a) (i: word, j: word): 'a =
+              if grain >= j - i then
+                seqred b (i, j)
+              else
+                iter b (i, j)
+          and iter (b: 'a) (i: word, j: word): 'a =
+              let val i' = i + grain
+                  fun unstolen b' = splitCheckBounds b' (i', j)
+                  fun body () = reduce (i, i') b step
+                  fun spwn () = unstolen z
+                  fun seq b' = iterCheckBounds b' (i', j)
+                  val sync = merge
+              in
+                sporkSamGive (body, spwn, seq, sync, unstolen)
+              end
+      in
+        splitCheckBoundsTokens z (i, j)
+      end
+
+
+  (*fun wsppareduce (grain: word) (i: word, j: word) (z: 'a) (step: word -> 'a) (smerge: 'a * 'a -> 'a) (pmerge: 'a * 'a -> 'a): 'a =
+      let fun seqred (b: 'a) (i: word, j: word) =
+              reduce (i, j) b (fn (i, a) => smerge (a, step i))
           fun eagers (b: 'a) (i: word, j: word): 'a =
               if grain >= j - i then
                 seqred b (i, j)
@@ -105,8 +189,7 @@ struct
               end
       in
         eagers z (i, j)
-      end
-
+      end*)
 
 
   (*fun wparfor (grain: word) (i: word, j: word) (f: word -> unit): unit =
