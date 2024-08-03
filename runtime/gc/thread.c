@@ -64,11 +64,6 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   thread->currentDepth = depth;
   // printf("%s %d\n", "setting thread depth to ", depth);
   // printf("%s %d\n", "HH depth = ", thread->hierarchicalHeap->depth);
-
-  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
-   * control the "use ancestor chunk" optimization, a good sanity check. */
-  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
-  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 }
 
 void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
@@ -273,11 +268,6 @@ void GC_HH_joinIntoParentBeforeFastClone(
   HM_HH_promoteChunks(s, thread);
   thread->currentDepth = newDepth;
 
-  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
-   * control the "use ancestor chunk" optimization, a good sanity check. */
-  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
-  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
-
   GC_HH_decheckJoin(s, tidLeft, tidRight);
 
   leave(s);
@@ -351,11 +341,6 @@ void GC_HH_joinIntoParent(
 
   HM_HH_promoteChunks(s, thread);
   thread->currentDepth = newDepth;
-
-  /* SAM_NOTE: not super relevant here, but if we do eventually decide to
-   * control the "use ancestor chunk" optimization, a good sanity check. */
-  assert(inSameBlock(s->frontier, s->limitPlusSlop-1));
-  assert(((HM_chunk)blockOf(s->frontier))->magic == CHUNK_MAGIC);
 
   GC_HH_decheckJoin(s, tidLeft, tidRight);
 
