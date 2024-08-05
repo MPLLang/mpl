@@ -10,11 +10,15 @@ sig
   val sporkSamKeep: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) * ('a -> 'c) -> 'c
   val sporkSamGive: (unit -> 'a) * (unit -> 'b) * ('a -> 'c) * ('a * 'b -> 'c) * ('a -> 'c) -> 'c
   val parfor: int -> (int * int) -> (int -> unit) -> unit
+  val parfor'': int -> (int * int) -> (int -> unit) -> unit
   val parfor_sam: int -> (int * int) -> (int -> unit) -> unit
+  val parfor_simple: int -> (int * int) -> (int -> unit) -> unit
   val pareduce: int -> (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduce': int -> (int * int) -> 'a -> (int -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduce'': int -> (int * int) -> 'a -> (int -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduce_sam: int -> (int * int) -> 'a -> (int -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduce_simple: int -> (int * int) -> 'a -> (int -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduceInitStepMerge : int -> (int * int) -> (int -> 'a) -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val alloc: int -> 'a array
 
   val idleTimeSoFar: unit -> Time.time
