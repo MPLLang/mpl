@@ -623,37 +623,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                in
                  ()
                end
-          (* | PCall {args, func, cont, parl, parr} =>
-               let
-                  val fi' = funcInfo func
-                  val () = flowVarInfoTysVars (FuncInfo.args fi', args)
-                  fun doit label =
-                     let
-                        val li = labelInfo label
-                        val () =
-                           Option.app
-                           (FuncInfo.returns fi', fn xts =>
-                            flowVarInfoTysVarInfoTys
-                            (LabelInfo.args li, xts))
-                        val () =
-                           FuncInfo.whenReturns
-                           (fi', visitLabelInfoTh li)
-                     in
-                        ()
-                     end
-                  val () = doit cont
-                  val () = doit parl
-                  val () =
-                     let
-                        val li = labelInfo parr
-                        val () = visitLabelInfoTh li ()
-                     in
-                        ()
-                     end
-                  val () = visitFuncInfo fi'
-               in
-                  ()
-               end *)
           | Raise xs =>
                (FuncInfo.raisee fi
                 ; flowVarInfoTysVars (valOf (FuncInfo.raises fi), xs))
@@ -1203,29 +1172,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                Spoin {spid = spid,
                       seq = seq,
                       sync = sync}
-          (*| PCall {func, args, cont, parl, parr} =>
-               let
-                  val fi' = funcInfo func
-                  fun doit label =
-                     if FuncInfo.mayReturn fi'
-                        then getContWrapperLabel (label, valOf (FuncInfo.returns fi'))
-                        else getBugFunc fi
-                  val cont = doit cont
-                  val parl = doit parl
-                  val parr = parr
-                  val args =
-                     Vector.keepAllMap2
-                     (args, FuncInfo.args fi', fn (x, (y, _)) =>
-                      if VarInfo.isUsed y
-                         then SOME x
-                      else NONE)
-               in
-                  PCall {func = func,
-                         args = args,
-                         cont = cont,
-                         parl = parl,
-                         parr = parr}
-               end*)
           | Raise xs =>
                Raise (Vector.keepAllMap2
                       (xs, valOf (FuncInfo.raises fi),

@@ -81,9 +81,6 @@ struct
                     Transfer.Spork {spid = spid, cont = cont, spwn = spwn}
                | Transfer.Spoin {spid, seq, sync} =>
                     Transfer.Spoin {spid = spid, seq = seq, sync = sync}
-               (*| Transfer.PCall {args, func, cont, parl, parr} =>
-                    Transfer.PCall {args=freshenVec args, func=func,
-                                    cont=cont, parl=parl, parr=parr}*)
                | Transfer.Raise vs =>
                     Transfer.Raise (freshenVec vs)
                | Transfer.Return vs =>

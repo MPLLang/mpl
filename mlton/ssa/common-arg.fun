@@ -135,10 +135,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     (visitLabelArgs cont; visitLabelArgs spwn)
                | Spoin {spid, seq, sync} =>
                     (visitLabelArgs seq; visitLabelArgs sync)
-               (*| PCall {cont, parl, parr, ...} =>
-                    (visitLabelArgs cont
-                     ; visitLabelArgs parl
-                     ; visitLabelArgs parr)*)
                | Raise _ => ()
                | Return _ => ()
                | Runtime {return, ...} => visitLabelArgs return)

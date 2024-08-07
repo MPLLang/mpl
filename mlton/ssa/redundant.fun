@@ -341,18 +341,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       | Goto {dst, args, ...} =>
                            Eqrel.refine {coarse = varEquiv args,
                                          fine = labelInfo dst}
-                      (*| PCall {func, args, cont, parl, ...} =>
-                          let
-                             val {arg = arg', return = return'} = funcInfo func
-                             val _ = Eqrel.refine {coarse = varEquiv args,
-                                                   fine = arg'}
-                             fun doit l =
-                                Option.app (return', fn e =>
-                                            Eqrel.unify (e, labelInfo l))
-                          in
-                             doit cont
-                             ; doit parl
-                          end*)
                       | Return xs =>
                            Eqrel.refine {coarse = varEquiv xs,
                                          fine = valOf return}
@@ -521,14 +509,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                    args = loopVars (keepUseful 
                                                     (#argsRed (labelReds dst), 
                                                      args))}
-                        (*| PCall {func, args, cont, parl, parr} =>
-                             PCall {func = func,
-                                    args = loopVars (keepUseful
-                                                     (#argsRed (funcReds func),
-                                                      args)),
-                                    cont = cont,
-                                    parl = parl,
-                                    parr = parr}*)
                         | Spork {spid, cont, spwn} =>
                              Spork {spid = spid, cont = cont, spwn = spwn}
                         | Spoin {spid, seq, sync} =>

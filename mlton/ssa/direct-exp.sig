@@ -59,14 +59,6 @@ signature DIRECT_EXP =
            val name: t * (Var.t -> t) -> t
            val spork: {spid: Spid.t, cont: t, spwn: t, ty: Type.t} -> t
            val spoin: {spid: Spid.t, seq: t, sync: t, ty: Type.t} -> t
-           (*val pcall: {func: Func.t,
-                       args: t vector,
-                       carg: Var.t * Type.t,
-                       cont: t,
-                       larg: Var.t * Type.t,
-                       parl: t,
-                       parr: t,
-                       ty: Type.t} -> t*)
            val primApp: {args: t vector,
                          prim: Type.t Prim.t,
                          targs: Type.t vector, 
