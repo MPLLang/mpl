@@ -68,7 +68,15 @@ struct
 
     (* NOTE: this actually computes 1 + floor(log_2(n)), i.e. the number of
      * bits required to represent n in binary *)
-    fun log2 n = if (n < 1) then 0 else 1 + log2(n div 2)
+    fun log2 n =
+        let fun loop n acc =
+                if n <= 0w1 then
+                  Word64.toInt acc
+                else
+                  loop (Word64.>> (n, 0w1)) (acc + 0w1)
+        in
+          loop (Word64.fromInt n) 0w0
+        end
 
     val maxIdx = capacity
     val idxBits = Word.fromInt (log2 maxIdx)
