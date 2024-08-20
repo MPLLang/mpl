@@ -70,7 +70,7 @@ struct
      * bits required to represent n in binary *)
     fun log2 n =
         let fun loop n acc =
-                if n <= 0w1 then
+                if n = 0w0 then
                   Word64.toInt acc
                 else
                   loop (Word64.>> (n, 0w1)) (acc + 0w1)
