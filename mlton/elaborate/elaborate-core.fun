@@ -140,6 +140,7 @@ in
    structure Cexp = Exp
    structure ExnDecElab = ExnDecElab
    structure Ffi = Ffi
+   structure InlineAttr = InlineAttr
    structure IntSize = IntSize
    structure Lambda = Lambda
    structure Cpat = Pat
@@ -1494,7 +1495,7 @@ local
                            isBool = isBool,
                            expandedCbTy = expandedCbTy,
                            ptrExp = ptrExp},
-           mayInline = true},
+           inline = InlineAttr.Auto},
           (Cexp.lambda o Lambda.make)
           {arg = setArg,
            argType = expandedCbTy,
@@ -1502,7 +1503,7 @@ local
                            isBool = isBool,
                            ptrExp = ptrExp,
                            valueExp = Cexp.var (setArg, expandedCbTy)},
-           mayInline = true})
+           inline = InlineAttr.Auto})
       end
 
    val isSymbolAttributeAlloc =
@@ -1753,7 +1754,7 @@ in
                {arg = ptrArg,
                 argType = expandedPtrTy,
                 body = symExp,
-                mayInline = true},
+                inline = InlineAttr.Auto},
                elabedTy)
       end
 end
@@ -2682,7 +2683,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                           {arg = arg,
                                            argType = argTy,
                                            body = body,
-                                           mayInline = true}),
+                                           inline = InlineAttr.Auto}),
                                          Type.arrow (argTy, Cexp.ty body)))
                                     val lambda =
                                        case Cexp.node lambda of
@@ -2979,7 +2980,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                        Lambda.make {arg = arg,
                                                     argType = argType,
                                                     body = body,
-                                                    mayInline = true}
+                                                    inline = InlineAttr.Auto}
                                  in
                                     {check = check,
                                      bound = bound,
@@ -3220,7 +3221,7 @@ fun elaborateDec (d, {env = E, nest}) =
                       Cexp.make (Cexp.Lambda (Lambda.make {arg = arg,
                                                            argType = argType,
                                                            body = body,
-                                                           mayInline = true}),
+                                                           inline = InlineAttr.Auto}),
                                  Type.arrow (argType, Cexp.ty body))
                    end
               | Aexp.Handle (try, match) =>
@@ -3435,7 +3436,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                   {arg = arg,
                                    argType = argType,
                                    body = body,
-                                   mayInline = true}
+                                   inline = InlineAttr.Auto}
                                end
                       fun etaNoWrap {expandedTy,
                                      prim: Type.t Prim.t} : Cexp.t =
@@ -3628,7 +3629,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                                                 elabedTy = elabedTy,
                                                                 expandedTy = expandedCfTy,
                                                                 layoutPrettyType = #1 o layoutPrettyType}},
-                                 mayInline = true},
+                                 inline = InlineAttr.Auto},
                                 elabedTy)
                             end
                        | Import {attributes, name, ty} =>

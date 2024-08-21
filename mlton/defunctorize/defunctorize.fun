@@ -1095,16 +1095,14 @@ fun defunctorize (CoreML.Program.T {decs}) =
          end
       and loopLambda (l: Clambda.t) =
          let
-            val {arg, argType, body, mayInline} = Clambda.dest l
+            val {arg, argType, body, inline} = Clambda.dest l
             val (body, bodyType) = loopExp body
          in
             {arg = arg,
              argType = loopTy argType,
              body = body,
              bodyType = bodyType,
-             inline = if mayInline
-                         then InlineAttr.Auto
-                      else InlineAttr.Never}
+             inline = inline}
          end
       val body = Xexp.toExp (loopDecs (decs, (Xexp.unit (), Xtype.unit)))
       val _ = showMatchDiagnostics ()

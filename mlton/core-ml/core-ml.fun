@@ -220,7 +220,7 @@ and expNode =
 and lambda = Lam of {arg: Var.t,
                      argType: Type.t,
                      body: exp,
-                     mayInline: bool}
+                     inline: InlineAttr.t}
 
 local
    open Layout
@@ -350,7 +350,7 @@ structure Lambda =
                         argType = Type.unit,
                         body = Exp {node = Seq (Vector.new0 ()),
                                     ty = Type.unit},
-                        mayInline = true}
+                        inline = InlineAttr.Auto}
    end
 
 structure Exp =
@@ -459,7 +459,7 @@ structure Exp =
                             make (Seq (Vector.new2 (expr, call)),
                                   Type.unit),
                             unit),
-                mayInline = true}
+                inline = InlineAttr.Auto}
          in
             make
             (Let (Vector.new1 (Fun {decs = Vector.new1 {lambda = lambda,
@@ -573,8 +573,8 @@ structure Dec =
                                              nest = nest,
                                              pat = pat,
                                              regionPat = regionPat})}
-            and loopLambda (Lam {arg, argType, body, mayInline}) =
-               Lam {arg = arg, argType = argType, body = loopExp body, mayInline = mayInline}
+            and loopLambda (Lam {arg, argType, body, inline}) =
+               Lam {arg = arg, argType = argType, body = loopExp body, inline = inline}
          in
             loopDec d
          end

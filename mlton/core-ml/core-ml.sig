@@ -147,11 +147,11 @@ signature CORE_ML =
             val dest: t -> {arg: Var.t,
                             argType: Type.t,
                             body: Exp.t,
-                            mayInline: bool}
+                            inline: InlineAttr.t}
             val make: {arg: Var.t,
                        argType: Type.t,
                        body: Exp.t,
-                       mayInline: bool} -> t
+                       inline: InlineAttr.t} -> t
          end
       sharing type Exp.lambda = Lambda.t
 
