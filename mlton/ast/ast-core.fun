@@ -367,9 +367,10 @@ and decNode =
   | Fix of {fixity: Fixity.t,
             ops: Vid.t vector}
   | Fun of {tyvars: Tyvar.t vector,
-            fbs: {body: exp,
-                  pats: Pat.t vector,
-                  resultType: Type.t option} vector vector}
+            fbs: ({body: exp,
+                   pats: Pat.t vector,
+                   resultType: Type.t option} vector
+                  * InlineAttr.t) vector}
   | Local of dec * dec
   | Open of Longstrid.t vector
   | Overload of Priority.t * Var.t * 
@@ -380,7 +381,8 @@ and decNode =
   | Val of {tyvars: Tyvar.t vector,
             vbs: {exp: exp,
                   pat: Pat.t} vector,
-            rvbs: {match: match,
+            rvbs: {inline: InlineAttr.t,
+                   match: match,
                    pat: Pat.t} vector}
 and matchNode = T of (Pat.t * exp) vector
 withtype
@@ -596,8 +598,12 @@ and layoutDec d =
 and layoutFun {tyvars, fbs} =
    layoutTyvarsAndsSusp ("fun", (tyvars, fbs), layoutFb)
 
-and layoutFb clauses =
-   alignPrefix (Vector.toListMap (clauses, layoutClause), "| ")
+and layoutFb (clauses, inline) =
+   mayAlign [case inline of
+                InlineAttr.Always => str "__inline_always__"
+              | InlineAttr.Auto => empty
+              | InlineAttr.Never => str "__inline_never__",
+             alignPrefix (Vector.toListMap (clauses, layoutClause), "| ")]
 
 and layoutClause ({pats, resultType, body}) =
    mayAlign [seq [maybeConstrain (Pat.layoutFlatApp pats,
@@ -619,8 +625,13 @@ and layoutVal {tyvars, vbs, rvbs} =
 and layoutVb {pat, exp} =
    bind (Pat.layoutT pat, layoutExpT exp)
 
-and layoutRvb {pat, match, ...} =
-   bind (Pat.layout pat, seq [str "fn ", layoutMatch match])
+and layoutRvb {pat, match, inline, ...} =
+   bind (Pat.layout pat, seq [str "fn ",
+                              case inline of
+                                 InlineAttr.Always => str "__inline_always__ "
+                               | InlineAttr.Auto => empty
+                               | InlineAttr.Never => str "__inline_never__ ",
+                              layoutMatch match])
 
 fun checkSyntaxExp (e: exp): unit =
    let
@@ -686,7 +697,7 @@ and checkSyntaxDec (d: dec): unit =
     | Fun {tyvars, fbs, ...} =>
          (reportDuplicateTyvars (tyvars,
                                  {ctxt = mkCtxt (d, layoutDec)})
-          ; Vector.foreach (fbs, fn clauses =>
+          ; Vector.foreach (fbs, fn (clauses, _) =>
                             Vector.foreach
                             (clauses, fn {body, pats, resultType} =>
                              (checkSyntaxExp body
@@ -700,7 +711,7 @@ and checkSyntaxDec (d: dec): unit =
     | Val {tyvars, rvbs, vbs, ...} =>
          (reportDuplicateTyvars (tyvars,
                                  {ctxt = mkCtxt (d, layoutDec)})
-          ; Vector.foreach (rvbs, fn {match, pat} =>
+          ; Vector.foreach (rvbs, fn {match, pat, ...} =>
                             (checkSyntaxMatch match
                              ; Pat.checkSyntax pat))
           ; Vector.foreach (vbs, fn {exp, pat} =>

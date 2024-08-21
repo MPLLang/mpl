@@ -71,7 +71,7 @@ structure Program =
                      Abstype {body, ...} => dec body
                    | Exception cs => Vector.foreach (cs, fn _ => inc ())
                    | Fun {fbs, ...} =>
-                        Vector.foreach (fbs, fn clauses =>
+                        Vector.foreach (fbs, fn (clauses, _) =>
                                         Vector.foreach (clauses, exp o #body))
                    | Local (d, d') => (dec d; dec d')
                    | SeqDec ds => Vector.foreach (ds, dec)

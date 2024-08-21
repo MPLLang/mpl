@@ -226,7 +226,7 @@ fun ('down, 'up)
                   let
                      val (down, finish) = bindFunVal (down, tyvars, Dec.region d)
                      val (fbs, u) =
-                        loops (fbs, fn clauses =>
+                        loops (fbs, fn (clauses, inline) =>
                                let
                                   val (clauses, u) =
                                      loops
@@ -245,7 +245,7 @@ fun ('down, 'up)
                                           combineUp (u, combineUp (u', u'')))
                                       end)
                                  in
-                                    (clauses, u)
+                                    ((clauses, inline), u)
                                  end)
                      val (tyvars, u) = finish u
                   in
@@ -273,12 +273,13 @@ fun ('down, 'up)
                   let
                      val (down, finish) = bindFunVal (down, tyvars, Dec.region d)
                      val (rvbs, u) =
-                        loops (rvbs, fn {match, pat} =>
+                        loops (rvbs, fn {inline, match, pat} =>
                                let
                                   val (match, u) = loopMatch (match, down)
                                   val u' = visitPat (pat, down)
                                in
-                                  ({match = match,
+                                  ({inline = inline,
+                                    match = match,
                                     pat = pat},
                                    combineUp (u, u'))
                                end)

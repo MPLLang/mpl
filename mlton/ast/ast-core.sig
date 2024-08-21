@@ -209,9 +209,10 @@ signature AST_CORE =
              | Fix of {fixity: Fixity.t,
                        ops: Vid.t vector}
              | Fun of {tyvars: Tyvar.t vector,
-                       fbs: {body: Exp.t,
-                             pats: Pat.t vector,
-                             resultType: Type.t option} vector vector}
+                       fbs: ({body: Exp.t,
+                              pats: Pat.t vector,
+                              resultType: Type.t option} vector 
+                             * InlineAttr.t) vector}
              | Local of t * t
              | Open of Longstrid.t vector
              | Overload of Priority.t *
@@ -220,7 +221,8 @@ signature AST_CORE =
                            Longvid.t vector
              | SeqDec of t vector
              | Type of TypBind.t
-             | Val of {rvbs: {match: Match.t,
+             | Val of {rvbs: {inline: InlineAttr.t,
+                              match: Match.t,
                               pat: Pat.t} vector,
                        tyvars: Tyvar.t vector,
                        vbs: {exp: Exp.t,
@@ -233,12 +235,14 @@ signature AST_CORE =
             val layout: t -> Layout.t
             val layoutFun:
                {tyvars: Tyvar.t vector,
-                fbs: {body: Exp.t,
-                      pats: Pat.t vector,
-                      resultType: Type.t option} vector vector}
+                fbs: ({body: Exp.t,
+                       pats: Pat.t vector,
+                       resultType: Type.t option} vector 
+                      * InlineAttr.t) vector}
                -> (unit -> Layout.t) vector
             val layoutVal:
-               {rvbs: {match: Match.t,
+               {rvbs: {inline: InlineAttr.t,
+                       match: Match.t,
                        pat: Pat.t} vector,
                 tyvars: Tyvar.t vector,
                 vbs: {exp: Exp.t,

@@ -197,7 +197,8 @@ type vb = {pat: Pat.t,
            exp: Exp.t}
 
 type rvb = {pat: Pat.t,
-            match: Match.t}
+            match: Match.t,
+            inline: InlineAttr.t}
 
 fun longIdFromTok (s, left, right) =
    let
@@ -326,7 +327,7 @@ type 'a whereAndEqns = WhereEquation.t list * 'a list
        | funbinds'1 of funbind whereAndEqns
        | funbinds'1' of funbind whereAndEqns
        | funbinds'2 of funbind list
-       | funs of clauses list
+       | funs of (clauses  * InlineAttr.t) list
        | idField of Symbol.t * Region.t
        | int of IntInf.t * string
        | longcon of Longcon.t
@@ -795,15 +796,15 @@ valbind : pat EQUALOP exp
 
 rvalbind : REC rvalbind                (rvalbind)
          | pat EQUALOP FN match
-             ([{pat = pat, match = match}])
+             ([{pat = pat, inline = InlineAttr.Auto, match = match}])
          | pat EQUALOP FN match AND rvalbind
-             ({pat = pat, match = match} :: rvalbind)
+             ({pat = pat, inline = InlineAttr.Auto, match = match} :: rvalbind)
 
 constraint :                    (NONE)
            | COLON ty           (SOME ty)
 
-funs    : clausesTop               ([clausesTop])
-        | clausesTop AND funs      (clausesTop :: funs)
+funs    : clausesTop               ([(clausesTop, InlineAttr.Auto)])
+        | clausesTop AND funs      ((clausesTop, InlineAttr.Auto) :: funs)
 
 clausesTop: clauses (Vector.fromList clauses)
           | optbar' clauses (Vector.fromList clauses)

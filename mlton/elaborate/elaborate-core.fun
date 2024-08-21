@@ -2387,7 +2387,7 @@ fun elaborateDec (d, {env = E, nest}) =
                              val {markFunc, setBound, unmarkFunc} = recursiveFun ()
                              val fbs =
                                 Vector.map2
-                                (fbs, Adec.layoutFun {tyvars = tyvars, fbs = fbs}, fn (clauses, layFb) =>
+                                (fbs, Adec.layoutFun {tyvars = tyvars, fbs = fbs}, fn ((clauses, inline), layFb) =>
                                  let
                                     val ctxtFb = fn () =>
                                        seq [str "in: ", approximate (layFb ())]
@@ -2471,6 +2471,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                     {clauses = clauses,
                                      ctxtFb = ctxtFb,
                                      func = func,
+                                     inline = inline,
                                      numArgs = numArgs,
                                      regionFb = regionFb}
                                  end)
@@ -2488,7 +2489,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                     else f :: ac)
                              val fbs =
                                 Vector.map
-                                (fbs, fn {clauses, ctxtFb, func, numArgs, regionFb} =>
+                                (fbs, fn {clauses, ctxtFb, func, inline, numArgs, regionFb} =>
                                  let
                                     val argTys = Vector.tabulate (numArgs, fn _ => Type.new ())
                                     val resTy = Type.new ()
@@ -2582,13 +2583,14 @@ fun elaborateDec (d, {env = E, nest}) =
                                      ctxtFb = ctxtFb,
                                      func = func,
                                      funTy = funTy,
+                                     inline = inline,
                                      regionFb = regionFb,
                                      resTy = resTy,
                                      var = var}
                                  end)
                              val fbs =
                                 Vector.map
-                                (fbs, fn {argTys, clauses, ctxtFb, func, funTy, regionFb, resTy, var, ...} =>
+                                (fbs, fn {argTys, clauses, ctxtFb, func, funTy, inline, regionFb, resTy, var, ...} =>
                                  let
                                     val nest = Avar.toString func :: nest
                                     val resultTypeConstraint = Vector.exists (clauses, Option.isSome o #resultType)
@@ -2690,7 +2692,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                           {arg = arg,
                                            argType = argTy,
                                            body = body,
-                                           inline = InlineAttr.Auto}),
+                                           inline = inline}),
                                          Type.arrow (argTy, Cexp.ty body)))
                                     val lambda =
                                        case Cexp.node lambda of
@@ -2880,7 +2882,7 @@ fun elaborateDec (d, {env = E, nest}) =
                              val elaboratePat = elaboratePat ()
                              val rvbs =
                                 Vector.map2
-                                (rvbs, layRvbs, fn ({pat, match}, layRvb) =>
+                                (rvbs, layRvbs, fn ({pat, match, inline}, layRvb) =>
                                  let
                                     fun ctxtRvb () =
                                        seq [str "in: ", approximate (layRvb ())]
@@ -2916,6 +2918,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                  in
                                     {bound = bound,
                                      ctxtRvb = ctxtRvb,
+                                     inline = inline,
                                      match = match,
                                      nest = nest,
                                      pat = pat,
@@ -2948,7 +2951,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                  end)
                              val rvbs =
                                 Vector.map
-                                (rvbs, fn {bound, ctxtRvb, match, nest, pat, patIsConstrained, regionPat, var, ...} =>
+                                (rvbs, fn {bound, ctxtRvb, inline, match, nest, pat, patIsConstrained, regionPat, var, ...} =>
                                  let
                                     val {argType, region, resultType, rules} =
                                        elabMatch (match, nest)
@@ -2987,7 +2990,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                        Lambda.make {arg = arg,
                                                     argType = argType,
                                                     body = body,
-                                                    inline = InlineAttr.Auto}
+                                                    inline = inline}
                                  in
                                     {check = check,
                                      bound = bound,
