@@ -18,7 +18,6 @@ local
    open S
 in
    structure Con = Con
-   structure InlineAttr = InlineAttr
    structure Label = Label
    structure Prim = Prim
    structure Var = Var
@@ -292,7 +291,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           in
              S2.Function.new {args = convertFormals args,
                               blocks = blocks,
-                              mayInline = InlineAttr.mayInline inline,
+                              inline = inline,
                               name = name,
                               raises = rr raises,
                               returns = rr returns,

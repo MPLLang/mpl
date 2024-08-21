@@ -2116,7 +2116,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                        {args = Vector.new0 (),
                                         func = main,
                                         return = S.Return.Tail})})),
-               mayInline = false, (* doesn't matter *)
+               inline = InlineAttr.Auto, (* doesn't matter *)
                name = Func.newString "initGlobals",
                raises = NONE,
                returns = NONE,
