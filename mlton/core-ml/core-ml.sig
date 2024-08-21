@@ -73,7 +73,7 @@ signature CORE_ML =
             type t
             datatype noMatch = Impossible | RaiseAgain | RaiseBind | RaiseMatch
             datatype node =
-               App of t * t
+               App of {func: t, arg: t, inline: InlineAttr.t}
              | Case of {ctxt: unit -> Layout.t,
                         kind: string * string,
                         nest: string list,

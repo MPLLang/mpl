@@ -3156,7 +3156,10 @@ fun elaborateDec (d, {env = E, nest}) =
                            align [seq [str "expects: ", l1],
                                   seq [str "but got: ", l2]]))
                    in
-                      Cexp.make (Cexp.App (cef, cea), resultType)
+                      Cexp.make (Cexp.App {func = cef,
+                                           arg = cea,
+                                           inline = InlineAttr.Auto},
+                                 resultType)
                    end
               | Aexp.Case (e, m) =>
                    let

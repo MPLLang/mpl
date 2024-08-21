@@ -653,7 +653,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
             datatype z = datatype Cexp.node
          in
             case Cexp.node e of
-               App (e, e') => (loopExp e; loopExp e')
+               App {func, arg, ...} => (loopExp func; loopExp arg)
              | Case {rules, test, ...} =>
                   (loopExp test
                    ; Vector.foreach (rules, loopExp o #exp))
@@ -951,20 +951,20 @@ fun defunctorize (CoreML.Program.T {decs}) =
             datatype z = datatype Cexp.node
             val exp =
                case n of
-                  App (e1, e2) =>
+                  App {func, arg, inline} =>
                      let
-                        val (e2, _) = loopExp e2
+                        val (arg, _) = loopExp arg
                      in
-                        case Cexp.node e1 of
+                        case Cexp.node func of
                            Con (con, targs) =>
-                              conApp {arg = e2,
+                              conApp {arg = arg,
                                       con = con,
                                       targs = conTargs (con, targs),
                                       ty = ty}
                          | _ => 
-                              Xexp.app {arg = e2,
-                                        func = #1 (loopExp e1),
-                                        inline = InlineAttr.Auto,
+                              Xexp.app {func = #1 (loopExp func),
+                                        arg = arg,
+                                        inline = inline,
                                         ty = ty}
                      end
                 | Case {ctxt, kind, nest, matchDiags, noMatch, region, rules, test, ...} =>
