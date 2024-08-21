@@ -105,6 +105,7 @@ in
    signature C_TYPE
    signature HASH_TYPE
    signature ID
+   signature INLINE_ATTR
    signature INT_SIZE
    signature LABEL
    signature PRIM

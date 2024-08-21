@@ -338,7 +338,8 @@ fun ('down, 'up)
                             combineUp (u, u'))
                         end
                    | FlatApp es => doVec (es, FlatApp)
-                   | Fn m => do1 (loopMatch m, Fn)
+                   | Fn (m, inline) => do1 (loopMatch m, fn m =>
+                                            Fn (m, inline))
                    | Handle (e, m) => do2 (loop e, loopMatch m, Handle)
                    | If (e1, e2, e3) => do3 (loop e1, loop e2, loop e3, If)
                    | Let (dec, e) => do2 (loopDec (dec, d), loop e, Let)

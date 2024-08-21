@@ -3770,7 +3770,7 @@ end)
  in ( LrTable.NT 45, ( result, app_exp1left, app_exp1right), rest671)
 end
 |  ( 211, ( ( _, ( MlyValue.match match1, _, match1right)) :: ( _, ( _, FN1left, _)) :: rest671)) => let val  result = MlyValue.expnode (fn _ => let val  (match as match1) = match1 ()
- in ((*#line 1013.34 "ml.grm"*)Exp.Fn match(*#line 3772.1 "ml.grm.sml"*)
+ in ((*#line 1013.34 "ml.grm"*)Exp.Fn (match, InlineAttr.Auto)(*#line 3772.1 "ml.grm.sml"*)
 )
 end)
  in ( LrTable.NT 45, ( result, FN1left, match1right), rest671)

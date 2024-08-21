@@ -1881,7 +1881,9 @@ fun export {attributes: ImportExportAttribute.t list,
                    fn (x, e) => Dec.vall (Vector.new0 (), x, e))],
                  Exp.tuple (Vector.new0 ()),
                  region)
-             end)))))))
+             end),
+           InlineAttr.Auto))))),
+      InlineAttr.Auto)
    end
 
 val export =
@@ -1906,7 +1908,8 @@ structure Aexp =
                   (Apat.Record {flexible = true,
                                 items = Vector.new1 (f, Region.bogus, xField)},
                    r),
-                  xVar))
+                  xVar),
+                InlineAttr.Auto)
       end
    end
 
@@ -3204,7 +3207,7 @@ fun elaborateDec (d, {env = E, nest}) =
                       Cexp.make (Cexp.node e, t')
                    end
               | Aexp.FlatApp items => elab (Parse.parseExp (items, E, ctxt))
-              | Aexp.Fn match =>
+              | Aexp.Fn (match, inline) =>
                    let
                       val nest =
                          case maybeName of
@@ -3224,7 +3227,7 @@ fun elaborateDec (d, {env = E, nest}) =
                       Cexp.make (Cexp.Lambda (Lambda.make {arg = arg,
                                                            argType = argType,
                                                            body = body,
-                                                           inline = InlineAttr.Auto}),
+                                                           inline = inline}),
                                  Type.arrow (argType, Cexp.ty body))
                    end
               | Aexp.Handle (try, match) =>

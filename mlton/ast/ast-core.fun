@@ -343,7 +343,7 @@ datatype expNode =
   | Const of Const.t
   | Constraint of exp * Type.t
   | FlatApp of exp vector
-  | Fn of match
+  | Fn of match * InlineAttr.t
   | Handle of exp * match
   | If of exp * exp * exp
   | Let of dec * exp
@@ -481,7 +481,13 @@ fun layoutExp arg =
             if Vector.length es = 1
                then layoutExp (Vector.first es, isDelimited)
             else delimit (seq (separate (Vector.toListMap (es, layoutExpF), " ")))
-       | Fn m => delimit (seq [str "fn ", layoutMatch m])
+       | Fn (m, inline) =>
+            delimit (seq [str "fn ",
+                          case inline of
+                             InlineAttr.Always => str "__inline_always__ "
+                           | InlineAttr.Auto => empty
+                           | InlineAttr.Never => str "__inline_never__ ",
+                          layoutMatch m])
        | Handle (try, match) =>
             delimit (align [layoutExpF try,
                             seq [str "handle ", layoutMatch match]])
@@ -613,7 +619,7 @@ fun checkSyntaxExp (e: exp): unit =
        | Const _ => ()
        | Constraint (e, t) => (c e; Type.checkSyntax t)
        | FlatApp es => Vector.foreach (es, c)
-       | Fn m => checkSyntaxMatch m
+       | Fn (m, _) => checkSyntaxMatch m
        | Handle (e, m) => (c e; checkSyntaxMatch m)
        | If (e1, e2, e3) => (c e1; c e2; c e3)
        | Let (d, e) => (checkSyntaxDec d; c e)
@@ -701,7 +707,7 @@ structure Exp =
 
       fun constraint (e, t) = makeRegion (Constraint (e, t), region e)
 
-      fun fnn rs =
+      fun fnn (rs, inline) =
          let
             val r =
                if Vector.isEmpty rs
@@ -709,7 +715,7 @@ structure Exp =
                else Region.append (Pat.region (#1 (Vector.first rs)),
                                    region (#2 (Vector.last rs)))
          in
-            makeRegion (Fn (Match.makeRegion (Match.T rs, r)), r)
+            makeRegion (Fn (Match.makeRegion (Match.T rs, r), inline), r)
          end
 
       fun longvid name =

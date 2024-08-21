@@ -143,7 +143,7 @@ signature AST_CORE =
              | Const of Const.t
              | Constraint of t * Type.t
              | FlatApp of t vector
-             | Fn of match
+             | Fn of match * InlineAttr.t
              | Handle of t * match
              | If of t * t * t
              | Let of dec * t
@@ -167,7 +167,7 @@ signature AST_CORE =
             val app: t * t -> t
             val const: Const.t -> t
             val constraint: t * Type.t -> t
-            val fnn: (Pat.t * t) vector -> t
+            val fnn: (Pat.t * t) vector * InlineAttr.t -> t
             val layout: t -> Layout.t
             val lett: dec vector * t * Region.t -> t
             val longvid: Longvid.t -> t
