@@ -322,8 +322,12 @@ in
                                 align [seq [maybeConstrain (Var.layout var, Type.arrow (argType, bodyType)), str " = "],
                                        indent (layoutLambda lambda, 3)])),
                         3)]
-   and layoutLambda (Lam {arg, argType, body, ...}) =
+   and layoutLambda (Lam {arg, argType, body, inline}) =
       paren (align [seq [str "fn ", 
+                         case inline of
+                            InlineAttr.Always => str "__inline_always__ "
+                          | InlineAttr.Auto => empty
+                          | InlineAttr.Never => str "__inline_never__ ",
                          maybeConstrain (Var.layout arg, argType),
                          str " =>"],
                     layoutExp body])
