@@ -377,14 +377,14 @@ fun transform (program as Program.T {datatypes, globals, functions, main}) =
       val functions =
          List.map (functions, fn f =>
             let
-               val { args, blocks, mayInline, name, start, ... } =
+               val { args, blocks, inline, name, start, ... } =
                   Function.dest f
                val { args = argTys, raises = raiseTys, returns = returnTys } = func name
             in
                Function.new
                { args = Vector.map2 (args, argTys, fn ((v, _), typeInfo) => (v, getTy typeInfo)),
                  blocks = Vector.map (blocks, loopBlock),
-                 mayInline = mayInline,
+                 inline = inline,
                  name = name,
                  raises = Option.map (raiseTys, fn tys => Vector.map (tys, getTy)),
                  returns = Option.map (returnTys, fn tys => Vector.map (tys, getTy)),

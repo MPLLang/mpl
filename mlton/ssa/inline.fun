@@ -59,7 +59,8 @@ local
       in
          List.foreach
          (functions, fn f =>
-          if not (Function.mayInline f) orelse dontInlineFunc (f, a)
+          if not (InlineAttr.mayInline (Function.inline f))
+             orelse dontInlineFunc (f, a)
              then ()
           else setShouldInline (Function.name f, true))
          ; Control.diagnostics
@@ -156,7 +157,7 @@ local
                       val {function, shouldInline, size, ...} = 
                          funcInfo (nodeFunc n)
                    in 
-                      if Function.mayInline function
+                      if InlineAttr.mayInline (Function.inline function)
                          andalso not (dontInline function)
                          then Exn.withEscape
                               (fn escape =>
@@ -270,7 +271,7 @@ fun nonRecursive (Program.T {functions, ...}, {small: int, product: int}) =
           end)
       fun mayInline (setSize: bool,
                      {function, doesCallSelf, numCalls, size, ...}: info): bool =
-         Function.mayInline function
+         InlineAttr.mayInline (Function.inline function)
          andalso not (!doesCallSelf)
          andalso let
                     val n =
@@ -446,7 +447,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
          List.fold
          (functions, [], fn (f, ac) =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
              fun keep () =
                 let
@@ -454,7 +455,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                 in
                    shrink (Function.new {args = args,
                                          blocks = blocks,
-                                         mayInline = mayInline,
+                                         inline = inline,
                                          name = name,
                                          raises = raises,
                                          returns = returns,

@@ -1483,7 +1483,7 @@ fun transform (program: Program.t): Program.t =
          doitBlock
       fun doitFunction f =
          let
-            val {args, blocks, mayInline, name, start, ...} = Function.dest f
+            val {args, blocks, inline, name, start, ...} = Function.dest f
             val {returns = returnvs, raises = raisevs, ...} = func name
             val args = keepUsefulArgs args
             val (blocks, blocks') =
@@ -1499,7 +1499,7 @@ fun transform (program: Program.t): Program.t =
          in
             Function.new {args = args,
                           blocks = blocks,
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

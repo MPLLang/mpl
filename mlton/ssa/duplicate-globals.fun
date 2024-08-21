@@ -93,10 +93,10 @@ struct
                transfer=loopTransfer transfer}
          fun loopFunction func =
             let
-               val {args, blocks, mayInline, name, raises, returns, start} = Function.dest func
+               val {args, blocks, inline, name, raises, returns, start} = Function.dest func
                val newBlocks = Vector.map(blocks, loopBlock)
             in
-               Function.new {args=args, blocks=newBlocks, mayInline=mayInline, name=name,
+               Function.new {args=args, blocks=newBlocks, inline=inline, name=name,
                   raises=raises, returns=returns, start=start}
             end
 

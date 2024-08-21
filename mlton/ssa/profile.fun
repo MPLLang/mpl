@@ -13,7 +13,7 @@ open S
 
 fun addProfileFunction (f: Function.t) =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val extraBlocks = ref []
       val siF =
@@ -141,7 +141,7 @@ fun addProfileFunction (f: Function.t) =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,
@@ -156,7 +156,7 @@ fun addProfile (Program.T {datatypes, functions, globals, main}) =
 
 fun dropProfileFunction f =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val blocks =
          Vector.map
@@ -171,7 +171,7 @@ fun dropProfileFunction f =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

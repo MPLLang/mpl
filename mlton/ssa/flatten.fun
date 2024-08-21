@@ -242,7 +242,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       val globals = Vector.map (globals, doitStatement)
       fun doitFunction f =
          let
-            val {args, mayInline, name, raises, returns, start, ...} =
+            val {args, inline, name, raises, returns, start, ...} =
                Function.dest f
             val {args = argsReps, returns = returnsReps, raises = raisesReps} = 
               funcInfo name
@@ -434,7 +434,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          in
             Function.new {args = args,
                           blocks = blocks,
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

@@ -1766,12 +1766,12 @@ fun transform (program: Program.t): Program.t =
                   transfer = doitTransfer transfer}
       fun doitFunction f =
          let
-            val {args, blocks, mayInline, name, raises, returns, start} =
+            val {args, blocks, inline, name, raises, returns, start} =
                Function.dest f
          in
             Function.new {args = args,
                           blocks = Vector.map (blocks, doitBlock),
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

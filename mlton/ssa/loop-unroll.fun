@@ -1311,7 +1311,7 @@ fun setDoms tree =
 fun optimizeFunction loadGlobal function =
    let
       val {graph, labelNode, nodeBlock} = Function.controlFlow function
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
         Function.dest function
       val fsize = Function.size (function, {sizeExp = Exp.size, sizeTransfer = Transfer.size})
       val () = logs (concat["Optimizing function: ", Func.toString name,
@@ -1326,7 +1326,7 @@ fun optimizeFunction loadGlobal function =
    in
       Function.new {args = args,
                     blocks = Vector.fromList(newBlocks),
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

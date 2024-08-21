@@ -18,6 +18,7 @@ local
    open S
 in
    structure Con = Con
+   structure InlineAttr = InlineAttr
    structure Label = Label
    structure Prim = Prim
    structure Var = Var
@@ -282,7 +283,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
          List.map
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 S.Function.dest f
              fun rr tvo = Option.map (tvo, convertTypes)
              val blocks = Vector.map (blocks, convertBlock)
@@ -291,7 +292,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           in
              S2.Function.new {args = convertFormals args,
                               blocks = blocks,
-                              mayInline = mayInline,
+                              mayInline = InlineAttr.mayInline inline,
                               name = name,
                               raises = rr raises,
                               returns = rr returns,

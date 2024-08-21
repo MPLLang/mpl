@@ -478,7 +478,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {blocks, mayInline, name, raises, start, ...} = Function.dest f
+             val {blocks, inline, name, raises, start, ...} = Function.dest f
              val {args, returns, returnsRed, ...} = funcReds name
              val blocks =
                 Vector.map
@@ -529,7 +529,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  end)
              val f = Function.new {args = args,
                                    blocks = blocks,
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    raises = raises,
                                    returns = returns,

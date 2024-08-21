@@ -11,7 +11,7 @@ open S
 
 fun dropSporkFunction f =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val blocks =
          Vector.map
@@ -50,7 +50,7 @@ fun dropSporkFunction f =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

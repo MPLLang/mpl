@@ -961,7 +961,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                end
       fun simplifyFunction f =
          let
-            val {args, mayInline, name, raises, returns, start, ...} =
+            val {args, inline, name, raises, returns, start, ...} =
                Function.dest f
          in
             case simplifyUsefulFormals args of
@@ -998,7 +998,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   in
                      SOME (Function.new {args = args,
                                          blocks = Vector.fromList (!blocks),
-                                         mayInline = mayInline,
+                                         inline = inline,
                                          name = name,
                                          raises = raises,
                                          returns = returns,

@@ -1026,7 +1026,7 @@ structure Function =
 
       type dest = {args: (Var.t * Type.t) vector,
                    blocks: Block.t vector,
-                   mayInline: bool,
+                   inline: InlineAttr.t,
                    name: Func.t,
                    raises: Type.t vector option,
                    returns: Type.t vector option,
@@ -1053,7 +1053,7 @@ structure Function =
       in
          val blocks = make #blocks
          val dest = make (fn d => d)
-         val mayInline = make #mayInline
+         val inline = make #inline
          val name = make #name
       end
 
@@ -1391,7 +1391,7 @@ structure Function =
 
       fun layoutHeader (f: t): Layout.t =
          let
-            val {args, name, mayInline, raises, returns, start, ...} = dest f
+            val {args, name, inline, raises, returns, start, ...} = dest f
             open Layout
             val (sep, rty) =
                if !Control.showTypes
@@ -1409,7 +1409,10 @@ structure Function =
                   else (str " =", empty)
          in
             mayAlign [mayAlign [seq [str "fun ",
-                                     if mayInline then empty else str "noinline ",
+                                     case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ ",
                                      Func.layout name,
                                      str " ",
                                      layoutFormals args,
@@ -1423,7 +1426,9 @@ structure Function =
             open Parse
          in
             kw "fun" *>
-            optional (kw "noinline") >>= (fn noInline =>
+            (kw "__inline_always__" *> pure InlineAttr.Always <|>
+             kw "__inline_never__" *> pure InlineAttr.Never <|>
+             pure InlineAttr.Auto) >>= (fn inline =>
             Func.parse >>= (fn name =>
             parseFormals >>= (fn args =>
             sym ":" *>
@@ -1433,7 +1438,7 @@ structure Function =
             sym "=" *>
             Label.parse >>= (fn start =>
             paren (pure ()) *>
-            pure (Option.isNone noInline, name, args, returns, raises, start))))))
+            pure (inline, name, args, returns, raises, start))))))
          end
 
       fun layout' (f: t, layoutVar) =
@@ -1452,9 +1457,9 @@ structure Function =
             open Parse
          in
             new <$>
-            (parseHeader >>= (fn (mayInline, name, args, returns, raises, start) =>
+            (parseHeader >>= (fn (inline, name, args, returns, raises, start) =>
              many Block.parse >>= (fn blocks =>
-             pure {mayInline = mayInline,
+             pure {inline = inline,
                    name = name,
                    args = args,
                    returns = returns,
@@ -1529,7 +1534,7 @@ structure Function =
                val (bindSpid, lookupSpid, destroySpid) =
                   make (Spid.new, Spid.plist)
             end
-            val {args, blocks, mayInline, name, raises, returns, start, ...} =
+            val {args, blocks, inline, name, raises, returns, start, ...} =
                dest f
             val args = Vector.map (args, fn (x, ty) => (bindVar x, ty))
             val bindSpid = ignore o bindSpid
@@ -1569,7 +1574,7 @@ structure Function =
          in
             new {args = args,
                  blocks = blocks,
-                 mayInline = mayInline,
+                 inline = inline,
                  name = name,
                  raises = raises,
                  returns = returns,
@@ -1583,7 +1588,7 @@ structure Function =
          else
          let
             val _ = Control.diagnostic (fn () => layout f)
-            val {args, blocks, mayInline, name, raises, returns, start} = dest f
+            val {args, blocks, inline, name, raises, returns, start} = dest f
             val extraBlocks = ref []
             val {get = labelBlock, set = setLabelBlock, rem} =
                Property.getSetOnce
@@ -1697,7 +1702,7 @@ structure Function =
             val f =
                new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

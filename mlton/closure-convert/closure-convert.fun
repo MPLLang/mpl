@@ -110,7 +110,7 @@ structure Accum =
                  {globals = Vector.new0 ()}
                  (Function.new {args = Vector.new0 (),
                                 blocks = Vector.fromList blocks,
-                                mayInline = false, (* doesn't matter *)
+                                inline = InlineAttr.Auto, (* doesn't matter *)
                                 name = Func.newNoname (),
                                 raises = NONE,
                                 returns = SOME (Vector.new1 (Type.tuple tys)),
@@ -870,7 +870,9 @@ fun closureConvert
                shrinkFunction
                (Function.new {args = args,
                               blocks = Vector.fromList blocks,
-                              mayInline = mayInline,
+                              inline = if mayInline
+                                          then InlineAttr.Auto
+                                       else InlineAttr.Never,
                               name = name,
                               raises = if mayRaise
                                           then raises

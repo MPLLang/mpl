@@ -121,7 +121,7 @@ fun transform program =
              val () = Function.dfs (f, markBlock)
 
              (* Map the statements using the marks *)
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
 
              fun mapBlock block =
@@ -137,7 +137,7 @@ fun transform program =
              val f =
                 Function.new {args = args,
                               blocks = Vector.map (blocks, mapBlock),
-                              mayInline = mayInline,
+                              inline = inline,
                               name = name,
                               raises = raises,
                               returns = returns,

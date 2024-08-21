@@ -186,7 +186,7 @@ signature SSA_TREE =
                      nodeBlock: unit DirectedGraph.Node.t -> Block.t}
             val dest: t -> {args: (Var.t * Type.t) vector,
                             blocks: Block.t vector,
-                            mayInline: bool,
+                            inline: InlineAttr.t,
                             name: Func.t,
                             raises: Type.t vector option,
                             returns: Type.t vector option,
@@ -204,11 +204,11 @@ signature SSA_TREE =
                                            controlFlowGraph: Layout.t,
                                            dominatorTree: unit -> Layout.t,
                                            loopForest: unit -> Layout.t}
-            val mayInline: t -> bool
+            val inline: t -> InlineAttr.t
             val name: t -> Func.t
             val new: {args: (Var.t * Type.t) vector,
                       blocks: Block.t vector,
-                      mayInline: bool,
+                      inline: InlineAttr.t,
                       name: Func.t,
                       raises: Type.t vector option,
                       returns: Type.t vector option,

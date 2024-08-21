@@ -683,7 +683,7 @@ structure Transform =
                let
                   val {args = f_args, 
                        blocks = f_blocks,
-                       mayInline = f_mayInline,
+                       inline = f_inline,
                        name = f, 
                        raises = f_raises,
                        returns = f_returns,
@@ -705,7 +705,7 @@ structure Transform =
                            in 
                               shrink (Function.new {args = f_args,
                                                     blocks = f_blocks,
-                                                    mayInline = f_mayInline,
+                                                    inline = f_inline,
                                                     name = f,
                                                     raises = f_raises,
                                                     returns = f_returns,

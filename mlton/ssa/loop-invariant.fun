@@ -30,7 +30,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
 
       fun simplifyFunction f =
          let
-            val {args, blocks, mayInline, name, raises, returns, start} =
+            val {args, blocks, inline, name, raises, returns, start} =
                Function.dest f
             val {get = labelInfo: Label.t -> {callsSelf: bool ref,
                                               visited: bool ref,
@@ -155,7 +155,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
          in
             shrink (Function.new {args = args,
                                   blocks = blocks,
-                                  mayInline = mayInline,
+                                  inline = inline,
                                   name = name,
                                   raises = raises,
                                   returns = returns,
