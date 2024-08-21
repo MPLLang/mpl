@@ -558,23 +558,6 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                   transfer = Transfer.Spoin
                                {spid = spid, seq = seq, sync = sync}}
                end
-          (*| PCall {func, args, carg, cont, larg, parl, parr, ty} =>
-               let
-                  val k = Cont.goto (reify (k, ty))
-                  val cont = newLabel (Vector.new1 carg, cont, h, k)
-                  val parl = newLabel (Vector.new1 larg, parl, h, k)
-                  val parr = newLabel0 (parr, h, k)
-               in
-                  loops
-                  (args, h, fn args =>
-                   {statements = [],
-                    transfer = (Transfer.PCall
-                                {func = func,
-                                 args = args,
-                                 cont = cont,
-                                 parl = parl,
-                                 parr = parr})})
-               end*)
           | PrimApp {prim, targs, args, ty} =>
                loops
                (args, h, fn xs =>

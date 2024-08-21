@@ -483,7 +483,7 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
    * violated this. It's valid to use `youngestOptimization=TRUE` as only in the
    * case where we know that the youngest and oldest frames happen to coincide.
    * The scheduler figures this out: if we have a spare heartbeat token at the
-   * moment that we execute a pcall, then we know that no other ancestor frames
+   * moment that we execute a spork, then we know that no other ancestor frames
    * in the stack are promotable (otherwise the spare token would have been
    * spent to promote them).
    */

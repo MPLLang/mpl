@@ -162,7 +162,6 @@ fun checkScopes (program as
           | Goto {args, ...} => getVars args
           | Spork {spid, ...} => bindSpid spid
           | Spoin {spid, ...} => getSpid spid
-          (*| PCall {func, args, ...} => (getFunc func; getVars args)*)
           | Raise xs => getVars xs
           | Return xs => getVars xs
           | Runtime {args, ...} => getVars args
