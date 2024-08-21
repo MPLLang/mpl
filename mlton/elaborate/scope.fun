@@ -324,9 +324,12 @@ fun ('down, 'up)
                in
                   case Exp.node e of
                      Andalso (e1, e2) => do2 (loop e1, loop e2, Andalso)
-                   | App {func, arg, wasInfix} =>
+                   | App {func, arg, inline, wasInfix} =>
                         do2 (loop func, loop arg, fn (func, arg) =>
-                             App {func = func, arg = arg, wasInfix = wasInfix})
+                             App {func = func,
+                                  arg = arg,
+                                  inline = inline,
+                                  wasInfix = wasInfix})
                    | Case (e, m) => do2 (loop e, loopMatch m, Case)
                    | Const _ => empty ()
                    | Constraint (e, t) =>
@@ -337,7 +340,8 @@ fun ('down, 'up)
                            (doit (Constraint (e, t)),
                             combineUp (u, u'))
                         end
-                   | FlatApp es => doVec (es, FlatApp)
+                   | FlatApp (es, inline) => doVec (es, fn es =>
+                                                    FlatApp (es, inline))
                    | Fn (m, inline) => do1 (loopMatch m, fn m =>
                                             Fn (m, inline))
                    | Handle (e, m) => do2 (loop e, loopMatch m, Handle)

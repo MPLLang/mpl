@@ -338,11 +338,11 @@ structure Priority =
 
 datatype expNode =
     Andalso of exp * exp
-  | App of {func: exp, arg: exp, wasInfix: bool}
+  | App of {func: exp, arg: exp, inline: InlineAttr.t, wasInfix: bool}
   | Case of exp * match
   | Const of Const.t
   | Constraint of exp * Type.t
-  | FlatApp of exp vector
+  | FlatApp of exp vector * InlineAttr.t
   | Fn of match * InlineAttr.t
   | Handle of exp * match
   | If of exp * exp * exp
@@ -450,7 +450,7 @@ fun layoutExp arg =
          Andalso (e, e') =>
             delimit (mayAlign [layoutExpF e,
                                seq [str "andalso ", layoutExpF e']])
-       | App {func, arg, wasInfix} =>
+       | App {func, arg, inline, wasInfix} =>
             if wasInfix
                then let
                        val (arg1, arg2) =
@@ -465,11 +465,20 @@ fun layoutExp arg =
                                   | NONE => Error.bug "AstCore.Exp.layout: App, wasInfix")
                            | _ => Error.bug "AstCore.Exp.layout: App, wasInfix"
                     in
-                       delimit (seq [layoutExpF arg1, str " ",
+                       delimit (seq [case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ ",
+                                     layoutExpF arg1, str " ",
                                      layoutExpF func, str " ",
                                      layoutExpF arg2])
                     end
-               else delimit (mayAlign [layoutExpF func, layoutExpF arg])
+               else delimit (mayAlign [case inline of
+                                          InlineAttr.Always => str "__inline_always__ "
+                                        | InlineAttr.Auto => empty
+                                        | InlineAttr.Never => str "__inline_never__ ",
+                                       layoutExpF func,
+                                       layoutExpF arg])
        | Case (expr, match) =>
             delimit (align [seq [str "case ", layoutExpT expr,
                                  str " of"],
@@ -477,10 +486,15 @@ fun layoutExp arg =
        | Const c => Const.layout c
        | Constraint (expr, constraint) =>
             delimit (layoutConstraint (layoutExpF expr, constraint))
-       | FlatApp es =>
+       | FlatApp (es, inline) =>
             if Vector.length es = 1
                then layoutExp (Vector.first es, isDelimited)
-            else delimit (seq (separate (Vector.toListMap (es, layoutExpF), " ")))
+            else delimit (seq ((case inline of
+                                   InlineAttr.Always => str "__inline_always__ "
+                                 | InlineAttr.Auto => empty
+                                 | InlineAttr.Never => str "__inline_never__ ")
+                               ::
+                               separate (Vector.toListMap (es, layoutExpF), " ")))
        | Fn (m, inline) =>
             delimit (seq [str "fn ",
                           case inline of
@@ -618,7 +632,7 @@ fun checkSyntaxExp (e: exp): unit =
        | Case (e, m) => (c e; checkSyntaxMatch m)
        | Const _ => ()
        | Constraint (e, t) => (c e; Type.checkSyntax t)
-       | FlatApp es => Vector.foreach (es, c)
+       | FlatApp (es, _) => Vector.foreach (es, c)
        | Fn (m, _) => checkSyntaxMatch m
        | Handle (e, m) => (c e; checkSyntaxMatch m)
        | If (e1, e2, e3) => (c e1; c e2; c e3)
@@ -724,8 +738,8 @@ structure Exp =
 
       val var = longvid o Longvid.short o Vid.fromVar
 
-      fun app (e1: t, e2: t): t =
-         makeRegion (App {func = e1, arg = e2, wasInfix = false},
+      fun app (e1: t, e2: t, inline): t =
+         makeRegion (App {func = e1, arg = e2, inline = inline, wasInfix = false},
                      Region.append (region e1, region e2))
 
       fun lett (ds: dec vector, e: t, r: Region.t): t =

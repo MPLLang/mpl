@@ -984,7 +984,8 @@ elabel  : field EQUALOP exp     (field, (reg (fieldleft, fieldright), exp))
                                              (Exp.makeRegion'
                                               (Exp.Var {name = Longvid.short (Vid.fromSymbol idField),
                                                         fixop = Fixop.None},
-                                               idFieldleft, idFieldright))),
+                                               idFieldleft, idFieldright)),
+                                             InlineAttr.Auto),
                                             idFieldleft, idFieldright)
                                         val exp =
                                            case constraint of
@@ -1009,7 +1010,7 @@ expnode : exp HANDLE match      (Exp.Handle (exp, match))
         | exp ORELSE exp        (Exp.Orelse (exp1, exp2))
         | exp ANDALSO exp       (Exp.Andalso (exp1, exp2))
         | exp COLON ty          (Exp.Constraint (exp, ty))
-        | app_exp               (Exp.FlatApp (Vector.fromList app_exp))
+        | app_exp               (Exp.FlatApp (Vector.fromList app_exp, InlineAttr.Auto))
         | FN match              (Exp.Fn (match, InlineAttr.Auto))
         | CASE exp OF match     (Exp.Case (exp, match))
         | WHILE exp DO exp      (Exp.While {test = exp1, expr = exp2})

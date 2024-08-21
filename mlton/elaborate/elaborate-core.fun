@@ -1854,7 +1854,8 @@ fun export {attributes: ImportExportAttribute.t list,
                             Exp.app
                             (id (concat ["get", name]),
                              (Exp.tuple o Vector.new2)
-                             (Exp.var p, int (i + 1))))
+                             (Exp.var p, int (i + 1)),
+                            InlineAttr.Auto))
                      in
                         (x, dec)
                      end))
@@ -1867,7 +1868,8 @@ fun export {attributes: ImportExportAttribute.t list,
                   Vector.map
                   (Vector.new2
                    ((resVar, Exp.app (Exp.var f,
-                                      Exp.tuple (Vector.map (args, Exp.var)))),
+                                      Exp.tuple (Vector.map (args, Exp.var)),
+                                      InlineAttr.Auto)),
                     (newVar (),
                      (case res of
                          NONE => Exp.constraint (Exp.var resVar, Type.unit)
@@ -1877,12 +1879,14 @@ fun export {attributes: ImportExportAttribute.t list,
                              (Exp.tuple o Vector.new3)
                              (Exp.var p,
                               int (Vector.length args + 1),
-                              Exp.var resVar))))),
+                              Exp.var resVar),
+                             InlineAttr.Auto)))),
                    fn (x, e) => Dec.vall (Vector.new0 (), x, e))],
                  Exp.tuple (Vector.new0 ()),
                  region)
              end),
-           InlineAttr.Auto))))),
+           InlineAttr.Auto))),
+        InlineAttr.Auto)),
       InlineAttr.Auto)
    end
 
@@ -3123,7 +3127,7 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.node e, Type.bool)
                    end
-              | Aexp.App {func = ef, arg = ea, ...} =>
+              | Aexp.App {func = ef, arg = ea, inline, ...} =>
                    let
                       val cef = elab ef
                       val cea = elab ea
@@ -3161,7 +3165,7 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.App {func = cef,
                                            arg = cea,
-                                           inline = InlineAttr.Auto},
+                                           inline = inline},
                                  resultType)
                    end
               | Aexp.Case (e, m) =>
@@ -3206,7 +3210,8 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.node e, t')
                    end
-              | Aexp.FlatApp items => elab (Parse.parseExp (items, E, ctxt))
+              | Aexp.FlatApp (items, inline) =>
+                   elab (Parse.parseExp (items, inline, E, ctxt))
               | Aexp.Fn (match, inline) =>
                    let
                       val nest =

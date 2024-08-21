@@ -138,11 +138,11 @@ signature AST_CORE =
             type t
             datatype node =
                Andalso of t * t
-             | App of {func: t, arg: t, wasInfix: bool}
+             | App of {func: t, arg: t, inline: InlineAttr.t, wasInfix: bool}
              | Case of t * match
              | Const of Const.t
              | Constraint of t * Type.t
-             | FlatApp of t vector
+             | FlatApp of t vector * InlineAttr.t
              | Fn of match * InlineAttr.t
              | Handle of t * match
              | If of t * t * t
@@ -164,7 +164,7 @@ signature AST_CORE =
             include WRAPPED sharing type node' = node
                             sharing type obj = t
 
-            val app: t * t -> t
+            val app: t * t * InlineAttr.t -> t
             val const: Const.t -> t
             val constraint: t * Type.t -> t
             val fnn: (Pat.t * t) vector * InlineAttr.t -> t
