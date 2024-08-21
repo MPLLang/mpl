@@ -26,6 +26,7 @@ end
 local
    open S2
 in
+   structure InlineAttr = InlineAttr
    structure Base = Base
    structure Prod = Prod
 end
@@ -250,6 +251,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           | S.Transfer.Call {args, func, return} =>
                S2.Transfer.Call {args = args,
                                  func = func,
+                                 inline = InlineAttr.Auto,
                                  return = convertReturn return}
           | S.Transfer.Case {cases, default, test} =>
                S2.Transfer.Case {cases = convertCases cases,

@@ -591,7 +591,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
       fun visitTransfer (t: Transfer.t, fi: FuncInfo.t) =
          case t of
             Bug => ()
-          | Call {args, func, return} =>
+          | Call {args, func, return, ...} =>
                let
                   datatype u = None
                              | Caller
@@ -1251,7 +1251,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
       fun simplifyTransfer (t: Transfer.t, fi: FuncInfo.t): Transfer.t =
          case t of
             Bug => Bug
-          | Call {func, args, return} =>
+          | Call {func, args, inline, return} =>
                let
                   val fi' = funcInfo func
                   datatype u = None
@@ -1344,6 +1344,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                in
                   Call {func = func,
                         args = args,
+                        inline = inline,
                         return = return}
                end
           | Case {test, cases = Cases.Con cases, default} =>
