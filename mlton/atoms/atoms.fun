@@ -92,6 +92,7 @@ structure Atoms =
       structure Handler = Handler (structure Label = Label)
       structure Return = Return (structure Label = Label
                                  structure Handler = Handler)
+      structure InlineAttr = InlineAttr ()
 
       structure SourceInfo = SourceInfo ()
       structure ProfileExp = ProfileExp (structure SourceInfo = SourceInfo)

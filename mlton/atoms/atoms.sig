@@ -1,4 +1,4 @@
-(* Copyright (C) 2019-2021 Matthew Fluet.
+(* Copyright (C) 2019-2021,2024 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -29,6 +29,7 @@ signature ATOMS' =
       structure Field: FIELD
       structure Func: FUNC
       structure Handler: HANDLER
+      structure InlineAttr: INLINE_ATTR
       structure IntSize: INT_SIZE
       structure Label: LABEL
       structure Prim: PRIM
@@ -103,6 +104,7 @@ signature ATOMS =
       sharing Field = Atoms.Field
       sharing Func = Atoms.Func
       sharing Handler = Atoms.Handler
+      sharing InlineAttr = Atoms.InlineAttr
       sharing IntSize = Atoms.IntSize
       sharing Label = Atoms.Label
       sharing Prim = Atoms.Prim

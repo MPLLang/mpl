@@ -1,4 +1,4 @@
-(* Copyright (C) 2017,2019-2021 Matthew Fluet.
+(* Copyright (C) 2017,2019-2021,2024 Matthew Fluet.
  * Copyright (C) 1999-2006 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -117,6 +117,8 @@ handler.sig
 handler.fun
 return.sig
 return.fun
+inline-attr.sig
+inline-attr.fun
 source-info.sig
 source-info.fun
 profile-exp.sig
