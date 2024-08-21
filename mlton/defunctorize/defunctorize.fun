@@ -223,6 +223,7 @@ fun casee {ctxt: unit -> Layout.t,
                                                   (args, fn (x, t) =>
                                                    Xexp.monoVar (rename x, t))),
                                           ty = argType},
+                              inline = InlineAttr.Auto,
                               ty = caseType})))
                 in
                    (p, finish)
@@ -437,6 +438,7 @@ structure Xexp =
                      {func = Xexp.monoVar (revVar, revTy),
                       arg = Xexp.tuple {exps = Vector.new2 (e1, e2),
                                         ty = revArgTy},
+                      inline = InlineAttr.Auto,
                       ty = ty}
                   fun detuple2 (tuple: Xexp.t,
                                 f: XvarExp.t * XvarExp.t -> Xexp.t): Xexp.t =
@@ -822,6 +824,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                                                  Xtype.unit)),
                                        ty = subst thunkTy,
                                        var = x},
+                                      inline = InlineAttr.Auto,
                                       ty = subst expType}
                                   val decs =
                                      [Xdec.PolyVal {exp = thunk,
@@ -961,6 +964,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                          | _ => 
                               Xexp.app {arg = e2,
                                         func = #1 (loopExp e1),
+                                        inline = InlineAttr.Auto,
                                         ty = ty}
                      end
                 | Case {ctxt, kind, nest, matchDiags, noMatch, region, rules, test, ...} =>

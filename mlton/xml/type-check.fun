@@ -174,7 +174,7 @@ fun typeCheck (program as Program.T {datatypes, body}): unit =
                end
          in
             case e of
-               App {arg, func} => checkApp (checkVarExp func, arg)
+               App {arg, func, ...} => checkApp (checkVarExp func, arg)
              | Case {cases, default, test} =>
                   let
                      val default = Option.map (default, checkExp)

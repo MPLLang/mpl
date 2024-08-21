@@ -182,10 +182,12 @@ fun transform (prog: Program.t): Program.t =
             val eTy = transType eTy
             val k = DirectExp.monoVar (kVar, kTy)
             val h = DirectExp.monoVar (hVar, hTy)
-            fun return x = DirectExp.app {func = k, arg = x, ty = ansTy}
+            fun return x = DirectExp.app {func = k, arg = x,
+                                          inline = InlineAttr.Auto,
+                                          ty = ansTy}
          in 
             case e of
-               App {arg, func} =>
+               App {arg, func, inline} =>
                   let
                      val (arg, argTy) = transVarExpWithType arg
                      val func = transVarExp func
@@ -197,16 +199,19 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = k,
+                                  inline = inline,
                                   ty = Type.arrow (hTy, Type.arrow (argTy, ansTy))}
                               val app2 =
                                  DirectExp.app
                                  {func = app1,
                                   arg = h,
+                                  inline = inline,
                                   ty = Type.arrow (argTy, ansTy)}
                               val app3 =
                                  DirectExp.app
                                  {func = app2,
                                   arg = arg,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -221,11 +226,13 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = arg2,
+                                  inline = inline,
                                   ty = Type.arrow (argTy, ansTy)}
                               val app3 =
                                  DirectExp.app
                                  {func = app2,
                                   arg = arg,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -240,6 +247,7 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = arg3,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -333,6 +341,7 @@ fun transform (prog: Program.t): Program.t =
                   DirectExp.app
                   {func = h,
                    arg = transVarExp exn,
+                   inline = InlineAttr.Auto,
                    ty = ansTy}
              | Select {offset, tuple} => 
                   (return o DirectExp.select)
@@ -392,7 +401,8 @@ fun transform (prog: Program.t): Program.t =
             val k = DirectExp.monoVar (kVar, kTy)
             val k'Body =
                DirectExp.app
-               {func = k, arg = transVarExp result, ty = ansTy}
+               {func = k, arg = transVarExp result,
+                inline = InlineAttr.Auto, ty = ansTy}
          in
             List.foldr
             (decs, k'Body, fn (dec, kBody) =>

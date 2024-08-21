@@ -178,7 +178,8 @@ datatype exp =
            result: VarExp.t}
 and primExp =
     App of {func: VarExp.t,
-            arg: VarExp.t}
+            arg: VarExp.t,
+            inline: InlineAttr.t}
   | Case of {test: VarExp.t,
              cases: (Pat.t, exp) Cases.t,
              default: exp option}
@@ -267,7 +268,13 @@ in
                      str "end"]
    and layoutPrimExp e =
       case e of
-         App {arg, func} => seq [VarExp.layout func, str " ", VarExp.layout arg]
+         App {arg, func, inline} =>
+            seq [str "app ",
+                 case inline of
+                    InlineAttr.Always => str "__inline_always__ "
+                  | InlineAttr.Auto => empty
+                  | InlineAttr.Never => str "__inline_never__ ",
+                 VarExp.layout func, str " ", VarExp.layout arg]
        | Case {test, cases, default} =>
             let
                fun doit (v, layoutP) =
@@ -331,9 +338,9 @@ in
    and layoutLambda (Lam {arg, argType, body, inline, ...}) =
       mayAlign [maybeConstrain (seq [str "fn ",
                                      case inline of
-                                        InlineAttr.Always => str "inline_always "
+                                        InlineAttr.Always => str "__inline_always__ "
                                       | InlineAttr.Auto => empty
-                                      | InlineAttr.Never => str "inline_never "],
+                                      | InlineAttr.Never => str "__inline_never__ "],
                                 arg, argType, str " =>"),
                 indent (layoutExp body, 2)]
 
@@ -395,7 +402,15 @@ in
         pure {decs = [], result = result})))
    and parsePrimExp () =
       mlSpaces *> any
-      [Case <$>
+      [App <$>
+       (kw "app" *>
+        (kw "__inline_always__" *> pure InlineAttr.Always <|>
+         kw "__inline_never__" *> pure InlineAttr.Never <|>
+         pure InlineAttr.Auto) >>= (fn inline =>
+        VarExp.parse >>= (fn func =>
+        VarExp.parse >>= (fn arg =>
+        pure {func = func, arg = arg, inline = inline})))),
+       Case <$>
        let
           fun parseCase (parseP, mk) =
              VarExp.parse >>= (fn test =>
@@ -452,17 +467,13 @@ in
         VarExp.parse >>= (fn tuple =>
         pure {offset = offset, tuple = tuple}))),
        Tuple <$> parseArgs,
-       App <$>
-       (VarExp.parse >>= (fn func =>
-        VarExp.parse >>= (fn arg =>
-        pure {func = func, arg = arg}))),
        Var <$> VarExp.parse]
    and parseLambda () =
       Lam <$>
       (kw "fn" *>
-            (kw "inline_always" *> pure InlineAttr.Always <|>
-             kw "inline_never" *> pure InlineAttr.Never <|>
-             pure InlineAttr.Auto) >>= (fn inline =>
+       (kw "__inline_always__" *> pure InlineAttr.Always <|>
+        kw "__inline_never__" *> pure InlineAttr.Never <|>
+        pure InlineAttr.Auto) >>= (fn inline =>
        Var.parse >>= (fn arg =>
        sym ":" *>
        Type.parse >>= (fn argType =>
@@ -614,8 +625,8 @@ structure Exp =
                     | ConApp {arg, ...} => (case arg of
                                                NONE => ()
                                              | SOME x => handleVarExp x)
-                    | App {func, arg} => (handleVarExp func
-                                          ; handleVarExp arg)
+                    | App {func, arg, ...} => (handleVarExp func
+                                               ; handleVarExp arg)
                     | Raise {exn, ...} => handleVarExp exn
                     | Handle {try, catch, handler, ...} =>
                          (loopExp try
@@ -924,9 +935,9 @@ structure DirectExp =
          converts (Vector.new2 (e1, e2),
                    fn xs => make (Vector.first xs, Vector.sub (xs, 1)))
 
-      fun app {func, arg, ty} =
+      fun app {func, arg, inline, ty} =
          convert2 (func, arg, fn ((func, _), (arg, _)) =>
-                   (App {func = func, arg = arg}, ty))
+                   (App {func = func, arg = arg, inline = inline}, ty))
 
       fun casee {test, cases, default, ty} =
          convert (test, fn (test, _) =>

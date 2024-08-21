@@ -250,8 +250,10 @@ fun simplifyTypes (I.Program.T {body, datatypes}) =
          end
       and fixPrimExp (e: I.PrimExp.t): O.PrimExp.t =
          case e of
-            I.PrimExp.App {arg, func} => O.PrimExp.App {arg = fixVarExp arg,
-                                                        func = fixVarExp func}
+            I.PrimExp.App {arg, func, inline} =>
+               O.PrimExp.App {arg = fixVarExp arg,
+                              func = fixVarExp func,
+                              inline = inline}
           | I.PrimExp.Case {cases, default, test} =>
                let
                   val cases =

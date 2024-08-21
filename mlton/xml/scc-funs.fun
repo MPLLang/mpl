@@ -48,7 +48,7 @@ fun sccFuns (Program.T {datatypes, body}) =
          end
       and loopPrimExp (e: PrimExp.t): PrimExp.t =
          case e of
-            App {func, arg} => (loopVarExp func; loopVarExp arg; e)
+            App {func, arg, ...} => (loopVarExp func; loopVarExp arg; e)
           | Case {test, cases, default} =>
                (loopVarExp test
                 ; Case {cases = Cases.map (cases, loopExp),

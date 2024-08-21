@@ -78,7 +78,8 @@ signature XML_TREE =
             type exp = Lambda.exp
             datatype t =
                App of {arg: VarExp.t,
-                       func: VarExp.t}
+                       func: VarExp.t,
+                       inline: InlineAttr.t}
              | Case of {cases: (Pat.t, exp) Cases.t,
                         default: exp option,
                         test: VarExp.t}
@@ -168,7 +169,7 @@ signature XML_TREE =
          sig
             type t
 
-            val app: {func: t, arg: t, ty: Type.t} -> t
+            val app: {func: t, arg: t, inline: InlineAttr.t, ty: Type.t} -> t
             val bug: string -> t
             val casee:
                {cases: (Pat.t, t) Cases.t,

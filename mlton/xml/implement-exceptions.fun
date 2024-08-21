@@ -163,6 +163,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                              (extendExtraVar,
                                               Type.reff extendExtraType)),
                                arg = extractExtra tup,
+                               inline = InlineAttr.Auto,
                                ty = extraType}},
                              extend = false,
                              ty = ty})
@@ -307,6 +308,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                                        (defaultVar,
                                                         Type.arrow
                                                         (Type.unit, ty))),
+                                               inline = InlineAttr.Auto,
                                                arg = unit (),
                                                ty = ty}
                                        val unit = Var.newString "unit"
@@ -411,7 +413,8 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                       | Prim.Exn_name =>
                            (primExp o App)
                            {func = VarExp.mono exnNameVar,
-                            arg = Vector.first args}
+                            arg = Vector.first args,
+                            inline = InlineAttr.Auto}
                       | Prim.Exn_setExtendExtra =>
                            assign (extendExtraVar,
                                    extendExtraType)
@@ -502,6 +505,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                          (Dexp.monoVar
                                           (topLevelHandlerVar,
                                            Type.reff topLevelHandlerType))),
+                                 inline = InlineAttr.Auto,
                                  arg = Dexp.monoVar x,
                                  ty = Type.unit}}
          end

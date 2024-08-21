@@ -102,6 +102,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                              (topLevelSuffixVar,
                               Type.reff topLevelSuffixType))),
                     arg = Dexp.unit (),
+                    inline = InlineAttr.Auto,
                     ty = Type.unit})
       val body =
          Dexp.let1
