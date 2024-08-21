@@ -67,7 +67,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                              let
                                 val transfer =
                                    case transfer of
-                                      Call {func, args, return} =>
+                                      Call {func, args, return, ...} =>
                                          if Func.equals (name, func)
                                             andalso Return.isTail return
                                             then Goto {dst = loopName, 

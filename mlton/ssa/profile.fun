@@ -103,7 +103,7 @@ fun addProfileFunction (f: Function.t) =
                       end
              val (leaveStmts, transfer) =
                 case transfer of
-                   Transfer.Call {args, func, return} => 
+                   Transfer.Call {args, func, inline, return} => 
                       (case return of
                           Return.Dead => doit ()
                         | Return.NonTail {cont, handler} => 
@@ -119,6 +119,7 @@ fun addProfileFunction (f: Function.t) =
                                        (leaveL (),
                                         Transfer.Call {args = args,
                                                        func = func,
+                                                       inline = inline,
                                                        return = return})
                                     end
                                | Handler.Handle _ => doitL ())

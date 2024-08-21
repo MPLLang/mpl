@@ -19,6 +19,7 @@ datatype t =
    Bug
  | Call of {func: Func.t,
             args: t vector,
+            inline: InlineAttr.t,
             ty: Type.t}
  | Case of {cases: cases,
             default: t option,
@@ -149,8 +150,12 @@ in
    fun layout e : Layout.t =
       case e of
          Bug => str "bug"
-       | Call {func, args, ty} =>
-            seq [Func.layout func, str " ", layouts args,
+       | Call {func, args, inline, ty} =>
+            seq [case inline of
+                    InlineAttr.Always => str "(*@inline_always*) "
+                  | InlineAttr.Auto => empty
+                  | InlineAttr.Never => str "(*@inline_never*) ",
+                 Func.layout func, str " ", layouts args,
                  str ": ", Type.layout ty]
        | Case {cases, default, test, ...} =>
             align
@@ -421,13 +426,14 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
          case e of
             Bug => {statements = [],
                     transfer = Transfer.Bug}
-          | Call {func, args, ty} =>
+          | Call {func, args, inline, ty} =>
                loops
                (args, h, fn xs =>
                 {statements = [],
                  transfer = (Transfer.Call
                              {func = func,
                               args = xs,
+                              inline = inline,
                               return = Return.NonTail {cont = reify (k, ty),
                                                        handler = h}})})
           | Case {cases, default, test, ty} =>

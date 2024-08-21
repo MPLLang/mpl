@@ -647,13 +647,14 @@ structure Transform =
              let
                 val transfer
                   = case transfer
-                      of Call {func, args, return}
+                      of Call {func, args, inline, return}
                        => ((case return of
                                Return.NonTail r => addContPrefixes (f, r, c)
                              | _ => ());
                            case FuncData.replace (getFuncData func) of
                               NONE => Call {func = func,
                                             args = args,
+                                            inline = inline,
                                             return = Return.compose (c, return)}
                             | SOME {label, ...} =>
                                  Goto {dst = label, args = args})

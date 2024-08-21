@@ -389,11 +389,12 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                transfer = transfer}
                 in
                   case transfer of
-                     Call {func, args, return = return'} =>
+                     Call {func, args, inline, return = return'} =>
                         let
                            val return = Return.compose (return, return')
                         in
                            if shouldInline func
+                              andalso InlineAttr.mayInline inline
                               then 
                               let
                                  local
@@ -423,6 +424,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                               end
                            else new (Call {func = func,
                                            args = args,
+                                           inline = inline,
                                            return = return})
                         end
                    | Raise xs =>

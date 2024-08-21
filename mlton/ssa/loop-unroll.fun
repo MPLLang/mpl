@@ -860,7 +860,7 @@ fun copyLoop(blocks: Block.t vector,
             end
           else
             case transfer of
-              Transfer.Call {args, func, return} =>
+              Transfer.Call {args, func, inline, return} =>
                 let
                   val newReturn =
                     case return of
@@ -875,7 +875,7 @@ fun copyLoop(blocks: Block.t vector,
                         end
                     | _ => return
                 in
-                  Transfer.Call {args = args, func = func, return = newReturn}
+                  Transfer.Call {args = args, func = func, inline = inline, return = newReturn}
                 end
             | Transfer.Case {cases, default, test} =>
                 let

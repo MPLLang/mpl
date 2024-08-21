@@ -71,8 +71,8 @@ struct
          fun loopTransfer transfer =
             case transfer of
                  Transfer.Bug => Transfer.Bug
-               | Transfer.Call {args, func, return} =>
-                    Transfer.Call {args=freshenVec args, func=func, return=return}
+               | Transfer.Call {args, func, inline, return} =>
+                    Transfer.Call {args=freshenVec args, func=func, inline=inline, return=return}
                | Transfer.Case {cases, default, test} =>
                     Transfer.Case {cases=cases, default=default, test=freshenIfGlobal test}
                | Transfer.Goto {args, dst} =>

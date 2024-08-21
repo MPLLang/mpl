@@ -778,6 +778,7 @@ fun closureConvert
                                    args = Vector.new2 (Dexp.var env,
                                                        coerce (argExp, argVal,
                                                                value param)),
+                                   inline = InlineAttr.Auto,
                                    ty = valueType result},
                                   result, resultVal)}
                end))}

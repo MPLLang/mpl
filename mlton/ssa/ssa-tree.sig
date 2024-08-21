@@ -113,6 +113,7 @@ signature SSA_TREE =
                Bug  (* MLton thought control couldn't reach here. *)
              | Call of {args: Var.t vector,
                         func: Func.t,
+                        inline: InlineAttr.t,
                         return: Return.t}
              | Case of {cases: (Con.t, Label.t) Cases.t,
                         default: Label.t option, (* Must be nullary. *)

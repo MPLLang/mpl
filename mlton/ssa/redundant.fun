@@ -494,11 +494,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     val transfer =
                        case transfer of
                           Bug => Bug
-                        | Call {func, args, return} =>
+                        | Call {func, args, inline, return} =>
                              Call {func = func, 
                                    args = loopVars (keepUseful 
                                                     (#argsRed (funcReds func),
                                                      args)),
+                                   inline = inline,
                                    return = return}
                         | Case {test, cases, default} =>
                              Case {test = loopVar test, 

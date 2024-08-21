@@ -238,6 +238,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            args = Vector.new4
                                   (dvec1, dvec2, dlen1,
                                    Dexp.word (WordX.zero seqIndexWordSize)),
+                           inline = InlineAttr.Auto,
                            ty = Type.bool})}
                   in
                      if doEq
@@ -287,6 +288,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       (equalExp (sub (dvec1, di), sub (dvec2, di), ty),
                        Dexp.call {args = args,
                                   func = loop,
+                                  inline = InlineAttr.Auto,
                                   ty = Type.bool}))
                   end
                val (start, blocks) = Dexp.linearize (body, Handler.Caller)
@@ -367,6 +369,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                             body =
                             Dexp.call {func = bigIntInfEqual,
                                        args = Vector.new2 (toVector darg1, toVector darg2),
+                                       inline = InlineAttr.Auto,
                                        ty = Type.bool}})})
                      val (start, blocks) = Dexp.linearize (body, Handler.Caller)
                      val blocks = Vector.fromList blocks
@@ -406,12 +409,14 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      then eq ()
                   else Dexp.call {func = equalTyconFunc tycon,
                                   args = Vector.new2 (dx1, dx2),
+                                  inline = InlineAttr.Auto,
                                   ty = Type.bool}
              | Type.IntInf =>
                   if hasConstArg ()
                      then eq ()
                   else Dexp.call {func = intInfEqualFunc (),
                                   args = Vector.new2 (dx1, dx2),
+                                  inline = InlineAttr.Auto,
                                   ty = Type.bool}
              | Type.Real rs =>
                   let
@@ -451,6 +456,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
              | Type.Vector ty =>
                   Dexp.call {func = vectorEqualFunc ty,
                              args = Vector.new2 (dx1, dx2),
+                             inline = InlineAttr.Auto,
                              ty = Type.bool}
              | Type.Weak _ => eq ()
              | Type.Word ws => prim (Prim.Word_equal ws, Vector.new0 ())

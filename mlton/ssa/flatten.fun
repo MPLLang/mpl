@@ -147,7 +147,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       (case raises of
                           NONE => Error.bug "Flatten.flatten: raise mismatch"
                         | SOME rs => coerces (xs, rs))
-                 | Call {func, args, return} =>
+                 | Call {func, args, return, ...} =>
                       let
                         val {args = funcArgs, 
                              returns = funcReturns,
@@ -380,9 +380,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                end 
             fun doitTransfer transfer =
                case transfer of
-                  Call {func, args, return} =>
+                  Call {func, args, inline, return} =>
                      Call {func = func, 
                            args = flattens (args, funcArgs func),
+                           inline = inline,
                            return = return}
                 | Case {test, cases = Cases.Con cases, default} =>
                      doitCaseCon {test = test, 

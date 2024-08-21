@@ -795,7 +795,7 @@ fun shrinkFunction {globals: Statement.t vector} =
             (fn (t: Transfer.t) =>
             case t of
                Bug => ([], Bug)
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   let
                      val (statements, return) =
                         case return of
@@ -866,6 +866,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                      (statements,
                       Call {func = func,
                             args = simplifyVars args,
+                            inline = inline,
                             return = return})
                   end
               | Case {test, cases, default} =>

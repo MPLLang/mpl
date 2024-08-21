@@ -798,9 +798,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       fun simplifyTransfer (t : Transfer.t): Statement.t vector * Transfer.t =
          case t of
             Bug => (Vector.new0 (), t)
-          | Call {func, args, return} =>
+          | Call {func, args, inline, return} =>
                (Vector.new0 (),
-                Call {func = func, return = return,
+                Call {func = func, inline = inline, return = return,
                       args = simplifyUsefulVars args})
           | Case {test, cases = Cases.Con cases, default} =>
                let
