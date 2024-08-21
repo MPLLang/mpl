@@ -372,7 +372,7 @@ fun shrinkOnce (Program.T {datatypes, body}) =
                    | VarInfo.Mono {numOccurrences, value, varExp, ...} => 
                         case (!numOccurrences, !value) of
                            (1, SOME (Value.Lambda {isInlined, lam = l})) =>
-                              if not (Lambda.mayInline l)
+                              if not (InlineAttr.mayInline (Lambda.inline l))
                                  then normal varExp
                               else
                                  let
@@ -581,12 +581,12 @@ fun shrinkOnce (Program.T {datatypes, body}) =
          traceShrinkLambda
          (fn l => 
           let
-             val {arg, argType, body, mayInline} = Lambda.dest l
+             val {arg, argType, body, inline} = Lambda.dest l
           in
              Lambda.make {arg = arg,
                           argType = argType,
                           body = shrinkExp body,
-                          mayInline = mayInline}
+                          inline = inline}
           end) l
       val _ = countExp body
       val body = shrinkExp body

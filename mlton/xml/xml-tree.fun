@@ -217,7 +217,7 @@ and dec =
 and lambda = Lam of {arg: Var.t,
                      argType: Type.t,
                      body: exp,
-                     mayInline: bool,
+                     inline: InlineAttr.t,
                      plist: PropertyList.t}
 
 local
@@ -328,9 +328,12 @@ in
                  VarExp.layout x])
             xs
        | Var x => VarExp.layout x
-   and layoutLambda (Lam {arg, argType, body, mayInline, ...}) =
+   and layoutLambda (Lam {arg, argType, body, inline, ...}) =
       mayAlign [maybeConstrain (seq [str "fn ",
-                                     str (if not mayInline then "noinline " else "")],
+                                     case inline of
+                                        InlineAttr.Always => str "inline_always "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "inline_never "],
                                 arg, argType, str " =>"),
                 indent (layoutExp body, 2)]
 
@@ -457,15 +460,17 @@ in
    and parseLambda () =
       Lam <$>
       (kw "fn" *>
-       optional (kw "noinline") >>= (fn noInline =>
+            (kw "inline_always" *> pure InlineAttr.Always <|>
+             kw "inline_never" *> pure InlineAttr.Never <|>
+             pure InlineAttr.Auto) >>= (fn inline =>
        Var.parse >>= (fn arg =>
        sym ":" *>
        Type.parse >>= (fn argType =>
        sym "=>" *>
        delay parseExp >>= (fn body =>
-       pure {mayInline = Option.isNone noInline,
-             arg = arg, argType = argType,
+       pure {arg = arg, argType = argType,
              body = body,
+             inline = inline,
              plist = PropertyList.new ()})))))
 end
 
@@ -727,10 +732,10 @@ structure Exp =
                 | PolyVal {exp, ty, tyvars, var} =>
                      SOME (PolyVal {exp = dropProfileExp exp, ty = ty,
                                     tyvars = tyvars, var = var})
-            and dropProfileLambda (Lam {arg, argType, body, mayInline, plist}) =
+            and dropProfileLambda (Lam {arg, argType, body, inline, plist}) =
                Lam {arg = arg, argType = argType,
                     body = dropProfileExp body,
-                    mayInline = mayInline,
+                    inline = inline,
                     plist = plist}
          in
             dropProfileExp e
@@ -789,18 +794,18 @@ structure Lambda =
       in
          val arg = make #arg
          val body = make #body
-         val mayInline = make #mayInline
+         val inline = make #inline
       end
 
-      fun make {arg, argType, body, mayInline} =
+      fun make {arg, argType, body, inline} =
          Lam {arg = arg,
               argType = argType,
               body = body,
-              mayInline = mayInline,
+              inline = inline,
               plist = PropertyList.new ()}
 
-      fun dest (Lam {arg, argType, body, mayInline, ...}) =
-         {arg = arg, argType = argType, body = body, mayInline = mayInline}
+      fun dest (Lam {arg, argType, body, inline, ...}) =
+         {arg = arg, argType = argType, body = body, inline = inline}
 
       fun plist (Lam {plist, ...}) = plist
 
@@ -1028,11 +1033,11 @@ structure DirectExp =
                Exp.prefix (send (body, k),
                            Dec.MonoVal {var = var, ty = ty, exp = exp}))
 
-      fun lambda {arg, argType, body, bodyType, mayInline} =
+      fun lambda {arg, argType, body, bodyType, inline} =
          simple (Lambda (Lambda.make {arg = arg,
                                       argType = argType,
                                       body = toExp body,
-                                      mayInline = mayInline}),
+                                      inline = inline}),
                  Type.arrow (argType, bodyType))
 
       fun fromLambda (l, ty) =

@@ -862,7 +862,7 @@ fun closureConvert
          if !Control.closureConvertShrink
             then Ssa.shrinkFunction {globals = Vector.new0 ()}
          else fn f => f
-      fun addFunc (ac, {args, body, isMain, mayInline, mayRaise, name, returns}) =
+      fun addFunc (ac, {args, body, isMain, inline, mayRaise, name, returns}) =
          let
             val (start, blocks) =
                Dexp.linearize (body, if mayRaise then Ssa.Handler.Caller else Ssa.Handler.Dead)
@@ -870,9 +870,7 @@ fun closureConvert
                shrinkFunction
                (Function.new {args = args,
                               blocks = Vector.fromList blocks,
-                              inline = if mayInline
-                                          then InlineAttr.Auto
-                                       else InlineAttr.Never,
+                              inline = inline,
                               name = name,
                               raises = if mayRaise
                                           then raises
@@ -1335,7 +1333,7 @@ fun closureConvert
                          info as LambdaInfo.T {frees, name, recs, ...},
                          ac: Accum.t): Accum.t =
          let
-            val {arg = argVar, body, mayInline, ...} = Slambda.dest lambda
+            val {arg = argVar, body, inline, ...} = Slambda.dest lambda
             val argVarInfo = varInfo argVar
             val env = Var.newString "env"
             val envType = lambdaInfoType info
@@ -1364,7 +1362,7 @@ fun closureConvert
                  addFunc (ac, {args = args,
                                body = body,
                                isMain = false,
-                               mayInline = mayInline,
+                               inline = inline,
                                mayRaise = true,
                                name = name,
                                returns = returns})
@@ -1381,7 +1379,7 @@ fun closureConvert
              val (body, ac) = convertExp (body, Accum.empty)
              val ac = addFunc (ac, {args = Vector.new0 (),
                                     body = body,
-                                    mayInline = false,
+                                    inline = InlineAttr.Never,
                                     mayRaise = false,
                                     isMain = true,
                                     name = main,

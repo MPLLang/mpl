@@ -73,7 +73,7 @@ fun transform (prog: Program.t): Program.t =
 
       fun transLambda (l: Lambda.t): Lambda.t =
          let
-            val {arg = argVar, argType = argTy, body, mayInline} = Lambda.dest l
+            val {arg = argVar, argType = argTy, body, inline} = Lambda.dest l
             val resTy = getVarExpOrigType (Exp.result body)
 
             val argTy = transType argTy
@@ -93,20 +93,20 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = bodyKHA,
                          bodyType = ansTy,
-                         mayInline = mayInline}
+                         inline = inline}
                      val bodyK =
                         DirectExp.lambda
                         {arg = hVar,
                          argType = hTy,
                          body = bodyKH,
                          bodyType = Type.arrow (argTy, ansTy),
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      Lambda.make
                      {arg = kVar,
                       argType = kTy,
                       body = DirectExp.toExp bodyK,
-                      mayInline = true}
+                      inline = InlineAttr.Auto}
                   end
              | Mixed => 
                   let
@@ -119,7 +119,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = bodyKHA,
                          bodyType = ansTy,
-                         mayInline = mayInline}
+                         inline = inline}
                      val bodyXK =
                         DirectExp.let1 
                         {var = hVar, 
@@ -139,7 +139,7 @@ fun transform (prog: Program.t): Program.t =
                      {arg = xVar,
                       argType = xTy,
                       body = DirectExp.toExp bodyX,
-                      mayInline = true}
+                      inline = InlineAttr.Auto}
                   end
              | Uncurried =>
                   let
@@ -172,7 +172,7 @@ fun transform (prog: Program.t): Program.t =
                      {arg = xVar,
                       argType = xTy,
                       body = DirectExp.toExp bodyX,
-                      mayInline = mayInline}
+                      inline = inline}
                   end
          end
       and transPrimExp (e: PrimExp.t, eTy: Type.t,
@@ -304,7 +304,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = exnTy,
                          body = transExp (handler, kVar, kTy, hVar, hTy),
                          bodyType = ansTy,
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      DirectExp.let1 {var = h'Var, exp = h'Body, body =
                      transExp (try, kVar, kTy, h'Var, h'Ty)}
@@ -377,7 +377,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = kBody,
                          bodyType = ansTy,
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      DirectExp.let1 {var = k'Var, exp = k'Body, body =
                      transPrimExp (exp, expTy, k'Var, k'Ty, hVar, hTy)}
@@ -423,7 +423,7 @@ fun transform (prog: Program.t): Program.t =
           argType = ansTy,
           body = DirectExp.unit (),
           bodyType = ansTy,
-          mayInline = true}
+          inline = InlineAttr.Auto}
       val k0Ty = Type.arrow (ansTy, Type.unit)
       (* Initial exception continuation. *)
       val h0 = Var.newString "h0"
@@ -433,7 +433,7 @@ fun transform (prog: Program.t): Program.t =
           argType = exnTy,
           body = DirectExp.unit (),
           bodyType = ansTy,
-          mayInline = true}
+          inline = InlineAttr.Auto}
       val h0Ty = Type.arrow (exnTy, Type.unit)
 
       (* Translate body, in context of initial continuations. *)

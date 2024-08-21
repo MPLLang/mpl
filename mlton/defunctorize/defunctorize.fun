@@ -20,6 +20,7 @@ in
    structure Cexp = Exp
    structure Clambda = Lambda
    structure Cpat = Pat
+   structure InlineAttr = InlineAttr
    structure Prim = Prim
    structure RealSize = RealSize
    structure Record = Record
@@ -209,7 +210,7 @@ fun casee {ctxt: unit -> Layout.t,
                                   {tuple = Xexp.monoVar (arg, argType),
                                    components = vars,
                                    body = e ()})),
-                         mayInline = true})}
+                         inline = InlineAttr.Auto})}
                    fun finish np =
                       (numPats := np
                        ; fn rename =>
@@ -450,7 +451,7 @@ structure Xexp =
                      Xlambda.make
                      {arg = revArg,
                       argType = revArgTy,
-                      mayInline = true,
+                      inline = InlineAttr.Auto,
                       body =
                       Xexp.toExp
                       (detuple2
@@ -730,13 +731,13 @@ fun defunctorize (CoreML.Program.T {decs}) =
                Vector.map
                (Vector.rev v, fn {lambda, var} =>
                 let
-                   val {arg, argType, body, bodyType, mayInline} =
+                   val {arg, argType, body, bodyType, inline} =
                       loopLambda lambda
                 in
                    {lambda = Xlambda.make {arg = arg,
                                            argType = argType,
                                            body = Xexp.toExp body,
-                                           mayInline = mayInline},
+                                           inline = inline},
                     ty = Xtype.arrow (argType, bodyType),
                     var = var}
                 end)
@@ -803,7 +804,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                                           argType = Xtype.unit,
                                           body = exp,
                                           bodyType = expType,
-                                          mayInline = true})
+                                          inline = InlineAttr.Auto})
                                      end
                                   val thunkTy =
                                      Xtype.arrow (Xtype.unit, expType)
@@ -1001,7 +1002,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                                            targs = targs,
                                            ty = bodyType}),
                                   bodyType = bodyType,
-                                  mayInline = true}
+                                  inline = InlineAttr.Auto}
                               end
                      end
                 | Const f =>
@@ -1101,7 +1102,9 @@ fun defunctorize (CoreML.Program.T {decs}) =
              argType = loopTy argType,
              body = body,
              bodyType = bodyType,
-             mayInline = mayInline}
+             inline = if mayInline
+                         then InlineAttr.Auto
+                      else InlineAttr.Never}
          end
       val body = Xexp.toExp (loopDecs (decs, (Xexp.unit (), Xtype.unit)))
       val _ = showMatchDiagnostics ()
