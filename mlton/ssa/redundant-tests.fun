@@ -154,7 +154,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
       val numSimplified = ref 0
       fun simplifyFunction f =
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
              val _ =
                 Control.diagnostic
@@ -443,7 +443,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
           in
              shrink (Function.new {args = args,
                                    blocks = blocks,
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    raises = raises,
                                    returns = returns,

@@ -73,7 +73,7 @@ fun transform (prog: Program.t): Program.t =
 
       fun transLambda (l: Lambda.t): Lambda.t =
          let
-            val {arg = argVar, argType = argTy, body, mayInline} = Lambda.dest l
+            val {arg = argVar, argType = argTy, body, inline} = Lambda.dest l
             val resTy = getVarExpOrigType (Exp.result body)
 
             val argTy = transType argTy
@@ -93,20 +93,20 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = bodyKHA,
                          bodyType = ansTy,
-                         mayInline = mayInline}
+                         inline = inline}
                      val bodyK =
                         DirectExp.lambda
                         {arg = hVar,
                          argType = hTy,
                          body = bodyKH,
                          bodyType = Type.arrow (argTy, ansTy),
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      Lambda.make
                      {arg = kVar,
                       argType = kTy,
                       body = DirectExp.toExp bodyK,
-                      mayInline = true}
+                      inline = InlineAttr.Auto}
                   end
              | Mixed => 
                   let
@@ -119,7 +119,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = bodyKHA,
                          bodyType = ansTy,
-                         mayInline = mayInline}
+                         inline = inline}
                      val bodyXK =
                         DirectExp.let1 
                         {var = hVar, 
@@ -139,7 +139,7 @@ fun transform (prog: Program.t): Program.t =
                      {arg = xVar,
                       argType = xTy,
                       body = DirectExp.toExp bodyX,
-                      mayInline = true}
+                      inline = InlineAttr.Auto}
                   end
              | Uncurried =>
                   let
@@ -172,7 +172,7 @@ fun transform (prog: Program.t): Program.t =
                      {arg = xVar,
                       argType = xTy,
                       body = DirectExp.toExp bodyX,
-                      mayInline = mayInline}
+                      inline = inline}
                   end
          end
       and transPrimExp (e: PrimExp.t, eTy: Type.t,
@@ -182,10 +182,12 @@ fun transform (prog: Program.t): Program.t =
             val eTy = transType eTy
             val k = DirectExp.monoVar (kVar, kTy)
             val h = DirectExp.monoVar (hVar, hTy)
-            fun return x = DirectExp.app {func = k, arg = x, ty = ansTy}
+            fun return x = DirectExp.app {func = k, arg = x,
+                                          inline = InlineAttr.Auto,
+                                          ty = ansTy}
          in 
             case e of
-               App {arg, func} =>
+               App {arg, func, inline} =>
                   let
                      val (arg, argTy) = transVarExpWithType arg
                      val func = transVarExp func
@@ -197,16 +199,19 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = k,
+                                  inline = inline,
                                   ty = Type.arrow (hTy, Type.arrow (argTy, ansTy))}
                               val app2 =
                                  DirectExp.app
                                  {func = app1,
                                   arg = h,
+                                  inline = inline,
                                   ty = Type.arrow (argTy, ansTy)}
                               val app3 =
                                  DirectExp.app
                                  {func = app2,
                                   arg = arg,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -221,11 +226,13 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = arg2,
+                                  inline = inline,
                                   ty = Type.arrow (argTy, ansTy)}
                               val app3 =
                                  DirectExp.app
                                  {func = app2,
                                   arg = arg,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -240,6 +247,7 @@ fun transform (prog: Program.t): Program.t =
                                  DirectExp.app
                                  {func = func,
                                   arg = arg3,
+                                  inline = inline,
                                   ty = ansTy}
                            in
                               app3
@@ -304,7 +312,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = exnTy,
                          body = transExp (handler, kVar, kTy, hVar, hTy),
                          bodyType = ansTy,
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      DirectExp.let1 {var = h'Var, exp = h'Body, body =
                      transExp (try, kVar, kTy, h'Var, h'Ty)}
@@ -333,6 +341,7 @@ fun transform (prog: Program.t): Program.t =
                   DirectExp.app
                   {func = h,
                    arg = transVarExp exn,
+                   inline = InlineAttr.Auto,
                    ty = ansTy}
              | Select {offset, tuple} => 
                   (return o DirectExp.select)
@@ -377,7 +386,7 @@ fun transform (prog: Program.t): Program.t =
                          argType = argTy,
                          body = kBody,
                          bodyType = ansTy,
-                         mayInline = true}
+                         inline = InlineAttr.Auto}
                   in
                      DirectExp.let1 {var = k'Var, exp = k'Body, body =
                      transPrimExp (exp, expTy, k'Var, k'Ty, hVar, hTy)}
@@ -392,7 +401,8 @@ fun transform (prog: Program.t): Program.t =
             val k = DirectExp.monoVar (kVar, kTy)
             val k'Body =
                DirectExp.app
-               {func = k, arg = transVarExp result, ty = ansTy}
+               {func = k, arg = transVarExp result,
+                inline = InlineAttr.Auto, ty = ansTy}
          in
             List.foldr
             (decs, k'Body, fn (dec, kBody) =>
@@ -423,7 +433,7 @@ fun transform (prog: Program.t): Program.t =
           argType = ansTy,
           body = DirectExp.unit (),
           bodyType = ansTy,
-          mayInline = true}
+          inline = InlineAttr.Auto}
       val k0Ty = Type.arrow (ansTy, Type.unit)
       (* Initial exception continuation. *)
       val h0 = Var.newString "h0"
@@ -433,7 +443,7 @@ fun transform (prog: Program.t): Program.t =
           argType = exnTy,
           body = DirectExp.unit (),
           bodyType = ansTy,
-          mayInline = true}
+          inline = InlineAttr.Auto}
       val h0Ty = Type.arrow (exnTy, Type.unit)
 
       (* Translate body, in context of initial continuations. *)

@@ -39,16 +39,16 @@ fun sccFuns (Program.T {datatypes, body}) =
       fun loopVarExps xs = Vector.foreach (xs, loopVarExp)
       fun loopLambda (l: Lambda.t): Lambda.t =
          let
-            val {arg, argType, body, mayInline} = Lambda.dest l
+            val {arg, argType, body, inline} = Lambda.dest l
          in
             Lambda.make {arg = arg,
                          argType = argType,
                          body = loopExp body,
-                         mayInline = mayInline}
+                         inline = inline}
          end
       and loopPrimExp (e: PrimExp.t): PrimExp.t =
          case e of
-            App {func, arg} => (loopVarExp func; loopVarExp arg; e)
+            App {func, arg, ...} => (loopVarExp func; loopVarExp arg; e)
           | Case {test, cases, default} =>
                (loopVarExp test
                 ; Case {cases = Cases.map (cases, loopExp),

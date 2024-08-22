@@ -86,12 +86,12 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
          end
       and loopLambda l =
          let
-            val {arg, argType, body, mayInline} = Lambda.dest l
+            val {arg, argType, body, inline} = Lambda.dest l
          in
             Lambda.make {arg = arg,
                          argType = argType,
                          body = loop body,
-                         mayInline = mayInline}
+                         inline = inline}
          end
       val body = Dexp.fromExp (loop body, Type.unit)
       val body =
@@ -102,6 +102,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                              (topLevelSuffixVar,
                               Type.reff topLevelSuffixType))),
                     arg = Dexp.unit (),
+                    inline = InlineAttr.Auto,
                     ty = Type.unit})
       val body =
          Dexp.let1
@@ -111,7 +112,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                             argType = Type.unit,
                             body = Dexp.bug "toplevel suffix not installed",
                             bodyType = Type.unit,
-                            mayInline = true}),
+                            inline = InlineAttr.Auto}),
           body = body}
       val body = Dexp.toExp body
    in

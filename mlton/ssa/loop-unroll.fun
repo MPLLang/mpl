@@ -860,7 +860,7 @@ fun copyLoop(blocks: Block.t vector,
             end
           else
             case transfer of
-              Transfer.Call {args, func, return} =>
+              Transfer.Call {args, func, inline, return} =>
                 let
                   val newReturn =
                     case return of
@@ -875,7 +875,7 @@ fun copyLoop(blocks: Block.t vector,
                         end
                     | _ => return
                 in
-                  Transfer.Call {args = args, func = func, return = newReturn}
+                  Transfer.Call {args = args, func = func, inline = inline, return = newReturn}
                 end
             | Transfer.Case {cases, default, test} =>
                 let
@@ -1311,7 +1311,7 @@ fun setDoms tree =
 fun optimizeFunction loadGlobal function =
    let
       val {graph, labelNode, nodeBlock} = Function.controlFlow function
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
         Function.dest function
       val fsize = Function.size (function, {sizeExp = Exp.size, sizeTransfer = Transfer.size})
       val () = logs (concat["Optimizing function: ", Func.toString name,
@@ -1326,7 +1326,7 @@ fun optimizeFunction loadGlobal function =
    in
       Function.new {args = args,
                     blocks = Vector.fromList(newBlocks),
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

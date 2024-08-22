@@ -231,7 +231,7 @@ fun shrinkFunction {globals: Statement.t vector} =
       fn f: Function.t =>
       let
          val _ = Function.clear f
-         val {args, blocks, mayInline, name, raises, returns, start, ...} =
+         val {args, blocks, inline, name, raises, returns, start, ...} =
             Function.dest f
          val _ = Vector.foreach
                  (args, fn (x, ty) => 
@@ -795,7 +795,7 @@ fun shrinkFunction {globals: Statement.t vector} =
             (fn (t: Transfer.t) =>
             case t of
                Bug => ([], Bug)
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   let
                      val (statements, return) =
                         case return of
@@ -866,6 +866,7 @@ fun shrinkFunction {globals: Statement.t vector} =
                      (statements,
                       Call {func = func,
                             args = simplifyVars args,
+                            inline = inline,
                             return = return})
                   end
               | Case {test, cases, default} =>
@@ -1207,7 +1208,7 @@ fun shrinkFunction {globals: Statement.t vector} =
          val f = 
             Function.new {args = args,
                           blocks = Vector.fromList (!newBlocks),
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,
@@ -1252,13 +1253,13 @@ fun eliminateUselessProfile (f: Function.t): Function.t =
                            statements = statements,
                            transfer = transfer}
                end
-         val {args, blocks, mayInline, name, raises, returns, start} =
+         val {args, blocks, inline, name, raises, returns, start} =
             Function.dest f
          val blocks = Vector.map (blocks, eliminateInBlock)
       in
          Function.new {args = args,
                        blocks = blocks,
-                       mayInline = mayInline,
+                       inline = inline,
                        name = name,
                        raises = raises,
                        returns = returns,

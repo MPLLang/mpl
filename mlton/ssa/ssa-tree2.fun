@@ -878,6 +878,7 @@ structure Transfer =
          Bug (* MLton thought control couldn't reach here. *)
        | Call of {args: Var.t vector,
                   func: Func.t,
+                  inline: InlineAttr.t,
                   return: Return.t}
        | Case of {test: Var.t,
                   cases: (Con.t, Label.t) Cases.t,
@@ -939,9 +940,10 @@ structure Transfer =
          in
             case t of
                Bug => Bug
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   Call {func = func,
                         args = fxs args,
+                        inline = inline,
                         return = Return.map (return, fl)}
              | Case {test, cases, default} =>
                   Case {test = fx test,
@@ -999,21 +1001,27 @@ structure Transfer =
          in
             case t of
                Bug => str "bug"
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   let
+                     val pre =
+                        seq [str "call ",
+                             case inline of
+                                InlineAttr.Always => str "__inline_always__ "
+                              | InlineAttr.Auto => empty
+                              | InlineAttr.Never => str "__inline_never__ "]
                      val call = seq [Func.layout func, str " ", layoutArgs args]
                   in
                      case return of
-                        Return.Dead => seq [str "call dead ", call]
+                        Return.Dead => seq [pre, str "dead ", call]
                       | Return.NonTail {cont, handler} =>
-                           seq [str "call ", Label.layout cont, str " ",
+                           seq [pre, Label.layout cont, str " ",
                                 paren call,
                                 str " handle _ => ",
                                 case handler of
                                    Handler.Caller => str "raise"
                                  | Handler.Dead => str "dead"
                                  | Handler.Handle l => Label.layout l]
-                      | Return.Tail => seq [str "call tail ", call]
+                      | Return.Tail => seq [pre, str "tail ", call]
                   end
              | Case arg => layoutCase arg
              | Goto {dst, args} =>
@@ -1055,21 +1063,27 @@ structure Transfer =
             val parseCall =
                Func.parse >>= (fn func =>
                parseArgs >>= (fn args =>
-               pure (fn return => pure {func = func, args = args, return = return})))
+               pure (fn (inline, return) => pure {func = func,
+                                                  args = args,
+                                                  inline = inline,
+                                                  return = return})))
          in
             mlSpaces *> any
             [Bug <$ kw "bug",
              Call <$>
              (kw "call" *>
+              (kw "__inline_always__" *> pure InlineAttr.Always <|>
+               kw "__inline_never__" *> pure InlineAttr.Never <|>
+               pure InlineAttr.Auto) >>= (fn inline =>
               mlSpaces *>
-              any [kw "dead" *> parseCall >>= (fn mkCall => mkCall Return.Dead),
-                   kw "tail" *> parseCall >>= (fn mkCall => mkCall Return.Tail),
+              any [kw "dead" *> parseCall >>= (fn mkCall => mkCall (inline, Return.Dead)),
+                   kw "tail" *> parseCall >>= (fn mkCall => mkCall (inline, Return.Tail)),
                    Label.parse >>= (fn cont =>
                    paren parseCall >>= (fn mkCall =>
                    kw "handle" *> kw "_" *> sym "=>" *>
-                   any [kw "raise" *> mkCall (Return.NonTail {cont = cont, handler = Handler.Caller}),
-                        kw "dead" *> mkCall (Return.NonTail {cont = cont, handler = Handler.Dead}),
-                        Label.parse >>= (fn h => mkCall (Return.NonTail {cont = cont, handler = Handler.Handle h}))]))]),
+                   any [kw "raise" *> mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Caller}),
+                        kw "dead" *> mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Dead}),
+                        Label.parse >>= (fn h => mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Handle h}))]))])),
              Case <$>
              any ((kw "case" *> parseCase (Con.parse, Cases.Con)) ::
                   (List.map (WordSize.all, fn ws =>
@@ -1113,10 +1127,11 @@ structure Transfer =
       fun equals (e: t, e': t): bool =
          case (e, e') of
             (Bug, Bug) => true
-          | (Call {func, args, return},
-             Call {func = func', args = args', return = return'}) =>
+          | (Call {func, args, inline, return},
+             Call {func = func', args = args', inline = inline', return = return'}) =>
                Func.equals (func, func') andalso
                varsEquals (args, args') andalso
+               InlineAttr.equals (inline, inline') andalso
                Return.equals (return, return')
           | (Case {test, cases, default},
              Case {test = test', cases = cases', default = default'}) =>
@@ -1151,13 +1166,17 @@ structure Transfer =
          fun hashVars (xs: Var.t vector, w: Word.t): Word.t =
             Hash.combine (w, Hash.vectorMap (xs, Var.hash))
          fun hash2 (w1: Word.t, w2: Word.t) = Hash.combine (w1, w2)
+         fun hash3 (w1: Word.t, w2: Word.t, w3: Word.t) =
+            Hash.combine (hash2 (w1, w2), w3)
          fun hash4 (w1: Word.t, w2: Word.t, w3: Word.t, w4: Word.t) =
-            Hash.combine (Hash.combine (w1, w2), Hash.combine (w3, w4))
+            Hash.combine (hash3 (w1, w2, w3), w4)
       in
          val hash: t -> Word.t =
             fn Bug => bug
-             | Call {func, args, return} =>
-                  hashVars (args, hash2 (Func.hash func, Return.hash return))
+             | Call {func, args, inline, return} =>
+                  hashVars (args, hash3 (Func.hash func,
+                                         InlineAttr.hash inline,
+                                         Return.hash return))
              | Case {test, cases, default} =>
                   hash2 (Var.hash test,
                          Cases.fold
@@ -1305,7 +1324,7 @@ structure Function =
 
       type dest = {args: (Var.t * Type.t) vector,
                    blocks: Block.t vector,
-                   mayInline: bool,
+                   inline: InlineAttr.t,
                    name: Func.t,
                    raises: Type.t vector option,
                    returns: Type.t vector option,
@@ -1654,7 +1673,7 @@ structure Function =
 
       fun layoutHeader (f: t): Layout.t =
          let
-            val {args, name, mayInline, raises, returns, start, ...} = dest f
+            val {args, name, inline, raises, returns, start, ...} = dest f
             open Layout
             val (sep, rty) =
                if !Control.showTypes
@@ -1672,7 +1691,10 @@ structure Function =
                   else (str " =", empty)
          in
             mayAlign [mayAlign [seq [str "fun ",
-                                     if mayInline then empty else str "noinline ",
+                                     case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ ",
                                      Func.layout name,
                                      str " ",
                                      layoutFormals args,
@@ -1686,7 +1708,9 @@ structure Function =
             open Parse
          in
             kw "fun" *>
-            optional (kw "noinline") >>= (fn noInline =>
+            (kw "__inline_always__" *> pure InlineAttr.Always <|>
+             kw "__inline_never__" *> pure InlineAttr.Never <|>
+             pure InlineAttr.Auto) >>= (fn inline =>
             Func.parse >>= (fn name =>
             parseFormals >>= (fn args =>
             sym ":" *>
@@ -1696,7 +1720,7 @@ structure Function =
             sym "=" *>
             Label.parse >>= (fn start =>
             paren (pure ()) *>
-            pure (Option.isNone noInline, name, args, returns, raises, start))))))
+            pure (inline, name, args, returns, raises, start))))))
          end
 
       fun layout' (f: t, layoutVar) =
@@ -1715,9 +1739,9 @@ structure Function =
             open Parse
          in
             new <$>
-            (parseHeader >>= (fn (mayInline, name, args, returns, raises, start) =>
+            (parseHeader >>= (fn (inline, name, args, returns, raises, start) =>
              many Block.parse >>= (fn blocks =>
-             pure {mayInline = mayInline,
+             pure {inline = inline,
                    name = name,
                    args = args,
                    returns = returns,
@@ -1792,7 +1816,7 @@ structure Function =
                val (bindSpid, lookupSpid, destroySpid) =
                   make (Spid.new, Spid.plist)
             end
-            val {args, blocks, mayInline, name, raises, returns, start, ...} =
+            val {args, blocks, inline, name, raises, returns, start, ...} =
                dest f
             val args = Vector.map (args, fn (x, ty) => (bindVar x, ty))
             val bindSpid = ignore o bindSpid
@@ -1828,7 +1852,7 @@ structure Function =
          in
             new {args = args,
                  blocks = blocks,
-                 mayInline = mayInline,
+                 inline = inline,
                  name = name,
                  raises = raises,
                  returns = returns,
@@ -1844,7 +1868,7 @@ structure Function =
          else
          let
             val _ = Control.diagnostic (fn () => layout f)
-            val {args, blocks, mayInline, name, raises, returns, start} = dest f
+            val {args, blocks, inline, name, raises, returns, start} = dest f
             val extraBlocks = ref []
             val {get = labelBlock, set = setLabelBlock, rem} =
                Property.getSetOnce
@@ -1911,7 +1935,7 @@ structure Function =
                        transfer)
                    val (statements, transfer) =
                       case transfer of
-                         Call {args, func, return} =>
+                         Call {args, func, inline, return} =>
                             let
                                datatype z = datatype Return.t
                             in
@@ -1932,6 +1956,7 @@ structure Function =
                                                (statements,
                                                 Call {args = args,
                                                       func = func,
+                                                      inline = inline,
                                                       return = return})
                                             end
                                        | Handler.Handle _ =>
@@ -1952,7 +1977,7 @@ structure Function =
             val f =
                new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

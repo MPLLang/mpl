@@ -471,7 +471,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       fun visitTransfer (t: Transfer.t, fi: FuncInfo.t) =
          case t of
             Bug => ()
-          | Call {args, func, return} =>
+          | Call {args, func, return, ...} =>
                let
                   datatype u = None
                              | Caller
@@ -1023,7 +1023,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       fun simplifyTransfer (t: Transfer.t, fi: FuncInfo.t): Transfer.t =
          case t of
             Bug => Bug
-          | Call {func, args, return} =>
+          | Call {func, args, inline, return} =>
                let
                   val fi' = funcInfo func
                   datatype u = None
@@ -1116,6 +1116,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                in
                   Call {func = func,
                         args = args,
+                        inline = inline,
                         return = return}
                end
           | Case {test, cases = Cases.Con cases, default} =>
@@ -1222,7 +1223,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       val shrink = shrinkFunction {globals = globals}
       fun simplifyFunction (f: Function.t): Function.t option =
          let
-            val {args, blocks, mayInline, name, start, ...} = Function.dest f
+            val {args, blocks, inline, name, start, ...} = Function.dest f
             val fi = funcInfo name
          in
             if FuncInfo.isUsed fi
@@ -1261,7 +1262,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     in
                        SOME (shrink (Function.new {args = args,
                                                    blocks = blocks,
-                                                   mayInline = mayInline,
+                                                   inline = inline,
                                                    name = name,
                                                    raises = raises,
                                                    returns = returns,

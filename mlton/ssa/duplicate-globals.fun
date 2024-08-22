@@ -71,8 +71,8 @@ struct
          fun loopTransfer transfer =
             case transfer of
                  Transfer.Bug => Transfer.Bug
-               | Transfer.Call {args, func, return} =>
-                    Transfer.Call {args=freshenVec args, func=func, return=return}
+               | Transfer.Call {args, func, inline, return} =>
+                    Transfer.Call {args=freshenVec args, func=func, inline=inline, return=return}
                | Transfer.Case {cases, default, test} =>
                     Transfer.Case {cases=cases, default=default, test=freshenIfGlobal test}
                | Transfer.Goto {args, dst} =>
@@ -93,10 +93,10 @@ struct
                transfer=loopTransfer transfer}
          fun loopFunction func =
             let
-               val {args, blocks, mayInline, name, raises, returns, start} = Function.dest func
+               val {args, blocks, inline, name, raises, returns, start} = Function.dest func
                val newBlocks = Vector.map(blocks, loopBlock)
             in
-               Function.new {args=args, blocks=newBlocks, mayInline=mayInline, name=name,
+               Function.new {args=args, blocks=newBlocks, inline=inline, name=name,
                   raises=raises, returns=returns, start=start}
             end
 

@@ -145,7 +145,7 @@ fun shouldDuplicate (program as Program.T {body, ...}, hofo, small, product)
                                         fn e => loopExp (e, numDuplicates)
                                      val _ =
                                         case exp of
-                                           App {func, arg} =>
+                                           App {func, arg, ...} =>
                                               (loopVar func; loopVar arg)
                                          | Case {test, cases, default} =>
                                               (loopVar test
@@ -285,12 +285,12 @@ fun transform (program as Program.T {datatypes, body},
          end
       and loopLambda (l: Lambda.t): Lambda.t =
          let
-            val {arg, argType, body, mayInline} = Lambda.dest l
+            val {arg, argType, body, inline} = Lambda.dest l
          in
             Lambda.make {arg = bind arg,
                          argType = argType,
                          body = loopExp body,
-                         mayInline = mayInline}
+                         inline = inline}
          end
       and loopDecs (ds: Dec.t list, result): {decs: Dec.t list,
                                               result: VarExp.t} =
@@ -322,9 +322,10 @@ fun transform (program as Program.T {datatypes, body},
                             let
                                val exp =
                                   case exp of
-                                     App {func, arg} =>
+                                     App {func, arg, inline} =>
                                         App {func = loopVar func,
-                                             arg = loopVar arg}
+                                             arg = loopVar arg,
+                                             inline = inline}
                                    | Case {test, cases, default} =>
                                         let
                                            datatype z = datatype Cases.t

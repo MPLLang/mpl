@@ -71,7 +71,7 @@ structure Program =
                      Abstype {body, ...} => dec body
                    | Exception cs => Vector.foreach (cs, fn _ => inc ())
                    | Fun {fbs, ...} =>
-                        Vector.foreach (fbs, fn clauses =>
+                        Vector.foreach (fbs, fn (clauses, _) =>
                                         Vector.foreach (clauses, exp o #body))
                    | Local (d, d') => (dec d; dec d')
                    | SeqDec ds => Vector.foreach (ds, dec)
@@ -90,8 +90,8 @@ structure Program =
                    | App {func, arg, ...} => (exp func; exp arg)
                    | Case (e, m) => (exp e; match m)
                    | Constraint (e, _) => exp e
-                   | FlatApp es => exps es
-                   | Fn m => match m
+                   | FlatApp (es, _) => exps es
+                   | Fn (m, _) => match m
                    | Handle (e, m) => (exp e; match m)
                    | If (e1, e2, e3) => (exp e1; exp e2; exp e3)
                    | Let (d, e) => (dec d; exp e)

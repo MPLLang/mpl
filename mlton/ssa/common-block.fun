@@ -49,7 +49,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
 
       fun eliminateFunction f = 
          let
-            val {args, blocks, mayInline, name, returns, raises, start} =
+            val {args, blocks, inline, name, returns, raises, start} =
                Function.dest f
             val newBlocks = ref []
             local
@@ -150,7 +150,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
          in
             shrink (Function.new {args = args,
                                   blocks = blocks,
-                                  mayInline = mayInline,
+                                  inline = inline,
                                   name = name,
                                   raises = raises,
                                   returns = returns,

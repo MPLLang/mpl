@@ -247,9 +247,10 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
       fun convertTransfer (t: S.Transfer.t): S2.Transfer.t =
          case t of
             S.Transfer.Bug => S2.Transfer.Bug
-          | S.Transfer.Call {args, func, return} =>
+          | S.Transfer.Call {args, func, inline = inline, return} =>
                S2.Transfer.Call {args = args,
                                  func = func,
+                                 inline = inline,
                                  return = convertReturn return}
           | S.Transfer.Case {cases, default, test} =>
                S2.Transfer.Case {cases = convertCases cases,
@@ -282,7 +283,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
          List.map
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 S.Function.dest f
              fun rr tvo = Option.map (tvo, convertTypes)
              val blocks = Vector.map (blocks, convertBlock)
@@ -291,7 +292,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           in
              S2.Function.new {args = convertFormals args,
                               blocks = blocks,
-                              mayInline = mayInline,
+                              inline = inline,
                               name = name,
                               raises = rr raises,
                               returns = rr returns,

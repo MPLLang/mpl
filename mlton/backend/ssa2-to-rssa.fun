@@ -1087,7 +1087,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                 Transfer.t) =
          case t of
             S.Transfer.Bug => ([], Transfer.bug ())
-          | S.Transfer.Call {func, args, return} =>
+          | S.Transfer.Call {func, args, return, ...} =>
                let
                   datatype z = datatype S.Return.t
                   val return =
@@ -2115,8 +2115,9 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                            transfer = (S.Transfer.Call
                                        {args = Vector.new0 (),
                                         func = main,
+                                        inline = InlineAttr.Never, (* doesn't matter *)
                                         return = S.Return.Tail})})),
-               mayInline = false, (* doesn't matter *)
+               inline = InlineAttr.Auto, (* doesn't matter *)
                name = Func.newString "initGlobals",
                raises = NONE,
                returns = NONE,

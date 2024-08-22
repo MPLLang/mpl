@@ -147,7 +147,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       (case raises of
                           NONE => Error.bug "Flatten.flatten: raise mismatch"
                         | SOME rs => coerces (xs, rs))
-                 | Call {func, args, return} =>
+                 | Call {func, args, return, ...} =>
                       let
                         val {args = funcArgs, 
                              returns = funcReturns,
@@ -242,7 +242,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       val globals = Vector.map (globals, doitStatement)
       fun doitFunction f =
          let
-            val {args, mayInline, name, raises, returns, start, ...} =
+            val {args, inline, name, raises, returns, start, ...} =
                Function.dest f
             val {args = argsReps, returns = returnsReps, raises = raisesReps} = 
               funcInfo name
@@ -380,9 +380,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                end 
             fun doitTransfer transfer =
                case transfer of
-                  Call {func, args, return} =>
+                  Call {func, args, inline, return} =>
                      Call {func = func, 
                            args = flattens (args, funcArgs func),
+                           inline = inline,
                            return = return}
                 | Case {test, cases = Cases.Con cases, default} =>
                      doitCaseCon {test = test, 
@@ -434,7 +435,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          in
             Function.new {args = args,
                           blocks = blocks,
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

@@ -138,12 +138,12 @@ signature AST_CORE =
             type t
             datatype node =
                Andalso of t * t
-             | App of {func: t, arg: t, wasInfix: bool}
+             | App of {func: t, arg: t, inline: InlineAttr.t, wasInfix: bool}
              | Case of t * match
              | Const of Const.t
              | Constraint of t * Type.t
-             | FlatApp of t vector
-             | Fn of match
+             | FlatApp of t vector * InlineAttr.t
+             | Fn of match * InlineAttr.t
              | Handle of t * match
              | If of t * t * t
              | Let of dec * t
@@ -164,10 +164,10 @@ signature AST_CORE =
             include WRAPPED sharing type node' = node
                             sharing type obj = t
 
-            val app: t * t -> t
+            val app: t * t * InlineAttr.t -> t
             val const: Const.t -> t
             val constraint: t * Type.t -> t
-            val fnn: (Pat.t * t) vector -> t
+            val fnn: (Pat.t * t) vector * InlineAttr.t -> t
             val layout: t -> Layout.t
             val lett: dec vector * t * Region.t -> t
             val longvid: Longvid.t -> t
@@ -209,9 +209,10 @@ signature AST_CORE =
              | Fix of {fixity: Fixity.t,
                        ops: Vid.t vector}
              | Fun of {tyvars: Tyvar.t vector,
-                       fbs: {body: Exp.t,
-                             pats: Pat.t vector,
-                             resultType: Type.t option} vector vector}
+                       fbs: ({body: Exp.t,
+                              pats: Pat.t vector,
+                              resultType: Type.t option} vector 
+                             * InlineAttr.t) vector}
              | Local of t * t
              | Open of Longstrid.t vector
              | Overload of Priority.t *
@@ -220,7 +221,8 @@ signature AST_CORE =
                            Longvid.t vector
              | SeqDec of t vector
              | Type of TypBind.t
-             | Val of {rvbs: {match: Match.t,
+             | Val of {rvbs: {inline: InlineAttr.t,
+                              match: Match.t,
                               pat: Pat.t} vector,
                        tyvars: Tyvar.t vector,
                        vbs: {exp: Exp.t,
@@ -233,12 +235,14 @@ signature AST_CORE =
             val layout: t -> Layout.t
             val layoutFun:
                {tyvars: Tyvar.t vector,
-                fbs: {body: Exp.t,
-                      pats: Pat.t vector,
-                      resultType: Type.t option} vector vector}
+                fbs: ({body: Exp.t,
+                       pats: Pat.t vector,
+                       resultType: Type.t option} vector 
+                      * InlineAttr.t) vector}
                -> (unit -> Layout.t) vector
             val layoutVal:
-               {rvbs: {match: Match.t,
+               {rvbs: {inline: InlineAttr.t,
+                       match: Match.t,
                        pat: Pat.t} vector,
                 tyvars: Tyvar.t vector,
                 vbs: {exp: Exp.t,

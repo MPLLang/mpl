@@ -27,7 +27,7 @@ signature DIRECT_EXP =
             | Word of WordSize.t * (WordX.t * t) vector
 
            val bug: string -> t
-           val call: {func: Func.t, args: t vector, ty: Type.t} -> t
+           val call: {func: Func.t, args: t vector, inline: InlineAttr.t, ty: Type.t} -> t
            val casee: {test: t, 
                        cases: cases,
                        default: t option,

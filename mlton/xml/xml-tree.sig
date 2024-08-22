@@ -50,14 +50,14 @@ signature XML_TREE =
             val dest: t -> {arg: Var.t,
                             argType: Type.t,
                             body: exp,
-                            mayInline: bool}
+                            inline: InlineAttr.t}
             val equals: t * t -> bool
+            val inline: t -> InlineAttr.t
             val layout: t -> Layout.t
             val make: {arg: Var.t,
                        argType: Type.t,
                        body: exp,
-                       mayInline: bool} -> t
-            val mayInline: t -> bool
+                       inline: InlineAttr.t} -> t
             val plist: t -> PropertyList.t
          end
 
@@ -78,7 +78,8 @@ signature XML_TREE =
             type exp = Lambda.exp
             datatype t =
                App of {arg: VarExp.t,
-                       func: VarExp.t}
+                       func: VarExp.t,
+                       inline: InlineAttr.t}
              | Case of {cases: (Pat.t, exp) Cases.t,
                         default: exp option,
                         test: VarExp.t}
@@ -168,7 +169,7 @@ signature XML_TREE =
          sig
             type t
 
-            val app: {func: t, arg: t, ty: Type.t} -> t
+            val app: {func: t, arg: t, inline: InlineAttr.t, ty: Type.t} -> t
             val bug: string -> t
             val casee:
                {cases: (Pat.t, t) Cases.t,
@@ -198,7 +199,7 @@ signature XML_TREE =
                          argType: Type.t,
                          body: t,
                          bodyType: Type.t,
-                         mayInline: bool} -> t
+                         inline: InlineAttr.t} -> t
             val let1: {var: Var.t, exp: t, body: t} -> t
             val lett: {decs: Dec.t list, body: t} -> t
             val monoVar: Var.t * Type.t -> t

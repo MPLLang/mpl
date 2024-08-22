@@ -1310,7 +1310,7 @@ fun transform (program: Program.t): Program.t =
          : Block.t list * Transfer.t =
          case t of
             Bug => ([], Bug)
-          | Call {func = f, args, return} =>
+          | Call {func = f, args, inline, return} =>
                let
                   val {args = fargs, returns = freturns, raises = fraises} = func f
                   fun bug () =
@@ -1400,6 +1400,7 @@ fun transform (program: Program.t): Program.t =
                in (blocks,
                    Call {func = f,
                          args = keepUseful (args, fargs),
+                         inline = inline,
                          return = return})
                end
           | Case {test, cases, default} =>
@@ -1483,7 +1484,7 @@ fun transform (program: Program.t): Program.t =
          doitBlock
       fun doitFunction f =
          let
-            val {args, blocks, mayInline, name, start, ...} = Function.dest f
+            val {args, blocks, inline, name, start, ...} = Function.dest f
             val {returns = returnvs, raises = raisevs, ...} = func name
             val args = keepUsefulArgs args
             val (blocks, blocks') =
@@ -1499,7 +1500,7 @@ fun transform (program: Program.t): Program.t =
          in
             Function.new {args = args,
                           blocks = blocks,
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

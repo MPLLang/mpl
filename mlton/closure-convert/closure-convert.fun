@@ -110,7 +110,7 @@ structure Accum =
                  {globals = Vector.new0 ()}
                  (Function.new {args = Vector.new0 (),
                                 blocks = Vector.fromList blocks,
-                                mayInline = false, (* doesn't matter *)
+                                inline = InlineAttr.Auto, (* doesn't matter *)
                                 name = Func.newNoname (),
                                 raises = NONE,
                                 returns = SOME (Vector.new1 (Type.tuple tys)),
@@ -317,7 +317,7 @@ fun closureConvert
                   datatype z = datatype PrimExp.t
                in
                   case exp of
-                     App {func, arg} =>
+                     App {func, arg, ...} =>
                         let val arg = varExp arg
                            val result = new ()
                         in Value.addHandler
@@ -387,6 +387,7 @@ fun closureConvert
                          val syncres = Var.newString "syncres"
                          val result = new ()
 
+                         val inline = InlineAttr.Auto (* doesn't matter *)
                          val {sporkInfo, ...} = varInfo var
                          val _ = sporkInfo := SOME {contres = contres,
                                                     data = data,
@@ -398,7 +399,8 @@ fun closureConvert
 
                          val _ = loopBind {var = contres,
                                            ty = tar,
-                                           exp = App {func = cont, arg = contarg}}
+                                           exp = App {func = cont, arg = contarg,
+                                                      inline = inline}}
 
                          val _ = Value.coerce {from = Value.sporkDataValue td,
                                                to = value data}
@@ -410,11 +412,14 @@ fun closureConvert
 
                          val _ = loopBind {var = spwnres,
                                            ty = tbr,
-                                           exp = App {func = spwn, arg = SvarExp.mono spwnarg_data}}
+                                           exp = App {func = spwn,
+                                                      arg = SvarExp.mono spwnarg_data,
+                                                      inline = inline}}
                          val _ = loopBind {var = seqres,
                                            ty = tc,
                                            exp = App {func = seq,
-                                                      arg = SvarExp.mono contres}}
+                                                      arg = SvarExp.mono contres,
+                                                      inline = inline}}
                          val _ = Value.coerce {from = value seqres, to = result}
                          val _ = loopBind {var = contres_data,
                                            ty = Stype.tuple (Vector.new2 (tar, td)),
@@ -424,7 +429,8 @@ fun closureConvert
                          val _ = loopBind {var = syncres,
                                            ty = tc,
                                            exp = App {func = sync,
-                                                      arg = SvarExp.mono contres_data}}
+                                                      arg = SvarExp.mono contres_data,
+                                                      inline = inline}}
                          val _ = Value.coerce {from = value syncres, to = result}
                      in
                        ()
@@ -749,7 +755,7 @@ fun closureConvert
       (*------------------------------------*)                 
       (*               apply                *)
       (*------------------------------------*)
-      fun apply {func, arg, resultVal}: Dexp.t =
+      fun apply {func, arg, inline, resultVal}: Dexp.t =
          let
             val func = varExpInfo func
             val arg = varExpInfo arg
@@ -778,6 +784,7 @@ fun closureConvert
                                    args = Vector.new2 (Dexp.var env,
                                                        coerce (argExp, argVal,
                                                                value param)),
+                                   inline = inline,
                                    ty = valueType result},
                                   result, resultVal)}
                end))}
@@ -862,7 +869,7 @@ fun closureConvert
          if !Control.closureConvertShrink
             then Ssa.shrinkFunction {globals = Vector.new0 ()}
          else fn f => f
-      fun addFunc (ac, {args, body, isMain, mayInline, mayRaise, name, returns}) =
+      fun addFunc (ac, {args, body, isMain, inline, mayRaise, name, returns}) =
          let
             val (start, blocks) =
                Dexp.linearize (body, if mayRaise then Ssa.Handler.Caller else Ssa.Handler.Dead)
@@ -870,7 +877,7 @@ fun closureConvert
                shrinkFunction
                (Function.new {args = args,
                               blocks = Vector.fromList blocks,
-                              mayInline = mayInline,
+                              inline = inline,
                               name = name,
                               raises = if mayRaise
                                           then raises
@@ -960,8 +967,8 @@ fun closureConvert
             fun simple e = (e, ac)
          in
             case e of
-               SprimExp.App {func, arg} =>
-                  (apply {func = func, arg = arg, resultVal = v},
+               SprimExp.App {func, arg, inline} =>
+                  (apply {func = func, arg = arg, inline = inline, resultVal = v},
                    ac)
              | SprimExp.Case {test, cases, default} =>
                   let
@@ -1080,6 +1087,7 @@ fun closureConvert
                  val contres_data_ty = valueType contres_data_value
                  val cont = apply {func = cont,
                                    arg = contarg,
+                                   inline = InlineAttr.Auto,
                                    resultVal = contres_value}
                  val cont =
                     case raiseTy of
@@ -1092,6 +1100,7 @@ fun closureConvert
                            handler = Dexp.bug "Spork cont raised"}
                  val spwn = apply {func = spwn,
                                    arg = SvarExp.mono spwnarg_data,
+                                   inline = InlineAttr.Auto,
                                    resultVal = spwnres_value}
                  val spwn =
                     case raiseTy of
@@ -1127,10 +1136,12 @@ fun closureConvert
                  val seq =
                     apply {func = seq,
                            arg = SvarExp.mono contres,
+                           inline = InlineAttr.Auto,
                            resultVal = v}
                  val sync =
                     apply {func = sync,
                            arg = SvarExp.mono contres_data,
+                           inline = InlineAttr.Auto,
                            resultVal = v}
                  val sync =
                     newScope
@@ -1333,7 +1344,7 @@ fun closureConvert
                          info as LambdaInfo.T {frees, name, recs, ...},
                          ac: Accum.t): Accum.t =
          let
-            val {arg = argVar, body, mayInline, ...} = Slambda.dest lambda
+            val {arg = argVar, body, inline, ...} = Slambda.dest lambda
             val argVarInfo = varInfo argVar
             val env = Var.newString "env"
             val envType = lambdaInfoType info
@@ -1362,7 +1373,7 @@ fun closureConvert
                  addFunc (ac, {args = args,
                                body = body,
                                isMain = false,
-                               mayInline = mayInline,
+                               inline = inline,
                                mayRaise = true,
                                name = name,
                                returns = returns})
@@ -1379,7 +1390,7 @@ fun closureConvert
              val (body, ac) = convertExp (body, Accum.empty)
              val ac = addFunc (ac, {args = Vector.new0 (),
                                     body = body,
-                                    mayInline = false,
+                                    inline = InlineAttr.Never,
                                     mayRaise = false,
                                     isMain = true,
                                     name = main,

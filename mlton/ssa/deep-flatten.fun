@@ -1190,7 +1190,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                   transfer = transformTransfer transfer}
       fun transformFunction (f: Function.t): Function.t =
           let
-             val {args, mayInline, name, start, ...} = Function.dest f
+             val {args, inline, name, start, ...} = Function.dest f
              val {raises, returns, ...} = func name
              val args = transformFormals args
              val raises = Option.map (raises, valuesTypes)
@@ -1203,7 +1203,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
           in
              Function.new {args = args,
                            blocks = Vector.fromList (!blocks),
-                           mayInline = mayInline,
+                           inline = inline,
                            name = name,
                            raises = raises,
                            returns = returns,

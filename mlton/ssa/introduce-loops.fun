@@ -33,7 +33,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
              val tailCallsItself = ref false
              val _ =
@@ -67,7 +67,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                              let
                                 val transfer =
                                    case transfer of
-                                      Call {func, args, return} =>
+                                      Call {func, args, return, ...} =>
                                          if Func.equals (name, func)
                                             andalso Return.isTail return
                                             then Goto {dst = loopName, 
@@ -104,7 +104,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           in
              Function.new {args = args,
                            blocks = blocks,
-                           mayInline = mayInline,
+                           inline = inline,
                            name = name,
                            raises = raises,
                            returns = returns,

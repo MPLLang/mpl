@@ -140,6 +140,7 @@ in
    structure Cexp = Exp
    structure ExnDecElab = ExnDecElab
    structure Ffi = Ffi
+   structure InlineAttr = InlineAttr
    structure IntSize = IntSize
    structure Lambda = Lambda
    structure Cpat = Pat
@@ -1494,7 +1495,7 @@ local
                            isBool = isBool,
                            expandedCbTy = expandedCbTy,
                            ptrExp = ptrExp},
-           mayInline = true},
+           inline = InlineAttr.Auto},
           (Cexp.lambda o Lambda.make)
           {arg = setArg,
            argType = expandedCbTy,
@@ -1502,7 +1503,7 @@ local
                            isBool = isBool,
                            ptrExp = ptrExp,
                            valueExp = Cexp.var (setArg, expandedCbTy)},
-           mayInline = true})
+           inline = InlineAttr.Auto})
       end
 
    val isSymbolAttributeAlloc =
@@ -1753,7 +1754,7 @@ in
                {arg = ptrArg,
                 argType = expandedPtrTy,
                 body = symExp,
-                mayInline = true},
+                inline = InlineAttr.Auto},
                elabedTy)
       end
 end
@@ -1853,7 +1854,8 @@ fun export {attributes: ImportExportAttribute.t list,
                             Exp.app
                             (id (concat ["get", name]),
                              (Exp.tuple o Vector.new2)
-                             (Exp.var p, int (i + 1))))
+                             (Exp.var p, int (i + 1)),
+                            InlineAttr.Auto))
                      in
                         (x, dec)
                      end))
@@ -1866,7 +1868,8 @@ fun export {attributes: ImportExportAttribute.t list,
                   Vector.map
                   (Vector.new2
                    ((resVar, Exp.app (Exp.var f,
-                                      Exp.tuple (Vector.map (args, Exp.var)))),
+                                      Exp.tuple (Vector.map (args, Exp.var)),
+                                      InlineAttr.Auto)),
                     (newVar (),
                      (case res of
                          NONE => Exp.constraint (Exp.var resVar, Type.unit)
@@ -1876,11 +1879,15 @@ fun export {attributes: ImportExportAttribute.t list,
                              (Exp.tuple o Vector.new3)
                              (Exp.var p,
                               int (Vector.length args + 1),
-                              Exp.var resVar))))),
+                              Exp.var resVar),
+                             InlineAttr.Auto)))),
                    fn (x, e) => Dec.vall (Vector.new0 (), x, e))],
                  Exp.tuple (Vector.new0 ()),
                  region)
-             end)))))))
+             end),
+           InlineAttr.Auto))),
+        InlineAttr.Auto)),
+      InlineAttr.Auto)
    end
 
 val export =
@@ -1905,7 +1912,8 @@ structure Aexp =
                   (Apat.Record {flexible = true,
                                 items = Vector.new1 (f, Region.bogus, xField)},
                    r),
-                  xVar))
+                  xVar),
+                InlineAttr.Auto)
       end
    end
 
@@ -2379,7 +2387,7 @@ fun elaborateDec (d, {env = E, nest}) =
                              val {markFunc, setBound, unmarkFunc} = recursiveFun ()
                              val fbs =
                                 Vector.map2
-                                (fbs, Adec.layoutFun {tyvars = tyvars, fbs = fbs}, fn (clauses, layFb) =>
+                                (fbs, Adec.layoutFun {tyvars = tyvars, fbs = fbs}, fn ((clauses, inline), layFb) =>
                                  let
                                     val ctxtFb = fn () =>
                                        seq [str "in: ", approximate (layFb ())]
@@ -2463,6 +2471,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                     {clauses = clauses,
                                      ctxtFb = ctxtFb,
                                      func = func,
+                                     inline = inline,
                                      numArgs = numArgs,
                                      regionFb = regionFb}
                                  end)
@@ -2480,7 +2489,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                     else f :: ac)
                              val fbs =
                                 Vector.map
-                                (fbs, fn {clauses, ctxtFb, func, numArgs, regionFb} =>
+                                (fbs, fn {clauses, ctxtFb, func, inline, numArgs, regionFb} =>
                                  let
                                     val argTys = Vector.tabulate (numArgs, fn _ => Type.new ())
                                     val resTy = Type.new ()
@@ -2574,13 +2583,14 @@ fun elaborateDec (d, {env = E, nest}) =
                                      ctxtFb = ctxtFb,
                                      func = func,
                                      funTy = funTy,
+                                     inline = inline,
                                      regionFb = regionFb,
                                      resTy = resTy,
                                      var = var}
                                  end)
                              val fbs =
                                 Vector.map
-                                (fbs, fn {argTys, clauses, ctxtFb, func, funTy, regionFb, resTy, var, ...} =>
+                                (fbs, fn {argTys, clauses, ctxtFb, func, funTy, inline, regionFb, resTy, var, ...} =>
                                  let
                                     val nest = Avar.toString func :: nest
                                     val resultTypeConstraint = Vector.exists (clauses, Option.isSome o #resultType)
@@ -2682,7 +2692,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                           {arg = arg,
                                            argType = argTy,
                                            body = body,
-                                           mayInline = true}),
+                                           inline = inline}),
                                          Type.arrow (argTy, Cexp.ty body)))
                                     val lambda =
                                        case Cexp.node lambda of
@@ -2872,7 +2882,7 @@ fun elaborateDec (d, {env = E, nest}) =
                              val elaboratePat = elaboratePat ()
                              val rvbs =
                                 Vector.map2
-                                (rvbs, layRvbs, fn ({pat, match}, layRvb) =>
+                                (rvbs, layRvbs, fn ({pat, match, inline}, layRvb) =>
                                  let
                                     fun ctxtRvb () =
                                        seq [str "in: ", approximate (layRvb ())]
@@ -2908,6 +2918,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                  in
                                     {bound = bound,
                                      ctxtRvb = ctxtRvb,
+                                     inline = inline,
                                      match = match,
                                      nest = nest,
                                      pat = pat,
@@ -2940,7 +2951,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                  end)
                              val rvbs =
                                 Vector.map
-                                (rvbs, fn {bound, ctxtRvb, match, nest, pat, patIsConstrained, regionPat, var, ...} =>
+                                (rvbs, fn {bound, ctxtRvb, inline, match, nest, pat, patIsConstrained, regionPat, var, ...} =>
                                  let
                                     val {argType, region, resultType, rules} =
                                        elabMatch (match, nest)
@@ -2979,7 +2990,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                        Lambda.make {arg = arg,
                                                     argType = argType,
                                                     body = body,
-                                                    mayInline = true}
+                                                    inline = inline}
                                  in
                                     {check = check,
                                      bound = bound,
@@ -3119,7 +3130,7 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.node e, Type.bool)
                    end
-              | Aexp.App {func = ef, arg = ea, ...} =>
+              | Aexp.App {func = ef, arg = ea, inline, ...} =>
                    let
                       val cef = elab ef
                       val cea = elab ea
@@ -3155,7 +3166,10 @@ fun elaborateDec (d, {env = E, nest}) =
                            align [seq [str "expects: ", l1],
                                   seq [str "but got: ", l2]]))
                    in
-                      Cexp.make (Cexp.App (cef, cea), resultType)
+                      Cexp.make (Cexp.App {func = cef,
+                                           arg = cea,
+                                           inline = inline},
+                                 resultType)
                    end
               | Aexp.Case (e, m) =>
                    let
@@ -3199,8 +3213,9 @@ fun elaborateDec (d, {env = E, nest}) =
                    in
                       Cexp.make (Cexp.node e, t')
                    end
-              | Aexp.FlatApp items => elab (Parse.parseExp (items, E, ctxt))
-              | Aexp.Fn match =>
+              | Aexp.FlatApp (items, inline) =>
+                   elab (Parse.parseExp (items, inline, E, ctxt))
+              | Aexp.Fn (match, inline) =>
                    let
                       val nest =
                          case maybeName of
@@ -3220,7 +3235,7 @@ fun elaborateDec (d, {env = E, nest}) =
                       Cexp.make (Cexp.Lambda (Lambda.make {arg = arg,
                                                            argType = argType,
                                                            body = body,
-                                                           mayInline = true}),
+                                                           inline = inline}),
                                  Type.arrow (argType, Cexp.ty body))
                    end
               | Aexp.Handle (try, match) =>
@@ -3435,7 +3450,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                   {arg = arg,
                                    argType = argType,
                                    body = body,
-                                   mayInline = true}
+                                   inline = InlineAttr.Auto}
                                end
                       fun etaNoWrap {expandedTy,
                                      prim: Type.t Prim.t} : Cexp.t =
@@ -3628,7 +3643,7 @@ fun elaborateDec (d, {env = E, nest}) =
                                                                 elabedTy = elabedTy,
                                                                 expandedTy = expandedCfTy,
                                                                 layoutPrettyType = #1 o layoutPrettyType}},
-                                 mayInline = true},
+                                 inline = InlineAttr.Auto},
                                 elabedTy)
                             end
                        | Import {attributes, name, ty} =>

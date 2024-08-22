@@ -361,18 +361,20 @@ fun shrinkOnce (Program.T {datatypes, body}) =
                end
          in
             case exp of
-               App {func, arg} =>
+               App {func, arg, inline} =>
                   let
                      val arg = varExpInfo arg
                      fun normal func =
                         expansive (App {func = func,
-                                        arg = VarInfo.varExp arg})
+                                        arg = VarInfo.varExp arg,
+                                        inline = inline})
                   in case varExpInfo func of
                      VarInfo.Poly x => normal x
                    | VarInfo.Mono {numOccurrences, value, varExp, ...} => 
                         case (!numOccurrences, !value) of
                            (1, SOME (Value.Lambda {isInlined, lam = l})) =>
-                              if not (Lambda.mayInline l)
+                              if not (InlineAttr.mayInline (Lambda.inline l)
+                                      andalso (InlineAttr.mayInline inline))
                                  then normal varExp
                               else
                                  let
@@ -581,12 +583,12 @@ fun shrinkOnce (Program.T {datatypes, body}) =
          traceShrinkLambda
          (fn l => 
           let
-             val {arg, argType, body, mayInline} = Lambda.dest l
+             val {arg, argType, body, inline} = Lambda.dest l
           in
              Lambda.make {arg = arg,
                           argType = argType,
                           body = shrinkExp body,
-                          mayInline = mayInline}
+                          inline = inline}
           end) l
       val _ = countExp body
       val body = shrinkExp body
