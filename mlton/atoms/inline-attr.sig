@@ -21,5 +21,6 @@ signature INLINE_ATTR =
       val hash: t -> word
       val layout: t -> Layout.t
       val mayInline: t -> bool
+      val mustInline: t -> bool
       val parse: t Parse.t
    end

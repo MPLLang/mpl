@@ -358,7 +358,8 @@ fun nonRecursive (Program.T {functions, ...}, {small: int, product: int}) =
 
 fun transform {program as Program.T {datatypes, globals, functions, main},
                shouldInline: Func.t -> bool,
-               inlineIntoMain: bool} =
+               inlineIntoMain: bool,
+               forceAlways: bool} =
    let
       val {get = funcInfo: Func.t -> {function: Function.t,
                                       visited: bool ref},
@@ -388,7 +389,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                     val _ = visitedRef := true
                     val {args, blocks, inline, name, raises, returns, start} =
                        Function.dest (function func)
-                    val blocks = doit (blocks, Return.Tail)
+                    val blocks = doit (blocks, Return.Tail, [name])
                  in
                     List.push
                     (newFunctions,
@@ -402,7 +403,8 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                  end
          end
       and doit (blocks: Block.t vector,
-                return: Return.t) : Block.t vector =
+                return: Return.t,
+                nest: Func.t list) : Block.t vector =
          let
             val newBlocks = ref []
             val blocks =
@@ -421,15 +423,24 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                         let
                            val return = Return.compose (return, return')
                         in
-                           if shouldInline func
-                              andalso InlineAttr.mayInline inline
+                           if not (List.contains (nest, func, Func.equals))
+                              andalso
+                              InlineAttr.mayInline inline
+                              andalso
+                              (shouldInline func
+                               orelse
+                               (forceAlways
+                                andalso
+                                (InlineAttr.mustInline (#inline (Function.dest (function func)))
+                                 orelse
+                                 InlineAttr.mustInline inline)))
                               then 
                               let
                                  local
                                     val {name, args, start, blocks, ...} =
                                        (Function.dest o Function.alphaRename) 
-                                       (#function (funcInfo func))
-                                    val blocks = doit (blocks, return)
+                                       (function func)
+                                    val blocks = doit (blocks, return, name::nest)
                                     val _ = List.push (newBlocks, blocks)
                                     val name =
                                        Label.newString (Func.originalName name)
@@ -502,10 +513,12 @@ fun inlineLeaf (p, {loops, repeat, size}) =
                     | (false, true) => leafRepeat (p, {size = size})
                     | (true, false) => leafOnceNoLoop (p, {size = size})
                     | (true, true) => leafRepeatNoLoop (p, {size = size}),
-                   inlineIntoMain = true}
+                   inlineIntoMain = true,
+                   forceAlways = false}
 fun inlineNonRecursive (p, arg) =
    transform {program = p,
               shouldInline = nonRecursive (p, arg),
-              inlineIntoMain = !Control.inlineIntoMain}
+              inlineIntoMain = !Control.inlineIntoMain,
+              forceAlways = true}
 
 end

@@ -19,6 +19,12 @@ fun mayInline i =
     | Auto => true
     | Never => false
 
+fun mustInline i =
+   case i of
+      Always => true
+    | Auto => false
+    | Never => false
+
 val all = [Always, Auto, Never]
 
 fun equals (i, i'): bool =
