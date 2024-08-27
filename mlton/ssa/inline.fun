@@ -422,10 +422,13 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                      Call {func, args, inline, return = return'} =>
                         let
                            val return = Return.compose (return, return')
+                           val funcInline = #inline (Function.dest (function func))
                         in
                            if not (List.contains (nest, func, Func.equals))
                               andalso
                               InlineAttr.mayInline inline
+                              andalso
+                              InlineAttr.mayInline funcInline
                               andalso
                               (shouldInline func
                                orelse
