@@ -389,24 +389,41 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                     val _ = visitedRef := true
                     val {args, blocks, inline, name, raises, returns, start} =
                        Function.dest (function func)
-                    val blocks = doit (blocks, Return.Tail, [name])
+                    val start'' = Label.new start
+                    val start' = Label.new start
+                    val args' = Vector.map (args, fn (x, ty) => (Var.new x, ty))
+                    val newBlocks =
+                       Vector.new2
+                       (Block.T {label = start'',
+                                 args = Vector.new0 (),
+                                 statements = Vector.new0 (),
+                                 transfer = Transfer.Goto
+                                            {dst = start',
+                                             args = Vector.map (args', #1)}},
+                        Block.T {label = start',
+                                 args = args,
+                                 statements = Vector.new0 (),
+                                 transfer = Transfer.Goto {dst = start,
+                                                           args = Vector.new0 ()}})
+                    val blocks = doit (blocks, Return.Tail, newBlocks, [(func,start')])
                  in
                     List.push
                     (newFunctions,
-                     shrink (Function.new {args = args,
+                     shrink (Function.new {args = args',
                                            blocks = blocks,
                                            inline = inline,
                                            name = name,
                                            raises = raises,
                                            returns = returns,
-                                           start = start}))
+                                           start = start''}))
                  end
          end
       and doit (blocks: Block.t vector,
                 return: Return.t,
-                nest: Func.t list) : Block.t vector =
+                newBlocks: Block.t vector,
+                nest: (Func.t * Label.t) list) : Block.t vector =
          let
-            val newBlocks = ref []
+            val newBlocks = ref [newBlocks]
             val blocks =
                Vector.map
                (blocks,
@@ -422,53 +439,64 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                      Call {func, args, inline, return = return'} =>
                         let
                            val return = Return.compose (return, return')
-                           val funcInline = #inline (Function.dest (function func))
-                        in
-                           if not (List.contains (nest, func, Func.equals))
-                              andalso
-                              InlineAttr.mayInline inline
-                              andalso
-                              InlineAttr.mayInline funcInline
-                              andalso
-                              (shouldInline func
-                               orelse
-                               (forceAlways
-                                andalso
-                                (InlineAttr.mustInline (#inline (Function.dest (function func)))
-                                 orelse
-                                 InlineAttr.mustInline inline)))
-                              then 
+                           fun doCall () =
+                              (visit func
+                               ; new (Call {func = func,
+                                            args = args,
+                                            inline = inline,
+                                            return = return}))
+                           fun doInline () =
                               let
-                                 local
-                                    val {name, args, start, blocks, ...} =
-                                       (Function.dest o Function.alphaRename) 
-                                       (function func)
-                                    val blocks = doit (blocks, return, name::nest)
-                                    val _ = List.push (newBlocks, blocks)
-                                    val name =
-                                       Label.newString (Func.originalName name)
-                                    val _ = 
-                                       List.push 
-                                       (newBlocks,
-                                        Vector.new1
-                                        (Block.T
-                                         {label = name,
-                                          args = args,
-                                          statements = Vector.new0 (),
-                                          transfer = Goto {dst = start,
-                                                           args = Vector.new0 ()}}))
-                                 in
-                                    val name = name
-                                 end
+                                 val dst =
+                                    let
+                                       val {args, start, blocks, ...} =
+                                          (Function.dest o Function.alphaRename)
+                                          (function func)
+                                       val start' =
+                                          Label.newString (Func.originalName func)
+                                       val blocks =
+                                          doit
+                                          (blocks,
+                                           return,
+                                           Vector.new1
+                                           (Block.T
+                                            {label = start',
+                                             args = args,
+                                             statements = Vector.new0 (),
+                                             transfer = Goto {dst = start,
+                                                              args = Vector.new0 ()}}),
+                                           (func, start')::nest)
+                                       val _ = List.push (newBlocks, blocks)
+                                    in
+                                       start'
+                                    end
                               in
-                                 new (Goto {dst = name, 
+                                 new (Goto {dst = dst,
                                             args = args})
                               end
-                           else (visit func
-                                 ; new (Call {func = func,
-                                              args = args,
-                                              inline = inline,
-                                              return = return}))
+                        in
+                           case List.peekMap (nest, fn (func', start') =>
+                                              if Func.equals (func, func')
+                                                 then SOME start'
+                                              else NONE) of
+                              SOME start =>
+                                 (case return of
+                                     Return.Tail => new (Transfer.Goto
+                                                         {dst = start,
+                                                          args = args})
+                                   | _ => doCall ())
+                            | NONE =>
+                                 if InlineAttr.mayInline inline
+                                    andalso
+                                    (shouldInline func
+                                     orelse
+                                     (forceAlways
+                                      andalso
+                                      (InlineAttr.mustInline (#inline (Function.dest (function func)))
+                                       orelse
+                                       InlineAttr.mustInline inline)))
+                                    then doInline ()
+                                 else doCall ()
                         end
                    | Raise xs =>
                         (case return of
