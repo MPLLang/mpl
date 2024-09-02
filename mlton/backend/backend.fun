@@ -925,8 +925,12 @@ fun toMachine (rssa: Rssa.Program.t) =
                    val (inSpwn, resetInSpwn) =
                       case kind of
                          R.Kind.SporkSpwn _ =>
-                            (inSpwn := true
-                             ; (true, fn () => inSpwn := false))
+                            let
+                               val oldInSpwn = !inSpwn
+                               val _ = inSpwn := true
+                            in
+                               (true, fn () => inSpwn := oldInSpwn)
+                            end
                        | _ => (!inSpwn, fn () => ())
                    val _ = setLabelInfo (label, {args = args, inSpwn = inSpwn})
                    val _ = newVarInfos args
