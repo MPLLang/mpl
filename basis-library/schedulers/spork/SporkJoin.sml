@@ -12,15 +12,21 @@ struct
   val w2i = Word64.toIntX
   val i2w = Word64.fromInt
 
-  val sporkFair = Scheduler.SporkJoin.sporkFair
+  fun __inline_always__ sporkFair x = __inline_always__ Scheduler.SporkJoin.sporkFair x
+  fun __inline_always__ sporkGive x = __inline_always__ Scheduler.SporkJoin.sporkGive x
+  fun __inline_always__ sporkKeep x = __inline_always__ Scheduler.SporkJoin.sporkKeep x
+  fun __inline_always__ sporkSamFair x = __inline_always__ Scheduler.SporkJoin.sporkSamFair x
+  fun __inline_always__ sporkSamGive x = __inline_always__ Scheduler.SporkJoin.sporkSamGive x
+  fun __inline_always__ sporkSamKeep x = __inline_always__ Scheduler.SporkJoin.sporkSamKeep x
+  (*val sporkFair = Scheduler.SporkJoin.sporkFair
   val sporkGive = Scheduler.SporkJoin.sporkGive
   val sporkKeep = Scheduler.SporkJoin.sporkKeep
   val sporkSamFair = Scheduler.SporkJoin.sporkSamFair
   val sporkSamGive = Scheduler.SporkJoin.sporkSamGive
-  val sporkSamKeep = Scheduler.SporkJoin.sporkSamKeep
+  val sporkSamKeep = Scheduler.SporkJoin.sporkSamKeep*)
 
-  fun par (f: unit -> 'a, g: unit -> 'b): 'a * 'b =
-      sporkFair (f, g, fn a => (a, g ()), fn ab => ab)
+  fun __inline_always__ par (f: unit -> 'a, g: unit -> 'b): 'a * 'b =
+      sporkFair (__inline_always__ f, __inline_always__ g, fn __inline_always__ a => (a, __inline_always__ g ()), fn __inline_always__ ab => ab)
 
   val fork = par
 
@@ -36,64 +42,196 @@ struct
         else
           reduce (i + 0w1, j) (step (i, a)) step
 
-    fun midpoint (i: word, j: word) =
-        i + (Word64.>> (j - i, 0w1))
+    (*fun __inline_always__ midpoint (i: word, j: word) =
+        i + (Word64.>> (j - i, 0w1))*)
   in
 
-  (*fun wpareduce_grained (grain: word) (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      let fun red_no_grain (i, j) b =
-              if i = j then
+  fun __inline_always__ midpoint (i: word, j: word) =
+        i + (Word64.>> (j - i, 0w1))
+
+
+  (*fun __inline_always__ wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun halves (b: 'a) (i: word, j: word): 'a =
+              if i >= j then b else
+                let val mid = midpoint (i, j)
+                    fun innerloop (b: 'a) (i: word, j: word): 'a =
+                        if i >= j then b else
+                          let val i' = i + 0w1
+                              fun body2 () = __inline_always__ step (i, b)
+                              fun seq2 b = innerloop b (i', j)
+                              fun spwn2 () = halves z (i', j)
+                              fun sync2 (b, b') = merge (b, b')
+                              fun unstolen2 b = halves b (i', j)
+                          in
+                            sporkSamGive (body2, spwn2, seq2, sync2, unstolen2)
+                          end
+                    fun body () = __inline_always__ innerloop b (i, mid)
+                    fun seq b = halves b (mid, j)
+                    fun spwn () = halves z (mid, j)
+                    fun sync (b, b') = merge (b, b')
+                in
+                  sporkSamFair (body, spwn, seq, sync, seq)
+                end
+      in
+        __inline_always__ halves z (i, j)
+      end*)
+
+  fun __inline_always__ wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun iter (b: 'a) (i: word, j: word): 'a =
+              if i >= j then
                 b
               else
-                step (i, b)
-          fun red_grain (i, j) b =
-              reduce (i, j) b step
-          val seqred =
-              if grain = 0w1 then
-                red_no_grain
-              else
-                red_grain
+                let val i' = i + 0w1
+                    fun __inline_always__ body () = __inline_always__ step (i, b)
+                    fun __inline_always__ spwn () =
+                        if i' >= j then
+                          z
+                        else
+                          let val mid = midpoint (i', j)
+                              fun __inline_always__ body () = iter z (i', mid)
+                              fun __inline_always__ seq b' = iter b' (mid, j)
+                              fun __inline_always__ spwn () = iter z (mid, j)
+                              fun __inline_always__ sync (b, b') = merge (b, b')
+                              fun __inline_always__ unstolen b' = iter b' (mid, j)
+                          in
+                            (*merge (par (fn () => iter z (i', mid),
+                                        fn () => iter z (mid, j)))*)
+                            sporkSamFair (body, spwn, seq, sync, unstolen)
+                          end
+                    fun __inline_always__ seq b' = iter b' (i', j)
+                    fun __inline_always__ sync (b, b') = merge (b, b')
+                    fun __inline_always__ unstolen b' = iter b' (i', j)
+                        (*if i' >= j then
+                          b'
+                        else
+                          let val mid = midpoint (i', j) in
+                            merge (par (fn () => iter b' (i', mid),
+                                        fn () => iter z (mid, j)))
+                          end*)
+                in
+                  sporkSamGive (body, spwn, seq, sync, unstolen)
+                end
+      in
+        __inline_always__ iter z (i, j)
+      end
 
-          fun steps_no_grain (i, i') b =
-              step (i, b)
-
-          val steps =
-              if grain = 0w1 then
-                steps_no_grain
+  (*fun __inline_always__ wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun __inline_never__ split (b: 'a) (i: word, j: word): 'a =
+              if i >= j then
+                b
               else
-                red_grain
-          fun guard (f: 'a -> word * word -> 'a) (b: 'a) (i: word, j: word): 'a =
-              if grain >= j - i then
-                seqred (i, j) b
+                let val mid = midpoint (i, j)
+                    fun __inline_always__ body () = iter b (i, mid)
+                    fun __inline_always__ seq b' = iter b' (mid, j)
+                    fun __inline_always__ spwn () = iter z (mid, j)
+                    fun __inline_always__ sync (b, b') = merge (b, b')
+                    fun __inline_always__ unstolen b' = iter b' (mid, j)
+                in
+                  sporkSamFair (body, spwn, seq, sync, unstolen)
+                end
+          and iter (b: 'a) (i: word, j: word): 'a =
+              if i >= j then
+                b
+              else
+                let val i' = i + 0w1
+                    fun __inline_always__ body () = __inline_always__ step (i, b)
+                    fun __inline_always__ spwn () = split z (i', j)
+                    fun __inline_always__ seq b' = iter b' (i', j)
+                    fun __inline_always__ sync (b, b') = merge (b, b')
+                    fun __inline_always__ unstolen b' = split b' (i', j)
+                in
+                  sporkSamGive (body, spwn, seq, sync, unstolen)
+                end
+      in
+        __inline_always__ iter z (i, j)
+      end*)
+
+
+  fun __inline_always__ wpareduceBackup (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun __inline_always__ guard (f: 'a -> word * word -> 'a) (b: 'a) (i: word, j: word): 'a =
+              if i + 0w1 >= j then
+                if i >= j then
+                  b
+                else
+                  step (i, b)
               else
                 f b (i, j)
           fun splitCheckBoundsTokens (b: 'a) (i: word, j: word): 'a =
               guard splitCheckTokens b (i, j)
-          and splitCheckTokens (b: 'a) (i: word, j: word): 'a =
+          and __inline_always__ splitCheckTokens (b: 'a) (i: word, j: word): 'a =
               if Scheduler.SporkJoin.noTokens () then
                 iter b (i, j)
               else
                 split b (i, j)
           and split (b: 'a) (i: word, j: word): 'a =
+              (*let val mid = midpoint (i, j)
+                  fun body () = splitCheckBoundsTokens b  (i, mid)
+                  fun spwn () = splitCheckBoundsTokens z  (mid, j)
+                  fun seq  b' = splitCheckBoundsTokens b' (mid, j)
+                  val sync = merge
+                  val unstolen = seq
+              in
+                sporkSamFair (body, spwn, seq, sync, unstolen)*)
               let val mid = midpoint (i, j) in
-                  merge (par (fn () => splitCheckBoundsTokens b (i, mid),
-                              fn () => splitCheckBoundsTokens z (mid, j)))
-                end
-          and iter (b: 'a) (i: word, j: word): 'a =
-              let val i' = i + grain
-                  fun unstolen b' = guard split b' (i', j)
-                  fun body () = steps (i, i') b
-                  fun spwn () = unstolen z
+              merge (par (fn () => splitCheckBoundsTokens b (i, mid),
+                          fn () => splitCheckBoundsTokens z (mid, j)))
+              end
+          and __inline_always__ iter (b: 'a) (i: word, j: word): 'a =
+              let val i' = i + 0w1
+                  fun body () = step (i, b)
+                  fun spwn () = guard split z (i', j)
                   fun seq b' = guard iter b' (i', j)
                   val sync = merge
+                  fun unstolen b' = guard split b' (i', j)
               in
                 sporkSamGive (body, spwn, seq, sync, unstolen)
               end
       in
         splitCheckBoundsTokens z (i, j)
+      end
+
+  (* IDEA: maybe have a wrapper loop that always gets inlined, then once promoted go to funcall version *)
+
+
+  (* TODO: reduce code size/code paths/code duplication, by deleting splitCheckToken stuff *)
+  (* Then try to line up IRs *)
+  (*fun wpareduceInlineable (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun iter (b: 'a) (i: word, j: word): 'a =
+              if i + 0w1 >= j then
+                if i >= j then
+                  b
+                else
+                  step (i, b)
+              else
+                let val i' = i + 0w1
+                    fun unstolen b' =
+                        if i' + 0w1 = j then
+                          step (i', b)
+                        else
+                          let val mid = midpoint (i', j)
+                              fun body () = iter b (i', mid)
+                              fun spwn () = iter z (mid, j)
+                              fun seq  b' = iter b' (mid, j)
+                              val sync = merge
+                              val unstolen = seq
+                          in
+                            sporkSamFair (body, spwn, seq, sync, unstolen)
+                                         (* merge (par (fn () => iter b (i', mid), *)
+                                         (*             fn () => iter z (mid, j))) *)
+                          end
+                    fun body () = step (i, b)
+                    fun spwn () = unstolen z
+                    fun seq b' = iter b' (i', j)
+                    val sync = merge
+                in
+                  sporkSamGive (body, spwn, seq, sync, unstolen)
+                end
+      in
+        iter z (i, j)
       end*)
 
-  fun wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+
+  fun wpareduceI (i: word, j: word) (b: 'a) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun guard (f: 'a -> word * word -> 'a) (b: 'a) (i: word, j: word): 'a =
               if i + 0w1 >= j then
                 if i >= j then
@@ -110,27 +248,33 @@ struct
               else
                 split b (i, j)
           and split (b: 'a) (i: word, j: word): 'a =
-              let val mid = midpoint (i, j) in
-                  merge (par (fn () => splitCheckBoundsTokens b (i, mid),
-                              fn () => splitCheckBoundsTokens z (mid, j)))
-                end
+              let val mid = midpoint (i, j)
+                  fun body () = splitCheckBoundsTokens b  (i, mid)
+                  fun spwn () = splitCheckBoundsTokens z  (mid, j)
+                  fun seq  b' = splitCheckBoundsTokens b' (mid, j)
+                  val sync = merge
+                  val unstolen = seq
+              in
+                sporkSamFair (body, spwn, seq, sync, unstolen)
+              (*merge (par (fn () => splitCheckBoundsTokens b (i, mid),
+                fn () => splitCheckBoundsTokens z (mid, j)))*)
+              end
           and iter (b: 'a) (i: word, j: word): 'a =
               let val i' = i + 0w1
-                  fun unstolen b' = guard split b' (i', j)
                   fun body () = step (i, b)
-                  fun spwn () = unstolen z
+                  fun spwn () = guard split z (i', j)
                   fun seq b' = guard iter b' (i', j)
                   val sync = merge
+                  fun unstolen b' = guard split b' (i', j)
               in
                 sporkSamGive (body, spwn, seq, sync, unstolen)
               end
       in
-        splitCheckBoundsTokens z (i, j)
+        splitCheckBoundsTokens b (i, j)
       end
 
-  (* IDEA: maybe have a wrapper loop that always gets inlined, then once promoted go to funcall version *)
 
-  fun wpareduceInlineable (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+  fun __inline_always__ wpareduceInlineable (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun loop (b: 'a) (i: word, j: word) =
               let val i' = i + 0w1 in
                 if i' >= j then
@@ -138,20 +282,28 @@ struct
                 else
                   let fun body () = step (i, b)
                       fun seq b' = loop b' (i', j)
-                      fun spwn () =
-                          let val mid = midpoint (i', j) in
-                            merge (par (fn () => wpareduce (i', mid) z step merge,
-                                        fn () => wpareduce (mid, j) z step merge))
+                      fun unstolen b' =
+                          let val mid = midpoint (i', j)
+                              fun body () = wpareduceI (i', mid) b' z step merge
+                              fun spwn () = wpareduceI (mid, j) z z step merge
+                              fun seq b'' = wpareduceI (mid, j) b'' z step merge
+                              val sync = merge
+                              val unstolen = seq
+                          in
+                            sporkSamFair (body, spwn, seq, sync, unstolen)
                           end
+                          (* let val mid = midpoint (i', j) in *)
+                          (*   merge (par (fn () => wpareduceI (i', mid) b' step merge, *)
+                          (*               fn () => wpareduceI (mid, j) z step merge)) *)
+                          (* end *)
+                      fun spwn () = __inline_always__ unstolen z
                       val sync = merge
-                      val unstolen = seq
-                      (* fun unstolen b' = merge (b', spwn () *)
                   in
                     sporkSamGive (body, spwn, seq, sync, unstolen)
                   end
               end
       in
-        loop z (i, j)
+        __inline_always__ loop z (i, j)
       end
 
   fun wpareduceInlineable' (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
@@ -176,7 +328,7 @@ struct
                   fun spwn () = splitCheckBoundsTokens z (mid, j)
                   fun seq b' = splitCheckBoundsTokens b' (mid, j)
                   val sync = merge
-                  val unstolen  = seq
+                  val unstolen = seq
               in
                 sporkSamFair (body, spwn, seq, sync, unstolen)
               end
@@ -408,22 +560,28 @@ struct
   (* end *)
 
   local
-    fun wrap (reduce: word * word -> 'a -> (word * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a)
+  
+    fun __inline_always__ wrap (reduce: word * word -> 'a -> (word * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a)
              (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-        reduce (i2w i, i2w j) b (fn (w, a) => step (w2i w, a)) merge
-    fun pfor (reduce: word * word -> unit -> (word * unit -> unit) -> (unit * unit -> unit) -> unit)
-             (i: int, j: int) (step: int -> unit): unit =
-        reduce (i2w i, i2w j) () (fn (w, ()) => step (w2i w)) (fn ((), ()) => ())
+        __inline_always__ reduce (i2w i, i2w j) b (fn __inline_always__ (w, a) => __inline_always__ step (w2i w, a)) merge
+    (* fun pfor (reduce: word * word -> unit -> (word * unit -> unit) -> (unit * unit -> unit) -> unit) *)
+    (*          (i: int, j: int) (step: int -> unit): unit = *)
+    (*     reduce (i2w i, i2w j) () (fn (w, ()) => step (w2i w)) (fn ((), ()) => ()) *)
   in
-  fun pareduce (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+
+  fun __inline_always__ pareduce (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce (i, j) b step merge
+
   fun pareduce'' (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce'' (i, j) b step merge
+
   fun pareduce_sam (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce_sam (i, j) b step merge
+
   fun pareduce_simple (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce_simple (i, j) b step merge
-  fun pareduceInlineable (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+
+  fun __inline_always__ pareduceInlineable (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduceInlineable (i, j) b step merge
   end
 
@@ -438,8 +596,8 @@ struct
       in
         pareduce (0, k) () (fn (i, ()) => f i) (fn ((), ()) => ())
       end*)
-  fun parfor (grain: int) (i: int, j: int) (f: int -> unit): unit =
-      pareduce (i, j) () (fn (i, ()) => f i) (fn ((), ()) => ())
+  fun __inline_always__ parfor (grain: int) (i: int, j: int) (f: int -> unit): unit =
+      pareduce (i, j) () (fn __inline_always__ (i, ()) => f i) (fn ((), ()) => ())
 
   (*fun wpareduceInitStepMerge (grain: word) (i: word, j: word) (init: word -> 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun seqred (b: 'a) (i: word, j: word): 'a =

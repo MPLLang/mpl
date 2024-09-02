@@ -26,7 +26,7 @@ local
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
   (*Stack.sml*)
-  ../shh/Result.sml
+  Result.sml
   
   ann
      "exnDecElab app"
@@ -40,12 +40,13 @@ local
   in
     (*MkScheduler.sml*)
     Scheduler.sml
+    SporkJoin.sml
   end
 
   (* Scheduler.sml *)
   (* MkSporkJoin.sml *)
   (* MkForkJoin.sml *)
-  SporkJoin.sml
+  (* SporkJoin.sml *)
   ForkJoin.sml
 in
   structure ForkJoin
