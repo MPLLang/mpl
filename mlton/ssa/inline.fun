@@ -13,6 +13,17 @@ struct
 open S
 open Exp Transfer
 
+structure Return =
+   struct
+      open Return
+
+      fun isTail (z: t): bool =
+         case z of
+            Dead => false
+          | NonTail _ => false
+          | Tail => true
+   end
+
 structure Function =
    struct
       open Function
@@ -405,7 +416,9 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                  statements = Vector.new0 (),
                                  transfer = Transfer.Goto {dst = start,
                                                            args = Vector.new0 ()}})
-                    val blocks = doit (blocks, Return.Tail, newBlocks, [(func,start')])
+                    val blocks = doit (blocks,
+                                       [(func,start',Return.Tail)],
+                                       newBlocks)
                  in
                     List.push
                     (newFunctions,
@@ -419,10 +432,11 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                  end
          end
       and doit (blocks: Block.t vector,
-                return: Return.t,
-                newBlocks: Block.t vector,
-                nest: (Func.t * Label.t) list) : Block.t vector =
+                nest: (Func.t * Label.t * Return.t) list,
+                newBlocks: Block.t vector) : Block.t vector =
          let
+            val return = List.foldr (nest, Return.Tail, fn ((_,_,r'), r) =>
+                                     Return.compose (r, r'))
             val newBlocks = ref [newBlocks]
             val blocks =
                Vector.map
@@ -438,13 +452,12 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                   case transfer of
                      Call {func, args, inline, return = return'} =>
                         let
-                           val return = Return.compose (return, return')
                            fun doCall () =
                               (visit func
                                ; new (Call {func = func,
                                             args = args,
                                             inline = inline,
-                                            return = return}))
+                                            return = Return.compose (return, return')}))
                            fun doInline () =
                               let
                                  val dst =
@@ -457,15 +470,14 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                        val blocks =
                                           doit
                                           (blocks,
-                                           return,
+                                           (func, start', return')::nest,
                                            Vector.new1
                                            (Block.T
                                             {label = start',
                                              args = args,
                                              statements = Vector.new0 (),
                                              transfer = Goto {dst = start,
-                                                              args = Vector.new0 ()}}),
-                                           (func, start')::nest)
+                                                              args = Vector.new0 ()}}))
                                        val _ = List.push (newBlocks, blocks)
                                     in
                                        start'
@@ -474,27 +486,49 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                  new (Goto {dst = dst,
                                             args = args})
                               end
+                           fun findLoop (nest, allTails) =
+                              case nest of
+                                 [] => NONE
+                               | (func',start',return')::nest =>
+                                    let
+                                       val allTails' =
+                                          allTails
+                                          andalso
+                                          Return.isTail return'
+                                    in
+                                       if Func.equals (func, func')
+                                          then if allTails
+                                                  then SOME (SOME start')
+                                               else SOME NONE
+                                       else findLoop (nest, allTails')
+                                    end
+                           val callSiteInline = inline
+                           val calleeInline = #inline (Function.dest (function func))
+                           val mayInline = fn () =>
+                              InlineAttr.mayInline callSiteInline
+                              andalso
+                              InlineAttr.mayInline calleeInline
+                           val mustInline = fn () =>
+                              forceAlways
+                              andalso
+                              (InlineAttr.mustInline callSiteInline
+                               orelse
+                               InlineAttr.mustInline calleeInline)
                         in
-                           case List.peekMap (nest, fn (func', start') =>
-                                              if Func.equals (func, func')
-                                                 then SOME start'
-                                              else NONE) of
-                              SOME start =>
-                                 (case return of
-                                     Return.Tail => new (Transfer.Goto
-                                                         {dst = start,
-                                                          args = args})
-                                   | _ => doCall ())
+                           case findLoop (nest, Return.isTail return') of
+                              SOME (SOME start) => new (Transfer.Goto
+                                                        {dst = start,
+                                                         args = args})
+                            | SOME NONE => if mayInline ()
+                                              andalso
+                                              mustInline ()
+                                              then doInline ()
+                                           else doCall ()
                             | NONE =>
-                                 if InlineAttr.mayInline inline
+                                 if mayInline ()
                                     andalso
                                     (shouldInline func
-                                     orelse
-                                     (forceAlways
-                                      andalso
-                                      (InlineAttr.mustInline (#inline (Function.dest (function func)))
-                                       orelse
-                                       InlineAttr.mustInline inline)))
+                                     orelse mustInline ())
                                     then doInline ()
                                  else doCall ()
                         end
